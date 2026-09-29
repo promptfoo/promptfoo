@@ -31,7 +31,7 @@ import {
 } from '../types/index';
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
-import { restoreAzureBlobSasTokens } from './sanitizer';
+import { restoreAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './sanitizer';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -43,8 +43,6 @@ import type { StandaloneEval } from './standaloneEvalCache';
 export { clearStandaloneEvalCache } from './standaloneEvalCache';
 
 export type { StandaloneEval };
-
-type ResultsFileConfigOnly = Pick<ResultsFile, 'config'>;
 
 export async function writeResultsToDatabase(
   results: EvaluateSummaryV2,
@@ -63,7 +61,7 @@ export async function writeResultsToDatabase(
         createdAt: createdAt.getTime(),
         author: getAuthor(),
         description: config.description,
-        config,
+        config: sanitizeTracingConfigForPersistence(config),
         results,
         isRedteam: config.redteam !== undefined,
       })
@@ -199,11 +197,7 @@ export async function updateResult(
     }
 
     if (newConfig) {
-      const mergedConfig = {
-        ...existingEval.config,
-        ...newConfig,
-      };
-      existingEval.config = restoreAzureBlobSasTokens(mergedConfig, existingEval.config);
+      existingEval.config = restoreAzureBlobSasTokens(newConfig, existingEval.config);
     }
     if (newTable) {
       existingEval.setTable(newTable);
@@ -219,7 +213,7 @@ export async function updateResult(
 }
 
 async function getPromptsWithPredicate(
-  predicate: (result: ResultsFileConfigOnly) => boolean,
+  predicate: (eval_: Eval) => boolean,
   limit: number,
 ): Promise<PromptWithMetadata[]> {
   // TODO(ian): Make this use a proper database query
@@ -229,13 +223,10 @@ async function getPromptsWithPredicate(
 
   for (const eval_ of evals_) {
     const createdAt = new Date(eval_.createdAt).toISOString();
-    const resultWrapper: ResultsFileConfigOnly = { config: eval_.config };
-    if (predicate(resultWrapper)) {
+    if (predicate(eval_)) {
+      const datasetId = sha256(JSON.stringify(eval_.config.tests || []));
       for (const prompt of eval_.getPrompts()) {
         const promptId = sha256(prompt.raw);
-        const datasetId = resultWrapper.config.tests
-          ? sha256(JSON.stringify(resultWrapper.config.tests))
-          : '-';
         if (promptId in groupedPrompts) {
           groupedPrompts[promptId].recentEvalDate = new Date(
             Math.max(
@@ -276,15 +267,15 @@ export function getPromptsForTestCasesHash(
   testCasesSha256: string,
   limit: number = DEFAULT_QUERY_LIMIT,
 ) {
-  return getPromptsWithPredicate((result) => {
-    const testsJson = JSON.stringify(result.config.tests);
+  return getPromptsWithPredicate((eval_) => {
+    const testsJson = JSON.stringify(eval_.config.tests || []);
     const hash = sha256(testsJson);
     return hash === testCasesSha256;
   }, limit);
 }
 
 async function getTestCasesWithPredicate(
-  predicate: (result: ResultsFileConfigOnly) => boolean,
+  predicate: (result: ResultsFile) => boolean,
   limit: number,
 ): Promise<TestCasesWithMetadata[]> {
   const evals_ = await Eval.getMany(limit);
@@ -293,7 +284,7 @@ async function getTestCasesWithPredicate(
 
   for (const eval_ of evals_) {
     const createdAt = new Date(eval_.createdAt).toISOString();
-    const resultWrapper: ResultsFileConfigOnly = { config: eval_.config };
+    const resultWrapper: ResultsFile = await eval_.toResultsFile();
     const testCases = resultWrapper.config.tests;
     if (testCases && predicate(resultWrapper)) {
       const evalId = eval_.id;
@@ -310,7 +301,7 @@ async function getTestCasesWithPredicate(
         logger.warn('Skipping TestGeneratorConfig object in database storage');
         continue;
       }
-      const datasetId = sha256(JSON.stringify(storableTestCases));
+      const datasetId = sha256(JSON.stringify(eval_.config.tests || []));
 
       if (datasetId in groupedTestCases) {
         groupedTestCases[datasetId].recentEvalDate = new Date(

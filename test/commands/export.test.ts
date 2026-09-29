@@ -43,6 +43,7 @@ vi.mock('../../src/logger', () => ({
   default: {
     info: vi.fn(),
     error: vi.fn(),
+    debug: vi.fn(),
   },
 }));
 
@@ -209,6 +210,60 @@ describe('exportCommand', () => {
     expect(logger.info).toHaveBeenCalledWith(JSON.stringify(expectedJson, null, 2));
   });
 
+  it.each(['Invalid string length', 'ERR_STRING_TOO_LONG'])(
+    'recommends row-wise JSONL when console serialization exceeds the string limit: %s',
+    async (message) => {
+      vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
+      exportCommand(program);
+      const stringify = vi.spyOn(JSON, 'stringify').mockImplementationOnce(() => {
+        throw new RangeError(message);
+      });
+      try {
+        await program.parseAsync(['node', 'test', 'export', 'eval', 'test-id']);
+        expect(stringify).toHaveBeenCalledWith(
+          expect.objectContaining({ evalId: 'test-id' }),
+          null,
+          2,
+        );
+        expect(logger.error).toHaveBeenCalledWith(
+          'Eval too large for console output. Export rows with --output output.jsonl instead.',
+        );
+        expect(writeOutput).not.toHaveBeenCalled();
+        expect(process.exitCode).toBe(1);
+      } finally {
+        stringify.mockRestore();
+      }
+    },
+  );
+
+  it.each([
+    new TypeError('Invalid string length'),
+    new RangeError('Maximum call stack size exceeded'),
+  ])('preserves the error for unrelated console failures: %s', async (error) => {
+    vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
+    exportCommand(program);
+    const stringify = vi.spyOn(JSON, 'stringify').mockImplementationOnce(() => {
+      throw error;
+    });
+    try {
+      await program.parseAsync(['node', 'test', 'export', 'eval', 'test-id']);
+      expect(logger.error).toHaveBeenCalledWith(`Failed to export eval: ${error}`);
+      expect(process.exitCode).toBe(1);
+    } finally {
+      stringify.mockRestore();
+    }
+  });
+
+  it('preserves file-export errors', async () => {
+    vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
+    const error = new RangeError('Invalid string length');
+    vi.mocked(writeOutput).mockRejectedValueOnce(error);
+    exportCommand(program);
+    await program.parseAsync(['node', 'test', 'export', 'eval', 'test-id', '-o', 'output.json']);
+    expect(logger.error).toHaveBeenCalledWith(`Failed to export eval: ${error}`);
+    expect(process.exitCode).toBe(1);
+  });
+
   it('should exit with error when eval not found', async () => {
     vi.spyOn(Eval, 'findById').mockResolvedValue(undefined);
 
@@ -216,75 +271,6 @@ describe('exportCommand', () => {
 
     await program.parseAsync(['node', 'test', 'export', 'eval', 'non-existent-id']);
 
-    expect(process.exitCode).toBe(1);
-  });
-
-  it('should show specific command when eval is too large for console output', async () => {
-    mockEval.toEvaluateSummary.mockRejectedValue(new RangeError('Invalid string length'));
-    vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
-
-    exportCommand(program);
-
-    await program.parseAsync(['node', 'test', 'export', 'eval', 'test-id']);
-
-    expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining('promptfoo export eval test-id -o output.jsonl'),
-    );
-    expect(process.exitCode).toBe(1);
-  });
-
-  it('should show specific command when JSON output is too large to stringify', async () => {
-    const originalStringify = JSON.stringify;
-    const stringifySpy = vi
-      .spyOn(JSON, 'stringify')
-      .mockImplementation((...args: Parameters<typeof JSON.stringify>) => {
-        const [value] = args;
-        if (value && typeof value === 'object' && 'evalId' in value) {
-          throw new RangeError('Invalid string length');
-        }
-        return originalStringify(args[0], args[1], args[2]);
-      });
-    vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
-
-    exportCommand(program);
-
-    try {
-      await program.parseAsync(['node', 'test', 'export', 'eval', 'test-id']);
-
-      expect(stringifySpy).toHaveBeenCalled();
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('promptfoo export eval test-id -o output.jsonl'),
-      );
-      expect(process.exitCode).toBe(1);
-    } finally {
-      stringifySpy.mockRestore();
-    }
-  });
-
-  it('should re-throw non-RangeError errors from console export', async () => {
-    mockEval.toEvaluateSummary.mockRejectedValue(new TypeError('Something else'));
-    vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
-
-    exportCommand(program);
-
-    await program.parseAsync(['node', 'test', 'export', 'eval', 'test-id']);
-
-    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to export eval'));
-    expect(process.exitCode).toBe(1);
-  });
-
-  it('should re-throw unrelated RangeErrors from console export', async () => {
-    mockEval.toEvaluateSummary.mockRejectedValue(new RangeError('Index out of range'));
-    vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
-
-    exportCommand(program);
-
-    await program.parseAsync(['node', 'test', 'export', 'eval', 'test-id']);
-
-    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to export eval'));
-    expect(logger.error).not.toHaveBeenCalledWith(
-      expect.stringContaining('promptfoo export eval test-id -o output.jsonl'),
-    );
     expect(process.exitCode).toBe(1);
   });
 

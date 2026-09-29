@@ -4,7 +4,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
-import { fetchCellDetail } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import {
   normalizeMediaText,
@@ -17,9 +16,7 @@ import {
   type EvaluateTableOutput,
   type GradingResult,
   type ImageOutput,
-  type ProviderResponse,
   ResultFailureReason,
-  type Vars,
 } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
@@ -32,6 +29,7 @@ import {
   Star,
   ThumbsDown,
   ThumbsUp,
+  X,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import logger from '../../../../../logger';
@@ -51,7 +49,6 @@ import {
   setEvalDetailsHash,
   useEvalDetailsHash,
 } from './utils';
-import type { ResultDetailResponse } from '@promptfoo/types/api/eval';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -110,7 +107,7 @@ export function isImageProvider(provider: string | undefined): boolean {
  * - 'openai:video:sora-2' (OpenAI Sora)
  * - 'openai:video:sora-2-pro' (OpenAI Sora Pro)
  * - 'google:video:veo-3.1-generate-preview' (Google Veo)
- * - 'google:video:veo-2-generate' (Google Veo 2)
+ * - 'google:video:veo-3.1-fast-generate-preview' (Google Veo Fast)
  * Used to skip truncation for video content.
  */
 export function isVideoProvider(provider: string | undefined): boolean {
@@ -891,16 +888,12 @@ function renderCommentNode({
 
 function renderCellDetail({
   showStats,
-  isRedteam,
-  numRequests,
   tokenUsageDisplay,
   latencyDisplay,
   tokPerSecDisplay,
   costDisplay,
 }: {
   showStats: boolean;
-  isRedteam?: boolean;
-  numRequests?: number;
   tokenUsageDisplay?: React.ReactNode;
   latencyDisplay?: React.ReactNode;
   tokPerSecDisplay?: React.ReactNode;
@@ -912,11 +905,6 @@ function renderCellDetail({
 
   return (
     <div className="cell-detail">
-      {isRedteam && numRequests !== undefined && (
-        <div className="stat-item">
-          <strong>Probes:</strong> {numRequests}
-        </div>
-      )}
       {tokenUsageDisplay && (
         <div className="stat-item">
           <strong>Tokens:</strong> {tokenUsageDisplay}
@@ -1002,12 +990,14 @@ function renderStatusBlock({
 
 function renderPromptBlock({
   showPrompts,
+  firstOutput,
   prompt,
 }: {
   showPrompts: boolean;
+  firstOutput?: EvaluateTableOutput | null;
   prompt: EvaluateTableOutput['prompt'];
 }): React.ReactNode {
-  if (!showPrompts || !prompt) {
+  if (!showPrompts || !firstOutput?.prompt) {
     return null;
   }
 
@@ -1041,18 +1031,15 @@ function renderOutputActions({
   copied,
   linked,
   isHighlighted,
+  isRedteam,
   activeRating,
   openPrompt,
   output,
   text,
-  cellDetail,
-  canFetchCellDetail,
-  loadingDetail,
   rowIndex,
   promptIndex,
   evaluationId,
   testCaseId,
-  testVars,
   cloudConfig,
   addFilter,
   resetFilters,
@@ -1072,18 +1059,15 @@ function renderOutputActions({
   copied: boolean;
   linked: boolean;
   isHighlighted: boolean;
+  isRedteam: boolean;
   activeRating: boolean | null;
   openPrompt: boolean;
   output: EvaluateTableOutput;
   text: string;
-  cellDetail: ResultDetailResponse | null;
-  canFetchCellDetail: boolean;
-  loadingDetail: boolean;
   rowIndex: number;
   promptIndex: number;
   evaluationId?: string;
   testCaseId?: string;
-  testVars?: Vars;
   cloudConfig: ReturnType<typeof useCloudConfig>['data'];
   addFilter: ReturnType<typeof useTableStore.getState>['addFilter'];
   resetFilters: ReturnType<typeof useTableStore.getState>['resetFilters'];
@@ -1099,12 +1083,8 @@ function renderOutputActions({
   handlePromptClose: () => void;
   setActionsHovered: (hovered: boolean) => void;
 }): React.ReactNode {
-  const detailVars =
-    cellDetail?.testCase?.vars &&
-    typeof cellDetail.testCase.vars === 'object' &&
-    !Array.isArray(cellDetail.testCase.vars)
-      ? (cellDetail.testCase.vars as Vars)
-      : undefined;
+  const passActionLabel = isRedteam ? 'Mark as safe' : 'Mark test passed';
+  const failActionLabel = isRedteam ? 'Mark as vulnerable' : 'Mark test failed';
 
   return (
     <div
@@ -1168,15 +1148,19 @@ function renderOutputActions({
             className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === true ? 'active text-emerald-600 dark:text-emerald-400' : ''}`}
             onClick={() => handleRating(true)}
             aria-pressed={activeRating === true}
-            aria-label="Mark test passed"
+            aria-label={passActionLabel}
           >
-            <ThumbsUp
-              className={`size-4 ${activeRating === true ? 'stroke-emerald-700 dark:stroke-emerald-300' : ''}`}
-              fill={activeRating === true ? 'currentColor' : 'none'}
-            />
+            {isRedteam ? (
+              <Check className="size-4" />
+            ) : (
+              <ThumbsUp
+                className={`size-4 ${activeRating === true ? 'stroke-emerald-700 dark:stroke-emerald-300' : ''}`}
+                fill={activeRating === true ? 'currentColor' : 'none'}
+              />
+            )}
           </button>
         </TooltipTrigger>
-        <TooltipContent>Mark test passed (score 1.0)</TooltipContent>
+        <TooltipContent>{passActionLabel} (score 1.0)</TooltipContent>
       </Tooltip>
       <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
@@ -1185,15 +1169,19 @@ function renderOutputActions({
             className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === false ? 'active text-red-600 dark:text-red-400' : ''}`}
             onClick={() => handleRating(false)}
             aria-pressed={activeRating === false}
-            aria-label="Mark test failed"
+            aria-label={failActionLabel}
           >
-            <ThumbsDown
-              className={`size-4 ${activeRating === false ? 'stroke-red-700 dark:stroke-red-300' : ''}`}
-              fill={activeRating === false ? 'currentColor' : 'none'}
-            />
+            {isRedteam ? (
+              <X className="size-4" />
+            ) : (
+              <ThumbsDown
+                className={`size-4 ${activeRating === false ? 'stroke-red-700 dark:stroke-red-300' : ''}`}
+                fill={activeRating === false ? 'currentColor' : 'none'}
+              />
+            )}
           </button>
         </TooltipTrigger>
-        <TooltipContent>Mark test failed (score 0.0)</TooltipContent>
+        <TooltipContent>{failActionLabel} (score 0.0)</TooltipContent>
       </Tooltip>
       <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
@@ -1221,7 +1209,7 @@ function renderOutputActions({
         </TooltipTrigger>
         <TooltipContent>Edit comment</TooltipContent>
       </Tooltip>
-      {(output.prompt || canFetchCellDetail) && (
+      {output.prompt && (
         <>
           <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
@@ -1229,8 +1217,6 @@ function renderOutputActions({
                 type="button"
                 className="action p-1 rounded hover:bg-muted transition-colors"
                 onClick={handlePromptOpen}
-                disabled={loadingDetail && !openPrompt}
-                aria-busy={loadingDetail}
                 aria-label="View output and test details"
               >
                 <Search className="size-4" />
@@ -1242,22 +1228,17 @@ function renderOutputActions({
             <EvalOutputPromptDialog
               open={openPrompt}
               onClose={handlePromptClose}
-              prompt={cellDetail?.prompt || output.prompt || (loadingDetail ? 'Loading...' : '')}
+              prompt={output.prompt}
               provider={output.provider}
               gradingResults={getDialogGradingResults(output)}
               output={text}
               metadata={output.metadata}
-              providerPrompt={getActualPrompt(
-                (cellDetail?.response as ProviderResponse | undefined) || output.response,
-                { formatted: true },
-              )}
+              providerPrompt={getActualPrompt(output.response, { formatted: true })}
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
               testIndex={rowIndex}
               promptIndex={promptIndex}
-              variables={
-                output.metadata?.inputVars || detailVars || testVars || output.testCase?.vars
-              }
+              variables={output.metadata?.inputVars || output.testCase?.vars}
               onAddFilter={addFilter}
               onResetFilters={resetFilters}
               onReplay={replayEvaluation}
@@ -1278,11 +1259,10 @@ export interface EvalOutputCellProps {
   rowPositionIndex?: number;
   promptIndex: number;
   showStats: boolean;
+  isRedteam?: boolean;
   onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
   evaluationId?: string;
   testCaseId?: string;
-  isRedteam?: boolean;
-  testVars?: Vars;
 }
 
 /**
@@ -1302,7 +1282,6 @@ export interface EvalOutputCellProps {
  * @param evaluationId - Evaluation identifier passed to the prompt/details dialog.
  * @param testCaseId - Test case identifier passed to the prompt/details dialog (falls back to `output.id` when not provided).
  * @param onMetricFilter - Optional callback to filter by a custom metric (passed through to the CustomMetrics child).
- * @param isRedteam - When true, shows probe-specific stats in the stats panel.
  */
 function EvalOutputCell({
   output,
@@ -1315,10 +1294,9 @@ function EvalOutputCell({
   showDiffs,
   searchText,
   showStats,
+  isRedteam = false,
   evaluationId,
   testCaseId,
-  isRedteam,
-  testVars,
 }: EvalOutputCellProps & {
   firstOutput?: EvaluateTableOutput | null;
   showDiffs: boolean;
@@ -1341,25 +1319,16 @@ function EvalOutputCell({
   const { replayEvaluation, fetchTraces } = useEvalOperations();
 
   const [openPrompt, setOpen] = React.useState(false);
-  const [cellDetail, setCellDetail] = React.useState<ResultDetailResponse | null>(null);
-  const [loadingDetail, setLoadingDetail] = React.useState(false);
   const locationHash = useEvalDetailsHash();
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
     getHumanRating(output)?.pass ?? null,
   );
 
-  // Update activeRating and reset lazy-loaded detail when the cell is reused.
+  // Update activeRating when output changes
   React.useEffect(() => {
     const humanRating = getHumanRating(output)?.pass;
     setActiveRating(humanRating ?? null);
-    setCellDetail(null);
-    setLoadingDetail(false);
   }, [output]);
-
-  // Preserve evalId through trimTableCellForApi so comparison cells fetch their own detail.
-  const cellEvalId = output.evalId;
-  const detailEvalId = cellEvalId || evaluationId || '';
-  const canFetchCellDetail = Boolean(output.isTruncated && output.id && detailEvalId);
 
   React.useEffect(() => {
     const hashTarget = parseEvalOutputPromptHash(locationHash);
@@ -1370,35 +1339,6 @@ function EvalOutputCell({
 
     setOpen(hashTarget.rowIndex === rowIndex && hashTarget.promptIndex === promptIndex);
   }, [locationHash, rowIndex, promptIndex]);
-
-  React.useEffect(() => {
-    const resultId = output.id;
-    if (!openPrompt || cellDetail || !canFetchCellDetail || !resultId) {
-      return;
-    }
-
-    let cancelled = false;
-    const fetchDetail = async () => {
-      setLoadingDetail(true);
-      try {
-        const detail = await fetchCellDetail(detailEvalId, resultId);
-        if (!cancelled && detail) {
-          setCellDetail(detail);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingDetail(false);
-        }
-      }
-    };
-
-    void fetchDetail();
-
-    return () => {
-      cancelled = true;
-      setLoadingDetail(false);
-    };
-  }, [openPrompt, cellDetail, canFetchCellDetail, detailEvalId, output.id]);
 
   const promptDetailsHash = buildEvalOutputPromptHash(rowIndex, promptIndex);
 
@@ -1671,7 +1611,7 @@ function EvalOutputCell({
         showPassReasons,
         passReasons,
       })}
-      {renderPromptBlock({ showPrompts, prompt: cellDetail?.prompt || output.prompt })}
+      {renderPromptBlock({ showPrompts, firstOutput, prompt: output.prompt })}
       {renderResponseAudioPlayer(responseAudioSource)}
       <div
         className={!showPassFail && !showPrompts ? 'content-needs-action-clearance' : undefined}
@@ -1693,8 +1633,6 @@ function EvalOutputCell({
       })}
       {renderCellDetail({
         showStats,
-        isRedteam,
-        numRequests: tokenUsage?.numRequests,
         tokenUsageDisplay,
         latencyDisplay,
         tokPerSecDisplay,
@@ -1705,18 +1643,15 @@ function EvalOutputCell({
         copied,
         linked,
         isHighlighted: commentIsHighlighted,
+        isRedteam,
         activeRating,
         openPrompt,
         output,
         text,
-        cellDetail,
-        canFetchCellDetail,
-        loadingDetail,
         rowIndex,
         promptIndex,
         evaluationId,
         testCaseId,
-        testVars,
         cloudConfig,
         addFilter,
         resetFilters,

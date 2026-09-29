@@ -18,7 +18,7 @@ export function registerCompareProvidersTool(server: McpServer) {
         .describe(
           dedent`
             List of providers to compare.
-            Examples: ["openai:gpt-4o", "anthropic:claude-3-sonnet", "google:gemini-pro"]
+            Examples: ["openai:gpt-5.6", "anthropic:claude-sonnet-5", "google:gemini-2.5-flash"]
           `,
         ),
 

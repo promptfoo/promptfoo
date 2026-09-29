@@ -1,13 +1,6 @@
 import { mockBrowserProperty } from '@app/tests/browserMocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  callApi,
-  fetchCellDetail,
-  fetchUserEmail,
-  fetchUserId,
-  getApiBaseUrl,
-  updateEvalAuthor,
-} from './api';
+import { callApi, fetchUserEmail, fetchUserId, getApiBaseUrl, updateEvalAuthor } from './api';
 
 // Mock the store
 vi.mock('@app/stores/apiConfig', () => ({
@@ -100,6 +93,16 @@ describe('callApi', () => {
     };
     await callApi('/users', options);
     expect(mockFetch).toHaveBeenCalledWith('https://api.example.com/api/users', options);
+  });
+
+  it('uses an explicitly captured endpoint after global settings change', async () => {
+    const captured = getApiBaseUrl('https://original.example/proxy/');
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://changed.example'));
+    await callApi('/user/cloud-config', {}, captured);
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://original.example/proxy/api/user/cloud-config',
+      {},
+    );
   });
 
   it('returns the fetch response', async () => {
@@ -226,37 +229,6 @@ describe('fetchUserId', () => {
 
     const userId = await fetchUserId();
     expect(userId).toBe('12345');
-  });
-});
-
-describe('fetchCellDetail', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
-  });
-
-  it('returns result detail when the API call succeeds', async () => {
-    const detail = {
-      prompt: 'Full prompt',
-      response: { output: 'Full response' },
-      testCase: { vars: { city: 'Denver' } },
-    };
-    mockFetch.mockResolvedValue(new Response(JSON.stringify(detail), { status: 200 }));
-
-    await expect(fetchCellDetail('eval-123', 'result-456')).resolves.toEqual(detail);
-    expect(mockFetch).toHaveBeenCalledWith('/api/eval/eval-123/results/result-456/detail', {});
-  });
-
-  it('returns null when the API response is not ok', async () => {
-    mockFetch.mockResolvedValue(new Response('Not found', { status: 404 }));
-
-    await expect(fetchCellDetail('eval-123', 'missing-result')).resolves.toBeNull();
-  });
-
-  it('returns null when the request fails', async () => {
-    mockFetch.mockRejectedValue(new Error('Network error'));
-
-    await expect(fetchCellDetail('eval-123', 'result-456')).resolves.toBeNull();
   });
 });
 

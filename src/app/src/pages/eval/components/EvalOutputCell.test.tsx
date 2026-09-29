@@ -1,6 +1,5 @@
 import { mockClipboard } from '@app/tests/browserMocks';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
-import { fetchCellDetail } from '@app/utils/api';
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
 import {
   type AssertionType,
@@ -17,13 +16,11 @@ import type { EvalOutputCellProps } from './EvalOutputCell';
 
 // Mock the EvalOutputPromptDialog component to check what props are passed to it
 vi.mock('./EvalOutputPromptDialog', () => ({
-  default: vi.fn(({ gradingResults, metadata, onClose, prompt, variables }) => (
+  default: vi.fn(({ gradingResults, metadata, onClose }) => (
     <div
       data-testid="dialog-component"
       data-grading-results={JSON.stringify(gradingResults)}
       data-metadata={JSON.stringify(metadata)}
-      data-prompt={prompt}
-      data-variables={JSON.stringify(variables)}
     >
       Mocked Dialog Component
       <button type="button" onClick={onClose}>
@@ -32,16 +29,6 @@ vi.mock('./EvalOutputPromptDialog', () => ({
     </div>
   )),
 }));
-
-vi.mock('@app/utils/api', async (importOriginal) => {
-  const api = await importOriginal<typeof import('@app/utils/api')>();
-  return {
-    ...api,
-    fetchCellDetail: vi.fn(),
-  };
-});
-
-const mockFetchCellDetail = vi.mocked(fetchCellDetail);
 
 const renderWithProviders = (ui: React.ReactElement) => {
   return baseRender(<ShiftKeyProvider>{ui}</ShiftKeyProvider>);
@@ -194,6 +181,24 @@ describe('EvalOutputCell', () => {
     timers = undefined;
   });
 
+  it.each([
+    [true, 'Mark as safe', 'Mark as vulnerable', 'lucide-check', 'lucide-x'],
+    [false, 'Mark test passed', 'Mark test failed', 'lucide-thumbs-up', 'lucide-thumbs-down'],
+  ])(
+    'shows the correct grading actions when isRedteam is %s',
+    (isRedteam, passLabel, failLabel, passIcon, failIcon) => {
+      renderWithProviders(<EvalOutputCell {...defaultProps} isRedteam={isRedteam} />);
+
+      const passButton = screen.getByRole('button', { name: passLabel });
+      const failButton = screen.getByRole('button', { name: failLabel });
+
+      expect(passButton.querySelector('svg')).toHaveClass(passIcon);
+      expect(failButton.querySelector('svg')).toHaveClass(failIcon);
+      expect(passButton).not.toHaveTextContent(passLabel);
+      expect(failButton).not.toHaveTextContent(failLabel);
+    },
+  );
+
   it('handles outputs without text without throwing', () => {
     const propsWithoutText: MockEvalOutputCellProps = {
       ...defaultProps,
@@ -288,109 +293,6 @@ describe('EvalOutputCell', () => {
 
     expect(screen.getByTestId('dialog-component')).toBeInTheDocument();
     expect(window.location.hash).toBe('#details-row-1-prompt-1');
-  });
-
-  it('lazy-loads trimmed detail for hash-opened prompt dialogs', async () => {
-    mockFetchCellDetail.mockResolvedValue({
-      prompt: 'Expanded prompt from result detail',
-      response: { output: 'Expanded output' },
-      testCase: { vars: { city: 'Denver' } },
-    });
-    window.history.replaceState({}, '', '/#details-row-1-prompt-1');
-
-    renderWithProviders(
-      <EvalOutputCell
-        {...defaultProps}
-        evaluationId="page-eval-id"
-        output={{
-          ...defaultProps.output,
-          evalId: 'cell-eval-id',
-          isTruncated: true,
-          prompt: '',
-        }}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(mockFetchCellDetail).toHaveBeenCalledWith('cell-eval-id', 'test-id');
-    });
-    await waitFor(() => {
-      expect(screen.getByTestId('dialog-component')).toHaveAttribute(
-        'data-prompt',
-        'Expanded prompt from result detail',
-      );
-    });
-  });
-
-  it('lazy-loads trimmed detail when the prompt dialog opens from the cell action', async () => {
-    const user = userEvent.setup();
-    mockFetchCellDetail.mockResolvedValue({
-      prompt: 'Expanded prompt after click',
-      response: { output: 'Expanded output' },
-      testCase: { vars: { city: 'Denver' } },
-    });
-
-    renderWithProviders(
-      <EvalOutputCell
-        {...defaultProps}
-        evaluationId="page-eval-id"
-        output={{
-          ...defaultProps.output,
-          isTruncated: true,
-          prompt: '',
-        }}
-      />,
-    );
-
-    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
-
-    await waitFor(() => {
-      expect(mockFetchCellDetail).toHaveBeenCalledWith('page-eval-id', 'test-id');
-    });
-    await waitFor(() => {
-      expect(screen.getByTestId('dialog-component')).toHaveAttribute(
-        'data-prompt',
-        'Expanded prompt after click',
-      );
-    });
-  });
-
-  it('uses lazy-loaded test variables for trimmed comparison cells', async () => {
-    const user = userEvent.setup();
-    mockFetchCellDetail.mockResolvedValue({
-      prompt: 'Expanded prompt after click',
-      response: { output: 'Expanded output' },
-      testCase: { vars: { city: 'Boulder', source: 'comparison-eval' } },
-    });
-
-    renderWithProviders(
-      <EvalOutputCell
-        {...defaultProps}
-        evaluationId="page-eval-id"
-        testVars={{ city: 'Denver', source: 'base-eval' }}
-        output={{
-          ...defaultProps.output,
-          evalId: 'comparison-eval-id',
-          isTruncated: true,
-          prompt: '',
-          testCase: { provider: 'comparison-provider' },
-        }}
-      />,
-    );
-
-    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('dialog-component')).toHaveAttribute(
-        'data-prompt',
-        'Expanded prompt after click',
-      );
-    });
-
-    const passedVariables = JSON.parse(
-      screen.getByTestId('dialog-component').getAttribute('data-variables') || '{}',
-    );
-    expect(passedVariables).toEqual({ city: 'Boulder', source: 'comparison-eval' });
   });
 
   it('clears the row hint when closing a deep-linked prompt dialog', async () => {
@@ -1049,10 +951,18 @@ describe('EvalOutputCell', () => {
       await clipboard.writeText.mock.results[0]?.value;
     });
 
+    // Flush query notifications without advancing the three-second link feedback timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(1);
 
     unmount();
 
+    // The shared cloud query removes unused entries on its zero-delay GC timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(0);
   });
 
@@ -1082,6 +992,10 @@ describe('EvalOutputCell', () => {
       await writeTextPromise;
     });
 
+    // The shared cloud query removes unused entries on its zero-delay GC timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(0);
   });
 
@@ -2475,6 +2389,10 @@ describe('isImageProvider helper function', () => {
     expect(isImageProvider('google:gemini-2.5-flash-image')).toBe(true);
   });
 
+  it('should return true for Gemini 3.1 Flash-Lite image provider (Nano Banana 2 Lite)', () => {
+    expect(isImageProvider('google:gemini-3.1-flash-lite-image')).toBe(true);
+  });
+
   it('should return false for text completion providers', () => {
     expect(isImageProvider('openai:gpt-4')).toBe(false);
   });
@@ -2509,8 +2427,8 @@ describe('isVideoProvider helper function', () => {
     expect(isVideoProvider('google:video:veo-3.1-generate-preview')).toBe(true);
   });
 
-  it('should return true for Google Veo 2 provider', () => {
-    expect(isVideoProvider('google:video:veo-2-generate')).toBe(true);
+  it('should return true for Google Veo 3.1 Fast provider', () => {
+    expect(isVideoProvider('google:video:veo-3.1-fast-generate-preview')).toBe(true);
   });
 
   it('should return true for any provider with :video: in the name', () => {

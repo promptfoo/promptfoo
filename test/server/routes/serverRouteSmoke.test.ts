@@ -44,7 +44,6 @@ const mocks = vi.hoisted(() => ({
   fetchWithProxy: vi.fn(),
   getAvailableProviders: vi.fn(),
   getBlobByHash: vi.fn(),
-  getBlobUrl: vi.fn(),
   getDb: vi.fn(),
   getEnvBool: vi.fn(),
   getEnvFloat: vi.fn(),
@@ -91,7 +90,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../src/blobs', () => ({
   getBlobByHash: mocks.getBlobByHash,
-  getBlobUrl: mocks.getBlobUrl,
 }));
 
 vi.mock('../../../src/blobs/extractor', () => ({
@@ -491,12 +489,6 @@ const smokeCases: SmokeCase[] = [
     path: '/api/eval/eval-1/results',
     body: {},
     expectedStatus: 400,
-  },
-  {
-    method: 'get',
-    openApiPath: '/api/eval/{evalId}/results/{resultId}/detail',
-    path: '/api/eval/eval-1/results/result-1/detail',
-    expectedStatus: 404,
   },
   {
     method: 'post',

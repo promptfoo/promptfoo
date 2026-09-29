@@ -16,7 +16,6 @@ import {
   getEvalTablePromptStrippedPayload,
   mergeComparisonTables,
 } from '../../util/eval/evalTableUtils';
-import { trimTableCellForApi } from '../../util/exportToFile';
 import invariant from '../../util/invariant';
 import {
   redactAzureBlobSasTokens,
@@ -63,6 +62,14 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
     });
 
     const promptLocations = getEvalTableOutputPromptLocationsBySize(parsedPayload);
+    if (promptLocations.length === 0) {
+      logger.error('[GET /:id/table] Response too large and has no prompts to strip', {
+        evalId,
+      });
+      res.status(413).json({ error: 'Eval too large to display. Try reducing the page size.' });
+      return;
+    }
+
     const tryStringifyWithStrippedPrompts = (promptCountToStrip: number): string | null => {
       const responseWithoutPrompts = getEvalTablePromptStrippedPayload(
         parsedPayload,
@@ -94,7 +101,7 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
       upperBound *= 2;
     }
 
-    if (!responseBody && promptLocations.length > 0) {
+    if (!responseBody) {
       upperBound = promptLocations.length;
       responseBody = tryStringifyWithStrippedPrompts(upperBound);
     }
@@ -115,28 +122,7 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
       return;
     }
 
-    const promptStrippedPayload =
-      promptLocations.length > 0
-        ? getEvalTablePromptStrippedPayload(parsedPayload, promptLocations, promptLocations.length)
-        : parsedPayload;
-    const { tests: _tests, ...configWithoutTests } = promptStrippedPayload.config;
-
-    try {
-      const responseWithoutTests = JSON.stringify({
-        ...promptStrippedPayload,
-        config: configWithoutTests,
-      });
-      invariant(typeof responseWithoutTests === 'string', 'Eval table response must serialize');
-      logger.warn('[GET /:id/table] Response too large, omitting config.tests', { evalId });
-      res.type('json').send(responseWithoutTests);
-      return;
-    } catch (retryError) {
-      if (!(retryError instanceof RangeError)) {
-        throw retryError;
-      }
-    }
-
-    logger.error('[GET /:id/table] Response still too large after trimming fallback fields', {
+    logger.error('[GET /:id/table] Response still too large after stripping prompts', {
       evalId,
     });
     res.status(413).json({ error: 'Eval too large to display. Try reducing the page size.' });
@@ -158,6 +144,7 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
     evaluateOptions,
     sourceEvalId,
     providers: _validatedProviders,
+    basePath: _basePath,
     ...restData
   } = result.data;
   let testSuite = {
@@ -170,7 +157,10 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
     try {
       const sourceEval = await Eval.findById(sourceEvalId);
       if (sourceEval) {
-        testSuite = restoreAzureBlobSasTokens(testSuite, sourceEval.config);
+        testSuite = {
+          ...restoreAzureBlobSasTokens(testSuite, sourceEval.config),
+          ...(sourceEval.config.basePath !== undefined && { basePath: sourceEval.config.basePath }),
+        };
       }
     } catch (error) {
       sendError(res, 500, 'Failed to prepare eval job', error);
@@ -479,13 +469,6 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     }
   }
 
-  // Trim non-display cell detail for the API response to prevent large table payloads.
-  // Full provider response/testCase detail, and any prompt removed by the size fallback,
-  // can be fetched on demand by result ID.
-  for (const row of returnTable.body) {
-    row.outputs = row.outputs.map((output) => (output ? trimTableCellForApi(output) : output));
-  }
-
   const responsePayload = {
     table: returnTable,
     totalCount: table.totalCount,
@@ -500,38 +483,6 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 
   sendEvalTableResponse(res, id, responsePayload);
 });
-
-// Returns the full prompt, response, and test case for a single result cell.
-// The table endpoint trims hidden details and may strip prompts in its size fallback.
-evalRouter.get(
-  '/:evalId/results/:resultId/detail',
-  async (req: Request, res: Response): Promise<void> => {
-    const paramsResult = EvalSchemas.ResultDetail.Params.safeParse(req.params);
-    if (!paramsResult.success) {
-      res.status(400).json({ error: z.prettifyError(paramsResult.error) });
-      return;
-    }
-
-    const { evalId, resultId } = paramsResult.data;
-
-    try {
-      const result = await EvalResult.findById(resultId);
-      if (!result || result.evalId !== evalId) {
-        res.status(404).json({ error: 'Result not found' });
-        return;
-      }
-
-      const response = EvalSchemas.ResultDetail.Response.parse({
-        prompt: result.prompt.raw,
-        response: result.response,
-        testCase: result.testCase,
-      });
-      res.json(response);
-    } catch (error) {
-      sendError(res, 500, 'Failed to fetch result detail', error);
-    }
-  },
-);
 
 evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {
   const paramsResult = EvalSchemas.MetadataKeys.Params.safeParse(req.params);
