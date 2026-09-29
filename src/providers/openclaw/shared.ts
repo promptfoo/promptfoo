@@ -6,7 +6,7 @@ import JSON5 from 'json5';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 
-import type { ProviderOptions } from '../../types/providers';
+import type { CallApiContextParams, ProviderOptions } from '../../types/providers';
 import type { OpenClawConfig, OpenClawGatewayConfig } from './types';
 
 export const DEFAULT_GATEWAY_PORT = 18789;
@@ -326,31 +326,92 @@ export function resolveAuthToken(
 }
 
 /**
+ * Normalize an explicit OpenClaw agent selector to the optional agent id used downstream.
+ * Only the canonical slash-form default alias is implicit. Colon-form compatibility aliases
+ * still name explicit agents, including valid agents named `default` or `openclaw`.
+ */
+export function normalizeOpenClawAgentId(agentId?: string): string | undefined {
+  const trimmedAgentId = agentId?.trim() ?? '';
+  if (!trimmedAgentId) {
+    return undefined;
+  }
+
+  const lowerAgentId = trimmedAgentId.toLowerCase();
+  if (lowerAgentId === 'openclaw/default') {
+    return undefined;
+  }
+  if (lowerAgentId.startsWith('openclaw/')) {
+    const targetAgentId = trimmedAgentId.slice('openclaw/'.length).trim();
+    return targetAgentId || trimmedAgentId;
+  }
+  if (lowerAgentId.startsWith('openclaw:')) {
+    const targetAgentId = trimmedAgentId.slice('openclaw:'.length).trim();
+    return targetAgentId || trimmedAgentId;
+  }
+  if (lowerAgentId.startsWith('agent:')) {
+    const targetAgentId = trimmedAgentId.slice('agent:'.length).trim();
+    return targetAgentId || trimmedAgentId;
+  }
+  return trimmedAgentId;
+}
+
+/**
  * Build the canonical OpenClaw model id for OpenAI-compatible endpoints.
  */
-export function buildOpenClawModelName(agentId: string): string {
-  const trimmedAgentId = agentId.trim();
-  if (!trimmedAgentId || trimmedAgentId === 'default' || trimmedAgentId === 'openclaw') {
-    return 'openclaw/default';
-  }
-  if (trimmedAgentId.startsWith('openclaw/')) {
-    const targetAgentId = trimmedAgentId.slice('openclaw/'.length).trim();
-    return targetAgentId ? `openclaw/${targetAgentId}` : 'openclaw/default';
-  }
-  if (trimmedAgentId.startsWith('openclaw:')) {
-    const targetAgentId = trimmedAgentId.slice('openclaw:'.length).trim();
-    return targetAgentId ? `openclaw/${targetAgentId}` : 'openclaw/default';
-  }
-  if (trimmedAgentId.startsWith('agent:')) {
-    const targetAgentId = trimmedAgentId.slice('agent:'.length).trim();
-    return targetAgentId ? `openclaw/${targetAgentId}` : 'openclaw/default';
-  }
-  return `openclaw/${trimmedAgentId}`;
+export function buildOpenClawModelName(agentId?: string): string {
+  const normalizedAgentId = normalizeOpenClawAgentId(agentId);
+  // Older HTTP gateways interpret `openclaw/default` as a literal agent named `default`.
+  return normalizedAgentId ? `openclaw/${normalizedAgentId}` : 'openclaw';
 }
 
 function normalizeHeaderValue(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed || undefined;
+}
+
+/**
+ * Scope an unqualified session key to an explicit agent. OpenClaw canonicalizes unscoped keys
+ * under the configured default agent, so explicit agents must carry their scope in the key.
+ */
+export function buildOpenClawSessionKey(agentId: string | undefined, sessionKey: string): string {
+  const trimmedSessionKey = sessionKey.trim();
+  const trimmedAgentId = agentId?.trim();
+  if (!trimmedSessionKey) {
+    return trimmedSessionKey;
+  }
+
+  if (trimmedSessionKey.startsWith(':')) {
+    throw new Error(
+      `OpenClaw session key "${trimmedSessionKey}" must include a non-empty session ID`,
+    );
+  }
+
+  if (trimmedSessionKey.toLowerCase().startsWith('agent:')) {
+    const sessionKeyParts = trimmedSessionKey.split(':');
+    const scopedAgentId = sessionKeyParts[1]?.trim();
+    if (!scopedAgentId || !sessionKeyParts[2]?.trim()) {
+      throw new Error(
+        `OpenClaw session key "${trimmedSessionKey}" must use the form "agent:<agent-id>:<session-id>"`,
+      );
+    }
+    if (trimmedAgentId && scopedAgentId.toLowerCase() !== trimmedAgentId.toLowerCase()) {
+      throw new Error(
+        `OpenClaw session key targets agent "${scopedAgentId}" but the provider targets "${trimmedAgentId}"`,
+      );
+    }
+    return trimmedSessionKey;
+  }
+
+  const lowerSessionKey = trimmedSessionKey.toLowerCase();
+  if (lowerSessionKey === 'global' || lowerSessionKey === 'unknown') {
+    return trimmedSessionKey;
+  }
+
+  if (!trimmedAgentId) {
+    return trimmedSessionKey;
+  }
+
+  return `agent:${trimmedAgentId}:${trimmedSessionKey}`;
 }
 
 /**
@@ -397,18 +458,69 @@ export function resolveOpenClawBillingModelName(config?: OpenClawConfig): string
  * passed as an RPC param there, not as an HTTP header.
  */
 export function buildOpenClawHeaders(
-  agentId: string,
+  agentId: string | undefined,
   config?: OpenClawConfig,
 ): Record<string, string> {
-  const headers: Record<string, string> = {
-    'x-openclaw-agent-id': agentId,
-  };
-  if (config?.session_key) {
-    headers['x-openclaw-session-key'] = config.session_key;
+  const headers: Record<string, string> = {};
+  const contextHeaders = buildOpenClawContextHeaders(config);
+  const generatedContextHeaderNames = new Set(
+    Object.keys(contextHeaders).map((name) => name.toLowerCase()),
+  );
+  let headerSessionKey: string | undefined;
+  for (const [name, value] of Object.entries(config?.headers ?? {})) {
+    const normalizedName = name.toLowerCase();
+    if (normalizedName === 'x-openclaw-agent-id' || normalizedName === 'x-openclaw-agent') {
+      continue;
+    }
+    if (normalizedName === 'x-openclaw-session-key') {
+      headerSessionKey = value;
+      continue;
+    }
+    if (generatedContextHeaderNames.has(normalizedName)) {
+      continue;
+    }
+    headers[name] = value;
+  }
+
+  if (agentId) {
+    headers['x-openclaw-agent-id'] = agentId;
+  }
+  const sessionKey = config?.session_key ?? headerSessionKey;
+  if (sessionKey?.trim()) {
+    headers['x-openclaw-session-key'] = buildOpenClawSessionKey(agentId, sessionKey);
   }
   return {
     ...headers,
-    ...buildOpenClawContextHeaders(config),
+    ...contextHeaders,
+  };
+}
+
+export function buildOpenClawCallContext(
+  context?: CallApiContextParams,
+): CallApiContextParams | undefined {
+  const passthrough = context?.prompt?.config?.passthrough;
+  if (
+    !context?.prompt?.config ||
+    !passthrough ||
+    typeof passthrough !== 'object' ||
+    Array.isArray(passthrough) ||
+    !('model' in passthrough)
+  ) {
+    return context;
+  }
+
+  // Remove route overrides before OpenAI parameter and billing decisions.
+  return {
+    ...context,
+    prompt: {
+      ...context.prompt,
+      config: {
+        ...context.prompt.config,
+        passthrough: Object.fromEntries(
+          Object.entries(passthrough).filter(([name]) => name !== 'model'),
+        ),
+      },
+    },
   };
 }
 
@@ -417,7 +529,7 @@ export function buildOpenClawHeaders(
  * Resolves gateway URL, auth token, and merges OpenClaw-specific headers.
  */
 export function buildOpenClawProviderOptions(
-  agentId: string,
+  agentId: string | undefined,
   providerOptions: ProviderOptions,
 ): ProviderOptions {
   const config = (providerOptions.config || {}) as Record<string, unknown>;
@@ -427,20 +539,23 @@ export function buildOpenClawProviderOptions(
     config as { auth_password?: string; auth_token?: string },
     env,
   );
+  const passthrough = config.passthrough;
+  const sanitizedPassthrough =
+    passthrough && typeof passthrough === 'object' && !Array.isArray(passthrough)
+      ? Object.fromEntries(Object.entries(passthrough).filter(([name]) => name !== 'model'))
+      : passthrough;
 
   return {
     ...providerOptions,
     config: {
       ...config,
+      ...(passthrough === undefined ? {} : { passthrough: sanitizedPassthrough }),
       apiBaseUrl: `${gatewayUrl}/v1`,
       // Only set apiKey if we resolved an OpenClaw token; don't clobber user-supplied keys
       ...(authToken && { apiKey: authToken }),
       // Prevent OpenAI base class from falling back to OPENAI_API_KEY
       apiKeyRequired: false,
-      headers: {
-        ...(config.headers as Record<string, string> | undefined),
-        ...buildOpenClawHeaders(agentId, config as OpenClawConfig),
-      },
+      headers: buildOpenClawHeaders(agentId, config as OpenClawConfig),
     },
   };
 }

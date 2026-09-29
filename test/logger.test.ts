@@ -12,8 +12,7 @@ import {
   vi,
 } from 'vitest';
 import { mockProcessEnv } from './util/utils';
-import type { Logger } from 'winston';
-import type Transport from 'winston-transport';
+import type { Logger, transport as Transport } from 'winston';
 
 // Create hoisted mocks
 const { mockGetEnvString, mockGetEnvBool, mockGetConfigDirectoryPath, fsMock, mockLogger } =
@@ -134,6 +133,11 @@ describe('logger', () => {
     mockGetEnvBool.mockImplementation((_, defaultValue) => defaultValue);
     mockGetConfigDirectoryPath.mockReset();
     mockGetConfigDirectoryPath.mockReturnValue('/mock/config');
+    winstonMock.transports.File.mockReset().mockImplementation(function (this: {
+      write: ReturnType<typeof vi.fn>;
+    }) {
+      this.write = vi.fn();
+    });
     for (const fn of Object.values(fsMock)) {
       (fn as Mock).mockReset();
     }

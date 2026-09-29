@@ -46,10 +46,6 @@ sidebar_position: 3
 - Use `// highlight-next-line` for emphasis
 - Never remove existing highlight directives
 
-## MDX Syntax
-
-- Escape `<` as `&lt;` in prose (e.g., `&lt;1%`) — MDX treats `<` as JSX
-
 ## Admonitions
 
 ```markdown
