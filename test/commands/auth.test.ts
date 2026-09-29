@@ -1,6 +1,6 @@
 import search from '@inquirer/search';
 import { Command } from 'commander';
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authCommand } from '../../src/commands/auth';
 import { isNonInteractive } from '../../src/envars';
 import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
@@ -70,11 +70,14 @@ afterAll(() => {
   restoreFetch();
 });
 
+afterEach(() => {
+  vi.resetAllMocks();
+});
+
 describe('auth command', () => {
   let program: Command;
 
   beforeEach(() => {
-    vi.clearAllMocks();
     vi.resetAllMocks();
     program = new Command();
     process.exitCode = undefined;
