@@ -7,7 +7,7 @@ import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import { formatASRForDisplay } from '@app/utils/redteam';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import type { EvalSummary } from '@promptfoo/types';
 import type { ColumnDef } from '@tanstack/react-table';
 

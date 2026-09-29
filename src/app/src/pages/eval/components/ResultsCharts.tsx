@@ -82,8 +82,7 @@ function HistogramChart({ table }: ChartProps) {
   const titleId = useId();
   const summaryId = useId();
 
-  // Compute the binned dataset once so the canvas and the non-visual accessible
-  // summary describe the exact same distribution (per-bin, per-prompt counts).
+  // Share bins between the chart and its accessible table.
   const binnedData = useMemo(() => {
     const scores = table.body
       .flatMap((row) => row.outputs.map((output) => output?.score))
@@ -118,9 +117,6 @@ function HistogramChart({ table }: ChartProps) {
     return { totalScores: scores.length, minScore, maxScore, binSize, bins, datasets };
   }, [table]);
 
-  // Derive the accessible summary from the SAME binned dataset the chart renders so
-  // materially different distributions (e.g. swapped prompt/bin frequencies) produce
-  // materially different non-visual summaries.
   const summary = useMemo(() => {
     if (!binnedData) {
       return {

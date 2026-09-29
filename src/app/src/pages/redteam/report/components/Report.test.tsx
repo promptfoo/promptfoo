@@ -6,7 +6,7 @@ import { callApi } from '@app/utils/api';
 import { ResultFailureReason } from '@promptfoo/types';
 import { render, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom';
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import App from './Report';
 import type { EvaluateResult, GradingResult, ResultsFile } from '@promptfoo/types';

@@ -104,30 +104,6 @@ describe('coverage ratchets', () => {
     );
   });
 
-  it.each(['ts', 'tsx'])('excludes browser tests from source coverage floors (%s)', (extension) => {
-    const file = `src/app/src/tests/browser-mode/navigation.browser.${extension}`;
-    const result = evaluateCoverageRatchets({
-      changedFiles: [{ path: file, status: 'A' }],
-      coverageMap: { [file]: coverageFile(file, { statements: { covered: 0, total: 4 } }) },
-      repoRoot,
-      report: frontendReport,
-    });
-    expect(result.checkedFiles).toEqual([]);
-    expect(result.failures).toEqual([]);
-  });
-
-  it('keeps production browser replacements in source coverage floors', () => {
-    const file = 'src/app/src/util/createHash.browser.ts';
-    const result = evaluateCoverageRatchets({
-      changedFiles: [{ path: file, status: 'A' }],
-      coverageMap: { [file]: coverageFile(file, { statements: { covered: 0, total: 4 } }) },
-      repoRoot,
-      report: frontendReport,
-    });
-    expect(result.checkedFiles).toHaveLength(1);
-    expect(result.failures).toHaveLength(1);
-  });
-
   it('does not gate ordinary modified legacy source files', () => {
     const result = evaluateCoverageRatchets({
       changedFiles: [{ path: 'src/legacy.ts', status: 'M' }],
@@ -186,6 +162,29 @@ describe('coverage ratchets', () => {
     expect(result.failures).toEqual([]);
     expect(result.checkedFiles).toHaveLength(1);
     expect(result.checkedFiles[0].file).toBe(file);
+  });
+
+  it('excludes browser tests without excluding production browser helpers', () => {
+    const helper = 'src/app/src/components/model.browserHelpers.tsx';
+    const result = evaluateCoverageRatchets({
+      changedFiles: [
+        { path: 'src/app/src/components/model.browser.ts', status: 'A' },
+        { path: 'src/app/src/components/model.browser.tsx', status: 'A' },
+        { path: helper, status: 'A' },
+      ],
+      coverageMap: {},
+      repoRoot,
+      report: frontendReport,
+    });
+
+    expect(result.failures).toEqual([
+      {
+        file: helper,
+        reason: 'new source file',
+        message: `No coverage entry found for ${helper}`,
+      },
+    ]);
+    expect(result.checkedFiles).toEqual([]);
   });
 
   it('parses added, modified, and renamed files from git name-status output', () => {

@@ -7,7 +7,7 @@ import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router';
 import PromptDialog from './PromptDialog';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
 import type { ColumnDef } from '@tanstack/react-table';

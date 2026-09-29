@@ -22,7 +22,7 @@ import { ArrowBackIcon, DeleteIcon, DownloadIcon, MoreVertIcon } from '@app/comp
 import { Spinner } from '@app/components/ui/spinner';
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { usePageMeta } from '@app/hooks/usePageMeta';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router';
 import { ResultPageSkeleton } from '../model-audit/components/ModelAuditSkeleton';
 import ResultsTab from '../model-audit/components/ResultsTab';
 import ScannedFilesDialog from '../model-audit/components/ScannedFilesDialog';
@@ -49,10 +49,7 @@ export default function ModelAuditResult() {
   const currentScan = scan?.id === id ? scan : null;
 
   useEffect(() => {
-    // React Router reuses this component across /model-audit/:id navigations, so a
-    // previously loaded scan can linger. Clear it whenever the id changes so the page
-    // title (and error state) never keeps identifying the prior scan while the next one
-    // loads, is missing, or fails to load.
+    // Clear the previous scan while the next route loads.
     setScan(null);
 
     if (!id) {
