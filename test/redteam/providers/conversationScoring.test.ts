@@ -115,9 +115,7 @@ describe.each([
           { prompt: { raw: expectedBody, label: kind }, vars: {} },
           options,
         );
-        expect(kind === 'eval' && Array.isArray(result) ? result[0] : result).toEqual(
-          kind === 'refusal' ? [false, score.rationale] : score,
-        );
+        expect(result).toEqual(kind === 'refusal' ? [false, score.rationale] : score);
         expect(usage.assertions).toMatchObject(reported);
         expect(TokenUsageTracker.getInstance().getProviderUsage(scorer.id())).toMatchObject(
           reported,
