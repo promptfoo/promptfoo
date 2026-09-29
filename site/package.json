@@ -55,12 +55,12 @@
     "motion": "^12.34.3",
     "prism-react-renderer": "^2.4.1",
     "prismjs": "^1.30.0",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "satori": "^0.26.0",
     "typescript": "^7.0.0",
     "vitest": "^5.0.0",
-    "webpack": "5.111.0"
+    "webpack": "5.111.1"
   },
   "optionalDependencies": {
     "sharp": "^0.35.4"

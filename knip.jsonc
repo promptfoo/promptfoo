@@ -85,6 +85,8 @@
     "act",
     "ffmpeg",
     "go",
+    // POSIX utility used by workspace FIFO regression tests.
+    "mkfifo",
     "modelaudit",
     "ruby",
     "security"

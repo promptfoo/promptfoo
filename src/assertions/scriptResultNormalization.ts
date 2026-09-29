@@ -56,12 +56,11 @@ export function normalizeScriptAssertionResult(
   return {
     ...result,
     pass,
-    reason:
-      pass === result.pass
-        ? result.reason
-        : pass
-          ? 'Assertion passed'
-          : `${labels.code} returned ${result.pass ? 'true' : 'false'}`,
+    reason: inverse
+      ? pass
+        ? 'Assertion passed'
+        : result.reason || `${labels.code} returned true`
+      : result.reason,
     assertion: result.assertion ?? assertion,
   };
 }
