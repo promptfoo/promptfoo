@@ -518,7 +518,7 @@ Azure OpenAI becomes the default provider (used for grading, dataset generation,
 2. Azure authentication is configured (either via API key or client credentials)
 3. Either `AZURE_OPENAI_DEPLOYMENT_NAME` or `AZURE_DEPLOYMENT_NAME` is set
 
-The default deployment is taken from `AZURE_OPENAI_DEPLOYMENT_NAME` when available, otherwise from `AZURE_DEPLOYMENT_NAME`. If both are set, `AZURE_OPENAI_DEPLOYMENT_NAME` takes precedence.
+`AZURE_OPENAI_DEPLOYMENT_NAME` takes precedence over `AZURE_DEPLOYMENT_NAME` when both are set.
 
 For example, if you have these environment variables set:
 
