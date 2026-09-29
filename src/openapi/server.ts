@@ -581,7 +581,7 @@ export function createServerOpenApiRegistry() {
     tags: ['Eval'],
     summary: 'Upload a chunk of evaluation results',
     description:
-      'Appends result rows to an existing imported evaluation. Prompt metrics must already describe the complete result set, as in the chunked sharing workflow. This endpoint does not recalculate aggregate scores or pass/fail counts and is not an operation for extending a completed evaluation with newly evaluated tests.',
+      'Appends result rows to an imported evaluation. Supply complete prompt metrics before uploading chunks; this endpoint does not recalculate scores or pass/fail counts.',
     request: {
       params: params('AddResultsParams', EvalSchemas.AddResults.Params),
       body: jsonBody('AddResultsRequest', EvalSchemas.AddResults.Request),

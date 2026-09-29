@@ -334,7 +334,7 @@ After configuring the CLI, you need to explicitly upload eval results to your se
 2. Run `promptfoo share` to upload the results
 3. Or use `promptfoo eval --share` to do both in one command
 
-Custom upload clients should follow the same import contract: save the eval with complete prompt metrics, then upload result chunks to `POST /api/eval/{id}/results`. Chunk uploads append rows but do not recompute those metrics. Use an eval run to calculate new results rather than treating this endpoint as a way to extend an already summarized eval.
+Custom upload clients should follow the same import contract: save the eval with complete prompt metrics, then upload result chunks to `POST /api/eval/{id}/results`. Chunk uploads append rows but do not recompute those metrics. Run a new eval to calculate results for additional tests.
 
 Alternatively, configure these URLs permanently in your `promptfooconfig.yaml`:
 
@@ -405,7 +405,7 @@ Place a `ui-providers.yaml` file in your `.promptfoo` directory (same location a
 providers:
   # Simple provider IDs
   - openai:gpt-5.4-mini
-  - anthropic:messages:claude-sonnet-4-5-20250929
+  - anthropic:messages:claude-sonnet-5
 
   # With labels and defaults
   - id: openai:gpt-5.1
@@ -448,7 +448,7 @@ data:
   ui-providers.yaml: |
     providers:
       - openai:gpt-5.1
-      - anthropic:messages:claude-sonnet-4-5-20250929
+      - anthropic:messages:claude-sonnet-5
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -521,8 +521,8 @@ providers:
 **Provider ID formats:**
 
 - **OpenAI:** `openai:gpt-5.1`, `openai:gpt-5.4-mini`
-- **Anthropic:** `anthropic:messages:claude-sonnet-4-5-20250929`
-- **AWS Bedrock:** `bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0`
+- **Anthropic:** `anthropic:messages:claude-sonnet-5`
+- **AWS Bedrock:** `bedrock:us.anthropic.claude-sonnet-5`
 - **Azure OpenAI:** `azureopenai:chat:deployment-name`
 - **Custom HTTP:** `http://your-api.com/v1` or `https://...`
 
