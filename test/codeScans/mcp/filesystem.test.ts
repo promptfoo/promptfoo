@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import path from 'path';
+import { pathToFileURL } from 'url';
 import type { ChildProcess } from 'child_process';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,6 +8,8 @@ import { mockProcessEnv } from '../../util/utils';
 
 const mocks = vi.hoisted(() => ({
   execFile: vi.fn(),
+  realpath: vi.fn(),
+  exists: vi.fn(),
   resolve: vi.fn(),
   spawn: vi.fn(),
 }));
@@ -18,6 +21,11 @@ vi.mock('child_process', async (importOriginal) => {
     execFile: mocks.execFile,
     spawn: mocks.spawn,
   };
+});
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return { ...actual, realpathSync: mocks.realpath, existsSync: mocks.exists };
 });
 
 vi.mock('module', async (importOriginal) => {
@@ -137,10 +145,14 @@ describe('filesystem MCP launcher', () => {
     '/promptfoo/node_modules/@modelcontextprotocol/server-filesystem/dist/index.js',
   );
   let restoreEnv: () => void;
+  const originalPnp = process.versions.pnp;
 
   beforeEach(() => {
     vi.resetAllMocks();
+    delete process.versions.pnp;
     mocks.resolve.mockReturnValue(serverEntry);
+    mocks.realpath.mockImplementation((file: string) => file);
+    mocks.exists.mockReturnValue(true);
     mocks.spawn.mockReturnValue(createFakeProcess());
     restoreEnv = mockProcessEnv(
       {
@@ -160,6 +172,11 @@ describe('filesystem MCP launcher', () => {
 
   afterEach(() => {
     restoreEnv();
+    if (originalPnp === undefined) {
+      delete process.versions.pnp;
+    } else {
+      process.versions.pnp = originalPnp;
+    }
   });
 
   it('runs the installed server with the current Node executable', () => {
@@ -171,7 +188,7 @@ describe('filesystem MCP launcher', () => {
     expect(mocks.spawn).toHaveBeenCalledWith(
       process.execPath,
       [serverEntry, rootDir],
-      expect.objectContaining({ cwd: rootDir }),
+      expect.objectContaining({ cwd: path.dirname(serverEntry) }),
     );
   });
 
@@ -183,6 +200,88 @@ describe('filesystem MCP launcher', () => {
       Path: '/usr/bin',
       SystemRoot: 'C:\\Windows',
     });
+  });
+
+  it.each(['entry', 'symlink', 'root-symlink'])(
+    'rejects a server inside the scanned repository (%s)',
+    (mode) => {
+      const inside = path.join(rootDir, 'node_modules/server/index.js');
+      if (mode === 'entry') {
+        mocks.resolve.mockReturnValue(inside);
+      } else if (mode === 'symlink') {
+        mocks.realpath.mockImplementation((file: string) => (file === serverEntry ? inside : file));
+      } else {
+        mocks.realpath.mockImplementation((file: string) =>
+          file === rootDir ? path.dirname(serverEntry) : file,
+        );
+      }
+      expect(() => startFilesystemMcpServer(rootDir)).toThrow(
+        'installed outside the scanned repository',
+      );
+      expect(mocks.spawn).not.toHaveBeenCalled();
+    },
+  );
+
+  it('allows a sibling installation with the same directory prefix', () => {
+    const siblingEntry = path.join(`${rootDir}-tools`, 'index.js');
+    mocks.resolve.mockReturnValue(siblingEntry);
+    startFilesystemMcpServer(rootDir);
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      process.execPath,
+      [siblingEntry, rootDir],
+      expect.anything(),
+    );
+  });
+
+  it('passes only trusted Yarn PnP loaders to the Node child', () => {
+    process.versions.pnp = '3';
+    const pnpLoader = path.resolve('/promptfoo/.pnp.cjs');
+    const esmLoader = path.resolve('/promptfoo/.pnp.loader.mjs');
+    mocks.resolve.mockImplementation((name: string) =>
+      name === 'pnpapi' ? pnpLoader : serverEntry,
+    );
+    startFilesystemMcpServer(rootDir);
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      process.execPath,
+      [
+        '--require',
+        pnpLoader,
+        '--experimental-loader',
+        pathToFileURL(esmLoader).href,
+        serverEntry,
+        rootDir,
+      ],
+      expect.objectContaining({ cwd: path.dirname(pnpLoader) }),
+    );
+    expect(mocks.spawn.mock.calls[0][2].env).not.toHaveProperty('NODE_OPTIONS');
+  });
+
+  it.each(['pnp', 'esm'])('rejects a Yarn %s loader resolving inside the repository', (loader) => {
+    process.versions.pnp = '3';
+    const pnpLoader = path.resolve('/promptfoo/.pnp.cjs');
+    const esmLoader = path.resolve('/promptfoo/.pnp.loader.mjs');
+    mocks.resolve.mockImplementation((name: string) =>
+      name === 'pnpapi' ? pnpLoader : serverEntry,
+    );
+    mocks.realpath.mockImplementation((file: string) =>
+      file === (loader === 'pnp' ? pnpLoader : esmLoader)
+        ? path.join(rootDir, path.basename(file))
+        : file,
+    );
+    expect(() => startFilesystemMcpServer(rootDir)).toThrow(
+      'installed outside the scanned repository',
+    );
+    expect(mocks.spawn).not.toHaveBeenCalled();
+  });
+
+  it('explains how to enable the missing Yarn ESM loader', () => {
+    process.versions.pnp = '3';
+    mocks.resolve.mockImplementation((name: string) =>
+      name === 'pnpapi' ? path.resolve('/promptfoo/.pnp.cjs') : serverEntry,
+    );
+    mocks.exists.mockReturnValue(false);
+    expect(() => startFilesystemMcpServer(rootDir)).toThrow('Enable pnpEnableEsmLoader');
+    expect(mocks.spawn).not.toHaveBeenCalled();
   });
 
   it('fails before spawning when the server package is not installed', () => {
@@ -297,6 +396,23 @@ describe('filesystem MCP cleanup', () => {
     expect(onStopped).toHaveBeenCalledOnce();
     expect(child.listenerCount('exit')).toBe(0);
     expect(child.listenerCount('error')).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('arms the exit deadline only after sending SIGKILL', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    const child = createFakeProcess();
+    const stopped = stopFilesystemMcpServer(child);
+    expect(vi.getTimerCount()).toBe(1);
+
+    // Suspending the host must not consume the post-SIGKILL confirmation window.
+    vi.setSystemTime(Date.now() + 60000);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(child.kill).toHaveBeenLastCalledWith('SIGKILL');
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(4999);
+    child.emit('exit', null, 'SIGKILL');
+    await expect(stopped).resolves.toBeUndefined();
     expect(vi.getTimerCount()).toBe(0);
   });
 

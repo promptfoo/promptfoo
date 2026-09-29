@@ -14,7 +14,9 @@ access through MCP, GitHub PR context, and the hosted scanner service.
   abort.
 - Run the filesystem MCP server from promptfoo's installed package with `process.execPath`
   and a minimal env (see `mcp/filesystem.ts`), not through npx/npm or a bare command
-  name, so it is resolved and launched outside the scanned repository's npm context.
+  name. Canonicalize the server entry and any Yarn PnP loaders, reject paths inside the
+  scanned repository, and use a working directory outside it. Do not forward ambient
+  `NODE_OPTIONS` or loader arguments.
 - Preserve npm/npx environment sanitization when spawning tool installers or MCP
   servers. When adding install paths, make the registry/cwd/env explicit and cover
   PR-controlled npm config in tests.

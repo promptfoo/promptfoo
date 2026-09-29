@@ -5,8 +5,10 @@
  */
 
 import { type ChildProcess, execFile, spawn } from 'child_process';
+import { existsSync, realpathSync } from 'fs';
 import { createRequire } from 'module';
-import { isAbsolute, join, resolve } from 'path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'path';
+import { pathToFileURL } from 'url';
 import { promisify } from 'util';
 
 import logger from '../../logger';
@@ -50,6 +52,49 @@ function resolveFilesystemMcpServerEntry(): string {
   }
 }
 
+function getFilesystemMcpLaunch(rootDir: string): { args: string[]; cwd: string } {
+  const canonicalRoot = realpathSync(rootDir);
+  const outsideRoot = (file: string): string => {
+    const canonicalFile = realpathSync(file);
+    const relativePath = relative(canonicalRoot, canonicalFile);
+    if (
+      relativePath !== '..' &&
+      !relativePath.startsWith(`..${sep}`) &&
+      !isAbsolute(relativePath)
+    ) {
+      throw new Error(
+        'The filesystem MCP launcher must be installed outside the scanned repository. Use an external promptfoo installation or --diffs-only.',
+      );
+    }
+    return canonicalFile;
+  };
+
+  const entry = outsideRoot(resolveFilesystemMcpServerEntry());
+  if (!process.versions.pnp) {
+    return { args: [entry, canonicalRoot], cwd: dirname(entry) };
+  }
+
+  // Resolve only the installed package's loaders; never inherit ambient NODE_OPTIONS.
+  const pnpLoader = outsideRoot(require.resolve('pnpapi'));
+  const esmLoader = join(dirname(pnpLoader), '.pnp.loader.mjs');
+  if (!existsSync(esmLoader)) {
+    throw new Error(
+      'The filesystem MCP server needs Yarn ESM support. Enable pnpEnableEsmLoader and reinstall, use nodeLinker: node-modules, or use --diffs-only.',
+    );
+  }
+  return {
+    args: [
+      '--require',
+      pnpLoader,
+      '--experimental-loader',
+      pathToFileURL(outsideRoot(esmLoader)).href,
+      entry,
+      canonicalRoot,
+    ],
+    cwd: dirname(pnpLoader),
+  };
+}
+
 /**
  * Start the filesystem MCP server as a child process
  * @param rootDir Absolute path to root directory for filesystem access
@@ -68,17 +113,12 @@ export function startFilesystemMcpServer(rootDir: string): ChildProcess {
   logger.debug(`Root directory: ${absoluteRootDir}`);
 
   try {
-    // Run the installed server under this Node rather than through npx, so the scanned
-    // repository's npm context does not affect how it is resolved or launched.
-    const mcpProcess = spawn(
-      process.execPath,
-      [resolveFilesystemMcpServerEntry(), absoluteRootDir],
-      {
-        stdio: ['pipe', 'pipe', 'pipe'], // stdin/stdout/stderr all piped
-        cwd: absoluteRootDir,
-        env: createFilesystemMcpEnv(),
-      },
-    );
+    const { args, cwd } = getFilesystemMcpLaunch(absoluteRootDir);
+    const mcpProcess = spawn(process.execPath, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd,
+      env: createFilesystemMcpEnv(),
+    });
 
     // Filter stderr to suppress expected timeout warnings
     mcpProcess.stderr?.on('data', (chunk: Buffer) => {
@@ -242,6 +282,7 @@ export async function stopFilesystemMcpServer(mcpProcess: ChildProcess): Promise
 
   return new Promise((resolve, reject) => {
     let settled = false;
+    let exitTimeout: ReturnType<typeof setTimeout> | undefined;
 
     const cleanup = () => {
       clearTimeout(timeout);
@@ -282,12 +323,13 @@ export async function stopFilesystemMcpServer(mcpProcess: ChildProcess): Promise
     const timeout = setTimeout(() => {
       logger.debug('MCP server did not exit gracefully, force killing...');
       sendSignal('SIGKILL');
+      if (!settled) {
+        // Start the confirmation window after escalation, even when the event loop was delayed.
+        exitTimeout = setTimeout(() => {
+          onError(new Error(`Timed out waiting for process ${mcpProcess.pid} to exit`));
+        }, 5000);
+      }
     }, 5000);
-
-    // Allow five more seconds to confirm termination after escalation.
-    const exitTimeout = setTimeout(() => {
-      onError(new Error(`Timed out waiting for process ${mcpProcess.pid} to exit`));
-    }, 10000);
 
     mcpProcess.once('exit', onExit);
     mcpProcess.once('error', onError);

@@ -33,6 +33,8 @@
       ],
       "ignoreFiles": [],
       "ignoreDependencies": [
+        // Yarn injects pnpapi as a runtime builtin; the filesystem MCP launcher resolves its loader.
+        "pnpapi",
         // Imported by test/code-scan-action/*.test.ts; declared in
         // code-scan-action/package.json rather than the root manifest.
         "@actions/*",
@@ -88,6 +90,8 @@
     "act",
     "ffmpeg",
     "go",
+    // POSIX utility used by workspace FIFO regression tests.
+    "mkfifo",
     "modelaudit",
     "ruby",
     "security"
