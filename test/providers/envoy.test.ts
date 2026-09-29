@@ -128,21 +128,6 @@ describe('Envoy gateway URLs', () => {
       'https://registered.example/v1/',
       'https://registered.example/v1/chat/completions',
     ],
-    ['empty provider', '', undefined, undefined, 'https://env.example/v1/chat/completions'],
-    [
-      'empty provider over suite',
-      '',
-      'https://suite.example/',
-      undefined,
-      'https://suite.example/v1/chat/completions',
-    ],
-    [
-      'empty provider with registered value',
-      '',
-      undefined,
-      'https://registered.example/',
-      'https://registered.example/v1/chat/completions',
-    ],
   ] as const)(
     'uses the %s native URL through the loader',
     async (_, providerUrl, suiteUrl, registeredUrl, expectedUrl) => {
@@ -168,6 +153,18 @@ describe('Envoy gateway URLs', () => {
       expect((await provider.callApi('Hello')).output).toBe('Hello');
       expect(fetchWithCache).toHaveBeenCalledTimes(1);
       expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(expectedUrl);
+    },
+  );
+
+  it.each([undefined, 'https://suite.example/'])(
+    'masks lower-priority gateways with an empty provider URL (suite: %s)',
+    async (suiteUrl) => {
+      await expect(
+        loadApiProviders([{ id: 'envoy:route:stable', env: { ENVOY_API_BASE_URL: '' } }], {
+          env: { ENVOY_API_BASE_URL: suiteUrl },
+        }),
+      ).rejects.toThrow('requires a gateway URL');
+      expect(fetchWithCache).not.toHaveBeenCalled();
     },
   );
 
@@ -247,6 +244,28 @@ describe('Envoy gateway URLs', () => {
     expect(fetchWithCache).not.toHaveBeenCalled();
   });
 
+  it('merges direct constructor environment scopes without losing suite credentials', async () => {
+    const provider = createEnvoyProvider('envoy:route:stable', {
+      config: {
+        id: 'configured-id',
+        env: {
+          ENVOY_API_BASE_URL: 'https://provider.example/',
+          OPENAI_API_KEY: undefined,
+        },
+      },
+      env: {
+        ENVOY_API_BASE_URL: 'https://suite.example/',
+        OPENAI_API_KEY: 'test-suite-key',
+      },
+    });
+
+    expect(provider.id()).toBe('configured-id');
+    expect((await provider.callApi('Hello')).output).toBe('Hello');
+    const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    expect(url).toBe('https://provider.example/v1/chat/completions');
+    expect(request?.headers).toMatchObject({ Authorization: 'Bearer test-suite-key' });
+  });
+
   it('does not borrow the OpenAI key when the selected variable is missing', async () => {
     const provider = await loadApiProvider('envoy:route:stable', {
       options: { config: { apiKeyEnvar: 'MISSING_ENVOY_TEST_KEY' } },
@@ -312,17 +331,23 @@ describe('Envoy gateway URLs', () => {
     expect(fetchWithCache).not.toHaveBeenCalled();
   });
 
-  it('preserves generic URL fallback for an explicitly empty config URL', async () => {
-    mockProcessEnv({ OPENAI_API_BASE_URL: 'https://openai.example/custom' });
-    const provider = await loadApiProvider('envoy:route:stable', {
-      options: { config: { apiBaseUrl: '' } },
-    });
+  it.each([undefined, '', 'not-a-url', 'https://env.example/v1/'])(
+    'preserves generic fallback for an empty config URL when the Envoy URL is %s',
+    async (envoyUrl) => {
+      mockProcessEnv({
+        ENVOY_API_BASE_URL: envoyUrl,
+        OPENAI_API_BASE_URL: 'https://openai.example/custom',
+      });
+      const provider = await loadApiProvider('envoy:route:stable', {
+        options: { config: { apiBaseUrl: '' } },
+      });
 
-    expect((await provider.callApi('Hello')).output).toBe('Hello');
-    expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(
-      'https://openai.example/custom/chat/completions',
-    );
-  });
+      expect((await provider.callApi('Hello')).output).toBe('Hello');
+      expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(
+        'https://openai.example/custom/chat/completions',
+      );
+    },
+  );
 
   it('keeps the suite gateway when the explicit config URL is undefined', async () => {
     const provider = await loadApiProvider('envoy:route:stable', {

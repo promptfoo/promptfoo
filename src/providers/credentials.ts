@@ -1,6 +1,4 @@
-import { getEnvString } from '../envars';
-
-import type { EnvVarKey } from '../envars';
+import { type EnvVarKey, getEnvString } from '../envars';
 
 interface CredentialOptions {
   apiKey?: string;

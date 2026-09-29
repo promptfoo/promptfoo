@@ -675,7 +675,7 @@ describe('retryCommand', () => {
   });
 
   it.each([false, true])(
-    'keeps retry output redaction scoped when persistence fails (%j)',
+    'keeps retry output redaction scoped with persistence failure=%j',
     async (failed) => {
       const previousConfig = cliState.config;
       const env: EnvOverrides = { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' };

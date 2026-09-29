@@ -6,10 +6,10 @@ import { parse as parsePath } from 'path';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
-import { globSync } from 'glob';
+import { escape as escapeGlob, globSync, hasMagic } from 'glob';
+import cliState from '../cliState';
 import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
-import { getEnvOverrides } from '../envOverrides';
 import { importModule } from '../esm';
 import { fetchCsvFromGoogleSheet } from '../googleSheets';
 import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets';
@@ -18,19 +18,17 @@ import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
+import { isApiProvider } from '../types/providers';
 import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
-import { isProviderTypeMap } from './gradingProvider';
 import { renderEnvOnlyInObject } from './render';
 import { parseXlsxFile } from './xlsx';
 import { loadYaml } from './yamlLoad';
 
 import type {
-  AssertionOrSet,
   CsvRow,
   EnvOverrides,
-  GradingConfig,
   ProviderOptions,
   TestCase,
   TestCaseWithVarsFile,
@@ -48,19 +46,27 @@ type AzureBlobTestFileExtension = 'csv' | 'json' | 'jsonl' | 'yaml' | 'yml';
 
 const SHA256_BLOB_SUFFIX = /\.[a-f0-9]{64}$/i;
 
-// Config resolution and the programmatic API can read the same rows more than once.
-const remoteTestCases = new WeakSet<TestCase>();
-
+// Saved remote rows must stay data when a config is serialized and replayed.
 function preserveRemoteTests(tests: TestCase[]): TestCase[] {
-  for (const test of tests) {
-    remoteTestCases.add(test);
-  }
-  return tests;
+  return tests.map((test) => {
+    validateTestCase(test);
+    return {
+      ...test,
+      metadata: {
+        ...test.metadata,
+        __promptfoo: { ...test.metadata?.__promptfoo, remote: true },
+      },
+    };
+  });
+}
+
+function isRemoteTestCase(test: TestCaseWithVarsFile): boolean {
+  return test.metadata?.__promptfoo?.remote === true;
 }
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],
-  basePath: string = '',
+  basePath: string = cliState.basePath || '',
 ): Promise<Record<string, string | string[] | object>> {
   if (typeof pathOrGlobs === 'string') {
     pathOrGlobs = [pathOrGlobs];
@@ -106,9 +112,10 @@ export async function readTestFiles(
  */
 export async function readStandaloneTestsFile(
   varsPath: string,
-  basePath: string = '',
+  basePath: string = cliState.basePath || '',
   config?: Record<string, any>,
 ): Promise<TestCase[]> {
+  varsPath = renderEnvOnlyInObject(varsPath);
   const finalConfig = config ? maybeLoadConfigFromExternalFile(config) : config;
 
   if (varsPath.startsWith('huggingface://datasets/')) {
@@ -274,8 +281,7 @@ function getStandaloneTestsFileMetadata(
     throw new Error(`Too many colons. Invalid test file script path: ${varsPath}`);
   }
 
-  const pathWithoutFunction =
-    lastColonIndex > 1 ? resolvedVarsPath.slice(0, lastColonIndex) : resolvedVarsPath;
+  const pathWithoutFunction = stripFunctionSuffix(resolvedVarsPath);
   const maybeFunctionName =
     lastColonIndex > 1 ? resolvedVarsPath.slice(lastColonIndex + 1) : undefined;
   // Sheet specifiers apply only to xlsx/xls basenames. Inspecting the basename preserves `#`
@@ -295,13 +301,30 @@ function getStandaloneTestsFileMetadata(
   };
 }
 
+function containsFunction(value: unknown, seen = new Set<object>()): boolean {
+  if (typeof value === 'function' || isApiProvider(value)) {
+    return true;
+  }
+  if (!value || typeof value !== 'object' || seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
+  return Object.values(value).some((item) => containsFunction(item, seen));
+}
+
 async function readJavascriptTestCases(
   pathWithoutFunction: string,
   maybeFunctionName: string | undefined,
   finalConfig: Record<string, any> | undefined,
 ): Promise<TestCase[]> {
   const mod = await importModule(pathWithoutFunction, maybeFunctionName);
-  return typeof mod === 'function' ? await mod(finalConfig) : mod;
+  const tests = typeof mod === 'function' ? await mod(finalConfig) : mod;
+  if (containsFunction(tests)) {
+    logger.warn(
+      `Tests from ${pathWithoutFunction} contain function values that cannot be saved for resume/retry. Use file:// references for executable test fields.`,
+    );
+  }
+  return tests;
 }
 
 async function readPythonTestCases(
@@ -440,68 +463,56 @@ async function loadTestWithVars(
   return ret;
 }
 
-function resolveGradingProviderPaths(
-  provider: GradingConfig['provider'],
-  basePath: string,
-  env: EnvOverrides | undefined,
-): GradingConfig['provider'] {
-  if (typeof provider === 'string') {
-    if (!provider.startsWith('file://')) {
-      return provider;
-    }
-    const processEnvDisabled = getEnvBool(
-      'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
-      getEnvBool('PROMPTFOO_SELF_HOSTED', false),
-    );
-    const rendered = renderEnvOnlyInObject(
-      provider,
-      { ...(processEnvDisabled ? {} : process.env), ...env },
-      true,
-    );
-    return rendered.includes('{{')
-      ? rendered
-      : 'file://' + path.resolve(basePath, rendered.slice('file://'.length));
-  }
-  if (isProviderTypeMap(provider)) {
-    return Object.fromEntries(
-      Object.entries(provider).map(([type, value]) => [
-        type,
-        resolveGradingProviderPaths(value, basePath, env),
-      ]),
-    );
-  }
-  if (provider && typeof provider === 'object' && typeof provider.id === 'string') {
-    return {
-      ...provider,
-      id: resolveGradingProviderPaths(provider.id, basePath, { ...env, ...provider.env }) as string,
-    };
-  }
-  return provider;
-}
-
-function resolveAssertionProviderPaths<T extends AssertionOrSet>(
-  assertion: T,
-  basePath: string,
-  env: EnvOverrides | undefined,
-): T {
-  if (assertion.type === 'assert-set') {
-    return {
-      ...assertion,
-      assert: assertion.assert.map((child) => resolveAssertionProviderPaths(child, basePath, env)),
-    };
-  }
-  return assertion.provider
-    ? { ...assertion, provider: resolveGradingProviderPaths(assertion.provider, basePath, env) }
-    : assertion;
-}
-
 export async function readTest(
   test: string | TestCaseWithVarsFile,
-  basePath: string = '',
+  basePath: string = cliState.basePath || '',
   isDefaultTest: boolean = false,
-  env: EnvOverrides | undefined = getEnvOverrides(),
+  env: EnvOverrides | undefined = cliState.env,
 ): Promise<TestCase> {
-  if (typeof test === 'object' && remoteTestCases.has(test as TestCase)) {
+  return cliState.withBasePath(basePath, () =>
+    cliState.withEnv(env, () => readTestWithEnv(test, basePath, isDefaultTest, env)),
+  );
+}
+
+/** Read a replayable test row without constructing its provider. */
+export async function readTestConfig(
+  test: string | TestCaseWithVarsFile,
+  basePath: string = cliState.basePath || '',
+  isDefaultTest: boolean = false,
+  env: EnvOverrides | undefined = cliState.env,
+): Promise<TestCase> {
+  return cliState.withBasePath(basePath, () =>
+    cliState.withEnv(env, () => readTestWithEnv(test, basePath, isDefaultTest, env, false)),
+  );
+}
+
+function resolveVarsFileReferences(value: unknown, basePath: string): unknown {
+  if (typeof value === 'string') {
+    if (!value.startsWith('file://')) {
+      return value;
+    }
+    const reference = renderEnvOnlyInObject(value);
+    return `file://${path.resolve(basePath, reference.slice(7))}`;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => resolveVarsFileReferences(item, basePath));
+  }
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, resolveVarsFileReferences(item, basePath)]),
+    );
+  }
+  return value;
+}
+
+async function readTestWithEnv(
+  test: string | TestCaseWithVarsFile,
+  basePath: string,
+  isDefaultTest: boolean,
+  env: EnvOverrides | undefined,
+  loadProviders = true,
+): Promise<TestCase> {
+  if (typeof test === 'object' && isRemoteTestCase(test)) {
     return test as TestCase;
   }
   let testCase: TestCase;
@@ -517,7 +528,23 @@ export async function readTest(
     testCase = await loadTestWithVars(test, basePath);
   }
 
-  if (testCase.provider && typeof testCase.provider !== 'function') {
+  if (!loadProviders) {
+    testCase.vars = resolveVarsFileReferences(testCase.vars, basePath) as TestCase['vars'];
+    if (typeof testCase.provider === 'string' && testCase.provider.startsWith('file://')) {
+      testCase.provider = resolveVarsFileReferences(testCase.provider, effectiveBasePath) as string;
+    } else if (
+      typeof testCase.provider === 'object' &&
+      typeof testCase.provider.id === 'string' &&
+      testCase.provider.id.startsWith('file://')
+    ) {
+      testCase.provider = {
+        ...testCase.provider,
+        id: resolveVarsFileReferences(testCase.provider.id, effectiveBasePath) as string,
+      };
+    }
+  }
+
+  if (loadProviders && testCase.provider && typeof testCase.provider !== 'function') {
     // Load provider - resolve paths relative to the test case's location
     if (typeof testCase.provider === 'string') {
       testCase.provider = await loadApiProvider(testCase.provider, {
@@ -533,40 +560,35 @@ export async function readTest(
     }
   }
 
-  if (testCase.options?.provider) {
-    testCase.options = {
-      ...testCase.options,
-      provider: resolveGradingProviderPaths(testCase.options.provider, effectiveBasePath, env),
-    };
+  if (!isDefaultTest) {
+    validateTestCase(testCase);
   }
-  if (testCase.assert) {
-    testCase.assert = testCase.assert.map((assertion) =>
-      resolveAssertionProviderPaths(assertion, effectiveBasePath, env),
-    );
-  }
+  return testCase;
+}
+
+function validateTestCase(testCase: TestCase): void {
+  const isDescriptionOnly =
+    testCase.description &&
+    Object.entries(testCase).every(([key, value]) => key === 'description' || value === undefined);
 
   if (
-    !isDefaultTest &&
     !testCase.assert &&
     !testCase.vars &&
     !testCase.options &&
     !testCase.metadata &&
     !testCase.provider &&
     !testCase.providerOutput &&
+    !isDescriptionOnly &&
     typeof testCase.threshold !== 'number'
   ) {
-    // Validate the shape of the test case
-    // We skip validation when loading the default test case, since it may not have all the properties
     throw new Error(
-      `Test case must contain one of the following properties: assert, vars, options, metadata, provider, providerOutput, threshold.\n\nInstead got:\n${JSON.stringify(
+      `Test case must contain assert, vars, options, metadata, provider, providerOutput, threshold, or only a description.\n\nInstead got:\n${JSON.stringify(
         testCase,
         null,
         2,
       )}`,
     );
   }
-
-  return testCase;
 }
 
 /**
@@ -574,12 +596,25 @@ export async function readTest(
  * @param loadTestsGlob - The glob pattern or URL to load tests from
  * @param basePath - Base path for resolving relative paths
  * @returns Promise resolving to an array of TestCase objects
+ * @throws Error when a literal local path does not exist.
  */
 export async function loadTestsFromGlob(
   loadTestsGlob: string,
-  basePath: string = '',
-  env?: EnvOverrides,
+  basePath: string = cliState.basePath || '',
+  env: EnvOverrides | undefined = cliState.env,
 ): Promise<TestCase[]> {
+  return cliState.withBasePath(basePath, () =>
+    cliState.withEnv(env, () => loadTestsFromGlobWithEnv(loadTestsGlob, basePath, env)),
+  );
+}
+
+async function loadTestsFromGlobWithEnv(
+  loadTestsGlob: string,
+  basePath: string,
+  env: EnvOverrides | undefined,
+  loadProviders = true,
+): Promise<TestCase[]> {
+  loadTestsGlob = renderEnvOnlyInObject(loadTestsGlob);
   if (loadTestsGlob.startsWith('huggingface://datasets/')) {
     telemetry.record('feature_used', {
       feature: 'huggingface dataset',
@@ -592,14 +627,20 @@ export async function loadTestsFromGlob(
   }
   const resolvedPath = path.resolve(basePath, loadTestsGlob);
 
-  const testFiles: Array<string> = globSync(resolvedPath, {
-    windowsPathsNoEscape: true,
-  });
+  const testFiles: string[] = fs.existsSync(resolvedPath)
+    ? [resolvedPath]
+    : globSync(
+        path.resolve(
+          escapeGlob(path.resolve(basePath), { windowsPathsNoEscape: true }),
+          path.relative(path.resolve(basePath), resolvedPath),
+        ),
+        {
+          windowsPathsNoEscape: true,
+        },
+      );
 
   // Check for possible function names in the path (Windows-aware)
-  const lastColonIndex = resolvedPath.lastIndexOf(':');
-  const pathWithoutFunction: string =
-    lastColonIndex > 1 ? resolvedPath.slice(0, lastColonIndex) : resolvedPath;
+  const pathWithoutFunction = stripFunctionSuffix(resolvedPath);
   // Only add the file if it's not already included by glob and it's a special file type
   if (
     (isJavascriptFile(pathWithoutFunction) || pathWithoutFunction.endsWith('.py')) &&
@@ -619,15 +660,17 @@ export async function loadTestsFromGlob(
 
   const ret: TestCase[] = [];
   if (testFiles.length < 1) {
-    logger.error(`No test files found for path: ${loadTestsGlob}`);
+    const message = `No test files found for path: ${resolvedPath}`;
+    if (!hasGlobMagic(path.relative(path.resolve(basePath), resolvedPath))) {
+      throw new Error(message);
+    }
+    logger.warn(message);
     return ret;
   }
   for (const testFile of testFiles) {
     let testCases: TestCase[] | undefined;
     // Extract path without function name (Windows-aware)
-    const lastColonIndex = testFile.lastIndexOf(':');
-    const pathWithoutFunction: string =
-      lastColonIndex > 1 ? testFile.slice(0, lastColonIndex) : testFile;
+    const pathWithoutFunction = stripFunctionSuffix(testFile);
 
     // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
     const fileWithoutSheet = testFile.split('#')[0];
@@ -666,7 +709,7 @@ export async function loadTestsFromGlob(
         testCases = [testCases];
       }
       for (const testCase of testCases) {
-        ret.push(await readTest(testCase, path.dirname(testFile), false, env));
+        ret.push(await readTestWithEnv(testCase, basePath, false, env, loadProviders));
       }
     }
   }
@@ -675,32 +718,59 @@ export async function loadTestsFromGlob(
 
 export async function readTests(
   tests: TestSuiteConfig['tests'],
-  basePath: string = '',
-  env: EnvOverrides | undefined = getEnvOverrides(),
+  basePath: string = cliState.basePath || '',
+  env: EnvOverrides | undefined = cliState.env,
 ): Promise<TestCase[]> {
-  const ret: TestCase[] = [];
+  return cliState.withBasePath(basePath, () =>
+    cliState.withEnv(env, () => readTestsWithEnv(tests, basePath, env)),
+  );
+}
+
+/** Parse source files once and retain declarative rows for persistence and replay. */
+export async function readTestConfigs(
+  tests: TestSuiteConfig['tests'],
+  basePath: string = cliState.basePath || '',
+  env: EnvOverrides | undefined = cliState.env,
+): Promise<TestCase[]> {
+  return cliState.withBasePath(basePath, () =>
+    cliState.withEnv(env, () => readTestsWithEnv(tests, basePath, env, false)),
+  );
+}
+
+async function readTestsWithEnv(
+  tests: TestSuiteConfig['tests'],
+  basePath: string,
+  env: EnvOverrides | undefined,
+  loadProviders = true,
+): Promise<TestCase[]> {
   const loadStandalone = async (source: string, config?: Record<string, any>) => {
+    source = renderEnvOnlyInObject(source);
     const tests = await readStandaloneTestsFile(source, basePath, config);
-    if (source.includes('://') && !source.startsWith('file://')) {
-      // Remote datasets are data; do not execute local provider or vars file references.
+    if (isRemoteTestsReference(source)) {
+      // Resolve local provider and vars references only for local sources.
       return tests;
     }
-    const testBasePath = path.dirname(
-      getStandaloneTestsFileMetadata(source, basePath).pathWithoutFunction,
+    return Promise.all(
+      tests.map((test) => readTestWithEnv(test, basePath, false, env, loadProviders)),
     );
-    return Promise.all(tests.map((test) => readTest(test, testBasePath, false, env)));
   };
 
   if (typeof tests === 'string') {
-    if (tests.startsWith('az://')) {
-      return loadStandalone(tests);
+    const source = renderEnvOnlyInObject(tests);
+    if (source.startsWith('az://')) {
+      return loadStandalone(source);
     }
     // Points to a tests file with multiple test cases
-    if (tests.endsWith('yaml') || tests.endsWith('yml')) {
-      return loadTestsFromGlob(tests, basePath, env);
+    if (source.endsWith('yaml') || source.endsWith('yml')) {
+      return loadTestsFromGlobWithEnv(source, basePath, env, loadProviders);
     }
-    // Points to a tests.{csv,json,yaml,yml,py,js,ts,mjs} or Google Sheet
-    return loadStandalone(tests);
+    const withoutScheme = source.replace(/^file:\/\//, '');
+    if (!hasGlobMagic(withoutScheme) || fs.existsSync(path.resolve(basePath, withoutScheme))) {
+      // Preserve standalone parsing for literal files, including names with glob characters.
+      return loadStandalone(source);
+    }
+    // Use the original reference so the array loader renders env templates consistently.
+    tests = [tests];
   } else if (
     typeof tests === 'object' &&
     tests !== null &&
@@ -710,46 +780,58 @@ export async function readTests(
   ) {
     return loadStandalone(tests.path, tests.config);
   }
-  if (Array.isArray(tests)) {
-    for (const globOrTest of tests) {
-      if (typeof globOrTest === 'string') {
-        // Extract path without function name (Windows-aware)
-        const pathWithoutScheme = globOrTest.replace(/^file:\/\//, '');
-        const lastColonIndex = pathWithoutScheme.lastIndexOf(':');
-        const pathWithoutFunction: string =
-          lastColonIndex > 1 ? pathWithoutScheme.slice(0, lastColonIndex) : pathWithoutScheme;
-        // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
-        const pathWithoutSheet = globOrTest.split('#')[0];
-        // For Python, JS, xlsx/xls files, or files with potential function names, use readStandaloneTestsFile
-        if (
-          isJavascriptFile(pathWithoutFunction) ||
-          pathWithoutFunction.endsWith('.py') ||
-          pathWithoutSheet.endsWith('.xlsx') ||
-          pathWithoutSheet.endsWith('.xls') ||
-          lastColonIndex > 1
-        ) {
-          ret.push(...(await loadStandalone(globOrTest)));
-        } else {
-          // Resolve globs for other file types
-          ret.push(...(await loadTestsFromGlob(globOrTest, basePath, env)));
-        }
-      } else if (remoteTestCases.has(globOrTest as TestCase)) {
-        ret.push(globOrTest as TestCase);
-      } else if ('path' in globOrTest) {
-        ret.push(...(await loadStandalone(globOrTest.path, globOrTest.config)));
-      } else {
-        // Load individual TestCase
-        ret.push(await readTest(globOrTest as TestCaseWithVarsFile, basePath, false, env));
-      }
-    }
-  } else if (tests !== undefined && tests !== null) {
-    logger.warn(dedent`
-      Warning: Unsupported 'tests' format in promptfooconfig.yaml.
-      Expected: string, string[], or TestCase[], but received: ${typeof tests}
+  if (!Array.isArray(tests)) {
+    if (tests !== undefined && tests !== null) {
+      logger.warn(dedent`
+        Warning: Unsupported 'tests' format in promptfooconfig.yaml.
+        Expected: string, string[], or TestCase[], but received: ${typeof tests}
 
-      Please check your configuration file and ensure the 'tests' field is correctly formatted.
-      For more information, visit: https://promptfoo.dev/docs/configuration/reference/#test-case
-    `);
+        Please check your configuration file and ensure the 'tests' field is correctly formatted.
+        For more information, visit: https://promptfoo.dev/docs/configuration/reference/#test-case
+      `);
+    }
+    return [];
+  }
+
+  const ret: TestCase[] = [];
+  for (const entry of tests) {
+    const globOrTest = typeof entry === 'string' ? renderEnvOnlyInObject(entry) : entry;
+    if (typeof globOrTest === 'string') {
+      // Extract path without function name (Windows-aware)
+      const pathWithoutScheme = globOrTest.replace(/^file:\/\//, '');
+      const pathWithoutFunction = stripFunctionSuffix(pathWithoutScheme);
+      // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
+      const pathWithoutSheet = globOrTest.split('#')[0];
+      // Read standalone sources, then resolve provider and vars references for local rows.
+      if (
+        isRemoteTestsReference(globOrTest) ||
+        isJavascriptFile(pathWithoutFunction) ||
+        pathWithoutFunction.endsWith('.py') ||
+        pathWithoutSheet.endsWith('.xlsx') ||
+        pathWithoutSheet.endsWith('.xls') ||
+        pathWithoutFunction !== pathWithoutScheme
+      ) {
+        ret.push(...(await loadStandalone(globOrTest)));
+      } else {
+        // Resolve globs for other file types
+        ret.push(...(await loadTestsFromGlobWithEnv(globOrTest, basePath, env, loadProviders)));
+      }
+    } else if (isRemoteTestCase(globOrTest as TestCase)) {
+      ret.push(globOrTest as TestCase);
+    } else if ('path' in globOrTest) {
+      ret.push(...(await loadStandalone(globOrTest.path, globOrTest.config)));
+    } else {
+      // Load individual TestCase
+      ret.push(
+        await readTestWithEnv(
+          globOrTest as TestCaseWithVarsFile,
+          basePath,
+          false,
+          env,
+          loadProviders,
+        ),
+      );
+    }
   }
 
   if (
@@ -810,18 +892,12 @@ function stripSheetSelector(resolvedPath: string): string {
 }
 
 /** References the loader fetches over the network rather than reading from disk. */
-function isRemoteTestsReference(reference: string): boolean {
-  return (
-    reference.startsWith('http://') ||
-    reference.startsWith('https://') ||
-    reference.startsWith('az://') ||
-    reference.startsWith('huggingface://') ||
-    reference.startsWith('hf://')
-  );
+export function isRemoteTestsReference(reference: string): boolean {
+  return reference.includes('://') && !reference.startsWith('file://');
 }
 
 function hasGlobMagic(reference: string): boolean {
-  return /[*?[\]{}]/.test(reference);
+  return hasMagic(reference, { windowsPathsNoEscape: true, magicalBraces: true });
 }
 
 /**
@@ -833,6 +909,7 @@ function hasGlobMagic(reference: string): boolean {
  * unrelated edit beneath it, including the run's own output file.
  */
 function resolveTestsFileReference(reference: string, basePath: string): string[] {
+  reference = renderEnvOnlyInObject(reference);
   const withoutScheme = reference.replace(/^file:\/\//, '');
   if (isRemoteTestsReference(withoutScheme)) {
     return [];
@@ -840,7 +917,13 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
 
   const resolved = path.resolve(basePath, withoutScheme);
   if (hasGlobMagic(withoutScheme)) {
-    const matches = globSync(resolved, { windowsPathsNoEscape: true });
+    const matches = globSync(
+      path.resolve(
+        escapeGlob(path.resolve(basePath), { windowsPathsNoEscape: true }),
+        path.relative(path.resolve(basePath), resolved),
+      ),
+      { windowsPathsNoEscape: true },
+    );
     if (matches.length > 0) {
       return matches.map((match) => stripSheetSelector(match));
     }
@@ -863,7 +946,7 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
  * unreadable file is left to the loader to report, since this runs only to decide what
  * to watch.
  */
-function collectNestedFileReferences(testsFile: string): string[] {
+function collectNestedFileReferences(testsFile: string, basePath: string): string[] {
   const ext = parsePath(testsFile).ext.slice(1).toLowerCase();
   if (!['yaml', 'yml', 'json', 'jsonl'].includes(ext)) {
     return [];
@@ -876,7 +959,7 @@ function collectNestedFileReferences(testsFile: string): string[] {
         : ext === 'jsonl'
           ? parseJsonlLines(raw, testsFile)
           : loadYaml(raw);
-    return collectConfigFileReferences(parsed, path.dirname(testsFile));
+    return collectConfigFileReferences(parsed, basePath);
   } catch {
     return [];
   }
@@ -918,12 +1001,11 @@ function collectConfigFileReferences(
  * loader agree on which files feed an evaluation, rather than duplicating the rules.
  *
  * Must be called with the raw `tests` value from the config file. `combineConfigs`
- * expands scalar and generator references into concrete test cases, after which the
- * original reference is no longer available.
+ * expands references into concrete test cases and discards the original reference.
  */
 export function resolveTestsWatchPaths(
   tests: TestSuiteConfig['tests'],
-  basePath: string = '',
+  basePath: string = cliState.basePath || '',
 ): string[] {
   if (tests == null) {
     return [];
@@ -937,7 +1019,7 @@ export function resolveTestsWatchPaths(
       // config is built, so collect them here as well.
       return resolveTestsFileReference(entry, basePath).flatMap((file) => [
         file,
-        ...collectNestedFileReferences(file),
+        ...collectNestedFileReferences(file, basePath),
       ]);
     }
     if (!entry || typeof entry !== 'object') {

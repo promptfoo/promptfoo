@@ -68,7 +68,8 @@ vi.mock('path', async () => {
   };
 });
 
-vi.mock('glob', () => ({
+vi.mock('glob', async (importOriginal) => ({
+  escape: (await importOriginal<typeof import('glob')>()).escape,
   globSync: vi.fn(),
   hasMagic: vi.fn((pattern: string | string[]) => {
     const p = Array.isArray(pattern) ? pattern.join('') : pattern;
@@ -140,18 +141,18 @@ vi.mock('../../../src/util/file', async () => {
   };
 });
 
-vi.mock('../../../src/util/testCaseReader', () => ({
-  readTest: vi.fn().mockImplementation(async (test) => test),
-  readTests: vi.fn(async (tests) => {
-    if (!tests) {
-      return [];
-    }
-    if (Array.isArray(tests)) {
-      return tests;
-    }
-    return [];
-  }),
-}));
+vi.mock('../../../src/util/testCaseReader', async (importOriginal) => {
+  const readRows = vi.fn(async (tests) => (Array.isArray(tests) ? tests : []));
+  return {
+    isRemoteTestsReference: (
+      await importOriginal<typeof import('../../../src/util/testCaseReader')>()
+    ).isRemoteTestsReference,
+    readTest: vi.fn(async (test) => test),
+    readTestConfig: vi.fn(async (test) => test),
+    readTests: readRows,
+    readTestConfigs: readRows,
+  };
+});
 
 vi.mock('../../../src/providers', async () => {
   const actual =
@@ -312,6 +313,7 @@ describe('combineConfigs', () => {
     );
 
     expect(config1Result).toEqual({
+      basePath: '.',
       description: 'test1',
       tags: { tag1: 'value1' },
       providers: ['provider1'],
@@ -348,6 +350,7 @@ describe('combineConfigs', () => {
     );
 
     expect(config2Result).toEqual({
+      basePath: '.',
       description: 'test2',
       tags: {},
       providers: ['provider2'],
@@ -389,6 +392,7 @@ describe('combineConfigs', () => {
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(4);
     expect(result).toEqual({
+      basePath: '.',
       description: 'test1, test2',
       tags: { tag1: 'value1' },
       providers: ['provider1', 'provider2'],
@@ -1076,7 +1080,7 @@ describe('combineConfigs', () => {
     expect(result.sharing).toBeUndefined();
   });
 
-  it('preserves an absolute defaultTest file reference without loading it', async () => {
+  it('resolves a relative defaultTest file reference without loading it', async () => {
     const externalDefaultTest = {
       assert: [{ type: 'equals', value: 'test' }],
       vars: { foo: 'bar' },
@@ -1561,7 +1565,7 @@ describe('resolveConfigs', () => {
 
     await resolveConfigs(cmdObj, defaultConfig);
 
-    expect(cliState.basePath).toBe(path.dirname('config.json'));
+    expect(cliState.basePath).toBe(path.resolve(path.dirname('config.json')));
   });
 
   it('should include YAML location when an inline test references a missing prompt', async () => {
@@ -1630,9 +1634,9 @@ describe('resolveConfigs', () => {
       }),
     );
 
-    vi.mocked(maybeLoadFromExternalFile)
-      .mockResolvedValueOnce(scenarios)
-      .mockResolvedValueOnce(externalTests);
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) =>
+      typeof value === 'string' ? scenarios : value,
+    );
 
     vi.mocked(readTests).mockResolvedValue(externalTests);
 
@@ -1656,10 +1660,12 @@ describe('resolveConfigs', () => {
 
     const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
 
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith([
-      `file://${path.resolve('/mock/cwd/scenarios.yaml')}`,
-    ]);
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://tests.yaml');
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://scenarios.yaml');
+    expect(readTests).toHaveBeenCalledWith(
+      [`file://${path.resolve('/mock/cwd/tests.yaml')}`],
+      path.resolve('.'),
+      {},
+    );
 
     expect(testSuite).toMatchObject({
       prompts: [

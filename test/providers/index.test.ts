@@ -154,6 +154,7 @@ vi.mock('../../src/globalConfig/cloud', () => {
       isEnabled: vi.fn().mockReturnValue(false),
       getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.dev'),
       getApiKey: vi.fn().mockReturnValue('test-api-key'),
+      getAuthHeaderName: () => 'Authorization',
     },
   };
 });
@@ -1492,7 +1493,7 @@ describe('loadApiProvider', () => {
     cliState.config = { env: { ABLIT_API_BASE_URL: 'https://previous.example.com/v1' } };
 
     try {
-      const [provider] = await loadApiProviders(['abliteration:test-model'], { env: undefined });
+      const [provider] = await loadApiProviders(['abliteration:test-model'], { env: {} });
       expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
     } finally {
       cliState.config = originalConfig;

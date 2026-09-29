@@ -47,38 +47,49 @@ export function createEnvoyProvider(
     apiBaseUrl: configuredBaseUrl,
     ...configWithoutBasePath
   } = options.config?.config || {};
+  const env = {
+    ...options.env,
+    ...Object.fromEntries(
+      Object.entries(options.config?.env ?? {}).filter(([, value]) => value !== undefined),
+    ),
+  };
+  let apiBaseUrl =
+    configuredBaseUrl ?? env.ENVOY_API_BASE_URL ?? getEnvString('ENVOY_API_BASE_URL');
 
-  // Get the gateway URL from config or environment
-  const apiBaseUrl =
-    configuredBaseUrl || (options.env?.ENVOY_API_BASE_URL ?? getEnvString('ENVOY_API_BASE_URL'));
-
-  if (!apiBaseUrl) {
-    throw new Error(
-      'Envoy provider requires a gateway URL. Set ENVOY_API_BASE_URL environment variable or specify apiBaseUrl in config.',
-    );
-  }
-
-  // Ensure the URL ends with the correct path if not already specified
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(apiBaseUrl);
-    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-      throw new Error('Unsupported gateway protocol');
+  // An explicitly empty config URL retains the generic OpenAI URL fallback.
+  if (configuredBaseUrl !== '') {
+    if (!apiBaseUrl) {
+      throw new Error(
+        'Envoy provider requires a gateway URL. Set ENVOY_API_BASE_URL environment variable or specify apiBaseUrl in config.',
+      );
     }
-  } catch {
-    throw new Error(
-      'Envoy provider requires a valid gateway URL. Check ENVOY_API_BASE_URL or config.apiBaseUrl.',
-    );
+
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(apiBaseUrl);
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        throw new Error('Unsupported gateway protocol');
+      }
+    } catch {
+      throw new Error(
+        'Envoy provider requires a valid gateway URL. Check ENVOY_API_BASE_URL or config.apiBaseUrl.',
+      );
+    }
+
+    if (configuredBaseUrl == null) {
+      const basePath = parsedUrl.pathname.replace(/\/+$/, '');
+      parsedUrl.pathname = basePath.endsWith('/v1') ? basePath : `${basePath}/v1`;
+      apiBaseUrl = parsedUrl.toString();
+    }
   }
-  const basePath = parsedUrl.pathname.replace(/\/+$/, '');
-  parsedUrl.pathname = basePath.endsWith('/v1') ? basePath : `${basePath}/v1`;
-  const normalizedBaseUrl = parsedUrl.toString();
 
   const envoyConfig = {
-    ...options,
+    ...options.config,
+    id: options.id ?? options.config?.id,
+    env,
     config: {
       ...configWithoutBasePath,
-      apiBaseUrl: configuredBaseUrl ?? normalizedBaseUrl,
+      apiBaseUrl,
     },
   };
 
