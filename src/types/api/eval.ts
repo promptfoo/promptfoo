@@ -295,7 +295,7 @@ const LiteralAssertionValueSchema = z
   .max(10000)
   .refine(
     (value) =>
-      !value.startsWith('file://') && !value.startsWith('package:') && !/\{[{%#]/.test(value),
+      !value.startsWith('file://') && !value.startsWith('package:') && !/\{[{%#]|#\}/.test(value),
     'Use literal text; files, packages, and templates are not supported',
   );
 

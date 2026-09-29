@@ -195,6 +195,7 @@ describe('eval routes', () => {
       { type: 'contains', value: 'file://fixture.txt' },
       { type: 'contains', value: 'package:fixture:check' },
       { type: 'contains', value: '{{fixture}}' },
+      { type: 'contains', value: 'Fixture #} text' },
       { type: 'contains', value: 'fixture', provider: 'echo' },
     ])('rejects unsupported options without changing the evaluation', async (assertion) => {
       const { evaluation, url } = await fixture();
