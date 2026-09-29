@@ -304,6 +304,9 @@ export class VoiceConversationOrchestrator extends EventEmitter {
         this.simulatedUserConnection.sendAudio(chunk);
       }
 
+      if (this.state !== 'active') {
+        return;
+      }
       this.feedTurnDetector('target', chunk);
       this.emit('target_audio', adjustedChunk);
     });
@@ -410,6 +413,9 @@ export class VoiceConversationOrchestrator extends EventEmitter {
         this.targetConnection.sendAudio(chunk);
       }
 
+      if (this.state !== 'active') {
+        return;
+      }
       this.feedTurnDetector('user', chunk);
       this.emit('simulated_user_audio', adjustedChunk);
     });

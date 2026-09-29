@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvString } from '../../../src/envars';
+import { sanitizeProvider } from '../../../src/models/evalResult';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -51,9 +52,23 @@ describe('SimulatedVoiceUser', () => {
   });
 
   it('uses provider identity defaults and overrides', () => {
-    expect(new SimulatedVoiceUser({}).id()).toBe('simulated-voice-user');
+    expect(new SimulatedVoiceUser({}).id()).toBe('promptfoo:simulated-voice-user');
     expect(new SimulatedVoiceUser({ label: 'caller' }).id()).toBe('caller');
     expect(new SimulatedVoiceUser({ id: 'voice' }).toString()).toBe('[SimulatedVoiceUser voice]');
+  });
+
+  it('preserves programmatic provider settings in the saved provider config', () => {
+    const settings = {
+      maxTurns: 3,
+      recordConversation: false,
+      targetVoice: 'alloy',
+      sampleRate: 16000,
+      targetModel: 'fixture-model',
+    };
+    const saved = sanitizeProvider(new SimulatedVoiceUser({ config: settings }));
+    expect(saved).toMatchObject({ id: 'promptfoo:simulated-voice-user', config: settings });
+    const restored = new SimulatedVoiceUser(saved);
+    expect(restored.config).toEqual(saved.config);
   });
 
   it('renders caller goals, preserves explicit keys, and reports transcript, audio and usage', async () => {
@@ -87,7 +102,7 @@ describe('SimulatedVoiceUser', () => {
     expect(response).toMatchObject({
       output: 'Assistant: Hello\n---\nUser: Thanks ###STOP###',
       tokenUsage: result().tokenUsage,
-      audio: { format: 'wav' },
+      audio: { format: 'wav', transcript: 'Assistant: Hello\n---\nUser: Thanks ###STOP###' },
     });
     expect(Buffer.from(response.audio!.data!, 'base64').toString()).toBe('fixture audio');
   });

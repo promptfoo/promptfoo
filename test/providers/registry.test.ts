@@ -492,6 +492,11 @@ describe('Provider Registry', () => {
       expect(provider.toString()).toBe('[SimulatedVoiceUser test-provider]');
     });
 
+    it('uses the registered ID for the string-form simulated voice provider', async () => {
+      const provider = await registry.create('promptfoo:simulated-voice-user');
+      expect(provider.id()).toBe('promptfoo:simulated-voice-user');
+    });
+
     describe('OpenAI endpoint defaults', () => {
       it.each([
         ['chat', OpenAiChatCompletionProvider],

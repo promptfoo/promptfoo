@@ -34,14 +34,14 @@ type SimulatedVoiceUserProviderOptions = ProviderOptions & {
 
 export class SimulatedVoiceUser implements ApiProvider {
   private readonly identifier: string;
-  private readonly voiceConfig: SimulatedVoiceUserConfig;
+  readonly config: SimulatedVoiceUserConfig;
   private readonly env?: EnvOverrides;
   private readonly conversations = new Set<VoiceConversationOrchestrator>();
 
   constructor({ id, label, config, env }: SimulatedVoiceUserProviderOptions) {
-    this.identifier = id ?? label ?? 'simulated-voice-user';
+    this.identifier = id ?? label ?? 'promptfoo:simulated-voice-user';
     this.env = env;
-    this.voiceConfig = {
+    this.config = {
       maxTurns: DEFAULT_MAX_TURNS,
       timeoutMs: DEFAULT_TIMEOUT_MS,
       audioFormat: DEFAULT_AUDIO_FORMAT as 'pcm16',
@@ -59,31 +59,31 @@ export class SimulatedVoiceUser implements ApiProvider {
 
   private buildTurnDetectionConfig(): TurnDetectionConfig {
     return {
-      mode: this.voiceConfig.turnDetectionMode ?? 'server_vad',
-      silenceThresholdMs: this.voiceConfig.silenceThresholdMs ?? 500,
-      vadThreshold: this.voiceConfig.vadThreshold ?? DEFAULT_LOCAL_VAD_THRESHOLD,
-      minTurnDurationMs: this.voiceConfig.minTurnDurationMs ?? 100,
-      maxTurnDurationMs: this.voiceConfig.maxTurnDurationMs ?? 30000,
-      prefixPaddingMs: this.voiceConfig.prefixPaddingMs ?? 300,
+      mode: this.config.turnDetectionMode ?? 'server_vad',
+      silenceThresholdMs: this.config.silenceThresholdMs ?? 500,
+      vadThreshold: this.config.vadThreshold ?? DEFAULT_LOCAL_VAD_THRESHOLD,
+      minTurnDurationMs: this.config.minTurnDurationMs ?? 100,
+      maxTurnDurationMs: this.config.maxTurnDurationMs ?? 30000,
+      prefixPaddingMs: this.config.prefixPaddingMs ?? 300,
     };
   }
 
   private getAudioSampleRate(): number {
-    const audioFormat = this.voiceConfig.audioFormat || DEFAULT_AUDIO_FORMAT;
+    const audioFormat = this.config.audioFormat || DEFAULT_AUDIO_FORMAT;
     return audioFormat === 'pcm16'
-      ? this.voiceConfig.sampleRate || DEFAULT_SAMPLE_RATE
+      ? this.config.sampleRate || DEFAULT_SAMPLE_RATE
       : G711_SAMPLE_RATE;
   }
 
   private buildTargetConfig(instructions: string): VoiceProviderConfig {
-    const provider = this.voiceConfig.targetProvider || 'openai';
+    const provider = this.config.targetProvider || 'openai';
     return {
       provider,
-      model: this.voiceConfig.targetModel,
-      apiKey: this.voiceConfig.targetApiKey,
-      voice: this.voiceConfig.targetVoice ?? 'alloy',
+      model: this.config.targetModel,
+      apiKey: this.config.targetApiKey,
+      voice: this.config.targetVoice ?? 'alloy',
       instructions,
-      audioFormat: this.voiceConfig.audioFormat || DEFAULT_AUDIO_FORMAT,
+      audioFormat: this.config.audioFormat || DEFAULT_AUDIO_FORMAT,
       sampleRate: this.getAudioSampleRate(),
       // The orchestrator commits routed audio and requests each response itself.
       // Leaving VAD on here creates duplicate target responses for the same turn.
@@ -93,15 +93,15 @@ export class SimulatedVoiceUser implements ApiProvider {
 
   private buildSimulatedUserConfig(instructions: string): VoiceProviderConfig {
     const simulatedUserInstructions = this.buildSimulatedUserInstructions(instructions);
-    const provider = this.voiceConfig.simulatedUserProvider || 'openai';
+    const provider = this.config.simulatedUserProvider || 'openai';
 
     return {
       provider,
-      model: this.voiceConfig.simulatedUserModel,
-      apiKey: this.voiceConfig.simulatedUserApiKey,
-      voice: this.voiceConfig.simulatedUserVoice ?? 'echo',
+      model: this.config.simulatedUserModel,
+      apiKey: this.config.simulatedUserApiKey,
+      voice: this.config.simulatedUserVoice ?? 'echo',
       instructions: simulatedUserInstructions,
-      audioFormat: this.voiceConfig.audioFormat || DEFAULT_AUDIO_FORMAT,
+      audioFormat: this.config.audioFormat || DEFAULT_AUDIO_FORMAT,
       sampleRate: this.getAudioSampleRate(),
       // Wait for the target to finish before requesting the caller's response.
       turnDetection: undefined,
@@ -117,21 +117,21 @@ Speak naturally and respond to the agent. Say "${STOP_MARKER}" when your goal is
   }
 
   private shouldRecordConversation(): boolean {
-    return this.voiceConfig.recordConversation !== false;
+    return this.config.recordConversation !== false;
   }
 
   private shouldTargetSpeakFirst(): boolean {
-    return this.voiceConfig.targetSpeaksFirst ?? true;
+    return this.config.targetSpeaksFirst ?? true;
   }
 
   private validateLocalAudioConfiguration(): string | undefined {
     if (
-      (this.voiceConfig.targetProvider ?? 'openai') !== 'openai' ||
-      (this.voiceConfig.simulatedUserProvider ?? 'openai') !== 'openai'
+      (this.config.targetProvider ?? 'openai') !== 'openai' ||
+      (this.config.simulatedUserProvider ?? 'openai') !== 'openai'
     ) {
       return 'Simulated voice conversations support OpenAI Realtime endpoints only.';
     }
-    const sampleRate = this.voiceConfig.sampleRate;
+    const sampleRate = this.config.sampleRate;
     if (
       sampleRate !== undefined &&
       (!Number.isInteger(sampleRate) || sampleRate <= 0 || sampleRate > 192000)
@@ -161,14 +161,14 @@ Speak naturally and respond to the agent. Say "${STOP_MARKER}" when your goal is
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const rawInstructions = this.voiceConfig.instructions || DEFAULT_INSTRUCTIONS_TEMPLATE;
+    const rawInstructions = this.config.instructions || DEFAULT_INSTRUCTIONS_TEMPLATE;
     const instructions = getNunjucksEngine().renderString(rawInstructions, context?.vars || {});
 
     logger.debug('[SimulatedVoiceUser] Starting voice conversation:', {
       instructionLength: instructions.length,
-      maxTurns: this.voiceConfig.maxTurns,
-      targetProvider: this.voiceConfig.targetProvider,
-      simulatedUserProvider: this.voiceConfig.simulatedUserProvider,
+      maxTurns: this.config.maxTurns,
+      targetProvider: this.config.targetProvider,
+      simulatedUserProvider: this.config.simulatedUserProvider,
     });
 
     const configurationError = this.validateLocalAudioConfiguration();
@@ -183,8 +183,8 @@ Speak naturally and respond to the agent. Say "${STOP_MARKER}" when your goal is
       targetConfig,
       simulatedUserConfig,
       turnDetection: this.buildTurnDetectionConfig(),
-      maxTurns: this.voiceConfig.maxTurns || DEFAULT_MAX_TURNS,
-      timeoutMs: this.voiceConfig.timeoutMs || DEFAULT_TIMEOUT_MS,
+      maxTurns: this.config.maxTurns || DEFAULT_MAX_TURNS,
+      timeoutMs: this.config.timeoutMs || DEFAULT_TIMEOUT_MS,
       targetSpeaksFirst: this.shouldTargetSpeakFirst(),
       recordFullAudio: this.shouldRecordConversation(),
     });
@@ -284,6 +284,7 @@ Speak naturally and respond to the agent. Say "${STOP_MARKER}" when your goal is
         ? {
             data: audioData.toString('base64'),
             format: 'wav',
+            transcript: output,
           }
         : undefined,
     };

@@ -117,6 +117,30 @@ describe('VoiceConversationOrchestrator', () => {
     vi.restoreAllMocks();
   });
 
+  it.each(['target', 'user'] as const)(
+    'clears every timer after %s audio forwarding fails synchronously',
+    async (speaker) => {
+      vi.useFakeTimers({
+        toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'],
+      });
+      const orchestrator = new VoiceConversationOrchestrator(config());
+      const { result, target, user } = await startConversation(orchestrator);
+      const source = speaker === 'target' ? target : user;
+      const recipient = speaker === 'target' ? user : target;
+      recipient.sendAudio.mockImplementationOnce(() =>
+        recipient.emit('error', new Error('fixture socket closed')),
+      );
+      source.emit('audio_delta', chunk(0));
+      await expect(result).resolves.toMatchObject({
+        stopReason: 'error',
+        error: 'fixture socket closed',
+      });
+      expect(target.disconnect).toHaveBeenCalledOnce();
+      expect(user.disconnect).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
   it('settles and disconnects when recording encoding fails', async () => {
     const orchestrator = new VoiceConversationOrchestrator(config());
     const { result, target, user } = await startConversation(orchestrator);
