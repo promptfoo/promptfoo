@@ -107,8 +107,11 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
     return true;
   }
 
-  // Check for Anthropic with web_search tool
-  if (id.includes('anthropic') && hasTool(provider, (t) => t.type === 'web_search_20250305')) {
+  // Check for Anthropic with any version of its dated `web_search_YYYYMMDD` server tool.
+  if (
+    id.includes('anthropic') &&
+    hasTool(provider, (t) => typeof t.type === 'string' && /^web_search_\d{8}$/.test(t.type))
+  ) {
     return true;
   }
 
@@ -133,10 +136,10 @@ export async function loadWebSearchProvider(
           config: {
             tools: [
               {
-                type: 'web_search_20250305',
+                type: 'web_search_20260209',
                 name: 'web_search',
                 max_uses: 5,
-              } as any,
+              },
             ],
           },
         },
