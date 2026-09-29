@@ -382,11 +382,12 @@ providers:
       strict_mcp_config: true # Only use configured servers (true by default)
 ```
 
-Each server's `name` becomes its SDK server name, so its tools are exposed as `mcp__<name>__<tool>`
-(the form `append_allowed_tools` and `disallowed_tools` match). A server without a `name` is named
-after its `url` or `command` (`default` for a `path` server). Names must be unique, so set `name`
-when two servers would otherwise share one. Also set it when the `url` carries a credential, because
-the name appears in tool names and debug logs.
+Server names are part of tool names (`mcp__<server>__<tool>`), which `append_allowed_tools` and
+`disallowed_tools` match. Without an explicit `name`, the adapter uses the `url` or `command`
+(`default` for a `path` server). Names must remain distinct after SDK normalization; for example,
+`tools.local` and `tools_local` collide. Set explicit names for colliding servers or URLs containing
+credentials, since names appear in tools and debug logs. Update tool permission rules when renaming
+a server.
 
 This direct SDK integration cannot enforce the shared MCP `tools` allowlist or non-empty
 `exclude_tools` filters, so those configurations fail closed instead of silently exposing a broader

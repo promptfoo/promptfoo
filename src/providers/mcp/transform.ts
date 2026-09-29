@@ -137,10 +137,7 @@ function getServerConfigs(config: McpConfigParsed): MCPServerConfig[] {
   return [...(config.servers ?? []), ...(config.server ? [config.server] : [])];
 }
 
-/**
- * The SDK server name, which prefixes the server's tools as `mcp__<name>__<tool>`. Unnamed
- * servers keep the name they have always had, so existing tool allow and deny rules match.
- */
+// Preserve legacy names so existing tool allow and deny rules keep matching.
 function getClaudeCodeServerName({ name, url, command }: MCPServerConfig): string {
   return name ?? url ?? command ?? 'default';
 }
@@ -164,20 +161,22 @@ export function validateMCPConfigForClaudeCode(input: unknown): McpConfigParsed 
     );
   }
 
-  // Servers reach the SDK keyed by name, so a shared name would silently drop one. Rejecting
-  // instead of renaming keeps every existing `mcp__<name>__<tool>` rule on the same server.
-  const servers = getServerConfigs(config);
-  const names = servers.map(getClaudeCodeServerName);
-  const duplicate = servers.find((_, index) => names.indexOf(names[index]) !== index);
-  if (duplicate) {
-    // A url can carry credentials, so it is described rather than echoed.
-    const shared =
-      duplicate.name === undefined && duplicate.url
-        ? 'the same `url`'
-        : `the name \`${getClaudeCodeServerName(duplicate)}\``;
-    throw new Error(
-      `Two Claude Agent SDK MCP servers resolve to ${shared}; give each server a unique \`name\`.`,
-    );
+  const namespaces = new Map<string, number>();
+  for (const [index, server] of getServerConfigs(config).entries()) {
+    const name = getClaudeCodeServerName(server);
+    // Match the SDK's tool-name normalization without renaming the configured servers.
+    let namespace = name.replace(/[^a-zA-Z0-9_-]/g, '_');
+    if (name.startsWith('claude.ai ')) {
+      namespace = namespace.replace(/_+/g, '_').replace(/^_|_$/g, '');
+    }
+    const previous = namespaces.get(namespace);
+    if (previous !== undefined) {
+      // Names can be credential-bearing URLs; identify the entries without echoing them.
+      throw new Error(
+        `Claude Agent SDK MCP servers ${previous + 1} and ${index + 1} have colliding tool names; give each server a unique \`name\` using letters, numbers, hyphens, or underscores.`,
+      );
+    }
+    namespaces.set(namespace, index);
   }
   return config;
 }
