@@ -64,13 +64,6 @@ export interface FourthwallProduct {
   variants: FourthwallVariant[];
 }
 
-export interface FourthwallCollection {
-  id: string;
-  name: string;
-  slug: string;
-  description: string;
-}
-
 // Cart item structure per OpenAPI spec - variant is nested object, no top-level variantId
 export interface FourthwallCartItem {
   variant: FourthwallCartVariant;
@@ -100,20 +93,6 @@ export interface FourthwallCart {
   items: FourthwallCartItem[];
   checkoutUrl?: string;
   subtotal?: FourthwallMoney;
-}
-
-export interface PagingInfo {
-  pageNumber: number;
-  pageSize: number;
-  elementsSize: number;
-  elementsTotal: number;
-  totalPages: number;
-  hasNextPage: boolean;
-}
-
-export interface PaginatedResponse<T> {
-  results: T[];
-  paging: PagingInfo;
 }
 
 // Store UI State Types

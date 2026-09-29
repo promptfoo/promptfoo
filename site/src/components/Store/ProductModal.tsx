@@ -42,10 +42,9 @@ export function ProductModal() {
   useEffect(() => {
     if (selectedProduct) {
       setCurrentImageIndex(0);
-      const firstPurchasableVariant =
-        selectedProduct.state.type === 'AVAILABLE'
-          ? selectedProduct.variants.find((variant) => isInStock(variant.stock))
-          : undefined;
+      const firstPurchasableVariant = selectedProduct.variants.find((variant) =>
+        isInStock(variant.stock),
+      );
       setSelectedVariantId((firstPurchasableVariant ?? selectedProduct.variants[0])?.id || '');
     }
   }, [selectedProduct]);
@@ -84,6 +83,7 @@ export function ProductModal() {
     return selectedProduct?.variants.find((v) => v.id === selectedVariantId);
   }, [selectedProduct, selectedVariantId]);
   const soldOut = selectedProduct ? isProductSoldOut(selectedProduct) : false;
+  const canAddToCart = !!selectedVariant && !soldOut && isInStock(selectedVariant.stock);
 
   // Images to show (variant-specific or product-level)
   const images = useMemo(() => {
@@ -152,7 +152,9 @@ export function ProductModal() {
   }, [handleNextImage, handlePrevImage]);
 
   const handleAddToCart = async () => {
-    if (!selectedVariantId || soldOut) return;
+    if (!canAddToCart || isAdding || isLoading) {
+      return;
+    }
 
     setIsAdding(true);
     try {
@@ -480,13 +482,7 @@ export function ProductModal() {
             variant="contained"
             size="large"
             onClick={handleAddToCart}
-            disabled={
-              !selectedVariant ||
-              soldOut ||
-              !isInStock(selectedVariant.stock) ||
-              isAdding ||
-              isLoading
-            }
+            disabled={!canAddToCart || isAdding || isLoading}
             sx={{
               mt: 'auto',
               py: { xs: 1.75, sm: 1.5 },
@@ -508,7 +504,7 @@ export function ProductModal() {
           >
             {isAdding ? (
               <CircularProgress size={24} sx={{ color: 'var(--ifm-button-color, #fff)' }} />
-            ) : selectedVariant && !soldOut && isInStock(selectedVariant.stock) ? (
+            ) : canAddToCart ? (
               'Add to Cart'
             ) : soldOut ? (
               'Sold Out'

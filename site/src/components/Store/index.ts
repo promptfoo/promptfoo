@@ -15,11 +15,8 @@ export {
   getAttributeSwatch,
   getCheckoutUrl,
   isInStock,
-  isProductSoldOut,
   stripHtml,
   useCart,
-  useCollections,
-  useProduct,
   useProducts,
 } from './useFourthwall';
 
@@ -29,11 +26,8 @@ export type {
   FourthwallCart,
   FourthwallCartItem,
   FourthwallCartVariant,
-  FourthwallCollection,
   FourthwallImage,
   FourthwallMoney,
   FourthwallProduct,
-  FourthwallStock,
   FourthwallVariant,
-  PaginatedResponse,
 } from './types';

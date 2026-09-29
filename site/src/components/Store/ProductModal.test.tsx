@@ -2,7 +2,7 @@ import React from 'react';
 
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useCartContext } from './CartProvider';
 import { ProductModal } from './ProductModal';
 
@@ -11,6 +11,10 @@ import type { FourthwallProduct } from './types';
 vi.mock('./CartProvider', () => ({
   useCartContext: vi.fn(),
 }));
+
+afterEach(() => {
+  vi.resetAllMocks();
+});
 
 const mockProduct: FourthwallProduct = {
   id: 'prod-1',
@@ -39,7 +43,19 @@ function renderModal(product: FourthwallProduct, addToCart = vi.fn()) {
     closeProductModal: vi.fn(),
     addToCart,
     isLoading: false,
-  } as ReturnType<typeof useCartContext>);
+    cart: null,
+    error: null,
+    itemCount: 0,
+    removeFromCart: vi.fn(),
+    updateQuantity: vi.fn(),
+    clearCart: vi.fn(),
+    isCartOpen: false,
+    openCart: vi.fn(),
+    closeCart: vi.fn(),
+    openProductModal: vi.fn(),
+    couponCode: null,
+    clearCoupon: vi.fn(),
+  });
 
   render(<ProductModal />);
   return addToCart;
@@ -104,5 +120,31 @@ describe('ProductModal', () => {
 
     await userEvent.setup().click(button);
     expect(addToCart).toHaveBeenCalledWith('var-2', 1);
+  });
+
+  it('blocks a selected out-of-stock variant while another variant is available', async () => {
+    const addToCart = renderModal({
+      ...mockProduct,
+      variants: [
+        { ...mockProduct.variants[0], attributes: { size: 'Small' } },
+        {
+          ...mockProduct.variants[0],
+          id: 'var-2',
+          attributes: { size: 'Large' },
+          stock: { type: 'LIMITED', inStock: 0 },
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('combobox'));
+    await user.click(screen.getByRole('option', { name: 'Large' }));
+    expect(screen.getByRole('button', { name: 'Out of Stock' })).toBeDisabled();
+    expect(addToCart).not.toHaveBeenCalled();
+  });
+
+  it('disables purchases when the product has no variants', async () => {
+    const addToCart = renderModal({ ...mockProduct, variants: [] });
+    expect(await screen.findByRole('button', { name: 'Sold Out' })).toBeDisabled();
+    expect(addToCart).not.toHaveBeenCalled();
   });
 });
