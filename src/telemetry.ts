@@ -134,11 +134,10 @@ export class Telemetry {
   }
 
   private getPersonProperties(ciFlag: boolean) {
-    const personProperties = {
+    return {
       ...getUserAuthInfo(),
       isRunningInCi: ciFlag,
     };
-    return personProperties;
   }
 
   async identify() {
@@ -283,14 +282,9 @@ export class Telemetry {
 // initialization for backward compatibility.
 const telemetry = new Telemetry(false);
 
-// Use Symbol.for to ensure the same symbol across module reloads (e.g., in tests).
-// This prevents MaxListenersExceededWarning when tests use vi.resetModules().
+// Module reloads share one exit hook and the registry of clients to drain.
 const SHUTDOWN_HANDLER_KEY = Symbol.for('promptfoo.telemetry.shutdownHandler');
 
-// Register cleanup handler only once across all module reloads.
-// This is a safety net to ensure PostHog client is properly shut down when the process exits.
-// The primary fix is disabling PostHog's internal flush timer (flushInterval: 0) so it
-// doesn't keep the event loop alive. See: https://github.com/promptfoo/promptfoo/issues/5893
 if (!(process as unknown as Record<symbol, boolean>)[SHUTDOWN_HANDLER_KEY]) {
   (process as unknown as Record<symbol, boolean>)[SHUTDOWN_HANDLER_KEY] = true;
   process.once('beforeExit', async () => {

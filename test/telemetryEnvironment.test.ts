@@ -2,9 +2,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import dotenv from 'dotenv';
 import { PostHog } from 'posthog-node';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadEnvFiles } from '../src/util/envFile';
 import { createDeferred, mockProcessEnv } from './util/utils';
 
 const client = vi.hoisted(() => ({
@@ -426,25 +426,21 @@ describe('telemetry test-mode environment restrictions', () => {
   });
 
   it.each([undefined, 'false'])(
-    'lets an explicit env file override implicit dotenv test mode when the original host flag is %j',
+    'lets an explicit env file override implicit .env test mode when the original host flag is %j',
     async (hostFlag) => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-implicit-test-mode-'));
       const implicitFile = path.join(dir, '.env');
       const explicitFile = path.join(dir, 'explicit.env');
       fs.writeFileSync(implicitFile, 'IS_TESTING=true\n');
       fs.writeFileSync(explicitFile, 'IS_TESTING=false\n');
-      mockProcessEnv({ IS_TESTING: hostFlag });
-      const config = dotenv.config.bind(dotenv);
-      vi.spyOn(dotenv, 'config').mockImplementation((options) =>
-        config({ ...options, path: options?.path ?? implicitFile }),
-      );
+      mockProcessEnv({ IS_TESTING: hostFlag, DOTENV_PATH: implicitFile });
       try {
         const { Telemetry } = await import('../src/telemetry');
         const early = new Telemetry();
         if (hostFlag === undefined) {
           expect(PostHog).not.toHaveBeenCalled();
         }
-        dotenv.config({ path: explicitFile, override: true, quiet: true });
+        loadEnvFiles([explicitFile], { override: true });
         vi.resetModules();
         const { Telemetry: ReloadedTelemetry } = await import('../src/telemetry');
         const late = new ReloadedTelemetry();
@@ -465,7 +461,7 @@ describe('telemetry test-mode environment restrictions', () => {
     async (fileFlag) => {
       const { default: cliState } = await import('../src/cliState');
       const { Telemetry } = await import('../src/telemetry');
-      // The original host flag was absent; implicit dotenv loaded this value later.
+      // The original host flag was absent; the implicit .env loaded this value later.
       mockProcessEnv({ IS_TESTING: 'true' });
       const telemetry = new Telemetry(false);
       await cliState.withEnvFileOverrides({ IS_TESTING: fileFlag }, () =>

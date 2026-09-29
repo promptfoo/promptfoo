@@ -1,17 +1,16 @@
-import dotenv from 'dotenv';
 import { getEnvOverridesProvider } from './envOverrides';
+import { loadEnvFiles } from './util/envFile';
 import { parseEnvBool as parseBoolean } from './util/parseEnvBool';
 
 import type { EnvOverrides } from './types/env';
 
-// Preserve only the original host restriction, before implicit .env loading.
-// Separate CLI and library bundles share this value.
+// Preserve the original host restriction before loading .env, shared across CLI/library bundles.
 const HOST_TEST_MODE_KEY = Symbol.for('promptfoo.envars.isHostTesting');
 export const isHostTesting = ((process as unknown as Record<symbol, boolean>)[
   HOST_TEST_MODE_KEY
 ] ??= parseBoolean(process.env.IS_TESTING));
 
-dotenv.config({ quiet: true });
+loadEnvFiles();
 
 // Define the supported environment variables and their types
 type EnvVars = {
