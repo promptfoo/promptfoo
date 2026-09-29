@@ -1,32 +1,27 @@
 import { z } from 'zod';
 
-const PositiveIntegerSchema = z.coerce.number().int().positive();
-const ProbabilitySchema = z.coerce.number().min(0).max(1);
-const AssertionTypeSchema = z.enum(['pi', 'g-eval', 'llm-rubric']);
+const GenerationCountSchema = z
+  .string()
+  .regex(/^\d+$/)
+  .transform(Number)
+  .pipe(z.number().int().positive().max(Number.MAX_SAFE_INTEGER));
 
-export function validatePositiveIntegerOption(value: string | undefined, optionName: string): void {
-  if (value !== undefined && !PositiveIntegerSchema.safeParse(value).success) {
-    throw new Error(`Option ${optionName} must be a positive integer.`);
+export function parseGenerationCount(value: string, optionName: string): number {
+  const result = GenerationCountSchema.safeParse(value);
+  if (!result.success) {
+    throw new Error(`Option ${optionName} must be a positive safe integer.`);
   }
+  return result.data;
 }
 
-export function validateProbabilityOption(value: string | undefined, optionName: string): void {
-  if (value !== undefined && !ProbabilitySchema.safeParse(value).success) {
-    throw new Error(`Option ${optionName} must be a number between 0 and 1.`);
-  }
-}
-
-export function validateAssertionTypeOption(value: string | undefined, optionName: string): void {
-  if (value !== undefined && !AssertionTypeSchema.safeParse(value).success) {
-    throw new Error(`Option ${optionName} must be one of: pi, g-eval, llm-rubric.`);
-  }
-}
-
-export function validateExclusiveGenerationModes(
-  datasetOnly: boolean | undefined,
-  assertionsOnly: boolean | undefined,
+export function validateGenerationOutput(
+  output: string | undefined,
+  extensions: readonly string[],
 ): void {
-  if (datasetOnly && assertionsOnly) {
-    throw new Error('Cannot use --dataset-only and --assertions-only together.');
+  if (
+    output !== undefined &&
+    (typeof output !== 'string' || !extensions.some((extension) => output.endsWith(extension)))
+  ) {
+    throw new Error(`Unsupported output file type: ${output}. Use ${extensions.join(' or ')}.`);
   }
 }

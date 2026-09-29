@@ -1,8 +1,8 @@
 import compression from 'compression';
 import cors from 'cors';
-import dotenv from 'dotenv';
+import { loadEnvFiles } from '../util/envFile';
 
-dotenv.config({ quiet: true });
+loadEnvFiles();
 
 import fs from 'node:fs';
 import http from 'node:http';
@@ -43,7 +43,6 @@ import { csrfProtection } from './middleware/csrfProtection';
 import { blobsRouter } from './routes/blobs';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
-import { generationRouter } from './routes/generation';
 import { mediaRouter } from './routes/media';
 import { modelAuditRouter } from './routes/modelAudit';
 import { providersRouter } from './routes/providers';
@@ -328,7 +327,6 @@ export function createApp() {
   });
 
   app.use('/api/eval', evalRouter);
-  app.use('/api/generation', generationRouter);
   app.use('/api/media', mediaRouter);
   app.use('/api/blobs', blobsRouter);
   app.use('/api/providers', providersRouter);
@@ -374,7 +372,7 @@ export function createApp() {
 export async function startServer(
   port = getDefaultPort(),
   browserBehavior: BrowserBehavior = BrowserBehavior.ASK,
-) {
+): Promise<void> {
   const app = createApp();
 
   const httpServer = http.createServer(app);

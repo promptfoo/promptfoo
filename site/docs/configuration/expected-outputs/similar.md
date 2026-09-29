@@ -32,6 +32,8 @@ assert:
     threshold: 0.8
 ```
 
+The negated `not-similar` assertion is the logical inverse: with an array of values it passes only when the output is dissimilar to **every** value (and fails as soon as it is too similar to any one of them). This is the natural way to assert that an output does not resemble any item in a list of forbidden or canned answers.
+
 ## Similarity Metrics
 
 You can specify which metric to use by including it in the assertion type. The default is `similar` (cosine similarity).

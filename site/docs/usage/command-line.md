@@ -655,14 +655,19 @@ Manage authentication for cloud features.
 
 ### `promptfoo auth login`
 
-Login to the promptfoo cloud.
+Log in to Promptfoo Cloud.
 
-| Option                | Description                                                                |
-| --------------------- | -------------------------------------------------------------------------- |
-| `-o, --org <orgId>`   | The organization ID to log in to                                           |
-| `-h, --host <host>`   | The host of the promptfoo instance (API URL if different from the app URL) |
-| `-k, --api-key <key>` | Log in using an API key                                                    |
-| `-t, --team <team>`   | Team name, slug, or ID to use after login                                  |
+Promptfoo Cloud API keys are scoped to one organization. To switch organizations, log in with an API key from the organization you want to use. `--org` and `--team` apply only with `--api-key`.
+
+| Option                      | Description                                                                |
+| --------------------------- | -------------------------------------------------------------------------- |
+| `-o, --org <orgId>`         | The organization ID to log in to                                           |
+| `-h, --host <host>`         | The host of the promptfoo instance (API URL if different from the app URL) |
+| `-k, --api-key <key>`       | Log in using an API key                                                    |
+| `-t, --team <team>`         | Team name, slug, or ID to use after login                                  |
+| `--auth-header-name <name>` | Header carrying the Cloud API token when logging in with `--api-key`       |
+
+For gateways that reserve `Authorization`, use `--auth-header-name X-Promptfoo-Api-Key` or `PROMPTFOO_CLOUD_AUTH_HEADER`. The value remains `Bearer <token>`. Precedence is the login flag, saved setting, environment variable, then `Authorization`. A successful login saves the header name; changing `--host` does not reset it. Pass `--auth-header-name Authorization` to reset it. See [gateway configuration](/docs/usage/sharing.md#enterprise-sharing).
 
 After login, if you have multiple teams, you can switch between them using the `teams` subcommand.
 
@@ -679,6 +684,7 @@ Display current authentication status including user, organization, and active t
 - User email
 - Organization name
 - Current team (if logged in to a multi-team organization)
+- API URL and effective auth header name (shown even without a saved login or if the account lookup fails)
 - App URL
 
 Example:
@@ -690,6 +696,8 @@ promptfoo auth whoami
 Output:
 
 ```
+API URL: https://api.promptfoo.app
+Auth header: Authorization
 Currently logged in as:
 User: user@company.com
 Organization: Acme Corp
@@ -711,7 +719,7 @@ Manage team switching for organizations with multiple teams.
 
 #### `promptfoo auth teams list`
 
-List all teams you have access to in the current organization.
+List the teams accessible to your API key.
 
 #### `promptfoo auth teams current`
 
@@ -739,6 +747,8 @@ promptfoo auth teams set team_12345
 ```
 
 Your team selection is remembered across CLI sessions and applies to all promptfoo operations including evals and red team testing.
+
+If your saved team is no longer accessible, promptfoo falls back to the oldest team in your current organization. It never switches organizations on its own. To use another organization, run `promptfoo auth login --api-key <apiKey>` with a key from that organization.
 
 #### Team Selection Across Organizations
 
@@ -808,11 +818,6 @@ BETA: Generate synthetic test cases based on existing prompts and variables.
 | `--numTestCasesPerPersona <number>` | Number of test cases per persona                           | 3                    |
 | `--provider <provider>`             | Provider to use for generating test cases                  | default grader       |
 | `--no-cache`                        | Do not read or write results to disk cache                 | false                |
-| `--enhanced`                        | Use enhanced persona-based dataset generation              | false                |
-| `--edge-cases`                      | Include edge case generation                               | false                |
-| `--diversity`                       | Enable diversity measurement and optimization              | false                |
-| `--diversity-target <number>`       | Target diversity score (0-1)                               | 0.7                  |
-| `--iterative`                       | Iteratively fill coverage gaps                             | false                |
 
 For example, this command will modify your default config file (usually `promptfooconfig.yaml`) with new test cases:
 
@@ -825,6 +830,10 @@ This command will generate test cases for a specific config and write them to a 
 ```sh
 promptfoo generate dataset -c my_config.yaml -o new_tests.yaml -i 'All test cases for {{location}} must be European cities'
 ```
+
+The persona and test-case counts must be positive whole numbers within JavaScript's
+safe integer range. Invalid counts and output filenames are rejected before dataset
+generation starts. Output files must end in `.csv` or `.yaml`.
 
 ## `promptfoo generate assertions`
 
@@ -839,20 +848,20 @@ When brainstorming assertions:
 - Generates python code for any objective assertions
 - Uses a specified natural language assertion type (pi, llm-rubric, or g-eval) for any subjective assertion.
 
-| Option                      | Description                                                     | Default                                        |
-| --------------------------- | --------------------------------------------------------------- | ---------------------------------------------- |
-| `-t, --type <type>`         | The assertion type to use for generated subjective assertions.  | pi with `WITHPI_API_KEY`; otherwise llm-rubric |
-| `-c, --config <path>`       | Path to the configuration file that contains at least 1 prompt. | promptfooconfig.yaml                           |
-| `-w, --write`               | Write the generated assertions directly to the config file      | false                                          |
-| `-i, --instructions <text>` | Custom instructions for assertion generation                    |                                                |
-| `-o, --output <path>`       | Path to write the generated assertions                          | stdout                                         |
-| `--numAssertions <number>`  | Number of assertions to generate                                | 5                                              |
-| `--provider <provider>`     | Provider to use for generating assertions                       | default grader                                 |
-| `--no-cache`                | Do not read or write results to disk cache                      | false                                          |
-| `--enhanced`                | Use enhanced assertion generation                               | false                                          |
-| `--coverage`                | Enable coverage analysis to map assertions to requirements      | false                                          |
-| `--validate`                | Validate assertions against sample outputs                      | false                                          |
-| `--negative-tests`          | Generate negative test assertions (should-not patterns)         | false                                          |
+| Option                      | Description                                                     | Default              |
+| --------------------------- | --------------------------------------------------------------- | -------------------- |
+| `-t, --type <type>`         | The assertion type to use for generated subjective assertions.  | pi                   |
+| `-c, --config <path>`       | Path to the configuration file that contains at least 1 prompt. | promptfooconfig.yaml |
+| `-w, --write`               | Write the generated assertions directly to the config file      | false                |
+| `-i, --instructions <text>` | Custom instructions for assertion generation                    |                      |
+| `-o, --output <path>`       | Path to write the generated assertions                          | stdout               |
+| `--numAssertions <number>`  | Number of assertions to generate                                | 5                    |
+| `--provider <provider>`     | Provider to use for generating assertions                       | default grader       |
+| `--no-cache`                | Do not read or write results to disk cache                      | false                |
+
+`--numAssertions` must be a positive whole number within JavaScript's safe integer
+range. Invalid counts and output filenames are rejected before assertion generation
+starts. Output files must end in `.yaml`.
 
 For example, this command will modify your default config file (usually `promptfooconfig.yaml`) with new test cases:
 
@@ -860,29 +869,11 @@ For example, this command will modify your default config file (usually `promptf
 promptfoo generate assertions -w
 ```
 
-This command will generate subjective and `python` assertions for a specific config and write them to a file, while following special instructions:
+This command will generate `pi` and `python` assertions for a specific config and write them to a file, while following special instructions:
 
 ```sh
 promptfoo generate assertions -c my_config.yaml -o new_tests.yaml -i 'I need assertions about pronunciation'
 ```
-
-## `promptfoo generate tests`
-
-Generate a complete test suite with both datasets and assertions.
-
-| Option                  | Description                 | Default              |
-| ----------------------- | --------------------------- | -------------------- |
-| `-c, --config <path>`   | Path to configuration file  | promptfooconfig.yaml |
-| `-o, --output <path>`   | Output file path (.yaml)    | stdout               |
-| `-w, --write`           | Write to configuration file | false                |
-| `--provider <provider>` | LLM provider for generation |                      |
-| `--dataset-only`        | Skip assertion generation   | false                |
-| `--assertions-only`     | Skip dataset generation     | false                |
-| `--parallel`            | Run both in parallel        | false                |
-| _Dataset options_       | See `generate dataset`      |                      |
-| _Assertion options_     | See `generate assertions`   |                      |
-
-See [Test generation](/docs/configuration/test-generation) for full documentation.
 
 ## `promptfoo generate redteam`
 
@@ -1097,7 +1088,7 @@ These general-purpose environment variables are supported:
 | Name                                          | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Default                       |
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
 | `FORCE_COLOR`                                 | Set to 0 to disable terminal colors for printed outputs                                                                                                                                                                                                                                                                                                                                                                                                                                                          |                               |
-| `PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY`        | How many assertions to run at a time                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | 3                             |
+| `PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY`        | Maximum number of assertions to run at once per test case (minimum 1).                                                                                                                                                                                                                                                                                                                                                                                                                                           | 3                             |
 | `PROMPTFOO_CACHE_ENABLED`                     | Enable LLM request/response caching                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `true`                        |
 | `PROMPTFOO_CACHE_PATH`                        | Directory for the disk cache. Defaults to a `cache` directory under `PROMPTFOO_CONFIG_DIR`                                                                                                                                                                                                                                                                                                                                                                                                                       | `~/.promptfoo/cache`          |
 | `PROMPTFOO_CACHE_TTL`                         | Cache TTL in seconds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `1209600`                     |
@@ -1113,12 +1104,14 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_DISABLE_REF_PARSER`                | Prevents JSON schema dereferencing                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |                               |
 | `PROMPTFOO_DISABLE_REMOTE_GENERATION`         | Disables supported Promptfoo-hosted generation fallbacks within its documented scope, including red team target/provider setup helpers that rely on remote generation. This is not a network egress firewall and does not disable explicitly configured providers, graders, telemetry, account/license checks, sharing, Cloud sync, red team target/provider test requests, or red team target/provider setup helpers that do not rely on remote generation. Example: `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` | `false`                       |
 | `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` | Disables supported Promptfoo-hosted red team generation paths, including red team target/provider setup helpers that rely on remote generation, while leaving non-red-team hosted generation, red team target/provider test requests, red team target/provider setup helpers that do not rely on remote generation, sharing, telemetry, account, and Cloud-backed controls unchanged. Example: `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`                                                                | `false`                       |
-| `PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS`         | Disables OS environment variables in templates. When true, only config `env:` variables are available in templates.                                                                                                                                                                                                                                                                                                                                                                                              | `false` (true in self-hosted) |
-| `PROMPTFOO_DISABLE_TEMPLATING`                | Disables Nunjucks template processing                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `false`                       |
+| `PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS`         | Disables OS environment variables in templates. When true, only config `env:` variables are available in templates, file paths, and tracing settings. Suite settings cannot re-enable access disabled by the process.                                                                                                                                                                                                                                                                                            | `false` (true in self-hosted) |
+| `PROMPTFOO_DISABLE_TEMPLATING`                | Disables Nunjucks processing for config values and prompts, including when set in config `env:`. Grader templates remain enabled.                                                                                                                                                                                                                                                                                                                                                                                | `false`                       |
+| `PROMPTFOO_DISABLE_UPDATE`                    | Disables automatic update availability checks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `false`                       |
 | `PROMPTFOO_DISABLE_VAR_EXPANSION`             | Prevents Array-type vars from being expanded into multiple test cases                                                                                                                                                                                                                                                                                                                                                                                                                                            |                               |
 | `PROMPTFOO_FAILED_TEST_EXIT_CODE`             | Override the exit code when there is at least 1 test case failure or when the pass rate is below PROMPTFOO_PASS_RATE_THRESHOLD                                                                                                                                                                                                                                                                                                                                                                                   | 100                           |
 | `PROMPTFOO_LOG_DIR`                           | Directory to write log files (both debug and error logs). Overrides the default `~/.promptfoo/logs` directory.                                                                                                                                                                                                                                                                                                                                                                                                   | `~/.promptfoo/logs`           |
 | `PROMPTFOO_PASS_RATE_THRESHOLD`               | Set a minimum pass rate threshold (as a percentage). If not set, defaults to 100% (no failures allowed)                                                                                                                                                                                                                                                                                                                                                                                                          | 100                           |
+| `PROMPTFOO_PROMPT_SEPARATOR`                  | Separator for [multiple prompts](/docs/configuration/prompts#multiple-prompts-in-one-file) in a `.txt` file.                                                                                                                                                                                                                                                                                                                                                                                                     | `---`                         |
 | `PROMPTFOO_REQUIRE_JSON_PROMPTS`              | By default the chat completion provider will wrap non-JSON messages in a single user message. Setting this envar to true disables that behavior.                                                                                                                                                                                                                                                                                                                                                                 |                               |
 | `PROMPTFOO_SHARE_CHUNK_SIZE`                  | Number of results to send in each chunk. This is used to estimate the size of the results and to determine the number of chunks to send.                                                                                                                                                                                                                                                                                                                                                                         |                               |
 | `PROMPTFOO_EVAL_TIMEOUT_MS`                   | Timeout in milliseconds for each individual test case/provider API call. When reached, that specific test is marked as an error.                                                                                                                                                                                                                                                                                                                                                                                 |                               |
@@ -1128,6 +1121,8 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_STRIP_PROMPT_TEXT`                 | Strip prompt text from results to reduce memory usage                                                                                                                                                                                                                                                                                                                                                                                                                                                            | false                         |
 | `PROMPTFOO_STRIP_RESPONSE_OUTPUT`             | Strip model response outputs from results to reduce memory usage                                                                                                                                                                                                                                                                                                                                                                                                                                                 | false                         |
 | `PROMPTFOO_STRIP_TEST_VARS`                   | Strip test variables from results to reduce memory usage                                                                                                                                                                                                                                                                                                                                                                                                                                                         | false                         |
+| `PROMPTFOO_OFFICIAL_DOCKER_IMAGE`             | Internal marker for upstream official-image update guidance. Official Promptfoo builds set this automatically, and derived images inherit it. The inherited guidance includes the extra rebuild step; set it to `false` in a derived image for tailored custom-image guidance.                                                                                                                                                                                                                                   | `false`                       |
+| `PROMPTFOO_RUNNING_IN_DOCKER`                 | Internal marker for container-aware update guidance. The Promptfoo Dockerfile sets this automatically. Other custom Dockerfiles that bake Promptfoo into an image must set it to `true` to receive rebuild-and-redeploy guidance instead of package-manager commands.                                                                                                                                                                                                                                            | `false`                       |
 | `PROMPTFOO_SELF_HOSTED`                       | Enables self-hosted mode. When true, disables OS environment variables in templates (only config `env:` values available), disables telemetry, and modifies other behaviors for controlled environments                                                                                                                                                                                                                                                                                                          | `false`                       |
 
 :::tip

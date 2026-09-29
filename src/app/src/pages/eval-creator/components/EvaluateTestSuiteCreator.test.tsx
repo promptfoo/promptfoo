@@ -49,10 +49,9 @@ vi.mock('./RunTestSuiteButton', () => ({
 }));
 vi.mock('./TestCasesSection', () => ({
   // TestCasesSection expects varsList prop.
-  default: vi.fn(({ varsList, onOpenYamlEditor, prompts }) => (
+  default: vi.fn(({ varsList, onOpenYamlEditor }) => (
     <div data-testid="mock-test-cases-section">
       <span>Vars: {varsList?.join(', ')}</span>
-      <span data-testid="generation-prompts">{JSON.stringify(prompts)}</span>
       <button onClick={onOpenYamlEditor}>Mock Edit Test YAML</button>
     </div>
   )),
@@ -357,6 +356,57 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(useStore.getState().config.description).toBe('Test Config');
   });
 
+  it('makes the runtime provider alias available to the form and evaluation after upload', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+    const file = new File(['targets:\n  - echo'], 'targets.yaml', { type: 'application/yaml' });
+
+    const input = screen.getByLabelText('Upload YAML configuration');
+    await user.upload(input, file);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith('Configuration loaded successfully', 'success');
+    });
+    expect(useStore.getState().getTestSuite().providers).toEqual(['echo']);
+    expect(useStore.getState().config.targets).toBeUndefined();
+  });
+
+  it('keeps the current configuration when an upload violates the runtime field contract', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+    const previousConfig = useStore.getState().config;
+    const file = new File(['tracing:\n  enabled: incorrect-value'], 'invalid-config.yaml', {
+      type: 'application/yaml',
+    });
+
+    const input = screen.getByLabelText('Upload YAML configuration');
+    await user.upload(input, file);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith(
+        expect.stringContaining('tracing.enabled'),
+        'error',
+      );
+    });
+    expect(useStore.getState().config).toBe(previousConfig);
+  });
+
+  it('does not replace the form with an uploaded configuration that supplies basePath', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+    const previous = useStore.getState().config;
+    const file = new File(['basePath: /work/config\nprompts: [file://prompt.txt]'], 'config.yaml', {
+      type: 'application/yaml',
+    });
+
+    await user.upload(screen.getByLabelText('Upload YAML configuration'), file);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith(expect.stringMatching(/basePath.*CLI/), 'error');
+    });
+    expect(useStore.getState().config).toBe(previous);
+  });
+
   it('should handle invalid YAML with error toast', async () => {
     const user = userEvent.setup();
     render(<EvaluateTestSuiteCreator />);
@@ -492,22 +542,6 @@ describe('EvaluateTestSuiteCreator', () => {
 
     const testCasesSection = screen.getByTestId('mock-test-cases-section');
     expect(testCasesSection).toHaveTextContent('Vars: nestedVar, complete, validVar');
-  });
-
-  it('normalizes prompt-map configs for generation', async () => {
-    useStore.getState().updateConfig({
-      prompts: {
-        'file://prompt.txt': 'Prompt label',
-        '': 'Ignored blank prompt',
-      },
-    });
-
-    render(<EvaluateTestSuiteCreator />);
-    await userEvent.click(screen.getByRole('button', { name: /add test cases/i }));
-
-    expect(screen.getByTestId('generation-prompts')).toHaveTextContent(
-      JSON.stringify([{ raw: 'file://prompt.txt', label: 'Prompt label' }]),
-    );
   });
 
   it('should gracefully handle a missing hasCustomConfig property in the /providers/config-status response', async () => {

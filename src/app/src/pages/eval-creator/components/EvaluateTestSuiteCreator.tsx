@@ -16,7 +16,7 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import yaml from 'js-yaml';
+import { loadYaml } from '@promptfoo/util/yamlLoad';
 import { Check, Upload } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import ConfigureEnvButton from './ConfigureEnvButton';
@@ -25,17 +25,10 @@ import PromptsSection from './PromptsSection';
 import { ProvidersListSection } from './ProvidersListSection';
 import { RunOptionsSection } from './RunOptionsSection';
 import { StepSection } from './StepSection';
-import {
-  countTests,
-  normalizePrompts,
-  normalizePromptsForJob,
-  normalizeProviders,
-} from './setupReadiness';
+import { countTests, normalizePrompts, normalizeProviders } from './setupReadiness';
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
-import type { UnifiedConfig } from '@promptfoo/types';
-
-import type { GenerationPrompt } from '../api/generation';
+import { validateYamlConfigDraft } from './yamlConfigValidation';
 
 type SetupStepId = 1 | 2 | 3 | 4;
 type EditorTab = 'ui' | 'yaml';
@@ -135,28 +128,6 @@ const EvaluateTestSuiteCreator = () => {
 
   const normalizedPrompts = React.useMemo(() => normalizePrompts(prompts), [prompts]);
 
-  // Generation APIs only need raw prompt text and a stable label.
-  const promptsAsArray = React.useMemo(
-    (): GenerationPrompt[] =>
-      normalizePromptsForJob(prompts).flatMap((prompt) => {
-        if (typeof prompt === 'string') {
-          return prompt.trim() === '' ? [] : [{ raw: prompt, label: prompt }];
-        }
-
-        const raw = typeof prompt.raw === 'string' ? prompt.raw : undefined;
-        if (!raw?.trim()) {
-          return [];
-        }
-        return [
-          {
-            raw,
-            label: typeof prompt.label === 'string' && prompt.label.trim() ? prompt.label : raw,
-          },
-        ];
-      }),
-    [prompts],
-  );
-
   const varsList = React.useMemo(
     () => extractVarsFromPrompts(normalizedPrompts),
     [normalizedPrompts],
@@ -226,13 +197,13 @@ const EvaluateTestSuiteCreator = () => {
           );
         } else {
           try {
-            const parsedConfig = yaml.load(content) as Record<string, unknown>;
-            if (parsedConfig && typeof parsedConfig === 'object') {
-              updateConfig(parsedConfig as Partial<UnifiedConfig>);
+            const validation = validateYamlConfigDraft(loadYaml(content));
+            if (validation.success) {
+              updateConfig(validation.config);
               setResetKey((k) => k + 1);
               showToast('Configuration loaded successfully', 'success');
             } else {
-              showToast('Invalid YAML configuration', 'error');
+              showToast(validation.error, 'error');
             }
           } catch (err) {
             showToast(
@@ -661,7 +632,6 @@ const EvaluateTestSuiteCreator = () => {
                     >
                       <TestCasesSection
                         varsList={varsList}
-                        prompts={promptsAsArray}
                         onOpenYamlEditor={() => setEditorTab('yaml')}
                       />
                     </ErrorBoundary>

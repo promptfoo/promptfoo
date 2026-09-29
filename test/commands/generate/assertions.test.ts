@@ -1,14 +1,13 @@
 import fs from 'fs';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { synthesizeFromTestSuite } from '../../../src/assertions/synthesis';
 import { disableCache } from '../../../src/cache';
 import { doGenerateAssertions } from '../../../src/commands/generate/assertions';
-import { getEnvString } from '../../../src/envars';
-import { generateAssertions } from '../../../src/generation/assertions';
 import telemetry from '../../../src/telemetry';
 import { resolveConfigs } from '../../../src/util/config/load';
+import { loadYaml } from '../../../src/util/yamlLoad';
 
 import type { Assertion, TestSuite } from '../../../src/types/index';
 
@@ -39,14 +38,8 @@ vi.mock('fs/promises', () => ({
   writeFile: fsMocks.writeFileSync,
 }));
 vi.mock('js-yaml');
+vi.mock('../../../src/util/yamlLoad');
 vi.mock('../../../src/assertions/synthesis');
-vi.mock('../../../src/envars', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../src/envars')>()),
-  getEnvString: vi.fn(),
-}));
-vi.mock('../../../src/generation/assertions', () => ({
-  generateAssertions: vi.fn(),
-}));
 vi.mock('../../../src/util/config/load', () => ({
   resolveConfigs: vi.fn(),
 }));
@@ -125,22 +118,12 @@ describe('assertion generation', () => {
     beforeEach(() => {
       vi.mocked(synthesizeFromTestSuite).mockResolvedValue(mockResults);
       vi.mocked(yaml.dump).mockReturnValue('yaml content');
-      vi.mocked(yaml.load).mockReturnValue(mockTestSuite);
+      vi.mocked(loadYaml).mockReturnValue(mockTestSuite);
       vi.mocked(fs.readFileSync).mockReturnValue('mock config content');
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.writeFileSync).mockImplementation(() => undefined);
       vi.mocked(disableCache).mockImplementation(() => undefined);
       vi.mocked(telemetry.record).mockImplementation(() => undefined);
-      vi.mocked(getEnvString).mockReturnValue(undefined as never);
-      vi.mocked(generateAssertions).mockResolvedValue({
-        assertions: [],
-        metadata: {
-          totalGenerated: 0,
-          pythonConverted: 0,
-          durationMs: 0,
-          provider: 'test-provider',
-        },
-      } as never);
 
       vi.mocked(resolveConfigs).mockResolvedValue({
         testSuite: mockTestSuite,
@@ -148,6 +131,46 @@ describe('assertion generation', () => {
         basePath: '',
       });
     });
+
+    it.each(['0', '-1', '1.5', '2invalid', 'NaN', '', '9007199254740992'])(
+      'rejects invalid assertion count %j before loading config or generating',
+      async (numAssertions) => {
+        await expect(
+          doGenerateAssertions({
+            config: 'fixture.yaml',
+            defaultConfig: {},
+            defaultConfigPath: undefined,
+            cache: true,
+            write: false,
+            type: 'llm-rubric',
+            numAssertions,
+          }),
+        ).rejects.toThrow('Option --numAssertions must be a positive safe integer');
+        expect(resolveConfigs).not.toHaveBeenCalled();
+        expect(synthesizeFromTestSuite).not.toHaveBeenCalled();
+        expect(fs.writeFileSync).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['assertions.csv', 'assertions.txt', ''])(
+      'rejects output %j before generation',
+      async (output) => {
+        await expect(
+          doGenerateAssertions({
+            config: 'fixture.yaml',
+            defaultConfig: {},
+            defaultConfigPath: undefined,
+            cache: true,
+            write: false,
+            type: 'llm-rubric',
+            output,
+          }),
+        ).rejects.toThrow('Unsupported output file type');
+        expect(resolveConfigs).not.toHaveBeenCalled();
+        expect(synthesizeFromTestSuite).not.toHaveBeenCalled();
+        expect(fs.writeFileSync).not.toHaveBeenCalled();
+      },
+    );
 
     it('should write YAML output', async () => {
       const configPath = 'config.yaml';
@@ -164,26 +187,6 @@ describe('assertion generation', () => {
       });
 
       expect(fs.writeFileSync).toHaveBeenCalledWith('output.yaml', 'yaml content');
-    });
-
-    it('uses llm-rubric for enhanced generation when Pi access is unavailable', async () => {
-      const configPath = 'config.yaml';
-
-      await doGenerateAssertions({
-        cache: true,
-        config: configPath,
-        enhanced: true,
-        output: 'output.yaml',
-        write: false,
-        defaultConfig: {},
-        defaultConfigPath: configPath,
-      });
-
-      expect(generateAssertions).toHaveBeenCalledWith(
-        mockTestSuite.prompts,
-        mockTestSuite.tests || [],
-        expect.objectContaining({ type: 'llm-rubric' }),
-      );
     });
 
     it('should throw error for unsupported file type', async () => {
@@ -265,22 +268,6 @@ describe('assertion generation', () => {
           defaultConfigPath: configPath,
         }),
       ).rejects.toThrow('Synthesis failed');
-    });
-
-    it('rejects invalid assertion counts before generating', async () => {
-      await expect(
-        doGenerateAssertions({
-          cache: true,
-          config: 'config.yaml',
-          numAssertions: '0',
-          type: 'pi',
-          write: false,
-          defaultConfig: {},
-          defaultConfigPath: 'config.yaml',
-        }),
-      ).rejects.toThrow('Option --numAssertions must be a positive integer.');
-      expect(synthesizeFromTestSuite).not.toHaveBeenCalled();
-      expect(generateAssertions).not.toHaveBeenCalled();
     });
   });
 });
