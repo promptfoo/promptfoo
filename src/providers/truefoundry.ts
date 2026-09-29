@@ -1,5 +1,6 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { isGpt6Model } from './openai/gpt6';
 
 import type {
   ApiEmbeddingProvider,
@@ -221,14 +222,7 @@ function normalizeGuardrailErrorResponse(response: ProviderResponse): ProviderRe
   };
 }
 
-/**
- * TrueFoundry AI Gateway Provider
- *
- * Connects promptfoo to TrueFoundry's enterprise-grade AI Gateway, which
- * encompasses an LLM Gateway, MCP Gateway, and Agent Gateway for connecting,
- * observing, and governing agentic AI applications across providers from a
- * single control plane.
- */
+/** OpenAI-compatible gateway with TrueFoundry metadata and guardrail responses. */
 export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: TrueFoundryProviderOptions = {}) {
     super(modelName, {
@@ -242,7 +236,7 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
   }
 
   /**
-   * Override isReasoningModel to correctly detect GPT-5 and other reasoning models
+   * Override isReasoningModel to correctly detect OpenAI reasoning models
    * despite TrueFoundry's provider-account/model-name format
    */
   protected isReasoningModel(): boolean {
@@ -252,7 +246,8 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
       actualModelName.startsWith('o1') ||
       actualModelName.startsWith('o3') ||
       actualModelName.startsWith('o4') ||
-      actualModelName.startsWith('gpt-5')
+      actualModelName.startsWith('gpt-5') ||
+      isGpt6Model(actualModelName)
     );
   }
 

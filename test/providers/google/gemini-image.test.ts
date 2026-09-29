@@ -664,7 +664,7 @@ describe('GeminiImageProvider', () => {
       });
     });
 
-    it('should not count cached responses as upstream requests', async () => {
+    it('should count cached responses as one logical request', async () => {
       const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
 
       mockFetchWithCache.mockResolvedValueOnce({
@@ -693,7 +693,7 @@ describe('GeminiImageProvider', () => {
       expect(result.tokenUsage).toEqual({
         cached: 10,
         total: 10,
-        numRequests: 0,
+        numRequests: 1,
       });
     });
   });
@@ -1381,6 +1381,46 @@ describe('GeminiImageProvider', () => {
   });
 
   describe('Grounding tools', () => {
+    it.each([true, false])(
+      'deduplicates declarations across image tools (canonical first: %s)',
+      async (canonicalFirst) => {
+        const canonical = {
+          name: 'lookup',
+          parameters: {
+            type: 'OBJECT' as const,
+            properties: { code: { type: 'STRING' as const } },
+            required: ['code'],
+          },
+        };
+        const camelTool = { functionDeclarations: [canonical] };
+        const snakeTool = { function_declarations: [{ name: 'lookup' }] };
+        const provider = new GeminiImageProvider('gemini-3.1-flash-image', {
+          config: {
+            tools: canonicalFirst ? [camelTool, snakeTool] : [snakeTool, camelTool],
+          },
+        });
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: {
+            candidates: [
+              {
+                content: {
+                  parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+                },
+                finishReason: 'STOP',
+              },
+            ],
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        expect((await provider.callApi('Generate an image')).error).toBeUndefined();
+        const body = JSON.parse(mockFetchWithCache.mock.calls[0][1]?.body as string);
+        expect(body.tools).toEqual([{ functionDeclarations: [canonical] }]);
+      },
+    );
+
     it('should include googleSearch tool in request body', async () => {
       const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview', {
         config: {

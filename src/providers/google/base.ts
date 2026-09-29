@@ -613,7 +613,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       }
 
       // Execute the callback
-      logger.debug(`Executing function '${functionName}' with args: ${args}`);
+      logger.debug(`Executing function '${functionName}'`, { args });
       const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
         callback(args),
       );

@@ -556,7 +556,7 @@ describe('generateEvalSummary', () => {
       expect(output).toContain('Provider: 1,000 (cached)');
     });
 
-    it('should show zero probes for a fully cached redteam evaluation', () => {
+    it('should show an explicit zero probe count', () => {
       const params: EvalSummaryParams = {
         evalId: 'redteam-cached',
         isRedteam: true,

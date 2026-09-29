@@ -1081,11 +1081,10 @@ describe('AIStudioChatProvider', () => {
         tokenUsage: {
           cached: 15,
           total: 15,
-          numRequests: 0,
+          numRequests: 1,
         },
         raw: mockResponse.data,
         cached: true,
-        cost: undefined,
         metadata: {},
       });
     });
@@ -1787,6 +1786,43 @@ describe('AIStudioChatProvider', () => {
       );
     });
 
+    it.each([true, false])(
+      'deduplicates declarations across REST tools (canonical first: %s)',
+      async (canonicalFirst) => {
+        const canonical = {
+          name: 'lookup',
+          parameters: {
+            type: 'OBJECT' as const,
+            properties: { code: { type: 'STRING' as const } },
+            required: ['code'],
+          },
+        };
+        const camelTool = { functionDeclarations: [canonical] };
+        const snakeTool = { function_declarations: [{ name: 'lookup' }] };
+        provider = new AIStudioChatProvider('gemini-3.6-flash', {
+          config: {
+            apiKey: 'test-key',
+            tools: canonicalFirst ? [camelTool, snakeTool] : [snakeTool, camelTool],
+          },
+        });
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValueOnce({
+          contents: [{ role: 'user', parts: [{ text: 'Look up the code' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data: { candidates: [{ content: { parts: [{ text: 'Done' }] } }] },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        expect((await provider.callGemini('Look up the code')).error).toBeUndefined();
+        const body = JSON.parse(vi.mocked(cache.fetchWithCache).mock.calls[0][1]?.body as string);
+        expect(body.tools).toEqual([{ functionDeclarations: [canonical] }]);
+      },
+    );
+
     it('should handle function calling configuration', async () => {
       vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
         return {
@@ -2464,7 +2500,7 @@ describe('AIStudioChatProvider', () => {
       );
     });
 
-    it('should handle Google Search retrieval for Gemini 1.5 models', async () => {
+    it('should handle Google Search retrieval for Gemini 2.5 models', async () => {
       // Reset the Nunjucks mock to return the non-rendered value for these tests
       vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
         return {
@@ -2938,7 +2974,7 @@ describe('AIStudioChatProvider', () => {
         expect(response.tokenUsage).toEqual({
           cached: 80,
           total: 80,
-          numRequests: 0,
+          numRequests: 1,
           completionDetails: {
             reasoning: 50,
             acceptedPrediction: 0,
@@ -2946,6 +2982,37 @@ describe('AIStudioChatProvider', () => {
           },
         });
       });
+    });
+
+    it('should not double-count tool-use prompt tokens when pricing a standard Gemini response', async () => {
+      const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+        config: { apiKey: 'test-key' },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            toolUsePromptTokenCount: 400,
+            candidatesTokenCount: 500,
+            totalTokenCount: 1_900,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      const result = await provider.callGemini('test prompt');
+
+      expect(result.tokenUsage).toMatchObject({ prompt: 1_400, completion: 500, total: 1_900 });
+      expect(result.cost).toBeCloseTo((1_400 * 0.3 + 500 * 2.5) / 1e6, 12);
     });
 
     describe('thinking token cost calculation', () => {
@@ -3274,7 +3341,7 @@ describe('AIStudioEmbeddingProvider', () => {
     expect(response.error).toContain('No embedding found');
   });
 
-  it('marks responses as cached without recording an upstream request', async () => {
+  it('marks responses as cached and records one logical request', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
       ...(embeddingResponse([0.1, 0.2], 3) as any),
       cached: true,
@@ -3284,7 +3351,7 @@ describe('AIStudioEmbeddingProvider', () => {
     const response = await provider.callEmbeddingApi('hello');
 
     expect(response.cached).toBe(true);
-    expect(response.tokenUsage).toEqual({ cached: 3, total: 3, numRequests: 0 });
+    expect(response.tokenUsage).toEqual({ cached: 3, total: 3, numRequests: 1 });
   });
 
   it('does not support text inference via callApi', async () => {

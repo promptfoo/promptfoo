@@ -1,8 +1,10 @@
+import { act } from 'react';
+
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { fetchUserEmail } from '@app/utils/api';
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalHeader from './EvalHeader';
 import { useTableStore } from './store';
 
@@ -13,7 +15,42 @@ vi.mock('@app/utils/api', () => ({
 vi.mock('@app/hooks/useToast', () => ({ useToast: () => ({ showToast: vi.fn() }) }));
 vi.mock('./EvalSelectorDialog', () => ({ default: () => null }));
 vi.mock('./EvalSelectorKeyboardShortcut', () => ({ default: () => null }));
-vi.mock('./store', () => ({ useTableStore: vi.fn() }));
+
+const initialState = useTableStore.getState();
+
+function setCounts(counts: (number | undefined)[]) {
+  act(() => {
+    useTableStore.setState({
+      config: { metadata: { redteam: true } },
+      totalResultsCount: 12,
+      table: {
+        head: {
+          vars: [],
+          prompts: counts.map((count, index) => ({
+            id: `prompt-${index}`,
+            raw: 'Fixture prompt',
+            label: `Prompt ${index}`,
+            provider: `provider-${index}`,
+            metrics: {
+              score: 0,
+              testPassCount: 0,
+              testFailCount: 0,
+              testErrorCount: 0,
+              assertPassCount: 0,
+              assertFailCount: 0,
+              totalLatencyMs: 0,
+              tokenUsage: count === undefined ? {} : { numRequests: count },
+              namedScores: {},
+              namedScoresCount: {},
+              cost: 0,
+            },
+          })),
+        },
+        body: [],
+      },
+    });
+  });
+}
 
 function renderHeader() {
   render(
@@ -30,46 +67,34 @@ function renderHeader() {
   );
 }
 
-describe('EvalHeader', () => {
+describe('EvalHeader probe counts', () => {
   beforeEach(() => {
     vi.mocked(fetchUserEmail).mockResolvedValue(null);
-    vi.mocked(useTableStore).mockReturnValue({
-      config: { redteam: {} },
-      totalResultsCount: 12,
-      stats: null,
-      table: {
-        head: {
-          prompts: [{ provider: 'cached-provider', metrics: { tokenUsage: { numRequests: 0 } } }],
-        },
-      },
-      setAuthor: vi.fn(),
-    } as ReturnType<typeof useTableStore>);
   });
 
-  it('preserves an explicit zero probe count for a fully cached evaluation', () => {
-    renderHeader();
-
-    expect(screen.getByText('PROBES').closest('button')).toHaveTextContent('PROBES0');
+  afterEach(() => {
+    cleanup();
+    act(() => useTableStore.setState(initialState, true));
+    vi.resetAllMocks();
   });
 
-  it('adds probe counts from every prompt', () => {
-    vi.mocked(useTableStore).mockReturnValue({
-      config: { redteam: {} },
-      totalResultsCount: 12,
-      stats: null,
-      table: {
-        head: {
-          prompts: [
-            { provider: 'first', metrics: { tokenUsage: { numRequests: 2 } } },
-            { provider: 'second', metrics: { tokenUsage: { numRequests: 3 } } },
-          ],
-        },
-      },
-      setAuthor: vi.fn(),
-    } as ReturnType<typeof useTableStore>);
-
+  it.each([
+    { counts: [0], expected: 0 },
+    { counts: [2, 3], expected: 5 },
+    { counts: [0, 3], expected: 3 },
+    { counts: [undefined, 0], expected: 0 },
+    { counts: [undefined, undefined], expected: 12 },
+    { counts: [], expected: 12 },
+  ])('shows $expected for $counts', ({ counts, expected }) => {
+    setCounts(counts);
     renderHeader();
+    expect(screen.getByText('PROBES').closest('button')).toHaveTextContent(`PROBES${expected}`);
+  });
 
-    expect(screen.getByText('PROBES').closest('button')).toHaveTextContent('PROBES5');
+  it('updates when the table prompt metrics change', () => {
+    setCounts([0, 2]);
+    renderHeader();
+    setCounts([3, 4]);
+    expect(screen.getByText('PROBES').closest('button')).toHaveTextContent('PROBES7');
   });
 });

@@ -271,7 +271,6 @@ describe('GoogleImageProvider', async () => {
 
     expect(result.cached).toBe(true);
     expect(result.cost).toBeUndefined();
-    expect(result.tokenUsage).toEqual({ numRequests: 0 });
   });
 
   describe('Google AI Studio', () => {

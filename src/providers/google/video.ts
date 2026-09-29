@@ -4,9 +4,11 @@ import fs from 'fs';
 import { storeBlob } from '../../blobs';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { parseDataUrl } from '../../util/dataUrl';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { ellipsize } from '../../util/text';
 import { sleep } from '../../util/time';
+import { getVertexApiHostForRegion } from './shared';
 import {
   determineGoogleVertexMode,
   getGoogleApiKey,
@@ -187,8 +189,12 @@ export class GoogleVideoProvider implements ApiProvider {
   private getLocation(config: GoogleVideoOptions): string {
     return (
       config.region ||
-      getEnvString('GOOGLE_LOCATION') ||
+      this.env?.VERTEX_REGION ||
+      this.env?.GOOGLE_CLOUD_LOCATION ||
       this.env?.GOOGLE_LOCATION ||
+      getEnvString('VERTEX_REGION') ||
+      getEnvString('GOOGLE_CLOUD_LOCATION') ||
+      getEnvString('GOOGLE_LOCATION') ||
       DEFAULT_LOCATION
     );
   }
@@ -223,7 +229,12 @@ export class GoogleVideoProvider implements ApiProvider {
   private async getVertexEndpoint(config: GoogleVideoOptions, action: string): Promise<string> {
     const location = this.getLocation(config);
     const projectId = config.projectId || (await resolveProjectId(config, this.env));
-    return `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${this.modelName}:${action}`;
+    const apiHost =
+      config.apiHost ||
+      this.env?.VERTEX_API_HOST ||
+      getEnvString('VERTEX_API_HOST') ||
+      getVertexApiHostForRegion(location);
+    return `https://${apiHost}/v1/projects/${projectId}/locations/${location}/publishers/google/models/${this.modelName}:${action}`;
   }
 
   private getAiStudioEndpoint(pathSuffix: string): string {
@@ -268,6 +279,16 @@ export class GoogleVideoProvider implements ApiProvider {
         return { error: `Video file not found: ${filePath}` };
       }
       return { data: fs.readFileSync(filePath).toString('base64') };
+    }
+    const dataUrl = parseDataUrl(videoPath);
+    if (dataUrl && dataUrl.mimeType.toLowerCase() === 'video/mp4' && dataUrl.base64Data) {
+      return { data: dataUrl.base64Data };
+    }
+    if (/^[a-z][a-z\d+.-]*:/i.test(videoPath)) {
+      return {
+        error:
+          'Vertex AI Veo sourceVideo must be base64 data, a data:video/mp4 URL, gs:// URI, or file:// path.',
+      };
     }
     return { data: videoPath };
   }
