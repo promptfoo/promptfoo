@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { NumberInput } from '@app/components/ui/number-input';
 import {
   type BedrockApiMode,
   getBedrockTextRoute,
@@ -617,16 +618,14 @@ const FoundationModelConfiguration = ({
           <div className="grid gap-4">
             <div className="space-y-2">
               <Label htmlFor="temperature">Temperature</Label>
-              <Input
+              <NumberInput
                 id="temperature"
-                type="number"
                 min={0}
                 max={2}
                 step={0.1}
-                value={selectedTarget.config?.temperature ?? ''}
-                onChange={(e) =>
-                  updateCustomTarget('temperature', parseFloat(e.target.value) || undefined)
-                }
+                allowDecimals
+                value={selectedTarget.config?.temperature}
+                onChange={(v) => updateCustomTarget('temperature', v)}
               />
               <p className="text-sm text-muted-foreground">Controls randomness (0.0 to 2.0)</p>
             </div>
@@ -656,16 +655,14 @@ const FoundationModelConfiguration = ({
 
             <div className="space-y-2">
               <Label htmlFor="top-p">Top P</Label>
-              <Input
+              <NumberInput
                 id="top-p"
-                type="number"
                 min={0}
                 max={1}
                 step={0.01}
-                value={selectedTarget.config?.top_p ?? ''}
-                onChange={(e) =>
-                  updateCustomTarget('top_p', parseFloat(e.target.value) || undefined)
-                }
+                allowDecimals
+                value={selectedTarget.config?.top_p}
+                onChange={(v) => updateCustomTarget('top_p', v)}
               />
               <p className="text-sm text-muted-foreground">
                 Nucleus sampling parameter (0.0 to 1.0)

@@ -38,6 +38,7 @@ import {
   getRefusalDetails,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
+  isClaudeThinkingEnabled,
   isDisabledThinkingRejectedAtEffort,
   isForcedToolChoiceUnsupportedClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
@@ -46,6 +47,7 @@ import {
   outputFromMessage,
   parseMessages,
   processAnthropicTools,
+  resolveClaudeSamplingParams,
 } from './util';
 import type Anthropic from '@anthropic-ai/sdk';
 
@@ -89,10 +91,6 @@ function parseEnvFloat(value: string | undefined): number | undefined {
   return Number.isNaN(parsed) ? undefined : parsed;
 }
 
-function isThinkingEnabled(thinking: Anthropic.Messages.ThinkingConfigParam | undefined): boolean {
-  return thinking?.type === 'enabled' || thinking?.type === 'adaptive';
-}
-
 function normalizeHeadersForCacheKey(headers: Record<string, string>) {
   if (Object.keys(headers).length === 0) {
     return undefined;
@@ -123,7 +121,7 @@ function getMessagesRequestMetadata(params: Anthropic.Messages.MessageCreatePara
     stopSequenceCount: Array.isArray(params.stop_sequences)
       ? params.stop_sequences.length
       : undefined,
-    thinkingEnabled: isThinkingEnabled(params.thinking),
+    thinkingEnabled: isClaudeThinkingEnabled(params.thinking),
     toolCount: Array.isArray(params.tools) ? params.tools.length : undefined,
     hasToolChoice: params.tool_choice !== undefined,
     hasMetadata: params.metadata !== undefined,
@@ -664,7 +662,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const resolved = normalizeClaudeThinkingConfig(this.modelName, requested, effort, {
       allowGenerationFallback: samplingParamsDeprecated,
     }) as Anthropic.Messages.ThinkingConfigParam | undefined;
-    const thinkingEnabled = alwaysOnAdaptiveThinking || isThinkingEnabled(resolved);
+    const thinkingEnabled = alwaysOnAdaptiveThinking || isClaudeThinkingEnabled(resolved);
     // Deliberately NOT folded into thinkingEnabled: adaptive thinking is compatible with a
     // forced tool_choice (verified against the live API on Opus 5 and Opus 4.8), so treating
     // thinks-by-default as "thinking enabled" would silently drop a user's tool_choice.
@@ -771,28 +769,6 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       { samplingParamsDeprecated, alwaysOnAdaptiveThinking, modelWarningName },
     );
 
-    // Validate and warn about thinking-incompatible params. Skip when the model
-    // deprecates sampling params entirely — the deduped model-level warning
-    // below already covers the omission, and the "disable thinking" advice is
-    // impossible on always-on adaptive thinking models (Fable 5 / Mythos 5).
-    if (thinkingEnabled && !samplingParamsDeprecated) {
-      if (config.top_k != null) {
-        logger.warn(
-          'top_k is incompatible with extended thinking and will be omitted. Remove top_k from your config or disable thinking.',
-        );
-      }
-      if (config.temperature != null) {
-        logger.warn(
-          'temperature is incompatible with extended thinking and will be omitted. Remove temperature from your config or disable thinking.',
-        );
-      }
-      if (config.top_p != null && (config.top_p < 0.95 || config.top_p > 1.0)) {
-        logger.warn(
-          `top_p must be between 0.95 and 1.0 with extended thinking (got ${config.top_p}). Clamping to valid range.`,
-        );
-      }
-    }
-
     // Legacy budget-based thinking and Fable/Mythos 5.1 reject forced tool use.
     // Earlier adaptive models, including Fable 5, accept forced choices. Do not gate
     // this on thinkingEnabled: doing so would silently change their tool-routing evals.
@@ -816,17 +792,16 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
-    // Resolve top_p: clamp to [0.95, 1.0] when thinking is enabled
-    let resolvedTopP: number | undefined;
-    if (config.top_p != null) {
-      resolvedTopP = thinkingEnabled ? Math.max(0.95, Math.min(1.0, config.top_p)) : config.top_p;
-    }
-
-    // Warn when temperature is silently omitted due to top_p (even without thinking)
-    if (config.temperature != null && resolvedTopP != null && !thinkingEnabled) {
-      logger.warn(
-        'temperature is incompatible with top_p on Anthropic and will be omitted. Remove one of these parameters.',
-      );
+    // The rules Claude enforces for temperature, top_p, top_k, and thinking live in one helper
+    // shared with the Vertex and Bedrock paths.
+    const { sampling, warnings: samplingWarnings } = resolveClaudeSamplingParams(config, {
+      thinkingEnabled,
+      samplingParamsDeprecated,
+      defaultTemperature:
+        parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE) ?? getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
+    });
+    for (const warning of samplingWarnings) {
+      logger.warn(warning);
     }
 
     // Newer Claude models deprecate manual sampling controls at the model level —
@@ -855,11 +830,6 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       this.samplingParamsDeprecationWarned = true;
     }
 
-    // Anthropic rejects `temperature` alongside `top_p`, with extended thinking,
-    // and on adaptive-sampling Claude models.
-    // Collapse those cases into one predicate so the params spread stays readable.
-    const omitTemperature = resolvedTopP != null || thinkingEnabled || samplingParamsDeprecated;
-
     // When authenticating via a Claude Code OAuth token, Anthropic's API
     // requires the Claude Code identity as the first system block — as of
     // 2025-Q4, sending any other leading system block returns HTTP 400
@@ -884,20 +854,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       ),
       messages: extractedMessages,
       stream: shouldStream,
-      ...(omitTemperature
-        ? {}
-        : {
-            temperature:
-              config.temperature ??
-              parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE) ??
-              getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
-          }),
-      ...(resolvedTopP == null || samplingParamsDeprecated ? {} : { top_p: resolvedTopP }),
-      // Anthropic docs: top_k is incompatible with extended thinking, and Opus
-      // adaptive-sampling models reject it along with the other sampling controls.
-      ...(config.top_k == null || thinkingEnabled || samplingParamsDeprecated
-        ? {}
-        : { top_k: config.top_k }),
+      ...sampling,
       ...(config.cache_control ? { cache_control: config.cache_control } : {}),
       ...(config.service_tier ? { service_tier: config.service_tier } : {}),
       ...(config.stop_sequences?.length ? { stop_sequences: config.stop_sequences } : {}),

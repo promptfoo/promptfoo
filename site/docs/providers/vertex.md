@@ -78,6 +78,9 @@ Anthropic's Claude models are available with the following versions:
 
 Promptfoo omits unsupported `temperature`, `top_p`, and `top_k` values for the adaptive-only
 Claude models — Fable 5, Mythos 5, Opus 5.5, Opus 5, Sonnet 5, and Opus 4.7/4.8 (see their entries below).
+For the other Claude models it applies the rules the Anthropic API enforces, with a warning: no
+`temperature` alongside `top_p`, and with extended thinking no `temperature` or `top_k` and a `top_p`
+of at least 0.95.
 Regional and multi-region Vertex endpoints carry a
 [10% price premium](https://cloud.google.com/blog/products/ai-machine-learning/global-endpoint-for-claude-models-generally-available-on-vertex-ai)
 over the global endpoint for Claude 4.5 and later models (Sonnet 4.5+, Haiku 4.5,

@@ -1676,7 +1676,8 @@ Third line`;
 
   describe('inference configuration', () => {
     it('should use config values for inference parameters', async () => {
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+      // A non-Claude model: Claude rejects temperature together with topP (see below).
+      const provider = new AwsBedrockConverseProvider('amazon.nova-lite-v1:0', {
         config: {
           region: 'us-east-1',
           maxTokens: 2048,
@@ -1704,6 +1705,49 @@ Third line`;
         }),
       );
     });
+
+    // Converse relays Claude's own sampling rules as ValidationExceptions (verified live on
+    // Haiku 4.5 and Sonnet 4.5), so the provider applies them before sending.
+    it.each([
+      [
+        'temperature with topP',
+        { temperature: 0.5, topP: 0.9 },
+        { topP: 0.9 },
+        'temperature is incompatible with top_p',
+      ],
+      [
+        'temperature with thinking',
+        { temperature: 0, thinking: { type: 'enabled', budget_tokens: 1024 } },
+        {},
+        'temperature is incompatible with extended thinking',
+      ],
+      [
+        'a low topP with thinking',
+        { topP: 0.5, thinking: { type: 'enabled', budget_tokens: 1024 } },
+        { topP: 0.95 },
+        'top_p must be between 0.95 and 1.0',
+      ],
+    ] as const)(
+      'sends Claude only the sampling it accepts: %s',
+      async (_, sampling, expected, warning) => {
+        const warnSpy = vi.spyOn(logger, 'warn');
+        const provider = new AwsBedrockConverseProvider(
+          'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+          { config: { region: 'us-east-1', maxTokens: 2048, ...sampling } },
+        );
+        mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+        await provider.callApi('Test');
+
+        const { ConverseCommand } = (await import(
+          '@aws-sdk/client-bedrock-runtime'
+        )) as unknown as MockBedrockModule;
+        expect(ConverseCommand).toHaveBeenCalledWith(
+          expect.objectContaining({ inferenceConfig: { maxTokens: 2048, ...expected } }),
+        );
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(warning));
+      },
+    );
 
     it('should use environment variables as fallback', async () => {
       mockProcessEnv({ AWS_BEDROCK_MAX_TOKENS: '4096' });
