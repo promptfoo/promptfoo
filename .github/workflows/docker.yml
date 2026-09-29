@@ -79,9 +79,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   RELEASE_TAG: ${{ inputs.tag_name || github.event.release.tag_name || '' }}
-  # Qualify release tags as refs/tags/<tag>. actions/checkout resolves a bare ref as a
-  # branch before a tag, so an unqualified version like "0.120.0" would publish the
-  # contents of a same-named branch under that immutable release tag if one ever existed.
+  # Qualify tags so a same-named branch cannot change the release source.
   SOURCE_REF: ${{ inputs.tag_name && format('refs/tags/{0}', inputs.tag_name) || github.event.release.tag_name && format('refs/tags/{0}', github.event.release.tag_name) || github.ref }}
   BUILD_VERSION: ${{ inputs.tag_name || github.event.release.tag_name || github.ref_name }}
   BUILD_DATE: ${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event_name == 'release' && github.event.release.published_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
@@ -90,21 +88,13 @@ env:
   EXCLUDE_LEGACY_FRONTEND_TESTS: ${{ github.event_name == 'workflow_dispatch' && inputs.exclude_legacy_frontend_tests && 'true' || 'false' }}
   # Fallback release paths build a specific tag outside release-please.yml.
   IS_RELEASE_FALLBACK: ${{ (github.event_name == 'workflow_dispatch' && inputs.tag_name != '') || github.event_name == 'release' }}
-  # Shared by the test and publish jobs so both patch the checked-out tag identically.
-  # `checkout` replaces the workspace with the historical tree, so an in-repo helper
-  # script would not exist at the tag; defining it once here is the only way to keep a
-  # single source of truth. Written to RUNNER_TEMP (outside the Docker build context)
-  # so it can never leak into the image or bust the layer cache.
+  # Keep the patch available after checkout replaces the workspace with an old tag.
+  # Both build jobs run this script from RUNNER_TEMP, outside the image context.
   PREPARE_LEGACY_BUILD_JS: |
     const fs = require('node:fs');
 
-    // Releases before #9790 built the CLI links with `npm link promptfoo`, which
-    // resolves nothing in the server stage and leaves the image without a working
-    // `promptfoo`/`pf` binary. Replay the fix from that PR onto the checked-out tag.
-    //
-    // Requiring the legacy marker is also the version bound on legacy_backfill: a tag
-    // that already carries the fix needs no patching and must go through a normal
-    // tag_name dispatch, which keeps every container-contract check switched on.
+    // Repair the pre-#9790 CLI links. Tags with the fix already applied must use
+    // a normal tag_name dispatch, which retains all container-contract checks.
     const dockerfilePath = 'Dockerfile';
     let dockerfile = fs.readFileSync(dockerfilePath, 'utf8');
     const oldCliLinks =
@@ -158,11 +148,7 @@ env:
     console.log('Linked the historical release CLI from local build artifacts');
 
     if (process.env.EXCLUDE_LEGACY_FRONTEND_TESTS === 'true') {
-      // tsconfig.app.json is JSONC (it carries `/* Bundler mode */` comments) so it
-      // cannot be JSON.parsed, and the shape of `include` drifts across tags
-      // (0.121.x adds ../types/optional-deps.d.ts). Add a top-level `exclude` after the
-      // opening brace instead of rewriting `include`; that is shape-independent and
-      // `exclude` filters `include` regardless of what the latter lists.
+      // Insert exclude without rewriting historical JSONC comments or include entries.
       const file = 'src/app/tsconfig.app.json';
       const original = fs.readFileSync(file, 'utf8');
       if (/^\s*"exclude"\s*:/m.test(original)) {
@@ -214,8 +200,7 @@ jobs:
             exit 1
           fi
 
-          # Both knobs change what ships in the image, so neither may be used to alter a
-          # normal release build - only to reproduce a historical one.
+          # Build overrides apply only to historical backfills.
           if [[ -n "$PYTHON_VERSION" && "$LEGACY_BACKFILL" != 'true' ]]; then
             echo '::error::Python minor overrides require legacy backfill mode'
             exit 1
@@ -226,9 +211,7 @@ jobs:
             exit 1
           fi
 
-      # A backfill may only fill a gap. Version tags are immutable in practice - anyone
-      # pinned to one must keep resolving the bits they already pulled - so refuse to
-      # republish a tag that is already live rather than trusting the dispatch form.
+      # Backfills must not replace images already published under a version tag.
       - name: Ensure the legacy tag is not already published
         if: env.LEGACY_BACKFILL == 'true'
         run: |
@@ -373,18 +356,13 @@ jobs:
           fi
           echo "$promptfoo_output"
 
-          # The CLI logs runtime and update notices to stdout before commander prints the
-          # version (src/main.ts runs the startup checks ahead of parseAsync, and
-          # src/logger.ts only routes to stderr under PROMPTFOO_LOG_TO_STDERR). Match the
-          # tag on any whole line rather than pinning it to a position, so a new notice
-          # cannot fail a release publish on log formatting alone.
+          # Startup notices can precede the version; match the tag on a whole line.
           if [[ -n "$RELEASE_TAG" ]] && ! grep -Fxq "$RELEASE_TAG" <<< "$promptfoo_output"; then
             echo "::error::CLI version output does not report release '$RELEASE_TAG'"
             exit 1
           fi
 
-          # The backfill patch creates this symlink too, so verify it before the
-          # legacy exit rather than treating it as part of the modern contract.
+          # Verify both patched CLI links before skipping the modern contract.
           echo "Checking pf alias:"
           if ! docker exec promptfoo-container pf --version; then
             echo "pf alias check failed"
@@ -524,18 +502,12 @@ jobs:
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
         with:
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.platforms.digest-suffix }}
-          # Backfills are one-shot builds of a historical tree that will never hit this
-          # cache again. Exporting would add a permanent buildcache-<arch>-<tag> pseudo-tag
-          # to the package for every version filled, so skip the export entirely.
-          # Note the inverted condition: `cond && '' || x` would short-circuit past the
-          # empty string and always yield `x`, so the truthy branch must be the export.
+          # Backfills may read the build cache but must not overwrite it.
           cache-to: ${{ env.LEGACY_BACKFILL != 'true' && format('type=registry,ref={0}/{1}:buildcache-{2},mode=max', env.REGISTRY, env.IMAGE_NAME, matrix.platforms.digest-suffix) || '' }}
           context: .
           platforms: ${{ matrix.platforms.platform }}
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # A backfilled image is built from a patched Dockerfile, so it is not
-          # reproducible from its tag even though provenance attests the tag's ref. Label
-          # it so consumers can tell a backfill from an original release build.
+          # Record that the Dockerfile was patched and link the build run.
           labels: |
             ${{ steps.meta.outputs.labels }}
             ${{ env.LEGACY_BACKFILL == 'true' && 'dev.promptfoo.image.backfilled=true' || '' }}

@@ -7,11 +7,7 @@ import JSON5 from 'json5';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { parse as parseYaml } from 'yaml';
 
-// The legacy Docker backfill patch (`PREPARE_LEGACY_BUILD_JS` in docker.yml) only ever
-// runs during a manual `workflow_dispatch`, so no publish-path CI job exercises it. These
-// tests execute the exact script embedded in the workflow against fixtures that mirror the
-// real historical release trees, giving the dormant patch durable regression coverage on
-// every PR. If this test breaks, the backfill is broken too.
+// Exercise the manual backfill patch in ordinary CI without publishing images.
 
 const WORKFLOW = path.join(process.cwd(), '.github/workflows/docker.yml');
 
