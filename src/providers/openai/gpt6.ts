@@ -2,7 +2,7 @@ const REASONING_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 const UNKNOWN_PERSISTED_EFFORT = Symbol('unknown persisted effort');
 const COMPACTED_EFFORT = Symbol('effort before compaction');
 
-type Gpt6Variant = 'astra' | 'sol' | 'luna';
+type Gpt6Variant = 'astra' | 'sol' | 'luna' | '6.1-sol';
 type Gpt6Reasoning = { effort?: unknown; enabled?: unknown; mode?: unknown } | null | undefined;
 
 function getGpt6BaseModelName(modelName: string): string {
@@ -16,6 +16,9 @@ export function getGpt6Variant(modelName: unknown): Gpt6Variant | undefined {
     return undefined;
   }
   const baseModel = getGpt6BaseModelName(modelName);
+  if (/(?:^|[.-])gpt-6\.1-sol(?:[-:]|$)/.test(baseModel)) {
+    return '6.1-sol';
+  }
   return /(?:^|[.-])gpt-6-(astra|sol|luna)(?:[-:]|$)/.exec(baseModel)?.[1] as
     | Gpt6Variant
     | undefined;
@@ -130,7 +133,7 @@ function getResponsesReasoning(
   );
   for (const value of [typed, passthrough]) {
     if (value != null && !getObject(value)) {
-      throw new Error('GPT-6 Responses reasoning must be an object or null. Use { effort: none }.');
+      throw new Error('GPT-6 Responses reasoning must be an object or null. Use { effort: low }.');
     }
   }
   const options = { ...getObject(passthrough), ...getObject(typed) };
@@ -228,17 +231,18 @@ function getOpenRouterChatEffortUpdates(messages: unknown): unknown[] {
 }
 
 function validateReasoningEffort(effort: unknown, variant: Gpt6Variant, modelLabel: string): void {
+  const requiresReasoning = variant === 'astra' || variant === '6.1-sol';
   if (
     effort == null ||
     effort === '' ||
     (typeof effort === 'string' &&
-      (REASONING_EFFORTS.has(effort) || (variant !== 'astra' && effort === 'none')))
+      (REASONING_EFFORTS.has(effort) || (!requiresReasoning && effort === 'none')))
   ) {
     return;
   }
 
   throw new Error(
-    variant === 'astra'
+    requiresReasoning
       ? `${modelLabel} supports reasoning effort low, medium, high, xhigh, or max. Use low instead of none or minimal.`
       : `${modelLabel} supports reasoning effort none, low, medium, high, xhigh, or max.`,
   );
@@ -266,9 +270,9 @@ function validateChatTools(
     return;
   }
 
-  if (variant === 'astra') {
+  if (variant === 'astra' || variant === '6.1-sol') {
     throw new Error(
-      'GPT-6 Astra tool calling requires the Responses API. Use openai:responses:gpt-6-astra or azure:responses:<deployment>.',
+      `${modelLabel} tool calling requires the Responses API. Use openai:responses:${variant === '6.1-sol' ? 'gpt-6.1-sol' : 'gpt-6-astra'} or azure:responses:<deployment>.`,
     );
   }
   for (const [selector, definitions] of [
@@ -338,7 +342,8 @@ export function applyGpt6RequestRules(
   if (!variant) {
     return;
   }
-  const modelLabel = `GPT-6 ${variant[0].toUpperCase()}${variant.slice(1)}`;
+  const modelLabel =
+    variant === '6.1-sol' ? 'GPT-6.1 Sol' : `GPT-6 ${variant[0].toUpperCase()}${variant.slice(1)}`;
 
   const reasoning = normalizeReasoning(body);
   if (api === 'responses' && body.reasoning_effort !== undefined) {
@@ -384,6 +389,7 @@ export function applyGpt6RequestRules(
 
   if (
     variant === 'astra' ||
+    variant === '6.1-sol' ||
     (samplingEffort !== UNKNOWN_PERSISTED_EFFORT && samplingEffort !== 'none')
   ) {
     for (const key of ['temperature', 'top_p', 'logprobs', 'top_logprobs']) {
