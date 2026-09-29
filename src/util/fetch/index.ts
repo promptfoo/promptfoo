@@ -214,7 +214,11 @@ export async function fetchWithProxy(
     : options.signal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
-  const { getAuthHeaders, rejectUnauthorized, ...requestOptions } = options;
+  const {
+    getAuthHeaders,
+    rejectUnauthorized = !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+    ...requestOptions
+  } = options;
   const finalOptions: FetchOptions & { dispatcher?: any } = {
     ...requestOptions,
     headers: getFetchWithProxyHeaders(url, options),
@@ -260,9 +264,7 @@ export async function fetchWithProxy(
     }
   }
 
-  const tlsOptions: ConnectionOptions = {
-    rejectUnauthorized: rejectUnauthorized ?? !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
-  };
+  const tlsOptions: ConnectionOptions = { rejectUnauthorized };
 
   // Support custom CA certificates
   const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
