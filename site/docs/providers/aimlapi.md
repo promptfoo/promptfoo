@@ -1,16 +1,15 @@
 ---
 sidebar_label: AI/ML API
-description: "Access models through AI/ML API's unified OpenAI-compatible interface"
+description: 'Configure AI/ML API chat, completion, and embedding models in Promptfoo using model IDs from the provider catalog.'
 ---
 
 # AI/ML API
 
-[AI/ML API](https://aimlapi.com) provides access to models from multiple developers through a
-unified OpenAI-compatible interface.
+[AI/ML API](https://aimlapi.com) hosts models from OpenAI, Anthropic, Google, Meta, and other providers behind an OpenAI-compatible API.
 
 ## OpenAI Compatibility
 
-AI/ML API's endpoints are compatible with OpenAI's API, which means all parameters available in the [OpenAI provider](/docs/providers/openai/) work with AI/ML API.
+Promptfoo uses the [OpenAI provider](/docs/providers/openai/) request format. Supported parameters depend on the model and endpoint.
 
 ## Setup
 
@@ -52,62 +51,57 @@ You can omit the type to default to chat mode:
 aimlapi:<model_name>
 ```
 
+For Claude 5, set `omitDefaults: true` to omit Promptfoo's default `temperature: 0`.
+Leave sampling parameters unset in your config and environment; explicit values still apply.
+
 ## Configuration
 
 Configure the provider in your promptfoo configuration file:
 
 ```yaml
 providers:
-  - id: aimlapi:chat:deepseek/deepseek-r1
+  - id: aimlapi:chat:google/gemini-3-5-flash
     config:
       temperature: 0.7
       max_tokens: 2000
-      apiKey: ... # optional, overrides environment variable
 ```
 
 ### Configuration Options
 
-Supported configuration options include:
+Common OpenAI parameters include:
 
-| Parameter               | Description                                             |
-| ----------------------- | ------------------------------------------------------- |
-| `apiKey`                | Your AI/ML API key                                      |
-| `temperature`           | Controls randomness (0.0 to 2.0)                        |
-| `max_tokens`            | Maximum number of output tokens                         |
-| `max_completion_tokens` | Token cap for OpenAI reasoning models (GPT-5, o-series) |
-| `top_p`                 | Nucleus sampling parameter                              |
-| `frequency_penalty`     | Penalizes frequent tokens                               |
-| `presence_penalty`      | Penalizes new tokens based on presence                  |
-| `stop`                  | Sequences where the API will stop generating            |
+| Parameter           | Description                                  |
+| ------------------- | -------------------------------------------- |
+| `apiKey`            | Your AI/ML API key                           |
+| `temperature`       | Controls randomness (0.0 to 2.0)             |
+| `max_tokens`        | Maximum number of tokens to generate         |
+| `top_p`             | Nucleus sampling parameter                   |
+| `frequency_penalty` | Penalizes frequent tokens                    |
+| `presence_penalty`  | Penalizes new tokens based on presence       |
+| `stop`              | Sequences where the API will stop generating |
 
-The chat provider waits for a complete JSON response; streaming is not supported.
-
-For [DeepSeek R1](https://docs.aimlapi.com/api-references/text-models-llm/deepseek/deepseek-r1) and [Gemini 2.5 Flash](https://docs.aimlapi.com/api-references/text-models-llm/google/gemini-2.5-flash), use `max_tokens` even though these models support reasoning.
+Promptfoo requests complete responses; this provider does not support streaming.
 
 ## Popular Models
 
-AI/ML API adds and retires model IDs independently of promptfoo. Use its
-[model database](https://docs.aimlapi.com/api-references/model-database) as the source of truth.
+Use the model ID shown in the [AI/ML API catalog](https://aimlapi.com/models), including its publisher prefix. Examples:
 
 ### Reasoning Models
 
-Filter the model database for models that expose reasoning controls, then copy the exact ID from
-the linked API reference.
+- [GPT-5.6 Luna](https://aimlapi.com/models/gpt-5-6-luna): `openai/gpt-5.6-luna`
 
 ### Advanced Language Models
 
-The model database lists the exact provider-qualified IDs accepted by the API.
+- [Claude Sonnet 5](https://aimlapi.com/models/claude-sonnet-5): `anthropic/claude-sonnet-5`
+- [Gemini 3.5 Flash](https://aimlapi.com/models/gemini-3-5-flash): `google/gemini-3-5-flash`
 
 ### Open Source Models
 
-Use the model database's developer and modality filters instead of copying a dated static list.
+- [DeepSeek V4 Pro](https://aimlapi.com/models/deepseek-v4-pro): `deepseek/deepseek-v4-pro`
 
 ### Embedding Models
 
-Choose an embedding model from the model database and use its exact ID after the
-`aimlapi:embedding:` prefix.
-
-You can also browse the [AI/ML API Models page](https://aimlapi.com/models?utm_source=promptfoo&utm_medium=github&utm_campaign=integration).
+- [Text Embedding 3 Large](https://aimlapi.com/models/text-embedding-3-large): `openai/text-embedding-3-large`
 
 ## Example Configurations
 
@@ -116,9 +110,11 @@ You can also browse the [AI/ML API Models page](https://aimlapi.com/models?utm_s
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - aimlapi:chat:deepseek/deepseek-r1
-  - aimlapi:chat:openai/gpt-5-mini-2025-08-07
-  - aimlapi:chat:anthropic/claude-sonnet-4.6
+  - aimlapi:chat:deepseek/deepseek-v4-pro
+  - aimlapi:chat:openai/gpt-5.6-luna
+  - id: aimlapi:chat:anthropic/claude-sonnet-5
+    config:
+      omitDefaults: true
 
 prompts:
   - 'Explain {{concept}} in simple terms'
@@ -136,27 +132,21 @@ tests:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  # Reasoning model with low temperature
-  - id: aimlapi:chat:deepseek/deepseek-r1
-    label: 'DeepSeek R1 (Reasoning)'
+  - id: aimlapi:chat:deepseek/deepseek-v4-pro
+    label: 'DeepSeek V4 Pro'
     config:
-      temperature: 0.1
       max_tokens: 4000
 
-  # General purpose model
-  - id: aimlapi:chat:openai/gpt-5-2025-08-07
-    label: 'GPT-5'
-    config:
-      max_completion_tokens: 2000
+  - id: aimlapi:chat:openai/gpt-5.6-luna
+    label: 'GPT-5.6 Luna'
 
-  # Additional general-purpose model
-  - id: aimlapi:chat:google/gemini-2.5-flash
-    label: 'Gemini 2.5 Flash'
+  - id: aimlapi:chat:google/gemini-3-5-flash
+    label: 'Gemini 3.5 Flash'
     config:
       temperature: 0.5
 
 prompts:
-  - 'Implement the following task and return only Python code: {{task}}'
+  - 'Write Python code to {{task}}. Return only the code, without Markdown fences.'
 
 tests:
   - vars:
@@ -169,7 +159,7 @@ tests:
           try:
             ast.parse(output)
             return True
-          except:
+          except SyntaxError:
             return False
       - type: llm-rubric
         value: 'The code should include insert, search, and delete methods'
@@ -177,23 +167,32 @@ tests:
 
 ### Embedding Example
 
+Embedding models back the [`similar` assertion](/docs/configuration/expected-outputs/similar/). Set them under `defaultTest.options.provider.embedding`; an embedding model cannot be used as a top-level eval provider. Extra request fields such as `dimensions` go under `config.passthrough`.
+
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - echo
+  - aimlapi:chat:openai/gpt-5.6-luna
+
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: aimlapi:embedding:openai/text-embedding-3-large
+        config:
+          passthrough:
+            dimensions: 1024 # Optional: reduce embedding dimensions
 
 prompts:
-  - 'The quick brown fox jumps over the lazy dog'
+  - 'Describe {{topic}} in one sentence.'
 
 tests:
-  - assert:
+  - vars:
+      topic: 'a fox jumping over a dog'
+    assert:
       - type: similar
         value: 'The quick brown fox jumps over the lazy dog'
-        threshold: 0.9
-        provider:
-          id: aimlapi:embedding:text-embedding-3-large
-          config:
-            dimensions: 3072
+        threshold: 0.7
 ```
 
 ### JSON Mode Example
@@ -201,10 +200,9 @@ tests:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: aimlapi:chat:openai/gpt-5-2025-08-07
+  - id: aimlapi:chat:openai/gpt-5.6-luna
     config:
       response_format: { type: 'json_object' }
-      temperature: 0.0
 
 prompts:
   - |
@@ -236,13 +234,6 @@ Test your setup with working examples:
 npx promptfoo@latest init --example provider-aiml-api
 ```
 
-This includes tested configurations for comparing multiple models, evaluating reasoning capabilities, and measuring response quality.
-
 ## Notes
 
-- **API Key Required**: Sign up at [aimlapi.com](https://aimlapi.com) to get your API key
-- **Rate Limits**: Vary by subscription tier
-- **Model Updates**: New models are added regularly - check the [models page](https://aimlapi.com/models) for the current list
-- **Unified Billing**: Pay for all models through a single account
-
-For detailed pricing information, visit [aimlapi.com/pricing](https://aimlapi.com/pricing).
+Check [AI/ML API pricing](https://aimlapi.com/ai-ml-api-pricing) for rates and account limits.

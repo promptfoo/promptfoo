@@ -201,9 +201,10 @@ export const AZURE_MODELS: AzureModelCost[] = [
     },
   })),
   // Azure's product name is `gpt-chat-latest`, distinct from OpenAI's `chat-latest`
-  // API alias. Azure publishes versions 2026-06-24, 2026-05-28, and 2026-05-05.
+  // API alias. Versioned deployment names use the same Global Standard rates.
   ...[
     'gpt-chat-latest',
+    'gpt-chat-latest-2026-08-06',
     'gpt-chat-latest-2026-06-24',
     'gpt-chat-latest-2026-05-28',
     'gpt-chat-latest-2026-05-05',
@@ -908,6 +909,14 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: { input: 25 / 1000000, output: 125 / 1000000 },
   },
   {
+    id: 'claude-opus-5-5',
+    cost: { input: 4 / 1000000, output: 20 / 1000000, cacheRead: 0.2 / 1000000 },
+  },
+  {
+    id: 'claude-sonnet-5-5',
+    cost: { input: 2 / 1000000, output: 10 / 1000000, cacheRead: 0.2 / 1000000 },
+  },
+  {
     id: 'claude-opus-5',
     cost: { input: 5 / 1000000, output: 25 / 1000000 },
   },
@@ -920,9 +929,8 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: { input: 5 / 1000000, output: 25 / 1000000 },
   },
   {
+    // Foundry bills Claude at Anthropic's API rates (see ANTHROPIC_MODELS).
     id: 'claude-sonnet-5',
-    // The August 10 update made the $2/$10 rates permanent and canceled
-    // the previously announced September increase.
     cost: { input: 2 / 1000000, output: 10 / 1000000 },
   },
   {

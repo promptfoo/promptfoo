@@ -5,9 +5,7 @@ description: Configure Cerebras' high-speed inference models through its OpenAI-
 
 # Cerebras
 
-This provider enables you to use Cerebras models through their [Inference API](https://inference-docs.cerebras.ai).
-
-Cerebras offers an OpenAI-compatible API for high-speed inference. You can use it as a drop-in replacement for applications currently using the [OpenAI API](/docs/providers/openai/) chat endpoints.
+The Cerebras provider calls its [Inference API](https://docs.cerebras.ai) using the [OpenAI chat format](/docs/providers/openai/). Available models include Llama and DeepSeek.
 
 ## Setup
 
@@ -144,6 +142,6 @@ tests:
 
 - [OpenAI Provider](/docs/providers/openai) - Compatible API format used by Cerebras
 - [Configuration Reference](/docs/configuration/reference.md) - Full configuration options for providers
-- [Cerebras API Documentation](https://inference-docs.cerebras.ai) - Official API reference
-- [Cerebras Structured Outputs Guide](https://inference-docs.cerebras.ai/capabilities/structured-outputs/) - Learn more about JSON schema enforcement
-- [Cerebras Tool Use Guide](https://inference-docs.cerebras.ai/capabilities/tool-use/) - Learn more about tool calling capabilities
+- [Cerebras API Documentation](https://docs.cerebras.ai) - Official API reference
+- [Cerebras Structured Outputs Guide](https://inference-docs.cerebras.ai/capabilities/structured-outputs) - Learn more about JSON schema enforcement
+- [Cerebras Tool Use Guide](https://inference-docs.cerebras.ai/capabilities/tool-use) - Learn more about tool calling capabilities

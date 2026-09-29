@@ -5,7 +5,9 @@ description: Configure Groq's ultra-fast LLM inference API for high-performance 
 
 # Groq
 
-[Groq](https://groq.com) is a fast inference API compatible with all the options provided by Promptfoo's [OpenAI provider](/docs/providers/openai/). See openai specific documentation for configuration details.
+[Groq](https://groq.com) provides OpenAI-compatible chat and Responses endpoints. See the
+[OpenAI provider](/docs/providers/openai/) for shared configuration options and
+[Groq's compatibility guide](https://console.groq.com/docs/openai) for unsupported fields.
 
 Groq provides access to a wide range of models including reasoning models with chain-of-thought capabilities, compound models with built-in tools, and standard chat models. See the [Groq Models documentation](https://console.groq.com/docs/models) for the current list of available models.
 

@@ -12,7 +12,7 @@ providers:
       response_format:
         type: 'json_schema'
         json_schema:
-          schema:
+          schema: &movieSchema
             type: 'object'
             properties:
               title: { type: 'string' }
@@ -21,7 +21,11 @@ providers:
               genres: { type: 'array', items: { type: 'string' } }
               plot_summary: { type: 'string' }
             required: ['title', 'director', 'year', 'genres', 'plot_summary']
-      # This provider will be used for the first prompt only
+
+defaultTest:
+  assert:
+    - type: is-json
+      value: *movieSchema
 
 tests:
   - vars:

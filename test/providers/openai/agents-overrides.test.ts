@@ -368,6 +368,57 @@ describe('OpenAiAgentsProvider execution overrides', () => {
     },
   );
 
+  it.each([false, 'mock'] as const)(
+    'preserves lifecycle observers with an immutable mock tool graph (executeTools=%s)',
+    async (executeTools) => {
+      const modelProvider = new RecordingModelProvider();
+      setDefaultModelProvider(modelProvider);
+      const sourceTool = tool({
+        name: 'lookup',
+        description: 'Return a fixture value.',
+        parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+        strict: true,
+        execute: async () => 'fixture',
+      });
+      const child = new Agent({ name: 'Child', tools: [sourceTool] });
+      const root = new Agent({ name: 'Root', tools: [sourceTool], handoffs: [child] });
+      const observed: string[] = [];
+      for (const source of [root, child]) {
+        source.on('agent_start', (_context, runtime) => {
+          observed.push(runtime.name);
+          expect(Object.isFrozen(runtime.tools)).toBe(true);
+          expect(Object.isFrozen(runtime.handoffs)).toBe(true);
+          const mockedTool = runtime.tools[0];
+          expect(Object.isFrozen(mockedTool)).toBe(true);
+          if (mockedTool.type !== 'function') {
+            throw new Error('Expected a function tool');
+          }
+          expect(Object.isFrozen(mockedTool.inputGuardrails)).toBe(true);
+          expect(Object.isFrozen(mockedTool.outputGuardrails)).toBe(true);
+          for (const [key, replacement] of [
+            ['tools', []],
+            ['handoffs', []],
+            ['mcpServers', []],
+            ['prompt', undefined],
+          ] as const) {
+            expect(Reflect.set(runtime, key, replacement)).toBe(false);
+          }
+          expect(Reflect.set(runtime.tools[0], 'invoke', undefined)).toBe(false);
+        });
+      }
+      const provider = new OpenAiAgentsProvider('fixture', {
+        config: { agent: root, executeTools, model: 'fixture-model' },
+      });
+      await expect(provider.callApi('Run the fixture.')).resolves.toMatchObject({
+        output: 'Escalated successfully.',
+      });
+      expect(observed).toEqual(['Root', 'Child']);
+      expect(Object.isFrozen(root.tools)).toBe(false);
+      expect(Object.isFrozen(child.tools)).toBe(false);
+      expect(Object.isFrozen(sourceTool)).toBe(false);
+    },
+  );
+
   it.each([
     ['model', { model: 'override-model' }],
     ['model settings', { modelSettings: { temperature: 0.2 } }],

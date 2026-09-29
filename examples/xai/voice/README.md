@@ -25,20 +25,16 @@ npx promptfoo@latest eval
 
 ### Models
 
-- `grok-voice-think-fast-2.0` - Current flagship voice model
-- `grok-voice-latest` - Alias for the current voice model. Promptfoo leaves response cost unavailable because WebSocket responses do not establish complete billed audio duration; connection timing remains in metadata.
-- `grok-voice-think-fast-1.0` - Previous-generation voice model
-
-The model is selected through the `?model=` query parameter on the realtime WebSocket URL.
+- `grok-voice-think-fast-2.0` - The voice model documented by xAI's [Voice Agent API guide](https://docs.x.ai/developers/model-capabilities/audio/speech-to-speech). The model is selected via the `?model=` query parameter on the realtime WebSocket URL.
 
 ### Voices
 
-xAI Voice supports 5 different voices:
+Use a lowercase built-in voice ID or a custom voice ID. Common built-in voices include:
 
-- `eve` (default) - Female voice
-- `ara` - Female voice
+- `ara` (default) - Female voice
 - `rex` - Male voice
 - `sal` - Male voice
+- `eve` - Female voice
 - `leo` - Male voice
 
 ### Built-in Tools
@@ -154,10 +150,9 @@ tests:
 
 ## Pricing
 
-Grok Voice Think Fast 2.0 is billed at $0.08 per minute of audio. The
-previous-generation 1.0 model costs $0.05 per minute.
+Grok Voice 2.0 costs [$0.08 per minute of audio plus $0.004 per text input](https://docs.x.ai/developers/models/speech-to-speech). Promptfoo sends one text input per test and estimates cost from the returned audio. Tool-result messages do not add a text-input charge.
 
 ## Resources
 
-- [xAI Speech to Speech Documentation](https://docs.x.ai/developers/model-capabilities/audio/speech-to-speech)
+- [xAI Voice API Documentation](https://docs.x.ai/developers/model-capabilities/audio/speech-to-speech)
 - [xAI API Reference](https://docs.x.ai/api)

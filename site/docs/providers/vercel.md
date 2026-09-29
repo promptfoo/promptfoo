@@ -31,7 +31,7 @@ The Vercel provider uses the format: `vercel:<provider>/<model>`
 ```yaml
 providers:
   - vercel:openai/gpt-4o-mini
-  - vercel:anthropic/claude-sonnet-4.5
+  - vercel:anthropic/claude-sonnet-5
   - vercel:google/gemini-2.5-flash
 ```
 
@@ -60,11 +60,11 @@ providers:
 
 ```yaml
 providers:
-  - id: vercel:anthropic/claude-sonnet-4.5
+  - id: vercel:openai/gpt-4o-mini
     config:
       # Authentication
-      apiKey: ${VERCEL_AI_GATEWAY_API_KEY}
-      apiKeyEnvar: CUSTOM_API_KEY_VAR # Use a custom env var name
+      apiKey: '{{env.VERCEL_AI_GATEWAY_API_KEY}}'
+      # Or omit apiKey and set apiKeyEnvar: CUSTOM_API_KEY_VAR
 
       # Model settings
       temperature: 0.7
@@ -74,7 +74,7 @@ providers:
       frequencyPenalty: 0.5
       presencePenalty: 0.3
       stopSequences:
-        - '\n\n'
+        - "\n\n"
 
       # Request settings
       timeout: 60000
@@ -85,24 +85,27 @@ providers:
       streaming: true
 ```
 
+When using Claude 5, omit `temperature`, `topP`, and `topK`.
+
 ### Configuration Parameters
 
-| Parameter          | Type     | Description                                  |
-| ------------------ | -------- | -------------------------------------------- |
-| `apiKey`           | string   | Vercel AI Gateway API key                    |
-| `apiKeyEnvar`      | string   | Custom environment variable name for API key |
-| `temperature`      | number   | Controls randomness (0.0 to 1.0)             |
-| `maxTokens`        | number   | Maximum number of tokens to generate         |
-| `topP`             | number   | Nucleus sampling parameter                   |
-| `topK`             | number   | Top-k sampling parameter                     |
-| `frequencyPenalty` | number   | Penalizes frequent tokens                    |
-| `presencePenalty`  | number   | Penalizes tokens based on presence           |
-| `stopSequences`    | string[] | Sequences where generation stops             |
-| `timeout`          | number   | Request timeout in milliseconds              |
-| `headers`          | object   | Additional HTTP headers                      |
-| `streaming`        | boolean  | Enable streaming responses                   |
-| `responseSchema`   | object   | JSON schema for structured output            |
-| `baseUrl`          | string   | Override the AI Gateway base URL             |
+| Parameter          | Type     | Description                                     |
+| ------------------ | -------- | ----------------------------------------------- |
+| `apiKey`           | string   | Vercel AI Gateway API key                       |
+| `apiKeyEnvar`      | string   | Custom environment variable name for API key    |
+| `temperature`      | number   | Controls randomness; range depends on the model |
+| `maxTokens`        | number   | Maximum number of tokens to generate            |
+| `maxRetries`       | number   | Retry attempts for a failed request             |
+| `topP`             | number   | Nucleus sampling parameter                      |
+| `topK`             | number   | Top-k sampling parameter                        |
+| `frequencyPenalty` | number   | Penalizes frequent tokens                       |
+| `presencePenalty`  | number   | Penalizes tokens based on presence              |
+| `stopSequences`    | string[] | Sequences where generation stops                |
+| `timeout`          | number   | Request timeout in milliseconds                 |
+| `headers`          | object   | Additional HTTP headers                         |
+| `streaming`        | boolean  | Use the streaming API for text generation       |
+| `responseSchema`   | object   | JSON schema for structured output               |
+| `baseUrl`          | string   | Override the AI Gateway base URL                |
 
 ## Structured Output
 
@@ -128,6 +131,7 @@ providers:
         required:
           - sentiment
           - confidence
+          - keywords
 
 prompts:
   - 'Analyze the sentiment of this text: {{text}}'
@@ -142,48 +146,56 @@ tests:
 
 ## Streaming
 
-Enable streaming for real-time responses:
+Use Vercel's streaming API for text generation. Promptfoo collects the chunks and runs assertions on the completed response:
 
 ```yaml
 providers:
-  - id: vercel:anthropic/claude-sonnet-4.5
+  - id: vercel:anthropic/claude-sonnet-5
     config:
       streaming: true
       maxTokens: 2000
 ```
 
+The provider normalizes the AI SDK's `tool-calls` and `content-filter` finish reasons to `tool_calls` and `content_filter`. Use the [`finish-reason` assertion](/docs/configuration/expected-outputs/deterministic/#finish-reason) with these values, or `stop` and `length`, for both streaming and non-streaming responses.
+
 ## Supported Providers
 
-Vercel exposes an unauthenticated discovery endpoint with current model IDs, capabilities, and
-pricing metadata:
+Query Vercel's public model catalog for IDs, capabilities, and pricing:
 
 ```bash
-curl -fsS https://ai-gateway.vercel.sh/v1/models |
-  jq -r '.data[] | [.id, .type] | @tsv'
+curl -fsS https://ai-gateway.vercel.sh/v1/models
 ```
 
-See the [Vercel AI Gateway documentation](https://vercel.com/docs/ai-gateway/models-and-providers)
-for the response fields and filtering examples.
+The endpoint requires no authentication. See the
+[Vercel AI Gateway documentation](https://vercel.com/docs/ai-gateway/models-and-providers)
+for response fields and filtering examples.
 
 ## Embedding Models
 
 Generate embeddings for text similarity, search, and RAG applications:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-prompts:
-  - 'Hello world'
+Set the embedding provider for the `similar` assertion under `defaultTest.options.provider.embedding`:
 
+```yaml title="promptfooconfig.yaml"
 providers:
-  - echo
+  - vercel:openai/gpt-5.6-luna
+
+prompts:
+  - 'Answer concisely: {{question}}'
+
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: vercel:embedding:openai/text-embedding-3-small
 
 tests:
-  - assert:
+  - vars:
+      question: 'What is the capital of France?'
+    assert:
       - type: similar
-        value: 'Hello world'
-        threshold: 0.9
-        provider:
-          id: vercel:embedding:openai/text-embedding-3-small
+        value: Paris
+        threshold: 0.8
 ```
 
 Supported embedding models:
@@ -205,9 +217,9 @@ providers:
   - id: vercel:openai/gpt-4o-mini
     config:
       temperature: 0.7
-  - id: vercel:anthropic/claude-sonnet-4.5
+  - id: vercel:anthropic/claude-sonnet-5
     config:
-      temperature: 0.7
+      maxTokens: 1000
   - id: vercel:google/gemini-2.5-flash
     config:
       temperature: 0.7
@@ -244,6 +256,7 @@ providers:
         required:
           - summary
           - topics
+          - wordCount
 
 prompts:
   - 'Analyze this article and return a structured summary: {{article}}'
@@ -258,10 +271,11 @@ tests:
 
 ## Environment Variables
 
-| Variable                     | Description                 |
-| ---------------------------- | --------------------------- |
-| `VERCEL_AI_GATEWAY_API_KEY`  | API key for AI Gateway      |
-| `VERCEL_AI_GATEWAY_BASE_URL` | Override the AI Gateway URL |
+| Variable                     | Description                                                                   |
+| ---------------------------- | ----------------------------------------------------------------------------- |
+| `VERCEL_AI_GATEWAY_API_KEY`  | API key for AI Gateway                                                        |
+| `AI_GATEWAY_API_KEY`         | Fallback from the shell environment when `VERCEL_AI_GATEWAY_API_KEY` is unset |
+| `VERCEL_AI_GATEWAY_BASE_URL` | Override the AI Gateway URL                                                   |
 
 ## Troubleshooting
 

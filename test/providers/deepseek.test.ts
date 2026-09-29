@@ -8,6 +8,9 @@ import {
   createDeepSeekProvider,
   DEEPSEEK_CHAT_MODELS,
 } from '../../src/providers/deepseek';
+import { ProviderOptionsSchema } from '../../src/validators/providers';
+
+import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -37,29 +40,18 @@ describe('DeepSeek usage boundaries', () => {
 describe('calculateDeepSeekCost', () => {
   const customRates = { inputCost: 1 / 1e6, outputCost: 3 / 1e6, cacheReadCost: 0.1 / 1e6 };
 
-  it.each([
-    'deepseek-flash',
-    'deepseek-v4-flash',
-    'deepseek-v4-flash-vision-exp',
-    'deepseek-v4-pro',
-    'deepseek-chat',
-    'deepseek-reasoner',
-  ])('leaves %s cost unknown without applicable billing rates', (model) => {
-    expect(calculateDeepSeekCost(model, {}, 1_000_000, 1_000_000)).toBeUndefined();
-    expect(calculateDeepSeekCost(model, {}, 1_000_000, 1_000_000, 500_000)).toBeUndefined();
+  it('leaves unknown models unpriced without explicit rates', () => {
+    expect(calculateDeepSeekCost('custom-model', {}, 100, 200)).toBeUndefined();
+    expect(calculateDeepSeekCost('custom-model', {}, 100, 200, 50)).toBeUndefined();
   });
 
   it('requires rates only for token categories actually used', () => {
+    expect(calculateDeepSeekCost('custom-model', { inputCost: 1 / 1e6 }, 10, 1)).toBeUndefined();
+    expect(calculateDeepSeekCost('custom-model', { outputCost: 3 / 1e6 }, 1, 10)).toBeUndefined();
     expect(
-      calculateDeepSeekCost('deepseek-v4-flash', { inputCost: 1 / 1e6 }, 10, 1),
-    ).toBeUndefined();
-    expect(
-      calculateDeepSeekCost('deepseek-v4-flash', { outputCost: 3 / 1e6 }, 1, 10),
-    ).toBeUndefined();
-    expect(
-      calculateDeepSeekCost('deepseek-v4-flash', { cacheReadCost: 0.1 / 1e6 }, 10, 0, 10),
+      calculateDeepSeekCost('custom-model', { cacheReadCost: 0.1 / 1e6 }, 10, 0, 10),
     ).toBeCloseTo(1 / 1e6);
-    expect(calculateDeepSeekCost('deepseek-v4-flash', { cost: 0 }, 10, 10, 5)).toBe(0);
+    expect(calculateDeepSeekCost('custom-model', { cost: 0 }, 10, 10, 5)).toBe(0);
   });
 
   it('uses a flat explicit rate for both cached and uncached input and output', () => {
@@ -72,6 +64,11 @@ describe('calculateDeepSeekCost', () => {
     expect(
       calculateDeepSeekCost('deepseek-v4-pro', customRates, 1_000_000, 1_000_000, 500_000),
     ).toBeCloseTo(3.55);
+  });
+
+  it('should calculate cost for deepseek-v4-pro', () => {
+    const cost = calculateDeepSeekCost('deepseek-v4-pro', {}, 1000000, 1000000);
+    expect(cost).toBeCloseTo(5.28); // Peak input + output.
   });
 
   it('uses the explicit input rate for cached tokens unless separately overridden', () => {
@@ -126,23 +123,108 @@ describe('calculateDeepSeekCost', () => {
       expect(calculateDeepSeekCost('deepseek-v4-flash', { cost: rate }, 1, 1)).toBeUndefined();
     },
   );
+  it('should prefer separate custom costs over custom cost', () => {
+    const config = { cost: 5.0 / 1e6, inputCost: 1.0 / 1e6, outputCost: 3.0 / 1e6 };
+    const cost = calculateDeepSeekCost('deepseek-chat', config, 1000000, 1000000);
+    expect(cost).toBeCloseTo(4.0);
+  });
+
+  it('should return undefined when an unknown model has no pricing', () => {
+    const cost = calculateDeepSeekCost('unknown-model', {}, 1000000, 1000000);
+    expect(cost).toBeUndefined();
+  });
+
+  it('does not guess a rate for billable unknown-model usage', () => {
+    const model = 'unknown-model';
+    expect(calculateDeepSeekCost(model, { inputCost: 0.01 }, 100, 100)).toBeUndefined();
+    expect(calculateDeepSeekCost(model, { outputCost: 0.02 }, 100, 100)).toBeUndefined();
+    expect(calculateDeepSeekCost(model, { cacheReadCost: 0.001 }, 100, 100, 50)).toBeUndefined();
+    expect(
+      calculateDeepSeekCost(model, { cacheReadCost: 0.001, outputCost: 0.02 }, 100, 100, 50),
+    ).toBeUndefined();
+    expect(calculateDeepSeekCost(model, {}, 0, 0)).toBeUndefined();
+  });
+
+  it('only needs a rate for token categories that were actually used', () => {
+    expect(calculateDeepSeekCost('unknown-model', { inputCost: 0.01 }, 100, 0, 50)).toBeCloseTo(1);
+    expect(calculateDeepSeekCost('unknown-model', { outputCost: 0.02 }, 0, 100)).toBeCloseTo(2);
+    expect(
+      calculateDeepSeekCost('unknown-model', { cacheReadCost: 0.001 }, 100, 0, 100),
+    ).toBeCloseTo(0.1);
+    expect(
+      calculateDeepSeekCost(
+        'unknown-model',
+        { cacheReadCost: 0.001, outputCost: 0.02 },
+        100,
+        100,
+        100,
+      ),
+    ).toBeCloseTo(2.1);
+    expect(calculateDeepSeekCost('unknown-model', { cost: 0 }, 100, 100, 50)).toBe(0);
+  });
+
+  it('keeps built-in rates for unspecified directions on known models', () => {
+    expect(calculateDeepSeekCost('deepseek-v4-pro', { inputCost: 0.01 }, 100, 100)).toBeCloseTo(
+      1.000396,
+      8,
+    );
+  });
+
+  it('should calculate cost with 100% cache hits', () => {
+    const cost = calculateDeepSeekCost('deepseek-chat', {}, 1000000, 1000000, 1000000);
+    expect(cost).toBeCloseTo(0.2828); // (0.0028 + 0.28) - all input tokens are cached
+  });
+
+  it('should clamp cached tokens that exceed prompt tokens', () => {
+    const cost = calculateDeepSeekCost('deepseek-chat', {}, 1000000, 1000000, 1500000);
+    expect(cost).toBeCloseTo(0.2828); // capped at all-cached price, never negative
+  });
+
+  it('should clamp negative cached tokens to zero', () => {
+    const cost = calculateDeepSeekCost('deepseek-chat', {}, 1000000, 1000000, -500000);
+    expect(cost).toBeCloseTo(0.42); // (0.14 + 0.28) - treated as no cache hits
+  });
+
+  it('should treat non-finite cached tokens as no cache hits', () => {
+    const cost = calculateDeepSeekCost('deepseek-chat', {}, 1000000, 1000000, Number.NaN);
+    expect(cost).toBeCloseTo(0.42); // (0.14 + 0.28) - same as no cachedTokens
+  });
 });
 
 describe('DEEPSEEK_CHAT_MODELS', () => {
-  it('retains current IDs and legacy aliases without unqualified prices', () => {
-    expect(DEEPSEEK_CHAT_MODELS).toEqual([
-      { id: 'deepseek-flash' },
-      { id: 'deepseek-v4-pro' },
-      { id: 'deepseek-v4-flash' },
-      { id: 'deepseek-v4-flash-vision-exp' },
-      { id: 'deepseek-chat' },
-      { id: 'deepseek-reasoner' },
-    ]);
+  it.each(['deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp'])(
+    'uses current peak pricing for the Flash route %s',
+    (model) => {
+      expect(calculateDeepSeekCost(model, {}, 1_000_000, 1_000_000)).toBeCloseTo(1.5);
+      expect(calculateDeepSeekCost(model, {}, 1_000_000, 1_000_000, 500_000)).toBeCloseTo(1.353);
+    },
+  );
+
+  it('should have correct pricing for deepseek-v4-pro', () => {
+    expect(calculateDeepSeekCost('deepseek-v4-pro', {}, 1_000_000, 1_000_000, 500_000)).toBeCloseTo(
+      4.642,
+    );
+  });
+
+  it('should have correct pricing for deepseek-chat', () => {
+    const model = DEEPSEEK_CHAT_MODELS.find((m) => m.id === 'deepseek-chat');
+    expect(model).toBeDefined();
+    expect(model!.cost.input).toBeCloseTo(0.14 / 1e6);
+    expect(model!.cost.output).toBeCloseTo(0.28 / 1e6);
+    expect(model!.cost.cache_read).toBeCloseTo(0.0028 / 1e6);
+  });
+
+  it('should have correct pricing for deepseek-reasoner', () => {
+    const model = DEEPSEEK_CHAT_MODELS.find((m) => m.id === 'deepseek-reasoner');
+    expect(model).toBeDefined();
+    expect(model!.cost.input).toBeCloseTo(0.14 / 1e6);
+    expect(model!.cost.output).toBeCloseTo(0.28 / 1e6);
+    expect(model!.cost.cache_read).toBeCloseTo(0.0028 / 1e6);
   });
 });
 
 describe('createDeepSeekProvider', () => {
-  it('leaves fresh usage unpriced without applicable rates and cached responses free', () => {
+  it('prices fresh usage and leaves replayed responses free', () => {
     const provider = createDeepSeekProvider('deepseek:deepseek-v4-flash') as unknown as {
       calculateResponseCost(
         data: Record<string, unknown>,
@@ -151,7 +233,7 @@ describe('createDeepSeekProvider', () => {
       ): number | undefined;
     };
     const data = { usage: { prompt_tokens: 1_000_000, completion_tokens: 1_000_000 } };
-    expect(provider.calculateResponseCost(data, {}, false)).toBeUndefined();
+    expect(provider.calculateResponseCost(data, {}, false)).toBeCloseTo(1.5);
     expect(provider.calculateResponseCost(data, {}, true)).toBe(0);
   });
 
@@ -330,7 +412,19 @@ describe('DeepSeek native requests', () => {
     }
     expect(result.error).toBeUndefined();
     expect(result.output).toBe('fixture answer');
-    expect(result.cost).toBeUndefined();
+    const expected =
+      model === 'custom-model'
+        ? undefined
+        : model === 'deepseek-v4-pro'
+          ? 0.00016016
+          : model === 'deepseek-reasoner'
+            ? 0.000014112
+            : 0.00004224;
+    if (expected === undefined) {
+      expect(result.cost).toBeUndefined();
+    } else {
+      expect(result.cost).toBeCloseTo(expected, 12);
+    }
   });
 
   it.each([{ prompt_cache_hit_tokens: 40 }, { prompt_cache_miss_tokens: 60 }])(
@@ -448,6 +542,58 @@ describe('DeepSeek native requests', () => {
     expect(body).not.toHaveProperty('max_completion_tokens');
     expect(result.error).toBeUndefined();
     expect(result.output).toBe('fixture answer');
-    expect(result.cost).toBeUndefined();
+    expect(result.cost).toBeCloseTo(0.00004224, 12);
+  });
+
+  it.each(['deepseek', 'deepseek:'])(
+    'uses the current Flash model without changing the shorthand thinking mode for %s',
+    async (path) => {
+      const provider = createDeepSeekProvider(path) as OpenAiChatCompletionProvider;
+      const { body } = await provider.getOpenAiBody('Hello');
+      expect(provider.id()).toBe('deepseek:deepseek-flash');
+      expect(body).toMatchObject({ model: 'deepseek-flash', thinking: { type: 'disabled' } });
+    },
+  );
+
+  it('allows explicit thinking and leaves named model defaults to DeepSeek', async () => {
+    const shorthand = createDeepSeekProvider('deepseek:', {
+      config: { config: { passthrough: { thinking: { type: 'enabled' } } } },
+    }) as OpenAiChatCompletionProvider;
+    expect((await shorthand.getOpenAiBody('Hello')).body.thinking).toEqual({ type: 'enabled' });
+
+    const named = createDeepSeekProvider(
+      'deepseek:deepseek-v4-pro',
+    ) as OpenAiChatCompletionProvider;
+    const { body } = await named.getOpenAiBody('Hello');
+    expect(body.model).toBe('deepseek-v4-pro');
+    expect(body.thinking).toBeUndefined();
+  });
+
+  it('reads a provider-scoped API key after config validation', () => {
+    const options = ProviderOptionsSchema.parse({ env: { DEEPSEEK_API_KEY: 'provider-key' } });
+    const provider = createDeepSeekProvider('deepseek:', {
+      config: options,
+      env: { DEEPSEEK_API_KEY: 'suite-key' },
+    }) as OpenAiChatCompletionProvider;
+    expect(provider.getApiKey()).toBe('provider-key');
+  });
+
+  it('lets explicit rates replace the peak-hour estimates', () => {
+    expect(calculateDeepSeekCost('deepseek-flash', {}, 100, 100)).toBeCloseTo(0.00015, 8);
+    expect(
+      calculateDeepSeekCost('deepseek-flash', { inputCost: 0.01, outputCost: 0.02 }, 100, 100),
+    ).toBeCloseTo(3);
+    expect(
+      calculateDeepSeekCost(
+        'deepseek-flash',
+        { inputCost: 0.01, outputCost: 0.02, cacheReadCost: 0.001 },
+        100,
+        100,
+        50,
+      ),
+    ).toBeCloseTo(2.55);
+    expect(
+      calculateDeepSeekCost('deepseek-flash', { cost: 0, cacheReadCost: 0 }, 100, 100, 50),
+    ).toBe(0);
   });
 });

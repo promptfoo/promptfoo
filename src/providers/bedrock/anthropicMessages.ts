@@ -5,6 +5,8 @@ import {
   resolveBedrockMantleApiKey,
   resolveBedrockMantleRegion,
 } from './mantle';
+import { isBedrockRuntimeMessagesModel } from './routing';
+import { BedrockTokenProvider } from './tokenProvider';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { ClientOptions } from '@anthropic-ai/sdk';
 
@@ -37,37 +39,6 @@ function isConfiguredBedrockProxy(apiBaseUrl: string | undefined): boolean {
   }
 }
 
-const RUNTIME_MESSAGES_MODELS = new Set([
-  'us.anthropic.claude-fable-5-1',
-  'global.anthropic.claude-fable-5-1',
-  'us.anthropic.claude-mythos-5-1',
-  'global.anthropic.claude-mythos-5-1',
-]);
-
-const BEDROCK_ANTHROPIC_MESSAGES_MODELS = [
-  'anthropic.claude-fable-5',
-  'anthropic.claude-mythos-5',
-  'anthropic.claude-fable-5-1',
-  ...RUNTIME_MESSAGES_MODELS,
-  'anthropic.claude-mythos-preview',
-  'anthropic.claude-opus-4-7',
-  'anthropic.claude-opus-4-8',
-  'anthropic.claude-opus-5',
-  'anthropic.claude-sonnet-5',
-];
-const BEDROCK_ANTHROPIC_MESSAGES_ONLY_MODELS = new Set([
-  'anthropic.claude-mythos-5',
-  'anthropic.claude-mythos-preview',
-]);
-
-export function isBedrockAnthropicMessagesModel(modelName: string): boolean {
-  return BEDROCK_ANTHROPIC_MESSAGES_MODELS.includes(modelName);
-}
-
-export function requiresBedrockAnthropicMessagesModel(modelName: string): boolean {
-  return BEDROCK_ANTHROPIC_MESSAGES_ONLY_MODELS.has(modelName);
-}
-
 export function getBedrockAnthropicBaseUrl(region: string, useRuntime = false): string {
   // Validate the region before interpolating either host, which receives an API key.
   const mantleOrigin = getBedrockMantleOrigin(region);
@@ -79,7 +50,7 @@ export function getBedrockAnthropicBaseUrl(region: string, useRuntime = false): 
 export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider {
   protected override calculateMessageCost(
     config: AnthropicMessageOptions,
-    message: Anthropic.Messages.Message,
+    message: Pick<Anthropic.Messages.Message, 'stop_details' | 'stop_reason' | 'usage'>,
   ): number | undefined {
     const modelName =
       typeof config.extra_body?.model === 'string' ? config.extra_body.model : this.modelName;
@@ -111,16 +82,64 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
   }
 
   // Bedrock's Anthropic-compatible endpoint authenticates with an API key via
-  // x-api-key (the factory guarantees one). Never fall back to a local Claude
+  // x-api-key resolved for each HTTP request. Never fall back to a local Claude
   // Code OAuth session — that would send an Anthropic OAuth token to the
   // Bedrock host.
   static override readonly SUPPORTS_CLAUDE_CODE_OAUTH = false;
 
   protected override buildAnthropicClientOptions(options: ClientOptions): ClientOptions {
-    return buildIsolatedAnthropicClientOptions(options, this.env, this.apiKey);
+    const config = this.config;
+    const region = resolveBedrockMantleRegion(config, this.env, DEFAULT_BEDROCK_ANTHROPIC_REGION);
+    const tokens = new BedrockTokenProvider(config, this.env, region);
+    const isolated = buildIsolatedAnthropicClientOptions(options, this.env, undefined);
+    const fetch = options.fetch ?? globalThis.fetch;
+    return {
+      ...isolated,
+      // Explicit nulls prevent SDK fallback to Anthropic credentials. The transport below
+      // authenticates every HTTP operation, including retries and tool continuations.
+      apiKey: null,
+      authToken: null,
+      defaultHeaders: {
+        ...isolated.defaultHeaders,
+        'x-api-key': null,
+        authorization: null,
+      },
+      fetch: async (input, init) => {
+        const token = await tokens.getToken(init?.signal ?? undefined);
+        const headers = new Headers(init?.headers);
+        // Ambient headers were suppressed above. Explicit per-request proxy auth still wins.
+        if (token && !headers.has('x-api-key') && !headers.has('authorization')) {
+          headers.set('x-api-key', token);
+        }
+        return fetch(input, { ...init, headers });
+      },
+    };
   }
 
-  protected override hasCustomHeaders(): boolean {
+  getApiKey(): string | undefined {
+    return resolveBedrockMantleApiKey(this.config, this.env);
+  }
+
+  getApiBaseUrl(): string {
+    return (
+      this.config.apiBaseUrl ||
+      getBedrockAnthropicBaseUrl(
+        resolveBedrockMantleRegion(this.config, this.env, DEFAULT_BEDROCK_ANTHROPIC_REGION),
+        isBedrockRuntimeMessagesModel(this.modelName),
+      )
+    );
+  }
+
+  requiresApiKey(): boolean {
+    return false;
+  }
+
+  protected override validateAuthentication(): void {
+    // The fetch hook validates AWS credentials at each SDK HTTP attempt, not at construction.
+  }
+
+  protected override shouldCacheResponses(): boolean {
+    // AWS credentials may rotate to a different principal; we have no stable cache identity.
     return false;
   }
 
@@ -159,16 +178,6 @@ export function createBedrockAnthropicMessagesProvider(
     providerOptions.env,
     DEFAULT_BEDROCK_ANTHROPIC_REGION,
   );
-  const apiKey = resolveBedrockMantleApiKey(config, providerOptions.env);
-
-  if (!apiKey) {
-    throw new Error(
-      `Amazon Bedrock model "${modelName}" is served through Bedrock's Anthropic-compatible ` +
-        `Messages API. Set AWS_BEARER_TOKEN_BEDROCK (or config.apiKey). See ` +
-        `https://www.promptfoo.dev/docs/providers/aws-bedrock/#claude-fable-and-mythos-models`,
-    );
-  }
-
   if (!config.apiBaseUrl && modelName === 'anthropic.claude-mythos-5' && region !== 'us-east-1') {
     throw new Error(
       `Amazon Bedrock model "${modelName}" is only available in us-east-1 through the default ` +
@@ -215,9 +224,10 @@ export function createBedrockAnthropicMessagesProvider(
   }
 
   const apiBaseUrl =
-    config.apiBaseUrl || getBedrockAnthropicBaseUrl(region, RUNTIME_MESSAGES_MODELS.has(modelName));
-  const resolvedConfig = { ...config, region, apiBaseUrl, apiKey };
+    config.apiBaseUrl ||
+    getBedrockAnthropicBaseUrl(region, isBedrockRuntimeMessagesModel(modelName));
 
+  const resolvedConfig = { ...config, region, apiBaseUrl };
   return new BedrockAnthropicMessagesProvider(modelName, {
     ...providerOptions,
     config: resolvedConfig,

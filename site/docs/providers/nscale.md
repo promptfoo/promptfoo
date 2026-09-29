@@ -1,11 +1,11 @@
 ---
-description: Use the Nscale Serverless Inference API with promptfoo for model evaluation and testing
+title: Nscale
+description: Use Nscale Serverless Inference API with promptfoo for cost-effective AI model evaluation and testing
 ---
 
 # Nscale
 
-The Nscale provider enables you to use [Nscale's Serverless Inference API](https://nscale.com/serverless)
-models with promptfoo through an OpenAI-compatible interface.
+Use [Nscale's Serverless Inference API](https://docs.nscale.com/) for OpenAI-compatible chat, completion, embedding, and image requests.
 
 ## Setup
 
@@ -214,13 +214,14 @@ tests:
 
 ## Pricing
 
-Pricing varies by model. See [Nscale's pricing page](https://docs.nscale.com/pricing) for current
-rates before adding cost assertions.
+Nscale prices text generation and embeddings per token, and images per megapixel. Check
+[Nscale's model endpoint API](https://docs.nscale.com/api-reference/models/list-endpoints) for current rates available to your organization.
+
+Promptfoo has no Nscale-specific token price table. For chat, completion, or embedding estimates, set `cost` or `inputCost`/`outputCost` in USD per token. Image estimates use fixed model rates multiplied by the number of images; they do not adjust for resolution or use those token-cost settings.
 
 ## Key Features
 
-- **Serverless**: No infrastructure management required
-- **OpenAI Compatible**: Standard API interface
+Nscale hosts the models and exposes an OpenAI-compatible API. See [Nscale's documentation](https://docs.nscale.com/) for throughput, rate limits, and available regions.
 
 ## Error Handling
 

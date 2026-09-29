@@ -123,6 +123,4 @@ providers:
                 unit: { type: 'string', enum: ['celsius', 'fahrenheit'] }
 ```
 
-Kimi K3 uses a fixed `temperature` of `1.0`; see Together AI's [sampling parameters](https://docs.together.ai/docs/kimi-k3-quickstart#sampling-parameters).
-
-For more information, refer to the [Together AI documentation](https://docs.together.ai/docs/chat-models).
+For more information, refer to the [Together AI documentation](https://docs.together.ai/docs/serverless-models).

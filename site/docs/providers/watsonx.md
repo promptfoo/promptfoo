@@ -25,24 +25,13 @@ curl "https://us-south.ml.cloud.ibm.com/ml/v1/foundation_model_specs?version=202
 
 ### Currently Available Models
 
-Use the model-specs endpoint above as the source of truth. The examples below intentionally
-avoid a broad static catalog because IBM changes regional availability and lifecycle status.
+The examples use `ibm/granite-4-h-small`. Confirm its availability with the model-specs endpoint
+above, or select another text/chat model from your region's catalog.
 
-#### IBM Granite
-
-- `ibm/granite-4-h-small` - Ready-to-use Granite text model
-
-#### Meta Llama
-
-Query the model-specs endpoint for the Llama models available in your region.
-
-#### Mistral
-
-Query the model-specs endpoint for the Mistral models available in your region.
-
-#### Other Models
-
-Query the model-specs endpoint for other ready-to-use models available in your region.
+<a id="ibm-granite"></a>
+<a id="meta-llama"></a>
+<a id="mistral"></a>
+<a id="other-models"></a>
 
 ### Other Model Types
 

@@ -7,7 +7,8 @@ keywords: [fal.ai, image generation, AI images, flux, imagen, ideogram, promptfo
 
 # fal.ai
 
-The `fal` provider supports the [fal.ai](https://fal.ai) inference API using the [fal-js](https://github.com/fal-ai/fal-js) client, providing a native experience for using fal.ai models in your evals.
+The `fal` provider calls the [fal.ai](https://fal.ai) inference API through the
+[fal-js](https://github.com/fal-ai/fal-js) client.
 
 ## Setup
 
@@ -30,25 +31,25 @@ To run a model, specify the model type and model name: `fal:<model_type>:<model_
 
 ### Featured Models
 
-- `fal:image:fal-ai/flux-pro/v1.1-ultra` - Professional-grade image generation with up to 2K resolution
-- `fal:image:fal-ai/flux/schnell` - Fast, high-quality image generation in 1-4 steps
+- `fal:image:fal-ai/flux-pro/v1.1-ultra` - Image generation with up to 2K resolution
+- `fal:image:fal-ai/flux/schnell` - Image generation in 1-4 steps
 - `fal:image:fal-ai/fast-sdxl` - High-speed SDXL with LoRA support
 
 :::info
 
-Browse the complete [model gallery](https://fal.ai/models) for available models and detailed specifications. Model availability and capabilities are updated over time.
+See the [model gallery](https://fal.ai/models) for available models and their input fields.
 
 :::
 
 ## Popular Models
 
-**For speed**: `fal:image:fal-ai/flux/schnell` - Ultra-fast generation in 1-4 steps  
-**For quality**: `fal:image:fal-ai/flux/dev` - High-quality 12B parameter model  
-**For text/logos**: `fal:image:fal-ai/ideogram/v3` - Exceptional typography handling  
-**For professional work**: `fal:image:fal-ai/flux-pro/v1.1-ultra` - Up to 2K resolution  
-**For vector art**: `fal:image:fal-ai/recraft/v3/text-to-image` - SOTA with vector art and typography  
-**For 4K images**: `fal:image:fal-ai/sana` - 4K generation in under a second  
-**For multimodal**: `fal:image:fal-ai/bagel` - 7B parameter text and image model
+- **For speed**: `fal:image:fal-ai/flux/schnell` - Generation in 1-4 steps
+- **For quality**: `fal:image:fal-ai/flux/dev` - 12B parameter model
+- **For text/logos**: `fal:image:fal-ai/ideogram/v3` - Text and logo generation
+- **For professional work**: `fal:image:fal-ai/flux-pro/v1.1-ultra` - Up to 2K resolution
+- **For vector art**: `fal:image:fal-ai/recraft/v3/text-to-image` - Vector art and typography
+- **For 4K images**: `fal:image:fal-ai/sana` - 4K generation
+- **For multimodal**: `fal:image:fal-ai/bagel` - 7B parameter text and image model
 
 Browse all models at [fal.ai/models](https://fal.ai/models?categories=text-to-image).
 
@@ -94,7 +95,7 @@ providers:
       image_size:
         width: 1024
         height: 1024
-      num_inference_steps: 8
+      num_inference_steps: 4
       seed: 6252023
 ```
 

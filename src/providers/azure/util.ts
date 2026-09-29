@@ -42,6 +42,7 @@ const AZURE_CACHE_READ_RATE_GROUPS: Array<[number, string[]]> = [
       'gpt-5.5',
       'gpt-5.5-2026-04-24',
       'gpt-chat-latest',
+      'gpt-chat-latest-2026-08-06',
       'gpt-chat-latest-2026-06-24',
       'gpt-chat-latest-2026-05-28',
       'gpt-chat-latest-2026-05-05',

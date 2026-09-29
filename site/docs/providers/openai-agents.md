@@ -38,7 +38,7 @@ providers:
     config:
       agent:
         name: Customer Support Agent
-        model: gpt-5.6-luna
+        model: gpt-6-luna
         instructions: You are a helpful customer support agent.
       maxTurns: 10
 ```
@@ -137,7 +137,7 @@ import { Agent } from '@openai/agents';
 
 export default new Agent({
   name: 'Support Agent',
-  model: 'gpt-5.6-luna',
+  model: 'gpt-6-luna',
   instructions: 'You are a helpful customer support agent.',
 });
 ```
@@ -172,12 +172,12 @@ providers:
     config:
       agent:
         name: Triage Agent
-        model: gpt-5.6-luna
+        model: gpt-6-luna
         instructions: Route questions to the appropriate specialist.
       handoffs:
         - agent:
             name: Technical Support
-            model: gpt-5.6-luna
+            model: gpt-6-luna
             instructions: Handle technical troubleshooting.
           description: Transfer for technical issues
 ```
@@ -405,7 +405,7 @@ You can also compose them with `any` or `all`. If you are configuring Promptfoo 
 
 ## Mock Tool Execution
 
-Use mocked tool outputs when you want deterministic evals without calling external systems:
+Use mocked tool outputs for deterministic evals without executing function tools:
 
 ```yaml
 providers:
@@ -423,7 +423,9 @@ providers:
 Mock mode supports function tools and direct `Agent` handoffs only. It fails closed for explicit
 `Handoff` objects (their callbacks can have side effects), MCP servers, hosted tools, `SandboxAgent`
 capabilities, reusable prompt templates, and model `providerData` that overrides the request's tools
-or prompt. Use direct agents for side-effect-free mock handoffs.
+or prompt. Use direct agents for handoffs with mocked tools. Lifecycle hooks can observe the
+run, but cannot change the mocked tools or handoff configuration. Hooks and agent definitions
+still run as trusted local code; mock mode does not isolate them.
 
 ## Tracing
 
@@ -483,7 +485,7 @@ tests:
 
       - type: trajectory:goal-success
         value: 'Determine whether order 123 shipped and tell the user the correct status'
-        provider: openai:gpt-5.6-luna
+        provider: openai:gpt-6-luna
 ```
 
 See [Tracing](/docs/tracing/) for the eval-level OTLP setup required when you want Promptfoo to ingest and evaluate these traces directly.

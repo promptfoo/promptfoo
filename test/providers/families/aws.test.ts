@@ -268,7 +268,7 @@ describe('aws bedrock provider factory routing', () => {
   it('supports the explicit messages form for Bedrock Fable', async () => {
     const provider = await bedrockFactory.create(
       'bedrock:messages:anthropic.claude-fable-5',
-      { config: { apiKey: 'bedrock-key' } },
+      { config: { apiKey: 'bedrock-key', region: 'us-east-1' } },
       ctx,
     );
     expect(provider).toBeInstanceOf(BedrockAnthropicMessagesProvider);
@@ -340,11 +340,11 @@ describe('aws bedrock provider factory routing', () => {
     ).rejects.toThrow(/not supported by the Anthropic Messages provider/);
   });
 
-  it('throws a helpful error for frontier ids without a Bedrock API key', async () => {
+  it('allows frontier ids to use the AWS credential chain without a Bedrock API key', async () => {
     restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     await expect(
       bedrockFactory.create('bedrock:openai.gpt-5.5', { config: { region: 'us-east-2' } }, ctx),
-    ).rejects.toThrow(/AWS_BEARER_TOKEN_BEDROCK/);
+    ).resolves.toBeInstanceOf(OpenAiResponsesProvider);
   });
 
   it('routes the converse: form of a frontier id to the Responses provider on the mantle endpoint', async () => {
@@ -369,6 +369,55 @@ describe('aws bedrock provider factory routing', () => {
     expect((provider as any).config.apiBaseUrl).toBe(
       'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
     );
+  });
+
+  it.each([
+    'bedrock:converse:anthropic.claude-3-5-haiku-20241022-v1:0',
+    'bedrock:converse:us.anthropic.claude-3-5-haiku-20241022-v1:0',
+    'bedrock:kb:eu.anthropic.claude-3-5-haiku-20241022-v1:0',
+    'bedrock:knowledge-base:eu.anthropic.claude-3-5-haiku-20241022-v1:0',
+  ])(
+    'rejects a retired model on the explicit Converse and knowledge base routes (%s)',
+    async (providerPath) => {
+      await expect(
+        bedrockFactory.create(providerPath, { config: { region: 'us-east-1' } }, ctx),
+      ).rejects.toThrow(/Unknown Amazon Bedrock model/);
+    },
+  );
+
+  it.each(['kb', 'knowledge-base'])(
+    'validates the modelArn override on the %s route',
+    async (route) => {
+      const modelArn =
+        'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-opus-20240229-v1:0';
+      await expect(
+        bedrockFactory.create(
+          `bedrock:${route}:default`,
+          { config: { knowledgeBaseId: 'kb-123', modelArn } },
+          ctx,
+        ),
+      ).rejects.toThrow(`Unknown Amazon Bedrock model: ${modelArn}`);
+    },
+  );
+
+  it('allows an active modelArn to override a retired knowledge-base route model', async () => {
+    const modelArn = 'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0';
+    await expect(
+      bedrockFactory.create(
+        'bedrock:kb:eu.anthropic.claude-3-5-haiku-20241022-v1:0',
+        { config: { knowledgeBaseId: 'kb-123', modelArn } },
+        ctx,
+      ),
+    ).resolves.toHaveProperty('kbConfig.modelArn', modelArn);
+  });
+
+  it('still allows a Converse model AWS continues to serve', async () => {
+    const provider = await bedrockFactory.create(
+      'bedrock:converse:anthropic.claude-sonnet-4-20250514-v1:0',
+      { config: { region: 'us-east-1' } },
+      ctx,
+    );
+    expect(provider).toBeDefined();
   });
 
   it('routes the completion: form of a gpt-oss id to the InvokeModel completion provider (not Responses)', async () => {

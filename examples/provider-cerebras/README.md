@@ -1,6 +1,6 @@
-# provider-cerebras (Cerebras Example (High-Performance LLM Inference))
+# provider-cerebras (Cerebras)
 
-This example demonstrates how to use the Cerebras provider with promptfoo to evaluate models on the high-performance Cerebras Inference API.
+Evaluate Cerebras models on text responses, structured output, and function calls.
 
 You can run this example with:
 
@@ -39,7 +39,7 @@ This configuration evaluates two Cerebras models on their ability to explain com
 promptfoo eval
 ```
 
-**Expected output:** You'll see a comparison of how each model explains concepts from different domains, with metrics on clarity, accuracy, and response time.
+**Expected output:** Compare model responses and latency. The assertions check for topic-specific terms; they do not grade clarity or factual accuracy.
 
 ### 2. Structured Outputs (`promptfooconfig-structured.yaml`)
 
@@ -80,13 +80,13 @@ Example output:
 
 ### 3. Tool Use (`promptfooconfig-tools.yaml`)
 
-The tool use example demonstrates Cerebras's function calling capabilities with a calculator tool that the model can use to solve math problems.
+The tool example checks that the model requests the `calculate` function with the expected expression. It validates the returned function call; it does not execute a calculator.
 
 ```bash
 promptfoo eval -c promptfooconfig-tools.yaml
 ```
 
-**Expected output:** The model will use the calculator tool to solve math problems and provide step-by-step explanations of the solution process. For example, when given "15 × 7", it will calculate 105 and explain multiplication concepts.
+**Expected output:** A `calculate` tool call with a JSON `expression` argument matching the test input.
 
 ## Model Capabilities
 

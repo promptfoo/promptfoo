@@ -367,7 +367,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       }
 
       const hasMockValue = Object.prototype.hasOwnProperty.call(toolMocks, tool.name);
-      return {
+      const mockedTool = {
         ...tool,
         isEnabled: async () => true,
         needsApproval: async () => false,
@@ -379,10 +379,12 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         invoke: async () =>
           hasMockValue ? toolMocks[tool.name] : { mocked: true, tool: tool.name },
       };
+      Object.freeze(mockedTool.inputGuardrails);
+      Object.freeze(mockedTool.outputGuardrails);
+      return Object.freeze(mockedTool);
     });
 
-    const wrappedAgent = agent.clone({ tools, handoffs: [] });
-    shareAgentEventEmitter(agent, wrappedAgent);
+    const wrappedAgent = cloneAgentPreservingHooks(agent, { tools, handoffs: [] });
     wrappedAgents.set(agent as object, wrappedAgent);
 
     wrappedAgent.handoffs = agent.handoffs.map((agentHandoff) => {
@@ -399,6 +401,15 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       throw new Error("executeTools: false/'mock' cannot safely wrap an unknown handoff shape");
     });
 
+    // Lifecycle hooks may observe this graph, but cannot replace its mocks or tool lists.
+    for (const [key, value] of Object.entries({
+      tools: Object.freeze(tools),
+      handoffs: Object.freeze(wrappedAgent.handoffs),
+      mcpServers: Object.freeze([]),
+      prompt: undefined,
+    })) {
+      Object.defineProperty(wrappedAgent, key, { value, writable: false, configurable: false });
+    }
     return wrappedAgent;
   }
 
@@ -543,11 +554,8 @@ function cloneAgentPreservingHooks(
   config: Parameters<Agent<any, any>['clone']>[0],
 ): Agent<any, any> {
   const cloned = source.clone(config);
-  const sourceHooks = source as unknown as { eventEmitter: unknown };
-  const clonedHooks = cloned as unknown as { eventEmitter: unknown };
-  // Agent.clone() creates a fresh lifecycle emitter. The provider replaces the cloned graph at
-  // execution time, so share the source emitter to preserve all registered hook semantics.
-  clonedHooks.eventEmitter = sourceHooks.eventEmitter;
+  // Agent.clone() creates a fresh emitter. Retain the registered lifecycle listeners.
+  shareAgentEventEmitter(source, cloned);
   return cloned;
 }
 

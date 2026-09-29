@@ -5,7 +5,8 @@ description: Configure TrueFoundry's enterprise-grade AI Gateway (LLM, MCP, and 
 
 # TrueFoundry
 
-[TrueFoundry](https://www.truefoundry.com/ai-gateway) provides an enterprise-grade AI Gateway that encompasses an LLM Gateway, MCP Gateway, and Agent Gateway. This enables enterprises to connect, observe, and govern agentic AI applications across providers from a single control plane. TrueFoundry's gateway is OpenAI-compatible and integrates with promptfoo for testing and evaluation.
+[TrueFoundry](https://www.truefoundry.com/ai-gateway) routes requests to LLM providers and MCP
+servers. Promptfoo uses its OpenAI-compatible API for chat completions and embeddings.
 
 The TrueFoundry provider supports:
 
@@ -124,11 +125,18 @@ providers:
 
 ### Anthropic Models
 
+For Claude 5, set `omitDefaults: true` to omit Promptfoo's default `temperature: 0`.
+Leave sampling parameters unset in your config and environment; explicit values still apply.
+
 ```yaml
 providers:
-  - truefoundry:anthropic-main/claude-sonnet-4.5
-  - truefoundry:anthropic-main/claude-3-5-sonnet-20241022
-  - truefoundry:anthropic-main/claude-3-opus-20240229
+  - id: truefoundry:anthropic-main/claude-sonnet-5
+    config:
+      omitDefaults: true
+  - id: truefoundry:anthropic-main/claude-opus-5
+    config:
+      omitDefaults: true
+  - truefoundry:anthropic-main/claude-haiku-4-5
 ```
 
 ### Google Gemini Models
@@ -304,10 +312,10 @@ providers:
             - name: 'web_search'
       iteration_limit: 10
 
-  - id: truefoundry:anthropic-main/claude-sonnet-4.5
-    label: 'Claude Sonnet 4.5 via TrueFoundry'
+  - id: truefoundry:anthropic-main/claude-sonnet-5
+    label: 'Claude Sonnet 5 via TrueFoundry'
     config:
-      temperature: 0.7
+      omitDefaults: true
       max_tokens: 1000
       metadata:
         user_id: 'eval-user'

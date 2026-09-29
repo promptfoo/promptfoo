@@ -12,7 +12,7 @@ providers:
         json_schema:
           name: 'recipe_schema'
           strict: true
-          schema:
+          schema: &recipeSchema
             type: 'object'
             properties:
               name: { 'type': 'string' }
@@ -34,36 +34,39 @@ providers:
               instructions:
                 type: 'array'
                 items: { 'type': 'string' }
-            required: ['name', 'cuisine', 'difficulty', 'ingredients', 'instructions']
+            required:
+              [
+                'name',
+                'cuisine',
+                'difficulty',
+                'prepTime',
+                'cookTime',
+                'ingredients',
+                'instructions',
+              ]
             additionalProperties: false
+defaultTest:
+  assert:
+    - type: is-json
+      value: *recipeSchema
+
 tests:
   - vars:
       cuisine: Italian
       dish: Cacio e Pepe
-    assert:
-      - type: json-schema-valid
-        value: |
-          {
-            "type": "object",
-            "required": ["name", "cuisine", "difficulty", "ingredients", "instructions"]
-          }
   - vars:
       cuisine: Japanese
       dish: Okonomiyaki
     assert:
-      - type: contains-json-property
-        value: ['ingredients', 'instructions']
       - type: javascript
         value: |
-          return output.ingredients.length >= 5 ? 'pass' : 'fail: needs at least 5 ingredients'
+          const recipe = typeof output === 'string' ? JSON.parse(output) : output;
+          return recipe.ingredients.length >= 5;
   - vars:
       cuisine: Mexican
       dish: Chiles en Nogada
     assert:
-      - type: contains-json-property
-        value: ['difficulty']
       - type: javascript
         value: |
-          return output.instructions.length >= 3 ? 'pass' : 'fail: needs detailed instructions'
-outputs:
-  - type: json
+          const recipe = typeof output === 'string' ? JSON.parse(output) : output;
+          return recipe.instructions.length >= 3;

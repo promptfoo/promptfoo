@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Evaluate current Mistral reasoning models on AIME2024
+description: Evaluate Mistral reasoning models on AIME2024
 
 prompts:
   - |
@@ -18,8 +18,7 @@ providers:
       temperature: 0.7
       top_p: 0.95
       max_tokens: 40960
-  # `magistral-small-latest` still resolves to the deprecated 2509 snapshot, so use
-  # the current Mistral Small 4 alias for the hybrid-model comparison.
+  # Use Small 4 with explicit reasoning instead of the deprecated Magistral snapshot.
   - id: mistral:mistral-small-latest
     label: Mistral Small 4
     config:
@@ -32,6 +31,8 @@ tests:
   - huggingface://datasets/sea-snell/aime-2024?split=test
 
 defaultTest:
+  options:
+    provider: mistral:mistral-large-latest
   assert:
     - type: llm-rubric
       value: |

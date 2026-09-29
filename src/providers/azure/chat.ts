@@ -22,7 +22,13 @@ import {
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { applyGpt6AstraRequestRules, isGpt6AstraModel } from '../openai/gpt6';
+import {
+  applyGpt6RequestRules,
+  getGpt6ChatReasoningEffort,
+  getGpt6Variant,
+  isGpt6Model,
+  resolveGpt6ChatOutputCap,
+} from '../openai/gpt6';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
@@ -99,7 +105,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       lowerName.includes('-gpt-5') ||
       lowerName === 'gpt-chat-latest' ||
       lowerName.startsWith('gpt-chat-latest-') ||
-      isGpt6AstraModel(lowerName) ||
+      isGpt6Model(lowerName) ||
       // DeepSeek reasoning models
       lowerName.includes('deepseek-r1') ||
       lowerName.includes('deepseek_r1') ||
@@ -208,15 +214,18 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     ).toLowerCase();
     const isReasoningModel = this.isReasoningModel(capabilityModelName);
     const isFixedReasoningModel = /^gpt-chat-latest(?:-|$)/.test(capabilityModelName);
+    const gpt6Variant = getGpt6Variant(capabilityModelName);
+    const useModelDefaults = gpt6Variant === 'sol' || gpt6Variant === 'luna';
     const samplingParamsDeprecated = this.isSamplingParamsDeprecatedClaudeModel(config);
     const grokSamplingRestricted = this.isGrok4OrNewerModel();
 
     // Get max tokens based on model type
-    const maxTokensDefault = config.omitDefaults
-      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
-        ? undefined
-        : getEnvInt('OPENAI_MAX_TOKENS')
-      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
+    const maxTokensDefault =
+      config.omitDefaults || useModelDefaults
+        ? getEnvString('OPENAI_MAX_TOKENS') === undefined
+          ? undefined
+          : getEnvInt('OPENAI_MAX_TOKENS')
+        : getEnvInt('OPENAI_MAX_TOKENS', 1024);
     const maxTokens = config.max_tokens ?? maxTokensDefault;
     const maxCompletionTokens =
       config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? maxTokens;
@@ -239,9 +248,24 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       : (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0));
 
     // Get reasoning effort for reasoning models
+    const configuredGpt6Effort = gpt6Variant
+      ? getGpt6ChatReasoningEffort(this.config, context?.prompt?.config, (value) =>
+          renderVarsInObject(value, context?.vars),
+        )
+      : undefined;
+    const defaultReasoningEffort = config.omitDefaults || useModelDefaults ? undefined : 'medium';
     const reasoningEffort = isFixedReasoningModel
       ? undefined
-      : (config.reasoning_effort ?? (config.omitDefaults ? undefined : 'medium'));
+      : gpt6Variant
+        ? configuredGpt6Effort === undefined
+          ? defaultReasoningEffort
+          : configuredGpt6Effort
+        : (config.reasoning_effort ?? defaultReasoningEffort);
+    const renderedReasoningEffort = isReasoningModel
+      ? gpt6Variant
+        ? reasoningEffort
+        : renderVarsInObject(reasoningEffort, context?.vars)
+      : undefined;
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
@@ -259,12 +283,15 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       messages,
       ...(isReasoningModel
         ? {
-            ...(reasoningEffort === undefined
+            ...(renderedReasoningEffort === undefined
               ? {}
-              : { reasoning_effort: renderVarsInObject(reasoningEffort, context?.vars) }),
+              : { reasoning_effort: renderedReasoningEffort }),
             ...(maxCompletionTokens === undefined
               ? {}
               : { max_completion_tokens: maxCompletionTokens }),
+            ...(isGpt6Model(capabilityModelName) && temperature !== undefined
+              ? { temperature }
+              : {}),
           }
         : {
             ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
@@ -317,7 +344,25 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       delete body.reasoning_effort;
     }
 
-    applyGpt6AstraRequestRules(body, capabilityModelName, 'chat');
+    if (gpt6Variant) {
+      if (renderedReasoningEffort === undefined) {
+        delete body.reasoning_effort;
+      } else {
+        body.reasoning_effort = renderedReasoningEffort;
+      }
+    }
+    if (useModelDefaults) {
+      const outputCap = resolveGpt6ChatOutputCap(this.config, context?.prompt?.config, false, {
+        maxCompletionTokens: getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'),
+        maxTokens: getEnvInt('OPENAI_MAX_TOKENS'),
+      });
+      if (outputCap === undefined) {
+        delete body.max_completion_tokens;
+      } else {
+        body.max_completion_tokens = outputCap;
+      }
+    }
+    applyGpt6RequestRules(body, capabilityModelName, 'chat');
 
     return {
       body,

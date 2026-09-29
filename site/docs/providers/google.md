@@ -5,7 +5,7 @@ description: Configure Google's Gemini models with support for text, image, audi
 
 # Google AI / Gemini
 
-The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's Gemini and hosted Gemma models with support for text, image, audio, video, and PDF inputs.
+The `google` provider calls Gemini and hosted Gemma models through Google AI Studio. Depending on the model, inputs can include text, images, audio, video, and PDFs.
 
 If you are using Vertex AI instead of Google AI Studio, see the [`vertex` provider](/docs/providers/vertex).
 
@@ -112,7 +112,6 @@ Create a simple `promptfooconfig.yaml`:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-# promptfooconfig.yaml
 providers:
   - google:gemini-3.8-flash
 
@@ -134,12 +133,11 @@ promptfoo eval
 
 ### 2. Comparing Models
 
-Compare different Gemini models:
+Compare Gemini and Gemma models:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - google:gemini-2.5-flash
   - google:gemma-4-31b-it
   - google:gemini-3.8-flash
   - google:gemini-2.5-pro
@@ -206,9 +204,8 @@ export GOOGLE_API_KEY="your_api_key_here"
 
 - Add delays between requests:
   ```yaml
-  # promptfooconfig.yaml
   evaluateOptions:
-    delay: 1000 # 1 second delay between API calls
+  delay: 1000 # 1 second delay between API calls
   ```
 - Upgrade your API quota in Google AI Studio
 - Use a lower rate tier model like `gemini-2.5-flash-lite`
@@ -268,7 +265,9 @@ Example migration:
 # Before (Google AI Studio)
 providers:
   - google:gemini-2.5-pro
+```
 
+```yaml
 # After (Vertex AI)
 providers:
   - id: vertex:gemini-2.5-pro
@@ -298,13 +297,13 @@ Lyria music generation is not currently supported by promptfoo's Google provider
 - `google:gemini-3.1-pro-preview-customtools` - Gemini 3.1 Pro preview variant for custom tools with the same pricing as Gemini 3.1 Pro
 - `google:gemini-3.1-flash-lite` - Gemini 3.1 Flash-Lite GA model optimized for high-volume, low-latency tasks ($0.25/1M text/image/video input, $1.50/1M output)
 - `google:live:gemini-3.1-flash-live-preview` - Gemini 3.1 Flash Live preview for real-time multimodal interactions ($0.75/1M text input, $1/1M image input, $0.002/minute video input, $4.50/1M text output, $3/1M audio input, $12/1M audio output)
-- `google:gemini-robotics-er-2-preview` - Gemini Robotics ER 2 through the Interactions API ($2/1M input, $10/1M output, $0.20/1M cached input)
-- `google:live:gemini-robotics-er-2-streaming-preview` - Gemini Robotics ER 2 Streaming through the Live API ($2/1M input, $10/1M text output)
+- `google:live:gemini-3.8-live` - Gemini 3.8 Live for low-latency voice dialogue, with the same Live API pricing as 3.1 Flash Live
+- `google:live:gemini-3.8-live-extended-thinking` - Gemini 3.8 Live with background reasoning and asynchronous tools, with the same Live API pricing as 3.1 Flash Live
 - `google:gemini-3-flash-preview` - Gemini 3.0 Flash preview with frontier intelligence, Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities
 - `google:gemini-2.5-flash-lite` - Cost-efficient Gemini 2.5 model optimized for high-volume, latency-sensitive tasks
-- `google:gemini-3.1-flash-tts-preview` - Current Gemini text-to-speech preview ($1/1M text input, $20/1M audio output)
+- `google:gemini-3.1-flash-tts-preview` - Gemini text-to-speech preview ($1/1M text input, $20/1M audio output)
 - `google:gemini-2.5-pro-preview-tts` - Gemini 2.5 Pro text-to-speech model for high-fidelity audio generation
 - `google:gemini-2.5-flash-preview-tts` - Gemini 2.5 Flash text-to-speech model for low-latency audio generation
 - `google:gemini-pro-latest` - Google-maintained alias for the latest Gemini Pro release (currently Gemini 3.1 Pro pricing)
@@ -348,16 +347,16 @@ Google provides [Gemini 3.8 Flash Cyber through the Fairwind Program](https://de
 
 :::note Gemini 2.5 lifecycle
 
-Google has not announced shutdown dates for the stable Gemini API models `gemini-2.5-pro`,
-`gemini-2.5-flash`, and `gemini-2.5-flash-lite`. Check the [Gemini API lifecycle](https://ai.google.dev/gemini-api/docs/deprecations)
+Google has not announced shutdown dates for `gemini-2.5-pro`, `gemini-2.5-flash`, or
+`gemini-2.5-flash-lite`, but access is limited to existing users. Check the [Gemini API lifecycle](https://ai.google.dev/gemini-api/docs/deprecations)
 for updates and the separate [Vertex AI model lifecycle](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions)
 for Vertex deployments.
 
 :::
 
-Google has deprecated both Gemini 2.5 TTS preview models and recommends
-`gemini-3.1-flash-tts-preview` as their replacement. See Google's
-[model lifecycle page](https://ai.google.dev/gemini-api/docs/deprecations) for shutdown dates.
+Google recommends `gemini-3.8-flash-tts` or `gemini-3.8-flash-lite-tts` for new TTS work.
+The 2.5 and 3.1 TTS previews have no announced shutdown dates; check the
+[model lifecycle page](https://ai.google.dev/gemini-api/docs/deprecations) before selecting one.
 
 This list describes current endpoints. Promptfoo may retain pricing for retired model IDs so saved
 evaluations can still be scored; historical pricing data does not mean that Google still serves an
@@ -382,7 +381,7 @@ Use the `google:embedding:` prefix (or the plural `google:embeddings:` alias) to
 
 - `google:embedding:gemini-embedding-2` - Recommended current Gemini API model. Multimodal upstream, with up to 8,192 text tokens and 3,072 output dimensions
 - `google:embedding:gemini-embedding-001` - Supported text-only model, with up to 2,048 input tokens and 3,072 output dimensions; scheduled to shut down May 14, 2028
-- `google:embedding:embedding-2-preview` - Deprecated preview ($0.20/1M input tokens); scheduled to shut down August 10, 2026 in favor of `gemini-embedding-2`
+- `google:embedding:embedding-2-preview` - Retired preview; use `gemini-embedding-2` for new work
 
 Embedding options depend on the model (see Google's [embedding guide](https://ai.google.dev/gemini-api/docs/embeddings)):
 
@@ -558,7 +557,7 @@ input is $0.20/1M; batch processing is $1/1M input, $5/1M output, and $0.10/1M c
 streaming endpoint costs $2/1M input and $10/1M output and does not support caching or batch.
 
 :::warning
-Google will shut down `gemini-robotics-er-1.6-preview` on August 31, 2026. Replace it with
+Google retired `gemini-robotics-er-1.6-preview` on August 31, 2026. Replace it with
 `gemini-robotics-er-2-preview`, or use `google:live:gemini-robotics-er-2-streaming-preview` for
 low-latency streaming. `gemini-robotics-er-1.5-preview` shut down on April 30, 2026.
 :::
@@ -903,14 +902,12 @@ Configure system-level instructions for the model:
 providers:
   - id: google:gemini-2.5-pro
     config:
-      # Direct text
       systemInstruction: 'You are a helpful assistant'
-
-      # Or load from file
-      systemInstruction: file://system-instruction.txt
+      # To load from a file instead, use:
+      # systemInstruction: file://system-instruction.txt
 ```
 
-System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability.
+System instructions support Nunjucks templates and can be loaded from a file.
 
 ### Role Mapping Configuration
 
@@ -1318,7 +1315,7 @@ When using Search grounding, the API response includes additional metadata:
 - Search will only be performed when the model determines it's necessary
 - **Important**: Per Google's requirements, applications using Search grounding must display Google Search Suggestions included in the API response metadata
 
-For more details, see the [Google AI Studio documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).
+For more details, see the [Google AI Studio documentation on Grounding with Google Search](https://ai.google.dev/gemini-api/docs/google-search).
 
 ### Maps Grounding
 
@@ -1428,7 +1425,15 @@ For complete working examples of the search grounding, code execution, and url c
 
 ## Google Live API
 
-Promptfoo supports Google's WebSocket-based Live API, which enables low-latency bidirectional voice and video interactions with Gemini models. This API provides real-time interactive capabilities beyond what's available in the standard REST API.
+Promptfoo supports voice and video conversations through Google's WebSocket-based Live API.
+
+`google:live:` connects to the Gemini API, even when authenticating with OAuth. For Google Cloud project/location routing, use the separate [`vertex:live:` provider](/docs/providers/vertex#live-api).
+
+Live authentication prefers `config.apiKey`, then explicit `config.credentials`, then `GOOGLE_API_KEY` / `GEMINI_API_KEY`, and finally ADC. A Cloud-only ADC login does not override a Gemini API key; ADC used without a key must have the required Gemini API scopes.
+
+Use `google:live:gemini-3.8-live` for low-latency dialogue or `google:live:gemini-3.8-live-extended-thinking` for background reasoning. Both default to the `v1alpha` endpoint, audio output, and output transcription (`output.text`), and accept `GOOGLE_API_KEY` or `GEMINI_API_KEY`. Text response modality requests are converted to audio with transcription and billed at audio rates.
+
+Extended Thinking accepts `generationConfig.thinkingConfig.thinkingLevel: LOW` (default), `MEDIUM`, or `HIGH`. Promptfoo sets function declarations to `behavior: NON_BLOCKING` and waits for `interactionStatus: IDLE` before advancing the conversation or returning a result; intermediate spoken updates are included in the transcript. Blocking tools are rejected. The standard 3.8 Live model does not accept `thinkingConfig`; neither model accepts `enableAffectiveDialog` or disabled proactive audio. Finite PCM audio inputs use explicit activity boundaries instead of automatic voice activity detection. See [Google's migration guide](https://ai.google.dev/gemini-api/docs/live-api/thinking) and the [Gemini 3.8 example](https://github.com/promptfoo/promptfoo/blob/main/examples/google-live/promptfooconfig.yaml).
 
 ### Using the Live Provider
 
@@ -1545,6 +1550,8 @@ Where `tools.json` contains function declarations and built-in tools:
 ]
 ```
 
+Tools accept both `functionDeclarations` and `function_declarations`. If both aliases define the same function name anywhere in the tools list, `functionDeclarations` takes precedence. For repeated names using the same spelling, the first declaration wins. Distinct functions and built-in tools are retained; entries containing only discarded duplicates are omitted.
+
 ### Built-in Tools
 
 The Google Live API model supports built-in Google Search:
@@ -1595,15 +1602,12 @@ Other configuration options are available, such as setting proactive audio, sett
 Try the examples:
 
 ```sh
-# Initialize the basic text-only and function calling/tools examples
+# Initialize the Gemini 3.8 Live comparison
 promptfoo init --example google-live
 cd google-live
 
-# Basic text-only example
-promptfoo eval -c promptfooconfig.yaml -j 3
-
-# Function calling and tools example
-promptfoo eval -c promptfooconfig.tools.yaml -j 3
+# Grade both models' spoken-response transcripts
+promptfoo eval -c promptfooconfig.yaml --no-cache -j 1
 
 # Audio generation example
 cd ..

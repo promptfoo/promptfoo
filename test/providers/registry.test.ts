@@ -3,6 +3,7 @@ import path from 'path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadApiProvider } from '../../src/providers';
 import { isFoundationModelProvider } from '../../src/providers/constants';
+import { GolangProvider } from '../../src/providers/golangCompletion';
 import { LlamaApiProvider } from '../../src/providers/llamaApi';
 import { MCPProvider } from '../../src/providers/mcp';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
@@ -11,6 +12,7 @@ import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 import { OpenAiTtsProvider } from '../../src/providers/openai/tts';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
+import { ScriptCompletionProvider } from '../../src/providers/scriptCompletion';
 
 import type { CometApiImageProvider } from '../../src/providers/cometapi';
 import type { LoadApiProviderContext } from '../../src/types/index';
@@ -66,6 +68,27 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
+  it.each(['openai:agents-api', 'openai:agents-api:gpt-6-astra'])(
+    'routes %s to the hosted Agents API with scoped credentials',
+    async (providerPath) => {
+      const factories = await getProviderFactories(providerPath);
+      const factory = factories.find((entry) => entry.test(providerPath))!;
+      const provider = await factory.create(
+        providerPath,
+        { id: 'hosted-agent', config: { agent_id: 'agent_saved' } },
+        { basePath: '.', options: {}, env: { OPENAI_API_KEY: 'scoped-key' } },
+      );
+      expect(provider.constructor.name).toBe('OpenAiAgentsApiProvider');
+      expect(provider.id()).toBe('hosted-agent');
+      expect(provider).toHaveProperty('env.OPENAI_API_KEY', 'scoped-key');
+      expect(provider).toHaveProperty('config.agent_id', 'agent_saved');
+      expect(provider).toHaveProperty(
+        'modelName',
+        providerPath.endsWith('gpt-6-astra') ? 'gpt-6-astra' : '',
+      );
+    },
+  );
+
   it.each([undefined, 'configured-opencode'])('preserves OpenCode provider ID %s', async (id) => {
     const providerPath = 'opencode:sdk';
     const factory = providerMap.find((entry) => entry.test(providerPath))!;
@@ -124,6 +147,99 @@ describe('Provider Registry', () => {
     expect(provider).toHaveProperty('modelName', 'gpt-4o-mini-realtime-preview-2024-12-17');
     expect(provider.id()).toBe('realtime-fixture');
     expect(provider).toHaveProperty('config.apiBaseUrl', 'http://localhost:1234/v1');
+  });
+
+  it.each([
+    ['openai:live:gpt-live-1', 'gpt-live-1'],
+    ['openai:live', 'gpt-live-1'],
+    ['openai:gpt-live-1', 'gpt-live-1'],
+    ['openai:gpt-live-1-2026-09-01', 'gpt-live-1-2026-09-01'],
+  ])(
+    'routes %s to the Live endpoint with scoped configuration',
+    async (providerPath, modelName) => {
+      const factories = await getProviderFactories(providerPath);
+      const factory = factories.find((entry) => entry.test(providerPath));
+      const provider = await factory!.create(
+        providerPath,
+        {
+          id: 'live-fixture',
+          config: { audio: { output: { voice: 'quartz' } } },
+          env: { OPENAI_API_KEY: 'provider-key' },
+        },
+        { basePath: '.', options: {}, env: { OPENAI_API_KEY: 'suite-key' } },
+      );
+      expect(provider.constructor.name).toBe('OpenAiLiveProvider');
+      expect(provider.id()).toBe('live-fixture');
+      expect(provider).toHaveProperty('modelName', modelName);
+      expect(provider).toHaveProperty('config.audio.output.voice', 'quartz');
+      expect(provider).toHaveProperty('env.OPENAI_API_KEY', 'provider-key');
+    },
+  );
+
+  it.each([
+    'openai:gpt-live-transcribe',
+    'openai:gpt-live-transcribe-2026-09-01',
+    'openai:live:gpt-live-transcribe',
+    'openai:live:gpt-live-transcribe-2026-09-01',
+    'openai:transcription:gpt-live-transcribe',
+    'openai:transcription:gpt-live-transcribe-2026-09-01',
+    'openai:realtime:gpt-live-transcribe',
+    'openai:chat:gpt-live-transcribe',
+    'openai:responses:gpt-live-transcribe',
+  ])('rejects unsupported Live transcription on route %s', async (providerPath) => {
+    const factories = await getProviderFactories(providerPath);
+    const factory = factories.find((entry) => entry.test(providerPath));
+    await expect(factory!.create(providerPath, {}, { basePath: '.', options: {} })).rejects.toThrow(
+      'transcription session',
+    );
+  });
+
+  it.each(['openai:gpt-live-transcribe', 'openai:gpt-live-transcribe-2026-09-01'])(
+    'rejects transcription shorthand despite a model override for %s',
+    async (providerPath) => {
+      const factories = await getProviderFactories(providerPath);
+      const factory = factories.find((entry) => entry.test(providerPath));
+      await expect(
+        factory!.create(
+          providerPath,
+          { config: { model: 'gpt-live-1' } },
+          { basePath: '.', options: {} },
+        ),
+      ).rejects.toThrow('transcription session');
+    },
+  );
+
+  it('rejects transcription in a passthrough model override', async () => {
+    const factories = await getProviderFactories('openai:chat:gpt-4o');
+    const factory = factories.find((entry) => entry.test('openai:chat:gpt-4o'));
+    await expect(
+      factory!.create(
+        'openai:chat:gpt-4o',
+        { config: { passthrough: { model: 'gpt-live-transcribe' } } },
+        { basePath: '.', options: {} },
+      ),
+    ).rejects.toThrow('transcription session');
+  });
+
+  it.each([
+    'azure:live:gpt-live-1',
+    'azureopenai:live:gpt-live-1',
+    'openai:realtime:gpt-live-1',
+    'openai:realtime:gpt-live-1-2026-09-01',
+    'openai:chat:gpt-live-1',
+    'openai:chat:gpt-live-1-2026-09-01',
+    'openai:responses:gpt-live-1',
+    'openai:responses:gpt-live-1-2026-09-01',
+    'openai:completion:gpt-live-1',
+    'openai:embedding:gpt-live-1',
+    'openai:tts:gpt-live-1',
+    'openai:image:gpt-live-1',
+  ])('rejects the incompatible Live route %s', async (providerPath) => {
+    const factories = await getProviderFactories(providerPath);
+    const factory = factories.find((entry) => entry.test(providerPath));
+    await expect(factory!.create(providerPath, {}, { basePath: '.', options: {} })).rejects.toThrow(
+      'openai:live:',
+    );
   });
 
   it.each([
@@ -407,11 +523,11 @@ describe('Provider Registry', () => {
       it.each([
         ['chat', OpenAiChatCompletionProvider],
         ['responses', OpenAiResponsesProvider],
-      ])('uses Terra when openai:%s omits a model', async (endpoint, Provider) => {
+      ])('uses GPT-6 Sol when openai:%s omits a model', async (endpoint, Provider) => {
         const provider = await registry.create(`openai:${endpoint}`);
 
         expect(provider).toBeInstanceOf(Provider);
-        expect(provider).toHaveProperty('modelName', 'gpt-5.6-terra');
+        expect(provider).toHaveProperty('modelName', 'gpt-6-sol');
       });
 
       it.each([
@@ -425,6 +541,8 @@ describe('Provider Registry', () => {
         'gpt-5.10',
         'gpt-6',
         'gpt-6-astra',
+        'gpt-6-sol',
+        'gpt-6-luna',
         'gpt-6-astra-2026-09-01',
         'gpt-6.1',
         'gpt-7-mini',
@@ -436,7 +554,7 @@ describe('Provider Registry', () => {
         expect(provider.id()).toBe(`openai:${model}`);
       });
 
-      it.each(['gpt-5.6', 'gpt-5.6-luna', 'gpt-6-astra', 'gpt-7-mini'])(
+      it.each(['gpt-5.6', 'gpt-5.6-luna', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-7-mini'])(
         'honors the explicit Chat endpoint for %s',
         async (model) => {
           const provider = await registry.create(`openai:chat:${model}`);
@@ -802,6 +920,61 @@ describe('Provider Registry', () => {
 
       const provider = await factory!.create(path, redteamConfig, mockContext);
       expect(provider.id()).toBe(path);
+    });
+
+    it.each([
+      ['ai21:jamba:custom:v2', 'AI21ChatCompletionProvider', 'jamba:custom:v2'],
+      ['voyage:custom:model:v2', 'VoyageEmbeddingProvider', 'custom:model:v2'],
+      [
+        'anthropic:messages:anthropic.claude-3-5-sonnet-20241022-v2:0',
+        'AnthropicMessagesProvider',
+        'anthropic.claude-3-5-sonnet-20241022-v2:0',
+      ],
+      ['anthropic:completion:claude-2:custom', 'AnthropicCompletionProvider', 'claude-2:custom'],
+      [
+        'anthropic:claude-sonnet-4-6:custom',
+        'AnthropicMessagesProvider',
+        'claude-sonnet-4-6:custom',
+      ],
+      ['anthropic:claude-2.1:custom', 'AnthropicCompletionProvider', 'claude-2.1:custom'],
+    ])('preserves the model suffix and provider type for %s', async (path, type, modelName) => {
+      const provider = await loadApiProvider(path, { options: { config: { apiKey: 'test-key' } } });
+      expect(provider.constructor.name).toBe(type);
+      expect(provider).toHaveProperty('modelName', modelName);
+      expect(provider.id()).toContain(modelName);
+    });
+
+    it('preserves the full Promptfoo-hosted model ID', async () => {
+      const path = 'promptfoo:model:custom:model:v2';
+      const provider = await loadApiProvider(path);
+      expect(provider.id()).toBe(path);
+    });
+
+    it.each(['anthropic:messages', 'anthropic:messages:'])(
+      'reports a missing model for %s without sending a request',
+      async (path) => {
+        const provider = await loadApiProvider(path, {
+          options: { config: { apiKey: 'test-key' } },
+        });
+        await expect(provider.callApi('hello')).rejects.toThrow('Anthropic model name is not set');
+      },
+    );
+
+    it.each(['azure', 'azureopenai'])('preserves %s deployment suffixes', async (prefix) => {
+      for (const type of [
+        'chat',
+        'completion',
+        'embedding',
+        'embeddings',
+        'responses',
+        'realtime',
+        'video',
+      ]) {
+        const provider = await loadApiProvider(`${prefix}:${type}:deployment:custom:v2`, {
+          options: { config: { apiKey: 'test-key' } },
+        });
+        expect(provider).toHaveProperty('deploymentName', 'deployment:custom:v2');
+      }
     });
 
     it('should handle anthropic providers correctly', async () => {
@@ -1493,15 +1666,14 @@ describe('Provider Registry', () => {
     });
 
     it('should handle bedrock converse providers correctly', async () => {
-      const factories = await getProviderFactories('bedrock:converse:anthropic.claude-v2');
-      const factory = factories.find((f) => f.test('bedrock:converse:anthropic.claude-v2'));
+      // Uses a model AWS still serves: the converse route now rejects retired ids, and the
+      // previous fixture (`anthropic.claude-v2`) is one of them.
+      const path = 'bedrock:converse:anthropic.claude-sonnet-4-6';
+      const factories = await getProviderFactories(path);
+      const factory = factories.find((f) => f.test(path));
       expect(factory).toBeDefined();
 
-      const provider = await factory!.create(
-        'bedrock:converse:anthropic.claude-v2',
-        mockProviderOptions,
-        mockContext,
-      );
+      const provider = await factory!.create(path, mockProviderOptions, mockContext);
       expect(provider.constructor.name).toBe('AwsBedrockConverseProvider');
     });
 
@@ -1517,6 +1689,25 @@ describe('Provider Registry', () => {
         mockContext,
       );
       expect(provider.constructor.name).toBe('BedrockMantleChatProvider');
+    });
+
+    it('should handle explicit bedrock Responses providers correctly', async () => {
+      const path = 'bedrock:responses:openai.gpt-oss-120b';
+      const factories = await getProviderFactories(path);
+      const factory = factories.find((f) => f.test(path));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        path,
+        {
+          ...mockProviderOptions,
+          id: undefined,
+          config: { apiKey: 'bedrock-key', region: 'us-east-1' },
+        },
+        mockContext,
+      );
+      expect(provider.constructor.name).toBe('BedrockGptOssResponsesProvider');
+      expect(provider.id()).toBe(path);
     });
 
     it('should handle bedrock-agent providers correctly', async () => {
@@ -1598,7 +1789,16 @@ describe('Provider Registry', () => {
       ['sagemaker:endpoint-name', 'SageMakerCompletionProvider', { modelType: 'custom' }, 'custom'],
       ['sagemaker:jumpstart:endpoint-name', 'SageMakerCompletionProvider', {}, 'jumpstart'],
       ['sagemaker:openai:endpoint-name', 'SageMakerCompletionProvider', {}, 'openai'],
-      ['sagemaker:custom:my-jumpstart-endpoint', 'SageMakerCompletionProvider', {}, 'jumpstart'],
+      // An explicit model type wins over an endpoint name containing 'jumpstart'. This
+      // previously resolved to 'jumpstart', silently discarding what the user asked for.
+      ['sagemaker:custom:my-jumpstart-endpoint', 'SageMakerCompletionProvider', {}, 'custom'],
+      [
+        'sagemaker:huggingface:my-jumpstart-endpoint',
+        'SageMakerCompletionProvider',
+        {},
+        'huggingface',
+      ],
+      ['sagemaker:jumpstart:my-jumpstart-endpoint', 'SageMakerCompletionProvider', {}, 'jumpstart'],
     ])(
       'should handle %s providers correctly',
       async (path, expectedProviderName, config, expectedModelType) => {
@@ -1826,30 +2026,34 @@ describe('Provider Registry', () => {
     });
 
     it('should preserve absolute paths in file-based providers', async () => {
-      // Create a simple integration test that verifies the factory functionality
-      // exists but doesn't attempt detailed mocking of the provider internals
-
-      // Create an absolute path that would pass path.isAbsolute() check
       const absoluteGolangPath = path.resolve('/absolute/path/golang-script.go');
       const absolutePythonPath = path.resolve('/absolute/path/python-script.py');
       const absoluteExecPath = path.resolve('/absolute/path/exec-script.sh');
 
-      // Find the correct factories
       const golangFactory = providerMap.find((f) => f.test(`golang:${absoluteGolangPath}`));
       const pythonFactory = providerMap.find((f) => f.test(`python:${absolutePythonPath}`));
       const fileFactory = providerMap.find((f) => f.test(`file://${absolutePythonPath}`));
       const execFactory = providerMap.find((f) => f.test(`exec:${absoluteExecPath}`));
 
-      // Verify factories exist
       expect(golangFactory).toBeDefined();
       expect(pythonFactory).toBeDefined();
       expect(fileFactory).toBeDefined();
       expect(execFactory).toBeDefined();
 
-      // Note: We're not testing the actual mocked implementations here,
-      // just verifying that the factories exist and can be found for absolute paths.
-      // The actual path resolution logic (path.isAbsolute check) is identical in all providers
-      // and is already covered by the implementation in registry.ts.
+      await golangFactory!.create(`golang:${absoluteGolangPath}`, mockProviderOptions, mockContext);
+      expect(GolangProvider).toHaveBeenLastCalledWith(absoluteGolangPath, mockProviderOptions);
+
+      await pythonFactory!.create(`python:${absolutePythonPath}`, mockProviderOptions, mockContext);
+      expect(PythonProvider).toHaveBeenLastCalledWith(absolutePythonPath, mockProviderOptions);
+
+      await fileFactory!.create(`file://${absolutePythonPath}`, mockProviderOptions, mockContext);
+      expect(PythonProvider).toHaveBeenLastCalledWith(absolutePythonPath, mockProviderOptions);
+
+      await execFactory!.create(`exec:${absoluteExecPath}`, mockProviderOptions, mockContext);
+      expect(ScriptCompletionProvider).toHaveBeenLastCalledWith(
+        absoluteExecPath,
+        mockProviderOptions,
+      );
     });
 
     it('should handle helicone provider correctly', async () => {
@@ -2058,9 +2262,42 @@ describe('Provider Registry', () => {
       options: bareOptions,
     };
 
+    it('rejects a Vertex Live route without a model', async () => {
+      const factory = (await getProviderFactories('vertex:live:')).find((f) =>
+        f.test('vertex:live:'),
+      );
+      await expect(factory!.create('vertex:live:', bareOptions, bareContext)).rejects.toThrow(
+        'Missing model name',
+      );
+    });
+
     it.each([
       [
+        'vertex:live:gemini-live-2.5-flash-native-audio',
+        async () => (await import('../../src/providers/google/vertexLive')).VertexLiveProvider,
+      ],
+      [
+        'vertex:live:gemini-3.8-live',
+        async () => (await import('../../src/providers/google/vertexLive')).VertexLiveProvider,
+      ],
+      [
+        'vertex:live:gemini-3.8-live-extended-thinking',
+        async () => (await import('../../src/providers/google/vertexLive')).VertexLiveProvider,
+      ],
+      [
         'google:live:gemini-live-2.5-flash-preview',
+        async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
+      ],
+      [
+        'palm:live:gemini-3.8-live',
+        async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
+      ],
+      [
+        'google:live:gemini-3.8-live',
+        async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
+      ],
+      [
+        'google:live:gemini-3.8-live-extended-thinking',
         async () => (await import('../../src/providers/google/live')).GoogleLiveProvider,
       ],
       [
@@ -2288,19 +2525,16 @@ describe('Provider Registry', () => {
     it.each([
       'vertex:live:gemini-robotics-er-2-streaming-preview',
       'vertex:live:gemini-3.5-live-translate-preview',
-    ])(
-      'rejects unsupported Vertex Live route %s with Google Live guidance',
-      async (providerPath) => {
-        const factory = (await getProviderFactories(providerPath)).find((f) =>
-          f.test(providerPath),
-        );
-        expect(factory).toBeDefined();
+    ])('routes Vertex Live models through the Vertex transport for %s', async (providerPath) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
 
-        await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
-          'The promptfoo vertex: adapter does not implement Vertex Live.',
-        );
-      },
-    );
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      expect(provider.id()).toBe(providerPath);
+      expect(provider.toString()).toBe(
+        `[Vertex Live Provider ${providerPath.slice('vertex:live:'.length)}]`,
+      );
+    });
 
     it.each([
       'google:video:gemini-robotics-er-2-streaming-preview',

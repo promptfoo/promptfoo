@@ -30,6 +30,22 @@ sidebar_label: GitHub Models
 
 [GitHub retired GitHub Models on July 30, 2026](https://docs.github.com/en/github-models), including the inference API. The `github:` provider now reports a retirement error, and `GITHUB_TOKEN` no longer selects a default grader. GitHub Copilot is a separate service.
 
-Choose another [provider](./index.md) and configure its endpoint, model or deployment, and credentials. Provider IDs and credentials are not interchangeable. GitHub recommends Azure AI Foundry; see the [Azure provider](./azure.md) for configuration.
-
 :::
+
+## Migrating an existing config
+
+Replace `github:` with a [provider](./index.md) that hosts the model you need. GitHub recommends
+[Microsoft Foundry](./azure.md). For Azure, create a deployment and set `AZURE_API_KEY` (or configure [Entra ID authentication](./azure.md#setup)).
+
+```yaml
+providers:
+  # Before: - id: github:openai/gpt-4o
+  - id: azure:chat:my-deployment-name
+    config:
+      apiHost: my-resource.openai.azure.com
+```
+
+## See also
+
+- [Provider Options](/docs/providers/) - Overview of all available providers
+- [GitHub Models documentation](https://docs.github.com/en/github-models) - Official retirement notice

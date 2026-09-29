@@ -43,11 +43,12 @@ export const googleProviderFactories: ProviderFactory[] = [
       const firstPart = splits[1];
       if (firstPart === 'live') {
         const modelName = splits.slice(2).join(':');
+        if (!modelName) {
+          throw new Error('Missing model name. Use vertex:live:<model>.');
+        }
         validateGoogleModelRoute(modelName, firstPart);
-        throw new Error(
-          'The promptfoo vertex: adapter does not implement Vertex Live. ' +
-            'Use google:live: only with a model supported by the native Gemini Live API and native credentials.',
-        );
+        const { VertexLiveProvider } = await import('../google/vertexLive');
+        return new VertexLiveProvider(modelName, providerOptions);
       }
       if (firstPart === 'image') {
         const modelName = splits.slice(2).join(':');

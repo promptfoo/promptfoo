@@ -38,5 +38,3 @@ tests:
             'information loss',
             'firewall',
           ]
-outputs:
-  - type: csv

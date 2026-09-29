@@ -326,6 +326,7 @@ describe('calculateAzureCost', () => {
     ['gpt-5.5', 0.5],
     ['gpt-5.5-2026-04-24', 0.5],
     ['gpt-chat-latest', 0.5],
+    ['gpt-chat-latest-2026-08-06', 0.5],
     ['gpt-chat-latest-2026-06-24', 0.5],
     ['gpt-chat-latest-2026-05-28', 0.5],
     ['gpt-chat-latest-2026-05-05', 0.5],
@@ -574,6 +575,28 @@ describe('calculateAzureCost', () => {
     },
   );
 
+  // Foundry bills Claude at Anthropic's API rates; the $0.2 cache read is 10% of a $2 input rate.
+  it('prices Claude Sonnet 5 at $2/$10 with a $0.2 cache read', () => {
+    expect(calculateAzureCost('claude-sonnet-5', {}, 1000, 500)).toBeCloseTo(
+      (1000 * 2 + 500 * 10) / 1e6,
+      12,
+    );
+    expect(calculateAzureCost('claude-sonnet-5', {}, 1000, 500, 500)).toBeCloseTo(
+      (500 * 2 + 500 * 0.2 + 500 * 10) / 1e6,
+      12,
+    );
+  });
+
+  it('calculates cached input cost for claude-opus-5-5 at $0.20 per million cache reads', () => {
+    // 500 uncached * $4 + 500 cached * $0.20 + 500 output * $20, per 1e6
+    expect(calculateAzureCost('claude-opus-5-5', {}, 1000, 500, 500)).toBeCloseTo(0.0121, 8);
+  });
+
+  it('prices claude-sonnet-5-5 at Anthropic rates with $0.20 cache reads', () => {
+    // 500 uncached * $2 + 500 cached * $0.20 + 500 output * $10, per 1e6
+    expect(calculateAzureCost('claude-sonnet-5-5', {}, 1000, 500, 500)).toBeCloseTo(0.0061, 8);
+  });
+
   it('returns undefined for unknown model', () => {
     const cost = calculateAzureCost('unknown-model', {}, 100, 50);
     expect(cost).toBeUndefined();
@@ -800,6 +823,7 @@ describe('AZURE_MODELS cost coverage', () => {
     ['gpt-5.5', 5, 30],
     ['gpt-5.5-2026-04-24', 5, 30],
     ['gpt-chat-latest', 5, 30],
+    ['gpt-chat-latest-2026-08-06', 5, 30],
     ['gpt-chat-latest-2026-06-24', 5, 30],
     ['gpt-chat-latest-2026-05-28', 5, 30],
     ['gpt-chat-latest-2026-05-05', 5, 30],

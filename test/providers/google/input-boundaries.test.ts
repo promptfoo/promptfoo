@@ -10,7 +10,6 @@ import cliState from '../../../src/cliState';
 import { runEval } from '../../../src/evaluator';
 import { renderPrompt } from '../../../src/evaluatorHelpers';
 import { loadApiProvider, loadApiProviders } from '../../../src/providers';
-import { GoogleProvider } from '../../../src/providers/google/provider';
 import { geminiFormatAndSystemInstructions } from '../../../src/providers/google/util';
 import telemetry from '../../../src/telemetry';
 import { mockProcessEnv } from '../../util/utils';
@@ -21,7 +20,7 @@ const fixtures = fileURLToPath(new URL('../../fixtures/google-media/', import.me
 const model = 'gemini-2.5-pro';
 const functionCall = { functionCall: { name: 'get_weather', args: { location: 'Boston' } } };
 const declarations = [{ name: 'get_weather' }];
-type Route = 'Studio' | 'Vertex Express' | 'standalone';
+type Route = 'Studio' | 'Vertex Express';
 
 describe('Google media and tool-policy input boundaries', () => {
   const fetchMock = vi.fn<typeof fetch>();
@@ -94,12 +93,10 @@ describe('Google media and tool-policy input boundaries', () => {
       const [provider] = await loadApiProviders([{ id: `palm:${model}`, config: options.config }]);
       return provider;
     }
-    return route === 'standalone'
-      ? new GoogleProvider(model, options)
-      : loadApiProvider(
-          `${providerPrefix ?? (route === 'Studio' ? 'google' : 'vertex')}:${model}`,
-          { options },
-        );
+    return loadApiProvider(
+      `${providerPrefix ?? (route === 'Studio' ? 'google' : 'vertex')}:${model}`,
+      { options },
+    );
   }
 
   function requestBody(route: Route, streaming = false) {
@@ -120,7 +117,7 @@ describe('Google media and tool-policy input boundaries', () => {
     return JSON.parse(options?.body as string);
   }
 
-  describe.each<Route>(['Studio', 'Vertex Express', 'standalone'])('%s', (route) => {
+  describe.each<Route>(['Studio', 'Vertex Express'])('%s', (route) => {
     it.each(
       ['object', 'array'].flatMap((form) =>
         ['willContinue', 'partialArgs'].map((field) => ({ form, field })),
@@ -480,7 +477,7 @@ export function getTools() { return { functionDeclarations: ${JSON.stringify(dec
     );
   });
 
-  describe.each<Route>(['Studio', 'Vertex Express', 'standalone'])('%s registers', (route) => {
+  describe.each<Route>(['Studio', 'Vertex Express'])('%s registers', (route) => {
     it.each([
       { brand: 'isom', replacement: 'M4A file' },
       { brand: 'mp42', replacement: 'M4A file' },

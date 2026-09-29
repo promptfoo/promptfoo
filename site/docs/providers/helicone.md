@@ -1,12 +1,11 @@
 ---
-description: Route promptfoo requests through a self-hosted Helicone AI Gateway
+title: Helicone AI Gateway
+description: Monitor and optimize LLM usage through Helicone's AI gateway with unified access, caching, and comprehensive observability
 ---
 
 # Helicone AI Gateway
 
-[Helicone AI Gateway](https://github.com/Helicone/ai-gateway) is an open-source, self-hosted
-OpenAI-compatible gateway. The Helicone provider in promptfoo routes requests through a locally
-running gateway instance.
+The Helicone provider routes Promptfoo requests through a local [Helicone AI Gateway](https://github.com/Helicone/ai-gateway), an open-source gateway with an OpenAI-compatible API.
 
 ## Benefits
 
@@ -46,11 +45,17 @@ To route requests through your local Helicone AI Gateway:
 
 ```yaml
 providers:
-  - helicone:openai/gpt-4o-mini
+  - helicone:openai/gpt-5-mini
+  - id: helicone:anthropic/claude-sonnet-5
+    config:
+      omitDefaults: true
   - helicone:groq/llama-3.1-8b-instant
 ```
 
 The model format is `provider/model` as supported by the Helicone AI Gateway.
+
+For Claude 5, `omitDefaults: true` omits Promptfoo's default `temperature: 0`.
+Leave sampling parameters unset in your config and environment; explicit values still apply.
 
 ### Custom Configuration
 
@@ -93,13 +98,22 @@ The Helicone provider uses the format: `helicone:provider/model`
 Examples:
 
 - `helicone:openai/gpt-4o`
+- `helicone:anthropic/claude-sonnet-5`
 - `helicone:groq/llama-3.1-8b-instant`
 
 ### Supported Models
 
-The self-hosted gateway validates model IDs against its bundled catalog before forwarding requests.
-Check both the [Helicone AI Gateway documentation](https://github.com/Helicone/ai-gateway) and the
-upstream provider's current catalog before pinning an ID.
+The Helicone AI Gateway supports 100+ models from various providers. Some popular examples:
+
+| Provider  | Example Models                                                    |
+| --------- | ----------------------------------------------------------------- |
+| OpenAI    | `openai/gpt-4o`, `openai/gpt-5-mini`                              |
+| Anthropic | `anthropic/claude-sonnet-5`, `anthropic/claude-haiku-4-5`         |
+| Groq      | `groq/llama-3.1-8b-instant`, `groq/llama-3.1-70b-versatile`       |
+| Meta      | `meta-llama/Llama-3-8b-chat-hf`, `meta-llama/Llama-3-70b-chat-hf` |
+| Google    | `google/gemma-7b-it`, `google/gemma-2b-it`                        |
+
+For a complete list, see the [Helicone AI Gateway documentation](https://github.com/Helicone/ai-gateway).
 
 ### Configuration Parameters
 
@@ -144,14 +158,15 @@ tests:
 
 ### Multi-Provider Comparison with Observability
 
-Configure observability on the gateway, then use a normal promptfoo config to compare its upstream
-providers:
+Configure observability on the gateway, then compare its upstream providers:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - helicone:openai/gpt-4o-mini
-  - helicone:groq/llama-3.1-8b-instant
+  - id: helicone:anthropic/claude-sonnet-5
+    config:
+      omitDefaults: true
 
 prompts:
   - 'Write a creative story about {{topic}}'

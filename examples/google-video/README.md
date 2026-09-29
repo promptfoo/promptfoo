@@ -1,6 +1,6 @@
 # google-video (Google Video)
 
-This example demonstrates Google Veo video generation models for AI-powered video creation from text prompts.
+This example generates videos from text, images, and existing Veo videos.
 
 You can run this example with:
 
@@ -103,7 +103,7 @@ because the total source duration is unknown. `metadata.videoUri` is a compatibi
 the same sanitized URI as `metadata.sourceVideoUri`. Native extension requires a 720p Veo
 source no longer than 141 seconds; arbitrary videos are outside that documented contract.
 
-Export an eval with `-o results.json` to inspect the response metadata. Veo extension adds 7 seconds; promptfoo reports `metadata.extensionSeconds` and omits the unknown total video duration.
+Export an eval with `-o results.json` to inspect the response metadata.
 
 ## Notes
 

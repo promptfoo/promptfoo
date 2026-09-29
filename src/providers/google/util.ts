@@ -1453,41 +1453,60 @@ export function normalizeGeminiAudio(output: Part[] | string | undefined) {
  *   (e.g., additionalProperties, $schema, default) that Gemini doesn't support
  */
 export function normalizeTools(tools: Tool[]): Tool[] {
-  return tools.map((tool) => {
-    const {
-      code_execution: codeExecutionAlias,
-      function_declarations: functionDeclarationsAlias,
-      google_search: googleSearchAlias,
-      google_search_retrieval: googleSearchRetrievalAlias,
-      ...canonicalTool
-    } = tool as Tool & {
-      code_execution?: Tool['codeExecution'];
-      function_declarations?: Tool['functionDeclarations'];
-      google_search?: Tool['googleSearch'];
-      google_search_retrieval?: Tool['googleSearchRetrieval'];
-    };
+  // Canonical declarations take precedence even when a legacy alias appears in
+  // an earlier tool entry. For duplicates using the same spelling, the first wins.
+  const canonicalNames = new Set(
+    tools.flatMap((tool) => tool.functionDeclarations?.map(({ name }) => name) ?? []),
+  );
+  const seenNames = new Set<string>();
+
+  return tools.flatMap((tool) => {
+    const { code_execution, google_search, google_search_retrieval, ...canonicalTool } =
+      tool as Tool & {
+        code_execution?: Tool['codeExecution'];
+        google_search?: Tool['googleSearch'];
+        google_search_retrieval?: Tool['googleSearchRetrieval'];
+      };
     const normalizedTool: Tool = { ...canonicalTool };
-
-    if (
-      normalizedTool.functionDeclarations === undefined &&
-      functionDeclarationsAlias !== undefined
-    ) {
-      normalizedTool.functionDeclarations = functionDeclarationsAlias;
+    if (normalizedTool.codeExecution === undefined && code_execution !== undefined) {
+      normalizedTool.codeExecution = code_execution;
     }
-
-    if (normalizedTool.googleSearch === undefined && googleSearchAlias !== undefined) {
-      normalizedTool.googleSearch = googleSearchAlias;
+    if (normalizedTool.googleSearch === undefined && google_search !== undefined) {
+      normalizedTool.googleSearch = google_search;
     }
-
-    if (normalizedTool.codeExecution === undefined && codeExecutionAlias !== undefined) {
-      normalizedTool.codeExecution = codeExecutionAlias;
-    }
-
     if (
       normalizedTool.googleSearchRetrieval === undefined &&
-      googleSearchRetrievalAlias !== undefined
+      google_search_retrieval !== undefined
     ) {
-      normalizedTool.googleSearchRetrieval = googleSearchRetrievalAlias;
+      normalizedTool.googleSearchRetrieval = google_search_retrieval;
+    }
+
+    // Normalize declarations before sanitizing their schemas. Merge both aliases
+    // without mutating the caller's tools or retaining duplicate wire fields.
+    if (tool.functionDeclarations || tool.function_declarations) {
+      normalizedTool.functionDeclarations = [
+        ...(tool.functionDeclarations ?? []),
+        ...(tool.function_declarations ?? []).filter(({ name }) => !canonicalNames.has(name)),
+      ].filter(({ name }) => {
+        if (seenNames.has(name)) {
+          return false;
+        }
+        seenNames.add(name);
+        return true;
+      });
+      delete normalizedTool.function_declarations;
+
+      // Removing duplicates must not leave an empty function tool on the wire.
+      // Keep any built-in tools sharing the entry, and leave existing empty inputs alone.
+      if (
+        normalizedTool.functionDeclarations.length === 0 &&
+        (tool.functionDeclarations?.length || tool.function_declarations?.length)
+      ) {
+        delete normalizedTool.functionDeclarations;
+        if (Object.keys(normalizedTool).length === 0) {
+          return [];
+        }
+      }
     }
 
     // Sanitize function declarations to remove unsupported schema properties
@@ -1499,7 +1518,7 @@ export function normalizeTools(tools: Tool[]): Tool[] {
       }));
     }
 
-    return normalizedTool;
+    return [normalizedTool];
   });
 }
 
@@ -2126,10 +2145,9 @@ export function validateFunctionCall(
     // Parse function call and validate it against schema
     const functionName = functionCall.name;
     const functionArgs = parseStringObject(functionCall.args);
-    const functionDeclarations = interpolatedFunctions?.find((f) => 'functionDeclarations' in f);
-    const functionSchema = functionDeclarations?.functionDeclarations?.find(
-      (f) => f.name === functionName,
-    );
+    const functionSchema = interpolatedFunctions
+      ?.flatMap((tool) => tool.functionDeclarations ?? [])
+      .find((declaration) => declaration.name === functionName);
     if (!functionSchema) {
       throw new Error(`Called "${functionName}", but there is no function with that name`);
     }

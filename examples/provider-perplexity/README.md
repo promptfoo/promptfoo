@@ -1,6 +1,6 @@
 # provider-perplexity (Perplexity API Examples)
 
-This example demonstrates how to use Perplexity's search-augmented chat models to get up-to-date answers with citations, structured outputs, and specialized reasoning.
+Compare Perplexity search models, validate structured JSON responses, and configure search filters.
 
 You can run this example with:
 
@@ -16,7 +16,6 @@ cd provider-perplexity
 - Structured outputs with JSON Schema
 - Date-range and location-based search filtering
 - Search domain filtering for trusted sources
-- Chain of thought (CoT) reasoning
 - Deep research capabilities
 
 ## Environment Variables
@@ -73,8 +72,8 @@ npx promptfoo@latest eval -c promptfooconfig.search-filters.yaml
 
 Demonstrates specialized models for research and reasoning:
 
-- `sonar-deep-research`: Comprehensive research model
-- `sonar-reasoning-pro`: Advanced reasoning with Chain of Thought
+- `sonar-deep-research`: Research across multiple sources
+- `sonar-reasoning-pro`: Reasoning with web search
 
 ```bash
 npx promptfoo@latest eval -c promptfooconfig.research-reasoning.yaml
@@ -89,14 +88,3 @@ cd provider-perplexity
 npx promptfoo@latest eval -c <config-file.yaml>
 npx promptfoo@latest view
 ```
-
-## What You'll Learn
-
-These examples will show you how to:
-
-- Use different Perplexity models for specific tasks
-- Control search parameters for better results
-- Get structured outputs in specific formats
-- Utilize location and date-based filtering
-- Leverage specialized research and reasoning capabilities
-- Compare search-augmented models with traditional models

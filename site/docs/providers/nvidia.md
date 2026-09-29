@@ -28,7 +28,7 @@ NVIDIA_API_KEY=your_api_key_here
 2. Open any model card (for example, [Llama 3.3 70B Instruct](https://build.nvidia.com/meta/llama-3_3-70b-instruct)).
 3. Click **Get API Key**. The key starts with `nvapi-`.
 
-NVIDIA's developer program grants a recurring allowance of free request credits per account, which is usually enough for prompt iteration and small evals before any paid usage is needed. Credit limits and pricing are documented at [build.nvidia.com](https://build.nvidia.com); check there for what is in effect rather than assuming the value listed in any blog post.
+Check your account at [build.nvidia.com](https://build.nvidia.com) for available credits and usage limits before running an eval.
 
 ## Configuration
 
@@ -40,6 +40,8 @@ providers:
   - nvidia:qwen/qwen2.5-coder-32b-instruct
   - nvidia:nvidia/nemotron-3-super-120b-a12b
 ```
+
+Use `nvidia:<model>` without a subtype. `nvidia:chat:<model>`, `nvidia:embedding:<model>`, and other subtype forms are rejected.
 
 Standard OpenAI-compatible parameters are passed through:
 
@@ -61,6 +63,14 @@ providers:
     config:
       apiBaseUrl: https://your-proxy.example.com/nvidia/v1
       apiKeyEnvar: CUSTOM_NVIDIA_KEY
+```
+
+`NVIDIA_API_BASE_URL` applies the same override to every NVIDIA provider without editing each
+config. A `config.apiBaseUrl` takes precedence over it, and both take precedence over the default
+`https://integrate.api.nvidia.com/v1`.
+
+```bash
+export NVIDIA_API_BASE_URL=https://your-proxy.example.com/nvidia/v1
 ```
 
 ## A few common models

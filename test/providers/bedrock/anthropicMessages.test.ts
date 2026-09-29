@@ -9,8 +9,8 @@ import {
   BedrockAnthropicMessagesProvider,
   createBedrockAnthropicMessagesProvider,
   getBedrockAnthropicBaseUrl,
-  isBedrockAnthropicMessagesModel,
 } from '../../../src/providers/bedrock/anthropicMessages';
+import { isBedrockAnthropicMessagesModel } from '../../../src/providers/bedrock/routing';
 import { mockProcessEnv } from '../../util/utils';
 import type Anthropic from '@anthropic-ai/sdk';
 
@@ -70,12 +70,12 @@ describe('Bedrock Anthropic Messages provider', () => {
         },
       } as Anthropic.Messages.Message);
       const first = await provider.callApi('hosting cost');
-      const cached = await provider.callApi('hosting cost');
+      const repeated = await provider.callApi('hosting cost');
       expect(first.error).toBeUndefined();
       expect(first.cost).toBeCloseTo(expected, 12);
-      expect(cached.cost).toBeCloseTo(expected, 12);
-      expect(cached.cached).toBe(true);
-      expect(create).toHaveBeenCalledTimes(1);
+      expect(repeated.cost).toBeCloseTo(expected, 12);
+      expect(repeated.cached).not.toBe(true);
+      expect(create).toHaveBeenCalledTimes(2);
       expect(create.mock.calls[0]?.[0].model).toBe(overrideModel ?? 'anthropic.claude-opus-4-8');
       const zero = await provider.callApi('explicit pricing', {
         vars: {},
@@ -187,13 +187,13 @@ describe('Bedrock Anthropic Messages provider', () => {
     expect(() => getBedrockAnthropicBaseUrl('evil.example/x', true)).toThrow(/Invalid AWS region/);
   });
 
-  it('requires a Bedrock API key', () => {
+  it('defers AWS credential resolution when no Bedrock API key is configured', () => {
     restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     expect(() =>
       createBedrockAnthropicMessagesProvider('anthropic.claude-fable-5', {
         config: { region: 'us-east-1' },
       }),
-    ).toThrow(/AWS_BEARER_TOKEN_BEDROCK/);
+    ).not.toThrow();
   });
 
   it('restricts Mythos to us-east-1', () => {
@@ -280,7 +280,7 @@ describe('Bedrock Anthropic Messages provider', () => {
     expect(provider).toBeInstanceOf(BedrockAnthropicMessagesProvider);
     expect(provider['getGenAISystem']()).toBe('bedrock');
     expect(provider.apiKey).toBe('override-key');
-    expect(provider.anthropic.apiKey).toBe('override-key');
+    expect(provider.anthropic.apiKey).toBeNull();
     expect(provider.anthropic.authToken).toBeNull();
     expect(provider.getApiBaseUrl()).toBe('https://bedrock-mantle.eu-north-1.api.aws/anthropic');
 
@@ -297,7 +297,8 @@ describe('Bedrock Anthropic Messages provider', () => {
       path: '/v1/messages',
       body: { model: 'anthropic.claude-fable-5', max_tokens: 1, messages: [] },
     });
-    expect(req.headers.get('x-api-key')).toBe('override-key');
+    // Credentials are added by the transport at dispatch, not captured by the SDK.
+    expect(req.headers.get('x-api-key')).toBeNull();
     expect(req.headers.get('authorization')).toBeNull();
   });
 
@@ -328,7 +329,7 @@ describe('Bedrock Anthropic Messages provider', () => {
         body: { model: 'anthropic.claude-fable-5', max_tokens: 1, messages: [] },
       });
 
-      expect(req.headers.get('x-api-key')).toBe('bedrock-key');
+      expect(req.headers.get('x-api-key')).toBeNull();
       expect(req.headers.get('authorization')).toBeNull();
       expect(req.headers.get('x-proxy-secret')).toBeNull();
     },
@@ -350,7 +351,7 @@ describe('Bedrock Anthropic Messages provider', () => {
       body: { model: 'anthropic.claude-fable-5', max_tokens: 1, messages: [] },
     });
 
-    expect(req.headers.get('x-api-key')).toBe('bedrock-key');
+    expect(req.headers.get('x-api-key')).toBeNull();
   });
 
   it('suppresses every duplicate-case Anthropic header before calling Bedrock', async () => {
@@ -367,11 +368,11 @@ describe('Bedrock Anthropic Messages provider', () => {
       body: { model: 'anthropic.claude-fable-5', max_tokens: 1, messages: [] },
     });
 
-    expect(req.headers.get('x-api-key')).toBe('bedrock-key');
+    expect(req.headers.get('x-api-key')).toBeNull();
     expect(req.headers.get('x-proxy-secret')).toBeNull();
   });
 
-  it('keeps response caching enabled when Anthropic custom headers are suppressed', async () => {
+  it('bypasses response caching because a Bedrock credential source can rotate', async () => {
     restoreEnv = mockProcessEnv({ ANTHROPIC_CUSTOM_HEADERS: 'X-Proxy-Secret: do-not-forward' });
     enableCache();
     const provider = createBedrockAnthropicMessagesProvider('anthropic.claude-fable-5', {
@@ -393,8 +394,8 @@ describe('Bedrock Anthropic Messages provider', () => {
     const second = await provider.callApi('Cache this prompt');
 
     expect(first.cached).not.toBe(true);
-    expect(second.cached).toBe(true);
-    expect(create).toHaveBeenCalledTimes(1);
+    expect(second.cached).not.toBe(true);
+    expect(create).toHaveBeenCalledTimes(2);
   });
 
   it.each([
@@ -451,28 +452,36 @@ describe('Bedrock Anthropic Messages provider', () => {
         'X-Api-Key: anthropic-wrong-key\n' +
         'Anthropic-Version: wrong-version',
     });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            id: 'msg-header-isolation',
+            type: 'message',
+            role: 'assistant',
+            model: 'anthropic.claude-opus-5',
+            content: [{ type: 'text', text: 'ok' }],
+            stop_reason: 'end_turn',
+            stop_sequence: null,
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    );
     const provider = createBedrockAnthropicMessagesProvider('anthropic.claude-opus-5', {
       config: { region: 'us-east-1', apiKey: 'bedrock-key' },
     });
 
-    const { req } = await (
-      provider.anthropic as unknown as {
-        buildRequest(options: {
-          method: string;
-          path: string;
-          body: Record<string, unknown>;
-        }): Promise<{ req: Request }>;
-      }
-    ).buildRequest({
-      method: 'post',
-      path: '/v1/messages',
-      body: { model: 'anthropic.claude-opus-5', max_tokens: 1, messages: [] },
-    });
+    const result = await provider.callApi('hello');
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('ok');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const headers = new Headers(fetchSpy.mock.calls[0][1]?.headers);
 
-    expect(req.headers.get('x-api-key')).toBe('bedrock-key');
-    expect(req.headers.get('authorization')).toBeNull();
-    expect(req.headers.get('x-proxy-secret')).toBeNull();
-    expect(req.headers.get('anthropic-version')).toBeNull();
+    expect(headers.get('x-api-key')).toBe('bedrock-key');
+    expect(headers.get('authorization')).toBeNull();
+    expect(headers.get('x-proxy-secret')).toBeNull();
+    expect(headers.get('anthropic-version')).toBe('2023-06-01');
   });
 
   it('does not persist bearer-token-derived identifiers in the disk cache', async () => {
@@ -520,7 +529,7 @@ describe('Bedrock Anthropic Messages provider', () => {
       const cacheFile = path.join(cachePath, 'cache.json');
       const persistedCache = fs.existsSync(cacheFile) ? fs.readFileSync(cacheFile, 'utf8') : '';
       expect(persistedCache).not.toContain(apiKey);
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
 
       await clearDiskCache();
     } finally {
@@ -541,29 +550,37 @@ describe('Bedrock Anthropic Messages provider', () => {
       ANTHROPIC_CUSTOM_HEADERS:
         'Authorization: Bearer configured-secret\nX-Configured-Secret: configured-only',
     }));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            id: 'msg-header-isolation',
+            type: 'message',
+            role: 'assistant',
+            model: 'anthropic.claude-opus-5',
+            content: [{ type: 'text', text: 'ok' }],
+            stop_reason: 'end_turn',
+            stop_sequence: null,
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    );
     const provider = createBedrockAnthropicMessagesProvider('anthropic.claude-opus-5', {
       config: { region: 'us-east-1', apiKey: 'bedrock-key' },
     });
 
-    const { req } = await (
-      provider.anthropic as unknown as {
-        buildRequest(options: {
-          method: string;
-          path: string;
-          body: Record<string, unknown>;
-        }): Promise<{ req: Request }>;
-      }
-    ).buildRequest({
-      method: 'post',
-      path: '/v1/messages',
-      body: { model: 'anthropic.claude-opus-5', max_tokens: 1, messages: [] },
-    });
+    const result = await provider.callApi('hello');
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('ok');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const headers = new Headers(fetchSpy.mock.calls[0][1]?.headers);
 
-    expect(req.headers.get('x-api-key')).toBe('bedrock-key');
-    expect(req.headers.get('authorization')).toBeNull();
-    expect(req.headers.get('x-process-secret')).toBeNull();
-    expect(req.headers.get('x-configured-secret')).toBeNull();
-    expect(req.headers.get('anthropic-version')).toBeNull();
+    expect(headers.get('x-api-key')).toBe('bedrock-key');
+    expect(headers.get('authorization')).toBeNull();
+    expect(headers.get('x-process-secret')).toBeNull();
+    expect(headers.get('x-configured-secret')).toBeNull();
+    expect(headers.get('anthropic-version')).toBe('2023-06-01');
   });
 
   it.each([
@@ -666,7 +683,7 @@ describe('Bedrock Anthropic Messages provider', () => {
         ANTHROPIC_CUSTOM_HEADERS:
           'Authorization: Bearer ambient-token\nX-API-Key: ambient-key\nX-Ambient-Secret: ambient-only',
       });
-      const expectedApiKey = apiKeyHeaderName ? 'explicit-proxy-key' : 'bedrock-key';
+      const expectedApiKey = apiKeyHeaderName ? 'explicit-proxy-key' : null;
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
         if (new Headers(init?.headers).get('x-api-key') !== expectedApiKey) {
           return new Response(

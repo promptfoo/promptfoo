@@ -2,8 +2,6 @@
 description: 'Compare reasoning capabilities across Mistral models'
 
 providers:
-  # `magistral-small-latest` is deprecated and still resolves to the 2509 snapshot;
-  # compare the current Mistral Small 4 alias instead.
   - id: mistral:mistral-medium-3-5
     config:
       reasoning_effort: high
@@ -14,6 +12,10 @@ providers:
 
 prompts:
   - 'Solve this step by step: {{problem}}'
+
+defaultTest:
+  options:
+    provider: mistral:mistral-large-latest
 
 tests:
   - vars:

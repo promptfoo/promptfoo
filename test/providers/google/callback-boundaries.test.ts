@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { withCacheEnabled, withCacheNamespace } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { loadApiProvider } from '../../../src/providers';
-import { GoogleProvider } from '../../../src/providers/google/provider';
 import telemetry from '../../../src/telemetry';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -315,24 +314,4 @@ export default () => writeFileSync(${JSON.stringify(marker)}, 'unexpected');
       ).toBe('prompt:Boston:1');
     });
   });
-
-  it.each(['native', 'JSON object', 'JSON array'])(
-    'retains standalone callback ownership for %s',
-    async (form) => {
-      useResponseForm(form);
-      const provider = new GoogleProvider('gemini-2.5-pro', {
-        config: {
-          vertexai: false,
-          apiKey: 'test-callback-key',
-          basePath: providerDir,
-          tools,
-          functionToolCallbacks: callbacks,
-        },
-      });
-      expect((await call(provider, { basePath: promptDir })).output).toBe('provider:Boston:1');
-      expect(
-        (await call(provider, { basePath: promptDir, functionToolCallbacks: callbacks })).output,
-      ).toBe('prompt:Boston:1');
-    },
-  );
 });

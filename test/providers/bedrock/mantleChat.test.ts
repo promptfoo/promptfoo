@@ -61,11 +61,11 @@ describe('bedrock mantle Chat Completions provider', () => {
   });
 
   describe('createBedrockMantleChatProvider', () => {
-    it('throws a helpful error when no Bedrock API key is configured', () => {
+    it('defers AWS credential resolution when no Bedrock API key is configured', () => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
-      expect(() => createBedrockMantleChatProvider('zai.glm-4.6', {})).toThrow(
-        /AWS_BEARER_TOKEN_BEDROCK/,
-      );
+      const provider = createBedrockMantleChatProvider('zai.glm-4.6', {});
+      expect(provider.requiresApiKey()).toBe(false);
+      expect(provider.getApiKey()).toBeUndefined();
     });
 
     it('targets the mantle /v1 endpoint for the configured region with config.apiKey', () => {
@@ -91,7 +91,7 @@ describe('bedrock mantle Chat Completions provider', () => {
       expect((provider.config as any).apiBaseUrl).toBe(
         'https://bedrock-mantle.us-east-1.api.aws/openai/v1',
       );
-      expect((provider.config as any).apiKey).toBe('env-bedrock-key');
+      expect(provider.getApiKey()).toBe('env-bedrock-key');
     });
 
     it('defaults Grok mantle chat to its launch region', () => {
@@ -197,7 +197,7 @@ describe('bedrock mantle Chat Completions provider', () => {
         createBedrockMantleChatProvider('zai.glm-4.6', {
           config: { apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' },
         }),
-      ).toThrow(/AWS_BEARER_TOKEN_BEDROCK/);
+      ).not.toThrow();
     });
 
     it('rejects frontier OpenAI models on the mantle chat route', () => {
@@ -300,7 +300,9 @@ describe('bedrock mantle Chat Completions provider', () => {
         messages: [{ role: 'user', content: 'hello' }],
       });
       const headers = new Headers(request?.headers);
-      expect(headers.get('authorization')).toBe('Bearer explicit-bedrock-key');
+      expect(await request?.getAuthHeaders?.()).toEqual({
+        Authorization: 'Bearer explicit-bedrock-key',
+      });
       expect(headers.get('x-proxy-route')).toBe('explicit-route');
       expect(headers.get('openai-organization')).toBeNull();
     });
@@ -347,13 +349,15 @@ describe('bedrock mantle Chat Completions provider', () => {
       expect(fetchWithCache).toHaveBeenCalledWith(
         'https://bedrock-mantle.us-east-1.api.aws/openai/v1/chat/completions',
         expect.objectContaining({
-          headers: expect.objectContaining({ Authorization: 'Bearer bedrock-key' }),
+          getAuthHeaders: expect.any(Function),
         }),
         expect.any(Number),
         'json',
         true,
         undefined,
       );
+      const request = vi.mocked(fetchWithCache).mock.calls[0][1];
+      expect(await request?.getAuthHeaders?.()).toEqual({ Authorization: 'Bearer bedrock-key' });
       expect(result.output).toBe('Sol output');
       expect(result.tokenUsage).toMatchObject({ total: 10, prompt: 4, completion: 6 });
       expect(result.cost).toBeCloseTo((4 * 4.4 + 6 * 22) / 1_000_000, 10);
@@ -405,6 +409,32 @@ describe('bedrock mantle Chat Completions provider', () => {
           (700 * 2.2 + 200 * 0.22 + 100 * 2.75 + 500 * 13.2) / 1e6,
           12,
         );
+      },
+    );
+
+    it.each([
+      ['provider', 'openai.gpt-5.6-sol', 'zai.glm-4.6', '/v1'],
+      ['prompt', 'openai.gpt-5.6-sol', 'zai.glm-4.6', '/v1'],
+      ['provider', 'zai.glm-4.6', 'openai.gpt-5.6-sol', '/openai/v1'],
+      ['prompt', 'zai.glm-4.6', 'openai.gpt-5.6-sol', '/openai/v1'],
+    ])(
+      'rejects a %s model override from %s to %s requiring %s',
+      async (scope, model, override, route) => {
+        const passthrough = { model: override };
+        const provider = createBedrockMantleChatProvider(model, {
+          config: {
+            apiKey: 'bedrock-key',
+            ...(scope === 'provider' ? { passthrough } : {}),
+          },
+        });
+        const context =
+          scope === 'prompt'
+            ? { vars: {}, prompt: { raw: 'hello', label: 'test', config: { passthrough } } }
+            : undefined;
+        await expect(provider.callApi('hello', context)).rejects.toThrow(
+          `requires the ${route} Mantle endpoint`,
+        );
+        expect(fetchWithCache).not.toHaveBeenCalled();
       },
     );
 
@@ -484,7 +514,7 @@ describe('bedrock mantle Chat Completions provider', () => {
         'https://bedrock-mantle.us-west-2.api.aws/v1/chat/completions',
         expect.objectContaining({
           method: 'POST',
-          headers: expect.objectContaining({ Authorization: 'Bearer bedrock-key' }),
+          getAuthHeaders: expect.any(Function),
         }),
         expect.any(Number),
         'json',

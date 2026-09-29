@@ -2,7 +2,11 @@ import logger from '../../logger';
 import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from '../openai/chat';
-import { clampCachedTokens } from '../shared';
+import {
+  clampCachedTokens,
+  getOpenAIChatOutputLimitFromEnv,
+  resolveDirectTestVariable,
+} from '../shared';
 
 import type { ApiProvider, ProviderOptions } from '../../types/index';
 import type { OpenAiCompletionOptions } from '../openai/types';
@@ -106,15 +110,13 @@ export type XAIServiceTier = 'default' | 'priority';
 
 export function assertXAIServiceTier(serviceTier: unknown): void {
   if (serviceTier !== undefined && serviceTier !== 'default' && serviceTier !== 'priority') {
-    throw new Error(
-      `Invalid xAI service_tier ${JSON.stringify(serviceTier)}. Use "default" or "priority".`,
-    );
+    throw new Error('Invalid xAI service_tier. Use "default" or "priority".');
   }
 }
 
 type XAIConfig = Omit<OpenAiCompletionOptions, 'service_tier'> & {
   region?: string;
-  reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
+  reasoning_effort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
   service_tier?: XAIServiceTier;
   search_parameters?: Record<string, any>;
   /** xAI Agent Tools - server-side tools for agentic workflows */
@@ -137,7 +139,22 @@ const GROK_43_AND_420_LONG_CONTEXT_COST = {
 };
 
 export const XAI_CHAT_MODELS: XAIModel[] = [
-  // Grok 4.6 Models (500K context; flagship model recommended by xAI's catalog).
+  // Grok 4.7 (500K context): https://docs.x.ai/developers/release-notes
+  {
+    id: 'grok-4.7',
+    cost: {
+      input: 2.0 / 1e6,
+      output: 6.0 / 1e6,
+      cache_read: 0.5 / 1e6,
+      longContext: {
+        threshold: 200_000,
+        input: 4.0 / 1e6,
+        output: 12.0 / 1e6,
+        cache_read: 1.0 / 1e6,
+      },
+    },
+  },
+  // Grok 4.6 Models (500K context).
   // xAI publishes no aliases for this id — `grok-4.6-latest` 404s on
   // /v1/language-models — so none are listed here.
   {
@@ -430,9 +447,9 @@ export const GROK_3_MINI_MODELS = [
 ];
 
 // Models that support reasoning_effort on the chat-completions-compatible API.
-// grok-4.6 additionally supports `xhigh`; grok-4.3 accepts `none`.
-// https://docs.x.ai/developers/model-capabilities/text/reasoning
+// Grok 4.6 and 4.7 additionally support `xhigh`; Grok 4.3 accepts `none`.
 export const GROK_REASONING_EFFORT_MODELS = [
+  'grok-4.7',
   'grok-4.6',
   'grok-4.5',
   'grok-4.5-latest',
@@ -448,18 +465,68 @@ export const GROK_REASONING_EFFORT_MODELS = [
   'grok-3-mini-fast-latest',
 ];
 
-// Grok 4.5 *and newer* models, which require reasoning and accept model-specific
-// effort levels. Kept under the original export name because it is part of the
-// package's import surface; membership is "4.5 or later", not "exactly 4.5".
+// Grok 4.5 and newer models cannot disable reasoning. Keep the original export name.
 export const GROK_45_MODELS: ReadonlySet<string> = new Set([
+  'grok-4.7',
   'grok-4.6',
   'grok-4.5',
   'grok-4.5-latest',
   'grok-build-latest',
 ]);
 
+export class XAIRequestConfigError extends Error {}
+
+export function validateXAIReasoningEffort(
+  modelName: string,
+  effort: unknown,
+  parameter: 'reasoning_effort' | 'reasoning.effort',
+): void {
+  const supportsNone = ['grok-4.3', 'grok-4.3-latest', 'grok-latest'].includes(modelName);
+  if ((!GROK_45_MODELS.has(modelName) && !supportsNone) || effort === undefined) {
+    return;
+  }
+
+  const supportsXHigh = modelName === 'grok-4.7' || modelName === 'grok-4.6';
+  const allowed = supportsXHigh
+    ? ['low', 'medium', 'high', 'xhigh']
+    : supportsNone
+      ? ['none', 'low', 'medium', 'high']
+      : ['low', 'medium', 'high'];
+  if (typeof effort !== 'string' || !allowed.includes(effort)) {
+    const choices = supportsXHigh
+      ? '"low", "medium", "high", or "xhigh"'
+      : supportsNone
+        ? '"none", "low", "medium", or "high"'
+        : '"low", "medium", or "high"';
+    const guidance = supportsNone
+      ? `Use ${choices}, or omit ${parameter}.`
+      : `Use ${choices}, or omit ${parameter} to use the default "high".`;
+    throw new XAIRequestConfigError(
+      `xAI model ${modelName} does not support ${parameter} with the supplied value. ${guidance}`,
+    );
+  }
+}
+
+export function resolveGrok47ReasoningEffort(
+  value: unknown,
+  vars?: Record<string, unknown>,
+): string | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  value = resolveDirectTestVariable(value, vars);
+  if (typeof value === 'string' && ['none', 'low', 'medium', 'high', 'xhigh'].includes(value)) {
+    return value;
+  }
+  throw new XAIRequestConfigError(
+    'xAI Grok 4.7 reasoning effort must be a supported value or a simple test variable',
+  );
+}
+
 // All reasoning models, including older families that reason without a tunable effort knob.
 export const GROK_REASONING_MODELS = [
+  // Grok 4.7
+  'grok-4.7',
   // Grok 4.6
   'grok-4.6',
   // Grok 4.5
@@ -530,6 +597,8 @@ const GROK_BUILD_CHAT_MODELS = new Set([
 
 // Grok-4+ models that have specific sampling-parameter restrictions.
 export const GROK_4_MODELS = [
+  // Grok 4.7 rejects presence_penalty, frequency_penalty, and stop.
+  'grok-4.7',
   // Grok 4.6 (rejects presence_penalty, frequency_penalty, and stop; verified live 2026-08-31)
   'grok-4.6',
   // Grok 4.5 (rejects presence_penalty, frequency_penalty, and stop; verified live 2026-07-09)
@@ -609,6 +678,8 @@ export function calculateXAICost(
   reasoningTokens?: number,
   cachedTokens?: number,
   options?: {
+    /** Grok 4.7 and 4.6 catalog prices are 10% higher on the official US endpoint. */
+    apiUrl?: string;
     /**
      * Set when `completion_tokens` EXCLUDES reasoning tokens, so reasoning must be
      * billed on top at the output rate. xAI's chat-completions endpoint reports
@@ -641,25 +712,31 @@ export function calculateXAICost(
     : XAI_CHAT_MODELS.find(
         (m) => m.id === modelName || (m.aliases && m.aliases.includes(modelName)),
       );
-  if (!model || !model.cost) {
-    return undefined;
-  }
-
   const inputCostOverride = config.inputCost ?? config.cost;
   // xAI's language-model REST schema defines long_context_threshold as the token
   // count "at or above" which long-context prices apply.
-  const modelCost: XAIModelCost =
-    model.cost.longContext && promptTokens >= model.cost.longContext.threshold
+  const modelCost =
+    model?.cost?.longContext && promptTokens >= model.cost.longContext.threshold
       ? model.cost.longContext
-      : model.cost;
-  // Configured rates are final per-token overrides, including any tier premium.
-  const serviceTierMultiplier = options?.serviceTier === 'priority' ? 2 : 1;
-  const inputCost = inputCostOverride ?? modelCost.input * serviceTierMultiplier;
-  const outputCost = config.outputCost ?? config.cost ?? modelCost.output * serviceTierMultiplier;
+      : model?.cost;
+  const regionMultiplier =
+    (model?.id === 'grok-4.7' || model?.id === 'grok-4.6') &&
+    options?.apiUrl &&
+    URL.canParse(options.apiUrl) &&
+    new URL(options.apiUrl).origin === 'https://us.api.x.ai'
+      ? 1.1
+      : 1;
+  const catalogMultiplier = regionMultiplier * (options?.serviceTier === 'priority' ? 2 : 1);
+  const inputCost = inputCostOverride ?? (modelCost && modelCost.input * catalogMultiplier);
+  const outputCost =
+    config.outputCost ?? config.cost ?? (modelCost && modelCost.output * catalogMultiplier);
+  if (inputCost === undefined || outputCost === undefined) {
+    return undefined;
+  }
   const cacheReadCost =
     config.cacheReadCost ??
     inputCostOverride ??
-    (modelCost.cache_read ?? modelCost.input) * serviceTierMultiplier;
+    (modelCost?.cache_read === undefined ? inputCost : modelCost.cache_read * catalogMultiplier);
 
   const billableCachedTokens = clampCachedTokens(cachedTokens, promptTokens);
   const uncachedPromptTokens = promptTokens - billableCachedTokens;
@@ -701,6 +778,61 @@ export function hasXAICostOverrides(config?: XAICostConfig): boolean {
   );
 }
 
+export function getXAIRequestModel(modelName: string, config?: { passthrough?: object }): string {
+  const model = (config?.passthrough as { model?: unknown } | undefined)?.model;
+  return typeof model === 'string' ? model : modelName;
+}
+
+type XAIRequestOption = 'reasoning' | 'reasoning_effort' | 'max_completion_tokens' | 'max_tokens';
+
+export function getXAIRequestOption(
+  key: XAIRequestOption | readonly XAIRequestOption[],
+  ...scopes: (object | undefined)[]
+): unknown {
+  const keys = typeof key === 'string' ? [key] : key;
+  let passthroughReplaced = false;
+  for (const [index, scope] of scopes.entries()) {
+    const config = scope as Record<string, unknown> | undefined;
+    const raw = passthroughReplaced
+      ? undefined
+      : (config?.passthrough as Record<string, unknown> | undefined);
+    if (
+      index === 0 &&
+      raw &&
+      keys.some((name) => Object.prototype.hasOwnProperty.call(raw, name)) &&
+      keys.some((name) => config && Object.prototype.hasOwnProperty.call(config, name))
+    ) {
+      throw new XAIRequestConfigError(
+        `xAI received ${keys.join('/')} in both test options and test passthrough; use one location`,
+      );
+    }
+    if (config && Object.prototype.hasOwnProperty.call(config, 'passthrough')) {
+      passthroughReplaced = true;
+    }
+    for (const source of [raw, config]) {
+      const availableKeys = keys.filter(
+        (name) => source && Object.prototype.hasOwnProperty.call(source, name),
+      );
+      if (
+        source &&
+        availableKeys.length === 2 &&
+        availableKeys.every((name) => source[name] != null) &&
+        source[availableKeys[0]] !== source[availableKeys[1]]
+      ) {
+        throw new XAIRequestConfigError(
+          'xAI Grok 4.7 received conflicting max_tokens and max_completion_tokens; use one spelling',
+        );
+      }
+      for (const name of availableKeys) {
+        if (source && (keys.length === 1 || source[name] != null)) {
+          return source[name];
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
 class XAIProvider extends OpenAiChatCompletionProvider {
   private originalConfig?: XAIConfig;
 
@@ -724,7 +856,34 @@ class XAIProvider extends OpenAiChatCompletionProvider {
   }
 
   async getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
-    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+    const config = { ...this.config, ...context?.prompt?.config };
+    const model = getXAIRequestModel(this.modelName, config);
+    const usesGrok47 = model === 'grok-4.7';
+    const usesPassthroughReasoningModel =
+      typeof config.passthrough?.model === 'string' && GROK_REASONING_MODELS.includes(model);
+    const testOptions = context?.test?.options;
+    let effort: string | undefined;
+    let parentContext = context;
+    if (usesGrok47) {
+      const raw = config.passthrough;
+      effort = resolveGrok47ReasoningEffort(
+        getXAIRequestOption('reasoning_effort', testOptions, context?.prompt?.config, this.config),
+        context?.vars,
+      );
+      validateXAIReasoningEffort(model, effort, 'reasoning_effort');
+      parentContext = {
+        ...context,
+        prompt: {
+          ...context?.prompt,
+          config: {
+            ...context?.prompt?.config,
+            reasoning_effort: effort,
+            ...(raw && { passthrough: { ...raw, reasoning_effort: effort } }),
+          },
+        },
+      };
+    }
+    const result = await super.getOpenAiBody(prompt, parentContext, callApiOptions);
 
     // Ensure we have a valid result
     if (!result || !result.body) {
@@ -733,100 +892,54 @@ class XAIProvider extends OpenAiChatCompletionProvider {
 
     assertXAIServiceTier(result.body.service_tier);
 
-    type GrokRequestConfig = {
-      max_tokens?: number;
-      max_completion_tokens?: number;
-      reasoning_effort?: unknown;
-      passthrough?: {
-        model?: unknown;
-        max_tokens?: number;
-        max_completion_tokens?: number;
-      };
-    };
-    const promptConfig = context?.prompt?.config as GrokRequestConfig | undefined;
-    const promptPassthrough = promptConfig?.passthrough;
-    const resolvedConfig = result.config as GrokRequestConfig;
-    const resolvedPassthrough = resolvedConfig.passthrough as
-      | { max_tokens?: number; max_completion_tokens?: number }
-      | undefined;
-    const inheritedPassthrough = promptPassthrough ? undefined : resolvedPassthrough;
-    const maxTokens =
-      promptPassthrough?.max_tokens ??
-      promptPassthrough?.max_completion_tokens ??
-      promptConfig?.max_tokens ??
-      promptConfig?.max_completion_tokens ??
-      inheritedPassthrough?.max_tokens ??
-      inheritedPassthrough?.max_completion_tokens ??
-      resolvedConfig.max_tokens ??
-      resolvedConfig.max_completion_tokens ??
-      result.body.max_tokens ??
-      result.body.max_completion_tokens;
-    const maxCompletionTokens =
-      promptPassthrough?.max_completion_tokens ??
-      promptPassthrough?.max_tokens ??
-      promptConfig?.max_completion_tokens ??
-      promptConfig?.max_tokens ??
-      inheritedPassthrough?.max_completion_tokens ??
-      inheritedPassthrough?.max_tokens ??
-      resolvedConfig.max_completion_tokens ??
-      resolvedConfig.max_tokens ??
-      result.body.max_completion_tokens ??
-      result.body.max_tokens;
-    const effectiveModel =
-      typeof result.body.model === 'string' ? result.body.model : this.modelName;
-    if (GROK_BUILD_CHAT_MODELS.has(effectiveModel) && maxTokens !== undefined) {
-      result.body.max_tokens = maxTokens;
-      delete result.body.max_completion_tokens;
-    } else if (GROK_REASONING_MODELS.includes(effectiveModel)) {
-      if (maxCompletionTokens !== undefined) {
-        result.body.max_completion_tokens = maxCompletionTokens;
+    if (usesGrok47) {
+      if (effort === undefined) {
+        delete result.body.reasoning_effort;
+      } else {
+        Object.assign(result.body, { reasoning_effort: effort });
       }
-      delete result.body.max_tokens;
-    }
-
-    // The base OpenAI-compatible provider evaluates reasoning capabilities against
-    // the configured model before xAI's passthrough override reaches the body.
-    // Restore a top-level effort value when the effective xAI model supports it.
-    if (
-      GROK_REASONING_EFFORT_MODELS.includes(effectiveModel) &&
-      result.body.reasoning_effort === undefined &&
-      resolvedConfig.reasoning_effort !== undefined
-    ) {
-      result.body.reasoning_effort = renderVarsInObject(
-        resolvedConfig.reasoning_effort,
-        context?.vars,
+    } else if (usesPassthroughReasoningModel && GROK_REASONING_EFFORT_MODELS.includes(model)) {
+      const configuredEffort = getXAIRequestOption(
+        'reasoning_effort',
+        testOptions,
+        context?.prompt?.config,
+        this.config,
       );
+      const resolvedEffort =
+        configuredEffort == null ? undefined : renderVarsInObject(configuredEffort, context?.vars);
+      if (resolvedEffort === undefined) {
+        delete result.body.reasoning_effort;
+      } else {
+        Object.assign(result.body, { reasoning_effort: resolvedEffort });
+      }
+    }
+    if (usesGrok47 || GROK_BUILD_CHAT_MODELS.has(model) || usesPassthroughReasoningModel) {
+      const tokenLimit =
+        getXAIRequestOption(
+          ['max_completion_tokens', 'max_tokens'],
+          testOptions,
+          context?.prompt?.config,
+          this.config,
+        ) ?? getOpenAIChatOutputLimitFromEnv();
+      delete result.body.max_tokens;
+      delete result.body.max_completion_tokens;
+      if (tokenLimit !== undefined) {
+        const key = GROK_BUILD_CHAT_MODELS.has(model) ? 'max_tokens' : 'max_completion_tokens';
+        Object.assign(result.body, { [key]: tokenLimit });
+      }
     }
 
     // Filter out unsupported sampling controls for Grok-4-family models.
-    if (GROK_4_MODELS.includes(effectiveModel)) {
+    if (GROK_4_MODELS.includes(model)) {
       delete result.body.presence_penalty;
       delete result.body.frequency_penalty;
       delete result.body.stop;
     }
 
-    const reasoningEffort = result.body.reasoning_effort;
-    const supportedReasoningEfforts =
-      effectiveModel === 'grok-4.6'
-        ? ['low', 'medium', 'high', 'xhigh']
-        : ['low', 'medium', 'high'];
-    if (
-      GROK_45_MODELS.has(effectiveModel) &&
-      reasoningEffort !== undefined &&
-      !supportedReasoningEfforts.includes(reasoningEffort)
-    ) {
-      throw new Error(
-        `xAI model ${effectiveModel} does not support reasoning_effort ${JSON.stringify(reasoningEffort)}. ` +
-          `Use ${supportedReasoningEfforts.map((effort) => JSON.stringify(effort)).join(', ')}, ` +
-          'or omit reasoning_effort to use the default "high".',
-      );
-    }
+    validateXAIReasoningEffort(model, result.body.reasoning_effort, 'reasoning_effort');
 
     // Filter reasoning_effort for models that don't support it
-    if (
-      !GROK_REASONING_EFFORT_MODELS.includes(effectiveModel) &&
-      result.body.reasoning_effort !== undefined
-    ) {
+    if (!GROK_REASONING_EFFORT_MODELS.includes(model) && result.body.reasoning_effort) {
       delete result.body.reasoning_effort;
     }
 
@@ -853,10 +966,10 @@ class XAIProvider extends OpenAiChatCompletionProvider {
         ...providerOptions.config,
         ...xaiConfig, // Merge the nested config into the main config
         apiKeyEnvar: 'XAI_API_KEY',
-        apiBaseUrl: xaiConfig?.region
-          ? `https://${xaiConfig.region}.api.x.ai/v1`
-          : 'https://api.x.ai/v1',
-      } as unknown as OpenAiCompletionOptions,
+        apiBaseUrl:
+          xaiConfig?.apiBaseUrl ??
+          (xaiConfig?.region ? `https://${xaiConfig.region}.api.x.ai/v1` : 'https://api.x.ai/v1'),
+      },
     });
 
     // Store the original config for later use
@@ -896,19 +1009,18 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       | (NonNullable<OpenAiChatCompletionCostData['usage']> & { cost_in_usd_ticks?: number })
       | undefined;
     const reportedCost = hasXAICostOverrides(xaiConfig) ? undefined : getXAICostInUsd(usage);
-    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
-    const effectiveModel = typeof passthroughModel === 'string' ? passthroughModel : this.modelName;
 
     return (
       reportedCost ??
       calculateXAICost(
-        effectiveModel,
+        getXAIRequestModel(this.modelName, xaiConfig),
         xaiConfig,
         usage?.prompt_tokens,
         usage?.completion_tokens,
         usage?.completion_tokens_details?.reasoning_tokens,
         usage?.prompt_tokens_details?.cached_tokens,
         {
+          apiUrl: this.getApiUrl(),
           reasoningBilledSeparately: true,
           serviceTier: data.service_tier === 'priority' ? 'priority' : undefined,
         },
@@ -939,6 +1051,9 @@ class XAIProvider extends OpenAiChatCompletionProvider {
 
       return response;
     } catch (err) {
+      if (err instanceof XAIRequestConfigError) {
+        return { error: `xAI request error: ${err.message}` };
+      }
       // Handle JSON parsing errors and other API errors
       const errorMessage = err instanceof Error ? err.message : String(err);
 
