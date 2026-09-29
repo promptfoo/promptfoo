@@ -82,7 +82,8 @@ describe('synthesize', () => {
             output: '{"user_personas": ["Data Scientist", "ML Engineer"]}',
           });
         }
-        return Promise.resolve({ output: '{"vars": [{"var1": "val1"}]}' });
+        i++;
+        return Promise.resolve({ output: `{"vars": [{"var1": "val${i}"}]}` });
       }),
     });
     vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);

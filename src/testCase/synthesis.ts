@@ -91,119 +91,77 @@ export function testCasesPrompt(
     .join(', ')}}[]}`;
 }
 
-export function extractPersonas(output: string): string[] {
-  // 1. Try direct JSON parse in case the response is a JSON array or object
-  try {
-    const parsed = JSON.parse(output);
-    if (Array.isArray(parsed)) {
-      const extracted = parsed
-        .map((item) => {
-          if (typeof item === 'string') {
-            return item.trim();
-          }
-          if (typeof item === 'object' && item !== null) {
-            const personaVal =
-              (item as Record<string, unknown>).persona ||
-              (item as Record<string, unknown>).name ||
-              (item as Record<string, unknown>).description;
-            if (typeof personaVal === 'string') {
-              return personaVal.trim();
-            }
-          }
-          return null;
-        })
-        .filter((item): item is string => Boolean(item));
+function parsePersonaItem(item: unknown): string | null {
+  if (typeof item === 'string') {
+    const trimmed = item.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (typeof item === 'object' && item !== null) {
+    const record = item as Record<string, unknown>;
+    const val = record.persona ?? record.name ?? record.description;
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    }
+  }
+  return null;
+}
+
+function extractFromList(items: unknown[]): string[] {
+  return items.map(parsePersonaItem).filter((p): p is string => p !== null);
+}
+
+function extractFromRecord(obj: Record<string, unknown>): string[] {
+  const candidates = [
+    obj.personas,
+    obj.user_personas,
+    obj.persona_list,
+    obj.personas_list,
+    obj.results,
+  ];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      const extracted = extractFromList(candidate);
       if (extracted.length > 0) {
         return extracted;
       }
+    }
+  }
+  return [];
+}
+
+export function extractPersonas(output: string): string[] {
+  // 1. Try direct JSON parsing
+  try {
+    const parsed = JSON.parse(output);
+    if (Array.isArray(parsed)) {
+      const fromArray = extractFromList(parsed);
+      if (fromArray.length > 0) {
+        return fromArray;
+      }
     } else if (typeof parsed === 'object' && parsed !== null) {
-      const obj = parsed as Record<string, unknown>;
-      const rawPersonas =
-        obj.personas ||
-        obj.user_personas ||
-        obj.persona_list ||
-        obj.personas_list ||
-        obj.results;
-      if (Array.isArray(rawPersonas)) {
-        const extracted = rawPersonas
-          .map((item) => {
-            if (typeof item === 'string') {
-              return item.trim();
-            }
-            if (typeof item === 'object' && item !== null) {
-              const personaVal =
-                (item as Record<string, unknown>).persona ||
-                (item as Record<string, unknown>).name ||
-                (item as Record<string, unknown>).description;
-              if (typeof personaVal === 'string') {
-                return personaVal.trim();
-              }
-            }
-            return null;
-          })
-          .filter((item): item is string => Boolean(item));
-        if (extracted.length > 0) {
-          return extracted;
-        }
+      const fromObj = extractFromRecord(parsed as Record<string, unknown>);
+      if (fromObj.length > 0) {
+        return fromObj;
       }
     }
   } catch {
-    // Fall back to extractJsonObjects
+    // Fall back to scanning extracted JSON objects from text/markdown
   }
 
-  // 2. Try extracting JSON objects from markdown/text
+  // 2. Scan extracted JSON objects
   const respObjects = extractJsonObjects(output);
   for (const respObj of respObjects) {
     if (typeof respObj === 'object' && respObj !== null) {
-      const obj = respObj as Record<string, unknown>;
-      const rawPersonas =
-        obj.personas ||
-        obj.user_personas ||
-        obj.persona_list ||
-        obj.personas_list ||
-        obj.results;
-      if (Array.isArray(rawPersonas)) {
-        const extracted = rawPersonas
-          .map((item) => {
-            if (typeof item === 'string') {
-              return item.trim();
-            }
-            if (typeof item === 'object' && item !== null) {
-              const personaVal =
-                (item as Record<string, unknown>).persona ||
-                (item as Record<string, unknown>).name ||
-                (item as Record<string, unknown>).description;
-              if (typeof personaVal === 'string') {
-                return personaVal.trim();
-              }
-            }
-            return null;
-          })
-          .filter((item): item is string => Boolean(item));
-        if (extracted.length > 0) {
-          return extracted;
-        }
+      const fromObj = extractFromRecord(respObj as Record<string, unknown>);
+      if (fromObj.length > 0) {
+        return fromObj;
       }
     }
   }
 
-  // 3. If respObjects is a list of individual objects extracted from a top-level array, e.g. [{persona: "A"}, {persona: "B"}]
-  const extractedFromObjects = respObjects
-    .map((item) => {
-      if (typeof item === 'object' && item !== null) {
-        const personaVal =
-          (item as Record<string, unknown>).persona ||
-          (item as Record<string, unknown>).name ||
-          (item as Record<string, unknown>).description;
-        if (typeof personaVal === 'string') {
-          return personaVal.trim();
-        }
-      }
-      return null;
-    })
-    .filter((item): item is string => Boolean(item));
-
-  return extractedFromObjects;
+  // 3. Fallback: if respObjects itself is a list of persona objects
+  return extractFromList(respObjects);
 }
 
 export async function synthesize({
