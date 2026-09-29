@@ -1,36 +1,26 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Image generation with LLM-as-a-judge evaluation
 
-# Set PROMPTFOO_INLINE_MEDIA=true to keep images as data URIs for grading
-# Run: PROMPTFOO_INLINE_MEDIA=true promptfoo eval -c promptfooconfig.judge.yaml
+# Keep image bytes available to the grader instead of storing blob references.
+# Run: PROMPTFOO_INLINE_MEDIA=true promptfoo eval -c promptfooconfig.judge.yaml --no-cache
 
 prompts:
   - '{{prompt}}'
 
 providers:
-  - id: openai:image:gpt-image-2
+  - id: openai:image:gpt-image-2.5-flare
     config:
       size: 1024x1024
       quality: low
 
-  - id: openai:image:gpt-image-1-mini
+  - id: openai:image:gpt-image-2.5-sunburst
     config:
       size: 1024x1024
       quality: low
 
 defaultTest:
   options:
-    provider: openai:chat:gpt-5.4-mini
-    rubricPrompt: |
-      [
-        {
-          "role": "user",
-          "content": [
-            { "type": "image_url", "image_url": { "url": "{{output}}" } },
-            { "type": "text", "text": "Evaluate this generated image.\n\nThe prompt was: '{{prompt}}'\n\nGrading criteria: {{rubric}}\n\nRespond with JSON: {reason: string, pass: boolean, score: number}" }
-          ]
-        }
-      ]
+    provider: openai:gpt-6-sol
 
 tests:
   - vars:

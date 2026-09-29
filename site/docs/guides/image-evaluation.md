@@ -1,27 +1,23 @@
 ---
 title: Evaluating Image Generation
-description: Evaluate and compare model-generated images with Promptfoo using vision-capable graders, inline media data URIs, and rubric prompts for repeatable image evals.
+description: Compare generated images with Promptfoo using a vision-capable grader, automatic image attachments, and concrete rubric criteria for subjects, style, and text.
 sidebar_label: Image Generation Evaluation
 sidebar_position: 7
 ---
 
 # Evaluating Image Generation
 
-This guide shows how to evaluate generated images from providers like OpenAI and Google using a vision-capable LLM as a judge.
+Use `llm-rubric` with a vision-capable grader to compare generated images against written criteria. Built-in `openai:image` and `google:image` providers return structured images, which Promptfoo attaches to the grading prompt automatically.
 
 ## How It Works
 
-Promptfoo generates images via an image provider, then grades the output using `llm-rubric` with a vision-capable model. The key pieces:
-
-1. **Image provider** generates images from prompts
-2. **`PROMPTFOO_INLINE_MEDIA=true`** keeps images as inline data URIs instead of externalizing to disk
-3. **Vision-capable grader** (e.g., `openai:chat:gpt-5.4-mini`) evaluates the image using a multimodal rubric prompt
+Each test sends a prompt to the image provider. The grader receives the generated images and the assertion's criteria, then returns a pass/fail result, score, and reason. Set `PROMPTFOO_INLINE_MEDIA=true` to keep image bytes available to the grader. Stored blob references are not supported for multimodal grading.
 
 ## Prerequisites
 
-- Node.js 20.20+ or 22.22+
-- API key for your image provider (e.g., `OPENAI_API_KEY`)
-- API key for a vision-capable grader model
+- Node.js 22.22 or later
+- API access to the image and vision-capable grader models in your configuration
+- The relevant provider API key, such as `OPENAI_API_KEY`
 
 ## Complete Example
 
@@ -32,35 +28,25 @@ prompts:
   - '{{prompt}}'
 
 providers:
-  - id: openai:image:gpt-image-2
+  - id: openai:image:gpt-image-2.5-flare
     config:
       size: 1024x1024
       quality: low
-  - id: openai:image:gpt-image-1-mini
+  - id: openai:image:gpt-image-2.5-sunburst
     config:
       size: 1024x1024
       quality: low
 
 defaultTest:
   options:
-    provider: openai:chat:gpt-5.4-mini
-    rubricPrompt: |
-      [
-        {
-          "role": "user",
-          "content": [
-            { "type": "image_url", "image_url": { "url": "{{output}}" } },
-            { "type": "text", "text": "Evaluate this generated image.\n\nThe prompt was: '{{prompt}}'\n\nGrading criteria: {{rubric}}\n\nRespond with JSON: {reason: string, pass: boolean, score: number}" }
-          ]
-        }
-      ]
+    provider: openai:gpt-6-sol
 
 tests:
   - vars:
       prompt: A photorealistic golden retriever puppy playing in autumn leaves
     assert:
       - type: llm-rubric
-        value: The image is photorealistic (not cartoon), shows a golden retriever puppy, and includes autumn leaves
+        value: The image is photorealistic, shows a golden retriever puppy, and includes autumn leaves
   - vars:
       prompt: A neon sign that reads "HELLO WORLD" on a dark brick wall
     assert:
@@ -68,48 +54,56 @@ tests:
         value: The image shows a neon sign with legible text "HELLO WORLD" on a brick wall
 ```
 
-Run with inline media enabled:
+Run the eval and export its results:
 
 ```sh
-PROMPTFOO_INLINE_MEDIA=true promptfoo eval
+PROMPTFOO_INLINE_MEDIA=true promptfoo eval -c promptfooconfig.yaml --no-cache -o results.json
 ```
+
+Inspect each result's `success`, `score`, and `gradingResult.reason`. A model grader's score reflects its judgment against your criteria; review the images as well when assessing model quality.
 
 ## How the Rubric Prompt Works
 
-The `rubricPrompt` must use [OpenAI chat format](/docs/configuration/chat) with `image_url` content blocks so the grader can see the generated image. The following variables are available:
+The default rubric prompt handles image attachments. If you need custom instructions, keep them text-only and let Promptfoo attach the images:
 
-- `{{output}}` - the provider's output (a data URI when `PROMPTFOO_INLINE_MEDIA=true`)
-- `{{rubric}}` - the assertion's `value` text (your grading criteria)
-- Any test `vars` (e.g., `{{prompt}}` from `vars.prompt`)
+```yaml
+defaultTest:
+  options:
+    provider: openai:gpt-6-sol
+    rubricPrompt: |
+      Evaluate the attached image against this prompt: {{prompt}}
+      Criteria: {{rubric}}
+      Respond with JSON containing reason (string), pass (boolean), and score (number from 0 to 1).
+```
 
-The rubric prompt is rendered with [Nunjucks](/docs/configuration/parameters), so all standard template features work.
+`{{rubric}}` contains the assertion's `value`; test variables such as `{{prompt}}` are also available. For structured image outputs, `{{output}}` may contain an attachment placeholder. Do not use it as an `image_url`: the actual images are already attached.
 
 :::note
 
-Built-in `openai:image` and `google:image` providers set `{{output}}` to the first generated image and expose all returned images in `images`. Use `n: 1` when grading exactly one image per test.
+All structured images returned by the provider are attached. Set `n: 1` when you want exactly one image per test.
 
 :::
 
 ## Non-OpenAI Providers
 
-Image providers that return data URIs work out of the box. For example, [Google Imagen](/docs/providers/google#image-generation-models):
+Select a provider that returns structured images, such as [Google Imagen](/docs/providers/google#image-generation-models):
 
 ```yaml
 providers:
   - id: google:image:imagen-3.0-generate-002
 ```
 
-The grader provider must be vision-capable. Good options include `openai:chat:gpt-5.4-mini`, `anthropic:messages:claude-sonnet-4-6`, or `google:gemini-2.5-flash`.
+A custom provider should return images through [`ProviderResponse.images`](/docs/configuration/reference/#providerresponse). A raw JSON string containing `b64_json` is not a structured image response and is not covered by this workflow. The grader must support image inputs.
 
 ## Tips
 
-- **Set `PROMPTFOO_INLINE_MEDIA=true`** in your `.env` file or as an environment variable. Without it, images are externalized to disk and the output will be a blob reference instead of a data URI.
-- **Use `quality: low`** during development to reduce costs and speed up iteration.
-- **Be specific in rubric criteria.** Instead of "good image," describe what you expect: subject, style, colors, text content, composition.
-- **Use `--no-cache`** during development to ensure fresh image generation on each run.
+- Write criteria for observable details: subject, style, colors, text, or composition.
+- Use a lower supported quality setting while developing the rubric.
+- Use `--no-cache` when you need fresh image generation; omit it when reusing cached responses is useful.
+- Keep `PROMPTFOO_INLINE_MEDIA=true` enabled for image grading; exported media also remains self-contained.
 
 ## Further Reading
 
-- [Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) for more on `llm-rubric`
-- [OpenAI image provider](/docs/providers/openai#generating-images) for provider configuration
-- [OpenAI images example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-images) for a working example with judge config
+- [Model-graded assertions](/docs/configuration/expected-outputs/model-graded/)
+- [OpenAI image provider](/docs/providers/openai#generating-images)
+- [OpenAI images example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-images)

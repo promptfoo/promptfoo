@@ -198,6 +198,7 @@ const redTeamSidebar = [
           'red-team/strategies/iterative',
           'red-team/strategies/meta',
           'red-team/strategies/hydra',
+          'red-team/strategies/goblin',
           'red-team/strategies/tree',
           'red-team/strategies/composite-jailbreaks',
         ],

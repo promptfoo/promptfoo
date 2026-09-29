@@ -1,28 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-// Mock envars so we can control PROMPTFOO_INLINE_MEDIA per-test
-vi.mock('../../src/envars', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../src/envars')>();
-  return {
-    ...actual,
-    getEnvBool: vi.fn().mockImplementation(actual.getEnvBool),
-  };
-});
-
 import {
-  detectImageMimeType,
   extractAndStoreBinaryData,
   isBlobStorageEnabled,
   normalizeAudioMimeType,
 } from '../../src/blobs/extractor';
-import { getEnvBool } from '../../src/envars';
 import { sha256 } from '../../src/util/createHash';
 
 import type { ProviderResponse } from '../../src/types/providers';
 
 // Mock the remoteUpload module
 vi.mock('../../src/blobs/remoteUpload', () => ({
-  shouldAttemptRemoteBlobUpload: vi.fn(),
   uploadBlobRemote: vi.fn(),
 }));
 
@@ -207,8 +194,7 @@ describe('Audio MIME type normalization (integration)', () => {
   });
 });
 
-describe('Cloud blob upload', () => {
-  let mockShouldAttemptRemoteBlobUpload: ReturnType<typeof vi.fn>;
+describe('Local blob extraction', () => {
   let mockUploadBlobRemote: ReturnType<typeof vi.fn>;
   let mockStoreBlob: ReturnType<typeof vi.fn>;
 
@@ -217,7 +203,6 @@ describe('Cloud blob upload', () => {
 
     // Get the mocked functions
     const remoteUploadModule = await import('../../src/blobs/remoteUpload');
-    mockShouldAttemptRemoteBlobUpload = vi.mocked(remoteUploadModule.shouldAttemptRemoteBlobUpload);
     mockUploadBlobRemote = vi.mocked(remoteUploadModule.uploadBlobRemote);
 
     const blobIndexModule = await import('../../src/blobs/index');
@@ -230,21 +215,13 @@ describe('Cloud blob upload', () => {
         hash: 'abc123def456',
       },
     });
-    mockUploadBlobRemote.mockResolvedValue({
-      ref: {
-        uri: 'promptfoo://blob/abc123def456',
-        hash: 'abc123def456',
-      },
-    });
   });
 
   afterEach(() => {
     vi.resetAllMocks();
   });
 
-  it('should attempt cloud upload when authenticated', async () => {
-    mockShouldAttemptRemoteBlobUpload.mockReturnValue(true);
-
+  it('stores extracted blobs locally without eagerly uploading them', async () => {
     // Create a large enough data URL to trigger externalization (>1KB)
     const largeBase64 = Buffer.alloc(2000).toString('base64');
     const response: ProviderResponse = {
@@ -255,86 +232,10 @@ describe('Cloud blob upload', () => {
 
     // Should store locally
     expect(mockStoreBlob).toHaveBeenCalledTimes(1);
-
-    // Should also attempt cloud upload
-    expect(mockUploadBlobRemote).toHaveBeenCalledTimes(1);
-    expect(mockUploadBlobRemote).toHaveBeenCalledWith(
-      expect.any(Buffer),
-      'image/png',
-      expect.objectContaining({
-        location: 'response.output',
-        kind: 'image',
-      }),
-    );
-  });
-
-  it('should not attempt cloud upload when not authenticated', async () => {
-    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
-
-    // Create a large enough data URL to trigger externalization
-    const largeBase64 = Buffer.alloc(2000).toString('base64');
-    const response: ProviderResponse = {
-      output: `data:image/png;base64,${largeBase64}`,
-    };
-
-    await extractAndStoreBinaryData(response);
-
-    // Should store locally
-    expect(mockStoreBlob).toHaveBeenCalledTimes(1);
-
-    // Should NOT attempt cloud upload
     expect(mockUploadBlobRemote).not.toHaveBeenCalled();
   });
 
-  it('should succeed with local storage even if cloud upload fails', async () => {
-    mockShouldAttemptRemoteBlobUpload.mockReturnValue(true);
-    mockUploadBlobRemote.mockRejectedValue(new Error('Network error'));
-
-    // Create a large enough data URL to trigger externalization
-    const largeBase64 = Buffer.alloc(2000).toString('base64');
-    const response: ProviderResponse = {
-      output: `data:image/png;base64,${largeBase64}`,
-    };
-
-    const result = await extractAndStoreBinaryData(response);
-
-    // Should still succeed with local storage
-    expect(mockStoreBlob).toHaveBeenCalledTimes(1);
-    expect(result?.output).toBe('promptfoo://blob/abc123def456');
-  });
-
-  it('should pass context to cloud upload', async () => {
-    mockShouldAttemptRemoteBlobUpload.mockReturnValue(true);
-
-    const largeBase64 = Buffer.alloc(2000).toString('base64');
-    const response: ProviderResponse = {
-      output: `data:image/png;base64,${largeBase64}`,
-    };
-
-    const context = {
-      evalId: 'eval-123',
-      testIdx: 1,
-      promptIdx: 2,
-    };
-
-    await extractAndStoreBinaryData(response, context);
-
-    expect(mockUploadBlobRemote).toHaveBeenCalledWith(
-      expect.any(Buffer),
-      'image/png',
-      expect.objectContaining({
-        evalId: 'eval-123',
-        testIdx: 1,
-        promptIdx: 2,
-        location: 'response.output',
-        kind: 'image',
-      }),
-    );
-  });
-
   it('should externalize image data URIs to blobRefs', async () => {
-    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
-
     const largeBase64 = Buffer.alloc(2000).toString('base64');
     const response: ProviderResponse = {
       output: 'text output',
@@ -348,8 +249,6 @@ describe('Cloud blob upload', () => {
   });
 
   it('should reuse the same image blob when output and images contain identical data URIs', async () => {
-    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
-
     const largeBase64 = Buffer.alloc(2000).toString('base64');
     const dataUri = `data:image/png;base64,${largeBase64}`;
     const response: ProviderResponse = {
@@ -373,8 +272,6 @@ describe('Cloud blob upload', () => {
   });
 
   it('should reuse the same image blob for concurrent identical images[] siblings', async () => {
-    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
-
     const largeBase64 = Buffer.alloc(2000).toString('base64');
     const dataUri = `data:image/png;base64,${largeBase64}`;
     const response: ProviderResponse = {
@@ -394,8 +291,6 @@ describe('Cloud blob upload', () => {
   });
 
   it('should pass through images without data URIs unchanged', async () => {
-    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
-
     const response: ProviderResponse = {
       output: 'text output',
       images: [
@@ -416,8 +311,6 @@ describe('Cloud blob upload', () => {
   });
 
   it('should handle mixed images: externalize data URIs but keep existing blobRefs', async () => {
-    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
-
     const largeBase64 = Buffer.alloc(2000).toString('base64');
     const response: ProviderResponse = {
       output: 'text output',
@@ -441,57 +334,6 @@ describe('Cloud blob upload', () => {
     expect(result?.images?.[0].blobRef).toBeDefined();
     // Second image kept as-is
     expect(result?.images?.[1].blobRef?.hash).toBe('existing');
-  });
-
-  it('should preserve b64_json output without writing blobs when any image cannot be stored', async () => {
-    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
-
-    const largePngBase64 = Buffer.concat([
-      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-      Buffer.alloc(2000),
-    ]).toString('base64');
-    const tinyPngBase64 = 'iVBORw0KGgo=';
-    const output = JSON.stringify({
-      data: [{ b64_json: largePngBase64 }, { b64_json: tinyPngBase64 }],
-    });
-    const response: ProviderResponse = {
-      output,
-      isBase64: true,
-      format: 'json',
-    };
-
-    const result = await extractAndStoreBinaryData(response);
-    const repeatedResult = await extractAndStoreBinaryData(response);
-
-    expect(result?.output).toBe(output);
-    expect(repeatedResult?.output).toBe(output);
-    expect(mockStoreBlob).not.toHaveBeenCalled();
-  });
-
-  it('should preserve URL siblings when storing mixed b64_json and URL output items', async () => {
-    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
-
-    const largePngBase64 = Buffer.concat([
-      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-      Buffer.alloc(2000),
-    ]).toString('base64');
-    const imageUrl = 'https://example.com/generated.png';
-    const response: ProviderResponse = {
-      output: JSON.stringify({
-        data: [{ url: imageUrl }, { b64_json: largePngBase64 }],
-      }),
-      isBase64: true,
-      format: 'json',
-    };
-
-    const result = await extractAndStoreBinaryData(response);
-
-    expect(JSON.parse(result?.output as string)).toEqual([
-      imageUrl,
-      'promptfoo://blob/abc123def456',
-    ]);
-    expect(result?.metadata?.blobUris).toEqual(['promptfoo://blob/abc123def456']);
-    expect(mockStoreBlob).toHaveBeenCalledTimes(1);
   });
 
   it('should record blob references embedded in output text', async () => {
@@ -532,34 +374,7 @@ describe('Cloud blob upload', () => {
     );
   });
 
-  it('should attempt cloud upload for audio data', async () => {
-    mockShouldAttemptRemoteBlobUpload.mockReturnValue(true);
-
-    // Create a large enough audio data
-    const largeBase64 = Buffer.alloc(2000).toString('base64');
-    const response: ProviderResponse = {
-      output: 'test',
-      audio: {
-        data: largeBase64,
-        format: 'wav',
-      },
-    };
-
-    await extractAndStoreBinaryData(response);
-
-    expect(mockUploadBlobRemote).toHaveBeenCalledWith(
-      expect.any(Buffer),
-      'audio/wav',
-      expect.objectContaining({
-        location: 'response.audio.data',
-        kind: 'audio',
-      }),
-    );
-  });
-
   it('should reuse the top-level audio blob for mirrored realtime metadata audio data', async () => {
-    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
-
     const largeBase64 = Buffer.alloc(2000).toString('base64');
     const response: ProviderResponse = {
       output: 'test',
@@ -595,8 +410,6 @@ describe('Cloud blob upload', () => {
   });
 
   it('should externalize metadata-only audio data', async () => {
-    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
-
     const largeBase64 = Buffer.alloc(2000).toString('base64');
     const response: ProviderResponse = {
       output: 'test',
@@ -626,8 +439,7 @@ describe('Cloud blob upload', () => {
   it('should reuse the same audio blob across turns[].audio and metadata.audio', async () => {
     // Realtime providers can mirror an audio chunk into both turns[N].audio
     // and metadata.audio. Without a shared cache, the metadata path stored a
-    // separate blob (and triggered a duplicate cloud upload).
-    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
+    // separate blob.
 
     const largeBase64 = Buffer.alloc(2000).toString('base64');
     const response = {
@@ -663,8 +475,6 @@ describe('Cloud blob upload', () => {
     // E.g. a provider that mirrors a generated image into both `images[]` and
     // a metadata field. The shared per-response cache canonicalizes on the
     // parsed bytes so both paths land on one blob.
-    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
-
     const largeBase64 = Buffer.alloc(2000).toString('base64');
     const dataUri = `data:image/png;base64,${largeBase64}`;
     const response: ProviderResponse = {
@@ -693,8 +503,6 @@ describe('Cloud blob upload', () => {
   it('should reuse the same image blob when output is a data URL and metadata holds raw base64', async () => {
     // Different encodings of identical bytes (data: URL vs. raw base64) must
     // hit the same cache slot — canonicalization happens on the parsed buffer.
-    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
-
     const largeBase64 = Buffer.alloc(2000).toString('base64');
     const dataUri = `data:image/png;base64,${largeBase64}`;
     const response: ProviderResponse = {
@@ -709,8 +517,6 @@ describe('Cloud blob upload', () => {
   });
 
   it('should store small raw SVG outputs for the media library without replacing text output', async () => {
-    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
-
     const svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>';
     const response: ProviderResponse = { output: svg };
 
@@ -730,8 +536,6 @@ describe('Cloud blob upload', () => {
   });
 
   it('should not store the same raw SVG preview twice when metadata already references it', async () => {
-    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
-
     const svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>';
     const response: ProviderResponse = {
       output: svg,
@@ -747,8 +551,6 @@ describe('Cloud blob upload', () => {
   });
 
   it('should not store multiple root SVG documents as one media blob', async () => {
-    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
-
     const response: ProviderResponse = {
       output: '<svg><circle/></svg>\n\n<svg><rect/></svg>',
     };
@@ -757,159 +559,5 @@ describe('Cloud blob upload', () => {
 
     expect(result).toBe(response);
     expect(mockStoreBlob).not.toHaveBeenCalled();
-  });
-});
-
-describe('detectImageMimeType', () => {
-  it('should detect JPEG from magic bytes', () => {
-    expect(detectImageMimeType('/9j/4AAQSkZJRg==')).toBe('image/jpeg');
-  });
-
-  it('should detect PNG from magic bytes', () => {
-    expect(detectImageMimeType('iVBORw0KGgoAAAANSUhEUg==')).toBe('image/png');
-  });
-
-  it('should ignore surrounding whitespace in base64 data', () => {
-    expect(detectImageMimeType('\n  iVBORw0KGgoAAAANSUhEUg==  ')).toBe('image/png');
-  });
-
-  it('should detect WebP from magic bytes', () => {
-    expect(detectImageMimeType('UklGRlYAAABXRUJQ')).toBe('image/webp');
-  });
-
-  it('should detect GIF from magic bytes', () => {
-    expect(detectImageMimeType('R0lGODlhAQABAA==')).toBe('image/gif');
-  });
-
-  it('should fall back to PNG for unknown data', () => {
-    expect(detectImageMimeType('AAAA')).toBe('image/png');
-    expect(detectImageMimeType('')).toBe('image/png');
-  });
-});
-
-describe('Inline b64_json conversion (PROMPTFOO_INLINE_MEDIA=true)', () => {
-  beforeEach(async () => {
-    vi.resetAllMocks();
-
-    // Simulate PROMPTFOO_INLINE_MEDIA=true so isBlobStorageEnabled() returns false
-    vi.mocked(getEnvBool).mockImplementation((key: string, defaultValue?: boolean) => {
-      if (key === 'PROMPTFOO_INLINE_MEDIA') {
-        return true;
-      }
-      return defaultValue ?? false;
-    });
-
-    const remoteUploadModule = await import('../../src/blobs/remoteUpload');
-    vi.mocked(remoteUploadModule.shouldAttemptRemoteBlobUpload).mockReturnValue(false);
-  });
-
-  afterEach(() => {
-    vi.resetAllMocks();
-  });
-
-  it('should convert single b64_json PNG to data URI', async () => {
-    // PNG magic bytes: iVBORw0KGgo...
-    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk';
-    const response: ProviderResponse = {
-      output: JSON.stringify({ data: [{ b64_json: pngBase64 }] }),
-      isBase64: true,
-      format: 'json',
-    };
-
-    const result = await extractAndStoreBinaryData(response);
-    expect(result?.output).toBe(`data:image/png;base64,${pngBase64}`);
-  });
-
-  it('should convert single b64_json JPEG to data URI with correct MIME', async () => {
-    // JPEG magic bytes: /9j/...
-    const jpegBase64 = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAA';
-    const response: ProviderResponse = {
-      output: JSON.stringify({ data: [{ b64_json: jpegBase64 }] }),
-      isBase64: true,
-      format: 'json',
-    };
-
-    const result = await extractAndStoreBinaryData(response);
-    expect(result?.output).toBe(`data:image/jpeg;base64,${jpegBase64}`);
-  });
-
-  it('should convert single b64_json WebP to data URI with correct MIME', async () => {
-    // WebP magic bytes: UklGR...
-    const webpBase64 = 'UklGRlYAAABXRUJQVlA4IEoAAADQAQCdASoBAAEAAQ';
-    const response: ProviderResponse = {
-      output: JSON.stringify({ data: [{ b64_json: webpBase64 }] }),
-      isBase64: true,
-      format: 'json',
-    };
-
-    const result = await extractAndStoreBinaryData(response);
-    expect(result?.output).toBe(`data:image/webp;base64,${webpBase64}`);
-  });
-
-  it('should serialize multiple b64_json items as JSON array of data URIs', async () => {
-    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUg';
-    const jpegBase64 = '/9j/4AAQSkZJRgABAQ';
-    const response: ProviderResponse = {
-      output: JSON.stringify({
-        data: [{ b64_json: pngBase64 }, { b64_json: jpegBase64 }],
-      }),
-      isBase64: true,
-      format: 'json',
-    };
-
-    const result = await extractAndStoreBinaryData(response);
-    const parsed = JSON.parse(result?.output as string);
-    expect(parsed).toHaveLength(2);
-    expect(parsed[0]).toBe(`data:image/png;base64,${pngBase64}`);
-    expect(parsed[1]).toBe(`data:image/jpeg;base64,${jpegBase64}`);
-  });
-
-  it('should not modify response when output is not b64_json JSON', async () => {
-    const response: ProviderResponse = {
-      output: 'just a plain text response',
-    };
-
-    const result = await extractAndStoreBinaryData(response);
-    expect(result?.output).toBe('just a plain text response');
-  });
-
-  it('should not modify response when JSON has no data array', async () => {
-    const response: ProviderResponse = {
-      output: JSON.stringify({ error: 'something went wrong' }),
-      isBase64: true,
-      format: 'json',
-    };
-
-    const result = await extractAndStoreBinaryData(response);
-    expect(result?.output).toBe(response.output);
-  });
-
-  it('should handle JSON parse failure gracefully', async () => {
-    const response: ProviderResponse = {
-      output: '{not valid json b64_json',
-      isBase64: true,
-      format: 'json',
-    };
-
-    const result = await extractAndStoreBinaryData(response);
-    expect(result?.output).toBe(response.output);
-  });
-
-  it('should preserve URL siblings alongside inline b64_json conversion', async () => {
-    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUg';
-    const imageUrl = 'https://example.com/image.png';
-    const response: ProviderResponse = {
-      output: JSON.stringify({
-        data: [{ url: imageUrl }, { b64_json: pngBase64 }],
-      }),
-      isBase64: true,
-      format: 'json',
-    };
-
-    const result = await extractAndStoreBinaryData(response);
-    expect(JSON.parse(result?.output as string)).toEqual([
-      imageUrl,
-      `data:image/png;base64,${pngBase64}`,
-    ]);
   });
 });

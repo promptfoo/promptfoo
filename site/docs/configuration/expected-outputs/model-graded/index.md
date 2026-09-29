@@ -13,9 +13,9 @@ Output-based:
 - [`agent-rubric`](/docs/configuration/expected-outputs/model-graded/agent-rubric) - Like `llm-rubric`, but uses a coding-agent grader that can inspect configured workspace and tool evidence.
 - [`search-rubric`](/docs/configuration/expected-outputs/model-graded/search-rubric) - Like `llm-rubric` but with web search capabilities for verifying current information.
 - [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa) - Checks if LLM answers meet specific requirements using OpenAI's public evals prompts.
-- [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - Evaluates factual consistency between LLM output and a reference statement. Uses OpenAI's public evals prompt to determine if the output is factually consistent with the reference.
+- [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) (alias: `model-graded-factuality`) - Evaluates factual consistency between LLM output and a reference statement. Uses OpenAI's public evals prompt to determine if the output is factually consistent with the reference.
 - [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - Uses chain-of-thought prompting to evaluate outputs against custom criteria following the G-Eval framework.
-- [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - Evaluates whether LLM output is directly related to the original query.
+- [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) - Evaluates whether LLM output is directly related to the original query. Defaults to threshold `0.5`.
 - [`similar`](/docs/configuration/expected-outputs/similar) - Checks semantic similarity between output and expected value using embedding models.
 - [`pi`](/docs/configuration/expected-outputs/model-graded/pi) - Alternative scoring approach using a dedicated evaluation model to score inputs/outputs against criteria.
 - [`classifier`](/docs/configuration/expected-outputs/classifier) - Runs LLM output through HuggingFace text classifiers for detection of tone, bias, toxicity, and other properties. See [classifier grading docs](/docs/configuration/expected-outputs/classifier).
@@ -25,9 +25,9 @@ Output-based:
 
 Context-based:
 
-- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context
-- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
-- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context
+- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context. Defaults to threshold `0.5`.
+- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query. Defaults to threshold `0.5`.
+- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context. Defaults to threshold `0.5`.
 
 Conversational:
 
@@ -82,7 +82,7 @@ tests:
       - type: trajectory:goal-success
         value: Resolve the user's issue and provide the correct next step
         threshold: 0.8
-        provider: openai:gpt-5-mini
+        provider: openai:gpt-6-sol
 ```
 
 This works best alongside deterministic trajectory checks such as [`trajectory:tool-used`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used), [`trajectory:tool-args-match`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-args-match), or [`trajectory:tool-sequence`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence) when the exact path through the task also matters.
@@ -152,7 +152,7 @@ You can use test `vars` in the LLM rubric. This example uses the `question` vari
 
 ```yaml
 providers:
-  - openai:gpt-5-mini
+  - openai:gpt-6-sol
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
@@ -179,7 +179,7 @@ prompts:
   - 'Write a very concise, funny tweet about {{topic}}'
 
 providers:
-  - openai:gpt-5
+  - openai:gpt-6-sol
 
 tests:
   - vars:
@@ -204,7 +204,7 @@ prompts:
   - 'Write a comprehensive summary of {{article}} with key points'
 
 providers:
-  - openai:gpt-5
+  - openai:gpt-6-sol
 
 tests:
   - vars:
@@ -226,14 +226,14 @@ tests:
 
 By default, model-graded asserts use promptfoo's built-in grading provider. Promptfoo chooses that
 provider from the credentials available in the environment; for example, OpenAI, Anthropic, Gemini,
-Mistral, GitHub Models, Azure OpenAI, and Codex login credentials can each activate a different
+Mistral, Azure OpenAI, and Codex login credentials can each activate a different
 default. If you do not have access to the selected default or prefer a different judge, you can
 override the grader. There are several ways to do this, depending on your preferred workflow:
 
 1. Using the `--grader` CLI option:
 
    ```
-   promptfoo eval --grader openai:gpt-5-mini
+   promptfoo eval --grader openai:gpt-6-sol
    ```
 
 2. Using `test.options` or `defaultTest.options` on a per-test or testsuite basis:
@@ -241,7 +241,7 @@ override the grader. There are several ways to do this, depending on your prefer
    ```yaml
    defaultTest:
      options:
-       provider: openai:gpt-5-mini
+       provider: openai:gpt-6-sol
    tests:
      - description: Use LLM to evaluate output
        assert:
@@ -257,10 +257,58 @@ override the grader. There are several ways to do this, depending on your prefer
        assert:
          - type: llm-rubric
            value: Is spoken like a pirate
-           provider: openai:gpt-5-mini
+           provider: openai:gpt-6-sol
    ```
 
-Use the `provider.config` field to set custom parameters such as `temperature`, `max_tokens`, or API host:
+:::caution `defaultTest.provider` also sets the grader for output-based assertions
+
+`defaultTest.provider` is the field that pins the **target model** for every test in a suite.
+For output-based model-graded assertions (`llm-rubric`, `factuality`, `g-eval`,
+`model-graded-closedqa`, `answer-relevance`, etc.) it is also consulted as a grader fallback when
+no explicit grader is configured — **after** `--grader`, `assertion.provider`, and
+`test.options.provider` / `defaultTest.options.provider` have all been checked and found absent.
+
+In practice this means the following config generates responses **and** grades them with `gpt-4.1`:
+
+```yaml
+defaultTest:
+  provider: openai:gpt-4.1 # ← also becomes the judge when no grader is set
+tests:
+  - assert:
+      - type: llm-rubric
+        value: Answers the question accurately
+```
+
+To use a dedicated judge while still pinning the target, set `defaultTest.options.provider`
+(option 2 above) or pass `--grader` on the CLI:
+
+```yaml
+defaultTest:
+  provider: openai:gpt-4.1 # target model
+  options:
+    provider: openai:gpt-6-sol # explicit judge — takes precedence over the fallback
+```
+
+**Notes:**
+
+- This fallback applies to the output-based assertions listed above. `agent-rubric` and
+  `search-rubric` use capability-specific provider selection and are not affected.
+  **Red-team runs (`promptfoo redteam run`):** `RedteamProviderManager` selects `defaultTest.provider`
+  _before_ `defaultTest.options.provider`, so setting `defaultTest.options.provider` alone does not
+  override the judge. The reliable pattern is to move the target to the top-level `providers` list
+  and reserve `defaultTest.options.provider` for the judge:
+
+```yaml
+providers:
+  - openai:gpt-4.1 # target — no longer in defaultTest.provider
+defaultTest:
+  options:
+    provider: openai:gpt-6-sol # judge — now effective in both standard and red-team grading
+```
+
+:::
+
+Use the `provider.config` field to set custom parameters such as `temperature`, the output token limit, or API host:
 
 ```yaml
 tests:
@@ -268,8 +316,10 @@ tests:
       - type: llm-rubric
         value: Is not apologetic and provides a clear, concise answer
         provider:
-          id: openai:gpt-5-mini
+          id: openai:gpt-6-sol
           config:
+            reasoning:
+              effort: none
             temperature: 0
 ```
 
@@ -282,9 +332,7 @@ global provider object's `config` values such as `apiBaseUrl`, `apiKey`, `temper
 provider object there.
 
 :::note
-The built-in OpenAI grader already uses `temperature=0` by default, so you only need to set it when
-overriding the grader with a custom `provider` block that would otherwise inherit a non-zero
-default. GPT-5 series reasoning models ignore `temperature` entirely.
+The built-in OpenAI grader uses GPT-6 Sol with reasoning enabled, so it does not send `temperature`. To control sampling, configure a custom grader with `reasoning.effort: none` and `temperature`, as above.
 
 The built-in OpenAI grader may spend hidden reasoning tokens internally, but promptfoo receives the
 final grader output without private reasoning text prepended to the output string. The
@@ -391,7 +439,7 @@ See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples
 
 ### Image-based rubric prompts
 
-`llm-rubric` can also grade responses that reference images. Provide a `rubricPrompt` in OpenAI chat format that includes an image and use a vision-capable provider such as `openai:chat:gpt-5.4-mini`.
+`llm-rubric` can grade text about an image or generated image outputs. Use a vision-capable grader such as `openai:gpt-6-sol`.
 
 #### Grading text about a known image
 
@@ -400,7 +448,7 @@ Use an `image_url` block referencing a URL or variable to include a pre-existing
 ```yaml
 defaultTest:
   options:
-    provider: openai:chat:gpt-5.4-mini
+    provider: openai:gpt-6-sol
     rubricPrompt: |
       [
         { "role": "system", "content": "Evaluate if the answer matches the image. Respond with JSON {reason:string, pass:boolean, score:number}" },
@@ -416,28 +464,12 @@ defaultTest:
 
 #### Grading generated image outputs
 
-To grade images produced by an image generation provider (e.g., `openai:image:gpt-image-2`), set `PROMPTFOO_INLINE_MEDIA=true` so the generated image is kept as a data URI in `{{output}}`:
-
-```sh
-PROMPTFOO_INLINE_MEDIA=true promptfoo eval
-```
-
-Then pass `{{output}}` directly as the image URL in your rubric prompt:
+Built-in `openai:image` and `google:image` providers return structured images that `llm-rubric` attaches automatically. Set `PROMPTFOO_INLINE_MEDIA=true` to keep image bytes available to the grader, then select a vision-capable model and write criteria for the image:
 
 ```yaml
 defaultTest:
   options:
-    provider: openai:chat:gpt-5.4-mini
-    rubricPrompt: |
-      [
-        {
-          "role": "user",
-          "content": [
-            { "type": "image_url", "image_url": { "url": "{{output}}" } },
-            { "type": "text", "text": "Evaluate this generated image.\n\nThe prompt was: '{{prompt}}'\n\nGrading criteria: {{rubric}}\n\nRespond with JSON: {reason: string, pass: boolean, score: number}" }
-          ]
-        }
-      ]
+    provider: openai:gpt-6-sol
 tests:
   - vars:
       prompt: A cat wearing a top hat
@@ -446,7 +478,9 @@ tests:
         value: The image shows a cat wearing a top hat
 ```
 
-See the [image eval guide](/docs/guides/image-evaluation) for a complete walkthrough with provider comparison examples.
+A custom rubric can stay text-only. Do not put `{{output}}` in an `image_url` block for these providers: during grading, it may be replaced with an attachment placeholder. Stored blob references are not supported by multimodal grading, so keep inline media enabled for this workflow.
+
+See the [image eval guide](/docs/guides/image-evaluation) for a complete provider comparison and custom rubric example.
 
 #### select-best rubric prompt
 
@@ -495,13 +529,13 @@ assert:
     threshold: 0.8
 ```
 
-The `contextTransform` property accepts a stringified Javascript expression which itself accepts two arguments: `output` and `context`, and **must return a non-empty string.**
+The `contextTransform` property accepts a stringified JavaScript expression which itself accepts two arguments: `output` and `context`, and **must return a non-empty string, or an array of non-empty strings.**
 
 ```typescript
 /**
  * The context transform function signature.
  */
-type ContextTransform = (output: Output, context: Context) => string;
+type ContextTransform = (output: Output, context: Context) => string | string[];
 
 /**
  * The provider's response output.
@@ -570,7 +604,13 @@ contextTransform: 'JSON.stringify(output, null, 2)'
 
 ### Examples
 
-Context-based metrics require a `query` and context. You must also set the `threshold` property on your test (all scores are normalized between 0 and 1).
+What each metric needs:
+
+- `context-relevance` and `context-faithfulness`: a `query` variable and context.
+- `context-recall`: context, plus the fact to look for in `value`. Falls back to the prompt as context.
+- `answer-relevance`: no context. Uses the `query` variable if set, otherwise the prompt.
+
+Scores are normalized between 0 and 1; when `threshold` is omitted, `answer-relevance`, `context-recall`, `context-relevance`, and `context-faithfulness` default to `0.5`.
 
 Here's an example config using statically-defined (`test.vars.context`) context:
 
@@ -581,7 +621,7 @@ prompts:
     Respond to this query: {{query}}
     Here is some context that you can use to write your response: {{context}}
 providers:
-  - openai:gpt-5
+  - openai:gpt-6-sol
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
@@ -625,7 +665,7 @@ prompts:
     You are an internal corporate chatbot.
     Respond to this query: {{query}}
 providers:
-  - openai:gpt-5
+  - openai:gpt-6-sol
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
@@ -717,6 +757,10 @@ Model-graded assertions like `llm-rubric` determine PASS/FAIL using two mechanis
 
 This means a result like `{"pass": true, "score": 0}` will pass without a threshold, but fail with `threshold: 1`.
 
+Assertions with built-in thresholds, such as `answer-relevance`, `context-recall`,
+`context-relevance`, and `context-faithfulness`, default to `0.5` when `threshold` is
+omitted.
+
 **Common issue**: Tests show PASS even when scores are low
 
 ```yaml
@@ -738,7 +782,7 @@ assert:
     value: |
       Return 0 if the response is incorrect
       Return 1 if the response is correct
-    threshold: 1  # Only pass when score >= 1
+    threshold: 1 # Only pass when score >= 1
 
 # ✅ Option B: Have grader control pass explicitly
 assert:

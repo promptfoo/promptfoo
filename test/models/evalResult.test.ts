@@ -1,10 +1,15 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
-import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
+import EvalResult, {
+  sanitizeProvider,
+  sanitizeResultForJsonlArtifact,
+} from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
+import { WebSocketProvider } from '../../src/providers/websocket';
 import {
   type ApiProvider,
+  type Assertion,
   type AtomicTestCase,
   type EvaluateResult,
   type Prompt,
@@ -110,9 +115,101 @@ describe('EvalResult', () => {
         },
       });
     });
+
+    it('should redact env-rendered credentials from templated WebSocket provider data', () => {
+      const provider = new WebSocketProvider('websocket', {
+        config: {
+          url: 'ws://127.0.0.1/sessions/{{ sessionId }}?token=runtime-secret',
+          messageTemplate: '{{ prompt }}',
+        },
+      });
+
+      expect(sanitizeProvider(provider)).toEqual({
+        id: 'ws://127.0.0.1/sessions/{{ sessionId }}?token=%5BREDACTED%5D',
+        label: undefined,
+        config: {
+          url: 'ws://127.0.0.1/sessions/{{ sessionId }}?token=%5BREDACTED%5D',
+          messageTemplate: '{{ prompt }}',
+        },
+      });
+    });
   });
 
   describe('createFromEvaluateResult', () => {
+    it.each<Assertion>([
+      {
+        type: 'is-json',
+        value: {
+          type: 'object',
+          properties: { token: { type: 'string' }, password: { type: 'string' } },
+          required: ['token'],
+        },
+      },
+      { type: 'equals', value: '{ "token": "test input",  "number": 1 }' },
+    ])('preserves $type assertion values while redacting grader settings', async (assertion) => {
+      const credential = 'fixture-grader-credential';
+      const gradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'ok',
+        assertion,
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'ok',
+            assertion: {
+              ...assertion,
+              provider: {
+                id: `https://grader.example/check?api_key=${credential}`,
+                config: { apiKey: credential },
+              },
+              config: { headers: { Authorization: credential } },
+            },
+          },
+        ],
+      };
+      const input = { ...mockEvaluateResult, gradingResult };
+      const artifact = sanitizeResultForJsonlArtifact(input);
+      const result = await EvalResult.createFromEvaluateResult(
+        `assertion-values-${assertion.type}`,
+        input,
+        { persist: true },
+      );
+
+      for (const saved of [artifact, result, await EvalResult.findById(result.id)]) {
+        expect(saved?.gradingResult?.assertion?.value).toEqual(assertion.value);
+        expect(saved?.gradingResult?.componentResults?.[0].assertion?.value).toEqual(
+          assertion.value,
+        );
+        expect(JSON.stringify(saved?.gradingResult)).not.toContain(credential);
+      }
+
+      result.gradingResult = gradingResult;
+      await result.save();
+      const updated = await EvalResult.findById(result.id);
+      expect(updated?.gradingResult?.assertion?.value).toEqual(assertion.value);
+      expect(updated?.gradingResult?.componentResults?.[0].assertion?.value).toEqual(
+        assertion.value,
+      );
+      expect(JSON.stringify(updated?.gradingResult)).not.toContain(credential);
+      expect(gradingResult.componentResults[0].assertion.provider.config.apiKey).toBe(credential);
+    });
+
+    it('preserves URL test inputs while redacting provider URL credentials', async () => {
+      const url = 'https://cdn.example/image?X-Amz-Signature=short-secret&q=hello world';
+      const vars = { image: url, imageUrl: url };
+      const provider: ProviderOptions = { id: 'test-provider', config: { apiBaseUrl: url } };
+      const result = await EvalResult.createFromEvaluateResult('url-inputs', {
+        ...mockEvaluateResult,
+        testCase: { ...mockTestCase, vars },
+        provider,
+      });
+      const saved = await EvalResult.findById(result.id);
+      expect(saved?.testCase.vars).toEqual(vars);
+      expect(saved?.provider.config?.apiBaseUrl).not.toContain('short-secret');
+    });
+
     it('should create and persist an EvalResult', async () => {
       const evalId = 'test-eval-id';
       const result = await EvalResult.createFromEvaluateResult(evalId, mockEvaluateResult);
@@ -1258,6 +1355,62 @@ describe('EvalResult', () => {
       });
     });
 
+    it('does not invent grading requests when reconstructing deterministic assertions', () => {
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: null,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Deterministic assertion passed',
+          tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+        },
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      expect(result.toEvaluateResult().tokenUsage?.assertions).toMatchObject({
+        total: 0,
+        numRequests: 0,
+      });
+    });
+
+    it('separates logical and incurred requests when legacy grading results imply a cache hit', () => {
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: null,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Legacy cached grading result',
+          tokensUsed: { total: 97, cached: 97, numRequests: 0 },
+        },
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      expect(result.toEvaluateResult().tokenUsage).toMatchObject({
+        assertions: { total: 97, cached: 97, numRequests: 1 },
+        incurredTokenUsage: { assertions: { total: 0, numRequests: 0 } },
+      });
+    });
+
     it('counts a provider request for a response that reports no token usage', () => {
       const result = new EvalResult({
         id: 'test-id',
@@ -1478,37 +1631,6 @@ describe('EvalResult', () => {
       );
 
       expect(result.pluginId).toBe('eval-result-plugin');
-    });
-  });
-
-  describe('createManyFromEvaluateResult inline media imports', () => {
-    it('preserves inline b64_json image response JSON during bulk import persistence', async () => {
-      const restoreEnv = mockProcessEnv({ PROMPTFOO_INLINE_MEDIA: 'true' });
-      const pngBase64 = 'iVBORw0KGgoAAAANSUhEUg';
-      const output = JSON.stringify({
-        created: 1234,
-        data: [{ b64_json: pngBase64, revised_prompt: 'Keep this imported metadata.' }],
-      });
-
-      try {
-        const results = await EvalResult.createManyFromEvaluateResult(
-          [
-            {
-              ...mockEvaluateResult,
-              response: {
-                output,
-                isBase64: true,
-                format: 'json',
-              },
-            },
-          ],
-          'test-bulk-inline-image-result',
-        );
-
-        expect(results[0].response?.output).toBe(output);
-      } finally {
-        restoreEnv();
-      }
     });
   });
 

@@ -94,8 +94,8 @@ const provider = await loadApiProvider('openai:chat:gpt-5.5', {
 **Supported providers:**
 
 - `openai:chat:gpt-5.5`, `openai:responses:gpt-5.5`
-- `anthropic:messages:claude-opus-4-7`, `anthropic:messages:claude-sonnet-4-6`
-- `vertex:claude-opus-4-7`, `bedrock:*`, `azure:chat:gpt-5.4`
+- `anthropic:messages:claude-opus-5`, `anthropic:messages:claude-sonnet-5`
+- `vertex:claude-opus-5`, `bedrock:*`, `azure:chat:gpt-5.4`
 - `file://./custom.js`
 
 ---
@@ -107,7 +107,7 @@ const provider = await loadApiProvider('openai:chat:gpt-5.5', {
 ```typescript
 const providers = await loadApiProviders([
   'openai:chat:gpt-5.5',
-  'anthropic:messages:claude-opus-4-7',
+  'anthropic:messages:claude-opus-5',
 ]);
 
 for (const p of providers) {
@@ -201,11 +201,12 @@ await cache.withCacheNamespace('v1', async () => {
 
 ### Guardrails Functions
 
-| Function             | Purpose          | Stability |
-| -------------------- | ---------------- | --------- |
-| `guardrails.guard()` | Moderation check | ✅ Stable |
-| `guardrails.pii()`   | PII detection    | ✅ Stable |
-| `guardrails.harm()`  | Harm detection   | ✅ Stable |
+| Function                | Purpose                        | Stability |
+| ----------------------- | ------------------------------ | --------- |
+| `guardrails.guard()`    | Moderation check               | ✅ Stable |
+| `guardrails.pii()`      | PII detection                  | ✅ Stable |
+| `guardrails.harm()`     | Harm detection                 | ✅ Stable |
+| `guardrails.adaptive()` | Policy-based prompt adaptation | ✅ Stable |
 
 ### Red Team Functions
 
@@ -318,7 +319,7 @@ await evaluate(testSuite, {
 ```typescript
 const providers = await loadApiProviders([
   'openai:chat:gpt-5.5',
-  'anthropic:messages:claude-opus-4-7',
+  'anthropic:messages:claude-opus-5',
 ]);
 
 for (const p of providers) {
