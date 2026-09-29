@@ -227,7 +227,7 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
-    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    vi.useFakeTimers({ toFake: ['Date', 'performance', 'setTimeout', 'clearTimeout'] });
     const evaluation = evaluate(testSuite, evalRecord, { timeoutMs: 100 });
     await started;
     expect(fs.existsSync(workspaces[0])).toBe(true);
