@@ -7,11 +7,6 @@ import { resolveTestsWatchPaths } from '../../src/util/testCaseReader';
 
 import type { TestSuiteConfig } from '../../src/types/index';
 
-/**
- * These cover the paths watch mode needs to observe. The watcher previously duplicated
- * the loader's resolution rules and drifted from them, so each case here pins one rule
- * that the loader already applies in readTests()/loadTestsFromGlob().
- */
 describe('resolveTestsWatchPaths', () => {
   let base: string;
 
@@ -64,15 +59,10 @@ describe('resolveTestsWatchPaths', () => {
   });
 
   it("never watches a glob's parent directory", () => {
-    // chokidar watches a directory recursively, and doEval reruns the whole evaluation
-    // on any `change` beneath it. Watching the parent would therefore rerun on every
-    // unrelated edit in the tree -- including the run writing its own output file,
-    // which reruns forever. It also buys nothing: a newly added file emits `add`, and
-    // the watcher only handles `change`.
+    // Watching a parent would rerun on unrelated changes, including eval output.
     expect(resolve('file://tests/*.yaml' as TestSuiteConfig['tests'])).not.toContain(
       path.join(base, 'tests'),
     );
-    // The worst shape: a pattern anchored at the config directory itself.
     expect(resolve('file://*.yaml' as TestSuiteConfig['tests'])).not.toContain(base);
     expect(resolve('file://**/*.yaml' as TestSuiteConfig['tests'])).not.toContain(base);
   });
@@ -110,7 +100,7 @@ describe('resolveTestsWatchPaths', () => {
     // invoking the generator, so editing them changes the generated cases.
     const watched = resolve({
       path: 'file://gen.py:make',
-      config: { data: 'file://dataset.yaml' },
+      config: { nested: { data: ['file://dataset.yaml'] } },
     } as unknown as TestSuiteConfig['tests']);
     expect(watched).toContain(path.join(base, 'gen.py'));
     expect(watched).toContain(path.join(base, 'dataset.yaml'));
@@ -130,7 +120,6 @@ describe('resolveTestsWatchPaths', () => {
   });
 
   it('returns the literal path when a reference matches nothing yet', () => {
-    // Creating the file later should still trigger a rerun.
     expect(resolve('file://not-created-yet.yaml' as TestSuiteConfig['tests'])).toEqual([
       path.join(base, 'not-created-yet.yaml'),
     ]);
@@ -208,14 +197,20 @@ describe('resolveTestsWatchPaths', () => {
   });
 
   it('watches every reference of an array-valued var', () => {
-    // generateVarCombinations() fans an array out into one case per entry and
-    // renderPrompt() then loads each file, so all of them feed the evaluation.
+    // Each array string becomes a separate rendered case.
     const watched = resolve([
       { vars: { doc: ['file://tests/a.yaml', 'file://tests/b.yaml'] } },
     ] as unknown as TestSuiteConfig['tests']);
     expect(watched).toContain(path.join(base, 'tests/a.yaml'));
     expect(watched).toContain(path.join(base, 'tests/b.yaml'));
   });
+
+  it.each([{ data: { path: 'file://vars.csv' } }, { data: [{ path: 'file://vars.csv' }] }])(
+    'ignores file-like strings inside literal var objects: %j',
+    (vars) => {
+      expect(resolve([{ vars }] as TestSuiteConfig['tests'])).toEqual([]);
+    },
+  );
 
   it('ignores remote references', () => {
     expect(

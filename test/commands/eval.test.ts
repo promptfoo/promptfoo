@@ -1166,6 +1166,133 @@ describe('evalCommand', () => {
     }
   });
 
+  describe('watch run isolation', () => {
+    beforeEach(() => {
+      vi.mocked(resolveConfigs).mockReset();
+      vi.mocked(evaluate).mockReset();
+      vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
+    });
+
+    afterEach(() => {
+      vi.mocked(resolveConfigs).mockReset();
+      vi.mocked(evaluate).mockReset();
+    });
+
+    it('cleans up each failed run and recovers after evaluation and config errors', async () => {
+      const providers = Array.from({ length: 3 }, (_, index) => ({
+        id: () => `provider-${index}`,
+        callApi: vi.fn(async () => ({ output: 'ok' })),
+        cleanup: vi.fn().mockResolvedValue(undefined),
+      }));
+      for (const provider of providers.slice(0, 2)) {
+        vi.mocked(resolveConfigs).mockResolvedValueOnce({
+          config: {},
+          testSuite: { prompts: [], providers: [provider] },
+          basePath: path.resolve('/'),
+        });
+      }
+      vi.mocked(evaluate)
+        .mockImplementationOnce(async (_suite, record) => record as Eval)
+        .mockRejectedValueOnce(new Error('hook failed'))
+        .mockImplementationOnce(async (_suite, record) => record as Eval);
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+      try {
+        await doEval({ watch: true, write: false }, {}, defaultConfigPath, {});
+        const onChange = chokidarMocks.handlers.get('change')!;
+        await expect(onChange(defaultConfigPath)).resolves.toBeUndefined();
+        expect(errorSpy).toHaveBeenCalledWith('hook failed');
+        expect(providers[1].cleanup).toHaveBeenCalledTimes(1);
+
+        // A failure before resolving providers must not reuse the previous run's suite.
+        vi.mocked(resolveConfigs).mockReset().mockRejectedValueOnce(new Error('invalid config'));
+        await expect(onChange(defaultConfigPath)).resolves.toBeUndefined();
+        expect(providers[1].cleanup).toHaveBeenCalledTimes(1);
+
+        vi.mocked(resolveConfigs).mockResolvedValueOnce({
+          config: {},
+          testSuite: { prompts: [], providers: [providers[2]] },
+          basePath: path.resolve('/'),
+        });
+        await expect(onChange(defaultConfigPath)).resolves.toBeUndefined();
+        expect(evaluate).toHaveBeenCalledTimes(3);
+        for (const provider of providers) {
+          expect(provider.cleanup).toHaveBeenCalledTimes(1);
+        }
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
+
+    it('reloads removed options after a failed run and preserves caller cancellation', async () => {
+      const controller = new AbortController();
+      const initialOptions: Parameters<typeof doEval>[3] = {
+        repeat: 2,
+        maxConcurrency: 2,
+        eventSource: 'library',
+        generationEventId: 'caller-generation',
+        abortSignal: controller.signal,
+      };
+      vi.mocked(resolveConfigs)
+        .mockResolvedValueOnce({
+          config: {},
+          testSuite: { prompts: [], providers: [] },
+          basePath: path.resolve('/'),
+        })
+        .mockResolvedValueOnce({
+          config: {
+            evaluateOptions: {
+              repeat: 3,
+              maxConcurrency: 4,
+              delay: 5,
+              eventSource: 'cli',
+              generationEventId: 'config-generation',
+            } as Parameters<typeof doEval>[3],
+          },
+          testSuite: { prompts: [], providers: [] },
+          basePath: path.resolve('/'),
+        })
+        .mockResolvedValueOnce({
+          config: {},
+          testSuite: { prompts: [], providers: [] },
+          basePath: path.resolve('/'),
+        });
+      vi.mocked(evaluate)
+        .mockImplementationOnce(async (_suite, record) => record as Eval)
+        .mockRejectedValueOnce(new Error('hook failed'))
+        .mockImplementationOnce(async (_suite, record) => record as Eval);
+
+      await doEval({ watch: true, write: false }, {}, defaultConfigPath, initialOptions);
+      await chokidarMocks.handlers.get('change')!(defaultConfigPath);
+      await chokidarMocks.handlers.get('change')!(defaultConfigPath);
+
+      expect(evaluate).toHaveBeenNthCalledWith(
+        2,
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ repeat: 3, maxConcurrency: 1, delay: 5 }),
+      );
+      expect(evaluate).toHaveBeenNthCalledWith(
+        3,
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ repeat: 2, maxConcurrency: 2, delay: undefined }),
+      );
+      for (const [, , options] of vi.mocked(evaluate).mock.calls) {
+        expect(options).toMatchObject({
+          eventSource: 'library',
+          generationEventId: 'caller-generation',
+        });
+        expect(options?.abortSignal?.aborted).toBe(false);
+      }
+      expect(initialOptions.abortSignal).toBe(controller.signal);
+      expect(initialOptions.repeat).toBe(2);
+      controller.abort();
+      for (const [, , options] of vi.mocked(evaluate).mock.calls) {
+        expect(options?.abortSignal?.aborted).toBe(true);
+      }
+    });
+  });
+
   it('should fail with explicit cloud UUID error when cloud fetch fails', async () => {
     const cloudConfigUuid = '12345678-1234-4234-8234-123456789abc';
     const cmdObj = { config: [cloudConfigUuid] };
@@ -2208,6 +2335,43 @@ describe('evalCommand', () => {
     await doEval({}, defaultConfig, defaultConfigPath, {});
 
     expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('cleans up every provider without hiding the original evaluation error', async () => {
+    const runError = new Error('evaluation failed');
+    const cleanupErrors = [new Error('sync cleanup failed'), new Error('async cleanup failed')];
+    const cleanups = [
+      vi.fn(() => {
+        throw cleanupErrors[0];
+      }),
+      vi.fn().mockRejectedValue(cleanupErrors[1]),
+      vi.fn().mockResolvedValue(undefined),
+    ];
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: {},
+      testSuite: {
+        prompts: [],
+        providers: cleanups.map((cleanup, index) => ({
+          id: () => `cleanup-provider-${index}`,
+          callApi: vi.fn(async () => ({ output: 'ok' })),
+          cleanup,
+        })),
+      },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockRejectedValueOnce(runError);
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    try {
+      await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toBe(runError);
+      for (const cleanup of cleanups) {
+        expect(cleanup).toHaveBeenCalledTimes(1);
+      }
+      for (const error of cleanupErrors) {
+        expect(warnSpy).toHaveBeenCalledWith('Provider cleanup failed', { error });
+      }
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('should handle redteam config', async () => {
