@@ -1,5 +1,5 @@
 /**
- * Base error class for all MCP tool errors
+ * MCP errors with a code and serializable details.
  */
 export abstract class McpError extends Error {
   abstract readonly code: string;

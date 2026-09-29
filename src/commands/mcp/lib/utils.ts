@@ -5,9 +5,6 @@ import type { TextContent, ToolResponse, ToolResult } from './types';
  */
 export const DEFAULT_TOOL_TIMEOUT_MS = 5 * 60 * 1000;
 
-/**
- * Creates a standardized tool response with proper typing
- */
 export function createToolResponse<T = unknown>(
   tool: string,
   success: boolean,

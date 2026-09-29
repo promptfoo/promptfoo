@@ -3,17 +3,12 @@ import { LRUCache } from 'lru-cache';
 import type { EvalSummary } from '../../../types/index';
 
 /**
- * Performance utilities for MCP server operations
- */
-
-/**
- * Simple in-memory cache for evaluation results
+ * In-memory cache for evaluation results.
  */
 export class EvaluationCache {
   private cache: LRUCache<string, EvalSummary[]>;
 
   constructor(maxSize: number = 100, ttlMs: number = 5 * 60 * 1000) {
-    // 5 minutes default
     this.cache = new LRUCache<string, EvalSummary[]>({
       max: maxSize,
       ttl: ttlMs,
@@ -90,7 +85,4 @@ export function paginate<T>(items: T[], options: PaginationOptions = {}): Pagina
   };
 }
 
-/**
- * Default cache instances
- */
 export const evaluationCache = new EvaluationCache();
