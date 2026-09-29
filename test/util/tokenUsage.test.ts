@@ -188,18 +188,24 @@ describe('TokenUsageTracker', () => {
     });
   });
 
-  it('counts a response with malformed token usage as an unmetered request', () => {
-    tracker.trackResponseUsage('test-provider', {
-      tokenUsage: { total: Number.NaN, prompt: 3, completion: 4 },
-    });
+  it.each([Number.NaN, Infinity, -Infinity])(
+    'preserves known usage when a later response reports %s tokens',
+    (total) => {
+      tracker.trackResponseUsage('test-provider', {
+        tokenUsage: { total: 5, prompt: 2, completion: 3 },
+      });
+      tracker.trackResponseUsage('test-provider', {
+        tokenUsage: { total, prompt: 3, completion: 4 },
+      });
 
-    expect(tracker.getProviderUsage('test-provider')).toMatchObject({
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      numRequests: 1,
-    });
-  });
+      expect(tracker.getProviderUsage('test-provider')).toMatchObject({
+        total: 5,
+        prompt: 2,
+        completion: 3,
+        numRequests: 2,
+      });
+    },
+  );
 
   it('should merge token usage for the same provider', () => {
     const usage1: TokenUsage = {

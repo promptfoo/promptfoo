@@ -9,7 +9,7 @@ export class GoblinProvider extends HydraProvider {
   constructor(config: HydraConfig) {
     super(config, {
       strategyName: 'Goblin',
-      strategyId: 'jailbreak:goblin',
+      strategyId: 'goblin',
       providerId: 'promptfoo:redteam:goblin',
       taskId: 'goblin-decision',
       metadataPrefix: 'goblin',

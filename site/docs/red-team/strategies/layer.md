@@ -441,22 +441,21 @@ Be aware of test case growth when combining strategies:
 
 The following strategies can be used as the first step with per-turn transforms:
 
-| Strategy           | Type          | Description                        |
-| ------------------ | ------------- | ---------------------------------- |
-| `jailbreak:hydra`  | Multi-turn    | Branching conversation attack      |
-| `jailbreak:goblin` | Multi-turn    | Adaptive pattern-completion attack |
-| `crescendo`        | Multi-turn    | Gradual escalation attack          |
-| `goat`             | Multi-turn    | Goal-oriented adversarial testing  |
-| `custom`           | Multi-turn    | Custom multi-turn strategy         |
-| `jailbreak`        | Multi-attempt | Iterative single-turn attempts     |
-| `jailbreak:meta`   | Multi-attempt | Meta-agent attack generation       |
-| `jailbreak:tree`   | Multi-attempt | Tree-based attack search           |
+| Strategy          | Type          | Description                       |
+| ----------------- | ------------- | --------------------------------- |
+| `jailbreak:hydra` | Multi-turn    | Branching conversation attack     |
+| `crescendo`       | Multi-turn    | Gradual escalation attack         |
+| `goat`            | Multi-turn    | Goal-oriented adversarial testing |
+| `custom`          | Multi-turn    | Custom multi-turn strategy        |
+| `jailbreak`       | Multi-attempt | Iterative single-turn attempts    |
+| `jailbreak:meta`  | Multi-attempt | Meta-agent attack generation      |
+| `jailbreak:tree`  | Multi-attempt | Tree-based attack search          |
 
 ## Related Concepts
 
 - [Audio Strategy](./audio.md) - Text-to-speech conversion
 - [Image Strategy](./image.md) - Text-to-image conversion
-- [Hydra Strategy](./multi-turn.md) - Multi-turn jailbreak attacks
+- [Hydra Strategy](./hydra.md) - Multi-turn jailbreak attacks
 - [ROT13](./rot13.md) - Simple cipher encoding
 - [Base64](./base64.md) - Common encoding technique
 - [Custom Strategy Scripts](./custom.md) - Create your own strategies

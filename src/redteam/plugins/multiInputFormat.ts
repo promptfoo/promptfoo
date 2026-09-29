@@ -73,85 +73,20 @@ function hasPromptBoundaryMarker(line: string): boolean {
 
 function cleanPrompt(prompt: string): string {
   let cleaned = prompt;
-  // Handle numbered lists with various formats
-  cleaned = cleaned.replace(/^\d+[\.\)\-]?\s*-?\s*/, '');
+  // Require a list delimiter and following space; numeric attack content is significant.
+  cleaned = cleaned.replace(/^(?:\*+\s*)?\d+(?:[.)]|\s*-)(?:\*+)?\s+/, '');
   // Handle quotes
   cleaned = cleaned.replace(/^["'](.*)["']$/, '$1');
   // Handle nested quotes
   cleaned = cleaned.replace(/^'([^']*(?:'{2}[^']*)*)'$/, (_, p1) => p1.replace(/''/g, "'"));
   cleaned = cleaned.replace(/^"([^"]*(?:"{2}[^"]*)*)"$/, (_, p1) => p1.replace(/""/g, '"'));
-  // Strip leading and trailing asterisks
-  cleaned = cleaned.replace(/^\*+/, '').replace(/\*$/, '');
+  // Remove dangling formatting while preserving Markdown inside the payload.
+  cleaned = cleaned.replace(/^\*+\s+/, '').replace(/\s+\*+$/, '');
   return cleaned.trim();
 }
 
-type JsonPrefixState = {
-  escaped: boolean;
-  inString: boolean;
-  invalid: boolean;
-  stack: string[];
-  started: boolean;
-};
-
-function updateJsonStringState(state: JsonPrefixState, char: string): void {
-  if (state.escaped) {
-    state.escaped = false;
-  } else if (char === '\\') {
-    state.escaped = true;
-  } else if (char === '"') {
-    state.inString = false;
-  }
-}
-
-function updateJsonPrefixState(state: JsonPrefixState, line: string): void {
-  if (state.invalid) {
-    return;
-  }
-
-  for (const char of line) {
-    if (!state.started) {
-      if (/\s/.test(char)) {
-        continue;
-      }
-      if (char !== '{' && char !== '[') {
-        state.invalid = true;
-        return;
-      }
-      state.started = true;
-    }
-
-    if (state.inString) {
-      updateJsonStringState(state, char);
-      continue;
-    }
-
-    if (char === '"') {
-      state.inString = true;
-    } else if (char === '{' || char === '[') {
-      state.stack.push(char);
-    } else if (char === '}' || char === ']') {
-      const expected = char === '}' ? '{' : '[';
-      if (state.stack.pop() !== expected) {
-        state.invalid = true;
-        return;
-      }
-    }
-  }
-}
-
-function collectPromptAfterEmptyMarker(
-  lines: string[],
-  startIndex: number,
-  preserveBlankLines = false,
-): string {
+function collectPromptAfterEmptyMarker(lines: string[], startIndex: number): string {
   const promptLines: string[] = [];
-  const jsonPrefixState: JsonPrefixState = {
-    escaped: false,
-    inString: false,
-    invalid: false,
-    stack: [],
-    started: false,
-  };
 
   for (let i = startIndex; i < lines.length; i++) {
     const line = lines[i];
@@ -161,19 +96,7 @@ function collectPromptAfterEmptyMarker(
       if (promptLines.length === 0) {
         continue;
       }
-      if (!preserveBlankLines) {
-        break;
-      }
-
-      if (
-        !jsonPrefixState.started ||
-        jsonPrefixState.invalid ||
-        (!jsonPrefixState.inString && jsonPrefixState.stack.length === 0)
-      ) {
-        break;
-      }
-      promptLines.push(line);
-      continue;
+      break;
     }
 
     if (hasPromptBoundaryMarker(trimmedLine)) {
@@ -181,7 +104,6 @@ function collectPromptAfterEmptyMarker(
     }
 
     promptLines.push(line);
-    updateJsonPrefixState(jsonPrefixState, line);
   }
 
   return promptLines.join('\n').trim();
@@ -254,7 +176,7 @@ function parseMultiLinePrompts(
     const prompt = removePrefix(lines[promptIndex].trim(), 'Prompt');
 
     if (prompt.length === 0) {
-      const promptAfterEmptyMarker = collectPromptAfterEmptyMarker(lines, promptIndex + 1, true);
+      const promptAfterEmptyMarker = collectPromptAfterEmptyMarker(lines, promptIndex + 1);
       if (promptAfterEmptyMarker.length > 0) {
         prompts.push(promptAfterEmptyMarker);
       }
@@ -284,15 +206,18 @@ function parseLegacyPrompts(lines: string[]): { __prompt: string }[] {
     prompt = cleanPrompt(prompt);
 
     if (prompt.length === 0) {
-      return collectPromptAfterEmptyMarker(lines, lineIndex + 1, true);
+      return collectPromptAfterEmptyMarker(lines, lineIndex + 1);
     }
 
     return prompt;
   };
 
-  // Split semicolon-separated prompts while preserving newline indexes for empty-marker fallback.
+  // Split only before a new prompt marker; semicolons within attack payloads are content.
+  // Newlines already separate prompts; retain trailing payload semicolons and line indexes.
   const promptLines = lines.flatMap((line, lineIndex) =>
-    line.split(';').map((segment) => ({ line: segment, lineIndex })),
+    line
+      .split(/;(?=\s*(?:\*+\s*)?(?:\d+[.)-]?\s*(?:\*+\s*)?)?Prompt\s*:)/i)
+      .map((segment) => ({ line: segment, lineIndex })),
   );
 
   return promptLines

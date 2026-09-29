@@ -8,11 +8,6 @@ import {
   MULTI_INPUT_EXCLUDED_PLUGINS,
   type MultiTurnStrategy,
 } from '../../redteam/constants';
-import {
-  trackGenerationErrorTokenUsage,
-  trackGenerationResponseTokenUsage,
-  trackGenerationTokenUsage,
-} from '../../redteam/generationTokenUsage';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
 import { redteamProviderManager } from '../../redteam/providers/shared';
 import {
@@ -25,7 +20,6 @@ import { Strategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
 import { type RedteamFileConfig, TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
-import { BaseTokenUsageSchema, type TokenUsage } from '../../types/shared';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sanitizeObject } from '../../util/sanitizer';
 import { evalJobService } from '../services/evalJobService';
@@ -43,8 +37,6 @@ export const redteamRouter = Router();
  * Generates a test case for a given plugin/strategy combination.
  */
 redteamRouter.post('/generate-test', async (req: Request, res: Response): Promise<void> => {
-  const generationTokenUsage: TokenUsage = {};
-
   try {
     const parsedBody = RedteamSchemas.GenerateTest.Request.safeParse(req.body);
     if (!parsedBody.success) {
@@ -101,13 +93,9 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       provider: provider as RedteamFileConfig['provider'],
       ignoreCliState: true,
     });
-    const trackedProviderSelection = {
-      ...providerSelection,
-      provider: trackGenerationTokenUsage(providerSelection.provider, generationTokenUsage),
-    };
 
     const testCases = await pluginFactory.action({
-      provider: trackedProviderSelection.provider,
+      provider: providerSelection.provider,
       purpose: config.applicationDefinition.purpose ?? 'general AI assistant',
       injectVar,
       n: effectiveCount, // Generate requested number of test cases
@@ -120,10 +108,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     });
 
     if (testCases.length === 0) {
-      res.status(500).json({
-        error: 'Failed to generate test case',
-        tokenUsage: BaseTokenUsageSchema.parse(generationTokenUsage),
-      });
+      res.status(500).json({ error: 'Failed to generate test case' });
       return;
     }
 
@@ -144,9 +129,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           strategy.id,
           {
             // Provider options stay request-local because they can contain credentials.
-            generationProviderSelection: trackedProviderSelection,
-            wrapGenerationProvider: (provider) =>
-              trackGenerationTokenUsage(provider, generationTokenUsage),
+            generationProviderSelection: providerSelection,
           },
         );
 
@@ -154,11 +137,9 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           finalTestCases = strategyTestCases;
         }
       } catch (error) {
-        trackGenerationErrorTokenUsage(generationTokenUsage, error, false);
         logger.error(`Error applying strategy ${strategy.id}`, { error });
         res.status(500).json({
           error: `Failed to apply strategy ${strategy.id}`,
-          tokenUsage: BaseTokenUsageSchema.parse(generationTokenUsage),
         });
         return;
       }
@@ -192,28 +173,18 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           purpose,
           stateful,
         });
-        trackGenerationResponseTokenUsage(generationTokenUsage, {
-          tokenUsage: multiTurnResult.tokenUsage,
-          cached: false,
-        });
 
         res.json(
           RedteamSchemas.GenerateTest.Response.parse({
             prompt: multiTurnResult.prompt,
             context,
             metadata: multiTurnResult.metadata,
-            tokenUsage: generationTokenUsage,
           }),
         );
         return;
       } catch (error) {
-        const isRemoteGenerationDisabled = error instanceof RemoteGenerationDisabledError;
-        trackGenerationErrorTokenUsage(generationTokenUsage, error, !isRemoteGenerationDisabled);
-        if (isRemoteGenerationDisabled) {
-          res.status(400).json({
-            error: error.message,
-            tokenUsage: BaseTokenUsageSchema.parse(generationTokenUsage),
-          });
+        if (error instanceof RemoteGenerationDisabledError) {
+          res.status(400).json({ error: error.message });
           return;
         }
 
@@ -223,7 +194,6 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         });
         res.status(500).json({
           error: 'Failed to generate multi-turn prompt',
-          tokenUsage: BaseTokenUsageSchema.parse(generationTokenUsage),
         });
         return;
       }
@@ -242,7 +212,6 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         RedteamSchemas.GenerateTest.Response.parse({
           testCases: batchResults,
           count: batchResults.length,
-          tokenUsage: generationTokenUsage,
         }),
       );
       return;
@@ -259,15 +228,12 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         prompt: generatedPrompt,
         context,
         metadata: baseMetadata,
-        tokenUsage: generationTokenUsage,
       }),
     );
   } catch (error) {
-    trackGenerationErrorTokenUsage(generationTokenUsage, error, false);
     logger.error('Error generating test case', { error });
     res.status(500).json({
       error: 'Failed to generate test case',
-      tokenUsage: BaseTokenUsageSchema.parse(generationTokenUsage),
     });
   }
 });
@@ -295,6 +261,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   }
 
   const { config, force, verbose, delay, maxConcurrency } = bodyResult.data;
+  const { basePath: _basePath, ...localConfig } = config;
   const id = crypto.randomUUID();
   currentJobId = id;
   currentAbortController = new AbortController();
@@ -306,7 +273,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
 
   // Run redteam in background
   doRedteamRun({
-    liveRedteamConfig: config,
+    liveRedteamConfig: localConfig,
     force,
     verbose,
     ...(delay === undefined ? {} : { delay }),

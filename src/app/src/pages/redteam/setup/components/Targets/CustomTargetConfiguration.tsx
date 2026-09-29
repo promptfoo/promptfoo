@@ -11,7 +11,7 @@ import {
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import Prism from '@app/lib/prism';
+import { highlightJSON } from '@app/lib/codeHighlight';
 import { cn } from '@app/lib/utils';
 import deepEqual from 'fast-deep-equal';
 import {
@@ -52,18 +52,6 @@ interface ProviderConfig {
   configExample: Record<string, unknown>;
   configDescription: string;
 }
-
-const highlightJSON = (code: string): string => {
-  try {
-    const grammar = Prism?.languages?.json;
-    if (!grammar) {
-      return code;
-    }
-    return Prism.highlight(code, grammar, 'json');
-  } catch {
-    return code;
-  }
-};
 
 const getProviderConfig = (providerType?: string): ProviderConfig => {
   switch (providerType) {
