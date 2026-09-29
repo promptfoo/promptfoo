@@ -4,13 +4,8 @@ import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
-import {
-  getRequestTimeoutMs,
-  parseChatPrompt,
-  shouldBustProviderCache,
-  withResponseCacheMetadata,
-} from '../shared';
-import { GoogleGenericProvider, type GoogleProviderOptions, getCallbackErrorOutput } from './base';
+import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
+import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { CHAT_MODELS } from './shared';
 import {
   calculateGoogleCost,
@@ -39,7 +34,6 @@ import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
   CallApiContextParams,
-  CallApiOptionsParams,
   GuardrailResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
@@ -52,6 +46,10 @@ const GENERATE_CONTENT_MODEL_PREFIXES = ['gemini', 'gemma', 'codegemma', 'palige
 
 function usesGenerateContentApi(modelName: string): boolean {
   return GENERATE_CONTENT_MODEL_PREFIXES.some((prefix) => modelName.startsWith(prefix));
+}
+
+function shouldBustCache(context?: CallApiContextParams): boolean {
+  return context?.bustCache ?? context?.debug ?? false;
 }
 
 /**
@@ -174,14 +172,11 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
   /**
    * Call the Google AI Studio API.
    */
-  async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    options?.abortSignal?.throwIfAborted();
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for MCP initialization if pending
-    await this.initializeMCP(options?.abortSignal);
+    if (this.initializationPromise != null) {
+      await this.initializationPromise;
+    }
 
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -191,7 +186,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     }
 
     if (usesGenerateContentApi(this.modelName)) {
-      return this.callGemini(prompt, context, options);
+      return this.callGemini(prompt, context);
     }
 
     // Legacy PaLM API path
@@ -223,14 +218,13 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         `${baseUrl}/v1beta3/models/${this.modelName}:generateMessage`,
         {
           method: 'POST',
-          signal: options?.abortSignal,
           headers,
           body: JSON.stringify(body),
           ...(authDiscriminator && { _authHash: authDiscriminator }),
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
-        shouldBustProviderCache(context),
+        shouldBustCache(context),
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {
       return {
@@ -246,42 +240,64 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
 
     try {
       const output = data.candidates[0].content;
-      const tokenUsage = {
-        prompt:
-          data.usageMetadata?.promptTokenCount === undefined
-            ? undefined
-            : data.usageMetadata.promptTokenCount +
-              (data.usageMetadata?.toolUsePromptTokenCount ?? 0),
-        completion: data.usageMetadata?.candidatesTokenCount,
-        total: data.usageMetadata?.totalTokenCount,
-        numRequests: 1,
-        ...(data.usageMetadata?.cachedContentTokenCount !== undefined && {
-          cached: data.usageMetadata.cachedContentTokenCount,
-        }),
-        ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
-          completionDetails: {
-            reasoning: data.usageMetadata.thoughtsTokenCount,
-            acceptedPrediction: 0,
-            rejectedPrediction: 0,
-          },
-        }),
-      };
+      const tokenUsage = cached
+        ? {
+            cached: data.usageMetadata?.totalTokenCount,
+            total: data.usageMetadata?.totalTokenCount,
+            numRequests: 1,
+            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
+              completionDetails: {
+                reasoning: data.usageMetadata.thoughtsTokenCount,
+                acceptedPrediction: 0,
+                rejectedPrediction: 0,
+              },
+            }),
+          }
+        : {
+            prompt:
+              data.usageMetadata?.promptTokenCount === undefined
+                ? undefined
+                : data.usageMetadata.promptTokenCount +
+                  (data.usageMetadata?.toolUsePromptTokenCount ?? 0),
+            completion: data.usageMetadata?.candidatesTokenCount,
+            total: data.usageMetadata?.totalTokenCount,
+            numRequests: 1,
+            ...(data.usageMetadata?.cachedContentTokenCount !== undefined && {
+              cached: data.usageMetadata.cachedContentTokenCount,
+            }),
+            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
+              completionDetails: {
+                reasoning: data.usageMetadata.thoughtsTokenCount,
+                acceptedPrediction: 0,
+                rejectedPrediction: 0,
+              },
+            }),
+          };
 
+      // Calculate cost (only for non-cached responses)
       // Include thinking tokens in output cost - Google bills them as output tokens
       const completionForCost =
         data.usageMetadata?.candidatesTokenCount == null
           ? undefined
           : data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0);
-      const cost = calculateGoogleCostFromUsage(
-        this.modelName,
-        config,
-        data.usageMetadata?.promptTokenCount,
-        completionForCost,
-        false,
-        data.usageMetadata,
-      );
+      const cost = cached
+        ? undefined
+        : calculateGoogleCostFromUsage(
+            this.modelName,
+            config,
+            data.usageMetadata?.promptTokenCount,
+            completionForCost,
+            false,
+            data.usageMetadata,
+          );
 
-      return withResponseCacheMetadata({ output, tokenUsage, cost, raw: data }, cached);
+      return {
+        output,
+        tokenUsage,
+        cost,
+        raw: data,
+        cached,
+      };
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
@@ -292,12 +308,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
   /**
    * Call the Gemini API specifically.
    */
-  async callGemini(
-    prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    options?.abortSignal?.throwIfAborted();
+  async callGemini(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error(
@@ -322,7 +333,6 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     // Get all tools (MCP + config tools) using base class method
     const allTools = await this.getAllTools(context, {
       skipExecutableToolFiles: toolsDisabled,
-      abortSignal: options?.abortSignal,
     });
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
     const {
@@ -407,14 +417,13 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         endpoint,
         {
           method: 'POST',
-          signal: options?.abortSignal,
           headers,
           body: JSON.stringify(body),
           ...(authDiscriminator && { _authHash: authDiscriminator }),
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
-        shouldBustProviderCache(context),
+        shouldBustCache(context),
       );
       data = response.data as GeminiResponseData;
       cached = response.cached;
@@ -484,74 +493,78 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         lastData.usageMetadata,
       );
 
-      const tokenUsage = {
-        prompt:
-          lastData.usageMetadata?.promptTokenCount === undefined
-            ? undefined
-            : lastData.usageMetadata.promptTokenCount +
-              (lastData.usageMetadata?.toolUsePromptTokenCount ?? 0),
-        completion: lastData.usageMetadata?.candidatesTokenCount,
-        total: lastData.usageMetadata?.totalTokenCount,
-        numRequests: 1,
-        ...(lastData.usageMetadata?.cachedContentTokenCount !== undefined && {
-          cached: lastData.usageMetadata.cachedContentTokenCount,
-        }),
-        ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
-          completionDetails: {
-            reasoning: lastData.usageMetadata.thoughtsTokenCount,
-            acceptedPrediction: 0,
-            rejectedPrediction: 0,
-          },
-        }),
-      };
+      const tokenUsage = cached
+        ? {
+            cached: lastData.usageMetadata?.totalTokenCount,
+            total: lastData.usageMetadata?.totalTokenCount,
+            numRequests: 1,
+            ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
+              completionDetails: {
+                reasoning: lastData.usageMetadata.thoughtsTokenCount,
+                acceptedPrediction: 0,
+                rejectedPrediction: 0,
+              },
+            }),
+          }
+        : {
+            prompt:
+              lastData.usageMetadata?.promptTokenCount === undefined
+                ? undefined
+                : lastData.usageMetadata.promptTokenCount +
+                  (lastData.usageMetadata?.toolUsePromptTokenCount ?? 0),
+            completion: lastData.usageMetadata?.candidatesTokenCount,
+            total: lastData.usageMetadata?.totalTokenCount,
+            numRequests: 1,
+            ...(lastData.usageMetadata?.cachedContentTokenCount !== undefined && {
+              cached: lastData.usageMetadata.cachedContentTokenCount,
+            }),
+            ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
+              completionDetails: {
+                reasoning: lastData.usageMetadata.thoughtsTokenCount,
+                acceptedPrediction: 0,
+                rejectedPrediction: 0,
+              },
+            }),
+          };
 
+      // Calculate cost (only for non-cached responses)
       // Include thinking tokens in output cost - Google bills them as output tokens
       const completionForCost =
         lastData.usageMetadata?.candidatesTokenCount == null
           ? undefined
           : lastData.usageMetadata.candidatesTokenCount +
             (lastData.usageMetadata?.thoughtsTokenCount ?? 0);
-      const cost = calculateGoogleCostFromUsage(
-        this.modelName,
-        config,
-        lastData.usageMetadata?.promptTokenCount,
-        completionForCost,
-        false,
-        lastData.usageMetadata,
-        actualServiceTier,
-      );
+      const cost = cached
+        ? undefined
+        : calculateGoogleCostFromUsage(
+            this.modelName,
+            config,
+            lastData.usageMetadata?.promptTokenCount,
+            completionForCost,
+            false,
+            lastData.usageMetadata,
+            actualServiceTier,
+          );
       const audio = normalizeGeminiAudio(output);
 
-      const response = withResponseCacheMetadata(
-        {
-          output,
-          ...(audio && { audio }),
-          tokenUsage,
-          cost,
-          raw: data,
-          cached,
-          ...(guardrails && { guardrails }),
-          metadata: {
-            ...grounding,
-            ...(thoughtSignatures.length > 0 && { thoughtSignatures }),
-            ...(actualServiceTier && { serviceTier: actualServiceTier }),
-          },
-        },
+      const response: ProviderResponse = {
+        output,
+        ...(audio && { audio }),
+        tokenUsage,
+        cost,
+        raw: data,
         cached,
-      );
+        ...(guardrails && { guardrails }),
+        metadata: {
+          ...grounding,
+          ...(thoughtSignatures.length > 0 && { thoughtSignatures }),
+          ...(actualServiceTier && { serviceTier: actualServiceTier }),
+        },
+      };
       try {
-        response.output = await this.executeFunctionToolCallbacks(
-          output,
-          config,
-          toolsDisabled,
-          options?.abortSignal,
-        );
+        response.output = await this.executeFunctionToolCallbacks(output, config, toolsDisabled);
       } catch (error) {
-        return {
-          ...response,
-          output: getCallbackErrorOutput(error, response.output, options?.abortSignal?.aborted),
-          error: String(error),
-        };
+        return { ...response, output: undefined, error: String(error) };
       }
       return response;
     } catch (err) {
@@ -596,12 +609,7 @@ export class AIStudioEmbeddingProvider
     };
   }
 
-  async callEmbeddingApi(
-    text: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ): Promise<ProviderEmbeddingResponse> {
-    options?.abortSignal?.throwIfAborted();
+  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       return {
@@ -641,14 +649,12 @@ export class AIStudioEmbeddingProvider
         endpoint,
         {
           method: 'POST',
-          signal: options?.abortSignal,
           headers,
           body: JSON.stringify(body),
           ...(authDiscriminator && { _authHash: authDiscriminator }),
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
-        shouldBustProviderCache(context),
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {
       logger.error(`Google AI Studio embedding API call error: ${String(err)}`);
@@ -665,20 +671,17 @@ export class AIStudioEmbeddingProvider
     }
 
     const promptTokens: number | undefined = data?.usageMetadata?.promptTokenCount;
-    return withResponseCacheMetadata(
-      {
-        embedding: values,
-        tokenUsage: {
-          ...(promptTokens === undefined ? {} : { total: promptTokens }),
-          numRequests: 1,
-        },
-        cost:
-          promptTokens === undefined
-            ? undefined
-            : calculateGoogleCost(this.modelName, this.config, promptTokens, 0),
-      },
+    return {
+      embedding: values,
+      tokenUsage: cached
+        ? { cached: promptTokens ?? 0, total: promptTokens ?? 0, numRequests: 1 }
+        : { total: promptTokens ?? 0, numRequests: 1 },
       cached,
-    );
+      cost:
+        cached || promptTokens === undefined
+          ? undefined
+          : calculateGoogleCost(this.modelName, this.config, promptTokens, 0),
+    };
   }
 }
 

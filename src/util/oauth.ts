@@ -44,11 +44,7 @@ export interface OAuthTokenResult {
  * @param config - OAuth configuration with rendered/resolved values
  * @returns Token and expiration timestamp
  */
-export async function fetchOAuthToken(
-  config: OAuthTokenConfig,
-  signal?: AbortSignal,
-): Promise<OAuthTokenResult> {
-  signal?.throwIfAborted();
+export async function fetchOAuthToken(config: OAuthTokenConfig): Promise<OAuthTokenResult> {
   const now = Date.now();
 
   logger.debug('[OAuth] Fetching new token');
@@ -82,9 +78,7 @@ export async function fetchOAuthToken(
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: tokenRequestBody.toString(),
-    ...(signal && { signal }),
   });
-  signal?.throwIfAborted();
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -94,7 +88,6 @@ export async function fetchOAuthToken(
   }
 
   const tokenData = await response.json();
-  signal?.throwIfAborted();
 
   if (!tokenData.access_token) {
     throw new Error('OAuth token response missing access_token');

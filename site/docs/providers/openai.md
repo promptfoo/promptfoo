@@ -28,7 +28,7 @@ Use Promptfoo to compare OpenAI models, test prompts, and check your application
        Ticket: {{ticket}}
 
    providers:
-     - id: openai:responses:gpt-5.6-luna
+     - id: openai:gpt-6-luna
        config:
          reasoning:
            effort: low
@@ -59,11 +59,11 @@ If you keep your key in a local `.env` file, add `--env-file .env` to the comman
 
 ## Models
 
-Use an explicit endpoint in each provider ID. This makes the request format predictable, including for newly released models.
+For GPT-5.6 and newer models, use `openai:<model>`, such as `openai:gpt-6-luna`. These IDs default to Responses. Add an endpoint prefix only to select a different API or make an API comparison explicit.
 
 | Task                                   | Provider ID                                | Guide                                                                    |
 | -------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------ |
-| Text, image inputs, and built-in tools | `openai:responses:<model>`                 | [Responses API](#responses-api)                                          |
+| GPT-5.6+ text, image inputs, and tools | `openai:<model>`                           | [Responses API](#responses-api)                                          |
 | Chat Completions                       | `openai:chat:<model>`                      | [Parameters](#configuring-parameters)                                    |
 | Embeddings                             | `openai:embedding:<model>`                 | [Embedding dimensions](#reducing-embedding-dimensions)                   |
 | Moderation                             | `openai:moderation:omni-moderation-latest` | [Moderation assertions](/docs/configuration/expected-outputs/moderation) |
@@ -71,6 +71,7 @@ Use an explicit endpoint in each provider ID. This makes the request format pred
 | Audio input and output                 | `openai:chat:gpt-audio-1.5`                | [Audio](#audio-capabilities)                                             |
 | Text to speech                         | `openai:tts:gpt-4o-mini-tts`               | [Text to speech](#text-to-speech)                                        |
 | Conversational Realtime                | `openai:realtime:gpt-realtime-2.1`         | [Realtime](#realtime-api-models)                                         |
+| Full-duplex voice                      | `openai:live:gpt-live-1`                   | [GPT-Live](./openai-live.md)                                             |
 
 For file transcription, see [audio transcription](#audio-transcription). For Agents SDK, ChatKit, and Codex workflows, see [agent providers](#agentic-providers).
 
@@ -106,23 +107,22 @@ For file transcription, see [audio transcription](#audio-transcription). For Age
 
 Choose a model you can access, then test it with representative inputs. [OpenAI's model catalog](https://developers.openai.com/api/docs/models) lists current availability, capabilities, and limits. The main text-model choices are:
 
-| Model           | Starting point for                            |
-| --------------- | --------------------------------------------- |
-| `gpt-5.6-luna`  | Simple tasks and high-volume evals            |
-| `gpt-5.6-terra` | Balancing capability and cost                 |
-| `gpt-5.6-sol`   | Complex tasks                                 |
-| `gpt-6-astra`   | The most demanding reasoning and coding tasks |
+| Model         | Starting point for                            |
+| ------------- | --------------------------------------------- |
+| `gpt-6-luna`  | Simple tasks and high-volume evals            |
+| `gpt-6-sol`   | Complex tasks with balanced cost              |
+| `gpt-6-astra` | The most demanding reasoning and coding tasks |
 
 Check [OpenAI pricing](https://developers.openai.com/api/docs/pricing) before a large run. Model access and API billing belong to your OpenAI account.
 
 <details>
 <summary>Aliases, snapshots, and default models</summary>
 
-Bare `openai:<model>` IDs default to Responses for GPT-5.6 and newer GPT models, including named variants and dated snapshots. For example, `openai:gpt-5.6`, `openai:gpt-5.6-luna`, and `openai:gpt-6-astra` all use Responses. Older recognized models keep their model-specific routing; other unknown names fall back to Chat Completions.
+The Responses default includes named variants and dated snapshots. Older recognized models keep their model-specific routing; other unknown names fall back to Chat Completions.
 
 Use `openai:chat:<model>` or `openai:responses:<model>` to select the endpoint explicitly, including for a compatible gateway. Existing bare GPT-5.6 configurations with Chat-specific options should either select `openai:chat:gpt-5.6` or switch to Responses options such as `reasoning.effort` and `max_output_tokens`.
 
-Bare `openai:chat` and `openai:responses` select `gpt-5.6-terra`. Built-in grading uses `gpt-5.6-sol`; suggestions and web search use `gpt-5.6-terra`. Specify a model ID to override these defaults. When a model has dated snapshots, use one to hold the model version constant across runs. A fixed snapshot does not guarantee identical outputs.
+Bare `openai:chat` and `openai:responses` select `gpt-6-sol`. Built-in grading, suggestions, and web search also use `gpt-6-sol`. Specify a model ID to override these defaults. When a model has dated snapshots, use one to hold the model version constant across runs. A fixed snapshot does not guarantee identical outputs.
 
 `openai:embedding` and `openai:embeddings` default to `text-embedding-3-large`; both prefixes accept an explicit model. `openai:speech:` is an alias for `openai:tts:`.
 
@@ -134,7 +134,7 @@ The `gpt-5.6` model alias selects Sol. Sol, Terra, and Luna support Chat Complet
 
 ```yaml
 providers:
-  - id: openai:responses:gpt-5.6-sol
+  - id: openai:gpt-5.6-sol
     config:
       reasoning:
         effort: high
@@ -146,9 +146,19 @@ Accepted reasoning efforts vary by model. See the [model catalog](https://develo
 
 ### GPT-6 Astra
 
-Use `openai:responses:gpt-6-astra` for Astra evals with tools. Explicit `openai:chat:gpt-6-astra` supports text generation, but Astra tool calling requires Responses.
+Use `openai:gpt-6-astra` for Astra evals with tools. `openai:chat:gpt-6-astra` supports text generation, but Astra tool calling requires Responses.
 
 Astra accepts `low`, `medium`, `high`, `xhigh`, and `max` reasoning effort. It does not accept `none` or `minimal`. Promptfoo removes unsupported sampling and log-probability parameters for Astra. See the [Astra model guide](https://developers.openai.com/api/docs/models/gpt-6-astra).
+
+### GPT-6 Sol and Luna
+
+Use `openai:gpt-6-sol` for complex tasks or `openai:gpt-6-luna` for lower-cost evals. Both support text and image inputs, structured output, and `none`, `low`, `medium` (the API default), `high`, `xhigh`, and `max` reasoning effort. Chat Completions function calling requires `reasoning_effort: none`; use Responses for tools with reasoning enabled.
+
+Sampling and log-probability options are supported only with reasoning effort `none`. With other efforts, Promptfoo removes them. See the [Sol](https://developers.openai.com/api/docs/models/gpt-6-sol) and [Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) model guides.
+
+When reasoning effort is known to be `none`, Promptfoo defaults `temperature` to `0` unless `omitDefaults: true`.
+
+For advanced Responses conversations, a [`configuration_update`](https://developers.openai.com/api/docs/guides/reasoning#change-reasoning-mid-conversation) input can change the effort mid-conversation. Promptfoo accounts for these updates in standard, single-agent requests; Pro and multi-agent modes use the request-level effort. If stored conversation history makes the effort unknown, Promptfoo forwards explicit sampling options for the API to validate.
 
 ### Fine-tuned models {#fine-tuned-and-legacy-completion-models}
 
@@ -187,11 +197,11 @@ Put model options under the provider's `config`. Match the options to the endpoi
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-5.6-luna
+  - id: openai:chat:gpt-6-luna
     config:
       reasoning_effort: low
       max_completion_tokens: 2048
-  - id: openai:responses:gpt-5.6-luna
+  - id: openai:responses:gpt-6-luna
     config:
       reasoning:
         effort: low
@@ -203,7 +213,7 @@ Reasoning tokens count toward the output limit and billing, even though they are
 <Link id="gpt-41" />
 <Link id="usage-examples" />
 
-Promptfoo omits `temperature` for models it recognizes as reasoning models, including GPT-5, Astra, and o-series models. For a non-reasoning model such as `gpt-4.1-mini`, you can set `temperature: 0` and, on Chat Completions, `max_tokens`. Check the selected model's API documentation before using other sampling options.
+Promptfoo omits `temperature` for models it recognizes as reasoning models, including GPT-5, GPT-6, and o-series models. GPT-6 Sol and Luna allow sampling when reasoning effort is `none`. For a non-reasoning model such as `gpt-4.1-mini`, you can set `temperature: 0` and, on Chat Completions, `max_tokens`. Check the selected model's API documentation before using other sampling options.
 
 <details>
 <summary>Defaults and additional request options</summary>
@@ -253,6 +263,8 @@ Use the model name and endpoint supported by your gateway. `apiBaseUrl` includes
 
 Provider `env` overrides take precedence over the corresponding process environment variables. For [Azure OpenAI](/docs/providers/azure/), use the Azure provider and its deployment-specific configuration.
 
+For a runnable starting point, see the [`openai-compatible-gateway`](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-compatible-gateway) example. [vLLM](/docs/providers/vllm/), [Llamafile](/docs/providers/llamafile/), and [LiteLLM](/docs/providers/litellm/) document setups for those servers.
+
 <details>
 <summary>Base URL precedence and attribution headers</summary>
 
@@ -268,14 +280,13 @@ Promptfoo uses returned token usage and its model pricing catalog to estimate co
 
 Current standard rates in USD per million tokens, for requests with up to 272,000 input tokens:
 
-| Model                         | Input | Cached input | Cache writes | Output |
-| ----------------------------- | ----- | ------------ | ------------ | ------ |
-| GPT-5.6 Luna                  | $0.20 | $0.02        | $0.25        | $1.20  |
-| GPT-5.6 Terra                 | $2    | $0.20        | $2.50        | $12    |
-| GPT-5.6 Sol (`gpt-5.6` alias) | $4    | $0.40        | $5           | $20    |
-| GPT-6 Astra                   | $10   | $1           | $12.50       | $50    |
+| Model       | Input | Cached input | Cache writes | Output |
+| ----------- | ----- | ------------ | ------------ | ------ |
+| GPT-6 Luna  | $0.10 | $0.01        | $0.125       | $0.50  |
+| GPT-6 Sol   | $2    | $0.20        | $2.50        | $10    |
+| GPT-6 Astra | $10   | $1           | $12.50       | $50    |
 
-Above 272,000 input tokens, input, cached-input, and cache-write rates double; output rates increase by 50%. Batch and Flex cost half the standard rates. Fast mode (`fast` or `priority`) costs twice the standard rates. Regional processing adds 10%; Astra Fast mode is unavailable with EU data residency. Sol's promotional pricing runs at least through November 21, 2026. Rates verified September 9, 2026; see [OpenAI pricing](https://developers.openai.com/api/docs/pricing).
+Above 272,000 input tokens, input, cached-input, and cache-write rates double; output rates increase by 50%. Batch and Flex cost half the standard rates. Fast mode (`fast` or `priority`) costs twice the standard rates. Regional processing adds 10%. GPT-6 Astra, Sol, and Luna support EU data residency only with Standard processing. Rates verified September 24, 2026; see [OpenAI pricing](https://developers.openai.com/api/docs/pricing).
 
 For Chat Completions and Responses, set `inputCost` and `outputCost` to override rates in **dollars per token**, not per million tokens. For audio, use `audioInputCost` and `audioOutputCost`. The older `cost` and `audioCost` options are shared input/output fallbacks. These settings affect Promptfoo's estimates, not API billing.
 
@@ -316,11 +327,11 @@ When grading generated text with embeddings, configure the embedding provider on
 <Link id="best-practices-2" />
 <Link id="complete-example-1" />
 
-Use `openai:responses:<model>` for text, image and file inputs, built-in tools, and response state. A basic configuration is:
+Responses supports text, image and file inputs, built-in tools, and response state. GPT-5.6 and newer models use it by default:
 
 ```yaml
 providers:
-  - id: openai:responses:gpt-5.6-luna
+  - id: openai:gpt-6-luna
     config:
       instructions: Answer support questions using the supplied policy.
       reasoning:
@@ -357,11 +368,11 @@ The provider response's `raw` field contains the Responses object, including `id
 
 OpenAI prompt caching reuses a shared input prefix while still generating a new response. Promptfoo's local cache reuses the response itself. `--no-cache` bypasses Promptfoo's cache; it does not disable OpenAI prompt caching.
 
-For GPT-5.6 and Astra, configure `prompt_cache_options`:
+For GPT-5.6 and GPT-6, configure `prompt_cache_options`:
 
 ```yaml
 providers:
-  - id: openai:responses:gpt-5.6-luna
+  - id: openai:gpt-6-luna
     config:
       prompt_cache_key: support-policy
       prompt_cache_options:
@@ -396,7 +407,7 @@ prompts:
   - 'Classify this support ticket: {{ticket}}'
 
 providers:
-  - id: openai:responses:gpt-5.6-luna
+  - id: openai:gpt-6-luna
     config:
       reasoning:
         effort: low
@@ -423,7 +434,7 @@ tests:
         value: output.category === 'billing'
 ```
 
-Promptfoo parses valid JSON schema output into an object, so the assertion can read `output.category` directly. Refusals, incomplete responses, or invalid JSON may still produce a different output; check errors and failed assertions. For JSON mode without a schema, use `type: json_object` and explicitly ask for JSON in the prompt.
+The Responses provider parses valid JSON schema output into an object, so the assertion can read `output.category` directly. Refusals, incomplete responses, or invalid JSON may still produce a different output; check errors and failed assertions. For JSON mode without a schema, use `type: json_object` and explicitly ask for JSON in the prompt.
 
 ### External file references
 
@@ -477,9 +488,10 @@ prompts:
   - 'Look up order {{order_id}}.'
 
 providers:
-  - id: openai:chat:gpt-5.6-luna
-    // highlight-start
+  - id: openai:chat:gpt-6-luna
+    # highlight-start
     config:
+      reasoning_effort: none
       tools:
         - type: function
           function:
@@ -497,7 +509,7 @@ providers:
         type: function
         function:
           name: get_order_status
-    // highlight-end
+    # highlight-end
 
 tests:
   - vars:
@@ -597,7 +609,7 @@ Add OpenAI's `web_search` tool to a Responses provider:
 
 ```yaml
 providers:
-  - id: openai:responses:gpt-5.6-luna
+  - id: openai:gpt-6-luna
     config:
       tools:
         - type: web_search
@@ -655,8 +667,9 @@ Use an explicit Chat provider, even for models whose bare IDs default to Respons
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-5.6-luna
+  - id: openai:chat:gpt-6-luna
     config:
+      reasoning_effort: none
       mcp:
         enabled: true
         server:
@@ -680,16 +693,16 @@ For a remote MCP server, add a tool with `type: mcp`. OpenAI connects to that se
 
 ```yaml
 providers:
-  - id: openai:responses:gpt-5.6-luna
+  - id: openai:gpt-6-luna
     config:
       tools:
         - type: mcp
           server_label: deepwiki
           server_url: https://mcp.deepwiki.com/mcp
-          allowed_tools: [ask_question]
+          allowed_tools: [ask_wiki_question]
           require_approval:
             never:
-              tool_names: [ask_question]
+              tool_names: [ask_wiki_question]
 ```
 
 Use `headers` inside the MCP tool for authentication, with secret values supplied through environment variables. Approval requests appear in the output; this provider does not interactively approve them. Configure approvals deliberately for automated evals. See [OpenAI's MCP guide](https://developers.openai.com/api/docs/guides/tools-connectors-mcp#approvals) and the [Promptfoo MCP example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-mcp).
@@ -999,13 +1012,13 @@ Within endpoint environment settings, `OPENAI_API_HOST` is checked first. Provid
 
 ## Troubleshooting
 
-| Symptom                    | Check                                                                                                                                        |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Authentication failure     | Confirm the selected key variable, project, and endpoint. With `apiKeyEnvar`, a missing named key does not fall back to the default key.     |
-| Model not found            | Check your account's access and the [model lifecycle](https://developers.openai.com/api/docs/deprecations). Use an explicit endpoint prefix. |
-| Unsupported parameter      | Match the option to the model and API. For reasoning models, check the output limit and reasoning setting first.                             |
-| Empty or incomplete answer | Check the raw response and token usage. Reasoning may exhaust the output limit before producing a visible answer.                            |
-| Unexpectedly reused output | Run with `--no-cache` to bypass Promptfoo's local response cache.                                                                            |
+| Symptom                    | Check                                                                                                                                    |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Authentication failure     | Confirm the selected key variable, project, and endpoint. With `apiKeyEnvar`, a missing named key does not fall back to the default key. |
+| Model not found            | Confirm the model ID and your account's access; check the [model lifecycle](https://developers.openai.com/api/docs/deprecations).        |
+| Unsupported parameter      | Match the option to the model and API. For reasoning models, check the output limit and reasoning setting first.                         |
+| Empty or incomplete answer | Check the raw response and token usage. Reasoning may exhaust the output limit before producing a visible answer.                        |
+| Unexpectedly reused output | Run with `--no-cache` to bypass Promptfoo's local response cache.                                                                        |
 
 ### Rate limits {#openai-rate-limits}
 
@@ -1068,6 +1081,7 @@ Choose a provider that matches the application you are testing:
 
 | Application                                         | Provider guide                                                        |
 | --------------------------------------------------- | --------------------------------------------------------------------- |
+| Managed Codex sessions and hosted sandboxes         | [OpenAI Agents API](/docs/providers/openai-agents-api)                |
 | TypeScript Agents SDK tools, handoffs, and sessions | [OpenAI Agents SDK](/docs/providers/openai-agents)                    |
 | Python Agents SDK application                       | [Agents SDK Python guide](/docs/guides/evaluate-openai-agents-python) |
 | ChatKit integration                                 | [OpenAI ChatKit](/docs/providers/openai-chatkit)                      |

@@ -1,16 +1,12 @@
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import { getRequestTimeoutMs, shouldBustProviderCache, withResponseCacheMetadata } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
 import { appendOpenAiApiPath, assertOpenAiApiModel, getTokenUsage } from './util';
 
 import type { EnvOverrides } from '../../types/env';
-import type {
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderEmbeddingResponse,
-} from '../../types/index';
+import type { ProviderEmbeddingResponse } from '../../types/index';
 import type { OpenAiSharedOptions } from './types';
 
 type OpenAiEmbeddingOptions = OpenAiSharedOptions & {
@@ -31,12 +27,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
     return this.modelName;
   }
 
-  async callEmbeddingApi(
-    text: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ): Promise<ProviderEmbeddingResponse> {
-    options?.abortSignal?.throwIfAborted();
+  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
     // Validate API key first (like chat provider)
     if (this.requiresApiKey() && !this.getApiKey()) {
       return {
@@ -70,7 +61,6 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
         appendOpenAiApiPath(this.getApiUrl(), 'embeddings'),
         {
           method: 'POST',
-          signal: options?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
@@ -80,7 +70,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
         },
         getRequestTimeoutMs(),
         'json',
-        shouldBustProviderCache(context),
+        false,
         this.config.maxRetries,
       );
       ({ data, cached, status, statusText, latencyMs, deleteFromCache } = response as any);
@@ -106,15 +96,14 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
           error: 'No embedding found in OpenAI embeddings API response',
         };
       }
-      return withResponseCacheMetadata(
-        {
-          embedding,
-          latencyMs,
-          tokenUsage: getTokenUsage(data, false),
-          cost: calculateOpenAIUsageCost(this.getBillingModelName(), this.config, data.usage),
-        },
-        cached,
-      );
+      return {
+        embedding,
+        latencyMs,
+        tokenUsage: getTokenUsage(data, cached),
+        cost: calculateOpenAIUsageCost(this.getBillingModelName(), this.config, data.usage, {
+          cachedResponse: cached,
+        }),
+      };
     } catch (err) {
       logger.error(`Response parsing error: ${String(err)}`);
       await deleteFromCache?.();

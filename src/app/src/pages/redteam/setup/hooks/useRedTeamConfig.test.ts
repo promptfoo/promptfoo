@@ -27,6 +27,24 @@ describe('useRedTeamConfig', () => {
     useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
   });
 
+  it.each([
+    ['bedrock:agents:agent-id', 'bedrock-agent'],
+    ['anthropic:claude-agent-sdk', 'claude-agent-sdk'],
+    ['file:///path/to/langchain_agent.py', 'langchain'],
+    ['file:///path/to/claude_agent.py', 'claude-agent-sdk'],
+  ])('selects the matching UI editor when importing %s', (id, providerType) => {
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: { id, label: 'Imported target', config: { retained: true } },
+    });
+    expect(useRedTeamConfig.getState().providerType).toBe(providerType);
+    expect(useRedTeamConfig.getState().config.target).toEqual({
+      id,
+      label: 'Imported target',
+      config: { retained: true },
+    });
+  });
+
   it('tracks a target configuration error and clears it when loading a full configuration', () => {
     const config = useRedTeamConfig.getState().config;
 
@@ -5607,7 +5625,7 @@ describe('useRedTeamConfig', () => {
       expect(state.providerType).toBe('go');
     });
 
-    it('should set providerType to the target ID when the target ID has an unrecognized format', () => {
+    it('uses the generic editor for an unrecognized target without changing its ID', () => {
       const unrecognizedId = 'unknown-provider';
       const newConfig: Config = {
         description: 'Test config with an unknown provider target',
@@ -5648,7 +5666,8 @@ describe('useRedTeamConfig', () => {
       useRedTeamConfig.getState().setFullConfig(newConfig);
 
       const state = useRedTeamConfig.getState();
-      expect(state.providerType).toBe(unrecognizedId);
+      expect(state.providerType).toBe('custom');
+      expect(state.config.target.id).toBe(unrecognizedId);
     });
   });
 });

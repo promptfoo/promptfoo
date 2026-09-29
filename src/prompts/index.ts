@@ -153,7 +153,7 @@ async function processPrompt(
     for (const globbedFilePath of globbedPath) {
       const rawPath = functionName ? `${globbedFilePath}:${functionName}` : globbedFilePath;
       const processedPrompts = await processPrompt(
-        { raw: rawPath },
+        { raw: rawPath, config: prompt.config },
         basePath,
         maxRecursionDepth - 1,
       );
@@ -241,6 +241,7 @@ export async function readPrompts(
 
 export async function processPrompts(
   prompts: EvaluateTestSuite['prompts'],
+  basePath?: string,
 ): Promise<TestSuite['prompts']> {
   return (
     await Promise.all(
@@ -252,7 +253,7 @@ export async function processPrompts(
             function: promptInput as PromptFunction,
           };
         } else if (typeof promptInput === 'string') {
-          return readPrompts(promptInput);
+          return readPrompts(promptInput, basePath);
         }
         try {
           return PromptSchema.parse(promptInput);
