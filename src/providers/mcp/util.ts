@@ -93,10 +93,7 @@ export function getMcpErrorMessage(result: MCPToolResult): string {
   return message || 'Tool returned an error result';
 }
 
-/**
- * Resolve a readable message from a value thrown while executing an MCP tool.
- * MCP clients can throw plain objects, so `String(error)` is not enough here.
- */
+/** Extract messages from MCP errors, including plain objects. */
 export function getThrownMcpErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -119,24 +116,17 @@ export function getThrownMcpErrorMessage(error: unknown): string {
   }
 }
 
-/**
- * Join MCP tool error messages into a single `ProviderResponse.error` string,
- * or `undefined` when there were no errors.
- */
+/** Combine MCP failures for ProviderResponse.error. */
 export function joinMcpErrors(errors: string[]): string | undefined {
   return errors.length > 0 ? errors.join('; ') : undefined;
 }
 
-/** Format an MCP tool failure into the shared `MCP Tool Error (...)` string. */
+/** Format an MCP tool failure. */
 export function formatMcpToolError(name: string, message: string): string {
   return `MCP Tool Error (${name}): ${message}`;
 }
 
-/**
- * Format a successful MCP tool result into the shared `MCP Tool Result (...)`
- * string, normalizing `content` so non-string payloads never render as
- * `[object Object]`.
- */
+/** Format a tool result while retaining typed content metadata. */
 export function formatMcpToolResult(name: string, content: unknown): string {
   return `MCP Tool Result (${name}): ${normalizeMcpToolContent(content)}`;
 }
