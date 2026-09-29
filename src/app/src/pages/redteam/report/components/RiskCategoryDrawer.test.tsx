@@ -1,16 +1,21 @@
-import { mockCallApiResponse, mockCallApiRoutes, resetCallApiMock } from '@app/tests/apiMocks';
+import {
+  mockCallApiResponse,
+  mockCallApiResponseOnce,
+  mockCallApiRoutes,
+  resetCallApiMock,
+} from '@app/tests/apiMocks';
 import { mockWindowOpen } from '@app/tests/browserMocks';
 import { callApi } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RiskCategoryDrawer from './RiskCategoryDrawer';
 import type { AtomicTestCase, EvaluateResult, ResultFailureReason } from '@promptfoo/types';
 
 // Mock dependencies
-vi.mock('react-router-dom', () => ({
+vi.mock('react-router', () => ({
   useNavigate: vi.fn(),
 }));
 
@@ -289,7 +294,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     });
   });
 
-  it('caches selected full result details by result id', async () => {
+  it('releases closed details and fetches the current result when reopened', async () => {
     const compactResult = {
       ...createMockEvaluateResult({ pluginId: 'bola' }),
       id: 'result/id with space',
@@ -298,7 +303,10 @@ describe('RiskCategoryDrawer Component Navigation', () => {
       ...compactResult,
       response: { output: 'Full output', prompt: 'Full provider prompt' },
     };
-    mockCallApiResponse({ data: fullResult });
+    mockCallApiResponseOnce({ data: fullResult });
+    mockCallApiResponseOnce({
+      data: { ...fullResult, response: { output: 'Updated output' } },
+    });
     const user = userEvent.setup();
     const props = {
       ...defaultProps,
@@ -316,12 +324,24 @@ describe('RiskCategoryDrawer Component Navigation', () => {
       );
       expect(screen.getByRole('button', { name: 'Details' })).toBeEnabled();
     });
+    const onClose = mockEvalOutputPromptDialog.mock.calls[
+      mockEvalOutputPromptDialog.mock.calls.length - 1
+    ]?.[0].onClose as () => void;
+    act(onClose);
+    expect(mockEvalOutputPromptDialog).toHaveBeenLastCalledWith(
+      expect.objectContaining({ open: false, output: undefined, metadata: undefined }),
+    );
     await user.click(screen.getByRole('button', { name: 'Details' }));
 
-    expect(callApi).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalledTimes(2);
+      expect(mockEvalOutputPromptDialog).toHaveBeenLastCalledWith(
+        expect.objectContaining({ open: true, output: 'Updated output' }),
+      );
+    });
   });
 
-  it('does not reuse cached details for different result ids with the same coordinates', async () => {
+  it('loads the selected result ID when multiple results share coordinates', async () => {
     const firstCompactResult = {
       ...createMockEvaluateResult({ pluginId: 'bola' }),
       id: 'result-a',
@@ -569,10 +589,7 @@ describe('RiskCategoryDrawer Component Empty State', () => {
   });
 });
 
-// Regression for PR #9591 review (thread 3481318138): row details are the unbounded
-// payloads moved out of the report summary, so the drawer must bound what it retains and
-// abort stale downloads instead of re-creating the browser OOM this PR fixes.
-describe('RiskCategoryDrawer row-detail bounding (PR #9591 review)', () => {
+describe('RiskCategoryDrawer request cancellation', () => {
   const makeResult = (id: string): EvaluateResult => ({
     id,
     promptIdx: 0,
@@ -602,70 +619,6 @@ describe('RiskCategoryDrawer row-detail bounding (PR #9591 review)', () => {
     resetCallApiMock();
     vi.mocked(useNavigate).mockReturnValue(vi.fn());
     mockWindowOpen();
-  });
-
-  const clickDetails = async (user: ReturnType<typeof userEvent.setup>, index: number) => {
-    await waitFor(() => {
-      for (const button of screen.getAllByRole('button', { name: 'Details' })) {
-        expect(button).toBeEnabled();
-      }
-    });
-    const buttons = screen.getAllByRole('button', { name: 'Details' });
-    await user.click(buttons[index]);
-  };
-
-  it('evicts the oldest retained rows beyond the LRU bound and refetches them', async () => {
-    const user = userEvent.setup();
-    // Six rows exceed the 5-entry LRU bound, so the oldest (row-0) is evicted.
-    const failures = Array.from({ length: 6 }, (_, i) => makeFailure(`row-${i}`));
-    mockCallApiRoutes([
-      {
-        path: /\/results\/test-eval-123\/rows\//,
-        repeat: true,
-        response: (path: string) => {
-          const idMatch = path.match(/resultId=([^&]+)/);
-          const id = idMatch ? decodeURIComponent(idMatch[1]) : path;
-          return { data: { ...makeResult(id), response: { output: `full ${id}` } } };
-        },
-      },
-    ]);
-
-    renderWithProviders(
-      <RiskCategoryDrawer
-        open
-        onClose={vi.fn()}
-        category="bola"
-        failures={failures}
-        passes={[]}
-        evalId="test-eval-123"
-        numPassed={0}
-        numFailed={6}
-      />,
-    );
-
-    for (let i = 0; i < 6; i++) {
-      await clickDetails(user, i);
-      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(i + 1));
-      await waitFor(() =>
-        expect(mockEvalOutputPromptDialog).toHaveBeenLastCalledWith(
-          expect.objectContaining({ open: true, output: `full row-${i}` }),
-        ),
-      );
-    }
-    expect(callApi).toHaveBeenCalledTimes(6);
-
-    // row-2 is still cached (rows 1..5 retained) -> no additional fetch.
-    await clickDetails(user, 2);
-    await waitFor(() =>
-      expect(mockEvalOutputPromptDialog).toHaveBeenLastCalledWith(
-        expect.objectContaining({ open: true, output: 'full row-2' }),
-      ),
-    );
-    expect(callApi).toHaveBeenCalledTimes(6);
-
-    // row-0 was evicted by the LRU bound -> it must be refetched.
-    await clickDetails(user, 0);
-    await waitFor(() => expect(callApi).toHaveBeenCalledTimes(7));
   });
 
   it.each(['closes', 'unmounts'])(

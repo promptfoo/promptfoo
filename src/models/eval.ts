@@ -1,4 +1,4 @@
-import { and, desc, eq, type SQL, type SQLWrapper, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, type SQL, type SQLWrapper, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
@@ -12,12 +12,12 @@ import {
   promptsTable,
   tagsTable,
 } from '../database/tables';
-import { getEnvBool } from '../envars';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { categoryAliasesReverse, PLUGIN_CATEGORIES } from '../redteam/constants';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
+import { makeDefaultPolicyName } from '../redteam/plugins/policy/utils';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import { getTraceStore } from '../tracing/store';
 import {
@@ -43,7 +43,11 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
-import { sanitizeRuntimeOptions, sanitizeTracingConfigForPersistence } from '../util/sanitizer';
+import {
+  sanitizeConfigForOutput,
+  sanitizeRuntimeOptions,
+  sanitizeTracingConfigForPersistence,
+} from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGenerationTokenUsage,
@@ -61,18 +65,11 @@ import {
   queryTestIndicesOptimized,
 } from './evalPerformance';
 import EvalResult, {
-  getOutputStripFlags,
   getResultIndexKey,
-  MAX_COMPACT_HISTORY_ENTRIES,
-  MAX_COMPACT_HISTORY_MEDIA_LENGTH,
-  MAX_COMPACT_HISTORY_TEXT_LENGTH,
-  type OutputStripFlags,
+  getStripFlags,
   PROMPTFOO_METADATA_KEY,
   persistTraceMetadata,
-  projectEvaluateResultForOutput,
-  projectEvaluateTableForOutput,
-  projectMetadataForOutput,
-  projectPromptForOutput,
+  projectPrompt,
   projectTracesForOutput,
   sanitizeResultForJsonlArtifact,
   stripTraceLinkageFromMetadata,
@@ -120,16 +117,16 @@ interface RedteamReportResultRow {
   gradingSuggestions: string | null;
   gradingComponentResults: string | null;
   metadataPluginId: string | null;
+  metadataPolicyId: string | null;
   metadataHarmCategory: string | null;
   metadataRedteamFinalPrompt: string | null;
-  metadataRedteamHistory: string | null;
-  metadataRedteamTreeHistory: string | null;
   testCasePluginId: string | null;
   testCaseStrategyId: string | null;
   testCasePolicyId: string | null;
 }
 
-type RedteamReportStripFlags = OutputStripFlags;
+type RedteamReportStripFlags = ReturnType<typeof getStripFlags>;
+const MAX_REPORT_TEXT_LENGTH = 10_240;
 
 const REDTEAM_REPORT_ERROR_MARKER = '[error details stripped]';
 
@@ -174,7 +171,7 @@ function projectSuggestionsForRedteamReport(
         {
           type: suggestion.type,
           action: suggestion.action,
-          value: suggestion.value.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH),
+          value: suggestion.value.slice(0, MAX_REPORT_TEXT_LENGTH),
         },
       ];
     })
@@ -204,10 +201,14 @@ function hasRedteamReportIdentity(result: unknown): boolean {
     return false;
   }
 
+  if (result.assertion.type === 'moderation') {
+    return true;
+  }
   const metric = result.assertion.metric;
   return (
     typeof metric === 'string' &&
-    REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES.some((prefix) => metric.startsWith(prefix))
+    (Object.prototype.hasOwnProperty.call(categoryAliasesReverse, metric) ||
+      REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES.some((prefix) => metric.startsWith(prefix)))
   );
 }
 
@@ -218,13 +219,9 @@ function projectGradingResultForRedteamReport(gradingResult: GradingResult): Gra
   const components = Array.isArray(gradingResult.componentResults)
     ? gradingResult.componentResults
     : undefined;
-  const compactComponents = components?.slice(0, 25);
-  if (compactComponents?.length === 25 && !compactComponents.some(hasRedteamReportIdentity)) {
-    const identity = components?.slice(25).find(hasRedteamReportIdentity);
-    if (identity !== undefined) {
-      compactComponents[24] = identity;
-    }
-  }
+  const compactComponents = components?.filter(
+    (component, index) => index < 25 || hasRedteamReportIdentity(component),
+  );
   const componentResults = compactComponents
     ?.filter(isRecord)
     .map((componentResult) =>
@@ -239,7 +236,7 @@ function projectGradingResultForRedteamReport(gradingResult: GradingResult): Gra
         : 0,
     reason:
       typeof gradingResult.reason === 'string'
-        ? gradingResult.reason.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH)
+        ? gradingResult.reason.slice(0, MAX_REPORT_TEXT_LENGTH)
         : '',
     ...(assertion && { assertion }),
     ...(suggestions !== undefined && { suggestions }),
@@ -260,10 +257,10 @@ function projectVarsForRedteamReport(
     if (Object.prototype.hasOwnProperty.call(vars, key)) {
       const value = vars[key];
       if (typeof value === 'string') {
-        projectedVars.push([key, value.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH)]);
+        projectedVars.push([key, value.slice(0, MAX_REPORT_TEXT_LENGTH)]);
       } else if (isRecord(value) || Array.isArray(value)) {
         try {
-          if (JSON.stringify(value).length <= MAX_COMPACT_HISTORY_TEXT_LENGTH) {
+          if (JSON.stringify(value).length <= MAX_REPORT_TEXT_LENGTH) {
             projectedVars.push([key, value]);
           }
         } catch {}
@@ -308,7 +305,7 @@ function jsonTextOrNull(value: SQLWrapper, path: string): SQL<string | null> {
 function jsonBoundedTextOrNull(value: SQLWrapper, path: string): SQL<string | null> {
   return sql<
     string | null
-  >`CASE WHEN json_type(${value}, ${path}) = 'text' THEN substr(json_extract(${value}, ${path}), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}) ELSE NULL END`;
+  >`CASE WHEN json_type(${value}, ${path}) = 'text' THEN substr(json_extract(${value}, ${path}), 1, ${MAX_REPORT_TEXT_LENGTH}) ELSE NULL END`;
 }
 
 function jsonBooleanOrNull(value: SQLWrapper, path: string): SQL<number | null> {
@@ -331,7 +328,7 @@ function jsonSuggestionsOrNull(value: SQLWrapper, path: string): SQL<string | nu
         json_object(
           'type', json_extract(report_suggestion.value, '$.type'),
           'action', json_extract(report_suggestion.value, '$.action'),
-          'value', substr(json_extract(report_suggestion.value, '$.value'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH})
+          'value', substr(json_extract(report_suggestion.value, '$.value'), 1, ${MAX_REPORT_TEXT_LENGTH})
         )
       )
       FROM json_each(${value}, ${path}) AS report_suggestion
@@ -343,100 +340,6 @@ function jsonSuggestionsOrNull(value: SQLWrapper, path: string): SQL<string | nu
         )
         AND json_type(report_suggestion.value, '$.value') = 'text'
         AND report_suggestion.key < 25
-    )
-    ELSE NULL
-  END`;
-}
-
-function jsonHistoryForRedteamReport(
-  metadata: SQLWrapper,
-  path: string,
-  stripFlags: RedteamReportStripFlags,
-): SQL<string | null> {
-  if (stripFlags.shouldStripMetadata) {
-    return sql<string | null>`NULL`;
-  }
-
-  const promptFields = stripFlags.shouldStripPromptText
-    ? ['prompt']
-    : ['prompt', 'promptAudio', 'promptImage'];
-  const outputFields = stripFlags.shouldStripResponseOutput
-    ? ['output']
-    : ['output', 'outputAudio', 'outputImage'];
-  const allowedFields = [
-    'id',
-    'parentId',
-    'score',
-    'depth',
-    'wasSelected',
-    'graderPassed',
-    'role',
-    ...promptFields,
-    ...outputFields,
-  ];
-
-  // Bound each turn so the compact summary the browser loads eagerly cannot be blown up
-  // by a chatty/adversarial run: prompt/output must be text (truncated), and media
-  // objects over the inline budget are dropped from the summary (still available via
-  // full row-detail hydration). Keep these limits in sync with the JS projection in
-  // `evalResult.ts` (`projectRedteamHistoryForOutput`).
-  return sql<string | null>`CASE
-    WHEN json_type(${metadata}, ${path}) = 'array'
-    THEN (
-      SELECT json_group_array(
-        json((
-          SELECT json_group_object(
-            history_field.key,
-            CASE
-              WHEN history_field.type = 'true' THEN json('true')
-              WHEN history_field.type = 'false' THEN json('false')
-              WHEN history_field.key = 'prompt' AND ${stripFlags.shouldStripPromptText}
-                THEN '[prompt stripped]'
-              WHEN history_field.key = 'output' AND ${stripFlags.shouldStripResponseOutput}
-                THEN '[output stripped]'
-              WHEN history_field.key IN ('prompt', 'output')
-                THEN substr(history_field.value, 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH})
-              WHEN history_field.key IN ('promptAudio', 'promptImage', 'outputAudio', 'outputImage')
-                THEN (
-                  SELECT json_group_object(media_field.key, media_field.value)
-                  FROM json_each(history_field.value) AS media_field
-                  WHERE media_field.key IN ('data', 'format', 'blobRef')
-                    AND media_field.type = 'text'
-                )
-              WHEN history_field.type IN ('object', 'array') THEN json(history_field.value)
-              ELSE history_field.value
-            END
-          )
-          FROM json_each(report_history.value) AS history_field
-          WHERE history_field.key IN (${sql.join(
-            allowedFields.map((field) => sql`${field}`),
-            sql`, `,
-          )})
-            AND CASE history_field.key
-              WHEN 'id' THEN history_field.type = 'text'
-              WHEN 'parentId' THEN history_field.type = 'text'
-              WHEN 'score' THEN history_field.type IN ('integer', 'real')
-              WHEN 'depth' THEN history_field.type IN ('integer', 'real')
-              WHEN 'wasSelected' THEN history_field.type IN ('true', 'false')
-              WHEN 'graderPassed' THEN history_field.type IN ('true', 'false')
-              WHEN 'role' THEN history_field.type = 'text'
-                AND history_field.value IN ('user', 'assistant', 'system')
-              WHEN 'prompt' THEN history_field.type = 'text'
-              WHEN 'output' THEN history_field.type = 'text'
-              WHEN 'promptAudio' THEN history_field.type = 'object'
-                AND length(history_field.value) <= ${MAX_COMPACT_HISTORY_MEDIA_LENGTH}
-              WHEN 'promptImage' THEN history_field.type = 'object'
-                AND length(history_field.value) <= ${MAX_COMPACT_HISTORY_MEDIA_LENGTH}
-              WHEN 'outputAudio' THEN history_field.type = 'object'
-                AND length(history_field.value) <= ${MAX_COMPACT_HISTORY_MEDIA_LENGTH}
-              WHEN 'outputImage' THEN history_field.type = 'object'
-                AND length(history_field.value) <= ${MAX_COMPACT_HISTORY_MEDIA_LENGTH}
-              ELSE 1
-            END
-        )))
-      FROM json_each(${metadata}, ${path}) AS report_history
-      WHERE report_history.type = 'object'
-        AND report_history.key < ${MAX_COMPACT_HISTORY_ENTRIES}
     )
     ELSE NULL
   END`;
@@ -464,11 +367,7 @@ function normalizePromptForRedteamReport(prompt: unknown, bound = true): Prompt 
   }
 
   const text = (value: unknown) =>
-    typeof value === 'string'
-      ? bound
-        ? value.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH)
-        : value
-      : '';
+    typeof value === 'string' ? (bound ? value.slice(0, MAX_REPORT_TEXT_LENGTH) : value) : '';
   const raw = text(prompt.raw);
   const metrics =
     isRecord(prompt.metrics) && isRecord(prompt.metrics.tokenUsage)
@@ -526,12 +425,12 @@ function createProjectedGradingResult(row: RedteamReportResultRow): GradingResul
 
 function boundReportPrompt(prompt: NonNullable<EvaluateResult['response']>['prompt']) {
   if (typeof prompt === 'string') {
-    return prompt.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH);
+    return prompt.slice(0, MAX_REPORT_TEXT_LENGTH);
   }
   if (Array.isArray(prompt)) {
     const serialized = JSON.stringify(prompt);
-    return serialized.length > MAX_COMPACT_HISTORY_TEXT_LENGTH
-      ? serialized.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH)
+    return serialized.length > MAX_REPORT_TEXT_LENGTH
+      ? serialized.slice(0, MAX_REPORT_TEXT_LENGTH)
       : prompt;
   }
   return undefined;
@@ -575,19 +474,10 @@ function createRedteamReportMetadata(
   }
   const metadata = {
     ...(row.metadataPluginId !== null && { pluginId: row.metadataPluginId }),
+    ...(row.metadataPolicyId !== null && { policyId: row.metadataPolicyId }),
     ...(row.metadataHarmCategory !== null && { harmCategory: row.metadataHarmCategory }),
-    ...(row.metadataRedteamHistory !== null && {
-      redteamHistory: parseJsonFragment(row.metadataRedteamHistory),
-    }),
-    ...(row.metadataRedteamTreeHistory !== null && {
-      redteamTreeHistory: parseJsonFragment(row.metadataRedteamTreeHistory),
-    }),
   };
-  return projectMetadataForOutput(
-    Object.keys(metadata).length > 0 ? metadata : undefined,
-    stripFlags,
-    true,
-  );
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
 function createRedteamReportResult(
@@ -621,7 +511,7 @@ function createRedteamReportResult(
       };
 
   return {
-    id: row.id,
+    ...(typeof row.id === 'string' && { id: row.id }),
     promptIdx: row.promptIdx,
     testIdx: row.testIdx,
     testCase: {
@@ -638,7 +528,8 @@ function createRedteamReportResult(
     vars,
     response,
     error: row.errorExists ? REDTEAM_REPORT_ERROR_MARKER : null,
-    failureReason: row.failureReason as ResultFailureReason,
+    failureReason: (row.failureReason ??
+      (row.success ? ResultFailureReason.NONE : ResultFailureReason.ASSERT)) as ResultFailureReason,
     success: row.success,
     score: row.score,
     latencyMs: row.latencyMs ?? 0,
@@ -687,14 +578,11 @@ function projectResultForRedteamReport(
   const allowlistedMetadata = metadata
     ? {
         ...(typeof metadata.pluginId === 'string' && { pluginId: metadata.pluginId }),
+        ...(typeof metadata.policyId === 'string' && { policyId: metadata.policyId }),
         ...(typeof metadata.harmCategory === 'string' && { harmCategory: metadata.harmCategory }),
-        ...(metadata.redteamHistory !== undefined && { redteamHistory: metadata.redteamHistory }),
-        ...(metadata.redteamTreeHistory !== undefined && {
-          redteamTreeHistory: metadata.redteamTreeHistory,
-        }),
       }
     : undefined;
-  const projectedMetadata = projectMetadataForOutput(allowlistedMetadata, stripFlags, true);
+  const projectedMetadata = allowlistedMetadata;
 
   const redteamFinalPromptCandidate =
     result.response?.metadata?.redteamFinalPrompt ?? metadata?.redteamFinalPrompt;
@@ -702,7 +590,7 @@ function projectResultForRedteamReport(
     stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
       ? undefined
       : typeof redteamFinalPromptCandidate === 'string'
-        ? redteamFinalPromptCandidate.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH)
+        ? redteamFinalPromptCandidate.slice(0, MAX_REPORT_TEXT_LENGTH)
         : undefined;
   const responsePrompt = boundReportPrompt(result.response?.prompt);
   const hasResponsePrompt = !stripFlags.shouldStripPromptText && responsePrompt !== undefined;
@@ -712,7 +600,7 @@ function projectResultForRedteamReport(
           ...(result.response && stripFlags.shouldStripResponseOutput
             ? { output: '[output stripped]' }
             : typeof result.response?.output === 'string' && {
-                output: result.response.output.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH),
+                output: result.response.output.slice(0, MAX_REPORT_TEXT_LENGTH),
               }),
           ...(hasResponsePrompt && { prompt: responsePrompt }),
           ...(!hasResponsePrompt &&
@@ -767,7 +655,7 @@ function projectToolForRedteamReport(tool: unknown): Record<string, unknown> | u
       function: {
         ...(typeof tool.function.name === 'string' && { name: tool.function.name }),
         ...(typeof tool.function.description === 'string' && {
-          description: tool.function.description.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH),
+          description: tool.function.description.slice(0, MAX_REPORT_TEXT_LENGTH),
         }),
       },
     };
@@ -813,7 +701,11 @@ function projectToolsForRedteamReport(
   return projectedTools.length > 0 ? projectedTools : undefined;
 }
 
-function projectPluginForRedteamReport(plugin: unknown, stripPromptText = false): unknown {
+function projectPluginForRedteamReport(
+  plugin: unknown,
+  stripPromptText = false,
+  policyIndex = 0,
+): unknown {
   if (typeof plugin === 'string') {
     return plugin;
   }
@@ -834,7 +726,8 @@ function projectPluginForRedteamReport(plugin: unknown, stripPromptText = false)
     projectedPlugin.config = {
       policy: {
         id: sha256(policy).slice(0, 12),
-        text: policy.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH),
+        name: makeDefaultPolicyName(policyIndex),
+        text: policy.slice(0, MAX_REPORT_TEXT_LENGTH),
       },
     };
   } else if (isRecord(policy)) {
@@ -842,7 +735,7 @@ function projectPluginForRedteamReport(plugin: unknown, stripPromptText = false)
       ...(typeof policy.id === 'string' && { id: policy.id }),
       ...(typeof policy.name === 'string' && { name: policy.name }),
       ...(typeof policy.text === 'string' && {
-        text: policy.text.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH),
+        text: policy.text.slice(0, MAX_REPORT_TEXT_LENGTH),
       }),
     };
     if (Object.keys(projectedPolicy).length > 0) {
@@ -871,14 +764,17 @@ function projectConfigForRedteamReport(
           ...(typeof providerRecord?.label === 'string' && { label: providerRecord.label }),
           ...(tools !== undefined && { config: { tools } }),
         };
-  // The save/API boundary only guarantees `config` is a record, so persisted or legacy
-  // data can carry `redteam.plugins` as a non-array (e.g. `{ id: 'policy' }`). Guard with
-  // Array.isArray before mapping; an invalid collection is omitted rather than throwing
-  // `plugins.map is not a function` and breaking the whole compact report load.
+  let policyIndex = 0;
   const plugins = (
     Array.isArray(config.redteam?.plugins)
       ? config.redteam.plugins
-          .map((plugin) => projectPluginForRedteamReport(plugin, stripFlags.shouldStripPromptText))
+          .map((plugin) =>
+            projectPluginForRedteamReport(
+              plugin,
+              stripFlags.shouldStripPromptText,
+              isRecord(plugin) && plugin.id === 'policy' ? policyIndex++ : 0,
+            ),
+          )
           .filter((plugin) => plugin !== undefined)
       : undefined
   ) as NonNullable<NonNullable<Partial<UnifiedConfig>['redteam']>['plugins']> | undefined;
@@ -897,80 +793,6 @@ function projectConfigForRedteamReport(
     }),
     ...(provider && { providers: [provider] }),
   };
-}
-
-export function projectConfigForOutput(
-  config: Partial<UnifiedConfig>,
-  stripFlags: OutputStripFlags,
-): Partial<UnifiedConfig> {
-  if (!Object.values(stripFlags).some(Boolean)) {
-    return config;
-  }
-  const projectTest = (test: unknown) => {
-    if (!isRecord(test)) {
-      return test;
-    }
-    const options = isRecord(test.options) ? { ...test.options } : undefined;
-    if (stripFlags.shouldStripPromptText && options) {
-      delete options.prefix;
-      delete options.suffix;
-    }
-    const projectedTest = { ...test };
-    if (stripFlags.shouldStripResponseOutput) {
-      delete projectedTest.providerOutput;
-    }
-    if (stripFlags.shouldStripMetadata) {
-      delete projectedTest.metadata;
-    }
-    return {
-      ...projectedTest,
-      ...(stripFlags.shouldStripPromptText && 'prompt' in test
-        ? { prompt: '[prompt stripped]' }
-        : {}),
-      ...(options && { options }),
-      ...(stripFlags.shouldStripTestVars && 'vars' in test ? { vars: {} } : {}),
-    };
-  };
-  const projectScenario = (scenario: unknown) =>
-    isRecord(scenario)
-      ? {
-          ...scenario,
-          ...(Array.isArray(scenario.config) ? { config: scenario.config.map(projectTest) } : {}),
-          ...(Array.isArray(scenario.tests) ? { tests: scenario.tests.map(projectTest) } : {}),
-          ...(scenario.defaultTest === undefined
-            ? {}
-            : { defaultTest: projectTest(scenario.defaultTest) }),
-        }
-      : scenario;
-  const prompts = stripFlags.shouldStripPromptText
-    ? Array.isArray(config.prompts)
-      ? config.prompts.map((prompt) => projectPromptForOutput(prompt as Prompt, true))
-      : isRecord(config.prompts)
-        ? Object.fromEntries(Object.keys(config.prompts).map((key) => [key, '[prompt stripped]']))
-        : config.prompts === undefined
-          ? undefined
-          : '[prompt stripped]'
-    : config.prompts;
-  const redteam =
-    stripFlags.shouldStripPromptText && config.redteam
-      ? {
-          ...config.redteam,
-          ...(Array.isArray(config.redteam.plugins) && {
-            plugins: config.redteam.plugins
-              .map((plugin) => projectPluginForRedteamReport(plugin, true))
-              .filter((plugin) => plugin !== undefined),
-          }),
-        }
-      : config.redteam;
-  return {
-    ...config,
-    ...(stripFlags.shouldStripMetadata && { metadata: undefined }),
-    ...(prompts !== undefined && { prompts }),
-    ...(redteam !== undefined && { redteam }),
-    ...(Array.isArray(config.tests) && { tests: config.tests.map(projectTest) }),
-    ...(config.defaultTest !== undefined && { defaultTest: projectTest(config.defaultTest) }),
-    ...(Array.isArray(config.scenarios) && { scenarios: config.scenarios.map(projectScenario) }),
-  } as Partial<UnifiedConfig>;
 }
 
 function projectSummaryForRedteamReport(
@@ -1012,6 +834,7 @@ function normalizeLegacyResultForDetail(
   value: unknown,
   testIdx: number,
   promptIdx: number,
+  stripFlags = getStripFlags(),
 ): EvaluateResult | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -1060,7 +883,7 @@ function normalizeLegacyResultForDetail(
     ...(isRecord(value.metadata) && { metadata: value.metadata }),
   };
 
-  const sanitized = sanitizeResultForJsonlArtifact(normalizedResult);
+  const sanitized = sanitizeResultForJsonlArtifact(normalizedResult, stripFlags);
   return {
     ...sanitized,
     provider: projectProviderForRedteamReport(sanitized.provider),
@@ -1356,10 +1179,21 @@ export default class Eval {
     return await Eval.findById(db_results[0].id);
   }
 
-  static async findById(id: string) {
+  static async findById(id: string, options: ResultsFileOptions = {}) {
     const db = await getDb();
 
-    const evalData = await db.select().from(evalsTable).where(eq(evalsTable.id, id)).all();
+    const columns = getTableColumns(evalsTable);
+    const results =
+      options.resultProjection === 'redteamReport'
+        ? sql`CASE WHEN json_valid(${evalsTable.results}) THEN json_object('durationMs', json_extract(${evalsTable.results}, '$.durationMs'), 'generationDurationMs', json_extract(${evalsTable.results}, '$.generationDurationMs'), 'evaluationDurationMs', json_extract(${evalsTable.results}, '$.evaluationDurationMs'), 'stats', json_extract(${evalsTable.results}, '$.stats'), 'table', json_object('head', json_extract(${evalsTable.results}, '$.table.head'), 'body', json('[]')), 'results', json('[]')) ELSE '{}' END`.mapWith(
+            evalsTable.results,
+          )
+        : evalsTable.results;
+    const evalData = await db
+      .select({ ...columns, results })
+      .from(evalsTable)
+      .where(eq(evalsTable.id, id))
+      .all();
 
     if (evalData.length === 0) {
       return undefined;
@@ -1408,7 +1242,11 @@ export default class Eval {
       generationDurationMs,
       evaluationDurationMs,
     });
-    if (eval_.results && 'table' in eval_.results) {
+    if (
+      eval_.results &&
+      'table' in eval_.results &&
+      (eval_.results as EvaluateSummaryV2).table?.head
+    ) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
     }
 
@@ -1439,14 +1277,29 @@ export default class Eval {
     promptIdx: number,
     resultId?: string,
   ): Promise<EvaluateResult | undefined> {
-    const normalizedResult = resultId
-      ? await EvalResult.findByEvalIdAndResultId(evalId, resultId, testIdx, promptIdx)
-      : await EvalResult.findByEvalIdAndIndices(evalId, testIdx, promptIdx);
+    const db = await getDb();
+    const evaluation = await db
+      .select({ config: evalsTable.config })
+      .from(evalsTable)
+      .where(eq(evalsTable.id, evalId))
+      .get();
+    if (!evaluation) {
+      return undefined;
+    }
+    const stripFlags = getStripFlags(evaluation.config.env);
+    const normalizedResult = await EvalResult.findByEvalIdAndIndices(
+      evalId,
+      testIdx,
+      promptIdx,
+      resultId,
+    );
     if (normalizedResult) {
-      return sanitizeResultForJsonlArtifact(normalizedResult.toEvaluateResult());
+      return sanitizeResultForJsonlArtifact(
+        normalizedResult.toEvaluateResult(stripFlags),
+        stripFlags,
+      );
     }
 
-    const db = await getDb();
     const resultIdPredicate = resultId
       ? sql`AND json_type(legacy_result.value, '$.id') = 'text'
             AND json_extract(legacy_result.value, '$.id') = ${resultId}`
@@ -1474,7 +1327,12 @@ export default class Eval {
     }
 
     try {
-      return normalizeLegacyResultForDetail(JSON.parse(legacyRow.result), testIdx, promptIdx);
+      return normalizeLegacyResultForDetail(
+        JSON.parse(legacyRow.result),
+        testIdx,
+        promptIdx,
+        stripFlags,
+      );
     } catch {
       return undefined;
     }
@@ -1793,9 +1651,7 @@ export default class Eval {
 
   async getTable(): Promise<EvaluateTable> {
     if (this.useOldResults()) {
-      return projectEvaluateTableForOutput(
-        this.oldResults?.table || { head: { prompts: [], vars: [] }, body: [] },
-      );
+      return this.oldResults?.table || { head: { prompts: [], vars: [] }, body: [] };
     }
     return convertResultsToTable(await this.toResultsFile());
   }
@@ -2448,23 +2304,6 @@ export default class Eval {
     return this.results;
   }
 
-  async getResult(testIdx: number, promptIdx: number): Promise<EvaluateResult | undefined> {
-    if (this.useOldResults()) {
-      const result = this.oldResults?.results.find(
-        (result) => result.testIdx === testIdx && result.promptIdx === promptIdx,
-      );
-      return result ? projectEvaluateResultForOutput(result) : undefined;
-    }
-    if (!this.persisted) {
-      return this.results
-        .find((result) => result.testIdx === testIdx && result.promptIdx === promptIdx)
-        ?.toEvaluateResult();
-    }
-    return (
-      await EvalResult.findByEvalIdAndIndices(this.id, testIdx, promptIdx)
-    )?.toEvaluateResult();
-  }
-
   clearResults() {
     this.results = [];
     this._resultsLoaded = false;
@@ -2503,8 +2342,8 @@ export default class Eval {
       return {
         version: 2,
         timestamp: new Date(this.createdAt).toISOString(),
-        results: this.oldResults.results.map(projectEvaluateResultForOutput),
-        table: projectEvaluateTableForOutput(this.oldResults.table),
+        results: this.oldResults.results,
+        table: this.oldResults.table,
         stats: this.oldResults.stats,
       };
     }
@@ -2513,17 +2352,15 @@ export default class Eval {
     }
 
     const stats = await this.getStats();
-    const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
+    const stripFlags = getStripFlags(this.config.env);
 
-    const prompts = shouldStripPromptText
-      ? this.prompts.map((prompt) => projectPromptForOutput(prompt, true))
-      : this.prompts;
+    const prompts = this.prompts.map((p) => projectPrompt(p, stripFlags.shouldStripPromptText));
 
     return {
       version: 3,
       timestamp: new Date(this.createdAt).toISOString(),
       prompts,
-      results: this.results.map((r) => r.toEvaluateResult()),
+      results: this.results.map((r) => r.toEvaluateResult(stripFlags)),
       stats,
     };
   }
@@ -2532,7 +2369,7 @@ export default class Eval {
     injectVar: string,
     stripFlags: RedteamReportStripFlags,
   ): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
-    if (this.useOldResults()) {
+    if (this.useOldResults() && !this.persisted) {
       invariant(this.oldResults, 'Old results not found');
       return projectSummaryForRedteamReport(
         {
@@ -2558,53 +2395,70 @@ export default class Eval {
 
     const reportVarKeys = [...new Set([injectVar, 'prompt', 'query', 'question', 'harmCategory'])];
     const db = await getDb();
-    const validProviderJson = jsonObjectOrEmpty(evalResultsTable.provider);
-    const validPromptJson = jsonObjectOrEmpty(evalResultsTable.prompt);
-    const validTestCaseJson = jsonObjectOrEmpty(evalResultsTable.testCase);
-    const validResponseJson = jsonObjectOrEmpty(evalResultsTable.response);
-    const validGradingResultJson = jsonObjectOrEmpty(evalResultsTable.gradingResult);
-    const validMetadataJson = jsonObjectOrEmpty(evalResultsTable.metadata);
-    const validTestCaseVarsJson = sql`CASE WHEN json_type(${validTestCaseJson}, '$.vars') = 'object' THEN json_extract(${validTestCaseJson}, '$.vars') ELSE json('{}') END`;
+    const legacy = this.useOldResults();
+    const sources = legacy
+      ? {
+          id: sql<string>`json_extract(report_result.value, '$.id')`,
+          promptIdx: sql<number>`json_extract(report_result.value, '$.promptIdx')`,
+          testIdx: sql<number>`json_extract(report_result.value, '$.testIdx')`,
+          promptId: sql<string>`json_extract(report_result.value, '$.promptId')`,
+          provider: sql<string>`json_extract(report_result.value, '$.provider')`,
+          prompt: sql<string>`json_extract(report_result.value, '$.prompt')`,
+          testCase: sql<string>`json_extract(report_result.value, '$.testCase')`,
+          response: sql<string>`json_extract(report_result.value, '$.response')`,
+          gradingResult: sql<string>`json_extract(report_result.value, '$.gradingResult')`,
+          metadata: sql<string>`json_extract(report_result.value, '$.metadata')`,
+          error: sql<string>`json_extract(report_result.value, '$.error')`,
+          failureReason: sql<number>`json_extract(report_result.value, '$.failureReason')`,
+          success: sql<boolean>`json_extract(report_result.value, '$.success')`.mapWith(Boolean),
+          score: sql<number>`json_extract(report_result.value, '$.score')`,
+          latencyMs: sql<number>`json_extract(report_result.value, '$.latencyMs')`,
+        }
+      : evalResultsTable;
+    const validProviderJson = jsonObjectOrEmpty(sources.provider);
+    const validPromptJson = jsonObjectOrEmpty(sources.prompt);
+    const validTestCaseJson = jsonObjectOrEmpty(sources.testCase);
+    const validResponseJson = jsonObjectOrEmpty(sources.response);
+    const validGradingResultJson = jsonObjectOrEmpty(sources.gradingResult);
+    const validMetadataJson = jsonObjectOrEmpty(sources.metadata);
+    const validTestCaseVarsJson = legacy
+      ? sql`CASE WHEN json_type(report_result.value, '$.vars') = 'object' THEN json_extract(report_result.value, '$.vars') ELSE ${jsonObjectFieldOrEmpty(validTestCaseJson, '$.vars')} END`
+      : sql`CASE WHEN json_type(${validTestCaseJson}, '$.vars') = 'object' THEN json_extract(${validTestCaseJson}, '$.vars') ELSE json('{}') END`;
     const validReportComponentJson = sql`CASE WHEN report_component.type = 'object' THEN report_component.value ELSE json('{}') END`;
-    const rows = await db
-      .select({
-        id: evalResultsTable.id,
-        promptIdx: evalResultsTable.promptIdx,
-        testIdx: evalResultsTable.testIdx,
-        promptId: evalResultsTable.promptId,
-        providerId: sql<
-          string | null
-        >`CASE WHEN json_type(${validProviderJson}, '$.id') = 'text' THEN json_extract(${validProviderJson}, '$.id') ELSE NULL END`,
-        providerLabel: sql<
-          string | null
-        >`CASE WHEN json_type(${validProviderJson}, '$.label') = 'text' THEN json_extract(${validProviderJson}, '$.label') ELSE NULL END`,
-        promptObjectId: sql<
-          string | null
-        >`CASE WHEN json_type(${validPromptJson}, '$.id') = 'text' THEN json_extract(${validPromptJson}, '$.id') ELSE NULL END`,
-        promptRaw: stripFlags.shouldStripPromptText
-          ? sql<string | null>`'[prompt stripped]'`
-          : sql<
-              string | null
-            >`CASE WHEN json_type(${validPromptJson}, '$.raw') = 'text' THEN substr(json_extract(${validPromptJson}, '$.raw'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}) ELSE NULL END`,
-        promptLabel: stripFlags.shouldStripPromptText
-          ? sql<string | null>`'[prompt stripped]'`
-          : sql<
-              string | null
-            >`CASE WHEN json_type(${validPromptJson}, '$.label') = 'text' THEN substr(json_extract(${validPromptJson}, '$.label'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}) ELSE NULL END`,
-        promptDisplay: stripFlags.shouldStripPromptText
-          ? sql<
-              string | null
-            >`CASE WHEN json_type(${validPromptJson}, '$.display') = 'text' THEN '[prompt stripped]' ELSE NULL END`
-          : sql<
-              string | null
-            >`CASE WHEN json_type(${validPromptJson}, '$.display') = 'text' THEN substr(json_extract(${validPromptJson}, '$.display'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}) ELSE NULL END`,
-        // Build the payload-heavy projections from stripFlags so classes an active
-        // strip discards never cross the SQLite/Drizzle boundary (they are otherwise
-        // materialized in full and only dropped later in createRedteamReportResult,
-        // preserving the OOM/timeout mode this compact path exists to remove).
-        vars: stripFlags.shouldStripTestVars
-          ? sql<string | null>`NULL`
-          : sql<string | null>`(
+    const columns = {
+      id: sources.id,
+      promptIdx: sources.promptIdx,
+      testIdx: sources.testIdx,
+      promptId: sources.promptId,
+      providerId: sql<
+        string | null
+      >`CASE WHEN json_type(${validProviderJson}, '$.id') = 'text' THEN json_extract(${validProviderJson}, '$.id') ELSE NULL END`,
+      providerLabel: sql<
+        string | null
+      >`CASE WHEN json_type(${validProviderJson}, '$.label') = 'text' THEN json_extract(${validProviderJson}, '$.label') ELSE NULL END`,
+      promptObjectId: sql<
+        string | null
+      >`CASE WHEN json_type(${validPromptJson}, '$.id') = 'text' THEN json_extract(${validPromptJson}, '$.id') ELSE NULL END`,
+      promptRaw: stripFlags.shouldStripPromptText
+        ? sql<string | null>`'[prompt stripped]'`
+        : sql<
+            string | null
+          >`CASE WHEN json_type(${validPromptJson}, '$.raw') = 'text' THEN substr(json_extract(${validPromptJson}, '$.raw'), 1, ${MAX_REPORT_TEXT_LENGTH}) ELSE NULL END`,
+      promptLabel: stripFlags.shouldStripPromptText
+        ? sql<string | null>`'[prompt stripped]'`
+        : sql<
+            string | null
+          >`CASE WHEN json_type(${validPromptJson}, '$.label') = 'text' THEN substr(json_extract(${validPromptJson}, '$.label'), 1, ${MAX_REPORT_TEXT_LENGTH}) ELSE NULL END`,
+      promptDisplay: stripFlags.shouldStripPromptText
+        ? sql<
+            string | null
+          >`CASE WHEN json_type(${validPromptJson}, '$.display') = 'text' THEN '[prompt stripped]' ELSE NULL END`
+        : sql<
+            string | null
+          >`CASE WHEN json_type(${validPromptJson}, '$.display') = 'text' THEN substr(json_extract(${validPromptJson}, '$.display'), 1, ${MAX_REPORT_TEXT_LENGTH}) ELSE NULL END`,
+      vars: stripFlags.shouldStripTestVars
+        ? sql<string | null>`NULL`
+        : sql<string | null>`(
           SELECT json_group_object(
             report_vars.key,
             CASE report_vars.type
@@ -2615,7 +2469,7 @@ export default class Eval {
               WHEN 'real' THEN json(report_vars.value)
               WHEN 'array' THEN json(report_vars.value)
               WHEN 'object' THEN json(report_vars.value)
-              ELSE substr(report_vars.value, 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH})
+              ELSE substr(report_vars.value, 1, ${MAX_REPORT_TEXT_LENGTH})
             END
           )
           FROM json_each(${validTestCaseVarsJson}) AS report_vars
@@ -2625,70 +2479,70 @@ export default class Eval {
           )})
             AND (
               report_vars.type NOT IN ('array', 'object')
-              OR length(report_vars.value) <= ${MAX_COMPACT_HISTORY_TEXT_LENGTH}
+              OR length(report_vars.value) <= ${MAX_REPORT_TEXT_LENGTH}
             )
         )`,
-        responseExists: jsonIsObject(evalResultsTable.response),
-        responseOutput: stripFlags.shouldStripResponseOutput
-          ? sql<string | null>`NULL`
-          : sql<string | null>`CASE
+      responseExists: jsonIsObject(sources.response),
+      responseOutput: stripFlags.shouldStripResponseOutput
+        ? sql<string | null>`NULL`
+        : sql<string | null>`CASE
               WHEN json_type(${validResponseJson}, '$.output') = 'text'
-              THEN json_quote(substr(json_extract(${validResponseJson}, '$.output'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}))
+              THEN json_quote(substr(json_extract(${validResponseJson}, '$.output'), 1, ${MAX_REPORT_TEXT_LENGTH}))
               ELSE NULL
             END`,
-        responsePrompt: stripFlags.shouldStripPromptText
-          ? sql<string | null>`NULL`
-          : sql<string | null>`CASE
+      responsePrompt: stripFlags.shouldStripPromptText
+        ? sql<string | null>`NULL`
+        : sql<string | null>`CASE
               WHEN json_type(${validResponseJson}, '$.prompt') = 'text'
-              THEN json_quote(substr(json_extract(${validResponseJson}, '$.prompt'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}))
+              THEN json_quote(substr(json_extract(${validResponseJson}, '$.prompt'), 1, ${MAX_REPORT_TEXT_LENGTH}))
               WHEN json_type(${validResponseJson}, '$.prompt') = 'array'
               THEN CASE
-                WHEN length(${validResponseJson} -> '$.prompt') <= ${MAX_COMPACT_HISTORY_TEXT_LENGTH}
+                WHEN length(${validResponseJson} -> '$.prompt') <= ${MAX_REPORT_TEXT_LENGTH}
                 THEN ${validResponseJson} -> '$.prompt'
-                ELSE json_quote(substr(${validResponseJson} -> '$.prompt', 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}))
+                ELSE json_quote(substr(${validResponseJson} -> '$.prompt', 1, ${MAX_REPORT_TEXT_LENGTH}))
               END
               ELSE NULL
             END`,
-        responseRedteamFinalPrompt:
-          stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
-            ? sql<string | null>`NULL`
-            : jsonBoundedTextOrNull(validResponseJson, '$.metadata.redteamFinalPrompt'),
-        errorExists: sql<number>`CASE
-          WHEN ${evalResultsTable.error} IS NOT NULL AND ${evalResultsTable.error} <> '' THEN 1
+      responseRedteamFinalPrompt:
+        stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
+          ? sql<string | null>`NULL`
+          : jsonBoundedTextOrNull(validResponseJson, '$.metadata.redteamFinalPrompt'),
+      errorExists: sql<number>`CASE
+          WHEN ${sources.error} IS NOT NULL AND ${sources.error} <> '' THEN 1
           ELSE 0
         END`,
-        failureReason: evalResultsTable.failureReason,
-        success: evalResultsTable.success,
-        score: evalResultsTable.score,
-        latencyMs: evalResultsTable.latencyMs,
-        gradingResultExists: stripFlags.shouldStripGradingResult
-          ? sql<number>`0`
-          : jsonIsObject(evalResultsTable.gradingResult),
-        gradingPass: stripFlags.shouldStripGradingResult
-          ? sql<number | null>`NULL`
-          : jsonBooleanOrNull(validGradingResultJson, '$.pass'),
-        gradingScore: stripFlags.shouldStripGradingResult
-          ? sql<number | null>`NULL`
-          : jsonNumberOrNull(validGradingResultJson, '$.score'),
-        gradingReason: stripFlags.shouldStripGradingResult
-          ? sql<string | null>`NULL`
-          : sql<string | null>`CASE
+      failureReason: sources.failureReason,
+      success: sources.success,
+      score: sources.score,
+      latencyMs: sources.latencyMs,
+      gradingResultExists: stripFlags.shouldStripGradingResult
+        ? sql<number>`0`
+        : jsonIsObject(sources.gradingResult),
+      gradingPass: stripFlags.shouldStripGradingResult
+        ? sql<number | null>`NULL`
+        : jsonBooleanOrNull(validGradingResultJson, '$.pass'),
+      gradingScore: stripFlags.shouldStripGradingResult
+        ? sql<number | null>`NULL`
+        : jsonNumberOrNull(validGradingResultJson, '$.score'),
+      gradingReason: stripFlags.shouldStripGradingResult
+        ? sql<string | null>`NULL`
+        : sql<string | null>`CASE
               WHEN json_type(${validGradingResultJson}, '$.reason') = 'text'
-              THEN substr(json_extract(${validGradingResultJson}, '$.reason'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH})
+              THEN substr(json_extract(${validGradingResultJson}, '$.reason'), 1, ${MAX_REPORT_TEXT_LENGTH})
               ELSE NULL
             END`,
-        gradingAssertionType: stripFlags.shouldStripGradingResult
-          ? sql<string | null>`NULL`
-          : jsonTextOrNull(validGradingResultJson, '$.assertion.type'),
-        gradingAssertionMetric: stripFlags.shouldStripGradingResult
-          ? sql<string | null>`NULL`
-          : jsonTextOrNull(validGradingResultJson, '$.assertion.metric'),
-        gradingSuggestions: stripFlags.shouldStripGradingResult
-          ? sql<string | null>`NULL`
-          : jsonSuggestionsOrNull(validGradingResultJson, '$.suggestions'),
-        gradingComponentResults: stripFlags.shouldStripGradingResult
-          ? sql<string | null>`NULL`
-          : sql<string | null>`CASE
+      gradingAssertionType: stripFlags.shouldStripGradingResult
+        ? sql<string | null>`NULL`
+        : jsonTextOrNull(validGradingResultJson, '$.assertion.type'),
+      gradingAssertionMetric: stripFlags.shouldStripGradingResult
+        ? sql<string | null>`NULL`
+        : jsonTextOrNull(validGradingResultJson, '$.assertion.metric'),
+      gradingSuggestions: stripFlags.shouldStripGradingResult
+        ? sql<string | null>`NULL`
+        : jsonSuggestionsOrNull(validGradingResultJson, '$.suggestions'),
+      gradingComponentResults: stripFlags.shouldStripGradingResult
+        ? sql<string | null>`NULL`
+        : sql<string | null>`CASE
           WHEN json_type(${validGradingResultJson}, '$.componentResults') = 'array'
           THEN (
             SELECT json_group_array(
@@ -2699,7 +2553,7 @@ export default class Eval {
                     'score', ${jsonNumberOrNull(validReportComponentJson, '$.score')},
                     'reason', CASE
                       WHEN json_type(${validReportComponentJson}, '$.reason') = 'text'
-                      THEN substr(json_extract(${validReportComponentJson}, '$.reason'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH})
+                      THEN substr(json_extract(${validReportComponentJson}, '$.reason'), 1, ${MAX_REPORT_TEXT_LENGTH})
                       ELSE NULL
                     END
                   ),
@@ -2729,81 +2583,66 @@ export default class Eval {
               json_extract(${validGradingResultJson}, '$.componentResults')
             ) AS report_component
             WHERE report_component.type = 'object'
-              AND (
-                (
-                  report_component.key < 25
-                  AND (
-                    report_component.key < 24
-                    OR EXISTS (
-                      SELECT 1
-                      FROM json_each(json_extract(${validGradingResultJson}, '$.componentResults')) AS first_component
-                      WHERE first_component.key < 25
-                        AND (${sql.join(
-                          REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES.map(
-                            (prefix) =>
-                              sql`json_extract(first_component.value, '$.assertion.metric') LIKE ${`${prefix}%`}`,
-                          ),
-                          sql` OR `,
-                        )})
-                    )
-                    OR NOT EXISTS (
-                      SELECT 1
-                      FROM json_each(json_extract(${validGradingResultJson}, '$.componentResults')) AS later_component
-                      WHERE later_component.key >= 25
-                        AND (${sql.join(
-                          REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES.map(
-                            (prefix) =>
-                              sql`json_extract(later_component.value, '$.assertion.metric') LIKE ${`${prefix}%`}`,
-                          ),
-                          sql` OR `,
-                        )})
-                    )
-                  )
-                )
-                OR report_component.key = (
-                  SELECT MIN(identity_component.key)
-                  FROM json_each(json_extract(${validGradingResultJson}, '$.componentResults')) AS identity_component
-                  WHERE identity_component.key >= 25
-                    AND (${sql.join(
-                      REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES.map(
-                        (prefix) =>
-                          sql`json_extract(identity_component.value, '$.assertion.metric') LIKE ${`${prefix}%`}`,
-                      ),
-                      sql` OR `,
-                    )})
-                )
-              )
+              AND (report_component.key < 25 OR json_extract(${validReportComponentJson}, '$.assertion.type') = 'moderation' OR json_extract(${validReportComponentJson}, '$.assertion.metric') IN (${sql.join(
+                Object.keys(categoryAliasesReverse).map((alias) => sql`${alias}`),
+                sql`, `,
+              )}) OR (${sql.join(
+                REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES.map(
+                  (prefix) =>
+                    sql`json_extract(${validReportComponentJson}, '$.assertion.metric') LIKE ${prefix + '%'}`,
+                ),
+                sql` OR `,
+              )}))
           )
           ELSE NULL
         END`,
-        metadataPluginId: jsonTextOrNull(validMetadataJson, '$.pluginId'),
-        metadataHarmCategory: jsonTextOrNull(validMetadataJson, '$.harmCategory'),
-        metadataRedteamFinalPrompt:
-          stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
-            ? sql<string | null>`NULL`
-            : jsonBoundedTextOrNull(validMetadataJson, '$.redteamFinalPrompt'),
-        metadataRedteamHistory: jsonHistoryForRedteamReport(
-          validMetadataJson,
-          '$.redteamHistory',
-          stripFlags,
-        ),
-        metadataRedteamTreeHistory: jsonHistoryForRedteamReport(
-          validMetadataJson,
-          '$.redteamTreeHistory',
-          stripFlags,
-        ),
-        testCasePluginId: jsonTextOrNull(validTestCaseJson, '$.metadata.pluginId'),
-        testCaseStrategyId: jsonTextOrNull(validTestCaseJson, '$.metadata.strategyId'),
-        testCasePolicyId: jsonTextOrNull(validTestCaseJson, '$.metadata.policyId'),
-      })
-      .from(evalResultsTable)
-      .where(eq(evalResultsTable.evalId, this.id))
-      .orderBy(evalResultsTable.testIdx, evalResultsTable.promptIdx, evalResultsTable.id)
-      .all();
+      metadataPluginId: jsonTextOrNull(validMetadataJson, '$.pluginId'),
+      metadataPolicyId: jsonTextOrNull(validMetadataJson, '$.policyId'),
+      metadataHarmCategory: jsonTextOrNull(validMetadataJson, '$.harmCategory'),
+      metadataRedteamFinalPrompt:
+        stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
+          ? sql<string | null>`NULL`
+          : jsonBoundedTextOrNull(validMetadataJson, '$.redteamFinalPrompt'),
+      testCasePluginId: jsonTextOrNull(validTestCaseJson, '$.metadata.pluginId'),
+      testCaseStrategyId: jsonTextOrNull(validTestCaseJson, '$.metadata.strategyId'),
+      testCasePolicyId: jsonTextOrNull(validTestCaseJson, '$.metadata.policyId'),
+    };
+    const rows = legacy
+      ? await db
+          .select(columns)
+          .from(
+            sql`${evalsTable}, json_each(CASE WHEN json_valid(${evalsTable.results}) AND json_type(${evalsTable.results}, '$.results') = 'array' THEN json_extract(${evalsTable.results}, '$.results') ELSE json('[]') END) AS report_result`,
+          )
+          .where(sql`${evalsTable.id} = ${this.id} AND report_result.type = 'object'`)
+          .orderBy(sources.testIdx, sources.promptIdx, sources.id)
+          .all()
+      : await db
+          .select(columns)
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.evalId, this.id))
+          .orderBy(evalResultsTable.testIdx, evalResultsTable.promptIdx, evalResultsTable.id)
+          .all();
     const prompts = this.prompts.map((prompt) =>
       projectPromptForRedteamReport(prompt, stripFlags.shouldStripPromptText),
     );
 
+    if (legacy && this.oldResults) {
+      return {
+        version: 2,
+        timestamp: new Date(this.createdAt).toISOString(),
+        results: rows.map((row) => createRedteamReportResult(row, stripFlags)),
+        table: {
+          head: {
+            ...this.oldResults.table.head,
+            prompts: this.oldResults.table.head.prompts.map((prompt) =>
+              projectPromptForRedteamReport(prompt, stripFlags.shouldStripPromptText),
+            ),
+          },
+          body: [],
+        },
+        stats: this.oldResults.stats,
+      };
+    }
     return {
       version: 3,
       timestamp: new Date(this.createdAt).toISOString(),
@@ -2862,45 +2701,32 @@ export default class Eval {
     includeTraces = true,
     resultProjection = 'full',
   }: ResultsFileOptions = {}): Promise<ResultsFile> {
-    const traces = includeTraces ? projectTracesForOutput(await this.getTraces()) : [];
+    const stripFlags = getStripFlags(this.config.env);
+    const traces = includeTraces ? await this.getTraces() : [];
+    const compact = resultProjection === 'redteamReport';
     const injectVar =
       typeof this.config.redteam?.injectVar === 'string' ? this.config.redteam.injectVar : 'prompt';
-    const outputStripFlags = getOutputStripFlags();
-    const stripFlags = resultProjection === 'redteamReport' ? outputStripFlags : undefined;
-    const results = stripFlags
-      ? await this.toRedteamReportSummary(injectVar, stripFlags)
-      : await this.toEvaluateSummary();
-    const prompts = this.getPrompts();
-
-    const resultFile: ResultsFile = {
+    const config = sanitizeConfigForOutput(
+      compact ? projectConfigForRedteamReport(this.config, stripFlags) : this.config,
+      stripFlags,
+    );
+    return {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
-      results,
-      config:
-        resultProjection === 'redteamReport'
-          ? projectConfigForRedteamReport(
-              sanitizeTracingConfigForPersistence(this.config),
-              outputStripFlags,
-            )
-          : projectConfigForOutput(
-              sanitizeTracingConfigForPersistence(this.config),
-              outputStripFlags,
-            ),
+      results: compact
+        ? await this.toRedteamReportSummary(injectVar, stripFlags)
+        : await this.toEvaluateSummary(),
+      config,
       author: this.author || null,
-      prompts:
-        stripFlags === undefined
-          ? outputStripFlags.shouldStripPromptText
-            ? prompts.map((prompt) => projectPromptForOutput(prompt, true))
-            : prompts
-          : prompts.map((prompt) =>
-              projectPromptForRedteamReport(prompt, stripFlags.shouldStripPromptText),
-            ),
+      prompts: this.getPrompts().map((prompt) =>
+        compact
+          ? projectPromptForRedteamReport(prompt, stripFlags.shouldStripPromptText)
+          : projectPrompt(prompt, stripFlags.shouldStripPromptText),
+      ),
       ...(this.vars.length > 0 && { vars: [...this.vars] }),
       datasetId: this.datasetId || null,
-      ...(traces.length > 0 && { traces }),
+      ...(traces.length > 0 && { traces: projectTracesForOutput(traces, stripFlags) }),
     };
-
-    return resultFile;
   }
 
   async delete({ notify = true }: { notify?: boolean } = {}) {

@@ -45,7 +45,7 @@ import {
   type SharedResults,
 } from '@promptfoo/types';
 import { AlertTriangle, Filter, ListOrdered, Printer, Settings, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import FrameworkCompliance from './FrameworkCompliance';
 import { type CategoryStats, type TestResultStats } from './FrameworkComplianceUtils';
 import Overview from './Overview';
@@ -960,11 +960,11 @@ const App = ({ evalId: requestedEvalId, embedded, onActionsReady }: ReportProps)
                 <div className="flex flex-col gap-4 md:flex-row">
                   <div className="min-w-[200px]">
                     <Label htmlFor="search" className="sr-only">
-                      Search prompts & outputs
+                      Search preview text
                     </Label>
                     <Input
                       id="search"
-                      placeholder="Search prompts & outputs"
+                      placeholder="Search preview text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />

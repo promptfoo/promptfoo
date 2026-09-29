@@ -14,7 +14,7 @@ import { callApi } from '@app/utils/api';
 import { getActualPrompt } from '@app/utils/providerResponse';
 import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
 import { ChevronDown, Lightbulb } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import ChatMessages, { type Message } from '../../../eval/components/ChatMessages';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
@@ -31,57 +31,6 @@ interface RiskCategoryDrawerProps {
   evalId: string;
   numPassed: number;
   numFailed: number;
-}
-
-// Full row details are the unbounded payloads intentionally moved out of the report
-// summary, so retaining every inspected row would recreate the browser OOM this drawer
-// is meant to avoid. Keep only a small LRU with an explicit count + byte budget.
-const MAX_DETAIL_CACHE_ENTRIES = 5;
-const MAX_DETAIL_CACHE_BYTES = 5 * 1024 * 1024;
-
-type DetailsCacheEntry = { result: EvaluateResult; bytes: number };
-type DetailsCache = { evalId: string; results: Map<string, DetailsCacheEntry>; bytes: number };
-
-function createDetailsCache(evalId: string): DetailsCache {
-  return { evalId, results: new Map(), bytes: 0 };
-}
-
-function estimateResultBytes(result: EvaluateResult): number {
-  try {
-    return JSON.stringify(result).length;
-  } catch {
-    return 0;
-  }
-}
-
-function retainRowDetail(cache: DetailsCache, key: string, result: EvaluateResult): void {
-  const existing = cache.results.get(key);
-  if (existing) {
-    cache.bytes -= existing.bytes;
-    cache.results.delete(key);
-  }
-  const bytes = estimateResultBytes(result);
-  // A single row larger than the whole budget is still displayed, just never retained.
-  if (bytes > MAX_DETAIL_CACHE_BYTES) {
-    return;
-  }
-  cache.results.set(key, { result, bytes });
-  cache.bytes += bytes;
-  // Evict oldest (insertion-ordered) entries until within both bounds.
-  while (
-    cache.results.size > MAX_DETAIL_CACHE_ENTRIES ||
-    (cache.bytes > MAX_DETAIL_CACHE_BYTES && cache.results.size > 1)
-  ) {
-    const oldestKey = cache.results.keys().next().value as string | undefined;
-    if (oldestKey === undefined) {
-      break;
-    }
-    const evicted = cache.results.get(oldestKey);
-    cache.results.delete(oldestKey);
-    if (evicted) {
-      cache.bytes -= evicted.bytes;
-    }
-  }
 }
 
 const PRIORITY_STRATEGIES = ['jailbreak:composite', 'pliny', 'prompt-injections'];
@@ -205,7 +154,6 @@ const RiskCategoryDrawer = ({
   const [selectedTest, setSelectedTest] = React.useState<TestWithMetadata | null>(null);
   const [loadingDetailsKey, setLoadingDetailsKey] = React.useState<string | null>(null);
   const [detailsLoadError, setDetailsLoadError] = React.useState<string | null>(null);
-  const detailsCacheRef = React.useRef<DetailsCache>(createDetailsCache(evalId));
   const detailsRequestRef = React.useRef(0);
   const detailsAbortRef = React.useRef<AbortController | null>(null);
   const detailsContextRef = React.useRef({ category, evalId, open });
@@ -214,15 +162,9 @@ const RiskCategoryDrawer = ({
   React.useEffect(() => {
     detailsContextRef.current = { category, evalId, open };
     detailsRequestRef.current += 1;
-    // Cancel any in-flight download so a category switch, eval change, or close stops
-    // both the network request and the JSON parsing of a stale full row.
+    // Stop stale detail requests when the drawer context changes.
     detailsAbortRef.current?.abort();
     detailsAbortRef.current = null;
-    // Drop retained full rows when the eval changes or the drawer closes so the
-    // unbounded payloads never accumulate across evals or sessions.
-    if (detailsCacheRef.current.evalId !== evalId || !open) {
-      detailsCacheRef.current = createDetailsCache(evalId);
-    }
     setLoadingDetailsKey(null);
     setDetailsLoadError(null);
     setSelectedTest(null);
@@ -261,8 +203,6 @@ const RiskCategoryDrawer = ({
 
     const requestId = ++detailsRequestRef.current;
     const requestContext = { category, evalId, open };
-    // Abort any previous in-flight download before starting a new one so only the most
-    // recent request keeps network/JSON work alive.
     detailsAbortRef.current?.abort();
     const abortController = new AbortController();
     detailsAbortRef.current = abortController;
@@ -279,31 +219,17 @@ const RiskCategoryDrawer = ({
     setLoadingDetailsKey(detailsKey);
 
     try {
-      if (detailsCacheRef.current.evalId !== evalId) {
-        detailsCacheRef.current = createDetailsCache(evalId);
+      const resultIdQuery = compactResult.id
+        ? `?resultId=${encodeURIComponent(compactResult.id)}`
+        : '';
+      const response = await callApi(
+        `/results/${encodeURIComponent(evalId)}/rows/${compactResult.testIdx}/${compactResult.promptIdx}${resultIdQuery}`,
+        { cache: 'no-store', signal: abortController.signal },
+      );
+      if (!response.ok) {
+        throw new Error(`Failed to load full result details (${response.status})`);
       }
-      let fullResult = detailsCacheRef.current.results.get(detailsKey)?.result;
-      if (fullResult) {
-        retainRowDetail(detailsCacheRef.current, detailsKey, fullResult);
-      }
-      if (!fullResult) {
-        const resultIdQuery = compactResult.id
-          ? `?resultId=${encodeURIComponent(compactResult.id)}`
-          : '';
-        const response = await callApi(
-          `/results/${encodeURIComponent(evalId)}/rows/${compactResult.testIdx}/${compactResult.promptIdx}${resultIdQuery}`,
-          { cache: 'no-store', signal: abortController.signal },
-        );
-        if (!response.ok) {
-          throw new Error(`Failed to load full result details (${response.status})`);
-        }
-        const body = (await response.json()) as { data: EvaluateResult };
-        fullResult = body.data;
-        if (!isCurrentRequest() || detailsCacheRef.current.evalId !== evalId) {
-          return;
-        }
-        retainRowDetail(detailsCacheRef.current, detailsKey, fullResult);
-      }
+      const { data: fullResult } = (await response.json()) as { data: EvaluateResult };
       if (!isCurrentRequest()) {
         return;
       }
@@ -437,7 +363,9 @@ const RiskCategoryDrawer = ({
 
           {/* Collapsible content */}
           <CollapsibleContent>
-            {/* Chat conversation */}
+            <p className="px-3 pt-2 text-xs text-muted-foreground">
+              Preview only. Open Details for the full result.
+            </p>
             <ChatMessages
               messages={chatMessages}
               displayTurnCount={maxTurns > 1}
@@ -575,7 +503,10 @@ const RiskCategoryDrawer = ({
         />
         <EvalOutputPromptDialog
           open={detailsDialogOpen}
-          onClose={() => setDetailsDialogOpen(false)}
+          onClose={() => {
+            setDetailsDialogOpen(false);
+            setSelectedTest(null);
+          }}
           prompt={selectedTest?.result?.prompt.raw || 'Unknown'}
           output={
             typeof selectedTest?.result?.response?.output === 'object'

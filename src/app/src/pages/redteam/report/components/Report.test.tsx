@@ -6,7 +6,7 @@ import { callApi } from '@app/utils/api';
 import { ResultFailureReason } from '@promptfoo/types';
 import { render, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import App from './Report';
 import type { EvaluateResult, GradingResult, ResultsFile } from '@promptfoo/types';
@@ -23,8 +23,8 @@ const renderWithProviders = (ui: React.ReactElement) => {
 vi.mock('@app/utils/api');
 const mockRecordEvent = vi.hoisted(() => vi.fn());
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual('react-router');
   return {
     ...actual,
     useNavigate: () => vi.fn(),
@@ -1319,7 +1319,7 @@ describe('Filter panel regression tests', () => {
     });
 
     // Verify filter controls are rendered
-    expect(screen.getByPlaceholderText('Search prompts & outputs')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search preview text')).toBeInTheDocument();
     expect(screen.getByText('Risk Categories')).toBeInTheDocument();
     expect(screen.getByText('Strategies')).toBeInTheDocument();
   });
