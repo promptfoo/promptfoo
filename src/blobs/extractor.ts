@@ -110,13 +110,7 @@ function parseBinary(
   }
 }
 
-/**
- * Per-response store-once function: returns the same `BlobRef` for byte-identical
- * payloads regardless of how the input is encoded (raw base64 vs. `data:` URL) or
- * which field it appeared under, so a single response that mirrors the same
- * audio/image across `output`, `images[]`, `metadata`, and `turns[]` triggers one
- * `storeBlob` write.
- */
+/** Reuse one write per media kind and decoded payload within a response. */
 type StoreOnce = (
   base64OrDataUrl: string,
   defaultMimeType: string,
@@ -128,9 +122,6 @@ type StoreOnce = (
 function createStoreOnce(blobContext: BlobContext): StoreOnce {
   const cache = new Map<string, Promise<BlobRef>>();
   return async (base64OrDataUrl, defaultMimeType, location, kind, minSizeBytes) => {
-    // Canonicalize the cache key on the parsed bytes (not the raw input string)
-    // so a `data:image/png;base64,XYZ` URL and the bare `XYZ` base64 hit the
-    // same cache slot when they decode to the same buffer.
     const parsed = parseBinary(base64OrDataUrl, defaultMimeType);
     if (!parsed || !shouldExternalize(parsed.buffer, minSizeBytes)) {
       return null;
@@ -323,9 +314,7 @@ async function externalizeMetadataAudio(
     return { value: metadata, mutated: false };
   }
 
-  // Routing through `storeOnce` means a metadata-mirrored audio payload reuses the blob for any other
-  // path (`response.audio.data`, `turns[N].audio.data`, etc.) when the bytes
-  // match — one store.
+  // Reuse matching audio blobs already stored elsewhere in the response.
   const stored = await storeOnce(
     audioRecord.data,
     normalizeAudioMimeType(typeof audioRecord.format === 'string' ? audioRecord.format : undefined),
