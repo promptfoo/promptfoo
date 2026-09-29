@@ -1,18 +1,7 @@
-/**
- * Tests for inject variable prompt extraction logic in ResultsTable
- * Lines 691-707 in ResultsTable.tsx
- *
- * Tests the cell rendering logic that uses getActualPrompt to display
- * provider-reported prompts or redteam final prompts in inject variable cells.
- */
-
 import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import { describe, expect, it } from 'vitest';
 
-/**
- * Simulates the inject variable cell rendering logic from ResultsTable
- * This mirrors lines 696-707 in ResultsTable.tsx
- */
+// Model the table's first-nonempty prompt selection across provider outputs.
 function getCellValueForInjectVar(
   originalValue: string,
   outputs: Array<{ response?: any; metadata?: any }> | undefined,
