@@ -1,42 +1,33 @@
 # google-interactions (Gemini Interactions API)
 
-This example demonstrates the [Gemini Interactions API](https://ai.google.dev/gemini-api/docs/interactions-overview), which went GA in June 2026 and is Google's primary interface for Gemini models and agents. `generateContent` is now the legacy path.
-
-Promptfoo uses Interactions by default for `google:` chat models, so these configs mostly show what that default does and how to opt out of it.
-
-You can run this example with:
+Compare Google's `generateContent` and [Interactions](https://ai.google.dev/gemini-api/docs/interactions-overview) chat APIs, then try function callbacks and stored interaction IDs.
 
 ```bash
 npx promptfoo@latest init --example google-interactions
 cd google-interactions
 ```
 
-## Prerequisites
+Set `GOOGLE_API_KEY` or `GEMINI_API_KEY` before running the AI Studio examples. Ordinary `google:` providers use `generateContent`; select Interactions with `google:interactions:` or `config.interactions: true`.
 
-- Google AI Studio API key set as `GOOGLE_API_KEY` or `GEMINI_API_KEY` in your environment
-- For `promptfooconfig.vertex.yaml` only: `gcloud auth application-default login` and a Google Cloud project (Vertex refuses API-key auth)
-
-## Overview
-
-Bare `google:` chat providers use Interactions unless you opt out with `interactions: false` or hit a capability fallback. The `google:interactions:` prefix forces it explicitly, at the cost of changing the provider id.
-
-| Config                          | Shows                                                         |
-| ------------------------------- | ------------------------------------------------------------- |
-| `promptfooconfig.yaml`          | Both opt-in styles side by side with legacy `generateContent` |
-| `promptfooconfig.tools.yaml`    | Function calling, with and without `functionToolCallbacks`    |
-| `promptfooconfig.stateful.yaml` | Opt-in server-side history via `store: true`                  |
-
-## Retention
-
-Google stores interactions by default (55 days on the paid tier). Promptfoo sends `store: false` so eval and red-team payloads are not retained; function calling still works because the tool loop resends history inline. Set `store: true` only when you want server-side history, then pass `metadata.interactionId` as `previousInteractionId` to continue a thread.
-
-## Usage
+| Config                          | Purpose                                                     |
+| ------------------------------- | ----------------------------------------------------------- |
+| `promptfooconfig.yaml`          | Compare both transports and both Interactions opt-in styles |
+| `promptfooconfig.tools.yaml`    | Inspect pending function calls and run a local callback     |
+| `promptfooconfig.stateful.yaml` | Enable storage and return an interaction ID                 |
+| `promptfooconfig.vertex.yaml`   | Use Vertex OAuth, global routing, and stored interactions   |
 
 ```bash
-promptfoo eval -c promptfooconfig.yaml
-promptfoo eval -c promptfooconfig.tools.yaml
-promptfoo eval -c promptfooconfig.stateful.yaml
-promptfoo eval -c promptfooconfig.fallback.yaml
-promptfoo eval -c promptfooconfig.vertex.yaml
-promptfoo view
+promptfoo eval -c promptfooconfig.yaml --no-cache
+promptfoo eval -c promptfooconfig.tools.yaml --no-cache
+promptfoo eval -c promptfooconfig.stateful.yaml --no-cache -o stored.json
 ```
+
+AI Studio chat requests default to `store: false`. The stateful example enables storage; to continue one of its conversations, copy the result's `metadata.interactionId` into `config.previousInteractionId` for a later request. Storage is separate from other Google data-use policies.
+
+For Vertex, configure a Google Cloud project and run `gcloud auth application-default login`. The example uses `region: global` and explicitly enables storage. Vertex chat rejects `store: false` and previous interaction IDs; pass prior turns inline. Check current model availability before running it:
+
+```bash
+promptfoo eval -c promptfooconfig.vertex.yaml --no-cache
+```
+
+The chat adapter rejects controls it cannot preserve, including safety settings, required tool choices, thinking token budgets, MCP, and configured search-retrieval options. Keep those configurations on `generateContent`. Chat requests bypass Promptfoo's persistent cache.

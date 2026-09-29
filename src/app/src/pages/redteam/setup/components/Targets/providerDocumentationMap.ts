@@ -62,7 +62,6 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
 
   // Third-Party Providers
   openrouter: `${BASE_DOCS_URL}/openrouter`,
-  github: `${BASE_DOCS_URL}/github`,
   ai21: `${BASE_DOCS_URL}/ai21`,
   aimlapi: `${BASE_DOCS_URL}/aimlapi`,
   hyperbolic: `${BASE_DOCS_URL}/hyperbolic`,
@@ -108,7 +107,7 @@ export function getProviderDocumentationUrl(providerType?: string): string {
     return BASE_DOCS_URL;
   }
 
-  // Handle provider formats like 'openrouter:openai/gpt-5.4' or 'azure:chat:'
+  // Handle provider formats like 'openrouter:openai/gpt-6-sol' or 'azure:chat:'
   const normalizedType =
     providerType === 'openai:codex-security' || providerType.startsWith('openai:codex-security:')
       ? 'codex-security'

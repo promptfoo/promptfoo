@@ -7,7 +7,6 @@ import {
   geminiContentsToInteractionsInput,
   toInteractionsTools,
 } from '../../../src/providers/google/interactionsChat';
-import { shouldUseInteractions } from '../../../src/providers/google/interactionsShared';
 
 vi.mock('../../../src/cache', () => ({ fetchWithCache: vi.fn() }));
 
@@ -54,6 +53,7 @@ describe('GoogleInteractionsChatProvider', () => {
     // Endpoint/auth resolution reads the ambient environment; pin it so a
     // developer's gcloud or Gemini setup cannot redirect these assertions.
     vi.stubEnv('GOOGLE_API_HOST', '');
+    vi.stubEnv('PALM_API_HOST', '');
     vi.stubEnv('GOOGLE_API_BASE_URL', '');
     vi.stubEnv('VERTEX_REGION', '');
     vi.stubEnv('GOOGLE_CLOUD_LOCATION', '');
@@ -128,22 +128,26 @@ describe('GoogleInteractionsChatProvider', () => {
       });
     });
 
-    it('keys the cache on a credential hash rather than the raw API key', async () => {
+    it('bypasses persistent caching without a credential-derived cache identity', async () => {
       mockFetchWithCache.mockResolvedValue(interaction() as any);
       await make().callApi('Hello');
-
       const init = mockFetchWithCache.mock.calls[0][1] as any;
-      // Responses are cacheable like every other Google provider, but the key is
-      // discriminated by a hash so the credential is never a durable fingerprint.
-      expect(init._authHash).toMatch(/^[0-9a-f]{16}$/);
-      expect(JSON.stringify(init._authHash)).not.toContain('test-key');
-      expect(mockFetchWithCache.mock.calls[0][4]).toBe(false);
+      expect(init._authHash).toBeUndefined();
+      expect(mockFetchWithCache.mock.calls[0][4]).toBe(true);
     });
 
     it('busts the cache when the caller asks for fresh results', async () => {
       mockFetchWithCache.mockResolvedValue(interaction() as any);
       await make().callApi('Hello', { bustCache: true } as any);
       expect(mockFetchWithCache.mock.calls[0][4]).toBe(true);
+    });
+
+    it('does not send an already aborted request', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const result = await make().callApi('Hello', undefined, { abortSignal: controller.signal });
+      expect(result.error).toContain('aborted');
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
     });
 
     it('applies a configured timeoutMs to the initial request, not just polling', async () => {
@@ -409,16 +413,198 @@ describe('GoogleInteractionsChatProvider', () => {
       });
     });
 
-    it('drops safetySettings, which the Gemini Interactions API rejects', async () => {
+    it.each([
+      {
+        safetySettings: [
+          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+        ],
+      },
+      { tool_choice: 'required' },
+      { passthrough: { tool_choice: 'required' } },
+      { passthrough: { tool_config: { function_calling_config: { mode: 'ANY' } } } },
+      { tool_choice: { type: 'function', function: { name: 'f' } } },
+      { generationConfig: { thinkingConfig: { thinkingBudget: 512 } } },
+      { generationConfig: { responseModalities: ['AUDIO'] } },
+      { generationConfig: { response_mime_type: 'text/plain' } },
+      { mcp: { enabled: true } },
+    ])('rejects unsupported effective options before sending: %j', async (config) => {
+      const result = await make().callApi('Hello', {
+        prompt: { raw: 'Hello', label: 'prompt', config },
+      } as any);
+      expect(result.error).toBeTruthy();
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('preserves native Gemini media and function-result parts at the call boundary', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      const result = await make().callApi(
+        JSON.stringify({
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { inlineData: { mimeType: 'image/png', data: 'fixture' } },
+                {
+                  file_data: {
+                    mime_type: 'application/pdf',
+                    file_uri: 'https://example.com/doc.pdf',
+                  },
+                },
+                { functionResponse: { id: 'call_1', name: 'f', response: { ok: true } } },
+                { text: 'last' },
+              ],
+            },
+          ],
+        }),
+      );
+      expect(result.error).toBeUndefined();
+      expect(bodyOf(mockFetchWithCache.mock.calls[0]).input).toEqual([
+        {
+          type: 'user_input',
+          content: [
+            { type: 'image', mime_type: 'image/png', data: 'fixture' },
+            { type: 'document', mime_type: 'application/pdf', uri: 'https://example.com/doc.pdf' },
+          ],
+        },
+        {
+          type: 'function_result',
+          call_id: 'call_1',
+          name: 'f',
+          result: [{ type: 'text', text: '{"ok":true}' }],
+        },
+        { type: 'user_input', content: [{ type: 'text', text: 'last' }] },
+      ]);
+    });
+
+    it('preserves schema instance values and normalizes only schema keywords', async () => {
       mockFetchWithCache.mockResolvedValue(interaction() as any);
       await make({
-        safetySettings: [{ category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' }],
+        responseSchema: JSON.stringify({
+          type: 'OBJECT',
+          properties: { type: { type: 'STRING', const: 'PREMIUM' } },
+          const: { type: 'STRING' },
+          examples: [{ type: 'PREMIUM' }],
+        }),
       }).callApi('Hello');
-      expect(bodyOf(mockFetchWithCache.mock.calls[0]).safety_settings).toBeUndefined();
+      expect(bodyOf(mockFetchWithCache.mock.calls[0]).response_format).toEqual({
+        type: 'object',
+        properties: { type: { type: 'string', const: 'PREMIUM' } },
+        const: { type: 'STRING' },
+        examples: [{ type: 'PREMIUM' }],
+      });
+    });
+
+    it('maps camel-case passthrough generation config and model overrides', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      await make({
+        passthrough: {
+          model: 'other-model',
+          generationConfig: { maxOutputTokens: 12, responseSchema: { type: 'STRING' } },
+        },
+      }).callApi('Hello');
+      const body = bodyOf(mockFetchWithCache.mock.calls[0]);
+      expect(body).toMatchObject({
+        model: 'other-model',
+        generation_config: { max_output_tokens: 12 },
+        response_format: { type: 'string' },
+      });
+      expect(body.generationConfig).toBeUndefined();
+    });
+
+    it('preserves native passthrough tools while withholding disabled functions', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      await make({
+        tool_choice: 'none',
+        passthrough: { tools: [{ type: 'google_maps' }, { type: 'function', name: 'f' }] },
+      }).callApi('Hello');
+      expect(bodyOf(mockFetchWithCache.mock.calls[0]).tools).toEqual([{ type: 'google_maps' }]);
+    });
+
+    it.each([
+      {
+        googleSearchRetrieval: {
+          dynamicRetrievalConfig: { mode: 'MODE_DYNAMIC', dynamicThreshold: 0.8 },
+        },
+      },
+      { functionDeclarations: [{ name: 'f', response: { type: 'STRING' } }] },
+    ])('rejects tool configuration that cannot be preserved: %j', async (tool) => {
+      const result = await make({ tools: [tool] }).callApi('Hello');
+      expect(result.error).toContain('not supported');
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('retained compatibility coverage', () => {
+    it('normalizes both passthrough generation spellings with snake-case precedence', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      await make({
+        passthrough: {
+          generationConfig: { maxOutputTokens: 15, temperature: 0.1 },
+          generation_config: { temperature: 0.8 },
+        },
+      }).callApi('Hello');
+      const body = bodyOf(mockFetchWithCache.mock.calls[0]);
+      expect(body.generation_config).toMatchObject({ max_output_tokens: 15, temperature: 0.8 });
+      expect(body).not.toHaveProperty('generationConfig');
+    });
+
+    it('prices the model selected through passthrough', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      const overridden = await make({ passthrough: { model: 'gemini-2.5-pro' } }).callApi('Hello');
+      const direct = await new GoogleInteractionsChatProvider('gemini-2.5-pro', {
+        config: { apiKey: 'test-key', vertexai: false },
+      }).callApi('Hello');
+      expect(overridden.cost).toBeGreaterThan(0);
+      expect(overridden.cost).toBe(direct.cost);
+      expect(bodyOf(mockFetchWithCache.mock.calls[0]).model).toBe('gemini-2.5-pro');
+    });
+
+    it('rejects unsupported camel-case passthrough generation settings', async () => {
+      const response = await make({
+        passthrough: { generationConfig: { thinkingConfig: { thinkingBudget: 128 } } },
+      }).callApi('Hello');
+      expect(response.error).toContain('thinkingBudget');
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('honors PALM_API_HOST in provider-scoped environment overrides', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      await new GoogleInteractionsChatProvider('gemini-2.5-flash', {
+        config: { apiKey: 'test-key', vertexai: false },
+        env: { PALM_API_HOST: 'http://127.0.0.1:12345' },
+      }).callApi('Hello');
+      expect(mockFetchWithCache.mock.calls[0][0]).toBe(
+        'http://127.0.0.1:12345/v1beta/interactions',
+      );
+    });
+
+    it('keeps native tool declarations and withholds native functions when disabled', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      const tools = [
+        { type: 'function', name: 'echo', parameters: { type: 'object' } },
+        { type: 'google_search' },
+      ];
+      await make({ tools }).callApi('Hello');
+      expect(bodyOf(mockFetchWithCache.mock.calls[0]).tools).toEqual(tools);
+      await make({ tools, tool_choice: 'none' }).callApi('Hello');
+      expect(bodyOf(mockFetchWithCache.mock.calls[1]).tools).toEqual([{ type: 'google_search' }]);
     });
   });
 
   describe('response handling', () => {
+    it.each([
+      null,
+      [],
+      'unexpected',
+      { steps: {} },
+      { steps: [null] },
+      { steps: [{ content: [null] }] },
+    ])('normalizes malformed success payload %j', async (data) => {
+      mockFetchWithCache.mockResolvedValue({ data, cached: false, status: 200 } as any);
+      const result = await make().callApi('Hello');
+      expect(result.error).toContain('invalid response');
+    });
+
     it('returns only the newest turn when an interaction carries prior history', async () => {
       mockFetchWithCache.mockResolvedValue(
         interaction({
@@ -484,20 +670,6 @@ describe('GoogleInteractionsChatProvider', () => {
         'google_search_call',
         'google_search_result',
       ]);
-    });
-
-    it('attributes a fully cached exchange to cached tokens, not fresh usage', async () => {
-      mockFetchWithCache.mockResolvedValue({ ...interaction(), cached: true } as any);
-
-      const result = await make().callApi('Hello');
-
-      // Matches the other Google providers: nothing was billed, so the tokens
-      // must not be counted again as fresh prompt/completion usage.
-      expect(result.cached).toBe(true);
-      expect(result.tokenUsage).toMatchObject({ cached: 30, total: 30 });
-      expect(result.tokenUsage?.prompt).toBeUndefined();
-      expect(result.tokenUsage?.completion).toBeUndefined();
-      expect(result.cost).toBeUndefined();
     });
 
     it('reports token usage, reasoning tokens, and cost', async () => {
@@ -635,8 +807,11 @@ describe('GoogleInteractionsChatProvider', () => {
       expect(bodyOf(mockFetchWithCache.mock.calls[1]).input).toContainEqual(
         expect.objectContaining({
           type: 'function_result',
-          result: [{ type: 'text', text: 'Error: upstream down' }],
+          result: [{ type: 'text', text: 'Tool execution failed.' }],
         }),
+      );
+      expect(JSON.stringify(bodyOf(mockFetchWithCache.mock.calls[1]))).not.toContain(
+        'upstream down',
       );
       expect(result.metadata?.toolCalls).toEqual([
         expect.objectContaining({ name: 'get_weather', error: 'upstream down' }),
@@ -719,21 +894,6 @@ describe('GoogleInteractionsChatProvider', () => {
         (item: any) => item.type === 'function_result',
       );
       expect(typeof result[0].text).toBe('string');
-    });
-
-    it('still bills the uncached rounds of a partially cached tool loop', async () => {
-      mockFetchWithCache
-        .mockResolvedValueOnce({ ...pendingCall(), cached: true } as any)
-        .mockResolvedValueOnce(finalAnswer() as any);
-
-      const result = await make({
-        ...toolConfig,
-        functionToolCallbacks: { get_weather: () => 'ok' },
-      }).callApi('Weather?');
-
-      // The second round reached Google, so its cost must not be suppressed.
-      expect(result.cached).toBe(false);
-      expect(result.cost).toBeGreaterThan(0);
     });
 
     it.each(['constructor', 'toString', '__proto__', 'valueOf'])(
@@ -1150,88 +1310,5 @@ describe('toInteractionsTools', () => {
     expect(toInteractionsTools([{ functionDeclarations: [{ description: 'x' }] }] as any)).toEqual(
       [],
     );
-  });
-});
-
-describe('shouldUseInteractions', () => {
-  it('defaults to the Interactions API for AI Studio chat models', () => {
-    expect(shouldUseInteractions('gemini-3.6-flash', {})).toBe(true);
-  });
-
-  it.each([
-    ['a TTS model', 'gemini-2.5-flash-preview-tts', {}],
-    ['configured safetySettings', 'gemini-3.6-flash', { safetySettings: [{ category: 'X' }] }],
-    [
-      'an audio response modality',
-      'gemini-3.6-flash',
-      { generationConfig: { responseModalities: ['AUDIO'] } },
-    ],
-    [
-      'a snake_case image modality',
-      'gemini-3.6-flash',
-      { generationConfig: { response_modalities: ['IMAGE'] } },
-    ],
-    ['a tool mode Interactions cannot enforce', 'gemini-3.6-flash', { tool_choice: 'required' }],
-    [
-      'functionCallingConfig.mode ANY',
-      'gemini-3.6-flash',
-      { toolConfig: { functionCallingConfig: { mode: 'ANY' } } },
-    ],
-    [
-      'a thinking token budget',
-      'gemini-3.6-flash',
-      { generationConfig: { thinkingConfig: { thinkingBudget: 512 } } },
-    ],
-    [
-      'JSON mode without a schema',
-      'gemini-3.6-flash',
-      { generationConfig: { response_mime_type: 'application/json' } },
-    ],
-    [
-      'a sampling option the endpoint rejects',
-      'gemini-3.6-flash',
-      { generationConfig: { presencePenalty: 0.5 } },
-    ],
-    ['a legacy PaLM model', 'chat-bison-001', {}],
-    ['a script-like id', 'custom-model.ts', {}],
-  ])('falls back to generateContent for %s', (_label, model, config) => {
-    expect(shouldUseInteractions(model, config as any)).toBe(false);
-  });
-
-  it.each([
-    ['temperature', { temperature: 0.5 }],
-    ['seed', { seed: 42 }],
-    ['thinkingLevel', { thinkingConfig: { thinkingLevel: 'LOW' } }],
-    ['stopSequences', { stop_sequences: ['X'] }],
-  ])('still uses Interactions for the supported option %s', (_label, generationConfig) => {
-    expect(shouldUseInteractions('gemini-3.6-flash', { generationConfig } as any)).toBe(true);
-  });
-
-  it('keeps a response mime type when a schema already constrains the output', () => {
-    // The schema wins, so an accompanying mime type is redundant, not unsupported.
-    expect(
-      shouldUseInteractions('gemini-3.6-flash', {
-        responseSchema: '{"type":"object"}',
-        generationConfig: { response_mime_type: 'application/json' },
-      } as any),
-    ).toBe(true);
-  });
-
-  it('keeps Vertex on generateContent unless explicitly opted in', () => {
-    expect(shouldUseInteractions('gemini-3-flash-preview', {}, { vertex: true })).toBe(false);
-    expect(
-      shouldUseInteractions('gemini-3-flash-preview', { interactions: true } as any, {
-        vertex: true,
-      }),
-    ).toBe(true);
-  });
-
-  it('lets an explicit flag override every fallback in both directions', () => {
-    // Opting in past a known gap is allowed; the request may fail, but the
-    // caller asked for it.
-    expect(
-      shouldUseInteractions('gemini-2.5-flash-preview-tts', { interactions: true } as any),
-    ).toBe(true);
-    expect(shouldUseInteractions('gemini-3.6-flash', { interactions: false } as any)).toBe(false);
   });
 });

@@ -5,6 +5,7 @@ import path from 'path';
 import util from 'util';
 
 import { getCache, isCacheEnabled } from '../cache';
+import { getProcessEnv } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
@@ -39,10 +40,10 @@ export class GolangProvider implements ApiProvider {
     private options?: ProviderOptions,
   ) {
     const { filePath: providerPath, functionName } = parsePathOrGlob(
-      options?.config.basePath || '',
+      options?.config?.basePath || '',
       runPath,
     );
-    this.scriptPath = path.relative(options?.config.basePath || '', providerPath);
+    this.scriptPath = path.relative(options?.config?.basePath || '', providerPath);
     this.functionName = functionName || null;
     this.id = () => options?.id ?? `golang:${this.scriptPath}:${this.functionName || 'default'}`;
     this.label = options?.label;
@@ -69,7 +70,7 @@ export class GolangProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
   ): Promise<any> {
-    const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
+    const absPath = path.resolve(path.join(this.options?.config?.basePath || '', this.scriptPath));
     const moduleRoot = await this.findModuleRoot(path.dirname(absPath));
     logger.debug(`Found module root at ${moduleRoot}`);
     logger.debug(`Computing file hash for script ${absPath}`);
@@ -134,8 +135,10 @@ export class GolangProvider implements ApiProvider {
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);
         const goExecutable = this.config.goExecutable || 'go';
+        const env = getProcessEnv();
         const { stdout: packageJson } = await execFileAsync(goExecutable, ['list', '-json', '.'], {
           cwd: scriptDir,
+          env,
         });
         const packageInfo = JSON.parse(packageJson) as { ImportPath?: string; Name?: string };
         let buildDir = scriptDir;
@@ -161,17 +164,18 @@ export class GolangProvider implements ApiProvider {
 
         await execFileAsync(goExecutable, ['build', '-o', executablePath, ...buildFiles], {
           cwd: buildDir,
+          env,
         });
 
         const jsonArgs = safeJsonStringify(args) || '[]';
         logger.debug(`Running Go executable: ${executablePath}`);
 
         // Execute compiled binary with args (no shell escaping needed)
-        const { stdout, stderr } = await execFileAsync(executablePath, [
-          tempScriptPath,
-          functionName,
-          jsonArgs,
-        ]);
+        const { stdout, stderr } = await execFileAsync(
+          executablePath,
+          [tempScriptPath, functionName, jsonArgs],
+          { env },
+        );
         if (stderr) {
           logger.error(`Golang script stderr: ${stderr}`);
         }
@@ -185,7 +189,7 @@ export class GolangProvider implements ApiProvider {
         return result;
       } catch (error) {
         logger.error(`Error running Golang script: ${(error as Error).message}`);
-        logger.error(`Full error object: ${JSON.stringify(error)}`);
+        logger.error('Full error object', { error });
         throw new Error(`Error running Golang script: ${(error as Error).message}`);
       } finally {
         // Clean up temporary directory

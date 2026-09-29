@@ -1,25 +1,3 @@
-/**
- * Google Gemini chat/text provider built on the Interactions API.
- *
- * The Interactions API went GA in June 2026 and is Google's primary interface
- * for Gemini models and agents; `generateContent` is now the legacy path. This
- * provider maps Promptfoo's Gemini-shaped configuration onto Interactions so
- * existing suites can move transports without rewriting prompts, tools, or
- * assertions.
- *
- * Notable differences from `generateContent`, all verified against the live API:
- * - Input is a flat `input` timeline, not `contents`/`parts`.
- * - Tools are typed entries (`function`, `google_search`, `code_execution`).
- * - Structured output uses `response_format`, which takes a JSON Schema
- *   directly (`{type: 'object', ...}`); there is no `json_schema` wrapper.
- * - `safety_settings` is rejected by the Gemini API on this endpoint.
- * - Interactions are stored server-side by default (55-day paid retention).
- *   Promptfoo defaults to `store: false` so eval payloads are not retained,
- *   and runs the tool loop by resending history inline instead.
- *
- * @see https://ai.google.dev/gemini-api/docs/migrate-to-interactions
- */
-
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
@@ -31,13 +9,11 @@ import {
   getInteractionModalityTokenCount,
   getInteractionsEndpoint,
   getLatestTurnSteps,
-  getUnexpressibleToolMode,
   getVertexInteractionsEndpoint,
   resolveInteractionsTransport,
 } from './interactionsShared';
 import {
   calculateGoogleCost,
-  createAuthCacheDiscriminator,
   geminiFormatAndSystemInstructions,
   mergeGoogleCompletionOptions,
   parseStringObject,
@@ -45,7 +21,12 @@ import {
   resolveGoogleToolConfig,
 } from './util';
 
-import type { CallApiContextParams, ProviderResponse } from '../../types/index';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
+import type { GoogleProviderOptions } from './base';
 import type { InteractionResponse, InteractionStep } from './interactionsShared';
 import type { CompletionOptions, GoogleProviderConfig, Tool } from './types';
 
@@ -57,6 +38,24 @@ type InteractionInputItem = Record<string, unknown>;
 /** True for a non-null, non-array object - the shape passthrough blocks must have. */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isInteractionResponse(value: unknown): value is InteractionResponse {
+  if (!isPlainObject(value)) {
+    return false;
+  }
+  if (value.steps === undefined) {
+    return typeof value.status === 'string';
+  }
+  return (
+    Array.isArray(value.steps) &&
+    value.steps.every(
+      (step) =>
+        isPlainObject(step) &&
+        (step.content === undefined ||
+          (Array.isArray(step.content) && step.content.every(isPlainObject))),
+    )
+  );
 }
 
 /** Map a MIME type onto the Interactions content type that carries it. */
@@ -73,31 +72,58 @@ function interactionContentTypeForMime(mimeType: string): string {
   return 'document';
 }
 
-/**
- * Lowercase JSON Schema `type` keywords.
- *
- * Gemini's function declarations use uppercase types (`"OBJECT"`); the
- * Interactions API expects standard lowercase JSON Schema.
- */
 function lowercaseSchemaTypes(node: unknown): unknown {
   if (Array.isArray(node)) {
     return node.map(lowercaseSchemaTypes);
   }
-  if (!node || typeof node !== 'object') {
+  if (!isPlainObject(node)) {
     return node;
   }
+  const maps = new Set([
+    'properties',
+    'patternProperties',
+    '$defs',
+    'definitions',
+    'dependentSchemas',
+  ]);
+  const schemas = new Set([
+    'items',
+    'prefixItems',
+    'additionalItems',
+    'additionalProperties',
+    'unevaluatedProperties',
+    'unevaluatedItems',
+    'contains',
+    'propertyNames',
+    'allOf',
+    'anyOf',
+    'oneOf',
+    'not',
+    'if',
+    'then',
+    'else',
+  ]);
   return Object.fromEntries(
-    Object.entries(node as Record<string, unknown>).map(([key, value]) => {
-      if (key === 'type' && typeof value === 'string') {
-        return [key, value.toLowerCase()];
-      }
-      if (key === 'type' && Array.isArray(value)) {
+    Object.entries(node).map(([key, value]) => {
+      if (key === 'type') {
         return [
           key,
-          value.map((entry) => (typeof entry === 'string' ? entry.toLowerCase() : entry)),
+          Array.isArray(value)
+            ? value.map((entry) => (typeof entry === 'string' ? entry.toLowerCase() : entry))
+            : typeof value === 'string'
+              ? value.toLowerCase()
+              : value,
         ];
       }
-      return [key, lowercaseSchemaTypes(value)];
+      if (maps.has(key) && isPlainObject(value)) {
+        return [
+          key,
+          Object.fromEntries(
+            Object.entries(value).map(([name, schema]) => [name, lowercaseSchemaTypes(schema)]),
+          ),
+        ];
+      }
+      return [key, schemas.has(key) ? lowercaseSchemaTypes(value) : value];
     }),
   );
 }
@@ -106,6 +132,15 @@ function lowercaseSchemaTypes(node: unknown): unknown {
 function geminiPartToInteractionContent(part: unknown): Record<string, unknown> | undefined {
   if (!part || typeof part !== 'object') {
     return undefined;
+  }
+  if (
+    Object.keys(part).some(
+      (key) => !['text', 'inlineData', 'inline_data', 'fileData', 'file_data'].includes(key),
+    )
+  ) {
+    throw new Error(
+      'Unsupported Gemini prompt part fields for the Interactions chat adapter. Use generateContent.',
+    );
   }
   const typed = part as {
     text?: string;
@@ -151,12 +186,6 @@ function toFunctionResult(source: {
   };
 }
 
-/**
- * Convert Gemini `contents` into the Interactions `input` timeline.
- *
- * A `functionResponse` part becomes a top-level `function_result` entry rather
- * than message content, which is how the API threads tool results back in.
- */
 export function geminiContentsToInteractionsInput(contents: unknown): InteractionInputItem[] {
   const list = Array.isArray(contents) ? contents : [contents];
   const input: InteractionInputItem[] = [];
@@ -168,25 +197,32 @@ export function geminiContentsToInteractionsInput(contents: unknown): Interactio
     const { role, parts } = entry as { role?: string; parts?: unknown[] };
     const partList = Array.isArray(parts) ? parts : [];
 
-    const content: Record<string, unknown>[] = [];
+    let content: Record<string, unknown>[] = [];
+    const flushContent = () => {
+      if (content.length > 0) {
+        input.push({
+          type: role === 'model' || role === 'assistant' ? 'model_output' : 'user_input',
+          content,
+        });
+        content = [];
+      }
+    };
     for (const part of partList) {
       const functionResponse = (part as { functionResponse?: any })?.functionResponse;
       if (functionResponse) {
+        flushContent();
         input.push(toFunctionResult(functionResponse));
         continue;
       }
       const mapped = geminiPartToInteractionContent(part);
-      if (mapped) {
-        content.push(mapped);
+      if (!mapped) {
+        throw new Error(
+          'Unsupported Gemini prompt part for Interactions. Use text, inlineData, fileData, or functionResponse.',
+        );
       }
+      content.push(mapped);
     }
-
-    if (content.length > 0) {
-      input.push({
-        type: role === 'model' || role === 'assistant' ? 'model_output' : 'user_input',
-        content,
-      });
-    }
+    flushContent();
   }
 
   return input;
@@ -210,11 +246,24 @@ export function toInteractionsTools(tools: Tool[]): Record<string, unknown>[] {
       continue;
     }
     const raw = tool as Record<string, any>;
+    if (typeof raw.type === 'string') {
+      out.push(raw);
+      continue;
+    }
     const declarations = raw.functionDeclarations ?? raw.function_declarations;
     if (Array.isArray(declarations)) {
       for (const declaration of declarations) {
         if (!declaration?.name) {
           continue;
+        }
+        if (
+          declaration.response ||
+          declaration.responseJsonSchema ||
+          declaration.response_json_schema
+        ) {
+          throw new Error(
+            'Function response schemas are not supported by the Interactions chat adapter. Use generateContent.',
+          );
         }
         out.push({
           type: 'function',
@@ -227,7 +276,13 @@ export function toInteractionsTools(tools: Tool[]): Record<string, unknown>[] {
       }
     }
     for (const [type, aliases] of SERVER_TOOL_ALIASES) {
-      if (aliases.some((alias) => raw[alias])) {
+      const alias = aliases.find((name) => raw[name]);
+      if (alias) {
+        if (!isPlainObject(raw[alias]) || Object.keys(raw[alias]).length > 0) {
+          throw new Error(
+            `Configured ${alias} options are not supported by the Interactions chat adapter. Use a native tool in passthrough.tools or generateContent.`,
+          );
+        }
         out.push({ type });
       }
     }
@@ -235,12 +290,6 @@ export function toInteractionsTools(tools: Tool[]): Record<string, unknown>[] {
   return out;
 }
 
-/**
- * Restrict advertised functions to `allowedFunctionNames`.
- *
- * Interactions has no `tool_choice`, so an allow-list can only be honored by not
- * offering the other functions in the first place. Server-side tools are kept.
- */
 function filterAllowedFunctions(
   tools: Record<string, unknown>[],
   allowedFunctionNames: string[] | undefined,
@@ -253,13 +302,6 @@ function filterAllowedFunctions(
   );
 }
 
-/**
- * Whether a model-named function has a callback the caller actually registered.
- *
- * A plain object inherits `constructor`, `toString`, `valueOf` and friends, so a
- * bare index lookup would treat a model-chosen name like `constructor` as a
- * registered callback and invoke it. Only own properties count.
- */
 function getRegisteredCallback(
   callbacks: CompletionOptions['functionToolCallbacks'],
   name: string,
@@ -290,13 +332,6 @@ function flattenSystemInstruction(systemInstruction: unknown): string | undefine
 
 type NormalizedFunctionCall = { id?: string; name: string; args: unknown };
 
-/**
- * Function calls the model is still waiting on.
- *
- * `executed` filters out calls we already answered: a stored interaction fetched
- * with GET replays its whole timeline, so an answered call reappears on later
- * rounds and would otherwise be run twice or emitted as pending output.
- */
 function collectPendingFunctionCalls(
   steps: InteractionStep[],
   executed: ReadonlySet<string>,
@@ -307,14 +342,6 @@ function collectPendingFunctionCalls(
     .filter((call) => !call.id || !executed.has(call.id));
 }
 
-/**
- * Search queries the model actually issued.
- *
- * `generateContent` reports these as `webSearchQueries` in grounding metadata;
- * Interactions puts them on the `google_search_call` step, so surface them under
- * the same key to keep grounding assertions and reports working across both
- * transports.
- */
 function collectSearchQueries(steps: InteractionStep[]): string[] {
   return steps
     .filter((step) => step.type === 'google_search_call')
@@ -367,6 +394,95 @@ function buildGenerationConfig(config: GoogleProviderConfig): Record<string, unk
   return generationConfig;
 }
 
+function validateChatOptions(config: GoogleProviderConfig): void {
+  if (
+    config.safetySettings ||
+    config.passthrough?.safety_settings ||
+    config.passthrough?.safetySettings
+  ) {
+    throw new Error(
+      'safetySettings is not supported by the Interactions chat adapter. Use generateContent.',
+    );
+  }
+  if (config.mcp?.enabled) {
+    throw new Error('MCP is not supported by the Interactions chat adapter. Use generateContent.');
+  }
+  const { toolConfig } = resolveGoogleToolConfig(config);
+  const mode = toolConfig?.functionCallingConfig?.mode;
+  if (mode && !['AUTO', 'NONE', 'MODE_UNSPECIFIED'].includes(mode)) {
+    throw new Error(
+      'Required or named tool choices are not supported by the Interactions chat adapter. Use generateContent.',
+    );
+  }
+  if (
+    config.passthrough?.tool_choice !== undefined ||
+    (toolConfig &&
+      (Object.keys(toolConfig).some((key) => key !== 'functionCallingConfig') ||
+        toolConfig.functionCallingConfig?.streamFunctionCallArguments))
+  ) {
+    throw new Error(
+      'Unsupported tool policy for the Interactions chat adapter. Use generateContent.',
+    );
+  }
+  const generation: Record<string, unknown> = {
+    ...config.generationConfig,
+    ...(isPlainObject(config.passthrough?.generationConfig)
+      ? config.passthrough.generationConfig
+      : {}),
+    ...(isPlainObject(config.passthrough?.generation_config)
+      ? config.passthrough.generation_config
+      : {}),
+  };
+  const allowed = new Set([
+    'temperature',
+    'topP',
+    'top_p',
+    'topK',
+    'top_k',
+    'maxOutputTokens',
+    'max_output_tokens',
+    'stopSequences',
+    'stop_sequences',
+    'seed',
+    'thinkingConfig',
+    'thinking_level',
+    'responseSchema',
+    'response_schema',
+    'responseMimeType',
+    'response_mime_type',
+  ]);
+  for (const key of Object.keys(generation)) {
+    if (!allowed.has(key)) {
+      throw new Error(
+        `generationConfig.${key} is not supported by the Interactions chat adapter. Use generateContent.`,
+      );
+    }
+  }
+  if (
+    isPlainObject(generation.thinkingConfig) &&
+    Object.keys(generation.thinkingConfig).some((key) => key !== 'thinkingLevel')
+  ) {
+    throw new Error(
+      'Only thinkingLevel is supported in Interactions thinkingConfig. Use generateContent for thinkingBudget.',
+    );
+  }
+  const mime = generation.responseMimeType ?? generation.response_mime_type;
+  if (
+    mime &&
+    (mime !== 'application/json' ||
+      !(
+        config.responseSchema ??
+        generation.responseSchema ??
+        generation.response_schema ??
+        config.passthrough?.response_format
+      ))
+  ) {
+    throw new Error(
+      'Interactions JSON output requires a response schema. Use generateContent for other response modalities.',
+    );
+  }
+}
+
 type UsageTotals = {
   prompt: number;
   completion: number;
@@ -401,13 +517,8 @@ function newUsageTotals(): UsageTotals {
   };
 }
 
-/**
- * Report usage the way the other Google providers do.
- *
- * A fully cached exchange was not billed, so its tokens are attributed to
- * `cached` rather than counted again as fresh prompt/completion usage.
- */
-function buildTokenUsage(totals: UsageTotals, allCached: boolean) {
+/** Normalize usage across interaction rounds. */
+function buildTokenUsage(totals: UsageTotals) {
   const total = totals.total || totals.prompt + totals.completion + totals.thoughts;
   const reasoning =
     totals.thoughts > 0
@@ -419,9 +530,6 @@ function buildTokenUsage(totals: UsageTotals, allCached: boolean) {
           },
         }
       : {};
-  if (allCached) {
-    return { cached: total, total, numRequests: totals.requests, ...reasoning };
-  }
   return {
     prompt: totals.prompt,
     completion: totals.completion,
@@ -435,10 +543,8 @@ function buildTokenUsage(totals: UsageTotals, allCached: boolean) {
 type ToolLoopResult = {
   lastData: InteractionResponse;
   totals: UsageTotals;
-  billable: UsageTotals;
   executedToolCalls: Array<{ name: string; args: unknown; result?: unknown; error?: string }>;
   groundingCalls: Array<Record<string, unknown>>;
-  allCached: boolean;
   /** Calls already answered, so the final output does not repeat them. */
   executedCallIds: ReadonlySet<string>;
 };
@@ -467,16 +573,6 @@ function accumulateUsage(totals: UsageTotals, usage: InteractionResponse['usage'
   totals.requests++;
 }
 
-/**
- * Resolve server-side retention settings and strip the fields they govern out of
- * `passthrough`.
- *
- * Google stores interactions by default (55 days on the paid tier), which is the
- * wrong default for eval and red-team payloads, so AI Studio defaults to
- * `store: false`. `passthrough` is merged into the request body last, so a
- * `store` or `previous_interaction_id` supplied there would silently defeat
- * these checks; both are resolved from either source before validating.
- */
 function resolveRetention(
   config: GoogleProviderConfig,
   isVertexMode: boolean,
@@ -485,17 +581,25 @@ function resolveRetention(
       store: boolean;
       previousInteractionId?: string;
       passthrough: Record<string, unknown>;
-      passthroughGenerationConfig: unknown;
+      passthroughGenerationConfig: Record<string, unknown>;
     }
   | { error: string } {
   const {
     generation_config: passthroughGenerationConfig,
+    generationConfig: passthroughGenerationConfigCamel,
     store: passthroughStore,
     previous_interaction_id: passthroughPreviousId,
     previousInteractionId: passthroughPreviousIdCamel,
     ...passthrough
   } = (config.passthrough || {}) as Record<string, unknown>;
 
+  if (
+    [config.store, passthroughStore].some(
+      (value) => value !== undefined && typeof value !== 'boolean',
+    )
+  ) {
+    return { error: 'Interactions store must be a boolean.' };
+  }
   const passthroughPrevious = [passthroughPreviousId, passthroughPreviousIdCamel].find(
     (value): value is string => typeof value === 'string',
   );
@@ -506,7 +610,7 @@ function resolveRetention(
   if (previousInteractionId && isVertexMode) {
     // Vertex accepts previous_interaction_id with HTTP 200 but does not thread the
     // stored history into the turn, so honoring it would silently drop the
-    // conversation. Verified against the live API; Omni rejects it for the same reason.
+    // conversation. Keep the same restriction as the Omni provider.
     return {
       error:
         'Gemini Interactions on Vertex AI does not support previousInteractionId; the stored history is silently ignored. Use the Google AI Studio route for server-side history, or pass prior turns in the prompt.',
@@ -519,9 +623,10 @@ function resolveRetention(
     };
   }
   if (isVertexMode && requestedStore === false) {
-    logger.warn(
-      '[Google Interactions] Vertex AI requires store: true for Interactions; the request will likely be rejected.',
-    );
+    return {
+      error:
+        'Vertex Interactions requires store: true. Use generateContent when server-side storage is not acceptable.',
+    };
   }
 
   return {
@@ -530,17 +635,27 @@ function resolveRetention(
     store: requestedStore ?? (isVertexMode || Boolean(previousInteractionId)),
     previousInteractionId,
     passthrough,
-    passthroughGenerationConfig,
+    passthroughGenerationConfig: {
+      ...(isPlainObject(passthroughGenerationConfigCamel) ? passthroughGenerationConfigCamel : {}),
+      ...buildGenerationConfig({
+        generationConfig: passthroughGenerationConfig,
+      } as GoogleProviderConfig),
+    },
   };
 }
 
-/**
- * Gemini chat provider that speaks the Interactions API instead of
- * `generateContent`.
- */
 export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
   /** Vertex project id, resolved lazily on the first call. */
   private resolvedProjectId?: string;
+
+  constructor(modelName: string, options: GoogleProviderOptions = {}) {
+    if (options.config?.mcp?.enabled) {
+      throw new Error(
+        'MCP is not supported by the Interactions chat adapter. Use generateContent.',
+      );
+    }
+    super(modelName, options);
+  }
 
   id(): string {
     if (this.customId) {
@@ -602,7 +717,9 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     const combined = [...configured, ...fromPassthrough];
     return {
       tools: filterAllowedFunctions(
-        toInteractionsTools(toolsDisabled ? removeGoogleFunctionDeclarations(combined) : combined),
+        toInteractionsTools(
+          toolsDisabled ? removeGoogleFunctionDeclarations(combined) : combined,
+        ).filter((tool) => !toolsDisabled || tool.type !== 'function'),
         toolConfig?.functionCallingConfig?.allowedFunctionNames,
       ),
       toolsDisabled,
@@ -632,7 +749,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       return { text, record: { result: output } };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return { text: `Error: ${message}`, record: { error: message } };
+      return { text: 'Tool execution failed.', record: { error: message } };
     }
   }
 
@@ -640,25 +757,23 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
    * Drive one exchange to completion, resolving tool calls along the way.
    *
    * Returns the final interaction plus the usage accumulated across every round,
-   * so the caller can report tokens for the whole exchange while billing only
-   * the rounds that actually reached Google.
+   * so the caller can report tokens for the whole exchange including
+   * intermediate requests.
    */
   private async runToolLoop(args: {
     endpoint: string;
     headers: Record<string, string>;
     baseBody: Record<string, unknown>;
     config: GoogleProviderConfig;
-    context?: CallApiContextParams;
+    abortSignal?: AbortSignal;
     input: InteractionInputItem[];
     previousInteractionId?: string;
     store: boolean;
     toolsDisabled: boolean;
   }): Promise<ToolLoopResult | { error: ProviderResponse }> {
-    const { endpoint, headers, baseBody, config, context, store, toolsDisabled } = args;
+    const { endpoint, headers, baseBody, config, abortSignal, store, toolsDisabled } = args;
     // Accumulated across tool rounds so token usage reflects the whole exchange.
     const totals = newUsageTotals();
-    // Mirrors `totals` but counts only rounds that were not served from cache.
-    const billable = newUsageTotals();
     const executedToolCalls: Array<{
       name: string;
       args: unknown;
@@ -677,11 +792,13 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     let currentInput: InteractionInputItem[] = timeline;
     let currentPreviousInteractionId = args.previousInteractionId;
     let lastData: InteractionResponse | undefined;
-    let allCached = true;
     let rounds = 0;
     const maxRounds = DEFAULT_MAX_TOOL_ROUNDS;
 
     while (rounds <= maxRounds) {
+      if (abortSignal?.aborted) {
+        return { error: { error: 'Gemini Interactions request aborted.' } };
+      }
       rounds++;
       const body = {
         ...baseBody,
@@ -691,20 +808,13 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
           : {}),
       };
 
-      const result = await this.postInteraction(endpoint, headers, body, config, context);
+      const result = await this.postInteraction(endpoint, headers, body, config, abortSignal);
       if ('error' in result) {
         return { error: result.error };
       }
-      const { data, cached } = result;
+      const { data } = result;
       lastData = data;
-      allCached = allCached && cached;
-
       accumulateUsage(totals, data.usage);
-      if (!cached) {
-        // Only uncached rounds are billable; a partially cached tool loop must
-        // still report the cost of the rounds that reached Google.
-        accumulateUsage(billable, data.usage);
-      }
       for (const grounding of data.usage?.grounding_tool_count || []) {
         groundingCalls.push({ ...grounding });
       }
@@ -712,7 +822,13 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       const turnSteps = getLatestTurnSteps(data);
       const functionCalls = collectPendingFunctionCalls(turnSteps, executedCallIds);
       const callbacks = toolsDisabled ? undefined : config.functionToolCallbacks;
-      const runnable = functionCalls.filter((call) => getRegisteredCallback(callbacks, call.name));
+      const advertised =
+        (baseBody.tools as Array<{ type?: string; name?: string }> | undefined) ?? [];
+      const runnable = functionCalls.filter(
+        (call) =>
+          advertised.some((tool) => tool.type === 'function' && tool.name === call.name) &&
+          getRegisteredCallback(callbacks, call.name),
+      );
 
       // Continue only when every pending call can be answered. Executing a
       // subset would replace this response with the next round and silently
@@ -740,6 +856,9 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
 
       const results: InteractionInputItem[] = [];
       for (const call of runnable) {
+        if (abortSignal?.aborted) {
+          return { error: { error: 'Gemini Interactions request aborted.' } };
+        }
         if (call.id) {
           executedCallIds.add(call.id);
         }
@@ -754,8 +873,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       }
 
       // Vertex ignores stored history, so it always resends the timeline.
-      // Verified against the live API: the model's own `function_call` step must
-      // not be replayed, only the results.
+      // Function-call steps are server output; only results are valid input steps.
       timeline.push(...results);
       const useServerState = store && !this.isVertexMode && Boolean(data.id);
       currentPreviousInteractionId = useServerState ? data.id : currentPreviousInteractionId;
@@ -768,15 +886,31 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     return {
       lastData,
       totals,
-      billable,
       executedToolCalls,
       groundingCalls,
-      allCached,
       executedCallIds,
     };
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    try {
+      return await this.callInteraction(prompt, context, options);
+    } catch (error) {
+      return {
+        error: `Gemini Interactions API error: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+
+  private async callInteraction(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     if (this.initializationPromise) {
       await this.initializationPromise;
     }
@@ -792,11 +926,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     }
     const { store, previousInteractionId, passthrough, passthroughGenerationConfig } = retention;
 
-    if (config.safetySettings) {
-      logger.warn(
-        '[Google Interactions] safetySettings is not supported by the Gemini Interactions API and was dropped from the request.',
-      );
-    }
+    validateChatOptions(config);
 
     const transport = await resolveInteractionsTransport(config, this.env, {
       vertex: this.isVertexMode,
@@ -814,6 +944,14 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     }
     const { endpoint, headers } = transport;
 
+    try {
+      const parsed: unknown = JSON.parse(prompt);
+      if (isPlainObject(parsed) && Array.isArray(parsed.contents)) {
+        prompt = JSON.stringify(parsed.contents);
+      }
+    } catch {
+      // The formatter also accepts plain text.
+    }
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
@@ -835,7 +973,9 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     const rawResponseSchema =
       config.responseSchema ??
       config.generationConfig?.response_schema ??
-      (config.generationConfig as { responseSchema?: unknown } | undefined)?.responseSchema;
+      (config.generationConfig as { responseSchema?: unknown } | undefined)?.responseSchema ??
+      passthroughGenerationConfig.responseSchema ??
+      passthroughGenerationConfig.response_schema;
     let responseFormat: unknown;
     if (rawResponseSchema) {
       const schema = maybeLoadFromExternalFile(
@@ -852,19 +992,19 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       }
     }
 
-    const unexpressibleMode = getUnexpressibleToolMode(config);
-    if (unexpressibleMode) {
-      logger.warn(
-        `[Google Interactions] The Interactions API has no tool_choice field, so functionCallingConfig.mode ${unexpressibleMode} cannot be enforced; the model may skip the required call.`,
-      );
-    }
-
     // `tools` is already resolved above; re-spreading it here would undo the policy.
-    const { tools: _passthroughTools, ...passthroughWithoutTools } = passthrough;
+    const {
+      tools: _passthroughTools,
+      toolConfig: _toolConfig,
+      tool_config: _snakeToolConfig,
+      ...passthroughWithoutTools
+    } = passthrough;
     const systemText = flattenSystemInstruction(systemInstruction);
     const mergedGenerationConfig = {
       ...generationConfig,
-      ...(isPlainObject(passthroughGenerationConfig) ? passthroughGenerationConfig : {}),
+      ...buildGenerationConfig({
+        generationConfig: passthroughGenerationConfig,
+      } as GoogleProviderConfig),
     };
 
     const baseBody: Record<string, unknown> = {
@@ -875,7 +1015,6 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       ...(Object.keys(mergedGenerationConfig).length > 0
         ? { generation_config: mergedGenerationConfig }
         : {}),
-      // Verified accepted by the live API and echoed back on the response.
       ...(config.service_tier ? { service_tier: config.service_tier } : {}),
       store,
       ...passthroughWithoutTools,
@@ -888,7 +1027,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       headers,
       baseBody,
       config,
-      context,
+      abortSignal: options?.abortSignal,
       input,
       previousInteractionId,
       store,
@@ -897,13 +1036,28 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     if ('error' in exchange) {
       return exchange.error;
     }
-    const { lastData, totals, billable, executedToolCalls, groundingCalls, allCached } = exchange;
+    const { lastData, totals, executedToolCalls, groundingCalls } = exchange;
     const { executedCallIds } = exchange;
     if (!lastData) {
       return { error: 'Gemini Interactions API returned no data' };
     }
 
     const turnSteps = getLatestTurnSteps(lastData);
+    if (
+      turnSteps.some(
+        (step) =>
+          step.type === 'model_output' &&
+          step.content?.some((part) =>
+            ['image', 'video', 'audio', 'document'].includes(part.type ?? ''),
+          ),
+      )
+    ) {
+      return {
+        error:
+          'The Interactions chat adapter does not support media output. Use the corresponding media provider.',
+        raw: lastData,
+      };
+    }
     const text = collectText(turnSteps);
     const functionCalls = collectPendingFunctionCalls(turnSteps, executedCallIds);
     const webSearchQueries = collectSearchQueries(turnSteps);
@@ -930,28 +1084,28 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     }
 
     const cost =
-      billable.requests === 0
+      totals.requests === 0
         ? undefined
         : calculateGoogleCost(
-            this.modelName,
+            typeof baseBody.model === 'string' ? baseBody.model : this.modelName,
             this.isVertexMode ? { ...config, region: this.getRegion() } : config,
-            billable.prompt,
-            billable.completion + billable.thoughts,
+            totals.prompt,
+            totals.completion + totals.thoughts,
             this.isVertexMode,
-            billable.audioIn,
-            billable.audioOut,
+            totals.audioIn,
+            totals.audioOut,
             0,
-            billable.imageIn,
-            billable.cached,
-            billable.cachedAudio,
-            billable.cachedImage,
+            totals.imageIn,
+            totals.cached,
+            totals.cachedAudio,
+            totals.cachedImage,
           );
 
     return {
       output,
-      cached: allCached,
+      cached: false,
       raw: lastData,
-      tokenUsage: buildTokenUsage(totals, allCached),
+      tokenUsage: buildTokenUsage(totals),
       cost,
       metadata: {
         ...(lastData.id ? { interactionId: lastData.id } : {}),
@@ -976,22 +1130,15 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     headers: Record<string, string>,
     body: Record<string, unknown>,
     config: GoogleProviderConfig,
-    context?: CallApiContextParams,
-  ): Promise<{ data: InteractionResponse; cached: boolean } | { error: ProviderResponse }> {
-    // Credentials are folded into the cache key as a hash so responses can be
-    // cached (like every other Google provider) without the key itself becoming
-    // part of a persisted fingerprint.
-    const authDiscriminator = createAuthCacheDiscriminator(headers);
-    const bustCache = context?.bustCache ?? context?.debug ?? false;
+    abortSignal?: AbortSignal,
+  ): Promise<{ data: InteractionResponse } | { error: ProviderResponse }> {
     const requestTimeoutMs = config.timeoutMs ?? getRequestTimeoutMs();
     let data: InteractionResponse;
-    let cached: boolean;
     let httpStatus: number;
     let httpStatusText: string;
     try {
       ({
         data,
-        cached,
         status: httpStatus,
         statusText: httpStatusText,
       } = (await fetchWithCache(
@@ -1000,11 +1147,11 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
           method: 'POST',
           headers,
           body: JSON.stringify(body),
-          ...(authDiscriminator && { _authHash: authDiscriminator }),
+          signal: abortSignal,
         } as RequestInit,
         requestTimeoutMs,
         'json',
-        bustCache,
+        true,
       )) as { data: InteractionResponse; cached: boolean; status: number; statusText: string });
     } catch (err) {
       return { error: { error: `Gemini Interactions API error: ${String(err)}` } };
@@ -1042,10 +1189,8 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
         await sleep(Math.min(1_000, pollTimeoutMs - elapsed));
       }
       try {
-        let polledCached: boolean;
         ({
           data,
-          cached: polledCached,
           status: httpStatus,
           statusText: httpStatusText,
         } = (await fetchWithCache(
@@ -1053,7 +1198,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
           {
             method: 'GET',
             headers,
-            ...(authDiscriminator && { _authHash: authDiscriminator }),
+            signal: abortSignal,
           } as RequestInit,
           Math.max(pollTimeoutMs - (Date.now() - pollStartedAt), 1),
           'json',
@@ -1061,8 +1206,6 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
           // first `in_progress` snapshot and guarantee a timeout.
           true,
         )) as { data: InteractionResponse; cached: boolean; status: number; statusText: string });
-        // A cached poll still means this result was not freshly billed.
-        cached = cached || polledCached;
       } catch (err) {
         return { error: { error: `Gemini Interactions API polling error: ${String(err)}` } };
       }
@@ -1081,6 +1224,10 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
           },
         };
       }
+    }
+
+    if (!isInteractionResponse(data)) {
+      return { error: { error: 'Gemini Interactions API returned an invalid response object.' } };
     }
 
     // `incomplete` means the model ran out of budget mid-answer, but the partial
@@ -1106,6 +1253,6 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       };
     }
 
-    return { data, cached };
+    return { data };
   }
 }

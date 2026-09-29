@@ -1,11 +1,9 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Server-side interaction history (opt-in retention)
 
-# Promptfoo defaults to store:false so eval payloads are not retained by Google.
-# Setting store:true opts into server-side history (55-day paid retention) and
-# makes metadata.interactionId available to continue the thread later.
+# AI Studio chat defaults to store:false. Enable storage to return an interaction ID.
 providers:
-  - id: google:gemini-3.6-flash
+  - id: google:interactions:gemini-3.6-flash
     config:
       store: true
 

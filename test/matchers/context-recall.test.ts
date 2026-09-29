@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_RAG_ASSERTION_THRESHOLD } from '../../src/assertions/ragDefaults';
 import { matchesContextRecall } from '../../src/matchers/rag';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
@@ -16,6 +17,23 @@ describe('matchesContextRecall', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('should tag provider failures as grader errors rather than a plain failure', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      error: 'grading provider unavailable',
+    } as any);
+
+    const result = await matchesContextRecall(
+      'Context text',
+      'Ground truth text',
+      DEFAULT_RAG_ASSERTION_THRESHOLD,
+    );
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('grading provider unavailable');
+    expect(result.metadata).toEqual({ graderError: true });
   });
 
   it('should pass when the recall score is above the threshold', async () => {
@@ -303,7 +321,7 @@ describe('matchesContextRecall', () => {
       ]);
     });
 
-    it('should return score 0 when LLM returns no classification lines', async () => {
+    it('should return score 0 and tag it as a grader error when the LLM returns no classification lines', async () => {
       const context = 'Test context';
       const groundTruth = 'Test ground truth';
       const threshold = 0.5;
@@ -325,6 +343,7 @@ describe('matchesContextRecall', () => {
       expect(result.score).toBe(0);
       expect(result.metadata?.totalSentences).toBe(0);
       expect(result.pass).toBe(false);
+      expect(result.metadata?.graderError).toBe(true);
     });
   });
 
