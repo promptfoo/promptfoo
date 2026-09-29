@@ -197,12 +197,28 @@ export const RedteamStrategySchema = z
       return;
     }
     const steps = strategy.config?.steps;
+    if (steps === undefined) {
+      return;
+    }
     if (!Array.isArray(steps)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['config', 'steps'],
+        message: 'Layer steps must be an array',
+      });
       return;
     }
     const ids = steps.map((step) =>
       typeof step === 'string' ? step : (step as { id?: unknown })?.id,
     );
+    if (ids.some((id) => typeof id !== 'string' || id.trim().length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['config', 'steps'],
+        message: 'Each layer step must be a nonempty string or an object with a nonempty string id',
+      });
+      return;
+    }
     const attackIndexes = ids.flatMap((id, index) =>
       typeof id === 'string' && isAttackProvider(id) ? [index] : [],
     );

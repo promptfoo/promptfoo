@@ -499,7 +499,6 @@ The deprecated bare `jailbreak` ID resolves to the legacy iterative provider ins
 - [Audio Strategy](./audio.md) - Text-to-speech conversion
 - [Image Strategy](./image.md) - Text-to-image conversion
 - [Hydra Strategy](./hydra.md) - Multi-turn jailbreak attacks
-- [Goblin Strategy](./goblin.md) - IICL-inspired multi-turn attacks
 - [ROT13](./rot13.md) - Simple cipher encoding
 - [Base64](./base64.md) - Common encoding technique
 - [Custom Strategy Scripts](./custom.md) - Create your own strategies

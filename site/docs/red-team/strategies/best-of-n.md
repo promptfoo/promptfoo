@@ -10,10 +10,6 @@ Best-of-N (BoN) generates text variations of a prompt and tests them against you
 
 The strategy is inspired by [Hughes et al. (2024)](https://arxiv.org/abs/2412.03556). The paper repeatedly samples text, vision, and audio variations until a harmful response is found; Promptfoo currently generates text variations only and does not grade each candidate while selecting a response.
 
-:::tip
-The paper reports 89% ASR on GPT-4o and 78% on Claude 3.5 Sonnet with 10,000 text samples. These results use a different attempt loop and should not be read as expected Promptfoo results.
-:::
-
 Use it like so in your `promptfooconfig.yaml`:
 
 ```yaml
@@ -80,19 +76,11 @@ Start with `useBasicRefusal: true` and low candidate counts to confirm that the 
 
 ## Performance
 
-The original BoN paper reports the following research results:
-
-- Text: 89% on GPT-4o and 78% on Claude 3.5 Sonnet with 10,000 samples
-- Vision and audio: the paper also demonstrates attacks against GPT-4o vision and Gemini 1.5 Pro audio using modality-specific augmentations
-
-The paper finds that attack success rate improves as more variations are tested. This illustrates why [ASR comparisons must account for attempt budget](/blog/asr-not-portable-metric). Promptfoo does not currently reproduce the paper's per-candidate harm-classification loop.
+The paper's reported success rates are not benchmarks for this implementation. Promptfoo uses a different candidate loop and grades the selected response after scheduling stops. Compare results only when the target, test cases, attempt budget, and grading procedure match.
 
 ## Key Features
 
-- **Simple Implementation**: No need for gradients or model internals
-- **Text Variations**: Applies capitalization, scrambling, and ASCII-noise augmentations
-- **Highly Parallelizable**: Can test multiple variations concurrently
-- **Hosted Generation**: Requires remote generation for candidate creation
+The strategy uses text variations and concurrent target requests. Candidate generation requires the hosted service; it does not require gradients or access to model internals.
 
 ## Related Concepts
 

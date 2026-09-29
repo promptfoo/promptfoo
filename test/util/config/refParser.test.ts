@@ -18,6 +18,33 @@ afterEach(() => {
   syncBuiltinESMExports();
 });
 
+describe('dereferenceConfig local references', () => {
+  it('resolves an own property without reading inherited properties', async () => {
+    const definitions = Object.assign(Object.create({ inherited: 'inherited prompt' }), {
+      own: 'own prompt',
+    });
+    const config = {
+      definitions,
+      prompts: [{ $ref: '#/definitions/own' }],
+      providers: ['echo'],
+      tests: [],
+    } as unknown as UnifiedConfig;
+
+    expect((await dereferenceConfig(config)).prompts).toEqual(['own prompt']);
+  });
+
+  it('rejects a reference to an inherited property', async () => {
+    const config = {
+      definitions: Object.create({ inherited: 'inherited prompt' }),
+      prompts: [{ $ref: '#/definitions/inherited' }],
+      providers: ['echo'],
+      tests: [],
+    } as unknown as UnifiedConfig;
+
+    await expect(dereferenceConfig(config)).rejects.toMatchObject({ code: 'EMISSINGPOINTER' });
+  });
+});
+
 describe('dereferenceConfig remote references', () => {
   it('uses the real resolver and nested Undici transport with a DNS-pinned address', async () => {
     const server = createServer((request, response) => {

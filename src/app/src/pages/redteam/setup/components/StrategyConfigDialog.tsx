@@ -37,18 +37,13 @@ import type { StrategyConfig } from '@promptfoo/redteam/types';
 
 import type { StrategyCardData } from './strategies/types';
 
-// ADDITIONAL_STRATEGIES contains transformation strategies (base64, jailbreak, etc.) that modify test cases.
-// We use ADDITIONAL_STRATEGIES (not ALL_STRATEGIES) because ALL_STRATEGIES includes preset strategies
-// like 'default', 'multilingual' which aren't meant to be composed as layer steps.
-// We exclude 'layer' itself to prevent infinite recursion and the deprecated bare 'jailbreak' ID.
+// Collections, recursive layers, and the deprecated bare jailbreak ID are not selectable steps.
 const LAYER_TRANSFORMABLE_STRATEGIES = ADDITIONAL_STRATEGIES.filter(
   (s) => s !== 'layer' && s !== 'jailbreak',
 ).sort();
 
-// Type for layer strategy steps (can be strings or objects with nested config)
 type StepType = string | { id: string; config?: Partial<StrategyConfig> };
 
-// Helper to extract step ID from either format
 const getStepId = (step: StepType): string => {
   return typeof step === 'string' ? step : step.id;
 };
@@ -172,24 +167,19 @@ export default function StrategyConfigDialog({
         return false;
       }
 
-      // Only include strategies that don't require config, or if they do, they must be configured
-      if (STRATEGIES_REQUIRING_CONFIG.includes(strategy)) {
-        const strategyConfig = strategyConfigMap.get(strategy);
-
-        if (!strategyConfig) {
-          return false; // Not configured, don't show
-        }
-
-        const config = typeof strategyConfig === 'object' ? strategyConfig.config : undefined;
-
-        if (strategy === 'custom') {
-          // Custom strategy needs strategyText
-          const strategyText = config?.strategyText;
-          return !!(strategyText && typeof strategyText === 'string' && strategyText.trim());
-        }
+      if (!STRATEGIES_REQUIRING_CONFIG.includes(strategy)) {
+        return true;
       }
-
-      return true;
+      const strategyConfig = strategyConfigMap.get(strategy);
+      if (!strategyConfig) {
+        return false;
+      }
+      const config = typeof strategyConfig === 'object' ? strategyConfig.config : undefined;
+      const strategyText = config?.strategyText;
+      return (
+        strategy !== 'custom' ||
+        (typeof strategyText === 'string' && strategyText.trim().length > 0)
+      );
     });
   }, [steps, allStrategies, isAgenticStrategy, isMultiModalStrategy]);
 

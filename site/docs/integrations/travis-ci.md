@@ -141,13 +141,13 @@ jobs:
     - stage: test
       script: npm test
     - stage: evaluate
-      script: npx promptfoo eval
+      script: npx promptfoo eval --providers "$PROVIDER"
       env:
-        - MODEL=gpt-4
+        - PROVIDER=openai:gpt-4
     - stage: evaluate
-      script: npx promptfoo eval
+      script: npx promptfoo eval --providers "$PROVIDER"
       env:
-        - MODEL=claude-opus-4-8
+        - PROVIDER=anthropic:claude-opus-5
 ```
 
 ## Troubleshooting

@@ -29,6 +29,22 @@ afterEach(() => {
 });
 
 describe('RedteamConfigSchema', () => {
+  it.each([null, {}, { config: {} }, { id: 42 }, { id: '' }, 42, '', ' '])(
+    'rejects malformed layer step %j before runtime',
+    (step) => {
+      const result = RedteamStrategySchema.safeParse({ id: 'layer', config: { steps: [step] } });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].path).toEqual(['config', 'steps']);
+      }
+    },
+  );
+
+  it.each([null, {}, 'base64', 42])('rejects non-array layer steps %j', (steps) => {
+    const result = RedteamStrategySchema.safeParse({ id: 'layer', config: { steps } });
+    expect(result.success).toBe(false);
+  });
+
   it('should validate basic config', () => {
     const config = {
       plugins: ['default'],

@@ -1,16 +1,8 @@
-import { TooltipProvider } from '@app/components/ui/tooltip';
-import { act, render, screen } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StrategyConfigDialog from './StrategyConfigDialog';
-
-const AllProviders = ({ children }: { children: React.ReactNode }) => (
-  <TooltipProvider>{children}</TooltipProvider>
-);
-
-const renderWithProviders = (ui: React.ReactElement) => {
-  return render(ui, { wrapper: AllProviders });
-};
 
 describe('StrategyConfigDialog', () => {
   const mockOnSave = vi.fn();
