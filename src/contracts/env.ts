@@ -150,6 +150,7 @@ export const ProviderEnvOverridesSchema = z.object({
   WATSONX_AI_PROJECT_ID: z.string().optional(),
   XAI_API_BASE_URL: z.string().optional(),
   XAI_API_KEY: z.string().optional(),
+  Y_API_API_KEY: z.string().optional(),
   AZURE_CONTENT_SAFETY_ENDPOINT: z.string().optional(),
   AZURE_CONTENT_SAFETY_API_KEY: z.string().optional(),
   AZURE_CONTENT_SAFETY_API_VERSION: z.string().optional(),

@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Compare models available through the Y-API gateway on a set of geography questions
+
+prompts:
+  - What is the capital of {{country}}?
+
+providers:
+  - y-api:deepseek/deepseek-v4-pro
+  - y-api:qwen/qwen3.8-flash
+  - y-api:anthropic/claude-sonnet-5
+
+tests:
+  - vars:
+      country: France
+    assert:
+      - type: icontains
+        value: Paris
+  - vars:
+      country: Germany
+    assert:
+      - type: icontains
+        value: Berlin
+  - vars:
+      country: Italy
+    assert:
+      - type: icontains
+        value: Rome
