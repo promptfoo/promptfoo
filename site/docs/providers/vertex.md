@@ -77,7 +77,7 @@ Anthropic's Claude models are available with the following versions:
 - `vertex:claude-fable-5` - Claude Fable 5 with a 1M-token context window and always-on adaptive thinking
 
 Promptfoo omits unsupported `temperature`, `top_p`, and `top_k` values for the adaptive-only
-Claude models, including Fable/Mythos 5, Opus 5.5, Opus 5, Sonnet 5, and Opus 4.7/4.8.
+Claude models, including Fable/Mythos 5, Opus 5.5, Sonnet 5.5, Opus 5, Sonnet 5, and Opus 4.7/4.8.
 For the other Claude models it applies the rules the Anthropic API enforces, with a warning: no
 `temperature` alongside `top_p`, and with extended thinking no `temperature` or `top_k` and a `top_p`
 of at least 0.95.
@@ -113,6 +113,10 @@ and the model ID because Google does not publish one in its public model catalog
 **Claude Opus 5:**
 
 - `vertex:claude-opus-5` - 1M-token context window and `low`, `medium`, `high`, `xhigh`, and `max` effort levels. Thinking is on by default; it can be disabled only at `high` effort or below.
+
+**Claude Sonnet 5.5:**
+
+- `vertex:claude-sonnet-5-5` - Claude Sonnet 5.5, priced at $2 / $10 per million input / output tokens, with a 1M-token context window. Use `config.region: global` for the global endpoint. Thinking is on by default and `thinking: { type: 'disabled' }` is rejected, so promptfoo sends `thinking: { type: 'between_tools' }` instead (no up-front thinking, accepted at `effort` `high` or below) and turns manual thinking budgets into adaptive thinking.
 
 **Claude Sonnet 5:**
 

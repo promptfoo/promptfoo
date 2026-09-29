@@ -1008,7 +1008,7 @@ providers:
 
 For Claude 5 and Opus 4.7/4.8 deployments with recognizable model names, promptfoo
 omits unsupported `temperature`, `top_p`, and `top_k` values. Fable/Mythos 5.1 and
-Opus 5.5 also omit forced `tool_choice` values; use `auto` or `none` instead.
+Opus 5.5 and Sonnet 5.5 also omit forced `tool_choice` values; use `auto` or `none` instead.
 
 If your Azure deployment uses a custom alias, set `modelName` to the underlying Claude model ID. Promptfoo uses it for request compatibility and cost estimates while continuing to send the deployment name to Azure:
 
@@ -1034,6 +1034,7 @@ Available Claude deployments on Azure AI Foundry:
 | `claude-mythos-5-1`          | Claude Mythos 5.1 (provider approval required) |
 | `claude-fable-5`             | Claude Fable 5                                 |
 | `claude-opus-5-5`            | Claude Opus 5.5                                |
+| `claude-sonnet-5-5`          | Claude Sonnet 5.5                              |
 | `claude-opus-5`              | Claude Opus 5                                  |
 | `claude-opus-4-8`            | Claude Opus 4.8                                |
 | `claude-opus-4-7`            | Claude Opus 4.7                                |

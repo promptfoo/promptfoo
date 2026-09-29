@@ -3219,6 +3219,68 @@ describe('VertexChatProvider.callClaudeApi', () => {
     },
   );
 
+  it.each([
+    // `disabled` is rejected at every effort; `between_tools` is the lowest setting up to high.
+    {
+      thinking: { type: 'disabled' as const },
+      effort: undefined,
+      expected: { type: 'between_tools' },
+      maxTokens: 512,
+    },
+    {
+      thinking: { type: 'disabled' as const },
+      effort: 'high' as const,
+      expected: { type: 'between_tools' },
+      maxTokens: 512,
+    },
+    // Above high, `between_tools` is a 400 too, so adaptive thinking runs.
+    {
+      thinking: { type: 'disabled' as const },
+      effort: 'max' as const,
+      expected: undefined,
+      maxTokens: 2048,
+    },
+    {
+      thinking: { type: 'between_tools' as const },
+      effort: 'xhigh' as const,
+      expected: undefined,
+      maxTokens: 2048,
+    },
+    {
+      thinking: { type: 'enabled' as const, budget_tokens: 1024 },
+      effort: 'high' as const,
+      expected: { type: 'adaptive' },
+      maxTokens: 2048,
+    },
+  ])(
+    'Claude Sonnet 5.5 on Vertex sends thinking %j as the API accepts it',
+    async ({ thinking, effort, expected, maxTokens }) => {
+      const model = 'claude-sonnet-5-5';
+      provider = new VertexChatProvider(model, {
+        config: { temperature: 0.5, top_p: 0.9, top_k: 40, thinking, effort },
+      });
+      const mockRequest = mockVertexRequest({
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 5, output_tokens: 1 },
+      });
+
+      await provider.callClaudeApi('test prompt');
+
+      const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+      expect(sentBody.temperature).toBeUndefined();
+      expect(sentBody.top_p).toBeUndefined();
+      expect(sentBody.top_k).toBeUndefined();
+      expect(sentBody.thinking).toEqual(expected);
+      expect(sentBody.max_tokens).toBe(maxTokens);
+    },
+  );
+
   it('omits temperature for Claude Opus 4.7 on Vertex', async () => {
     provider = new VertexChatProvider('claude-opus-4-7', {
       config: { max_tokens: 32, temperature: 0.5 },
@@ -3451,6 +3513,46 @@ describe('VertexChatProvider.callClaudeApi', () => {
 
     expect(result.output).toBe(expected);
   });
+
+  it.each([
+    { type: 'between_tools' as const, showThinking: undefined },
+    { type: 'disabled' as const, showThinking: undefined },
+    { type: 'between_tools' as const, showThinking: false },
+  ])(
+    'renders Sonnet 5.5 between-tool progress with $type and showThinking=$showThinking',
+    async ({ type, showThinking }) => {
+      provider = new VertexChatProvider('claude-sonnet-5-5', {
+        config: { thinking: { type }, showThinking },
+      });
+      const mockRequest = vi.fn().mockResolvedValue({
+        data: {
+          content: [
+            { type: 'thinking', thinking: 'Checking the result', signature: 'sig' },
+            { type: 'text', text: 'the answer' },
+          ],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 5, output_tokens: 1 },
+        },
+      });
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: { request: mockRequest } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+      const result = await provider.callClaudeApi('test prompt');
+
+      expect(result.output).toBe(
+        showThinking === false
+          ? 'the answer'
+          : 'Thinking: Checking the result\nSignature: sig\n\nthe answer',
+      );
+      expect(mockRequest.mock.calls[0][0].data).toMatchObject({
+        thinking: { type: 'between_tools' },
+        max_tokens: 512,
+      });
+    },
+  );
 
   it('keeps the 512 default for a Claude model that does not think by default', async () => {
     provider = new VertexChatProvider('claude-opus-4-8', { config: {} });

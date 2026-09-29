@@ -36,6 +36,11 @@ export interface OutputFormat {
   };
 }
 
+// Sonnet 5.5 adds this wire value before the pinned SDK's thinking union includes it.
+export type ClaudeThinkingConfig =
+  | Anthropic.Messages.ThinkingConfigParam
+  | { type: 'between_tools' };
+
 /** The reasoning-depth ladder Claude accepts on `output_config.effort`. */
 export type ClaudeEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
@@ -77,7 +82,7 @@ export interface AnthropicMessageOptions extends AnthropicBaseOptions {
   stop_sequences?: string[]; // Custom stop sequences
   stream?: boolean; // Enable streaming for long-running operations like extended thinking
   temperature?: number;
-  thinking?: Anthropic.Messages.ThinkingConfigParam;
+  thinking?: ClaudeThinkingConfig;
   tool_choice?: Anthropic.Messages.ToolChoice | OpenAIToolChoice;
   tools?: (Anthropic.Messages.ToolUnion | AnthropicToolConfig)[];
   top_k?: number;
