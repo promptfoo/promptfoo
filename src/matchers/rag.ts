@@ -331,12 +331,6 @@ export async function matchesContextRelevance(
     }
   }
   const relevantSentences = [...quotedSegments.values()];
-  // Cap at the total so the score never exceeds 1.
-  const numerator = Math.min(relevantSentences.length, totalContextUnits);
-
-  // RAGAS CONTEXT RELEVANCE FORMULA: relevant units / total context units
-  const score = totalContextUnits > 0 ? numerator / totalContextUnits : 0;
-  const pass = score >= threshold - Number.EPSILON;
 
   // Nonempty output that quotes nothing from the context (a refusal, an apology, an
   // out-of-format explanation) is a malformed grading attempt, not a low-relevance verdict.
@@ -357,6 +351,13 @@ export async function matchesContextRelevance(
       },
     };
   }
+
+  // Cap at the total so the score never exceeds 1.
+  const numerator = Math.min(relevantSentences.length, totalContextUnits);
+
+  // RAGAS CONTEXT RELEVANCE FORMULA: relevant units / total context units
+  const score = totalContextUnits > 0 ? numerator / totalContextUnits : 0;
+  const pass = score >= threshold - Number.EPSILON;
 
   const metadata = {
     graderOutputs: {

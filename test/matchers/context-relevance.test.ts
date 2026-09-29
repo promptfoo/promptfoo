@@ -394,33 +394,62 @@ This policy excludes all staff going on any outgoing structured programs, short 
       expect(result.metadata?.extractedSentences).toEqual(['The answer is 42.']);
     });
 
-    it.each([
-      [
-        'a grader header line',
-        'candidate sentences:\nIt was created by Guido van Rossum and released in 1991.',
-        'It was created by Guido van Rossum and released in 1991.',
-      ],
-      [
-        'a reformatted repeat of the same sentence',
-        '1. It was created by Guido van Rossum and released in 1991.\n- it was created by Guido van  Rossum and released in 1991.',
-        '1. It was created by Guido van Rossum and released in 1991.',
-      ],
-    ])('should not count %s as a relevant sentence', async (_label, output, extracted) => {
-      // Regression (#10245): only segments quoted from the context count toward the numerator.
-      const context =
-        'Python is a high-level, general-purpose programming language known for readability. It has a large standard library. It was created by Guido van Rossum and released in 1991. Python is widely used in data science, web development, and automation.';
-      vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
-        output,
-        tokenUsage: { total: 10, prompt: 5, completion: 5 },
-      });
+    const contextSentences = [
+      'Python is a high-level, general-purpose programming language known for readability.',
+      'It has a large standard library.',
+      'It was created by Guido van Rossum and released in 1991.',
+      'Python is widely used in data science, web development, and automation.',
+    ];
 
-      const result = await matchesContextRelevance('Who created Python?', context, 0.5);
+    describe.each([
+      { format: 'prose', context: contextSentences.join(' ') },
+      { format: 'multiline', context: contextSentences.join('\n') },
+      { format: 'array', context: contextSentences },
+    ])('$format context', ({ context }) => {
+      it.each([
+        [
+          'a grader header line',
+          'candidate sentences:\nIt was created by Guido van Rossum and released in 1991.',
+          ['It was created by Guido van Rossum and released in 1991.'],
+          0.25,
+          false,
+        ],
+        [
+          'a reformatted repeat of the same sentence',
+          '1. It was created by Guido van Rossum and released in 1991.\n- it was created by Guido van  Rossum and released in 1991.',
+          ['1. It was created by Guido van Rossum and released in 1991.'],
+          0.25,
+          false,
+        ],
+        [
+          'unrelated commentary between valid quotes',
+          'It was created by Guido van Rossum and released in 1991.\nThis passage answers your question.\nIt has a large standard library.',
+          [
+            'It was created by Guido van Rossum and released in 1991.',
+            'It has a large standard library.',
+          ],
+          0.5,
+          true,
+        ],
+      ])(
+        'should not count %s as a relevant sentence',
+        async (_label, output, extracted, score, pass) => {
+          // Regression (#10245): only distinct quotes count toward the numerator.
+          vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+            output,
+            tokenUsage: { total: 10, prompt: 5, completion: 5 },
+          });
 
-      // 1 relevant sentence out of 4 → 0.25 (was 2/4 = 0.5, a pass).
-      expect(result.score).toBe(0.25);
-      expect(result.pass).toBe(false);
-      expect(result.metadata?.relevantSentenceCount).toBe(1);
-      expect(result.metadata?.extractedSentences).toEqual([extracted]);
+          const result = await matchesContextRelevance('Who created Python?', context, 0.5);
+
+          expect(result.score).toBe(score);
+          expect(result.pass).toBe(pass);
+          expect(result.metadata?.totalContextUnits).toBe(4);
+          expect(result.metadata?.relevantSentenceCount).toBe(extracted.length);
+          expect(result.metadata?.extractedSentences).toEqual(extracted);
+          expect(result.metadata?.graderError).not.toBe(true);
+        },
+      );
     });
 
     it('should handle empty context', async () => {
