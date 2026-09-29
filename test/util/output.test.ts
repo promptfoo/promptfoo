@@ -2,7 +2,8 @@ import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
 import { XMLParser } from 'fast-xml-parser';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
+import { SaxesParser } from 'saxes';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
@@ -12,11 +13,13 @@ import { getTraceStore } from '../../src/tracing/store';
 import { type EvaluateResult, ResultFailureReason } from '../../src/types/index';
 import { createJunitXml } from '../../src/util/junit';
 import {
+  createOutputData,
   createOutputMetadata,
   warnOnDegradedJsonlRecovery,
   writeMultipleOutputs,
   writeOutput,
 } from '../../src/util/output';
+import { createEvaluateResult } from '../factories/eval';
 import { mockConsole, mockProcessEnv } from './utils';
 
 vi.mock('../../src/database', () => ({
@@ -44,15 +47,23 @@ const mockFileHandle = vi.hoisted(() => ({
   write: vi.fn().mockResolvedValue(undefined),
   close: vi.fn().mockResolvedValue(undefined),
 }));
+const JSONL_TEMP_DIRECTORY = '/tmp/promptfoo-jsonl-test';
+const JSONL_BACKUP_PATH = path.join(JSONL_TEMP_DIRECTORY, 'backup.jsonl');
+const JSONL_REPLACEMENT_PATH = path.join(JSONL_TEMP_DIRECTORY, 'replacement.jsonl');
 
 vi.mock('fs/promises', () => ({
   readFile: vi.fn(),
   writeFile: vi.fn(),
   appendFile: vi.fn(),
-  rename: vi.fn(),
-  rm: vi.fn(),
-  stat: vi.fn().mockResolvedValue({ mode: 0o644 }),
+  copyFile: vi.fn(),
   chmod: vi.fn(),
+  lstat: vi.fn(),
+  mkdtemp: vi.fn(),
+  stat: vi.fn(),
+  realpath: vi.fn(),
+  readlink: vi.fn(),
+  rename: vi.fn().mockResolvedValue(undefined),
+  rm: vi.fn().mockResolvedValue(undefined),
   mkdir: vi.fn(),
   open: vi.fn().mockResolvedValue(mockFileHandle),
 }));
@@ -65,6 +76,7 @@ describe('writeOutput', () => {
   let consoleLogSpy: ReturnType<typeof mockConsole>;
 
   beforeEach(() => {
+    const fileNotFoundError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
     vi.clearAllMocks();
     // Restore mock implementations that vi.resetAllMocks() clears
     mockFileHandle.write.mockResolvedValue(undefined);
@@ -72,11 +84,12 @@ describe('writeOutput', () => {
     vi.mocked(fsPromises.open).mockResolvedValue(
       mockFileHandle as unknown as fsPromises.FileHandle,
     );
-    // Restore the stat implementation that vi.resetAllMocks() clears; the atomic JSONL rewrite
-    // reads the destination's mode through it before renaming the temp file into place.
-    vi.mocked(fsPromises.stat).mockResolvedValue({ mode: 0o644 } as Awaited<
-      ReturnType<typeof fsPromises.stat>
-    >);
+    vi.mocked(fsPromises.rename).mockResolvedValue(undefined);
+    vi.mocked(fsPromises.rm).mockResolvedValue(undefined);
+    vi.mocked(fsPromises.copyFile).mockResolvedValue(undefined);
+    vi.mocked(fsPromises.mkdtemp).mockResolvedValue(JSONL_TEMP_DIRECTORY);
+    vi.mocked(fsPromises.lstat).mockRejectedValue(fileNotFoundError);
+    vi.mocked(fsPromises.stat).mockRejectedValue(fileNotFoundError);
     consoleLogSpy = mockConsole('log');
     // @ts-expect-error getDb is mocked with a partial test double.
     vi.mocked(getDb).mockResolvedValue({
@@ -161,6 +174,57 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
+  it('exports very large token-like config values with secret redaction intact', async () => {
+    const eval_ = new Eval({
+      tests: [{ vars: { media: 'A'.repeat(16_369_336), message: 'Public fixture text.' } }],
+      providers: [{ id: 'echo', config: { apiKey: 'fixture-api-key', max_tokens: 37 } }],
+    });
+
+    await writeOutput('output.json', eval_, null);
+
+    expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
+    const outputJson = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const parsed = JSON.parse(outputJson);
+    expect(parsed.config.tests[0].vars).toEqual({
+      media: '[REDACTED]',
+      message: 'Public fixture text.',
+    });
+    expect(parsed.config.providers[0].config).toEqual({
+      apiKey: '[REDACTED]',
+      max_tokens: 37,
+    });
+    expect(outputJson).not.toContain('fixture-api-key');
+  });
+
+  it.each(['json', 'yaml', 'html', 'xml'])(
+    'redacts legacy prompt config in %s exports',
+    async (extension) => {
+      const prompt = {
+        raw: 'Summarize',
+        label: 'gateway',
+        provider: 'openai:agents-api',
+        config: { apiHost: 'gateway.example', headers: { 'X-Gateway-Auth': 'legacy-header-7294' } },
+      };
+      const eval_ = new Eval({}, { prompts: [prompt] });
+      const summary = await eval_.toEvaluateSummary();
+      eval_.oldResults = {
+        version: 2,
+        timestamp: summary.timestamp,
+        stats: summary.stats,
+        results: [],
+        table: { head: { vars: [], prompts: [prompt] }, body: [] },
+      };
+      if (extension === 'html') {
+        vi.mocked(fsPromises.readFile).mockResolvedValue('{{ results | dump }}');
+      }
+      await writeOutput(`output.${extension}`, eval_, null);
+      const output = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      expect(output).not.toContain('legacy-header-7294');
+      expect(output).toContain('[REDACTED]');
+      expect(prompt.config.headers['X-Gateway-Auth']).toBe('legacy-header-7294');
+    },
+  );
+
   it('redacts env and secret config fields in JSON output', async () => {
     const outputPath = 'output.json';
     const eval_ = new Eval({
@@ -179,22 +243,216 @@ describe('writeOutput', () => {
             max_turns: 2,
           },
         },
+        {
+          id: 'openai:agents-api',
+          config: {
+            apiHost: 'host-credential:@gateway.example',
+            headers: { 'X-Gateway-Auth': 'opaque-gateway-7294', Accept: 'application/json' },
+            apiBaseUrl: 'https://url-credential:@gateway.example/v1',
+            agent: {
+              tools: [
+                {
+                  type: 'mcp',
+                  server_url: 'https://mcp.example?api_key=query-credential',
+                  headers: { 'X-MCP-Custom': 'opaque-value-7294' },
+                },
+              ],
+            },
+          },
+        },
       ],
+      tracing: {
+        enabled: true,
+        provider: {
+          id: 'tempo',
+          endpoint: 'https://tempo.example.com',
+          auth: { token: 'output-tempo-secret' },
+          headers: {
+            'X-Honeycomb-Team': 'output-honeycomb-secret',
+            'X-Tempo-Reader': 'tiny-reader-key',
+            'X-Trace-Access': 'Bearer short-secret',
+            'X-Scope-OrgID': 'tenant-a',
+          },
+        },
+      },
     });
+
+    eval_.prompts = [
+      {
+        raw: 'Literal prompt text',
+        label: 'gateway',
+        provider: 'openai:agents-api',
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1?tenant=a;api-key=prompt-query-secret',
+          headers: { 'X-Gateway-Auth': 'prompt-header-secret' },
+        },
+      },
+    ];
 
     await writeOutput(outputPath, eval_, null);
 
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
     const outputJson = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
     const parsed = JSON.parse(outputJson);
+    expect(parsed.results.prompts[0]).toEqual({
+      raw: 'Literal prompt text',
+      label: 'gateway',
+      provider: 'openai:agents-api',
+      config: {
+        apiBaseUrl: 'https://gateway.example/v1?tenant=%5BREDACTED%5D',
+        headers: { 'X-Gateway-Auth': '[REDACTED]' },
+      },
+    });
+    expect(eval_.prompts[0].config?.headers?.['X-Gateway-Auth']).toBe('prompt-header-secret');
     expect(parsed.config.env.AWS_BEARER_TOKEN_BEDROCK).toBe('[REDACTED]');
     expect(parsed.config.env.ANTHROPIC_API_KEY).toBe('[REDACTED]');
     expect(parsed.config.env.REGION).toBe('us-east-1');
     expect(parsed.config.providers[0].config.apiKey).toBe('[REDACTED]');
     expect(parsed.config.providers[0].config.max_turns).toBe(2);
+    expect(parsed.config.providers[1].config.headers).toEqual({
+      'X-Gateway-Auth': '[REDACTED]',
+      Accept: 'application/json',
+    });
+    expect(parsed.config.providers[1].config.agent.tools[0].headers).toEqual({
+      'X-MCP-Custom': '[REDACTED]',
+    });
+    for (const credential of [
+      'host-credential',
+      'url-credential',
+      'query-credential',
+      'opaque-value-7294',
+      'opaque-gateway-7294',
+      'prompt-query-secret',
+      'prompt-header-secret',
+    ]) {
+      expect(outputJson).not.toContain(credential);
+    }
     expect(parsed.config.description).toBe('Test config');
     expect(parsed.config.tests).toBe('az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D');
+    expect(outputJson).not.toContain('output-tempo-secret');
+    expect(outputJson).not.toContain('output-honeycomb-secret');
+    expect(outputJson).not.toContain('short-secret');
+    expect(outputJson).not.toContain('tiny-reader-key');
+    expect(parsed.config.tracing.provider.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
   });
+
+  it.each(['json', 'yaml'])('redacts gateway URL credentials in %s exports', async (extension) => {
+    const url = 'https://gateway-user:gateway-password@gateway.example/v1?token=short-secret';
+    const eval_ = new Eval({
+      env: { ENVOY_API_BASE_URL: url },
+      providers: [{ id: 'envoy:route', config: { apiBaseUrl: url } }],
+    });
+
+    await writeOutput(`output.${extension}`, eval_, null);
+
+    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const parsed = yaml.load(written) as Record<string, any>;
+    expect(parsed.config.env.ENVOY_API_BASE_URL).toBe(
+      'https://***:***@gateway.example/v1?token=%5BREDACTED%5D',
+    );
+    expect(parsed.config.providers[0].config.apiBaseUrl).toBe(parsed.config.env.ENVOY_API_BASE_URL);
+    expect(written).not.toContain('gateway-user');
+    expect(written).not.toContain('gateway-password');
+    expect(written).not.toContain('short-secret');
+    expect(eval_.config.env).toEqual({ ENVOY_API_BASE_URL: url });
+  });
+
+  it.each([true, false])(
+    'uses saved strip flags (%s) for exports outside the evaluation scope',
+    async (strip) => {
+      const flags = {
+        PROMPTFOO_STRIP_PROMPT_TEXT: String(strip),
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip),
+        PROMPTFOO_STRIP_TEST_VARS: String(strip),
+        PROMPTFOO_STRIP_GRADING_RESULT: String(strip),
+        PROMPTFOO_STRIP_METADATA: String(strip),
+      };
+      const restoreEnv = mockProcessEnv(
+        Object.fromEntries(Object.keys(flags).map((key) => [key, String(!strip)])),
+      );
+      const testCase = {
+        vars: { input: 'private-input' },
+        metadata: { note: 'private-note' },
+        providerOutput: 'private-output',
+      };
+      const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([
+        {
+          traceId: 'trace',
+          evaluationId: 'eval',
+          testCaseId: 'test',
+          metadata: { note: 'private-trace-note' },
+          spans: [
+            {
+              spanId: 'span',
+              name: 'provider',
+              startTime: 1,
+              attributes: {
+                'promptfoo.request.body': 'private-trace-prompt',
+                'promptfoo.response.body': 'private-trace-response',
+              },
+            },
+          ],
+        },
+      ]);
+      const eval_ = new Eval({ env: flags, tests: [testCase], prompts: ['private-config-prompt'] });
+      await eval_.addResult(
+        createEvaluateResult({
+          prompt: { raw: 'private-prompt', template: 'private-template', label: 'label' },
+          testCase,
+          response: { output: 'private-output', raw: 'private-raw-output' },
+          metadata: { note: 'private-note' },
+          gradingResult: { pass: true, score: 1, reason: 'private-grade' },
+        }),
+      );
+      try {
+        eval_.prompts = [
+          {
+            raw: 'private-prompt',
+            template: 'private-template',
+            label: 'public',
+            provider: 'echo',
+          },
+        ];
+        const resultsFile = await eval_.toResultsFile();
+        expect(resultsFile.prompts?.[0].raw).toBe(strip ? '[prompt stripped]' : 'private-prompt');
+        expect(JSON.stringify(resultsFile).includes('private-')).toBe(!strip);
+        const output = await createOutputData(eval_, null);
+        expect(JSON.stringify(output).includes('private-')).toBe(!strip);
+        expect(output.results.results[0]).toMatchObject({ success: true, score: 1 });
+        if (!strip) {
+          expect(output.results.results[0]).toMatchObject({
+            prompt: { raw: 'private-prompt' },
+            testCase,
+            response: { output: 'private-output', raw: 'private-raw-output' },
+            metadata: { note: 'private-note' },
+            gradingResult: { reason: 'private-grade' },
+          });
+        }
+
+        for (const extension of ['json', 'yaml', 'xml', 'jsonl']) {
+          vi.mocked(fsPromises.writeFile).mockClear();
+          vi.mocked(fsPromises.appendFile).mockClear();
+          await writeOutput(`output.${extension}`, eval_, null);
+          const contents = [
+            ...vi.mocked(fsPromises.writeFile).mock.calls,
+            ...vi.mocked(fsPromises.appendFile).mock.calls,
+          ]
+            .map((call) => call[1])
+            .join('');
+          expect(contents, extension).not.toBe('');
+          expect(contents.includes('private-'), extension).toBe(!strip);
+        }
+
+        expect(eval_.config.tests).toEqual([testCase]);
+        expect(eval_.config.prompts).toEqual(['private-config-prompt']);
+        expect(eval_.prompts[0].template).toBe('private-template');
+        expect(eval_.results[0].response?.output).toBe('private-output');
+      } finally {
+        traceSpy.mockRestore();
+        restoreEnv();
+      }
+    },
+  );
 
   it.each([
     {
@@ -205,56 +463,56 @@ describe('writeOutput', () => {
       extension: 'yaml',
       parse: (value: string) => yaml.load(value) as Record<string, any>,
     },
-  ])('omits nested response metadata from $extension output when metadata stripping is enabled', async ({
-    extension,
-    parse,
-  }) => {
-    const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
-    try {
-      const eval_ = new Eval({});
-      await eval_.addResult({
-        success: true,
-        failureReason: ResultFailureReason.NONE,
-        score: 1,
-        namedScores: {},
-        latencyMs: 100,
-        provider: { id: 'provider' },
-        prompt: {
-          raw: 'Test prompt',
-          label: 'Test prompt',
-        },
-        response: {
-          output: 'Test output',
-          metadata: {
-            transformedRequest: {
-              headers: {
-                Authorization: 'Bearer nested-secret',
+  ])(
+    'omits nested response metadata from $extension output when metadata stripping is enabled',
+    async ({ extension, parse }) => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
+      try {
+        const eval_ = new Eval({});
+        await eval_.addResult({
+          success: true,
+          failureReason: ResultFailureReason.NONE,
+          score: 1,
+          namedScores: {},
+          latencyMs: 100,
+          provider: { id: 'provider' },
+          prompt: {
+            raw: 'Test prompt',
+            label: 'Test prompt',
+          },
+          response: {
+            output: 'Test output',
+            metadata: {
+              transformedRequest: {
+                headers: {
+                  Authorization: 'Bearer nested-secret',
+                },
               },
             },
           },
-        },
-        vars: {},
-        promptIdx: 0,
-        testIdx: 0,
-        testCase: {},
-        promptId: 'prompt',
-        metadata: {
-          debug: 'top-level-secret',
-        },
-      });
+          vars: {},
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: {},
+          promptId: 'prompt',
+          metadata: {
+            debug: 'top-level-secret',
+          },
+        });
 
-      await writeOutput(`output.${extension}`, eval_, null);
+        await writeOutput(`output.${extension}`, eval_, null);
 
-      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
-      const parsed = parse(written);
-      const result = parsed.results.results[0];
-      expect(result.metadata).toEqual({});
-      expect(result.response.metadata).toBeUndefined();
-      expect(written).not.toContain('nested-secret');
-    } finally {
-      restoreEnv();
-    }
-  });
+        const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+        const parsed = parse(written);
+        const result = parsed.results.results[0];
+        expect(result.metadata).toEqual({});
+        expect(result.response.metadata).toBeUndefined();
+        expect(written).not.toContain('nested-secret');
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
 
   it.each([
     {
@@ -265,69 +523,69 @@ describe('writeOutput', () => {
       extension: 'yaml',
       parse: (value: string) => yaml.load(value) as Record<string, any>,
     },
-  ])('omits test-case metadata from $extension output when metadata stripping is enabled', async ({
-    extension,
-    parse,
-  }) => {
-    const restoreEnv = mockProcessEnv({
-      PROMPTFOO_STRIP_METADATA: 'true',
-      PROMPTFOO_STRIP_TEST_VARS: 'true',
-    });
+  ])(
+    'omits test-case metadata from $extension output when metadata stripping is enabled',
+    async ({ extension, parse }) => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_METADATA: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+      });
 
-    try {
-      const eval_ = new Eval({});
-      await eval_.addResult({
-        success: true,
-        failureReason: ResultFailureReason.NONE,
-        score: 1,
-        namedScores: {},
-        latencyMs: 100,
-        provider: { id: 'provider' },
-        prompt: {
-          raw: 'Test prompt',
-          label: 'Test prompt',
-        },
-        response: {
-          output: 'Test output',
-        },
-        vars: {
-          customerEmail: 'secret@example.com',
-        },
-        promptIdx: 0,
-        testIdx: 0,
-        testCase: {
+      try {
+        const eval_ = new Eval({});
+        await eval_.addResult({
+          success: true,
+          failureReason: ResultFailureReason.NONE,
+          score: 1,
+          namedScores: {},
+          latencyMs: 100,
+          provider: { id: 'provider' },
+          prompt: {
+            raw: 'Test prompt',
+            label: 'Test prompt',
+          },
+          response: {
+            output: 'Test output',
+          },
           vars: {
             customerEmail: 'secret@example.com',
           },
-          metadata: {
-            goal: 'goal testcase-secret',
-            pluginConfig: {
-              policy: 'policy testcase-secret',
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: {
+            vars: {
+              customerEmail: 'secret@example.com',
             },
-            inputMaterialization: {
-              source: 'source testcase-secret',
+            metadata: {
+              goal: 'goal testcase-secret',
+              pluginConfig: {
+                policy: 'policy testcase-secret',
+              },
+              inputMaterialization: {
+                source: 'source testcase-secret',
+              },
             },
           },
-        },
-        promptId: 'prompt',
-        metadata: {
-          debug: 'top-level-secret',
-        },
-      });
+          promptId: 'prompt',
+          metadata: {
+            debug: 'top-level-secret',
+          },
+        });
 
-      await writeOutput(`output.${extension}`, eval_, null);
+        await writeOutput(`output.${extension}`, eval_, null);
 
-      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
-      const parsed = parse(written);
-      const result = parsed.results.results[0];
-      expect(result.metadata).toEqual({});
-      expect(result.testCase.metadata).toBeUndefined();
-      expect(result.testCase.vars).toBeUndefined();
-      expect(written).not.toContain('testcase-secret');
-    } finally {
-      restoreEnv();
-    }
-  });
+        const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+        const parsed = parse(written);
+        const result = parsed.results.results[0];
+        expect(result.metadata).toEqual({});
+        expect(result.testCase.metadata).toBeUndefined();
+        expect(result.testCase.vars).toBeUndefined();
+        expect(written).not.toContain('testcase-secret');
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
 
   it('omits trace vars from JSON output when test variable stripping is enabled', async () => {
     const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_TEST_VARS: 'true' });
@@ -510,27 +768,27 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
-  it.each([
-    'yaml',
-    'txt',
-  ])('sanitizes runtime options before writing %s output for in-memory evals', async (extension) => {
-    const eval_ = new Eval(
-      {},
-      {
-        runtimeOptions: {
-          cache: false,
-          abortSignal: new AbortController().signal,
-          progressCallback: vi.fn(),
+  it.each(['yaml', 'txt'])(
+    'sanitizes runtime options before writing %s output for in-memory evals',
+    async (extension) => {
+      const eval_ = new Eval(
+        {},
+        {
+          runtimeOptions: {
+            cache: false,
+            abortSignal: new AbortController().signal,
+            progressCallback: vi.fn(),
+          },
         },
-      },
-    );
+      );
 
-    await writeOutput(`output.${extension}`, eval_, null);
+      await writeOutput(`output.${extension}`, eval_, null);
 
-    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
-    const parsed = yaml.load(written) as { runtimeOptions: Record<string, unknown> };
-    expect(parsed.runtimeOptions).toEqual({ cache: false });
-  });
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const parsed = yaml.load(written) as { runtimeOptions: Record<string, unknown> };
+      expect(parsed.runtimeOptions).toEqual({ cache: false });
+    },
+  );
 
   it('redacts env and secret config fields in YAML output', async () => {
     const outputPath = 'output.yaml';
@@ -852,29 +1110,36 @@ describe('writeOutput', () => {
     });
   });
 
+  async function junitSuiteWithNames(label: string, description = label) {
+    const eval_ = new Eval({});
+    const provider = { id: 'echo', label };
+    await eval_.addResult(createEvaluateResult({ provider, testCase: { description } }));
+    const xml = await createJunitXml(eval_);
+    expect(() => new SaxesParser().write(xml).close()).not.toThrow();
+    return new XMLParser({ ignoreAttributes: false }).parse(xml).testsuites.testsuite;
+  }
+
+  it('exports well-formed JUnit XML when names contain forbidden characters', async () => {
+    const invalid = '\u0000\u0001\u0008\u000e\u001b\u001f\ud800\ufffe\udfff\uffff';
+    const suite = await junitSuiteWithNames(
+      `target${invalid} & <model>`,
+      `case${invalid} \u{1f680} \u4e2d\u6587`,
+    );
+    expect(suite['@_name']).toMatch(/^\[target & <model>\] prompt 1 \([a-f0-9]{16}\)$/);
+    expect(suite.testcase['@_name']).toBe('test 1: case \u{1f680} \u4e2d\u6587');
+  });
+
   it('keeps JUnit failure messages compact when raw assertion reasons are long', async () => {
     const longReason = 'x'.repeat(600);
     const eval_ = new Eval({});
-    await eval_.addResult({
-      success: false,
-      failureReason: ResultFailureReason.ASSERT,
-      score: 0,
-      namedScores: {},
-      latencyMs: 0,
-      provider: { id: 'echo' },
-      prompt: { raw: 'Prompt', label: 'Prompt' },
-      response: { output: '' },
-      vars: {},
-      promptIdx: 0,
-      testIdx: 0,
-      testCase: {},
-      gradingResult: {
-        pass: false,
+    await eval_.addResult(
+      createEvaluateResult({
+        success: false,
+        failureReason: ResultFailureReason.ASSERT,
         score: 0,
-        reason: longReason,
-      },
-      promptId: 'long-message',
-    });
+        gradingResult: { pass: false, score: 0, reason: longReason },
+      }),
+    );
 
     const xml = await createJunitXml(eval_);
     const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
@@ -883,50 +1148,187 @@ describe('writeOutput', () => {
     expect(xml).not.toContain(longReason);
   });
 
-  it('separates JUnit suites for providers that share an id but differ by label', async () => {
+  it.each([
+    ['target-A', 'target-B'],
+    ['model', 'mo\u0000del'],
+    ['mo\u0000del', 'mo\u0001del'],
+    ['mo del', 'mo \u0000del'],
+    ['x'.repeat(508) + '🚀tailmore', 'x'.repeat(508) + '...'],
+    ['\u0001target', 'target', 'echo\u0001'],
+  ])(
+    'keeps JUnit identities distinct and stable for %j and %j',
+    async (first, second, secondId = 'echo') => {
+      const names: string[][] = [];
+      for (const labels of [
+        [first, second],
+        [second, first],
+      ]) {
+        const eval_ = new Eval({});
+        for (const [promptIdx, label] of labels.entries()) {
+          const success = label === first;
+          await eval_.addResult(
+            createEvaluateResult({
+              provider: { id: label === second ? secondId : 'echo', label },
+              promptId: 'shared',
+              promptIdx,
+              success,
+              score: Number(success),
+              failureReason: success ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+              gradingResult: { pass: success, score: Number(success), reason: 'fixture' },
+            }),
+          );
+        }
+        const xml = await createJunitXml(eval_);
+        expect(() => new SaxesParser().write(xml).close()).not.toThrow();
+        const report = new XMLParser({ ignoreAttributes: false }).parse(xml).testsuites;
+        expect(report).toMatchObject({ '@_tests': '2', '@_failures': '1' });
+        expect(Array.isArray(report.testsuite)).toBe(true);
+        expect(report.testsuite[labels.indexOf(second)].testcase.failure).toBeDefined();
+        const current: string[] = [];
+        for (const suite of report.testsuite) {
+          expect(suite.testcase['@_classname']).toBe(suite['@_name']);
+          current.push(suite['@_name']);
+        }
+        expect(new Set(current).size).toBe(2);
+        names.push(current);
+      }
+      expect(names[1]).toEqual([...names[0]].reverse());
+      if (first === 'target-A') {
+        expect(names[0]).toEqual(['[target-A] prompt 1', '[target-B] prompt 1']);
+      } else if (first.includes('🚀')) {
+        expect(names[0][0]).toContain('🚀...');
+      } else if (secondId !== 'echo') {
+        expect(names[0][0]).toMatch(/^\[target\] prompt 1 \([a-f0-9]{16}\)$/);
+        expect(names[0][1]).toBe('[target] prompt 1');
+      }
+    },
+  );
+
+  // A suite name reserves room for the uniqueness suffix, so it can show fewer
+  // characters than the testcase name built from the same raw text.
+  it.each([
+    { case: 'vertical tab', raw: 'hello\u000bworld', suite: 'hello world' },
+    { case: 'form feed', raw: 'hello\u000cworld', suite: 'hello world' },
+    { case: 'interior controls', raw: 'case \u0000 name', suite: 'case name' },
+    { case: 'surrounding controls', raw: ' \u0001 case \u0000  name \u001f ', suite: 'case name' },
+    {
+      case: 'astral characters past the limit',
+      raw: 'a' + '🚀'.repeat(300),
+      suite: 'a' + '🚀'.repeat(254) + '...',
+    },
+    {
+      case: 'a control inside the limit',
+      raw: 'x'.repeat(490) + '\u0000-v2',
+      suite: 'x'.repeat(490) + '-v2',
+    },
+    {
+      case: 'a control run inside the limit',
+      raw: 'x'.repeat(490) + '\u0000'.repeat(14) + 'XY',
+      suite: 'x'.repeat(490) + 'XY',
+    },
+    {
+      case: 'a control past the limit',
+      raw: 'x'.repeat(520) + '\u0000',
+      suite: 'x'.repeat(490) + '...',
+      testcase: 'x'.repeat(509) + '...',
+    },
+    {
+      case: 'a control just past the limit',
+      raw: 'x'.repeat(512) + '\u0001',
+      suite: 'x'.repeat(490) + '...',
+      testcase: 'x'.repeat(512),
+    },
+    {
+      case: 'a control run that frees up room',
+      raw: 'y'.repeat(509) + 'ABC' + '\u0000'.repeat(20),
+      suite: 'y'.repeat(490) + '...',
+      testcase: 'y'.repeat(509) + 'ABC',
+    },
+  ])(
+    'keeps visible JUnit text for $case',
+    async ({ raw, suite: expectedSuite, testcase = expectedSuite }) => {
+      const suite = await junitSuiteWithNames(raw);
+      expect(suite['@_name'].replace(/ \([a-f0-9]{16}\)$/, '')).toBe(
+        '[' + expectedSuite + '] prompt 1',
+      );
+      expect(suite.testcase['@_classname']).toBe(suite['@_name']);
+      expect(suite.testcase['@_name']).toBe('test 1: ' + testcase);
+    },
+  );
+
+  // Each pair renders to the same visible text once the forbidden character is
+  // removed, so only the uniqueness suffix keeps the two suites apart.
+  it.each([
+    ['a vertical tab collapses into a space', 'my\u000bmodel', 'my model'],
+    ['a form feed collapses into a space', 'my\u000cmodel', 'my model'],
+    [
+      'the forbidden character falls after the display limit',
+      `${'x'.repeat(600)}\u0000`,
+      'x'.repeat(600),
+    ],
+  ])('keeps suite identities distinct when %s', async (_scenario, sanitized, clean) => {
     const eval_ = new Eval({});
-    await eval_.addResult({
-      success: true,
-      failureReason: ResultFailureReason.NONE,
-      score: 1,
-      namedScores: {},
-      latencyMs: 100,
-      provider: { id: 'echo', label: 'target-A' },
-      prompt: { raw: 'Greet {{name}}', label: 'Greet prompt' },
-      response: { output: '' },
-      vars: { name: 'Alice' },
-      promptIdx: 0,
-      testIdx: 0,
-      testCase: {},
-      promptId: 'prompt-shared',
-    });
-    await eval_.addResult({
-      success: false,
-      failureReason: ResultFailureReason.ASSERT,
-      score: 0,
-      namedScores: {},
-      latencyMs: 200,
-      provider: { id: 'echo', label: 'target-B' },
-      prompt: { raw: 'Greet {{name}}', label: 'Greet prompt' },
-      response: { output: '' },
-      vars: { name: 'Alice' },
-      promptIdx: 1,
-      testIdx: 0,
-      testCase: {},
-      gradingResult: { pass: false, score: 0, reason: 'B failed' },
-      promptId: 'prompt-shared',
-    });
+    for (const label of [sanitized, clean]) {
+      await eval_.addResult(createEvaluateResult({ provider: { id: 'echo', label } }));
+    }
 
     const xml = await createJunitXml(eval_);
-    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+    expect(() => new SaxesParser().write(xml).close()).not.toThrow();
+    const suites: { '@_name': string }[] = new XMLParser({ ignoreAttributes: false }).parse(xml)
+      .testsuites.testsuite;
+    const names = suites.map((suite) => suite['@_name']);
+    expect(names[0]).toMatch(/ \([a-f0-9]{16}\)$/);
+    expect(names[1]).not.toMatch(/ \([a-f0-9]{16}\)$/);
+    expect(new Set(names).size).toBe(2);
+  });
 
-    expect(parsed.testsuites.testsuite).toEqual([
-      expect.objectContaining({ '@_name': '[target-A] prompt 1', '@_tests': '1' }),
-      expect.objectContaining({
-        '@_name': '[target-B] prompt 1',
-        '@_tests': '1',
-        '@_failures': '1',
-      }),
+  it('removes forbidden name characters before fallback and length limits', async () => {
+    const eval_ = new Eval({});
+    const cases = [
+      ['\u0000', '\u0000', 'unknown provider', 'test 1'],
+      [
+        '\ud800'.repeat(510) + 'VISIBLE_PROVIDER',
+        '\u0000'.repeat(510) + 'VISIBLE_TEST',
+        'VISIBLE_PROVIDER',
+        'test 2: VISIBLE_TEST',
+      ],
+      [
+        'y'.repeat(508) + '🚀tailmore',
+        'y'.repeat(508) + '🚀tailmore',
+        'y'.repeat(508) + '🚀...',
+        'test 3: ' + 'y'.repeat(508) + '🚀...',
+      ],
+    ];
+    for (const [testIdx, [label, description]] of cases.entries()) {
+      await eval_.addResult(
+        createEvaluateResult({
+          provider: { id: 'echo', label },
+          testCase: { description },
+          testIdx,
+        }),
+      );
+    }
+    const xml = await createJunitXml(eval_);
+    expect(() => new SaxesParser().write(xml).close()).not.toThrow();
+    const suites = new XMLParser({ ignoreAttributes: false }).parse(xml).testsuites.testsuite;
+    for (const [index, [, , provider, testcase]] of cases.entries()) {
+      expect(suites[index]['@_name']).toContain('[' + provider + '] prompt 1');
+      expect(suites[index].testcase['@_name']).toBe(testcase);
+    }
+  });
+
+  it('keeps different clean prompts numbered under a shared display name', async () => {
+    const eval_ = new Eval({});
+    for (const id of ['first', 'second']) {
+      await eval_.addResult(
+        createEvaluateResult({ provider: { id, label: 'shared' }, prompt: { raw: id, label: id } }),
+      );
+    }
+    const suites = new XMLParser({ ignoreAttributes: false }).parse(await createJunitXml(eval_))
+      .testsuites.testsuite;
+    expect(suites).toMatchObject([
+      { '@_name': '[shared] prompt 1' },
+      { '@_name': '[shared] prompt 2' },
     ]);
   });
 
@@ -971,25 +1373,14 @@ describe('writeOutput', () => {
     }
   });
 
-  it('omits raw JUnit error text when it matches the inline reason', async () => {
+  it.each([
+    ['request failed: 500', 'request failed: 500'],
+    ['API error: 401\n{"code":"invalid_api_key"}', 'invalid_api_key'],
+  ])('omits raw JUnit error text: %s', async (error, secret) => {
     const eval_ = new Eval({});
-    await eval_.addResult({
-      success: false,
-      failureReason: ResultFailureReason.ERROR,
-      score: 0,
-      namedScores: {},
-      latencyMs: 100,
-      provider: { id: 'echo' },
-      prompt: { raw: 'p', label: '' },
-      response: { output: '' },
-      error: 'request failed: 500',
-      vars: {},
-      promptIdx: 0,
-      testIdx: 0,
-      testCase: {},
-      promptId: 'collapsed-error',
-    });
-
+    await eval_.addResult(
+      createEvaluateResult({ success: false, failureReason: ResultFailureReason.ERROR, error }),
+    );
     const xml = await createJunitXml(eval_);
     const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
 
@@ -997,36 +1388,7 @@ describe('writeOutput', () => {
       '#text': 'Reason: Evaluation error',
       '@_message': 'Evaluation error',
     });
-    expect(xml).not.toContain('request failed: 500');
-  });
-
-  it('omits multiline raw JUnit error payloads', async () => {
-    const eval_ = new Eval({});
-    await eval_.addResult({
-      success: false,
-      failureReason: ResultFailureReason.ERROR,
-      score: 0,
-      namedScores: {},
-      latencyMs: 100,
-      provider: { id: 'echo' },
-      prompt: { raw: 'p', label: '' },
-      response: { output: '' },
-      error: 'API error: 401\n{"code":"invalid_api_key"}',
-      vars: {},
-      promptIdx: 0,
-      testIdx: 0,
-      testCase: {},
-      promptId: 'multiline-error',
-    });
-
-    const xml = await createJunitXml(eval_);
-    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
-
-    expect(parsed.testsuites.testsuite.testcase.error).toMatchObject({
-      '#text': 'Reason: Evaluation error',
-      '@_message': 'Evaluation error',
-    });
-    expect(xml).not.toContain('invalid_api_key');
+    expect(xml).not.toContain(secret);
   });
 
   it('omits raw model outputs from JUnit assertion details', async () => {
@@ -1123,10 +1485,190 @@ describe('writeOutput', () => {
 
     const eval_ = new Eval(config);
     await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
-    // JSONL is rebuilt in a temp file then atomically renamed over the destination, so the
-    // empty truncation lands on the temp path and the swap targets the real output path.
-    expect(fsPromises.writeFile).toHaveBeenCalledWith(expect.stringContaining(outputPath), '');
-    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringContaining(outputPath), outputPath);
+    expect(fsPromises.writeFile).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), '');
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), outputPath);
+  });
+
+  it('rewrites JSONL through an external backup when the output directory is not writable', async () => {
+    const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    vi.mocked(fsPromises.writeFile)
+      .mockRejectedValueOnce(permissionError)
+      .mockResolvedValueOnce(undefined);
+
+    const outputPath = 'output.jsonl';
+    await writeOutput(outputPath, new Eval({}), null);
+
+    expect(fsPromises.writeFile).toHaveBeenNthCalledWith(1, expect.stringMatching(/\.tmp$/), '');
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(1, outputPath, JSONL_BACKUP_PATH);
+    expect(fsPromises.writeFile).toHaveBeenNthCalledWith(2, JSONL_REPLACEMENT_PATH, '');
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(2, JSONL_REPLACEMENT_PATH, outputPath);
+    expect(fsPromises.rename).not.toHaveBeenCalled();
+  });
+
+  it('warns when the temporary JSONL backup directory cannot be removed', async () => {
+    const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    vi.mocked(fsPromises.writeFile)
+      .mockRejectedValueOnce(permissionError)
+      .mockResolvedValueOnce(undefined);
+    vi.mocked(fsPromises.rm).mockRejectedValueOnce(new Error('rm failed'));
+
+    await writeOutput('output.jsonl', new Eval({}), null);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[Output] Failed to remove temporary JSONL backup directory',
+      expect.objectContaining({
+        tempDirectory: JSONL_TEMP_DIRECTORY,
+      }),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('rewrites JSONL through an external backup when replacing the output file is not permitted', async () => {
+    const permissionError = Object.assign(new Error('EPERM'), { code: 'EPERM' });
+    vi.mocked(fsPromises.rename).mockRejectedValueOnce(permissionError);
+
+    const outputPath = 'output.jsonl';
+    const eval_ = new Eval({});
+    const fetchResultsBatchedSpy = vi.spyOn(eval_, 'fetchResultsBatched');
+    await writeOutput(outputPath, eval_, null);
+
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), outputPath);
+    expect(fsPromises.rm).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), { force: true });
+    expect(fetchResultsBatchedSpy).toHaveBeenCalledTimes(1);
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(1, outputPath, JSONL_BACKUP_PATH);
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(
+      2,
+      expect.stringMatching(/\.tmp$/),
+      JSONL_REPLACEMENT_PATH,
+    );
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(3, JSONL_REPLACEMENT_PATH, outputPath);
+  });
+
+  it('warns when a populated JSONL sidecar cannot be removed after an external rewrite', async () => {
+    const permissionError = Object.assign(new Error('EPERM'), { code: 'EPERM' });
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    vi.mocked(fsPromises.rename).mockRejectedValueOnce(permissionError);
+    vi.mocked(fsPromises.rm)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('rm failed'));
+
+    await writeOutput('output.jsonl', new Eval({}), null);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[Output] Failed to remove temporary JSONL output',
+      expect.objectContaining({
+        tempOutputPath: expect.stringMatching(/\.tmp$/),
+      }),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it('rewrites the target of a dangling JSONL symlink', async () => {
+    const fileNotFoundError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    const outputPath = path.join('artifacts', 'output.jsonl');
+    const symlinkTarget = path.join('nested', 'missing.jsonl');
+    const resolvedTarget = path.resolve(path.dirname(outputPath), symlinkTarget);
+    vi.mocked(fsPromises.lstat).mockResolvedValueOnce({
+      isSymbolicLink: () => true,
+    } as never);
+    vi.mocked(fsPromises.realpath).mockRejectedValueOnce(fileNotFoundError);
+    vi.mocked(fsPromises.readlink).mockResolvedValueOnce(symlinkTarget);
+
+    await writeOutput(outputPath, new Eval({}), null);
+
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), resolvedTarget);
+  });
+
+  it('creates the resolved target directory when rewriting a dangling JSONL symlink', async () => {
+    const fileNotFoundError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    const outputPath = path.join('artifacts', 'output.jsonl');
+    const symlinkTarget = path.join('nested', 'missing.jsonl');
+    const resolvedTarget = path.resolve(path.dirname(outputPath), symlinkTarget);
+    vi.mocked(fsPromises.lstat).mockResolvedValueOnce({
+      isSymbolicLink: () => true,
+    } as never);
+    vi.mocked(fsPromises.realpath).mockRejectedValueOnce(fileNotFoundError);
+    vi.mocked(fsPromises.readlink).mockResolvedValueOnce(symlinkTarget);
+
+    await writeOutput(outputPath, new Eval({}), null);
+
+    // The link's resolved target may live in a directory that does not exist yet; it must be
+    // created so the sibling temp-file rewrite can land next to it (otherwise the temp-file
+    // write fails with ENOENT instead of preserving the symlink).
+    expect(fsPromises.mkdir).toHaveBeenCalledWith(path.dirname(resolvedTarget), {
+      recursive: true,
+    });
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), resolvedTarget);
+  });
+
+  it('surfaces the permission error when a first-time JSONL write hits a read-only directory', async () => {
+    const accessError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    const fileNotFoundError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    // The output file does not exist yet and its directory is not writable: the temp-file
+    // create fails with EACCES, routing into the external-backup fallback.
+    vi.mocked(fsPromises.writeFile)
+      .mockRejectedValueOnce(accessError) // temp file in the read-only output directory
+      .mockResolvedValueOnce(undefined); // replacement file in the OS temp directory
+    // There is no existing artifact to back up (ENOENT); the replacement copy back into the
+    // read-only directory then fails with the real EACCES, which must be what surfaces.
+    vi.mocked(fsPromises.copyFile)
+      .mockRejectedValueOnce(fileNotFoundError) // copyFile(outputPath, backup) → ENOENT (absent)
+      .mockRejectedValueOnce(accessError); // copyFile(replacement, outputPath) → EACCES
+
+    await expect(writeOutput('output.jsonl', new Eval({}), null)).rejects.toThrow('EACCES');
+
+    // No backup was ever created, so the restore copy must be skipped (exactly two copies).
+    expect(fsPromises.copyFile).toHaveBeenCalledTimes(2);
+  });
+
+  it('restores the JSONL backup when an external rewrite fails', async () => {
+    const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    const copyError = new Error('copy failed');
+    vi.mocked(fsPromises.writeFile)
+      .mockRejectedValueOnce(permissionError)
+      .mockResolvedValueOnce(undefined);
+    vi.mocked(fsPromises.copyFile)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(copyError)
+      .mockResolvedValueOnce(undefined);
+
+    const outputPath = 'output.jsonl';
+    await expect(writeOutput(outputPath, new Eval({}), null)).rejects.toThrow('copy failed');
+
+    expect(fsPromises.copyFile).toHaveBeenNthCalledWith(3, JSONL_BACKUP_PATH, outputPath);
+  });
+
+  it('preserves the existing JSONL artifact when an external backup cannot be created', async () => {
+    const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    vi.mocked(fsPromises.writeFile).mockRejectedValueOnce(permissionError);
+    vi.mocked(fsPromises.copyFile).mockRejectedValueOnce(new Error('backup failed'));
+
+    const outputPath = 'output.jsonl';
+    await expect(writeOutput(outputPath, new Eval({}), null)).rejects.toThrow('backup failed');
+
+    expect(fsPromises.copyFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains the external JSONL backup when restoration fails', async () => {
+    const permissionError = Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    vi.mocked(fsPromises.writeFile)
+      .mockRejectedValueOnce(permissionError)
+      .mockResolvedValueOnce(undefined);
+    vi.mocked(fsPromises.copyFile)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('copy failed'))
+      .mockRejectedValueOnce(new Error('restore failed'));
+
+    const outputPath = 'output.jsonl';
+    await expect(writeOutput(outputPath, new Eval({}), null)).rejects.toThrow(
+      `Backup retained at ${JSONL_BACKUP_PATH}`,
+    );
+
+    expect(fsPromises.rm).not.toHaveBeenCalledWith(JSONL_TEMP_DIRECTORY, {
+      recursive: true,
+      force: true,
+    });
   });
 
   it('preserves the existing output file permissions across the atomic JSONL rewrite', async () => {
@@ -1140,8 +1682,8 @@ describe('writeOutput', () => {
 
     // The temp file is chmod'd to the destination's prior mode before the rename, so a
     // restricted (0600) reused path is not silently widened to the umask default.
-    expect(fsPromises.chmod).toHaveBeenCalledWith(expect.stringContaining(outputPath), 0o600);
-    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringContaining(outputPath), outputPath);
+    expect(fsPromises.chmod).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), 0o600);
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), outputPath);
   });
 
   it('skips the chmod when the JSONL output file does not yet exist', async () => {
@@ -1154,7 +1696,7 @@ describe('writeOutput', () => {
     await expect(writeOutput(outputPath, eval_, null)).resolves.toBeUndefined();
 
     expect(fsPromises.chmod).not.toHaveBeenCalled();
-    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringContaining(outputPath), outputPath);
+    expect(fsPromises.rename).toHaveBeenCalledWith(expect.stringMatching(/\.tmp$/), outputPath);
   });
 
   it('keeps newly streamed retry rows ahead of stale persisted rows after a save failure', async () => {
@@ -1253,6 +1795,40 @@ describe('writeOutput', () => {
     await writeMultipleOutputs(outputPath, eval_, null);
 
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits for every output write before rejecting', async () => {
+    let resolveSlowWrite: () => void;
+    const slowWrite = new Promise<void>((resolve) => {
+      resolveSlowWrite = resolve;
+    });
+    vi.mocked(fsPromises.writeFile).mockImplementation(async (outputPath) => {
+      if (outputPath === 'output.json') {
+        throw new Error('json write failed');
+      }
+      if (outputPath === 'output.txt') {
+        await slowWrite;
+      }
+    });
+
+    let settled = false;
+    const writePromise = writeMultipleOutputs(['output.json', 'output.txt'], new Eval({}), null);
+    void writePromise.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+
+    await vi.waitFor(() => {
+      expect(fsPromises.writeFile).toHaveBeenCalledTimes(2);
+    });
+    expect(settled).toBe(false);
+
+    resolveSlowWrite!();
+    await expect(writePromise).rejects.toThrow('One or more output writes failed');
   });
 
   it('writeOutput with HTML template escapes special characters', async () => {

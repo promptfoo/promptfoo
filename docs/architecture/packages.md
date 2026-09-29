@@ -43,6 +43,8 @@ leaf-safe surface. They currently own the dependency-free-or-`zod` subset that c
 `@promptfoo/schema` package:
 
 - shared token/input contracts
+- browser-safe common and user API DTOs
+- portable blob references and provider-neutral capability/result contracts
 - provider environment override schema
 - prompt contracts and prompt validation
 - transform contracts and shared transform validation
@@ -70,10 +72,46 @@ Mixed modules that do not yet have a stable package owner belong to
 `legacy-runtime`. This keeps migration debt visible. New checked source files
 must be assigned to a layer instead of silently becoming unclassified.
 
+`src/evaluator/runtime.ts` defines the evaluator's narrow runtime port. The
+`EvaluationStore` contract owns result append/read, prompt updates, resume lookup,
+comparison-result saves, and final evaluation persistence. The default
+`src/node/evaluationStore.ts` adapter maps that port to the existing `Eval` and
+`EvalResult` models, while `src/evaluator/inMemoryStore.ts` provides a
+dependency-light state implementation for embedded evaluators and focused tests.
+`src/node/evaluatorRuntime.ts` continues to own JSONL writer construction and
+resume append behavior. The evaluator orchestrates evaluation behavior without
+importing the concrete `Eval` model.
+
+`src/util/envFile.ts` owns plain `.env` file loading as a Node filesystem adapter.
+The imports from `src/envars.ts` and `src/server/server.ts` replace external
+`dotenv` calls at the same startup points; the edge baseline records these two
+internal dependencies. The loader imports only Node built-ins, so early loading
+does not initialize the logger, configuration state, or database. Keeping it
+separate from `setupEnv` preserves that initialization order without duplicating
+the parser across callers.
+
 The checker also resolves cross-layer source aliases such as `@promptfoo/*`.
 The browser-only `@app/*` alias stays inside the `app` layer. Alias spelling
 does not exempt a browser import from the same layer and path checks as a
 relative import.
+
+## DAG Progress Ratchets
+
+The architecture check also measures the layer dependency graph so it can move
+toward a directed acyclic graph without regressing:
+
+- `maxStronglyConnectedComponentSize` limits the size of the largest remaining
+  layer cycle.
+- `architecture/edge-baseline.json` limits every existing cross-layer edge to
+  its reviewed import count and rejects new edges.
+- `forbiddenDependencies` permanently locks layer pairs whose direct or
+  transitive dependency has been removed.
+- `tierOrder` lists every layer in the intended bottom-to-top topology so the
+  checker can report the remaining back-edges.
+
+After intentionally reducing or otherwise reviewing cross-layer coupling, run
+`npm run architecture:baseline` and include the baseline change in review. Do
+not refresh the baseline merely to make a newly introduced dependency pass.
 
 ## Browser Import Ratchet
 
@@ -98,3 +136,7 @@ npm run deps:ownership
 
 The report is intentionally descriptive for now. It gives us the evidence needed
 to move dependencies into future packages without guessing at ownership.
+
+It includes direct, optional, and peer dependency declarations. Peers marked
+optional in `peerDependenciesMeta` appear as `optional-peer`; other peers appear
+as `peer`. These labels describe the package contract, not what is installed.

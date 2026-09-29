@@ -1,6 +1,8 @@
 import {
+  COMMAND_ATTRIBUTE_KEYS,
   getFirstStringAttribute,
   getToolNameFromAttributes,
+  SEARCH_ATTRIBUTE_KEYS,
   TOOL_ARGUMENT_ATTRIBUTE_KEYS,
 } from '../tracing/toolAttributes';
 import { matchesPattern } from './traceUtils';
@@ -29,15 +31,6 @@ export interface TrajectoryStep {
   statusMessage?: string;
   type: TrajectoryStepType;
 }
-
-const COMMAND_ATTRIBUTE_KEYS = [
-  'codex.command',
-  'command',
-  'command.name',
-  'command_name',
-] as const;
-
-const SEARCH_ATTRIBUTE_KEYS = ['codex.search.query', 'search.query', 'search_query'] as const;
 
 const GENERIC_QUERY_ATTRIBUTE_KEYS = ['query'] as const;
 const DEFAULT_COMMAND_TOOL_NAMES = ['exec_command', 'local_shell', 'shell'] as const;

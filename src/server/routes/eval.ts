@@ -8,6 +8,14 @@ import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
+import {
+  ComparisonEvalNotFoundError,
+  evalTableToJson,
+  generateEvalCsv,
+  getEvalTableOutputPromptLocationsBySize,
+  getEvalTablePromptStrippedPayload,
+  mergeComparisonTables,
+} from '../../util/eval/evalTableUtils';
 import invariant from '../../util/invariant';
 import {
   redactAzureBlobSasTokens,
@@ -18,14 +26,6 @@ import { shouldShareResults } from '../../util/sharing';
 import { evalJobService } from '../services/evalJobService';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { replyValidationError, sendError } from '../utils/errors';
-import {
-  ComparisonEvalNotFoundError,
-  evalTableToJson,
-  generateEvalCsv,
-  getEvalTableOutputPromptLocationsBySize,
-  getEvalTablePromptStrippedPayload,
-  mergeComparisonTables,
-} from '../utils/evalTableUtils';
 import type { Request, Response } from 'express';
 
 import type {
@@ -144,6 +144,7 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
     evaluateOptions,
     sourceEvalId,
     providers: _validatedProviders,
+    basePath: _basePath,
     ...restData
   } = result.data;
   let testSuite = {
@@ -156,7 +157,10 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
     try {
       const sourceEval = await Eval.findById(sourceEvalId);
       if (sourceEval) {
-        testSuite = restoreAzureBlobSasTokens(testSuite, sourceEval.config);
+        testSuite = {
+          ...restoreAzureBlobSasTokens(testSuite, sourceEval.config),
+          ...(sourceEval.config.basePath !== undefined && { basePath: sourceEval.config.basePath }),
+        };
       }
     } catch (error) {
       sendError(res, 500, 'Failed to prepare eval job', error);

@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { propagation } from '@opentelemetry/api';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import { isLoggedIntoCloud } from '../../src/globalConfig/accounts';
@@ -498,48 +499,49 @@ describe('getRemoteGenerationUrlForUnaligned', () => {
 });
 
 describe('getRemoteGenerationHeaders', () => {
-  beforeEach(() => {
-    vi.stubEnv('PROMPTFOO_API_KEY', '');
-    vi.mocked(getEnvString).mockReturnValue('');
-    vi.mocked(readGlobalConfig).mockReturnValue({} as any);
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  it('adds a bearer token when cloud is enabled and there is no remote-generation override', () => {
-    vi.mocked(readGlobalConfig).mockReturnValue({
-      cloud: { apiKey: 'test-cloud-key', apiHost: 'https://onprem.example.com' },
-    } as any);
-
-    expect(getRemoteGenerationHeaders()).toMatchObject({
+  it('returns JSON headers without cloud credentials', () => {
+    expect(getRemoteGenerationHeaders()).toEqual({
       'Content-Type': 'application/json',
-      Authorization: 'Bearer test-cloud-key',
     });
-  });
-
-  it('does NOT add a token when PROMPTFOO_REMOTE_GENERATION_URL is set (self-hosted override)', () => {
-    vi.mocked(readGlobalConfig).mockReturnValue({
-      cloud: { apiKey: 'test-cloud-key' },
-    } as any);
-    vi.mocked(getEnvString).mockImplementation((key: string) =>
-      key === 'PROMPTFOO_REMOTE_GENERATION_URL' ? 'https://self-hosted.example.com/task' : '',
-    );
-
-    const headers = getRemoteGenerationHeaders();
-    expect(headers['Content-Type']).toBe('application/json');
-    expect(headers.Authorization).toBeUndefined();
-  });
-
-  it('does NOT add a token when cloud is not enabled', () => {
-    expect(getRemoteGenerationHeaders().Authorization).toBeUndefined();
   });
 
   it('preserves caller-supplied extra headers', () => {
-    expect(getRemoteGenerationHeaders({ 'X-Custom': 'value' })).toMatchObject({
+    expect(getRemoteGenerationHeaders({ 'X-Custom': 'value' })).toEqual({
       'Content-Type': 'application/json',
       'X-Custom': 'value',
     });
+  });
+
+  it('propagates W3C trace headers without forwarding baggage', () => {
+    const inject = vi.spyOn(propagation, 'inject').mockImplementation((_context, carrier) => {
+      const headers = carrier as Record<string, string>;
+      headers.traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+      headers.tracestate = 'vendor=state';
+      headers.baggage = 'customer-secret=do-not-forward';
+    });
+
+    try {
+      expect(getRemoteGenerationHeaders()).toEqual({
+        'Content-Type': 'application/json',
+        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        tracestate: 'vendor=state',
+      });
+    } finally {
+      inject.mockRestore();
+    }
+  });
+
+  it('preserves an explicitly supplied traceparent', () => {
+    const inject = vi.spyOn(propagation, 'inject').mockImplementation((_context, carrier) => {
+      (carrier as Record<string, string>).traceparent = 'automatically-injected';
+    });
+
+    try {
+      expect(getRemoteGenerationHeaders({ traceparent: 'explicit-parent' })).toMatchObject({
+        traceparent: 'explicit-parent',
+      });
+    } finally {
+      inject.mockRestore();
+    }
   });
 });

@@ -28,7 +28,7 @@ Under the hood, `llm-rubric` uses a model to evaluate the output based on the cr
 
 - **OpenAI API key**: `gpt-5`
 - **Codex/ChatGPT login**: `openai:codex-sdk` when the Codex SDK package is installed, Codex is signed in, and no higher-priority API credentials are set
-- **Anthropic API key**: `claude-sonnet-4-5-20250929`
+- **Anthropic API key**: `claude-sonnet-5`
 - **Google AI Studio API key**: `gemini-2.5-pro` (GEMINI_API_KEY, GOOGLE_API_KEY, or PALM_API_KEY)
 - **Google Vertex credentials**: `gemini-2.5-pro` (service account credentials)
 - **Mistral API key**: `mistral-large-latest`
@@ -64,6 +64,26 @@ assert:
 
       Anything funny enough to be on SNL should pass, otherwise fail.
 ```
+
+## Audio output
+
+To evaluate tone, pacing, or pronunciation, choose an audio-capable OpenAI Chat Completions grader. Promptfoo attaches the target provider's `response.audio` to the grading request:
+
+```yaml
+assert:
+  - type: llm-rubric
+    value: The speaker sounds calm and speaks at a steady pace.
+    provider:
+      id: openai:chat:gpt-audio-1.5
+      config:
+        modalities: [text]
+```
+
+`modalities: [text]` requests the grader's JSON result as text. The grader listens to the attached audio and uses the transcript as supporting context. This works with audio from [OpenAI Realtime](/docs/providers/openai#realtime-api-models), audio chat, text to speech, or a custom target provider that returns the same audio fields.
+
+The target must return inline base64 audio with `format: wav` or `format: mp3`, up to 20 MiB. Blob references and other formats produce a grading error. The built-in Realtime provider converts its default PCM16 output to WAV, including in persistent conversations; use `output_audio_format: pcm16` for grading. Text-only graders retain their existing behavior and evaluate the text output or transcript.
+
+An assertion with `transform` grades the transformed text and does not attach the original audio. Successful audio grades include `renderedGradingPromptAudio: true` in assertion metadata; `renderedGradingPrompt` contains the text prompt without the attached audio bytes.
 
 ## Using variables in the rubric
 
@@ -232,13 +252,13 @@ assert:
 assert:
   - type: llm-rubric
     # German: "Responds politely and helpfully. Provide reasoning in German."
-    value: "Antwortet höflich und hilfreich. Begründung auf Deutsch geben."
+    value: 'Antwortet höflich und hilfreich. Begründung auf Deutsch geben.'
 
 # Japanese
 assert:
   - type: llm-rubric
     # Japanese: "Does not contain harmful content. Please provide evaluation reasoning in Japanese."
-    value: "有害なコンテンツを含まない。評価理由は日本語で答えてください。"
+    value: '有害なコンテンツを含まない。評価理由は日本語で答えてください。'
 ```
 
 **Note:** Option 1 works with `llm-rubric`, `g-eval`, and `model-graded-closedqa`. For other assertion types like `factuality` or `context-recall`, create assertion-specific prompts that match their expected formats.
