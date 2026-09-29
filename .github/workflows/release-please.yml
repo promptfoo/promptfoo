@@ -134,15 +134,13 @@ jobs:
           retention-days: 7
 
   publish-npm:
-    # Keep trusted publishing in this workflow. This job executes no repository
-    # code or dependency install scripts; it only publishes the verified archive.
+    # Normal releases and backfills share an isolated OIDC publisher.
     if: >-
       ${{
         always() && !cancelled() &&
-        needs.release-please.outputs.release_created == 'true' &&
-        needs.build-npm.result == 'success'
+        (needs.build-npm.result == 'success' || needs.build-npm-backfill.result == 'success')
       }}
-    needs: [build-npm, release-please]
+    needs: [build-npm, build-npm-backfill, release-please]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -161,7 +159,7 @@ jobs:
           path: ${{ runner.temp }}/promptfoo-package
       - name: Publish verified npm package
         env:
-          EXPECTED_VERSION: ${{ needs.release-please.outputs.tag_name }}
+          EXPECTED_VERSION: ${{ needs.release-please.outputs.tag_name || inputs.tag_name }}
           # Neutralize setup-node's token placeholder so npm uses OIDC.
           NODE_AUTH_TOKEN: ''
           PACKAGE_DIR: ${{ runner.temp }}/promptfoo-package
@@ -281,62 +279,10 @@ jobs:
       - name: Upload verified npm package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: promptfoo-npm-backfill-package
+          name: promptfoo-npm-package
           path: ${{ steps.package-artifact.outputs.tarball }}
           if-no-files-found: error
           retention-days: 7
-
-  publish-npm-backfill:
-    # Keep trusted publishing in this workflow. This job executes no repository
-    # code or dependency install scripts; it only publishes the verified archive.
-    if: >-
-      ${{
-        always() && !cancelled() &&
-        github.event_name == 'workflow_dispatch' && inputs.tag_name != '' &&
-        needs.build-npm-backfill.result == 'success'
-      }}
-    needs: build-npm-backfill
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with:
-          # Includes npm 11 with trusted publishing support; no tool installation here.
-          node-version: '24.20.0'
-          registry-url: 'https://registry.npmjs.org'
-      - name: Download verified npm package
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: promptfoo-npm-backfill-package
-          path: ${{ runner.temp }}/promptfoo-package
-      - name: Publish verified npm package
-        env:
-          EXPECTED_VERSION: ${{ inputs.tag_name }}
-          # Neutralize setup-node's token placeholder so npm uses OIDC.
-          NODE_AUTH_TOKEN: ''
-          PACKAGE_DIR: ${{ runner.temp }}/promptfoo-package
-          REGISTRY_URL: https://registry.npmjs.org/
-        run: |
-          shopt -s nullglob
-          tarballs=("$PACKAGE_DIR"/*.tgz)
-          if [[ "${#tarballs[@]}" -ne 1 ]]; then
-            echo "::error::Expected exactly one verified npm tarball"
-            exit 1
-          fi
-          manifest_path="$RUNNER_TEMP/promptfoo-publish-manifest.json"
-          tar -xOf "${tarballs[0]}" package/package.json > "$manifest_path"
-          node - "$manifest_path" "$EXPECTED_VERSION" <<'NODE'
-          const fs = require('node:fs');
-          const [manifestPath, expectedVersion] = process.argv.slice(2);
-          const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-          if (manifest.name !== 'promptfoo' || manifest.version !== expectedVersion || manifest.publishConfig !== undefined) {
-            throw new Error('Downloaded artifact has unexpected publish metadata');
-          }
-          NODE
-          npm publish "${tarballs[0]}" --ignore-scripts --provenance --access public --registry="$REGISTRY_URL"
 
   docker:
     if: >-
