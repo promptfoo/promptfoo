@@ -13,6 +13,7 @@ import {
   maybeLoadFromExternalFileWithVars,
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadResponseSchemaFromExternalFileWithVars,
+  maybeLoadStructuredConfigFromExternalFileWithVars,
   maybeLoadToolsFromExternalFile,
   parsePathOrGlob,
   pathExists,
@@ -2156,6 +2157,48 @@ describe('file utilities', () => {
       vi.mocked(fsp.access).mockRejectedValueOnce(accessError);
 
       await expect(pathExists(path.join(tmpRoot, 'locked.txt'))).rejects.toBe(accessError);
+    });
+  });
+
+  describe('structured config file boundaries', () => {
+    beforeEach(() => vi.resetAllMocks());
+
+    it.each([
+      maybeLoadStructuredConfigFromExternalFileWithVars,
+      maybeLoadResponseSchemaFromExternalFileWithVars,
+      maybeLoadResponseFormatFromExternalFile,
+    ])('preserves inserted arrays through %s', (load) => {
+      const value = ['file://literal.json', '{{literal}}'];
+      for (const config of ['{{value}}', ['{{value}}'], [['{{value}}']]]) {
+        const result = load(config, { value, literal: 'replacement' });
+        expect(result).toEqual(
+          typeof config === 'string' ? value : Array.isArray(config[0]) ? [[value]] : [value],
+        );
+      }
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
+
+    it('preserves an inserted response-format schema array', () => {
+      const value = ['file://literal.json', '{{literal}}'];
+      expect(
+        maybeLoadResponseFormatFromExternalFile(
+          { type: 'json_schema', json_schema: { name: 'fixture', schema: '{{value}}' } },
+          { value, literal: 'replacement' },
+        ),
+      ).toEqual({ type: 'json_schema', json_schema: { name: 'fixture', schema: value } });
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
+
+    it('loads authored array file references while preserving inserted arrays', () => {
+      const value = ['file://literal.json'];
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue('{"type":"object"}');
+      expect(
+        maybeLoadStructuredConfigFromExternalFileWithVars(['file://authored.json', '{{value}}'], {
+          value,
+        }),
+      ).toEqual([{ type: 'object' }, value]);
+      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     });
   });
 

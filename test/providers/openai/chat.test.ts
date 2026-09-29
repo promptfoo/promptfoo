@@ -97,6 +97,65 @@ describe('OpenAI Provider', () => {
     });
 
     it.each([
+      { reported: 'ultrafast', cost: undefined },
+      { reported: undefined, cost: undefined },
+      { reported: 'default', cost: 0.003 },
+    ])(
+      'forwards Ultrafast and bills the actual tier $reported for GPT-6.1 Sol',
+      async ({ reported, cost }) => {
+        mockFetchWithCache.mockResolvedValue({
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          data: {
+            model: 'gpt-6.1-sol',
+            service_tier: reported,
+            choices: [{ message: { role: 'assistant', content: 'Ready.' } }],
+            usage: { prompt_tokens: 1000, completion_tokens: 100, total_tokens: 1100 },
+          },
+        });
+        const result = await new OpenAiChatCompletionProvider('gpt-6.1-sol', {
+          config: { service_tier: 'ultrafast', reasoning_effort: 'high' },
+        }).callApi('Say ready.');
+
+        const [, options] = mockFetchWithCache.mock.calls[0];
+        expect(JSON.parse(options?.body as string)).toMatchObject({
+          model: 'gpt-6.1-sol',
+          service_tier: 'ultrafast',
+          reasoning_effort: 'high',
+        });
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('Ready.');
+        if (cost === undefined) {
+          expect(result.cost).toBeUndefined();
+        } else {
+          expect(result.cost).toBeCloseTo(cost, 10);
+        }
+      },
+    );
+
+    it('surfaces a model or account rejection of Ultrafast from Chat Completions', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+        data: {
+          error: {
+            message: 'Ultrafast is unavailable for this model or account.',
+            type: 'invalid_request_error',
+            code: 'unsupported_value',
+            param: 'service_tier',
+          },
+        },
+      });
+      const result = await new OpenAiChatCompletionProvider('gpt-6.1-sol', {
+        config: { service_tier: 'ultrafast' },
+      }).callApi('Say ready.');
+      expect(result.error).toContain('Ultrafast is unavailable for this model or account.');
+      expect(result.output).toBeUndefined();
+    });
+
+    it.each([
       'gpt-live-transcribe',
       'gpt-live-transcribe-2026-09-01',
       'gpt-live-1',

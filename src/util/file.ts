@@ -484,20 +484,32 @@ export function maybeLoadFromExternalFileWithVars(
   return maybeLoadFromExternalFile(rendered);
 }
 
+function loadStructuredConfigFile(config: any, insertedValues: WeakSet<object>): any {
+  if (config && typeof config === 'object' && insertedValues.has(config)) {
+    return config;
+  }
+  if (Array.isArray(config)) {
+    return config.map((item) => loadStructuredConfigFile(item, insertedValues));
+  }
+  return maybeLoadFromExternalFile(config);
+}
+
 export function maybeLoadStructuredConfigFromExternalFileWithVars(
   config: any,
   vars?: Record<string, VarValue>,
 ): any {
-  const rendered = renderStructuredConfig(config, vars);
-  return maybeLoadFromExternalFile(rendered);
+  const insertedValues = new WeakSet<object>();
+  const rendered = renderStructuredConfig(config, vars, true, insertedValues);
+  return loadStructuredConfigFile(rendered, insertedValues);
 }
 
 export function maybeLoadResponseSchemaFromExternalFileWithVars(
   responseSchema: any,
   vars?: Record<string, VarValue>,
 ): any {
-  const rendered = renderStructuredConfig(responseSchema, vars);
-  const loaded = maybeLoadFromExternalFile(rendered);
+  const insertedValues = new WeakSet<object>();
+  const rendered = renderStructuredConfig(responseSchema, vars, true, insertedValues);
+  const loaded = loadStructuredConfigFile(rendered, insertedValues);
 
   // Render file contents once; inserted variable values must stay literal.
   if (typeof rendered === 'string' && rendered.startsWith('file://')) {
@@ -531,7 +543,7 @@ export function maybeLoadResponseFormatFromExternalFile(
   // First, render variables and load the outer response_format
   const insertedValues = new WeakSet<object>();
   const rendered = renderStructuredConfig(responseFormat, vars, true, insertedValues);
-  const loaded = maybeLoadFromExternalFile(rendered);
+  const loaded = loadStructuredConfigFile(rendered, insertedValues);
 
   if (
     !loaded ||
@@ -549,8 +561,10 @@ export function maybeLoadResponseFormatFromExternalFile(
     if (nestedSchema) {
       // Render file-loaded config, but preserve values already inserted from vars.
       const schemaForLoading =
-        typeof rendered === 'string' ? renderStructuredConfig(nestedSchema, vars) : nestedSchema;
-      const loadedSchema = maybeLoadFromExternalFile(schemaForLoading);
+        typeof rendered === 'string'
+          ? renderStructuredConfig(nestedSchema, vars, true, insertedValues)
+          : nestedSchema;
+      const loadedSchema = loadStructuredConfigFile(schemaForLoading, insertedValues);
 
       // Return with the loaded schema in place
       if (loaded.schema !== undefined) {
