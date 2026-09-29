@@ -513,7 +513,7 @@ describe('AwsBedrockConverseProvider', () => {
             },
           });
           mockSend.mockResolvedValueOnce(
-            createMockConverseResponse('', {
+            createMockConverseResponse('I will call the tool now.', {
               reasoningContent: 'Checking the tool.',
               toolUse: { id: 'tool-123', name, input },
               stopReason: 'tool_use',
@@ -543,6 +543,85 @@ describe('AwsBedrockConverseProvider', () => {
         }
       },
     );
+
+    it.each(['anthropic.claude-3-5-sonnet-20241022-v2:0', 'amazon.nova-pro-v1:0'])(
+      'keeps %s tool results parseable when the model includes a preamble',
+      async (model) => {
+        for (const useCallback of [false, true]) {
+          const provider = new AwsBedrockConverseProvider(model, {
+            config: {
+              region: 'us-east-1',
+              ...(useCallback
+                ? { functionToolCallbacks: { calculator: () => '{"answer":4}' } }
+                : {}),
+            },
+          });
+          mockSend.mockResolvedValueOnce(
+            createMockConverseResponse('I will call the tool now.', {
+              reasoningContent: 'Existing model reasoning.',
+              toolUse: { id: 'tool-123', name: 'calculator', input: { expression: '2+2' } },
+              stopReason: 'tool_use',
+            }),
+          );
+
+          const result = await provider.callApi('Use the calculator');
+
+          expect(JSON.parse(result.output as string)).toEqual(
+            useCallback
+              ? { answer: 4 }
+              : {
+                  type: 'tool_use',
+                  id: 'tool-123',
+                  name: 'calculator',
+                  input: { expression: '2+2' },
+                },
+          );
+        }
+      },
+    );
+
+    it.each([
+      { thinking: { type: 'disabled' } },
+      { additionalModelRequestFields: { thinking: { type: 'between_tools' } } },
+      { additionalModelRequestFields: { thinking: { type: 'disabled' } } },
+    ] as const)('uses normalized between_tools fields for progress: %j', async (config) => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-sonnet-5-5', {
+        config: { region: 'us-east-1', ...config },
+      });
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('I will call the tool now.', {
+          reasoningContent: 'Checking the tool.',
+          toolUse: { id: 'tool-123', name: 'calculator', input: {} },
+          stopReason: 'tool_use',
+        }),
+      );
+
+      const result = await provider.callApi('Use the calculator');
+
+      expect(result.output).toContain('Checking the tool.');
+      expect(result.output).not.toContain('I will call the tool now.');
+    });
+
+    it('keeps tool JSON intact when effort normalization removes between_tools', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-sonnet-5-5', {
+        config: {
+          region: 'us-east-1',
+          thinking: { type: 'between_tools' },
+          additionalModelRequestFields: { output_config: { effort: 'xhigh' } },
+        },
+      });
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('I will call the tool now.', {
+          reasoningContent: 'Adaptive reasoning.',
+          toolUse: { id: 'tool-123', name: 'calculator', input: {} },
+          stopReason: 'tool_use',
+        }),
+      );
+
+      const result = await provider.callApi('Use the calculator');
+
+      expect(JSON.parse(result.output as string)).toMatchObject({ type: 'tool_use' });
+    });
 
     it('should execute functionToolCallbacks when defined', async () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
@@ -1026,7 +1105,7 @@ describe('AwsBedrockConverseProvider', () => {
       expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', {});
       expect(localCallback).toHaveBeenCalledWith('{"expression":"2+2"}');
       // Both outputs are present in the combined response.
-      expect(result.output).toContain('Using the resource and calculator tools.');
+      expect(result.output).not.toContain('Using the resource and calculator tools.');
       expect(result.output).toContain('MCP Tool Result (list_resources)');
       expect(result.output).toContain('local result');
       expect(result.output).not.toContain('"type":"tool_use"');

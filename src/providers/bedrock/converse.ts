@@ -1157,6 +1157,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const toolsDisabled = this.isRequestToolsDisabled(context);
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
+    const betweenToolsThinking =
+      (additionalModelRequestFields as { thinking?: { type?: string } } | undefined)?.thinking
+        ?.type === 'between_tools';
     const performanceConfig = this.buildPerformanceConfig();
     const serviceTier = this.buildServiceTier();
 
@@ -1197,7 +1200,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       if (cachedResponse) {
         logger.debug('Returning cached response');
         const parsed = JSON.parse(cachedResponse as string) as ConverseCommandOutput;
-        const result = await this.parseResponse(parsed, toolsDisabled);
+        const result = await this.parseResponse(parsed, toolsDisabled, betweenToolsThinking);
         return { ...result, cached: true };
       }
     }
@@ -1247,7 +1250,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       hasMetrics: !!response.metrics,
     });
 
-    return await this.parseResponse(response, toolsDisabled);
+    return await this.parseResponse(response, toolsDisabled, betweenToolsThinking);
   }
 
   /**
@@ -1398,6 +1401,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   private async parseResponse(
     response: ConverseCommandOutput,
     toolsDisabled = false,
+    betweenToolsThinking = false,
   ): Promise<ProviderResponse> {
     // Extract output text
     const outputMessage = response.output?.message;
@@ -1576,12 +1580,14 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
 
     if (dispatchResults.length > 0) {
-      const nonToolOutput = extractTextFromContentBlocks(
-        content.filter((block) => !block.toolUse),
-        showThinking,
-      );
-      if (nonToolOutput) {
-        dispatchResults.unshift(nonToolOutput);
+      if (betweenToolsThinking) {
+        const progress = extractTextFromContentBlocks(
+          content.filter((block) => block.reasoningContent),
+          showThinking,
+        );
+        if (progress) {
+          dispatchResults.unshift(progress);
+        }
       }
       // Surface MCP failures via the response `error` field so downstream
       // consumers (assertions, exit codes, redteam grader) treat broken MCP
