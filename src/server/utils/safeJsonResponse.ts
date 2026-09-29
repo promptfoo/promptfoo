@@ -15,21 +15,12 @@ function isJsonSerializationLimitError(error: unknown): error is RangeError {
 }
 
 /**
- * Serialize a JSON response before applying success-only headers. V8
- * serialization-limit errors become a standard 413 response; other errors are
- * rethrown so callers do not lose useful failures.
- *
- * @param res - Express response to write to.
- * @param payload - Value to serialize and send.
- * @param options.beforeSend - Invoked immediately before a successful body is
- *   sent, so a 413 response does not inherit download headers.
- * @param options.evalId - Optional eval id included in the oversized-payload log.
- * @param options.logger - Optional logger used to warn when the 413 guard fires.
- * @param options.tooLargeMessage - Client-facing message for the 413 response.
+ * Serialize with Express's JSON settings before applying success-only headers.
+ * Engine limits return 413; other serialization errors propagate.
  */
-export function sendJsonResponse<T>(
+export function sendJsonResponse(
   res: Response,
-  payload: T,
+  payload: unknown,
   {
     beforeSend,
     evalId,
@@ -44,7 +35,13 @@ export function sendJsonResponse<T>(
 ): void {
   let body: string | undefined;
   try {
-    body = JSON.stringify(payload);
+    body = JSON.stringify(payload, res.app.get('json replacer'), res.app.get('json spaces'));
+    if (res.app.get('json escape') && typeof body === 'string') {
+      body = body.replace(
+        /[<>&]/g,
+        (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`,
+      );
+    }
   } catch (error) {
     if (!isJsonSerializationLimitError(error)) {
       throw error;

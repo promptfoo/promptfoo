@@ -1,22 +1,18 @@
-# openai-chat-history (Openai Chat History)
+# openai-chat-history (OpenAI Conversation History)
 
-You can run this example with:
+This example sends a conversation history and three follow-up questions to GPT-6 Luna. `prompt.json` combines the system message, earlier user and assistant messages, and the current question.
+
+## Usage
 
 ```bash
 npx promptfoo@latest init --example openai-chat-history
 cd openai-chat-history
+export OPENAI_API_KEY=your-key-here
+npx promptfoo@latest eval --no-cache
 ```
 
-## Usage
-
-To get started, set your OPENAI_API_KEY environment variable.
-
-Next, have a look at prompt.json and edit promptfooconfig.yaml.
-
-Then run:
+Edit `previous_messages` in `promptfooconfig.yaml` to test a different conversation. The example has no assertions; compare the responses with:
 
 ```bash
-promptfoo eval
+npx promptfoo@latest view
 ```
-
-Afterwards, you can view the results by running `promptfoo view`

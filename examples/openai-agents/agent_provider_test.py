@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 
+import asyncio
 import importlib.util
 import sys
 import types
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Generic, TypeVar
 
 EXAMPLE_DIR = Path(__file__).resolve().parent
 MODULE_PATH = EXAMPLE_DIR / "agent_provider.py"
+T = TypeVar("T")
+THIRD_PARTY_LOOKUP_ERROR = {
+    "error": "Unable to look up a third-party booking. The passenger must contact support directly."
+}
 
 
 def load_agent_provider():
@@ -21,7 +27,7 @@ def load_agent_provider():
     sandbox_unix_local_module = types.ModuleType("agents.sandbox.sandboxes.unix_local")
     tracing_module = types.ModuleType("promptfoo_tracing")
 
-    class Agent:
+    class Agent(Generic[T]):
         def __init__(self, *_, name=None, handoffs=None, **kwargs):
             self.name = name or "Agent"
             self.handoffs = list(handoffs or [])
@@ -32,11 +38,7 @@ def load_agent_provider():
         def text_message_output(item):
             return getattr(item, "text", "")
 
-    class ModelSettings:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-    class RunContextWrapper:
+    class RunContextWrapper(Generic[T]):
         def __init__(self, context):
             self.context = context
 
@@ -45,69 +47,16 @@ def load_agent_provider():
         def run_sync(*args, **kwargs):
             raise AssertionError("Runner.run_sync should not be called in these tests")
 
-    class ShellCallOutcome:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-    class ShellCommandOutput:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-    class ShellCommandRequest:
-        pass
-
-    class ShellResult:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-    class ShellTool:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-    class SQLiteSession:
-        def __init__(self, *args, **kwargs):
-            self.args = args
-            self.kwargs = kwargs
-
-    class RunConfig:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-    class SandboxRunConfig:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-    class Manifest:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-            self.entries = kwargs.get("entries", {})
-
     class SandboxAgent(Agent):
         def __init__(self, *args, default_manifest=None, **kwargs):
             super().__init__(*args, **kwargs)
             self.default_manifest = default_manifest
 
-    class File:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-            self.content = kwargs.get("content")
-
     class UnixLocalSandboxClient:
         pass
 
-    def function_tool(*decorator_args, **decorator_kwargs):
-        if (
-            decorator_args
-            and callable(decorator_args[0])
-            and len(decorator_args) == 1
-            and not decorator_kwargs
-        ):
-            return decorator_args[0]
-
-        def decorator(func):
-            return func
-
-        return decorator
+    def function_tool(**kwargs):
+        return lambda func: func
 
     def handoff(agent, **kwargs):
         return agent
@@ -127,27 +76,27 @@ def load_agent_provider():
 
     agents_module.Agent = Agent
     agents_module.ItemHelpers = ItemHelpers
-    agents_module.ModelSettings = ModelSettings
+    agents_module.ModelSettings = types.SimpleNamespace
     agents_module.RunContextWrapper = RunContextWrapper
     agents_module.Runner = Runner
-    agents_module.ShellCallOutcome = ShellCallOutcome
-    agents_module.ShellCommandOutput = ShellCommandOutput
-    agents_module.ShellCommandRequest = ShellCommandRequest
-    agents_module.ShellResult = ShellResult
-    agents_module.ShellTool = ShellTool
+    agents_module.ShellCallOutcome = types.SimpleNamespace
+    agents_module.ShellCommandOutput = types.SimpleNamespace
+    agents_module.ShellCommandRequest = types.SimpleNamespace
+    agents_module.ShellResult = types.SimpleNamespace
+    agents_module.ShellTool = types.SimpleNamespace
     agents_module.ShellToolLocalSkill = dict
-    agents_module.SQLiteSession = SQLiteSession
+    agents_module.SQLiteSession = types.SimpleNamespace
     agents_module.function_tool = function_tool
     agents_module.handoff = handoff
     agents_module.trace = trace
 
-    run_module.RunConfig = RunConfig
+    run_module.RunConfig = types.SimpleNamespace
 
-    sandbox_module.Manifest = Manifest
+    sandbox_module.Manifest = types.SimpleNamespace
     sandbox_module.SandboxAgent = SandboxAgent
-    sandbox_module.SandboxRunConfig = SandboxRunConfig
+    sandbox_module.SandboxRunConfig = types.SimpleNamespace
 
-    sandbox_entries_module.File = File
+    sandbox_entries_module.File = types.SimpleNamespace
     sandbox_unix_local_module.UnixLocalSandboxClient = UnixLocalSandboxClient
 
     items_module.HandoffOutputItem = HandoffOutputItem
@@ -180,7 +129,9 @@ AGENT_PROVIDER = load_agent_provider()
 
 class AgentProviderTests(unittest.TestCase):
     def test_update_seat_requires_prior_lookup(self):
-        context = AGENT_PROVIDER.AirlineContext()
+        context = AGENT_PROVIDER.AirlineContext(
+            authenticated_passenger_name="Ada Lovelace"
+        )
         wrapper = AGENT_PROVIDER.RunContextWrapper(context)
 
         result = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
@@ -189,8 +140,60 @@ class AgentProviderTests(unittest.TestCase):
         self.assertIsNone(context.seat_number)
         self.assertIsNone(context.verified_confirmation_number)
 
+    def test_update_seat_requires_valid_seat(self):
+        context = AGENT_PROVIDER.AirlineContext(
+            authenticated_passenger_name="Ada Lovelace"
+        )
+        wrapper = AGENT_PROVIDER.RunContextWrapper(context)
+
+        AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
+        invalid_seat = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "FIRST CLASS")
+
+        self.assertIn("valid seat number", invalid_seat)
+        self.assertEqual(context.seat_number, "12A")
+
+    def test_skill_shell_executor_rejects_unapproved_commands(self):
+        request = AGENT_PROVIDER.ShellCommandRequest()
+        request.data = types.SimpleNamespace(
+            action=types.SimpleNamespace(
+                commands=["echo hello", "'", ""], timeout_ms=None
+            )
+        )
+
+        result = asyncio.run(AGENT_PROVIDER.SkillShellExecutor(EXAMPLE_DIR)(request))
+
+        self.assertEqual(len(result.output), 3)
+        for output in result.output:
+            self.assertEqual(output.outcome.exit_code, 126)
+            self.assertEqual(output.stderr, "Command is not allowed by this skill")
+
+    def test_skill_shell_executor_runs_bundled_workflow(self):
+        request = AGENT_PROVIDER.ShellCommandRequest()
+        request.data = types.SimpleNamespace(
+            action=types.SimpleNamespace(
+                commands=[
+                    "cat skills/discount-review/SKILL.md",
+                    "python3 skills/discount-review/scripts/analyze_discount_policy.py skill_fixture/repo",
+                    "cat skill_fixture/repo/src/discount_policy.py",
+                ],
+                timeout_ms=5000,
+            )
+        )
+
+        result = asyncio.run(AGENT_PROVIDER.SkillShellExecutor(EXAMPLE_DIR)(request))
+
+        self.assertEqual(len(result.output), 3)
+        for output in result.output:
+            self.assertEqual(output.outcome.exit_code, 0)
+            self.assertEqual(output.stderr, "")
+        self.assertIn("discount-review", result.output[0].stdout)
+        self.assertIn("TICKET-014", result.output[1].stdout)
+        self.assertIn("def requires_manager_review", result.output[2].stdout)
+
     def test_lookup_then_update_succeeds(self):
-        context = AGENT_PROVIDER.AirlineContext()
+        context = AGENT_PROVIDER._build_context(
+            {"authenticated_passenger_name": "Ada Lovelace"}
+        )
         wrapper = AGENT_PROVIDER.RunContextWrapper(context)
 
         AGENT_PROVIDER._hydrate_context_from_step(
@@ -198,7 +201,7 @@ class AgentProviderTests(unittest.TestCase):
             context,
         )
         lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "abc123")
-        update = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
+        update = AGENT_PROVIDER.update_seat(wrapper, "ABC123", " 16f ")
 
         self.assertEqual(context.user_passenger_name, "Ada Lovelace")
         self.assertEqual(lookup["seat_number"], "12A")
@@ -217,15 +220,7 @@ class AgentProviderTests(unittest.TestCase):
         lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
         result = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
 
-        self.assertEqual(
-            lookup,
-            {
-                "error": (
-                    "Unable to look up a third-party booking. The passenger must "
-                    "contact support directly."
-                )
-            },
-        )
+        self.assertEqual(lookup, THIRD_PARTY_LOOKUP_ERROR)
         self.assertIn("third-party booking", result)
         self.assertIsNone(context.seat_number)
         self.assertEqual(context.third_party_confirmation_number, "ABC123")
@@ -248,15 +243,7 @@ class AgentProviderTests(unittest.TestCase):
         lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
         result = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
 
-        self.assertEqual(
-            lookup,
-            {
-                "error": (
-                    "Unable to look up a third-party booking. The passenger must "
-                    "contact support directly."
-                )
-            },
-        )
+        self.assertEqual(lookup, THIRD_PARTY_LOOKUP_ERROR)
         self.assertIn("third-party booking", result)
         self.assertFalse(context.pending_third_party_booking_change)
         self.assertEqual(context.third_party_confirmation_number, "ABC123")
@@ -295,15 +282,7 @@ class AgentProviderTests(unittest.TestCase):
         lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "ZZZ999")
         result = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
 
-        self.assertEqual(
-            lookup,
-            {
-                "error": (
-                    "Unable to look up a third-party booking. The passenger must "
-                    "contact support directly."
-                )
-            },
-        )
+        self.assertEqual(lookup, THIRD_PARTY_LOOKUP_ERROR)
         self.assertIn("third-party booking", result)
         self.assertTrue(context.pending_third_party_booking_change)
         self.assertIsNone(context.confirmation_number)
@@ -336,15 +315,7 @@ class AgentProviderTests(unittest.TestCase):
         lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "XYZ789")
         result = AGENT_PROVIDER.update_seat(wrapper, "XYZ789", "18A")
 
-        self.assertEqual(
-            lookup,
-            {
-                "error": (
-                    "Unable to look up a third-party booking. The passenger must "
-                    "contact support directly."
-                )
-            },
-        )
+        self.assertEqual(lookup, THIRD_PARTY_LOOKUP_ERROR)
         self.assertIn("third-party booking", result)
         self.assertFalse(context.pending_third_party_booking_change)
         self.assertEqual(context.third_party_confirmation_number, "XYZ789")
@@ -369,15 +340,7 @@ class AgentProviderTests(unittest.TestCase):
         lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "XYZ789")
         result = AGENT_PROVIDER.update_seat(wrapper, "XYZ789", "18A")
 
-        self.assertEqual(
-            lookup,
-            {
-                "error": (
-                    "Unable to look up a third-party booking. The passenger must "
-                    "contact support directly."
-                )
-            },
-        )
+        self.assertEqual(lookup, THIRD_PARTY_LOOKUP_ERROR)
         self.assertIn("third-party booking", result)
         self.assertEqual(context.third_party_confirmation_number, "XYZ789")
         self.assertIsNone(context.passenger_name)
@@ -385,7 +348,9 @@ class AgentProviderTests(unittest.TestCase):
         self.assertIsNone(context.verified_confirmation_number)
 
     def test_first_party_claim_after_third_party_refusal_resets_block(self):
-        context = AGENT_PROVIDER.AirlineContext()
+        context = AGENT_PROVIDER.AirlineContext(
+            authenticated_passenger_name="Ada Lovelace"
+        )
         wrapper = AGENT_PROVIDER.RunContextWrapper(context)
 
         AGENT_PROVIDER._hydrate_context_from_step(
@@ -406,15 +371,7 @@ class AgentProviderTests(unittest.TestCase):
         lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
         result = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
 
-        self.assertEqual(
-            blocked_lookup,
-            {
-                "error": (
-                    "Unable to look up a third-party booking. The passenger must "
-                    "contact support directly."
-                )
-            },
-        )
+        self.assertEqual(blocked_lookup, THIRD_PARTY_LOOKUP_ERROR)
         self.assertIsNone(context.third_party_confirmation_number)
         self.assertFalse(context.pending_third_party_booking_change)
         self.assertEqual(context.user_passenger_name, "Ada Lovelace")
@@ -425,7 +382,9 @@ class AgentProviderTests(unittest.TestCase):
         self.assertEqual(context.verified_confirmation_number, "ABC123")
 
     def test_first_party_claim_resets_pending_third_party_intent(self):
-        context = AGENT_PROVIDER.AirlineContext()
+        context = AGENT_PROVIDER.AirlineContext(
+            authenticated_passenger_name="Ada Lovelace"
+        )
         wrapper = AGENT_PROVIDER.RunContextWrapper(context)
 
         AGENT_PROVIDER._hydrate_context_from_step(
@@ -449,25 +408,34 @@ class AgentProviderTests(unittest.TestCase):
         self.assertEqual(context.seat_number, "16F")
         self.assertEqual(context.verified_confirmation_number, "ABC123")
 
-    def test_update_seat_refuses_mismatched_claimed_passenger(self):
-        context = AGENT_PROVIDER.AirlineContext()
+    def test_update_seat_requires_matching_authenticated_passenger(self):
+        for identity in (None, "", "   ", "Grace Hopper"):
+            with self.subTest(identity=identity):
+                context = AGENT_PROVIDER._build_context(
+                    {"authenticated_passenger_name": identity}
+                )
+                wrapper = AGENT_PROVIDER.RunContextWrapper(context)
+                AGENT_PROVIDER._hydrate_context_from_step(
+                    "My name is Ada Lovelace and my confirmation number is ABC123.",
+                    context,
+                )
+                AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
+                result = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
+
+                self.assertIn("Authenticate as the reservation's passenger", result)
+                self.assertEqual(context.user_passenger_name, "Ada Lovelace")
+                self.assertEqual(context.authenticated_passenger_name, identity)
+                self.assertEqual(context.seat_number, "12A")
+
+    def test_repeating_same_confirmation_preserves_updated_seat(self):
+        context = AGENT_PROVIDER.AirlineContext(
+            authenticated_passenger_name="Ada Lovelace"
+        )
         wrapper = AGENT_PROVIDER.RunContextWrapper(context)
 
         AGENT_PROVIDER._hydrate_context_from_step(
-            "My name is Mallory Vale and my confirmation number is ABC123.",
-            context,
+            "My name is Ada Lovelace and my confirmation number is ABC123.", context
         )
-        AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
-        result = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
-
-        self.assertIn("different passenger", result)
-        self.assertEqual(context.user_passenger_name, "Mallory Vale")
-        self.assertEqual(context.seat_number, "12A")
-
-    def test_repeating_same_confirmation_preserves_updated_seat(self):
-        context = AGENT_PROVIDER.AirlineContext()
-        wrapper = AGENT_PROVIDER.RunContextWrapper(context)
-
         AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
         AGENT_PROVIDER.update_seat(wrapper, "ABC123", "14D")
         AGENT_PROVIDER._hydrate_context_from_step(
@@ -478,11 +446,14 @@ class AgentProviderTests(unittest.TestCase):
         self.assertEqual(context.verified_confirmation_number, "ABC123")
 
     def test_switching_confirmation_clears_verification(self):
-        context = AGENT_PROVIDER.AirlineContext()
+        context = AGENT_PROVIDER.AirlineContext(
+            authenticated_passenger_name="Ada Lovelace"
+        )
         wrapper = AGENT_PROVIDER.RunContextWrapper(context)
 
         AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
         AGENT_PROVIDER.update_seat(wrapper, "ABC123", "14D")
+        self.assertEqual(context.seat_number, "14D")
         AGENT_PROVIDER._hydrate_context_from_step(
             "My confirmation number is XYZ789.", context
         )
@@ -492,11 +463,14 @@ class AgentProviderTests(unittest.TestCase):
         self.assertIsNone(context.verified_confirmation_number)
 
     def test_switching_to_unknown_confirmation_clears_stale_booking_fields(self):
-        context = AGENT_PROVIDER.AirlineContext()
+        context = AGENT_PROVIDER.AirlineContext(
+            authenticated_passenger_name="Ada Lovelace"
+        )
         wrapper = AGENT_PROVIDER.RunContextWrapper(context)
 
         AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
         AGENT_PROVIDER.update_seat(wrapper, "ABC123", "14D")
+        self.assertEqual(context.seat_number, "14D")
         AGENT_PROVIDER._hydrate_context_from_step(
             "My confirmation number is ZZZ999.", context
         )
@@ -620,7 +594,7 @@ class AgentProviderTests(unittest.TestCase):
             manifest.entries["AGENTS.md"].content,
         )
         self.assertEqual(
-            manifest.kwargs["environment"]["value"]["PATH"],
+            manifest.environment["value"]["PATH"],
             "bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
         )
         self.assertIn(
@@ -634,9 +608,7 @@ class AgentProviderTests(unittest.TestCase):
         self.assertEqual(agent.name, "Sandbox Workspace Analyst")
         self.assertIn("repo/task.md", agent.default_manifest.entries)
         self.assertIn("repo/src/discount_policy.py", agent.default_manifest.entries)
-        self.assertEqual(
-            agent.kwargs["model_settings"].kwargs["tool_choice"], "required"
-        )
+        self.assertEqual(agent.kwargs["model_settings"].tool_choice, "required")
 
     def test_discount_review_skill_points_at_bundled_skill(self):
         skill = AGENT_PROVIDER._build_discount_review_skill()
@@ -649,13 +621,13 @@ class AgentProviderTests(unittest.TestCase):
 
         self.assertEqual(agent.name, "Local Skill Analyst")
         self.assertEqual(
-            agent.kwargs["model_settings"].kwargs["tool_choice"],
+            agent.kwargs["model_settings"].tool_choice,
             "required",
         )
         shell_tool = agent.kwargs["tools"][0]
-        self.assertEqual(shell_tool.kwargs["environment"]["type"], "local")
+        self.assertEqual(shell_tool.environment["type"], "local")
         self.assertEqual(
-            shell_tool.kwargs["environment"]["skills"][0]["name"],
+            shell_tool.environment["skills"][0]["name"],
             "discount-review",
         )
 

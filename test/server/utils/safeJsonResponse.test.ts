@@ -1,9 +1,12 @@
+import express from 'express';
+import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sendJsonResponse } from '../../../src/server/utils/safeJsonResponse';
 import type { Response } from 'express';
 
 function createMockResponse() {
   const res = {
+    app: express(),
     statusCode: 200,
     body: undefined as unknown,
     contentType: undefined as string | undefined,
@@ -28,11 +31,7 @@ function createMockResponse() {
   return res;
 }
 
-/**
- * A payload whose `toJSON` throws the exact V8 RangeError we care about, so that
- * `JSON.stringify(payload)` reproduces the issue #7649 failure deterministically
- * without allocating a ~512MB string.
- */
+// Exercise the engine-limit path without allocating a large string.
 function oversizedPayload(message = 'Invalid string length') {
   return {
     toJSON() {
@@ -67,12 +66,10 @@ describe('sendJsonResponse', () => {
     const res = createMockResponse();
     const calls: string[] = [];
     const beforeSend = vi.fn(() => calls.push('beforeSend'));
-    (res.send as unknown as { mockImplementation: (fn: () => void) => void }).mockImplementation(
-      () => {
-        calls.push('send');
-        return res;
-      },
-    );
+    res.send.mockImplementation(() => {
+      calls.push('send');
+      return res;
+    });
 
     sendJsonResponse(res as unknown as Response, { ok: true }, { beforeSend });
 
@@ -88,6 +85,47 @@ describe('sendJsonResponse', () => {
     expect(res.send).toHaveBeenCalledWith(undefined);
     expect(res.contentType).toBe('application/json');
     expect(res.statusCode).toBe(200);
+  });
+
+  it.each([
+    (_key: string, value: unknown) => (value === 'omit this field' ? undefined : value),
+    ['visible', 'nested'],
+  ])('matches Express JSON settings on the wire for replacer %s', async (replacer) => {
+    const app = express();
+    const payload = {
+      visible: '<&>',
+      hidden: 'omit this field',
+      nested: { visible: 'kept', hidden: 'omit this field' },
+    };
+    app.set('json replacer', replacer);
+    app.set('json spaces', 2);
+    app.set('json escape', true);
+    app.get('/native', (_req, res) => res.json(payload));
+    app.get('/guarded', (_req, res) => sendJsonResponse(res, payload));
+
+    const native = await request(app).get('/native');
+    const guarded = await request(app).get('/guarded');
+
+    expect(guarded.status).toBe(200);
+    expect(guarded.text).toBe(native.text);
+    expect(guarded.text).not.toContain('omit this field');
+    expect(guarded.text).toContain('\\u003c\\u0026\\u003e');
+    expect(guarded.text).toContain('\n  "visible"');
+    expect(guarded.headers['content-type']).toBe(native.headers['content-type']);
+    expect(guarded.headers['content-length']).toBe(native.headers['content-length']);
+  });
+
+  it('matches the native empty response for an undefined payload', async () => {
+    const app = express();
+    app.get('/native', (_req, res) => res.json(undefined));
+    app.get('/guarded', (_req, res) => sendJsonResponse(res, undefined));
+
+    const native = await request(app).get('/native');
+    const guarded = await request(app).get('/guarded');
+
+    expect(guarded.status).toBe(native.status);
+    expect(guarded.text).toBe(native.text);
+    expect(guarded.headers['content-type']).toBe(native.headers['content-type']);
   });
 
   it('returns HTTP 413 with a clear error instead of throwing for oversized payloads (#7649)', () => {
