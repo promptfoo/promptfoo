@@ -25,7 +25,16 @@ describe('METEOR through the built CLI', () => {
     const output = path.join(outputDir, 'results.json');
     const result = spawnSync(
       process.execPath,
-      [cli, 'eval', '-c', 'test/smoke/fixtures/configs/meteor.yaml', '--no-cache', '-o', output],
+      [
+        cli,
+        'eval',
+        '-c',
+        'test/smoke/fixtures/configs/meteor.yaml',
+        '--no-cache',
+        '--no-share',
+        '-o',
+        output,
+      ],
       {
         cwd: root,
         encoding: 'utf8',
