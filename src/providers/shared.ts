@@ -39,6 +39,11 @@ export function withResponseCacheMetadata<T extends ProviderResponse | ProviderE
   };
 }
 
+/** Returns the complete model suffix after the given number of provider/type segments. */
+export function modelNameFromProviderPath(providerPath: string, segments: number): string {
+  return providerPath.split(':').slice(segments).join(':');
+}
+
 /**
  * The default timeout for API requests in milliseconds.
  */
@@ -46,10 +51,24 @@ export function getRequestTimeoutMs(): number {
   return getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
 }
 
-/** Preserve the transport deadline while also honoring caller cancellation. */
-export function getRequestSignal(abortSignal?: AbortSignal): AbortSignal {
-  const timeoutSignal = AbortSignal.timeout(getRequestTimeoutMs());
-  return abortSignal ? AbortSignal.any([abortSignal, timeoutSignal]) : timeoutSignal;
+/** Read a simple eval variable without evaluating template expressions. */
+export function resolveDirectTestVariable(value: unknown, vars?: Record<string, unknown>): unknown {
+  if (typeof value !== 'string' || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return value;
+  }
+  const variable = /^\{\{\s*([A-Za-z_]\w*)\s*\}\}$/.exec(value)?.[1];
+  return variable && vars && Object.prototype.hasOwnProperty.call(vars, variable)
+    ? vars[variable]
+    : value;
+}
+
+/** Match OpenAI-compatible output-limit environment precedence. */
+export function getOpenAIChatOutputLimitFromEnv(): number | undefined {
+  return getOpenAICompletionTokenLimitFromEnv() ?? getEnvInt('OPENAI_MAX_TOKENS');
+}
+
+export function getOpenAICompletionTokenLimitFromEnv(): number | undefined {
+  return getEnvInt('OPENAI_MAX_COMPLETION_TOKENS');
 }
 
 /**
@@ -526,32 +545,4 @@ export function transformTools(tools: unknown, format: ToolFormat): unknown {
     default:
       return tools;
   }
-}
-
-/** Stop waiting for provider work without cancelling another caller's shared work.
- * Also pass the signal to transports that support native cancellation. */
-export function awaitProviderOperation<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {
-  if (!signal) {
-    return operation;
-  }
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => {
-      signal.removeEventListener('abort', onAbort);
-      reject(signal.reason);
-    };
-    signal.addEventListener('abort', onAbort, { once: true });
-    operation.then(
-      (value) => {
-        signal.removeEventListener('abort', onAbort);
-        resolve(value);
-      },
-      (error) => {
-        signal.removeEventListener('abort', onAbort);
-        reject(error);
-      },
-    );
-    if (signal.aborted) {
-      onAbort();
-    }
-  });
 }

@@ -96,6 +96,8 @@ assert:
 
 The `not-classifier` type inverts the result of the classifier. In this case, the starpii model is trained to detect PII, but we want to assert that the LLM output is _not_ PII. So, we invert the classifier to accept values that are _not_ PII.
 
+Provider errors and empty classification results fail both `classifier` and `not-classifier` with a score of `0`. They are grader failures, so negation does not turn them into passes, even when `value` specifies a label.
+
 ## Prompt injection example
 
 This assertion uses a [fine-tuned deberta-v3-base model](https://huggingface.co/protectai/deberta-v3-base-prompt-injection) to detect prompt injections.

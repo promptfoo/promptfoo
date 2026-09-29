@@ -96,7 +96,7 @@ describe('matchesModeration', () => {
   });
 
   it.each([false, true])(
-    'forwards traced context with optional cancellation, signal=%s',
+    'preserves traced context and call arity, signal=%s',
     async (withSignal) => {
       setTestEnv({ OPENAI_API_KEY: 'test-key' });
       const abortSignal = withSignal ? new AbortController().signal : undefined;
@@ -131,8 +131,7 @@ describe('matchesModeration', () => {
       expect(call.mock.calls[0]).toEqual([
         'test prompt',
         'test response',
-        tracedContext,
-        abortSignal ? { abortSignal } : undefined,
+        ...(abortSignal ? [tracedContext, { abortSignal }] : []),
       ]);
     },
   );

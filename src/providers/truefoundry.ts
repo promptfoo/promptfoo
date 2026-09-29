@@ -1,12 +1,12 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { isGpt6Model } from './openai/gpt6';
 
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
-  ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
@@ -212,7 +212,7 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
   }
 
   /**
-   * Override isReasoningModel to correctly detect GPT-5 and other reasoning models
+   * Override isReasoningModel to correctly detect OpenAI reasoning models
    * despite TrueFoundry's provider-account/model-name format
    */
   protected isReasoningModel(): boolean {
@@ -222,7 +222,8 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
       actualModelName.startsWith('o1') ||
       actualModelName.startsWith('o3') ||
       actualModelName.startsWith('o4') ||
-      actualModelName.startsWith('gpt-5')
+      actualModelName.startsWith('gpt-5') ||
+      isGpt6Model(actualModelName)
     );
   }
 
@@ -330,11 +331,7 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
   /**
    * Override callEmbeddingApi to add TrueFoundry-specific headers
    */
-  async callEmbeddingApi(
-    text: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(...args: Parameters<OpenAiEmbeddingProvider['callEmbeddingApi']>) {
     const tfConfig = this.config as TrueFoundryCompletionOptions;
 
     // Add TrueFoundry-specific headers
@@ -356,7 +353,7 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
 
     try {
       // Call parent implementation
-      return await super.callEmbeddingApi(text, context, options);
+      return await super.callEmbeddingApi(...args);
     } finally {
       // Restore original headers
       this.config.headers = originalHeaders;

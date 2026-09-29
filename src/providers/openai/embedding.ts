@@ -36,7 +36,6 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
-    options?.abortSignal?.throwIfAborted();
     // Validate API key first (like chat provider)
     if (this.requiresApiKey() && !this.getApiKey()) {
       return {
@@ -70,13 +69,13 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
         appendOpenAiApiPath(this.getApiUrl(), 'embeddings'),
         {
           method: 'POST',
-          signal: options?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
             ...this.getOpenAiRequestHeaders(),
           },
           body: JSON.stringify(body),
+          ...(options?.abortSignal && { signal: options.abortSignal }),
         },
         getRequestTimeoutMs(),
         'json',

@@ -14,10 +14,7 @@ import type {
  * Extract user-facing metadata from response data.
  * Only includes fields that are useful for users viewing eval results.
  */
-function extractMetadata(
-  data: any,
-  processedOutput: Pick<ProcessedOutput, 'annotations'> = {},
-): Record<string, any> {
+function extractMetadata(data: any, processedOutput: ProcessedOutput): Record<string, any> {
   const metadata: Record<string, any> = {};
 
   // Response ID - for linking to OpenAI dashboard
@@ -42,7 +39,7 @@ function extractMetadata(
  * Extract token usage from response data, handling both OpenAI Chat Completions format
  * (prompt_tokens, completion_tokens) and Azure Responses format (input_tokens, output_tokens)
  */
-function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
+export function getResponsesTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
       const totalTokens =
@@ -92,41 +89,25 @@ export class ResponsesProcessor {
       };
     }
 
-    const cost = this.config.costCalculator(this.config.modelName, data.usage, requestConfig);
-    const response: ProviderResponse = {
-      tokenUsage: getTokenUsage(data, cached),
-      cached,
-      ...(cost === undefined ? {} : { cost }),
-      raw: data,
-    };
-
     try {
       const context: ProcessorContext = {
         config: requestConfig,
         cached,
         data,
         suppressReasoningOutput: options.suppressReasoningOutput,
-        abortSignal: options.abortSignal,
       };
 
       const processedOutput = await this.processOutput(data.output, context);
-      if (options.abortSignal?.aborted) {
-        return {
-          ...response,
-          output: processedOutput.result,
-          error:
-            options.abortSignal.reason instanceof Error
-              ? options.abortSignal.reason.message
-              : String(options.abortSignal.reason),
-          metadata: extractMetadata(data, processedOutput),
-        };
-      }
+      const cost = this.config.costCalculator(this.config.modelName, data.usage, requestConfig);
 
       if (processedOutput.isRefusal) {
         return {
-          ...response,
           output: processedOutput.refusal,
+          tokenUsage: getResponsesTokenUsage(data, cached),
           isRefusal: true,
+          cached,
+          ...(cost === undefined ? {} : { cost }),
+          raw: data,
           metadata: extractMetadata(data, processedOutput),
         };
       }
@@ -146,8 +127,11 @@ export class ResponsesProcessor {
       }
 
       const result: ProviderResponse = {
-        ...response,
         output: finalOutput,
+        tokenUsage: getResponsesTokenUsage(data, cached),
+        cached,
+        ...(cost === undefined ? {} : { cost }),
+        raw: data,
         metadata: extractMetadata(data, processedOutput),
       };
 
@@ -160,13 +144,7 @@ export class ResponsesProcessor {
       return result;
     } catch (err) {
       return {
-        ...response,
-        error: options.abortSignal?.aborted
-          ? err instanceof Error
-            ? err.message
-            : String(err)
-          : `Error parsing response: ${String(err)}\nResponse: ${JSON.stringify(data)}`,
-        metadata: extractMetadata(data),
+        error: `Error parsing response: ${String(err)}\nResponse: ${JSON.stringify(data)}`,
       };
     }
   }
@@ -193,15 +171,7 @@ export class ResponsesProcessor {
         continue;
       }
 
-      let processed;
-      try {
-        processed = await this.processOutputItem(item, context);
-      } catch (error) {
-        if (context.abortSignal?.aborted && result) {
-          break;
-        }
-        throw error;
-      }
+      const processed = await this.processOutputItem(item, context);
 
       if (processed.isRefusal) {
         refusal = processed.content || '';
@@ -294,8 +264,6 @@ export class ResponsesProcessor {
       functionResult = await this.config.functionCallbackHandler.processCalls(
         item,
         context.config.functionToolCallbacks,
-        undefined,
-        { abortSignal: context.abortSignal },
       );
     }
 
@@ -337,8 +305,6 @@ export class ResponsesProcessor {
           const functionResult = await this.config.functionCallbackHandler.processCalls(
             contentItem,
             context.config.functionToolCallbacks,
-            undefined,
-            { abortSignal: context.abortSignal },
           );
           content = functionResult;
         } else if (contentItem.type === 'refusal') {

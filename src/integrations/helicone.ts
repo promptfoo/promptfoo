@@ -1,8 +1,6 @@
 import { getEnvString } from '../envars';
 import { fetchWithProxy } from '../util/fetch/index';
 
-const heliconeApiKey = getEnvString('HELICONE_API_KEY');
-
 interface PromptVersionCompiled {
   id: string;
   minor_version: number;
@@ -89,7 +87,8 @@ export async function getPrompt(
   ) => {
     const res = await fetchWithProxy(`https://api.helicone.ai/v1/prompt/${id}/compile`, {
       headers: {
-        Authorization: `Bearer ${heliconeApiKey}`,
+        // Read at call time: --env-file and the config's `env:` block are applied after this module is imported.
+        Authorization: `Bearer ${getEnvString('HELICONE_API_KEY')}`,
         'Content-Type': 'application/json',
       },
       method: 'POST',
