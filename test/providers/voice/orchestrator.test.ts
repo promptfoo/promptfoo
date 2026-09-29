@@ -14,6 +14,9 @@ const { connectionMocks } = vi.hoisted(() => {
     config: VoiceProviderConfig;
     listeners = new Map<string, Array<(...args: any[]) => void>>();
     connect = vi.fn(async () => {
+      if (this.config.model === 'stalled-connect') {
+        await new Promise(() => {});
+      }
       if (this.config.model === 'fail-connect') {
         throw new Error('connect failed');
       }
@@ -25,6 +28,7 @@ const { connectionMocks } = vi.hoisted(() => {
     requestResponse = vi.fn();
     cancelResponse = vi.fn();
     isReady = vi.fn(() => true);
+    removeAllListeners = vi.fn(() => this.listeners.clear());
 
     constructor(config: VoiceProviderConfig) {
       this.config = config;
@@ -56,10 +60,7 @@ vi.mock('../../../src/providers/voice/connections/openaiRealtime', () => ({
   OpenAIRealtimeConnection: connectionMocks.MockConnection,
 }));
 
-import {
-  runVoiceConversation,
-  VoiceConversationOrchestrator,
-} from '../../../src/providers/voice/orchestrator';
+import { VoiceConversationOrchestrator } from '../../../src/providers/voice/orchestrator';
 
 function providerConfig(provider: 'openai' | 'google' | 'bedrock', model = `${provider}-model`) {
   return {
@@ -148,7 +149,7 @@ describe('VoiceConversationOrchestrator', () => {
 
     expect(user.sendAudio).toHaveBeenCalledWith(expect.objectContaining({ timestamp: 0 }));
     expect(user.commitAudio).toHaveBeenCalled();
-    expect(user.requestResponse).toHaveBeenCalled();
+    await vi.waitFor(() => expect(user.requestResponse).toHaveBeenCalled());
     expect(targetAudio).toHaveBeenCalledWith(expect.objectContaining({ timestamp: 0 }));
 
     user.emit('speech_started');
@@ -251,7 +252,22 @@ describe('VoiceConversationOrchestrator', () => {
     );
   });
 
-  it('supports user-first mode, max-turn completion, timeout cancellation, and one-shot runs', async () => {
+  it('applies the overall deadline while a connection is still opening', async () => {
+    vi.useFakeTimers();
+    const orchestrator = new VoiceConversationOrchestrator(
+      config({
+        targetConfig: providerConfig('openai', 'stalled-connect'),
+        timeoutMs: 10,
+      }),
+    );
+    const result = orchestrator.start();
+    await vi.advanceTimersByTimeAsync(10);
+    await expect(result).resolves.toMatchObject({ stopReason: 'timeout' });
+    expect(connectionMocks.instances[0].disconnect).toHaveBeenCalled();
+    expect(connectionMocks.instances[1].connect).not.toHaveBeenCalled();
+  });
+
+  it('supports user-first mode and max-turn completion', async () => {
     const userFirst = new VoiceConversationOrchestrator(
       config({ targetSpeaksFirst: false, maxTurns: 1 }),
     );
@@ -261,13 +277,20 @@ describe('VoiceConversationOrchestrator', () => {
 
     user.emit('transcript_done', 'Opening question');
     await expect(result).resolves.toEqual(expect.objectContaining({ stopReason: 'max_turns' }));
+  });
 
-    const oneShot = runVoiceConversation(config({ maxTurns: 1 }));
-    await vi.waitFor(() => {
-      expect(connectionMocks.instances).toHaveLength(4);
+  it('reports asynchronous audio commit failures as conversation errors', async () => {
+    const orchestrator = new VoiceConversationOrchestrator(config());
+    const { result, target, user } = await startConversation(orchestrator);
+    user.commitAudio.mockImplementationOnce(() => Promise.reject(new Error('audio commit failed')));
+    target.emit('audio_done');
+    target.emit('transcript_done', 'Hello caller');
+    await expect(result).resolves.toMatchObject({
+      stopReason: 'error',
+      error: 'audio commit failed',
     });
-    connectionMocks.instances[2].emit('transcript_done', 'one turn');
-    await expect(oneShot).resolves.toEqual(expect.objectContaining({ stopReason: 'max_turns' }));
+    expect(user.requestResponse).not.toHaveBeenCalled();
+    expect(target.disconnect).toHaveBeenCalled();
   });
 
   it('stops for explicit hangups and active connection failures', async () => {
@@ -283,14 +306,14 @@ describe('VoiceConversationOrchestrator', () => {
     const targetStart = await startConversation(targetFailure);
     targetStart.target.emit('error', new Error('target failed'));
     await expect(targetStart.result).resolves.toEqual(
-      expect.objectContaining({ stopReason: 'error' }),
+      expect.objectContaining({ stopReason: 'error', error: expect.any(String) }),
     );
 
     const closeFailure = new VoiceConversationOrchestrator(config());
     const closeStart = await startConversation(closeFailure);
     closeStart.user.emit('close');
     await expect(closeStart.result).resolves.toEqual(
-      expect.objectContaining({ stopReason: 'error' }),
+      expect.objectContaining({ stopReason: 'error', error: expect.any(String) }),
     );
   });
 

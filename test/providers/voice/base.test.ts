@@ -160,6 +160,24 @@ describe('BaseVoiceConnection', () => {
     expect(connection.getState()).toBe('disconnected');
   });
 
+  it('rejects an unfinished handshake on disconnect', async () => {
+    const handshake = new Promise((_, reject) => connection.setConnectingReject(reject));
+    connection.disconnect();
+    await expect(handshake).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('cleans event waiters on completion and disconnect', async () => {
+    const emitter = new EventEmitter();
+    const ready = waitForEvent(emitter, 'ready');
+    emitter.emit('ready');
+    await ready;
+    expect(emitter.eventNames()).toEqual([]);
+    const cancelled = waitForEvent(emitter, 'ready');
+    emitter.emit('close');
+    await expect(cancelled).rejects.toThrow('Connection closed');
+    expect(emitter.eventNames()).toEqual([]);
+  });
+
   it('handles closed sockets, send errors, disconnect errors, and socket errors', () => {
     const errors = vi.fn();
     connection.on('error', errors);
@@ -176,6 +194,8 @@ describe('BaseVoiceConnection', () => {
       throw new Error('send failed');
     });
     expect(connection.sendMessage({ type: 'throw' })).toBe(false);
+    expect(errors).toHaveBeenCalledWith(expect.objectContaining({ message: 'send failed' }));
+    expect(connection.getState()).toBe('error');
 
     socket.emit('error', new Error('socket failed'));
     expect(errors).toHaveBeenCalledWith(expect.objectContaining({ message: 'socket failed' }));

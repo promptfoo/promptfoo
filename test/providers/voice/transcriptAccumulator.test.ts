@@ -1,10 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  extractStopMarker,
-  formatTranscript,
-  STOP_MARKER,
-  TranscriptAccumulator,
-} from '../../../src/providers/voice/transcriptAccumulator';
+import { TranscriptAccumulator } from '../../../src/providers/voice/transcriptAccumulator';
 
 describe('TranscriptAccumulator', () => {
   let accumulator: TranscriptAccumulator;
@@ -259,67 +254,5 @@ describe('TranscriptAccumulator', () => {
       expect(stats.totalWords).toBe(8); // 2 + 5 + 1
       expect(stats.averageWordsPerTurn).toBeCloseTo(8 / 3, 2);
     });
-  });
-});
-
-describe('extractStopMarker', () => {
-  it('should extract stop marker from text', () => {
-    const result = extractStopMarker('Done! ###STOP###');
-
-    expect(result.hasStopMarker).toBe(true);
-    expect(result.text).toBe('Done!');
-  });
-
-  it('should return text unchanged if no marker', () => {
-    const result = extractStopMarker('Hello world');
-
-    expect(result.hasStopMarker).toBe(false);
-    expect(result.text).toBe('Hello world');
-  });
-
-  it('should handle marker at start', () => {
-    const result = extractStopMarker('###STOP### Done');
-
-    expect(result.hasStopMarker).toBe(true);
-    expect(result.text).toBe('Done');
-  });
-
-  it('should handle only marker', () => {
-    const result = extractStopMarker('###STOP###');
-
-    expect(result.hasStopMarker).toBe(true);
-    expect(result.text).toBe('');
-  });
-});
-
-describe('formatTranscript', () => {
-  it('should format transcript with default separator', () => {
-    const turns = [
-      { speaker: 'user' as const, text: 'Hello', timestamp: 0 },
-      { speaker: 'agent' as const, text: 'Hi', timestamp: 1000 },
-    ];
-
-    const result = formatTranscript(turns);
-    expect(result).toBe('User: Hello\n---\nAgent: Hi');
-  });
-
-  it('should use custom separator', () => {
-    const turns = [
-      { speaker: 'user' as const, text: 'Hello', timestamp: 0 },
-      { speaker: 'agent' as const, text: 'Hi', timestamp: 1000 },
-    ];
-
-    const result = formatTranscript(turns, '\n\n');
-    expect(result).toBe('User: Hello\n\nAgent: Hi');
-  });
-
-  it('should handle empty array', () => {
-    expect(formatTranscript([])).toBe('');
-  });
-});
-
-describe('STOP_MARKER constant', () => {
-  it('should be the expected value', () => {
-    expect(STOP_MARKER).toBe('###STOP###');
   });
 });

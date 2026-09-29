@@ -1,27 +1,18 @@
-/**
- * Simulated Voice User Provider
- *
- * A provider that simulates a voice user interacting with a realtime voice agent.
- * Uses bidirectional audio streaming to conduct voice-based conversations.
- *
- * This is the voice equivalent of the text-based SimulatedUser provider.
- */
-
+import { getEnvBool } from '../../envars';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
-import { neverGenerateRemoteForRegularEvals } from '../../redteam/remoteGeneration';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { VoiceConversationOrchestrator } from './orchestrator';
 import { STOP_MARKER } from './transcriptAccumulator';
 
+import type { ProviderResponse } from '../../contracts/providers';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderOptions,
-  ProviderResponse,
-} from '../../types/index';
+} from '../../types/providers';
 import type {
   ConversationResult,
   SimulatedVoiceUserConfig,
@@ -37,9 +28,6 @@ const DEFAULT_TIMEOUT_MS = 120000;
 const DEFAULT_LOCAL_VAD_THRESHOLD = 0.02;
 const DEFAULT_INSTRUCTIONS_TEMPLATE = '{{instructions}}';
 
-/**
- * Provider options for SimulatedVoiceUser.
- */
 type SimulatedVoiceUserProviderOptions = ProviderOptions & {
   config?: SimulatedVoiceUserConfig;
 };
@@ -87,9 +75,6 @@ export class SimulatedVoiceUser implements ApiProvider {
     return `[SimulatedVoiceUser ${this.identifier}]`;
   }
 
-  /**
-   * Build the turn detection config.
-   */
   private buildTurnDetectionConfig(): TurnDetectionConfig {
     return {
       mode: this.voiceConfig.turnDetectionMode ?? 'server_vad',
@@ -108,9 +93,6 @@ export class SimulatedVoiceUser implements ApiProvider {
       : G711_SAMPLE_RATE;
   }
 
-  /**
-   * Build the target voice provider config.
-   */
   private buildTargetConfig(instructions: string): VoiceProviderConfig {
     const provider = this.voiceConfig.targetProvider || 'openai';
     return {
@@ -127,9 +109,6 @@ export class SimulatedVoiceUser implements ApiProvider {
     };
   }
 
-  /**
-   * Build the simulated user voice provider config.
-   */
   private buildSimulatedUserConfig(instructions: string): VoiceProviderConfig {
     // Build the simulated user instructions with the goal
     const simulatedUserInstructions = this.buildSimulatedUserInstructions(instructions);
@@ -143,17 +122,11 @@ export class SimulatedVoiceUser implements ApiProvider {
       instructions: simulatedUserInstructions,
       audioFormat: this.voiceConfig.audioFormat || DEFAULT_AUDIO_FORMAT,
       sampleRate: this.getAudioSampleRate(),
-      // IMPORTANT: Disable turn detection on simulated user to prevent auto-responses.
-      // We explicitly call requestResponse() after the target finishes speaking.
-      // Using VAD here causes the user to start speaking while the target is still talking.
+      // Wait for the target to finish before requesting the caller's response.
       turnDetection: undefined,
     };
   }
 
-  /**
-   * Build the simulated user instructions.
-   * Includes the stop marker instruction for goal achievement.
-   */
   private buildSimulatedUserInstructions(goal: string): string {
     const baseInstructions = `
 You are simulating a user in a voice conversation. Your goal is:
@@ -200,9 +173,6 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
     return undefined;
   }
 
-  /**
-   * Run the voice conversation.
-   */
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -219,7 +189,7 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
       simulatedUserProvider: this.voiceConfig.simulatedUserProvider,
     });
 
-    const useRemote = cloudConfig.isEnabled() && !neverGenerateRemoteForRegularEvals();
+    const useRemote = cloudConfig.isEnabled() && !getEnvBool('PROMPTFOO_DISABLE_REMOTE_GENERATION');
     if (useRemote) {
       return this.callRemoteVoiceTau(
         prompt,
@@ -287,10 +257,6 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
     }
   }
 
-  /**
-   * Call the remote voice-tau task on the cloud server.
-   * This allows using server-side API keys for the simulated user.
-   */
   private async callRemoteVoiceTau(
     targetInstructions: string,
     simulatedUserInstructions: string,
@@ -309,7 +275,9 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
     logger.debug('[SimulatedVoiceUser] Using remote voice-tau task');
 
     try {
-      const timeoutSignal = AbortSignal.timeout(this.voiceConfig.timeoutMs || DEFAULT_TIMEOUT_MS);
+      const timeoutSignal = AbortSignal.timeout(
+        (this.voiceConfig.timeoutMs || DEFAULT_TIMEOUT_MS) + 15000,
+      );
       const requestSignal = abortSignal
         ? AbortSignal.any([abortSignal, timeoutSignal])
         : timeoutSignal;
@@ -355,7 +323,7 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
       }
 
       const result = await response.json();
-      return this.formatRemoteResult(result);
+      return this.formatResult(result);
     } catch (error) {
       logger.error('[SimulatedVoiceUser] Remote voice-tau request failed');
       return {
@@ -364,62 +332,6 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
     }
   }
 
-  /**
-   * Format the remote voice-tau result as a ProviderResponse.
-   */
-  private formatRemoteResult(result: {
-    success: boolean;
-    transcript: string;
-    turns: Array<{ speaker: string; text: string; timestamp?: number }>;
-    turnCount: number;
-    duration: number;
-    stopReason: string;
-    combinedAudio?: string;
-    targetAudio?: string;
-    simulatedUserAudio?: string;
-    metadata?: Record<string, unknown>;
-  }): ProviderResponse {
-    // Build the output transcript
-    const output = result.turns
-      .map((turn) => `${turn.speaker === 'agent' ? 'Assistant' : 'User'}: ${turn.text}`)
-      .join('\n---\n');
-
-    // Use combined stereo audio (left=agent, right=user) for best playback experience
-    // Falls back to target-only audio if combined not available
-    const audioData = this.shouldRecordConversation()
-      ? result.combinedAudio || result.targetAudio
-      : undefined;
-
-    return {
-      output,
-      metadata: {
-        turns: result.turns,
-        turnCount: result.turnCount,
-        duration: result.duration,
-        stopReason: result.stopReason,
-        success: result.success,
-        targetProvider: result.metadata?.targetProvider,
-        simulatedUserProvider: result.metadata?.simulatedUserProvider,
-        audioTracks: this.shouldRecordConversation()
-          ? {
-              combined: result.combinedAudio ? 'stereo (left=agent, right=user)' : undefined,
-              targetOnly: result.targetAudio ? 'mono (agent only)' : undefined,
-              userOnly: result.simulatedUserAudio ? 'mono (user only)' : undefined,
-            }
-          : undefined,
-      },
-      audio: audioData
-        ? {
-            data: audioData,
-            format: 'wav',
-          }
-        : undefined,
-    };
-  }
-
-  /**
-   * Setup logging for orchestrator events.
-   */
   private setupOrchestratorLogging(orchestrator: VoiceConversationOrchestrator): void {
     orchestrator.on('state_change', (state) => {
       logger.debug('[SimulatedVoiceUser] State change:', { state });
@@ -437,10 +349,13 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
     });
   }
 
-  /**
-   * Format the conversation result as a ProviderResponse.
-   */
-  private formatResult(result: ConversationResult): ProviderResponse {
+  private formatResult(
+    result: Omit<ConversationResult, 'combinedAudio' | 'targetAudio' | 'simulatedUserAudio'> & {
+      combinedAudio?: Buffer | string;
+      targetAudio?: Buffer | string;
+      simulatedUserAudio?: Buffer | string;
+    },
+  ): ProviderResponse {
     // Build the output transcript
     const output = result.turns
       .map((turn) => `${turn.speaker === 'agent' ? 'Assistant' : 'User'}: ${turn.text}`)
@@ -454,6 +369,9 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
 
     return {
       output,
+      ...(result.stopReason === 'error'
+        ? { error: result.error || 'Voice conversation failed before completion' }
+        : {}),
       metadata: {
         turns: result.turns,
         turnCount: result.turnCount,
@@ -473,7 +391,7 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
       },
       audio: audioData
         ? {
-            data: audioData.toString('base64'),
+            data: typeof audioData === 'string' ? audioData : audioData.toString('base64'),
             format: 'wav',
           }
         : undefined,

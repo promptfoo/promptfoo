@@ -1,32 +1,15 @@
-/**
- * Nova Sonic Voice Connection
- *
- * Adapter for AWS Bedrock Nova Sonic bidirectional streaming API.
- * Maps the AWS SDK streaming pattern to the VoiceConnection interface.
- *
- * Key differences from WebSocket-based providers:
- * - Uses AWS SDK InvokeModelWithBidirectionalStreamCommand
- * - Queue-based async iterable for sending events
- * - Uses 16kHz input sample rate, 24kHz output (resampled from Nova's 16kHz)
- * - Requires silence after audio input to trigger VAD-based turn detection
- *
- * Based on analysis of haizelabs/spoken library patterns.
- */
-
 import { EventEmitter } from 'events';
 
-import { firstValueFrom, Subject } from 'rxjs';
-import { take } from 'rxjs/operators';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
-import { base64ToBuffer, bufferToBase64 } from '../audioBuffer';
+import { base64ToBuffer, bufferToBase64, resamplePcm16 } from '../audioBuffer';
 
 import type { AudioChunk, AudioFormat, VoiceConnectionEvents, VoiceProviderConfig } from '../types';
 
 // Nova Sonic specific constants
 const DEFAULT_MODEL = 'amazon.nova-sonic-v1:0';
-const NOVA_INPUT_SAMPLE_RATE = 16000; // Nova Sonic expects 16kHz input (not 8kHz!)
-const NOVA_OUTPUT_SAMPLE_RATE = 24000; // Nova outputs at 24kHz (was incorrectly 16kHz)
+const NOVA_INPUT_SAMPLE_RATE = 16000;
+const NOVA_OUTPUT_SAMPLE_RATE = 24000;
 const TARGET_SAMPLE_RATE = 24000; // What other providers use
 const CONNECTION_TIMEOUT_MS = 30000;
 
@@ -39,18 +22,11 @@ const VAD_CHUNK_DELAY_MS = 10; // Delay between chunks
 const NOVA_VOICES = ['tiffany', 'matthew', 'amy'] as const;
 type NovaVoice = (typeof NOVA_VOICES)[number];
 
-/**
- * Connection state.
- */
 type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'ready' | 'error';
 
-/**
- * Nova Sonic session state.
- */
 interface SessionState {
   queue: NovaSonicEvent[];
-  queueSignal: Subject<void>;
-  closeSignal: Subject<void>;
+  wake?: () => void;
   isActive: boolean;
   audioContentId: string;
   promptName: string;
@@ -59,9 +35,6 @@ interface SessionState {
   promptEnded: boolean; // Track if promptEnd has been sent
 }
 
-/**
- * Nova Sonic event structure.
- */
 interface NovaSonicEvent {
   event: Record<string, unknown>;
 }
@@ -71,9 +44,6 @@ interface NovaTextContentState {
   generationStage?: string;
 }
 
-/**
- * Nova Sonic audio configuration.
- */
 interface NovaAudioConfig {
   audioType: 'SPEECH';
   encoding: 'base64';
@@ -84,9 +54,6 @@ interface NovaAudioConfig {
   voiceId?: string;
 }
 
-/**
- * Default Nova Sonic configuration.
- */
 const DEFAULT_CONFIG = {
   inference: {
     maxTokens: 1024,
@@ -117,47 +84,6 @@ const DEFAULT_CONFIG = {
   },
 };
 
-/**
- * Resample audio between sample rates using linear interpolation.
- * For production use, consider using a proper resampling library.
- */
-function resampleAudio(inputBuffer: Buffer, inputRate: number, outputRate: number): Buffer {
-  if (inputRate === outputRate) {
-    return inputBuffer;
-  }
-
-  const ratio = outputRate / inputRate;
-  const inputSamples = inputBuffer.length / 2; // 16-bit samples
-  const outputSamples = Math.floor(inputSamples * ratio);
-  const outputBuffer = Buffer.alloc(outputSamples * 2);
-
-  for (let i = 0; i < outputSamples; i++) {
-    const srcIndex = i / ratio;
-    const srcIndexFloor = Math.floor(srcIndex);
-    const srcIndexCeil = Math.min(srcIndexFloor + 1, inputSamples - 1);
-    const fraction = srcIndex - srcIndexFloor;
-
-    // Read samples (handle potential buffer overrun)
-    const sample1 =
-      srcIndexFloor * 2 + 1 < inputBuffer.length ? inputBuffer.readInt16LE(srcIndexFloor * 2) : 0;
-    const sample2 =
-      srcIndexCeil * 2 + 1 < inputBuffer.length
-        ? inputBuffer.readInt16LE(srcIndexCeil * 2)
-        : sample1;
-
-    // Linear interpolation
-    const interpolated = Math.round(sample1 + (sample2 - sample1) * fraction);
-    outputBuffer.writeInt16LE(Math.max(-32768, Math.min(32767, interpolated)), i * 2);
-  }
-
-  return outputBuffer;
-}
-
-/**
- * Nova Sonic Voice Connection.
- *
- * Adapts AWS Bedrock Nova Sonic bidirectional streaming to the VoiceConnection interface.
- */
 export class NovaSonicConnection extends EventEmitter {
   protected state: ConnectionState = 'disconnected';
   protected config: VoiceProviderConfig;
@@ -174,6 +100,7 @@ export class NovaSonicConnection extends EventEmitter {
   private textContentState = new Map<string, NovaTextContentState>();
   private currentTextContentState: NovaTextContentState = {};
   private responseCompleted = false;
+  private streamingError: Error | undefined;
 
   constructor(config: VoiceProviderConfig) {
     super();
@@ -181,11 +108,9 @@ export class NovaSonicConnection extends EventEmitter {
     this.model = config.model || DEFAULT_MODEL;
   }
 
-  /**
-   * Establish connection to Nova Sonic.
-   */
   async connect(): Promise<void> {
     this.state = 'connecting';
+    this.streamingError = undefined;
 
     try {
       // Set connection timeout
@@ -195,6 +120,9 @@ export class NovaSonicConnection extends EventEmitter {
       const { BedrockRuntimeClient } = await import('@aws-sdk/client-bedrock-runtime');
       const { NodeHttp2Handler } = await import('@smithy/node-http-handler');
 
+      if (this.state !== 'connecting') {
+        throw new Error('Nova Sonic connection cancelled');
+      }
       const region = this.getRegion();
 
       this.bedrockClient = new BedrockRuntimeClient({
@@ -219,9 +147,6 @@ export class NovaSonicConnection extends EventEmitter {
     }
   }
 
-  /**
-   * Configure the voice session.
-   */
   async configureSession(): Promise<void> {
     if (this.state !== 'connected') {
       throw new Error('Cannot configure session: not connected');
@@ -231,8 +156,6 @@ export class NovaSonicConnection extends EventEmitter {
     this.sessionId = crypto.randomUUID();
     this.session = {
       queue: [],
-      queueSignal: new Subject<void>(),
-      closeSignal: new Subject<void>(),
       isActive: true,
       audioContentId: crypto.randomUUID(),
       promptName: crypto.randomUUID(),
@@ -352,12 +275,18 @@ export class NovaSonicConnection extends EventEmitter {
     // Wait for the iterator to actually start being consumed by AWS SDK
     // This ensures events are being sent before we return
     const startTime = Date.now();
-    while (!this.session.iteratorStarted && Date.now() - startTime < 5000) {
-      await new Promise((resolve) => setImmediate(resolve));
+    while (
+      this.session?.isActive &&
+      !this.session.iteratorStarted &&
+      Date.now() - startTime < 5000
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
     }
 
-    if (!this.session.iteratorStarted) {
-      logger.warn('[NovaSonic] Iterator did not start within timeout');
+    if (!this.session?.iteratorStarted) {
+      const error = this.streamingError ?? new Error('Nova Sonic request stream did not start');
+      this.disconnect();
+      throw error;
     }
 
     this.state = 'ready';
@@ -370,9 +299,6 @@ export class NovaSonicConnection extends EventEmitter {
     });
   }
 
-  /**
-   * Send an audio chunk.
-   */
   sendAudio(chunk: AudioChunk): void {
     if (!this.isReady() || !this.session) {
       logger.warn('[NovaSonic] Cannot send audio: not ready');
@@ -405,7 +331,7 @@ export class NovaSonicConnection extends EventEmitter {
 
     // Resample from the routed audio sample rate to Nova Sonic's 16kHz input.
     const inputBuffer = base64ToBuffer(chunk.data);
-    const resampledBuffer = resampleAudio(
+    const resampledBuffer = resamplePcm16(
       inputBuffer,
       chunk.sampleRate || TARGET_SAMPLE_RATE,
       NOVA_INPUT_SAMPLE_RATE,
@@ -422,10 +348,6 @@ export class NovaSonicConnection extends EventEmitter {
     });
   }
 
-  /**
-   * Commit the audio buffer (signal end of input).
-   * Sends silence chunks to trigger Nova Sonic's VAD-based turn detection.
-   */
   async commitAudio(): Promise<void> {
     if (!this.isReady() || !this.session) {
       logger.warn('[NovaSonic] Cannot commit audio: not ready');
@@ -445,11 +367,6 @@ export class NovaSonicConnection extends EventEmitter {
     logger.debug('[NovaSonic] Audio committed with VAD silence');
   }
 
-  /**
-   * Send silence chunks to trigger VAD-based turn detection.
-   * Nova Sonic uses VAD to detect when user stops speaking.
-   * Based on haizelabs/spoken library approach.
-   */
   private async sendSilenceForVAD(): Promise<void> {
     if (!this.session?.isActive || !this.session.audioContentActive) {
       return;
@@ -479,12 +396,6 @@ export class NovaSonicConnection extends EventEmitter {
     logger.debug('[NovaSonic] Sent VAD silence chunks', { count: VAD_SILENCE_CHUNKS });
   }
 
-  /**
-   * Request a response from the provider.
-   * Nova Sonic generates a response after commitAudio sends the VAD silence.
-   * Unlike providers with an explicit response request, there is no second
-   * request message to send here.
-   */
   requestResponse(): void {
     if (!this.isReady() || !this.session) {
       logger.warn('[NovaSonic] Cannot request response: not ready');
@@ -512,9 +423,6 @@ export class NovaSonicConnection extends EventEmitter {
     logger.debug('[NovaSonic] Audio buffer clearing is not supported');
   }
 
-  /**
-   * Disconnect from the provider.
-   */
   disconnect(): void {
     this.clearConnectionTimeout();
 
@@ -550,8 +458,7 @@ export class NovaSonicConnection extends EventEmitter {
 
       // Keep terminal events queued for the request iterator to drain before ending.
       this.session.isActive = false;
-      this.session.queueSignal.next();
-      this.session.closeSignal.next();
+      this.session.wake?.();
     }
 
     this.session = null;
@@ -564,48 +471,26 @@ export class NovaSonicConnection extends EventEmitter {
     logger.debug('[NovaSonic] Disconnected');
   }
 
-  /**
-   * Check if ready.
-   */
   isReady(): boolean {
     return this.state === 'ready';
   }
 
-  /**
-   * Check if connected.
-   */
   isConnected(): boolean {
     return this.state === 'connected' || this.state === 'ready';
   }
 
-  /**
-   * Get connection state.
-   */
   getState(): ConnectionState {
     return this.state;
   }
 
-  /**
-   * Get session ID.
-   */
   getSessionId(): string | null {
     return this.sessionId;
   }
 
-  /**
-   * Get config.
-   */
   getConfig(): VoiceProviderConfig {
     return this.config;
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // PRIVATE METHODS
-  // ─────────────────────────────────────────────────────────────
-
-  /**
-   * Send an event to the queue.
-   */
   private sendEvent(event: NovaSonicEvent): void {
     if (!this.session?.isActive) {
       logger.warn('[NovaSonic] Cannot send event: session not active');
@@ -618,14 +503,9 @@ export class NovaSonicConnection extends EventEmitter {
     }
 
     this.session.queue.push(event);
-    this.session.queueSignal.next();
+    this.session.wake?.();
   }
 
-  /**
-   * Create async iterable for bidirectional stream using async generator.
-   * AWS SDK requires an async generator function pattern for proper streaming.
-   * Nova Sonic requires continuous input to avoid timeout.
-   */
   private createAsyncIterable(): AsyncIterable<{ chunk: { bytes: Uint8Array } }> {
     const session = this.session!;
 
@@ -655,16 +535,15 @@ export class NovaSonicConnection extends EventEmitter {
 
           // If queue is empty, wait briefly for new events or send keep-alive
           if (session.queue.length === 0 && session.isActive) {
-            try {
-              // Wait for signal with short timeout
-              await Promise.race([
-                firstValueFrom(session.queueSignal.pipe(take(1))),
-                firstValueFrom(session.closeSignal.pipe(take(1))),
-                new Promise((resolve) => setTimeout(resolve, 50)),
-              ]);
-            } catch {
-              // Ignore errors from race
-            }
+            await new Promise<void>((resolve) => {
+              const wake = () => {
+                clearTimeout(timeout);
+                session.wake = undefined;
+                resolve();
+              };
+              const timeout = setTimeout(wake, 50);
+              session.wake = wake;
+            });
 
             // If audio content is active and we haven't sent anything recently, send keep-alive
             if (
@@ -696,9 +575,6 @@ export class NovaSonicConnection extends EventEmitter {
     };
   }
 
-  /**
-   * Process response stream in background.
-   */
   private async processResponses(): Promise<void> {
     if (!this.responsePromise) {
       return;
@@ -719,15 +595,22 @@ export class NovaSonicConnection extends EventEmitter {
           }
         }
       }
+      if (this.session?.isActive) {
+        throw new Error('Nova Sonic response stream closed unexpectedly');
+      }
     } catch (error) {
-      logger.error('[NovaSonic] Response processing error:', { error });
-      this.emit('error', error instanceof Error ? error : new Error(String(error)));
+      if (!this.session?.isActive) {
+        return;
+      }
+      this.streamingError = error instanceof Error ? error : new Error(String(error));
+      this.state = 'error';
+      if (this.listenerCount('error') > 0) {
+        this.emit('error', this.streamingError);
+      }
+      this.disconnect();
     }
   }
 
-  /**
-   * Handle Nova Sonic event and emit VoiceConnection events.
-   */
   private handleNovaEvent(data: { event?: Record<string, unknown> }): void {
     if (!data.event) {
       logger.debug('[NovaSonic] Received non-event data');
@@ -796,7 +679,7 @@ export class NovaSonicConnection extends EventEmitter {
           // Nova Sonic outputs at 24kHz, same as our target - no resampling needed
           // but we keep the resample call for flexibility if rates change
           const novaBuffer = base64ToBuffer(audioContent);
-          const resampledBuffer = resampleAudio(
+          const resampledBuffer = resamplePcm16(
             novaBuffer,
             NOVA_OUTPUT_SAMPLE_RATE,
             TARGET_SAMPLE_RATE,
@@ -835,9 +718,6 @@ export class NovaSonicConnection extends EventEmitter {
     }
   }
 
-  /**
-   * Map voice name to Nova Sonic voice ID.
-   */
   private mapVoice(voice?: string): NovaVoice {
     if (!voice) {
       return 'tiffany';
@@ -861,9 +741,6 @@ export class NovaSonicConnection extends EventEmitter {
     return voiceMap[lowerVoice] || 'tiffany';
   }
 
-  /**
-   * Get AWS region.
-   */
   private getRegion(): string {
     return (
       (this.config as { region?: string }).region ||
@@ -873,9 +750,6 @@ export class NovaSonicConnection extends EventEmitter {
     );
   }
 
-  /**
-   * Set connection timeout.
-   */
   private setConnectionTimeout(ms: number): void {
     this.clearConnectionTimeout();
     this.connectionTimeout = setTimeout(() => {
@@ -887,9 +761,6 @@ export class NovaSonicConnection extends EventEmitter {
     }, ms);
   }
 
-  /**
-   * Clear connection timeout.
-   */
   private clearConnectionTimeout(): void {
     if (this.connectionTimeout) {
       clearTimeout(this.connectionTimeout);
@@ -897,9 +768,7 @@ export class NovaSonicConnection extends EventEmitter {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────
   // TYPED EVENT EMITTER METHODS
-  // ─────────────────────────────────────────────────────────────
 
   emit<K extends keyof VoiceConnectionEvents>(
     event: K,

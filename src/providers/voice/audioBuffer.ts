@@ -1,18 +1,7 @@
-/**
- * Audio Buffer Management
- *
- * Handles accumulation of audio chunks, format conversion,
- * and WAV encoding for voice conversations.
- */
-
 import { BYTES_PER_SAMPLE, SAMPLE_RATES } from './types';
 
 import type { AudioChunk, AudioFormat } from './types';
 
-/**
- * Manages audio chunks for a conversation turn.
- * Provides methods for accumulation, concatenation, and format conversion.
- */
 export class AudioBuffer {
   private chunks: AudioChunk[] = [];
   private readonly format: AudioFormat;
@@ -23,44 +12,26 @@ export class AudioBuffer {
     this.sampleRate = sampleRate;
   }
 
-  /**
-   * Append an audio chunk to the buffer.
-   */
   append(chunk: AudioChunk): void {
     this.chunks.push(chunk);
   }
 
-  /**
-   * Get all chunks in the buffer.
-   */
   getChunks(): AudioChunk[] {
     return [...this.chunks];
   }
 
-  /**
-   * Get the number of chunks in the buffer.
-   */
   getChunkCount(): number {
     return this.chunks.length;
   }
 
-  /**
-   * Check if the buffer is empty.
-   */
   isEmpty(): boolean {
     return this.chunks.length === 0;
   }
 
-  /**
-   * Get total duration in milliseconds.
-   */
   getDuration(): number {
     return calculateDuration(this.toPcm16Buffer().length, this.sampleRate, 'pcm16');
   }
 
-  /**
-   * Get concatenated audio as a Buffer.
-   */
   toBuffer(): Buffer {
     if (this.chunks.length === 0) {
       return Buffer.alloc(0);
@@ -70,23 +41,14 @@ export class AudioBuffer {
     return Buffer.concat(buffers);
   }
 
-  /**
-   * Convert the audio to WAV format.
-   */
   toWav(): Buffer {
     return pcm16ToWav(this.toPcm16Buffer(), this.sampleRate);
   }
 
-  /**
-   * Get the first timestamp in the buffer.
-   */
   getStartTime(): number | undefined {
     return this.chunks[0]?.timestamp;
   }
 
-  /**
-   * Get the last timestamp in the buffer.
-   */
   getEndTime(): number | undefined {
     if (this.chunks.length === 0) {
       return undefined;
@@ -95,32 +57,20 @@ export class AudioBuffer {
     return lastChunk.timestamp + (lastChunk.duration || 0);
   }
 
-  /**
-   * Get total size in bytes.
-   */
   getSize(): number {
     return this.chunks.reduce((sum, chunk) => {
       return sum + base64ToBuffer(chunk.data).length;
     }, 0);
   }
 
-  /**
-   * Clear the buffer.
-   */
   clear(): void {
     this.chunks = [];
   }
 
-  /**
-   * Get the audio format.
-   */
   getFormat(): AudioFormat {
     return this.format;
   }
 
-  /**
-   * Get the sample rate.
-   */
   getSampleRate(): number {
     return this.sampleRate;
   }
@@ -195,16 +145,10 @@ export function pcm16ToWav(
   return Buffer.concat([header, pcmData]);
 }
 
-/**
- * Convert base64 encoded audio to a Buffer.
- */
 export function base64ToBuffer(base64: string): Buffer {
   return Buffer.from(base64, 'base64');
 }
 
-/**
- * Convert a Buffer to base64 encoded string.
- */
 export function bufferToBase64(buffer: Buffer): string {
   return buffer.toString('base64');
 }
@@ -232,9 +176,6 @@ function decodeALawSample(value: number): number {
   return clampInt16(sign ? sample : -sample);
 }
 
-/**
- * Convert supported voice audio formats to PCM16 samples.
- */
 export function audioDataToPcm16(data: Buffer, format: AudioFormat): Buffer {
   if (format === 'pcm16') {
     return data;
@@ -250,9 +191,6 @@ export function audioDataToPcm16(data: Buffer, format: AudioFormat): Buffer {
   return decoded;
 }
 
-/**
- * Resample PCM16 audio using linear interpolation.
- */
 export function resamplePcm16(data: Buffer, inputRate: number, outputRate: number): Buffer {
   if (inputRate === outputRate || data.length === 0) {
     return data;
@@ -290,106 +228,6 @@ export function calculateDuration(bytes: number, sampleRate: number, format: Aud
   const samples = bytes / bytesPerSample;
   const seconds = samples / sampleRate;
   return Math.round(seconds * 1000);
-}
-
-/**
- * Calculate byte count from duration.
- *
- * @param durationMs Duration in milliseconds
- * @param sampleRate Sample rate in Hz
- * @param format Audio format
- * @returns Number of bytes
- */
-export function calculateBytes(
-  durationMs: number,
-  sampleRate: number,
-  format: AudioFormat,
-): number {
-  const bytesPerSample = BYTES_PER_SAMPLE[format];
-  const seconds = durationMs / 1000;
-  const samples = seconds * sampleRate;
-  return Math.round(samples * bytesPerSample);
-}
-
-/**
- * Create an AudioChunk from raw audio data.
- *
- * @param data Audio data as Buffer or base64 string
- * @param timestamp Timestamp in ms since conversation start
- * @param format Audio format
- * @param sampleRate Sample rate in Hz
- * @returns AudioChunk
- */
-export function createAudioChunk(
-  data: Buffer | string,
-  timestamp: number,
-  format: AudioFormat = 'pcm16',
-  sampleRate: number = SAMPLE_RATES.OPENAI_REALTIME,
-): AudioChunk {
-  const base64Data = typeof data === 'string' ? data : bufferToBase64(data);
-  const buffer = typeof data === 'string' ? base64ToBuffer(data) : data;
-  const duration = calculateDuration(buffer.length, sampleRate, format);
-
-  return {
-    data: base64Data,
-    timestamp,
-    duration,
-    format,
-    sampleRate,
-  };
-}
-
-/**
- * Merge multiple AudioBuffers into one.
- */
-export function mergeAudioBuffers(buffers: AudioBuffer[]): AudioBuffer {
-  if (buffers.length === 0) {
-    return new AudioBuffer();
-  }
-
-  const first = buffers[0];
-  const merged = new AudioBuffer(first.getFormat(), first.getSampleRate());
-
-  for (const buffer of buffers) {
-    for (const chunk of buffer.getChunks()) {
-      merged.append(chunk);
-    }
-  }
-
-  return merged;
-}
-
-/**
- * Split audio buffer at a specific timestamp.
- *
- * @param buffer The buffer to split
- * @param timestampMs The timestamp to split at
- * @returns Tuple of [before, after] buffers
- */
-export function splitAudioBuffer(
-  buffer: AudioBuffer,
-  timestampMs: number,
-): [AudioBuffer, AudioBuffer] {
-  const before = new AudioBuffer(buffer.getFormat(), buffer.getSampleRate());
-  const after = new AudioBuffer(buffer.getFormat(), buffer.getSampleRate());
-
-  for (const chunk of buffer.getChunks()) {
-    if (chunk.timestamp < timestampMs) {
-      before.append(chunk);
-    } else {
-      after.append(chunk);
-    }
-  }
-
-  return [before, after];
-}
-
-/**
- * Turn information for stereo audio alignment (legacy, kept for API compatibility).
- */
-export interface StereoTurn {
-  speaker: 'agent' | 'user';
-  timestamp: number;
 }
 
 function placeStereoChunks(
@@ -437,14 +275,9 @@ function placeStereoChunks(
  *
  * @param agentBuffer Audio buffer for agent (left channel)
  * @param userBuffer Audio buffer for user (right channel)
- * @param _turns Deprecated, not used - chunk timestamps are used directly
  * @returns Stereo WAV buffer with properly aligned audio
  */
-export function createStereoWav(
-  agentBuffer: AudioBuffer,
-  userBuffer: AudioBuffer,
-  _turns?: StereoTurn[],
-): Buffer {
+export function createStereoWav(agentBuffer: AudioBuffer, userBuffer: AudioBuffer): Buffer {
   const sampleRate = Math.max(
     agentBuffer.getSampleRate(),
     userBuffer.getSampleRate(),

@@ -34,6 +34,12 @@ Before setting up an evaluation, create a new directory and a `promptfooconfig.y
 
 Here's an example configuration that compares the outputs of Claude Sonnet 4.6 at a low temperature (0.2) and a high temperature (0.9):
 
+:::note
+
+Claude Sonnet 5 and newer Opus and Fable models do not support `temperature`, `top_p`, or `top_k`; Promptfoo omits these parameters with a warning. Their `effort` setting controls reasoning depth, not sampling randomness. These examples use Claude Sonnet 4.6, which accepts temperature settings when thinking is disabled.
+
+:::
+
 ```yaml title="promptfooconfig.yaml"
 prompts:
   - 'Respond to the following instruction: {{message}}'

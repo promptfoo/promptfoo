@@ -1,36 +1,11 @@
-/**
- * Transcript Accumulator
- *
- * Accumulates transcript deltas from voice providers and tracks
- * conversation history. Detects stop markers for conversation end.
- */
-
-/**
- * A completed transcript turn.
- */
 export interface TranscriptTurn {
-  /** Who spoke */
   speaker: 'user' | 'agent';
-  /** What they said */
   text: string;
-  /** Timestamp when turn completed */
   timestamp: number;
 }
 
-/**
- * The stop marker that signals goal achievement.
- */
 export const STOP_MARKER = '###STOP###';
 
-/**
- * Accumulates transcript deltas and manages conversation history.
- *
- * Features:
- * - Accumulates streaming transcript deltas
- * - Tracks completed turns with speaker labels
- * - Detects stop markers for conversation end
- * - Formats full transcript for output
- */
 export class TranscriptAccumulator {
   private buffer: string = '';
   private turns: TranscriptTurn[] = [];
@@ -103,85 +78,46 @@ export class TranscriptAccumulator {
     return text;
   }
 
-  /**
-   * Check if the stop marker has been detected.
-   */
   hasStopMarker(): boolean {
     return this.stopMarkerDetected;
   }
 
-  /**
-   * Get the full transcript formatted for output.
-   *
-   * Format:
-   * ```
-   * User: Hello
-   * ---
-   * Agent: Hi there
-   * ---
-   * User: Goodbye
-   * ```
-   */
   getFullTranscript(): string {
     return this.turns
       .map((turn) => `${turn.speaker === 'user' ? 'User' : 'Agent'}: ${turn.text}`)
       .join('\n---\n');
   }
 
-  /**
-   * Get all completed turns.
-   */
   getTurns(): TranscriptTurn[] {
     return [...this.turns];
   }
 
-  /**
-   * Get the number of completed turns.
-   */
   getTurnCount(): number {
     return this.turns.length;
   }
 
-  /**
-   * Get the current buffer (incomplete transcript).
-   */
   getCurrentBuffer(): string {
     return this.buffer;
   }
 
-  /**
-   * Check if there's content in the buffer.
-   */
   hasBufferedContent(): boolean {
     return this.buffer.length > 0;
   }
 
-  /**
-   * Get the last completed turn.
-   */
   getLastTurn(): TranscriptTurn | undefined {
     return this.turns[this.turns.length - 1];
   }
 
-  /**
-   * Get turns for a specific speaker.
-   */
   getTurnsBySpeaker(speaker: 'user' | 'agent'): TranscriptTurn[] {
     return this.turns.filter((turn) => turn.speaker === speaker);
   }
 
-  /**
-   * Reset the accumulator (clears buffer and turns).
-   */
   reset(): void {
     this.buffer = '';
     this.turns = [];
     this.stopMarkerDetected = false;
   }
 
-  /**
-   * Clear only the buffer (keeps turns).
-   */
   clearBuffer(): void {
     this.buffer = '';
   }
@@ -201,9 +137,6 @@ export class TranscriptAccumulator {
     });
   }
 
-  /**
-   * Get transcript summary statistics.
-   */
   getStats(): {
     totalTurns: number;
     userTurns: number;
@@ -225,33 +158,4 @@ export class TranscriptAccumulator {
       averageWordsPerTurn: this.turns.length > 0 ? totalWords / this.turns.length : 0,
     };
   }
-}
-
-/**
- * Extract the stop marker from a transcript if present.
- * Returns the transcript with the stop marker removed.
- *
- * @param transcript The transcript text
- * @returns Object with cleaned transcript and whether stop marker was found
- */
-export function extractStopMarker(transcript: string): {
-  text: string;
-  hasStopMarker: boolean;
-} {
-  const hasStopMarker = transcript.includes(STOP_MARKER);
-  const text = transcript.replace(STOP_MARKER, '').trim();
-
-  return { text, hasStopMarker };
-}
-
-/**
- * Format a conversation transcript for display.
- *
- * @param turns Array of transcript turns
- * @param separator Separator between turns (default: '\n---\n')
- */
-export function formatTranscript(turns: TranscriptTurn[], separator: string = '\n---\n'): string {
-  return turns
-    .map((turn) => `${turn.speaker === 'user' ? 'User' : 'Agent'}: ${turn.text}`)
-    .join(separator);
 }

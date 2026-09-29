@@ -1,15 +1,7 @@
-/**
- * Voice Conversation Orchestrator
- *
- * Manages bidirectional audio streaming between a target voice agent
- * and a simulated user. Handles turn detection, transcript accumulation,
- * and conversation lifecycle.
- */
-
 import { EventEmitter } from 'events';
 
 import logger from '../../logger';
-import { AudioBuffer, createStereoWav, type StereoTurn } from './audioBuffer';
+import { AudioBuffer, createStereoWav } from './audioBuffer';
 import { GoogleLiveConnection } from './connections/googleLive';
 import { NovaSonicConnection } from './connections/novaSonic';
 import { OpenAIRealtimeConnection } from './connections/openaiRealtime';
@@ -30,9 +22,6 @@ const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_TIMEOUT_MS = 120000; // 2 minutes
 const DEFAULT_SAMPLE_RATE = 24000;
 
-/**
- * Creates a voice connection based on provider type.
- */
 function createConnection(
   providerType: 'openai' | 'google' | 'bedrock',
   config: VoiceProviderConfig,
@@ -50,17 +39,6 @@ function createConnection(
   }
 }
 
-/**
- * Voice Conversation Orchestrator
- *
- * Bridges audio between a target voice agent and a simulated user,
- * managing the full conversation lifecycle including:
- * - Connection establishment
- * - Audio routing
- * - Turn detection
- * - Transcript accumulation
- * - Stop condition detection
- */
 export class VoiceConversationOrchestrator extends EventEmitter {
   private config: OrchestratorConfig;
   private targetConnection: BaseVoiceConnection | null = null;
@@ -82,11 +60,11 @@ export class VoiceConversationOrchestrator extends EventEmitter {
   // These offsets map each connection's internal timeline to the global timeline.
   private targetAudioOffsetMs = 0;
   private userAudioOffsetMs = 0;
-  // Baseline: where the PREVIOUS response ended in the connection's internal timeline.
+  // Baseline: where the previous response ended in the connection's internal timeline.
   // This is set in audio_done and used to calculate relative position within the current response.
   private targetBaselineMs = 0;
   private userBaselineMs = 0;
-  // Track where the CURRENT response ends (updated on each chunk, copied to baseline in audio_done).
+  // Track where the current response ends (updated on each chunk, copied to baseline in audio_done).
   private targetCurrentEndMs = 0;
   private userCurrentEndMs = 0;
   private pendingTurnDetectorSpeaker: 'target' | 'user' | null = null;
@@ -117,31 +95,18 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     this.setupTurnDetectorHandlers();
   }
 
-  /**
-   * Get the current conversation state.
-   */
   getState(): ConversationState {
     return this.state;
   }
 
-  /**
-   * Get the current turn count.
-   */
   getTurnCount(): number {
     return this.turnCount;
   }
 
-  /**
-   * Get the transcript accumulator.
-   */
   getTranscript(): TranscriptAccumulator {
     return this.transcript;
   }
 
-  /**
-   * Start the voice conversation.
-   * Connects to both endpoints and begins audio routing.
-   */
   async start(): Promise<ConversationResult> {
     if (this.state !== 'idle') {
       throw new Error(`Cannot start conversation: already in state ${this.state}`);
@@ -153,7 +118,6 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     this.emit('state_change', this.state);
 
     try {
-      // Create connections
       this.targetConnection = createConnection(
         this.config.targetConfig.provider as 'openai' | 'google' | 'bedrock',
         this.config.targetConfig,
@@ -162,59 +126,63 @@ export class VoiceConversationOrchestrator extends EventEmitter {
         this.config.simulatedUserConfig.provider as 'openai' | 'google' | 'bedrock',
         this.config.simulatedUserConfig,
       );
-
-      // Setup event handlers before connecting
-      this.setupTargetHandlers();
-      this.setupSimulatedUserHandlers();
-
-      // Connect to both endpoints
-      await this.targetConnection.connect();
-      await this.simulatedUserConnection.connect();
-
-      // Configure sessions
-      await this.targetConnection.configureSession();
-      await this.simulatedUserConnection.configureSession();
-
-      // Start conversation timeout
-      this.setConversationTimeout();
-
-      // Transition to active state
-      this.state = 'active';
-      this.emit('state_change', this.state);
-
-      logger.debug('[Orchestrator] Conversation started');
-
-      // The conversation loop is event-driven
-      // Wait for completion via events
-      return new Promise((resolve) => {
-        const onComplete = (result: ConversationResult) => {
-          this.removeListener('conversation_complete', onComplete);
-          resolve(result);
-        };
-        this.on('conversation_complete', onComplete);
-
-        // Initiate the conversation
-        if (this.config.targetSpeaksFirst === false) {
-          // Simulated user speaks first - request opening from simulated user
-          // This is useful when target doesn't support "speak first" mode (e.g., Nova Sonic)
-          logger.debug('[Orchestrator] Simulated user speaks first mode');
-          this.simulatedUserConnection?.requestResponse();
-        } else {
-          // Target speaks first (default) - request greeting from target
-          this.targetConnection?.requestResponse();
-        }
-      });
     } catch (error) {
-      this.state = 'error';
-      this.emit('state_change', this.state);
-      await this.cleanup();
+      this.cleanup();
       throw error;
     }
+    this.setupTargetHandlers();
+    this.setupSimulatedUserHandlers();
+    const target = this.targetConnection;
+    const user = this.simulatedUserConnection;
+    const isConnecting = () => this.state === 'connecting' && this.targetConnection === target;
+
+    return new Promise((resolve, reject) => {
+      const onComplete = (result: ConversationResult) => {
+        this.removeListener('conversation_complete', onComplete);
+        resolve(result);
+      };
+      this.on('conversation_complete', onComplete);
+      this.setConversationTimeout();
+
+      const setup = async () => {
+        await target.connect();
+        if (!isConnecting()) {
+          return;
+        }
+        await user.connect();
+        if (!isConnecting()) {
+          return;
+        }
+        await target.configureSession();
+        if (!isConnecting()) {
+          return;
+        }
+        await user.configureSession();
+        if (!isConnecting()) {
+          return;
+        }
+
+        this.state = 'active';
+        this.emit('state_change', this.state);
+        await (this.config.targetSpeaksFirst === false ? user : target).requestResponse();
+      };
+      void setup().catch((error) => {
+        if (
+          this.targetConnection !== target ||
+          this.state === 'completed' ||
+          this.state === 'idle'
+        ) {
+          return;
+        }
+        this.state = 'error';
+        this.emit('state_change', this.state);
+        this.removeListener('conversation_complete', onComplete);
+        this.cleanup();
+        reject(error);
+      });
+    });
   }
 
-  /**
-   * Stop the conversation gracefully.
-   */
   async stop(
     reason: 'goal_achieved' | 'max_turns' | 'timeout' | 'user_hangup' = 'user_hangup',
   ): Promise<void> {
@@ -272,6 +240,25 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     return false;
   }
 
+  private async requestNextResponse(connection: BaseVoiceConnection): Promise<void> {
+    try {
+      await connection.commitAudio();
+      if (
+        this.state === 'active' &&
+        (this.targetConnection === connection || this.simulatedUserConnection === connection)
+      ) {
+        await connection.requestResponse();
+      }
+    } catch (error) {
+      if (this.targetConnection === connection || this.simulatedUserConnection === connection) {
+        await this.completeConversation(
+          'error',
+          error instanceof Error ? error : new Error(String(error)),
+        );
+      }
+    }
+  }
+
   private maybeRequestSimulatedUserResponse(): void {
     if (!this.targetAudioDonePending || !this.targetTranscriptDoneForTurn) {
       return;
@@ -281,8 +268,7 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     this.targetTranscriptDoneForTurn = false;
 
     if (this.state === 'active' && this.simulatedUserConnection?.isReady()) {
-      this.simulatedUserConnection.commitAudio();
-      this.simulatedUserConnection.requestResponse();
+      void this.requestNextResponse(this.simulatedUserConnection);
     }
   }
 
@@ -295,14 +281,10 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     this.userTranscriptDoneForTurn = false;
 
     if (this.state === 'active' && this.targetConnection?.isReady()) {
-      this.targetConnection.commitAudio();
-      this.targetConnection.requestResponse();
+      void this.requestNextResponse(this.targetConnection);
     }
   }
 
-  /**
-   * Setup event handlers for the target connection.
-   */
   private setupTargetHandlers(): void {
     if (!this.targetConnection) {
       return;
@@ -395,7 +377,7 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     // Error handling
     this.targetConnection.on('error', (error: Error) => {
       logger.error('[Orchestrator] Target connection error:', { error });
-      void this.completeConversation('error');
+      void this.completeConversation('error', error);
       if (this.listenerCount('error') > 0) {
         this.emit('error', error);
       }
@@ -403,15 +385,12 @@ export class VoiceConversationOrchestrator extends EventEmitter {
 
     this.targetConnection.on('close', () => {
       logger.debug('[Orchestrator] Target connection closed');
-      if (this.state === 'active') {
-        void this.completeConversation('error');
+      if (this.state === 'active' || this.state === 'connecting') {
+        void this.completeConversation('error', new Error('Voice connection closed unexpectedly'));
       }
     });
   }
 
-  /**
-   * Setup event handlers for the simulated user connection.
-   */
   private setupSimulatedUserHandlers(): void {
     if (!this.simulatedUserConnection) {
       return;
@@ -503,7 +482,7 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     // Error handling
     this.simulatedUserConnection.on('error', (error: Error) => {
       logger.error('[Orchestrator] Simulated user connection error:', { error });
-      void this.completeConversation('error');
+      void this.completeConversation('error', error);
       if (this.listenerCount('error') > 0) {
         this.emit('error', error);
       }
@@ -511,15 +490,12 @@ export class VoiceConversationOrchestrator extends EventEmitter {
 
     this.simulatedUserConnection.on('close', () => {
       logger.debug('[Orchestrator] Simulated user connection closed');
-      if (this.state === 'active') {
-        void this.completeConversation('error');
+      if (this.state === 'active' || this.state === 'connecting') {
+        void this.completeConversation('error', new Error('Voice connection closed unexpectedly'));
       }
     });
   }
 
-  /**
-   * Setup event handlers for turn detection.
-   */
   private setupTurnDetectorHandlers(): void {
     this.turnDetector.on('turn_start', () => {
       this.activeTurnDetectorSpeaker =
@@ -562,9 +538,6 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     });
   }
 
-  /**
-   * Set the conversation timeout.
-   */
   private setConversationTimeout(): void {
     if (this.conversationTimeout) {
       clearTimeout(this.conversationTimeout);
@@ -576,11 +549,9 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     }, this.config.timeoutMs || DEFAULT_TIMEOUT_MS);
   }
 
-  /**
-   * Complete the conversation and generate result.
-   */
   private async completeConversation(
     reason: 'goal_achieved' | 'max_turns' | 'timeout' | 'error' | 'user_hangup',
+    error?: Error,
   ): Promise<void> {
     if (this.state === 'completed' || this.state === 'idle') {
       return;
@@ -609,21 +580,14 @@ export class VoiceConversationOrchestrator extends EventEmitter {
       ? this.simulatedUserAudioBuffer.toWav()
       : undefined;
 
-    // Create combined stereo audio (left=agent, right=user for diarization)
-    // Use turn timestamps for accurate time alignment
-    const stereoTurns: StereoTurn[] = turns
-      .filter((t): t is typeof t & { timestamp: number } => t.timestamp !== undefined)
-      .map((t) => ({
-        speaker: t.speaker,
-        timestamp: t.timestamp,
-      }));
     const combinedAudio = shouldRecordAudio
-      ? createStereoWav(this.targetAudioBuffer, this.simulatedUserAudioBuffer, stereoTurns)
+      ? createStereoWav(this.targetAudioBuffer, this.simulatedUserAudioBuffer)
       : undefined;
 
     const result: ConversationResult = {
       success: reason === 'goal_achieved',
       stopReason: reason,
+      ...(error ? { error: error.message } : {}),
       transcript: this.transcript.getFullTranscript(),
       turns,
       turnCount: this.turnCount,
@@ -645,14 +609,11 @@ export class VoiceConversationOrchestrator extends EventEmitter {
       duration: result.duration,
     });
 
-    await this.cleanup();
+    this.cleanup();
     this.emit('conversation_complete', result);
   }
 
-  /**
-   * Cleanup resources.
-   */
-  private async cleanup(): Promise<void> {
+  private cleanup(): void {
     logger.debug('[Orchestrator] Cleaning up...');
 
     if (this.conversationTimeout) {
@@ -669,12 +630,14 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     this.userTranscriptDoneForTurn = false;
 
     if (this.targetConnection) {
-      await this.targetConnection.disconnect();
+      this.targetConnection.disconnect();
+      this.targetConnection.removeAllListeners();
       this.targetConnection = null;
     }
 
     if (this.simulatedUserConnection) {
-      await this.simulatedUserConnection.disconnect();
+      this.simulatedUserConnection.disconnect();
+      this.simulatedUserConnection.removeAllListeners();
       this.simulatedUserConnection = null;
     }
 
@@ -703,15 +666,4 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     this.targetTranscriptDoneForTurn = false;
     this.userTranscriptDoneForTurn = false;
   }
-}
-
-/**
- * Create and run a voice conversation.
- * Convenience function for one-shot conversations.
- */
-export async function runVoiceConversation(
-  config: OrchestratorConfig,
-): Promise<ConversationResult> {
-  const orchestrator = new VoiceConversationOrchestrator(config);
-  return orchestrator.start();
 }

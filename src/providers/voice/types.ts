@@ -5,11 +5,7 @@
  * These types are used across the orchestrator, connections, and provider.
  */
 
-import type { TokenUsage } from '../../types';
-
-// ─────────────────────────────────────────────────────────────
-// AUDIO TYPES
-// ─────────────────────────────────────────────────────────────
+import type { TokenUsage } from '../../contracts/shared';
 
 /**
  * Supported audio formats for voice providers.
@@ -31,10 +27,6 @@ export interface AudioChunk {
   /** Sample rate in Hz */
   sampleRate: number;
 }
-
-// ─────────────────────────────────────────────────────────────
-// CONVERSATION TYPES
-// ─────────────────────────────────────────────────────────────
 
 /**
  * A single turn in the voice conversation (simplified for transcript).
@@ -78,6 +70,7 @@ export interface ConversationResult {
   success: boolean;
   /** Reason the conversation stopped */
   stopReason: StopReason;
+  error?: string;
   /** Full transcript formatted for output */
   transcript: string;
   /** All turns in the conversation */
@@ -102,10 +95,6 @@ export interface ConversationResult {
     timeoutMs?: number;
   };
 }
-
-// ─────────────────────────────────────────────────────────────
-// TURN DETECTION TYPES
-// ─────────────────────────────────────────────────────────────
 
 /**
  * Turn detection mode.
@@ -141,10 +130,6 @@ export const DEFAULT_TURN_DETECTION: TurnDetectionConfig = {
   maxTurnDurationMs: 30000,
   prefixPaddingMs: 300,
 };
-
-// ─────────────────────────────────────────────────────────────
-// PROVIDER CONFIGURATION TYPES
-// ─────────────────────────────────────────────────────────────
 
 /**
  * Supported voice provider types.
@@ -189,28 +174,9 @@ export interface OrchestratorConfig {
   timeoutMs?: number;
   /** Whether the target speaks first (default: true) */
   targetSpeaksFirst?: boolean;
-  /** Allow interruptions (barge-in) */
-  enableInterruptions?: boolean;
   /** Record full audio for playback */
   recordFullAudio?: boolean;
 }
-
-// ─────────────────────────────────────────────────────────────
-// SIMULATED VOICE USER CONFIG
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Available voices for OpenAI Realtime.
- */
-export type OpenAIVoice =
-  | 'alloy'
-  | 'ash'
-  | 'ballad'
-  | 'coral'
-  | 'echo'
-  | 'sage'
-  | 'shimmer'
-  | 'verse';
 
 /**
  * Configuration for the SimulatedVoiceUser provider.
@@ -270,22 +236,6 @@ export interface SimulatedVoiceUserConfig {
 }
 
 /**
- * Default configuration for SimulatedVoiceUser.
- */
-export const DEFAULT_SIMULATED_VOICE_USER_CONFIG: Required<
-  Pick<SimulatedVoiceUserConfig, 'maxTurns' | 'timeoutMs' | 'sampleRate' | 'audioFormat'>
-> = {
-  maxTurns: 10,
-  timeoutMs: 120000,
-  sampleRate: 24000,
-  audioFormat: 'pcm16',
-};
-
-// ─────────────────────────────────────────────────────────────
-// WEBSOCKET MESSAGE TYPES
-// ─────────────────────────────────────────────────────────────
-
-/**
  * Base WebSocket message structure.
  */
 export interface RealtimeMessage {
@@ -306,75 +256,6 @@ export interface RealtimeMessage {
   streamingCustomOp?: Record<string, unknown>;
   [key: string]: unknown;
 }
-
-/**
- * OpenAI session update message.
- */
-export interface SessionUpdateMessage extends RealtimeMessage {
-  type: 'session.update';
-  session: {
-    type: 'realtime';
-    output_modalities: Array<'text' | 'audio'>;
-    instructions: string;
-    audio: {
-      input: {
-        format: { type: 'audio/pcm'; rate: number } | { type: 'audio/pcmu' | 'audio/pcma' };
-        transcription?: { model: string };
-        turn_detection?: {
-          type: 'server_vad';
-          threshold?: number;
-          prefix_padding_ms?: number;
-          silence_duration_ms?: number;
-        } | null;
-      };
-      output: {
-        format: { type: 'audio/pcm'; rate: number } | { type: 'audio/pcmu' | 'audio/pcma' };
-        voice?: string;
-      };
-    };
-  };
-}
-
-/**
- * Audio delta message (streaming audio chunk).
- */
-export interface AudioDeltaMessage extends RealtimeMessage {
-  type: 'response.output_audio.delta' | 'input_audio_buffer.append';
-  delta?: string;
-  audio?: string;
-}
-
-/**
- * Transcript delta message.
- */
-export interface TranscriptDeltaMessage extends RealtimeMessage {
-  type: 'response.output_audio_transcript.delta';
-  delta: string;
-}
-
-/**
- * Transcript complete message.
- */
-export interface TranscriptDoneMessage extends RealtimeMessage {
-  type: 'response.output_audio_transcript.done';
-  transcript: string;
-}
-
-/**
- * Error message from voice provider.
- */
-export interface ErrorMessage extends RealtimeMessage {
-  type: 'error';
-  error: {
-    type: string;
-    code?: string;
-    message: string;
-  };
-}
-
-// ─────────────────────────────────────────────────────────────
-// CONNECTION EVENTS
-// ─────────────────────────────────────────────────────────────
 
 /**
  * Events emitted by voice connections.
@@ -403,10 +284,6 @@ export interface VoiceConnectionEvents {
   /** Connection closed */
   close: () => void;
 }
-
-// ─────────────────────────────────────────────────────────────
-// UTILITY TYPES
-// ─────────────────────────────────────────────────────────────
 
 /**
  * Audio sample rates commonly used.

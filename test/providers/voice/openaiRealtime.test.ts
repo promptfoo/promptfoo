@@ -197,7 +197,7 @@ describe('OpenAIRealtimeConnection', () => {
 
   describe('sendAudio', () => {
     it('should not send if not ready', () => {
-      const sendSpy = vi.spyOn(connection as any, 'send');
+      const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
       connection.sendAudio({
         data: 'base64audio',
         timestamp: Date.now(),
@@ -208,12 +208,12 @@ describe('OpenAIRealtimeConnection', () => {
       expect(sendSpy).not.toHaveBeenCalled();
     });
 
-    it('resamples routed PCM audio to the configured OpenAI input rate', () => {
+    it('keeps routed OpenAI PCM at 24 kHz regardless of configured recording rate', () => {
       const rateAdjusted = new OpenAIRealtimeConnection({
         ...config,
         sampleRate: 16000,
       });
-      const sendSpy = vi.spyOn(rateAdjusted as any, 'send');
+      const sendSpy = vi.spyOn(rateAdjusted as any, 'send').mockReturnValue(true);
       (rateAdjusted as any).setReady();
 
       rateAdjusted.sendAudio({
@@ -224,7 +224,7 @@ describe('OpenAIRealtimeConnection', () => {
       });
 
       const sent = sendSpy.mock.calls[0]?.[0] as { audio: string };
-      expect(Buffer.from(sent.audio, 'base64')).toHaveLength(640);
+      expect(Buffer.from(sent.audio, 'base64')).toHaveLength(960);
     });
 
     it('rejects unsupported routed format conversion into G.711 inputs', () => {
@@ -253,7 +253,7 @@ describe('OpenAIRealtimeConnection', () => {
 
     it('should use the Realtime GA session update shape', async () => {
       (connection as any).state = 'connected';
-      const sendSpy = vi.spyOn(connection as any, 'send');
+      const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
 
       const configurePromise = connection.configureSession();
 
@@ -265,7 +265,6 @@ describe('OpenAIRealtimeConnection', () => {
           audio: {
             input: expect.objectContaining({
               format: { type: 'audio/pcm', rate: 24000 },
-              transcription: { model: 'whisper-1' },
             }),
             output: {
               format: { type: 'audio/pcm', rate: 24000 },
@@ -275,6 +274,9 @@ describe('OpenAIRealtimeConnection', () => {
         }),
       });
 
+      expect((sendSpy.mock.calls[0][0] as any).session.audio.input).not.toHaveProperty(
+        'transcription',
+      );
       connection.emit('session_configured');
       await configurePromise;
     });
@@ -290,7 +292,7 @@ describe('OpenAIRealtimeConnection', () => {
         turnDetection: undefined,
       });
       (mappedConnection as any).state = 'connected';
-      const sendSpy = vi.spyOn(mappedConnection as any, 'send');
+      const sendSpy = vi.spyOn(mappedConnection as any, 'send').mockReturnValue(true);
 
       const configurePromise = mappedConnection.configureSession();
       expect(sendSpy).toHaveBeenCalledWith(
@@ -309,9 +311,38 @@ describe('OpenAIRealtimeConnection', () => {
     });
   });
 
+  it.each(['failed', 'incomplete', 'cancelled'])(
+    'reports terminal response status %s',
+    (status) => {
+      const error = vi.fn();
+      connection.on('error', error);
+      (connection as any).handleMessage(
+        JSON.stringify({
+          type: 'response.done',
+          response: { status, status_details: { reason: 'fixture reason' } },
+        }),
+      );
+      expect(error).toHaveBeenCalledWith(
+        expect.objectContaining({ message: `OpenAI Realtime response ${status}: fixture reason` }),
+      );
+    },
+  );
+
+  it('allows a requested response cancellation', () => {
+    const error = vi.fn();
+    connection.on('error', error);
+    (connection as any).setReady();
+    vi.spyOn(connection as any, 'send').mockReturnValue(true);
+    connection.cancelResponse();
+    (connection as any).handleMessage(
+      JSON.stringify({ type: 'response.done', response: { status: 'cancelled' } }),
+    );
+    expect(error).not.toHaveBeenCalled();
+  });
+
   describe('commitAudio', () => {
     it('should not commit if not ready', () => {
-      const sendSpy = vi.spyOn(connection as any, 'send');
+      const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
       connection.commitAudio();
 
       expect(sendSpy).not.toHaveBeenCalled();
@@ -320,7 +351,7 @@ describe('OpenAIRealtimeConnection', () => {
 
   describe('requestResponse', () => {
     it('should not request if not ready', () => {
-      const sendSpy = vi.spyOn(connection as any, 'send');
+      const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
       connection.requestResponse();
 
       expect(sendSpy).not.toHaveBeenCalled();
@@ -329,7 +360,7 @@ describe('OpenAIRealtimeConnection', () => {
 
   describe('cancelResponse', () => {
     it('should not cancel if not ready', () => {
-      const sendSpy = vi.spyOn(connection as any, 'send');
+      const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
       connection.cancelResponse();
 
       expect(sendSpy).not.toHaveBeenCalled();
@@ -338,7 +369,7 @@ describe('OpenAIRealtimeConnection', () => {
 
   describe('clearAudioBuffer', () => {
     it('should not clear if not ready', () => {
-      const sendSpy = vi.spyOn(connection as any, 'send');
+      const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
       connection.clearAudioBuffer();
 
       expect(sendSpy).not.toHaveBeenCalled();
@@ -347,7 +378,7 @@ describe('OpenAIRealtimeConnection', () => {
 
   describe('ready audio controls', () => {
     it('should send audio and response controls when ready', () => {
-      const sendSpy = vi.spyOn(connection as any, 'send');
+      const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
       (connection as any).setReady();
 
       connection.sendAudio({

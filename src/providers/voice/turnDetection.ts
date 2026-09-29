@@ -1,10 +1,3 @@
-/**
- * Turn Detection
- *
- * Handles turn detection logic for voice conversations.
- * Supports server VAD, silence-based, and hybrid detection modes.
- */
-
 import { EventEmitter } from 'events';
 
 import { audioDataToPcm16, base64ToBuffer } from './audioBuffer';
@@ -14,26 +7,6 @@ import type { AudioChunk, TurnDetectionConfig } from './types';
 
 const DEFAULT_LOCAL_VAD_THRESHOLD = 0.02;
 
-/**
- * Events emitted by TurnDetector.
- */
-export interface TurnDetectorEvents {
-  /** Speech has started */
-  turn_start: () => void;
-  /** Turn is complete (silence threshold met) */
-  turn_end: () => void;
-  /** Turn exceeded maximum duration */
-  turn_timeout: () => void;
-}
-
-/**
- * Handles turn detection logic for voice conversations.
- *
- * Supports three modes:
- * - `server_vad`: Relies on the voice provider's VAD events
- * - `silence`: Detects silence locally using audio amplitude
- * - `hybrid`: Uses server VAD with local silence detection as fallback
- */
 export class TurnDetector extends EventEmitter {
   private config: TurnDetectionConfig;
   private silenceTimer: NodeJS.Timeout | null = null;
@@ -56,9 +29,6 @@ export class TurnDetector extends EventEmitter {
     this.silenceDetector = new SilenceDetector(this.config.vadThreshold);
   }
 
-  /**
-   * Called when speech is detected (from server VAD).
-   */
   onSpeechStart(): void {
     if (this.isSpeaking) {
       this.clearSilenceTimer();
@@ -77,9 +47,6 @@ export class TurnDetector extends EventEmitter {
     this.emit('turn_start');
   }
 
-  /**
-   * Called when silence is detected (from server VAD).
-   */
   onSpeechEnd(): void {
     if (!this.isSpeaking) {
       return;
@@ -98,10 +65,6 @@ export class TurnDetector extends EventEmitter {
     this.endTurn();
   }
 
-  /**
-   * Called on each audio chunk (for local silence detection).
-   * Only used in 'silence' or 'hybrid' mode.
-   */
   onAudioChunk(chunk: AudioChunk): void {
     if (this.config.mode === 'server_vad') {
       // In server_vad mode, we don't do local detection
@@ -126,9 +89,6 @@ export class TurnDetector extends EventEmitter {
     }
   }
 
-  /**
-   * Force end of turn (e.g., max duration exceeded).
-   */
   forceEndTurn(): void {
     if (this.isSpeaking) {
       this.emit('turn_timeout');
@@ -136,9 +96,6 @@ export class TurnDetector extends EventEmitter {
     }
   }
 
-  /**
-   * Reset the detector state.
-   */
   reset(): void {
     this.clearSilenceTimer();
     this.clearMaxDurationTimer();
@@ -146,16 +103,10 @@ export class TurnDetector extends EventEmitter {
     this.turnStartTime = null;
   }
 
-  /**
-   * Check if currently in a turn (speaking).
-   */
   isInTurn(): boolean {
     return this.isSpeaking;
   }
 
-  /**
-   * Get the current turn duration in milliseconds.
-   */
   getTurnDuration(): number {
     if (this.turnStartTime === null) {
       return 0;
@@ -163,9 +114,6 @@ export class TurnDetector extends EventEmitter {
     return Date.now() - this.turnStartTime;
   }
 
-  /**
-   * Update configuration.
-   */
   updateConfig(config: Partial<TurnDetectionConfig>): void {
     const switchingToLocalMode =
       config.mode !== undefined &&
@@ -232,11 +180,6 @@ export class TurnDetector extends EventEmitter {
   }
 }
 
-/**
- * Silence detector using audio amplitude analysis.
- *
- * Analyzes PCM16 audio data to determine if it represents silence.
- */
 export class SilenceDetector {
   private threshold: number;
   private readonly defaultThreshold = DEFAULT_LOCAL_VAD_THRESHOLD; // 2% of max amplitude
@@ -307,24 +250,11 @@ export class SilenceDetector {
     return maxAbsSample / 32768;
   }
 
-  /**
-   * Update the silence threshold.
-   */
   setThreshold(threshold: number): void {
     this.threshold = threshold;
   }
 
-  /**
-   * Get the current silence threshold.
-   */
   getThreshold(): number {
     return this.threshold;
   }
-}
-
-/**
- * Create a TurnDetector with the given configuration.
- */
-export function createTurnDetector(config?: Partial<TurnDetectionConfig>): TurnDetector {
-  return new TurnDetector(config);
 }

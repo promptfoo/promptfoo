@@ -1,7 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Simulated voice user for testing realtime voice agents
-
-# The prompt becomes the instructions for the TARGET voice agent
 prompts:
   - |
     You are a friendly customer service agent for Acme Bank.
@@ -11,31 +9,20 @@ prompts:
 providers:
   - id: promptfoo:simulated-voice-user
     config:
-      # Simulated user configuration
       instructions: '{{goal}}'
       maxTurns: 10
       timeoutMs: 120000
-
-      # Target agent settings (the agent being tested)
       targetProvider: openai
       targetModel: gpt-realtime
       targetVoice: alloy
-
-      # Simulated user voice settings
       simulatedUserProvider: openai
       simulatedUserModel: gpt-realtime
       simulatedUserVoice: echo
-
-      # Audio settings
       audioFormat: pcm16
       sampleRate: 24000
-
-      # Turn detection (voice activity detection)
       turnDetectionMode: server_vad
       silenceThresholdMs: 500
       vadThreshold: 0.02
-
-# Test various customer scenarios
 tests:
   - vars:
       goal: |

@@ -312,6 +312,29 @@ describe('SimulatedVoiceUser', () => {
     );
   });
 
+  it.each([false, true])(
+    'reports partial error results as provider errors (remote=%s)',
+    async (remote) => {
+      const result = {
+        success: false,
+        stopReason: 'error',
+        error: 'fixture endpoint closed',
+        turns: [{ speaker: 'agent', text: 'partial answer' }],
+        transcript: 'partial answer',
+        turnCount: 1,
+        duration: 1,
+      };
+      providerMocks.cloud.isEnabled.mockReturnValue(remote);
+      providerMocks.start.mockResolvedValue(result);
+      providerMocks.fetchWithProxy.mockResolvedValue({ ok: true, json: async () => result });
+      const response = await new SimulatedVoiceUser({
+        config: { instructions: 'Ask a benign question' },
+      }).callApi('fixture');
+      expect(response.error).toBe('fixture endpoint closed');
+      expect(response.output).toBe('Assistant: partial answer');
+    },
+  );
+
   it('returns local orchestrator errors', async () => {
     providerMocks.start.mockRejectedValue(new Error('local failed'));
 

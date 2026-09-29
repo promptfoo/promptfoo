@@ -1,10 +1,3 @@
-/**
- * OpenAI Realtime Connection
- *
- * WebSocket connection implementation for OpenAI's Realtime API.
- * Handles session configuration, audio streaming, and event routing.
- */
-
 import WebSocket from 'ws';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
@@ -26,29 +19,24 @@ const DEFAULT_SAMPLE_RATE = 24000;
 const G711_SAMPLE_RATE = 8000;
 const CONNECTION_TIMEOUT_MS = 15000;
 
-function toRealtimeAudioFormat(format: AudioFormat, sampleRate: number) {
+function toRealtimeAudioFormat(format: AudioFormat) {
   switch (format) {
     case 'g711_ulaw':
       return { type: 'audio/pcmu' as const };
     case 'g711_alaw':
       return { type: 'audio/pcma' as const };
     case 'pcm16':
-      return { type: 'audio/pcm' as const, rate: sampleRate };
+      return { type: 'audio/pcm' as const, rate: DEFAULT_SAMPLE_RATE };
   }
 }
 
-/**
- * OpenAI Realtime API WebSocket connection.
- *
- * Manages the WebSocket connection to OpenAI's Realtime API,
- * handling session configuration, audio streaming, and event routing.
- */
 export class OpenAIRealtimeConnection extends BaseVoiceConnection {
   private model: string;
-  // Track cumulative audio position across ALL responses (for playback timeline).
+  // Track cumulative audio position across responses (for playback timeline).
   // This is the key to proper audio alignment: each chunk's timestamp is based
-  // on how much audio has been produced, NOT when it was received.
-  private cumulativeAudioPositionMs: number = 0;
+  // on how much audio has been produced, rather than when it was received.
+  private cumulativeAudioPositionMs = 0;
+  private cancelRequested = false;
 
   constructor(config: VoiceProviderConfig) {
     super(config);
@@ -56,14 +44,9 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
   }
 
   private getAudioSampleRate(audioFormat: AudioFormat): number {
-    return audioFormat === 'pcm16'
-      ? this.config.sampleRate || DEFAULT_SAMPLE_RATE
-      : G711_SAMPLE_RATE;
+    return audioFormat === 'pcm16' ? DEFAULT_SAMPLE_RATE : G711_SAMPLE_RATE;
   }
 
-  /**
-   * Connect to the OpenAI Realtime API.
-   */
   async connect(): Promise<void> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -86,6 +69,9 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
       });
 
       this.ws.on('open', () => {
+        if (this.state !== 'connecting') {
+          return;
+        }
         logger.debug('[OpenAIRealtime] WebSocket connected');
         this.clearConnectionTimeout();
         this.clearPendingConnectionReject();
@@ -94,24 +80,10 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
         resolve();
       });
 
-      this.ws.on('error', (error: Error) => {
-        logger.error('[OpenAIRealtime] WebSocket error:', { error });
-        this.clearConnectionTimeout();
-        if (this.state === 'connecting') {
-          this.clearPendingConnectionReject();
-          reject(error);
-        } else {
-          this.handleError(error);
-        }
-      });
-
       this.setupWebSocketHandlers(this.ws);
     });
   }
 
-  /**
-   * Configure the voice session.
-   */
   async configureSession(): Promise<void> {
     if (!this.isConnected()) {
       throw new Error('Cannot configure session: not connected');
@@ -129,10 +101,7 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
         : null;
 
     const audioFormat = this.config.audioFormat || DEFAULT_AUDIO_FORMAT;
-    const realtimeAudioFormat = toRealtimeAudioFormat(
-      audioFormat,
-      this.getAudioSampleRate(audioFormat),
-    );
+    const realtimeAudioFormat = toRealtimeAudioFormat(audioFormat);
     const sessionConfig = {
       type: 'session.update',
       session: {
@@ -142,9 +111,6 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
         audio: {
           input: {
             format: realtimeAudioFormat,
-            transcription: {
-              model: 'whisper-1',
-            },
             turn_detection: turnDetectionConfig,
           },
           output: {
@@ -160,17 +126,15 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
       turnDetection: turnDetectionConfig?.type || 'disabled',
     });
 
+    const configured = waitForEvent(this, 'session_configured', 10000);
     this.send(sessionConfig);
 
     // Wait for session confirmation
-    await waitForEvent(this, 'session_configured', 10000);
+    await configured;
 
     logger.debug('[OpenAIRealtime] Session configured');
   }
 
-  /**
-   * Send an audio chunk to the API.
-   */
   sendAudio(chunk: AudioChunk): void {
     if (!this.isReady()) {
       logger.warn('[OpenAIRealtime] Cannot send audio: not ready');
@@ -201,9 +165,6 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
     });
   }
 
-  /**
-   * Commit the audio buffer (signal end of input).
-   */
   commitAudio(): void {
     if (!this.isReady()) {
       logger.warn('[OpenAIRealtime] Cannot commit audio: not ready');
@@ -215,9 +176,6 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
     });
   }
 
-  /**
-   * Request a response from the API.
-   */
   requestResponse(): void {
     if (!this.isReady()) {
       logger.warn('[OpenAIRealtime] Cannot request response: not ready');
@@ -227,9 +185,6 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
     this.send({ type: 'response.create' });
   }
 
-  /**
-   * Clear the input audio buffer.
-   */
   clearAudioBuffer(): void {
     if (!this.isReady()) {
       return;
@@ -240,10 +195,8 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
     });
   }
 
-  /**
-   * Cancel the current response.
-   */
   cancelResponse(): void {
+    this.cancelRequested = true;
     if (!this.isReady()) {
       return;
     }
@@ -253,9 +206,6 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
     });
   }
 
-  /**
-   * Handle incoming WebSocket messages.
-   */
   protected handleMessage(data: Buffer | string): void {
     const msgString = typeof data === 'string' ? data : data.toString('utf-8');
 
@@ -353,9 +303,21 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
         });
         break;
 
-      case 'response.done':
-        logger.debug('[OpenAIRealtime] Response done');
+      case 'response.done': {
+        const response = msg.response as
+          | { status?: string; status_details?: { reason?: string; error?: { message?: string } } }
+          | undefined;
+        const status = response?.status;
+        if (status && status !== 'completed' && !(status === 'cancelled' && this.cancelRequested)) {
+          const detail =
+            response?.status_details?.error?.message ?? response?.status_details?.reason;
+          this.handleError(
+            new Error(`OpenAI Realtime response ${status}${detail ? `: ${detail}` : ''}`),
+          );
+        }
+        this.cancelRequested = false;
         break;
+      }
 
       case 'response.output_item.added':
         logger.debug('[OpenAIRealtime] Output item added');
@@ -387,7 +349,7 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
       case 'error':
         const error = msg.error as { type?: string; code?: string; message?: string };
         logger.error('[OpenAIRealtime] API error:', { error });
-        this.emit('error', new Error(error?.message || 'Unknown OpenAI Realtime error'));
+        this.handleError(new Error(error?.message || 'Unknown OpenAI Realtime error'));
         break;
 
       default:
@@ -395,9 +357,6 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
     }
   }
 
-  /**
-   * Get the API key from config or environment.
-   */
   protected getApiKey(): string {
     return this.config.apiKey || getEnvString('OPENAI_API_KEY') || '';
   }

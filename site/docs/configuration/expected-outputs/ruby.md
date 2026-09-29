@@ -93,6 +93,9 @@ A `context` object is available in the Ruby method. Here is its type definition:
   # The complete provider response
   'providerResponse' => Object | nil,  # ProviderResponse type
 
+  # Optional shortcut to providerResponse metadata
+  'metadata' => Hash | nil,
+
   # OpenTelemetry trace data (when tracing is enabled)
   'trace' => TraceData | nil
 }
@@ -107,7 +110,7 @@ tests:
       example: 'Example text'
     assert:
       - type: ruby
-        value: 'context["vars"]["example"] in output'
+        value: 'output.include?(context["vars"]["example"])'
 ```
 
 ## External .rb
@@ -182,6 +185,8 @@ You can also return nested metrics and assertions via a `GradingResult` object:
   'pass' => true,
   'score' => 0.75,
   'reason' => 'Looks good to me',
+  'named_scores' => {'quality' => 0.75},
+  'named_score_weights' => {'quality' => 3},
   'componentResults' => [{
     'pass' => output.downcase.include?('bananas'),
     'score' => 0.5,
@@ -194,6 +199,8 @@ You can also return nested metrics and assertions via a `GradingResult` object:
 }
 ```
 
+The `quality` metric contributes `0.75 × 3 = 2.25` to its weighted total, with weight `3`, so it displays as 75%.
+
 ### GradingResult types
 
 Here's a Ruby type definition you can use for the [`GradingResult`](/docs/configuration/reference/#gradingresult) object:
@@ -205,7 +212,8 @@ Here's a Ruby type definition you can use for the [`GradingResult`](/docs/config
   'score' => Float,
   'reason' => String,
   'componentResults' => Array[GradingResult] | nil,  # Component results (optional)
-  'namedScores' => Hash[String, Float] | nil  # Appear as metrics in the UI (optional)
+  'namedScores' => Hash[String, Float] | nil,  # Appear as metrics in the UI (optional)
+  'namedScoreWeights' => Hash[String, Float] | nil  # Total weight per named score (optional)
 }
 ```
 
@@ -214,6 +222,7 @@ Ruby snake_case fields are automatically mapped to camelCase:
 
 - `pass_` → `pass` (or just use `"pass"` as a hash key)
 - `named_scores` → `namedScores`
+- `named_score_weights` → `namedScoreWeights`
 - `component_results` → `componentResults`
 - `tokens_used` → `tokensUsed`
   :::

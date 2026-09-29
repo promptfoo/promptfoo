@@ -1,10 +1,3 @@
-/**
- * Google Live Connection
- *
- * WebSocket connection implementation for Google's Live (Gemini) API.
- * Handles session configuration, audio streaming, and event routing.
- */
-
 import WebSocket from 'ws';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
@@ -43,12 +36,6 @@ type GoogleRealtimeInput = {
   audio?: { mimeType?: string; data?: string };
 };
 
-/**
- * Google Live API WebSocket connection.
- *
- * Manages the WebSocket connection to Google's Live API,
- * handling session configuration, audio streaming, and event routing.
- */
 export class GoogleLiveConnection extends BaseVoiceConnection {
   private model: string;
   private apiVersion: string;
@@ -65,9 +52,6 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
     this.apiVersion = (config as { apiVersion?: string }).apiVersion || DEFAULT_API_VERSION;
   }
 
-  /**
-   * Connect to the Google Live API.
-   */
   async connect(): Promise<void> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -86,6 +70,9 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
       this.ws = new WebSocket(url);
 
       this.ws.on('open', () => {
+        if (this.state !== 'connecting') {
+          return;
+        }
         logger.debug('[GoogleLive] WebSocket connected');
         this.clearConnectionTimeout();
         this.clearPendingConnectionReject();
@@ -94,24 +81,10 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
         resolve();
       });
 
-      this.ws.on('error', (error: Error) => {
-        logger.error('[GoogleLive] WebSocket error:', { error });
-        this.clearConnectionTimeout();
-        if (this.state === 'connecting') {
-          this.clearPendingConnectionReject();
-          reject(error);
-        } else {
-          this.handleError(error);
-        }
-      });
-
       this.setupWebSocketHandlers(this.ws);
     });
   }
 
-  /**
-   * Configure the voice session.
-   */
   async configureSession(): Promise<void> {
     if (!this.isConnected()) {
       throw new Error('Cannot configure session: not connected');
@@ -160,17 +133,15 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
       voice: this.config.voice,
     });
 
+    const configured = waitForEvent(this, 'session_configured', 10000);
     this.send(setupMessage);
 
     // Wait for session confirmation
-    await waitForEvent(this, 'session_configured', 10000);
+    await configured;
 
     logger.debug('[GoogleLive] Session configured');
   }
 
-  /**
-   * Send an audio chunk to the API.
-   */
   sendAudio(chunk: AudioChunk): void {
     if (!this.isReady()) {
       logger.warn('[GoogleLive] Cannot send audio: not ready');
@@ -194,10 +165,6 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
     });
   }
 
-  /**
-   * Commit the audio buffer (signal end of input).
-   * End the manually bounded activity after the routed input audio completes.
-   */
   commitAudio(): void {
     if (!this.isReady()) {
       logger.warn('[GoogleLive] Cannot commit audio: not ready');
@@ -215,11 +182,6 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
     this.responseTriggeredByInput = true;
   }
 
-  /**
-   * Request a response from the API.
-   * Google Live responds to activityEnd after routed audio. For an initial
-   * speak-first request there is no audio to close, so provide a text kickoff.
-   */
   requestResponse(): void {
     if (!this.isReady()) {
       logger.warn('[GoogleLive] Cannot request response: not ready');
@@ -236,27 +198,16 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
     this.sendText(INITIAL_RESPONSE_PROMPT);
   }
 
-  /**
-   * Clear the input audio buffer.
-   * Google Live doesn't have explicit buffer clearing.
-   */
   clearAudioBuffer(): void {
     // Google Live doesn't support explicit buffer clearing
     logger.debug('[GoogleLive] Buffer clear not supported - will be handled by new turn');
   }
 
-  /**
-   * Cancel the current response.
-   * Google Live doesn't support explicit response cancellation.
-   */
   cancelResponse(): void {
     // Google Live doesn't support explicit response cancellation
     logger.debug('[GoogleLive] Response cancellation not supported');
   }
 
-  /**
-   * Send a text message (for text-based turns).
-   */
   sendText(text: string): void {
     if (!this.isReady()) {
       logger.warn('[GoogleLive] Cannot send text: not ready');
@@ -267,9 +218,6 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
     this.send({ realtimeInput: { text } });
   }
 
-  /**
-   * Handle incoming WebSocket messages.
-   */
   protected handleMessage(data: Buffer | string): void {
     // Handle binary audio data
     if (Buffer.isBuffer(data)) {
@@ -289,9 +237,6 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
     this.handleJsonMessage(data);
   }
 
-  /**
-   * Handle JSON messages from the API.
-   */
   private handleJsonMessage(msgString: string): void {
     let msg: RealtimeMessage;
     try {
@@ -315,7 +260,7 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
     if (msg.error) {
       const error = msg.error as { message?: string; code?: number };
       logger.error('[GoogleLive] API error:', { error });
-      this.emit('error', new Error(error?.message || 'Unknown Google Live error'));
+      this.handleError(new Error(error?.message || 'Unknown Google Live error'));
       return;
     }
 
@@ -448,9 +393,6 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
     super.disconnect();
   }
 
-  /**
-   * Get the API key from config or environment.
-   */
   protected getApiKey(): string {
     return this.config.apiKey || getEnvString('GOOGLE_API_KEY') || '';
   }

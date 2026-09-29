@@ -1,11 +1,3 @@
-/**
- * Base Voice Connection
- *
- * Abstract base class for voice provider WebSocket connections.
- * Provides common functionality for connection lifecycle, message routing,
- * and event handling.
- */
-
 import { EventEmitter } from 'events';
 
 import logger from '../../../logger';
@@ -13,22 +5,8 @@ import type WebSocket from 'ws';
 
 import type { AudioChunk, VoiceConnectionEvents, VoiceProviderConfig } from '../types';
 
-/**
- * Connection state.
- */
-export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'ready' | 'error';
+type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'ready' | 'error';
 
-/**
- * Abstract base class for voice provider connections.
- *
- * Subclasses must implement:
- * - connect(): Establish WebSocket connection
- * - configureSession(): Configure the voice session
- * - sendAudio(): Send audio chunk to the provider
- * - commitAudio(): Commit audio buffer (signal end of input)
- * - requestResponse(): Request a response from the provider
- * - handleMessage(): Process incoming WebSocket messages
- */
 export abstract class BaseVoiceConnection extends EventEmitter {
   protected ws: WebSocket | null = null;
   protected sessionId: string | null = null;
@@ -43,71 +21,32 @@ export abstract class BaseVoiceConnection extends EventEmitter {
     this.config = config;
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // ABSTRACT METHODS - Must be implemented by subclasses
-  // ─────────────────────────────────────────────────────────────
-
-  /**
-   * Establish the WebSocket connection.
-   * Should resolve when the connection is open (but not necessarily configured).
-   */
   abstract connect(): Promise<void>;
 
-  /**
-   * Configure the voice session after connection.
-   * Should resolve when the session is ready to use.
-   */
   abstract configureSession(): Promise<void>;
 
-  /**
-   * Send an audio chunk to the provider.
-   */
   abstract sendAudio(chunk: AudioChunk): void;
 
-  /**
-   * Commit the audio buffer (signal end of input for this turn).
-   * May be async for providers that need to send multiple messages (e.g., VAD triggers).
-   */
   abstract commitAudio(): void | Promise<void>;
 
-  /**
-   * Request a response from the provider.
-   * May be async for providers that need to send multiple messages (e.g., VAD triggers).
-   */
   abstract requestResponse(): void | Promise<void>;
 
-  /**
-   * Cancel the current response.
-   * Not all providers support this.
-   */
   cancelResponse(): void {
     // Default implementation does nothing
   }
 
-  /**
-   * Clear the audio buffer.
-   * Not all providers support this.
-   */
   clearAudioBuffer(): void {
     // Default implementation does nothing
   }
 
-  /**
-   * Handle incoming WebSocket messages.
-   * Should parse messages and emit appropriate events.
-   */
   protected abstract handleMessage(data: Buffer | string): void;
 
-  // ─────────────────────────────────────────────────────────────
-  // PUBLIC METHODS
-  // ─────────────────────────────────────────────────────────────
-
-  /**
-   * Disconnect from the provider.
-   */
   disconnect(): void {
+    const error = new Error('Voice connection disconnected');
+    error.name = 'AbortError';
+    this.rejectPendingConnection(error);
     this.clearTimers();
-    this.clearPendingConnectionReject();
+    this.state = 'disconnected';
 
     if (this.ws) {
       try {
@@ -118,60 +57,34 @@ export abstract class BaseVoiceConnection extends EventEmitter {
       this.ws = null;
     }
 
-    this.state = 'disconnected';
     this.sessionId = null;
+    this.emit('close');
   }
 
-  /**
-   * Check if connected and ready.
-   */
   isReady(): boolean {
     return this.state === 'ready';
   }
 
-  /**
-   * Check if connected (may not be ready yet).
-   */
   isConnected(): boolean {
     return this.state === 'connected' || this.state === 'ready';
   }
 
-  /**
-   * Get the current connection state.
-   */
   getState(): ConnectionState {
     return this.state;
   }
 
-  /**
-   * Get the session ID.
-   */
   getSessionId(): string | null {
     return this.sessionId;
   }
 
-  /**
-   * Get the provider configuration.
-   */
   getConfig(): VoiceProviderConfig {
     return this.config;
   }
 
-  /**
-   * Update the configuration.
-   * Note: This does not reconfigure the session.
-   */
   updateConfig(config: Partial<VoiceProviderConfig>): void {
     this.config = { ...this.config, ...config };
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // PROTECTED METHODS - For use by subclasses
-  // ─────────────────────────────────────────────────────────────
-
-  /**
-   * Set up common WebSocket event handlers.
-   */
   protected setupWebSocketHandlers(ws: WebSocket): void {
     ws.on('message', (data: Buffer | string) => {
       try {
@@ -188,6 +101,7 @@ export abstract class BaseVoiceConnection extends EventEmitter {
         reason: reason.toString(),
       });
       const wasConnecting = this.state === 'connecting';
+      const wasDisconnected = this.state === 'disconnected';
       this.clearTimers();
       this.state = 'disconnected';
       if (wasConnecting) {
@@ -197,7 +111,9 @@ export abstract class BaseVoiceConnection extends EventEmitter {
           new Error(`WebSocket closed while connecting (${code})${detail}`),
         );
       }
-      this.emit('close');
+      if (!wasDisconnected) {
+        this.emit('close');
+      }
     });
 
     ws.on('error', (error: Error) => {
@@ -210,13 +126,10 @@ export abstract class BaseVoiceConnection extends EventEmitter {
     });
   }
 
-  /**
-   * Send a JSON message over the WebSocket.
-   */
   protected send(message: object): boolean {
     if (!this.ws || this.ws.readyState !== 1) {
       // 1 = OPEN
-      logger.warn('[VoiceConnection] Cannot send - WebSocket not open');
+      this.handleError(new Error('Cannot send voice data: WebSocket not open'));
       return false;
     }
 
@@ -224,32 +137,25 @@ export abstract class BaseVoiceConnection extends EventEmitter {
       this.ws.send(JSON.stringify(message));
       return true;
     } catch (error) {
-      logger.error('[VoiceConnection] Error sending message:', { error });
+      this.handleError(error instanceof Error ? error : new Error(String(error)));
       return false;
     }
   }
 
-  /**
-   * Handle an error.
-   */
   protected handleError(error: Error): void {
+    this.rejectPendingConnection(error);
+    this.clearConnectionTimeout();
     this.state = 'error';
     if (this.listenerCount('error') > 0) {
       this.emit('error', error);
     }
   }
 
-  /**
-   * Mark the connection as ready.
-   */
   protected setReady(): void {
     this.state = 'ready';
     this.emit('ready');
   }
 
-  /**
-   * Set a connection timeout.
-   */
   protected setConnectionTimeout(ms: number, onTimeout?: (error: Error) => void): void {
     this.clearConnectionTimeout();
     this.connectionTimeout = setTimeout(() => {
@@ -262,9 +168,6 @@ export abstract class BaseVoiceConnection extends EventEmitter {
     }, ms);
   }
 
-  /**
-   * Track a pending connect promise so a socket close rejects startup.
-   */
   protected setPendingConnectionReject(reject: (error: Error) => void): void {
     this.pendingConnectionReject = reject;
   }
@@ -279,9 +182,6 @@ export abstract class BaseVoiceConnection extends EventEmitter {
     reject?.(error);
   }
 
-  /**
-   * Clear the connection timeout.
-   */
   protected clearConnectionTimeout(): void {
     if (this.connectionTimeout) {
       clearTimeout(this.connectionTimeout);
@@ -289,9 +189,6 @@ export abstract class BaseVoiceConnection extends EventEmitter {
     }
   }
 
-  /**
-   * Start a ping interval to keep the connection alive.
-   */
   protected startPingInterval(intervalMs: number = 30000): void {
     this.stopPingInterval();
     this.pingInterval = setInterval(() => {
@@ -301,9 +198,6 @@ export abstract class BaseVoiceConnection extends EventEmitter {
     }, intervalMs);
   }
 
-  /**
-   * Stop the ping interval.
-   */
   protected stopPingInterval(): void {
     if (this.pingInterval) {
       clearInterval(this.pingInterval);
@@ -311,17 +205,11 @@ export abstract class BaseVoiceConnection extends EventEmitter {
     }
   }
 
-  /**
-   * Clear all timers.
-   */
   protected clearTimers(): void {
     this.clearConnectionTimeout();
     this.stopPingInterval();
   }
 
-  /**
-   * Get the API key from config or environment.
-   */
   protected getApiKey(): string {
     if (this.config.apiKey) {
       return this.config.apiKey;
@@ -338,9 +226,6 @@ export abstract class BaseVoiceConnection extends EventEmitter {
     }
   }
 
-  /**
-   * Emit a typed event.
-   */
   emit<K extends keyof VoiceConnectionEvents>(
     event: K,
     ...args: Parameters<VoiceConnectionEvents[K]>
@@ -348,49 +233,46 @@ export abstract class BaseVoiceConnection extends EventEmitter {
     return super.emit(event, ...args);
   }
 
-  /**
-   * Add a typed event listener.
-   */
   on<K extends keyof VoiceConnectionEvents>(event: K, listener: VoiceConnectionEvents[K]): this {
     return super.on(event, listener);
   }
 
-  /**
-   * Add a one-time typed event listener.
-   */
   once<K extends keyof VoiceConnectionEvents>(event: K, listener: VoiceConnectionEvents[K]): this {
     return super.once(event, listener);
   }
 
-  /**
-   * Remove a typed event listener.
-   */
   off<K extends keyof VoiceConnectionEvents>(event: K, listener: VoiceConnectionEvents[K]): this {
     return super.off(event, listener);
   }
 }
 
-/**
- * Create a promise that resolves when an event is emitted.
- */
 export function waitForEvent<T = void>(
   emitter: EventEmitter,
   event: string,
   timeoutMs: number = 10000,
 ): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      reject(new Error(`Timeout waiting for event: ${event}`));
-    }, timeoutMs);
-
-    emitter.once(event, (value?: T) => {
+    const cleanup = () => {
       clearTimeout(timeout);
-      resolve(value as T);
-    });
-
-    emitter.once('error', (error: Error) => {
-      clearTimeout(timeout);
+      emitter.removeListener(event, onEvent);
+      emitter.removeListener('error', onError);
+      emitter.removeListener('close', onClose);
+    };
+    const onEvent = (value: T) => {
+      cleanup();
+      resolve(value);
+    };
+    const onError = (error: Error) => {
+      cleanup();
       reject(error);
-    });
+    };
+    const onClose = () => onError(new Error(`Connection closed while waiting for ${event}`));
+    const timeout = setTimeout(
+      () => onError(new Error(`Timeout waiting for event: ${event}`)),
+      timeoutMs,
+    );
+    emitter.once(event, onEvent);
+    emitter.once('error', onError);
+    emitter.once('close', onClose);
   });
 }

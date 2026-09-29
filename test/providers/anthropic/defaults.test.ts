@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../../src/cache';
 import {
   AnthropicLlmRubricProvider,
+  DEFAULT_ANTHROPIC_MODEL,
   getAnthropicProviders,
 } from '../../../src/providers/anthropic/defaults';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
+import type Anthropic from '@anthropic-ai/sdk';
 
 vi.mock('proxy-agent', async (importOriginal) => {
   return {
@@ -18,7 +20,7 @@ vi.mock('proxy-agent', async (importOriginal) => {
 
 describe('Anthropic Default Providers', () => {
   afterEach(async () => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
     await clearCache();
   });
 
@@ -31,6 +33,10 @@ describe('Anthropic Default Providers', () => {
       expect(providers.llmRubricProvider).toBeInstanceOf(AnthropicLlmRubricProvider);
       expect(providers.suggestionsProvider).toBeInstanceOf(AnthropicMessagesProvider);
       expect(providers.synthesizeProvider).toBeInstanceOf(AnthropicMessagesProvider);
+      expect(providers.webSearchProvider).toBeInstanceOf(AnthropicMessagesProvider);
+      for (const provider of Object.values(providers)) {
+        expect(provider.id()).toBe('anthropic:claude-sonnet-5');
+      }
     });
 
     it('should return the same instances on repeated calls', () => {
@@ -92,6 +98,38 @@ describe('Anthropic Default Providers', () => {
         },
       });
     });
+
+    it.each([undefined, true])(
+      'should parse grades with thinking blocks when showThinking is %s',
+      async (showThinking) => {
+        const provider = new AnthropicLlmRubricProvider(DEFAULT_ANTHROPIC_MODEL, {
+          config: showThinking === undefined ? {} : { showThinking },
+        });
+        const grade = {
+          pass: true,
+          score: 0.85,
+          reason: 'The output meets the criteria.',
+        };
+        const create = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+          content: [
+            { type: 'thinking', thinking: 'Checking the criteria.', signature: 'signature' },
+            { type: 'redacted_thinking', data: 'redacted' },
+            { type: 'tool_use', id: 'grade-id', name: 'grade_output', input: grade },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 20 },
+        } as Anthropic.Messages.Message);
+
+        await expect(provider.callApi('Grade this output')).resolves.toEqual({ output: grade });
+        expect(create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            model: DEFAULT_ANTHROPIC_MODEL,
+            tool_choice: { type: 'tool', name: 'grade_output' },
+          }),
+          expect.anything(),
+        );
+      },
+    );
 
     it('should handle non-string API response', async () => {
       const mockApiResponse = {

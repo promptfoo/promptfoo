@@ -1,4 +1,3 @@
-import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AudioChunk, VoiceProviderConfig } from '../../../src/providers/voice/types';
@@ -8,6 +7,7 @@ const { bedrockMocks } = vi.hoisted(() => {
     clientConfigs: [] as unknown[],
     constructError: undefined as Error | undefined,
     responseEvents: [] as Array<{ event?: Record<string, unknown> }>,
+    finishResponse: undefined as (() => void) | undefined,
     streams: [] as AsyncIterable<{ chunk: { bytes: Uint8Array } }>[],
   };
 
@@ -33,10 +33,13 @@ const { bedrockMocks } = vi.hoisted(() => {
             },
           };
         }
+        await new Promise<void>((resolve) => {
+          state.finishResponse = resolve;
+        });
       })(),
     };
   });
-  const destroy = vi.fn();
+  const destroy = vi.fn(() => state.finishResponse?.());
 
   class MockBedrockClient {
     send = send;
@@ -119,6 +122,8 @@ describe('NovaSonicConnection', () => {
   });
 
   afterEach(() => {
+    bedrockMocks.state.finishResponse?.();
+    bedrockMocks.state.finishResponse = undefined;
     vi.useRealTimers();
     vi.unstubAllEnvs();
   });
@@ -164,6 +169,34 @@ describe('NovaSonicConnection', () => {
     expect(nova.mapVoice('alloy')).toBe('tiffany');
     expect(nova.mapVoice('unknown')).toBe('tiffany');
     expect(nova.getRegion()).toBe('test-region');
+  });
+
+  it('rejects a request stream that the SDK never consumes', async () => {
+    vi.useFakeTimers();
+    bedrockMocks.send.mockImplementationOnce(async () => new Promise(() => {}));
+    const connection = new NovaSonicConnection(config);
+    await connection.connect();
+    const configured = connection.configureSession();
+    const rejected = expect(configured).rejects.toThrow('request stream did not start');
+    await vi.advanceTimersByTimeAsync(5010);
+    await rejected;
+    expect(connection.isReady()).toBe(false);
+    expect(bedrockMocks.destroy).toHaveBeenCalled();
+  });
+
+  it('reports premature response stream EOF', async () => {
+    const connection = new NovaSonicConnection(config);
+    const errors = vi.fn();
+    connection.on('error', errors);
+    await configure(connection);
+    await vi.waitFor(() => expect(bedrockMocks.state.finishResponse).toBeTypeOf('function'));
+    bedrockMocks.state.finishResponse?.();
+    await vi.waitFor(() =>
+      expect(errors).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'Nova Sonic response stream closed unexpectedly' }),
+      ),
+    );
+    expect(connection.isReady()).toBe(false);
   });
 
   it('rejects setup failures and unsupported session transitions', async () => {
@@ -291,6 +324,7 @@ describe('NovaSonicConnection', () => {
     expect(done).toHaveBeenCalledTimes(1);
     expect(stopped).toHaveBeenCalled();
 
+    await configure(connection);
     nova.responsePromise = Promise.reject(new Error('stream failed'));
     await nova.processResponses();
     expect(errors).toHaveBeenCalledWith(expect.objectContaining({ message: 'stream failed' }));
@@ -312,8 +346,6 @@ describe('NovaSonicConnection', () => {
     nova.state = 'ready';
     nova.session = {
       queue: [{ event: { sessionStart: {} } }],
-      queueSignal: new Subject<void>(),
-      closeSignal: new Subject<void>(),
       isActive: true,
       audioContentId: 'audio',
       promptName: 'prompt',
@@ -333,7 +365,7 @@ describe('NovaSonicConnection', () => {
 
     nova.session.queue.push({ event: { promptEnd: {} } }, { event: { sessionEnd: {} } });
     nova.session.isActive = false;
-    nova.session.queueSignal.next();
+    nova.session.wake?.();
     const promptEnd = await iterator.next();
     const sessionEnd = await iterator.next();
     expect(new TextDecoder().decode(promptEnd.value?.chunk.bytes)).toContain('promptEnd');

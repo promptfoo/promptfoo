@@ -174,7 +174,7 @@ describe('GoogleLiveConnection', () => {
 
   describe('sendAudio', () => {
     it('should not send if not ready', () => {
-      const sendSpy = vi.spyOn(connection as any, 'send');
+      const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
       connection.sendAudio({
         data: 'base64audio',
         timestamp: Date.now(),
@@ -188,7 +188,7 @@ describe('GoogleLiveConnection', () => {
 
   describe('commitAudio', () => {
     it('should not commit if not ready', () => {
-      const sendSpy = vi.spyOn(connection as any, 'send');
+      const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
       connection.commitAudio();
 
       expect(sendSpy).not.toHaveBeenCalled();
@@ -198,7 +198,7 @@ describe('GoogleLiveConnection', () => {
   describe('configureSession', () => {
     it('uses the documented Live API WebSocket setup shape', async () => {
       (connection as any).state = 'connected';
-      const sendSpy = vi.spyOn(connection as any, 'send');
+      const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
 
       const configurePromise = connection.configureSession();
 
@@ -235,7 +235,7 @@ describe('GoogleLiveConnection', () => {
 
   describe('sendText', () => {
     it('should not send text if not ready', () => {
-      const sendSpy = vi.spyOn(connection as any, 'send');
+      const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
       connection.sendText('Hello');
 
       expect(sendSpy).not.toHaveBeenCalled();
@@ -485,6 +485,7 @@ describe('GoogleLiveConnection', () => {
         }),
       );
 
+      expect(connection.getState()).toBe('error');
       expect(handler).toHaveBeenCalledWith(expect.any(Error));
       expect(handler.mock.calls[0][0].message).toBe('Something went wrong');
     });
@@ -553,7 +554,7 @@ describe('GoogleLiveConnection', () => {
 
   describe('ready client messages', () => {
     it('resamples routed audio and uses realtime text for speak-first turns', () => {
-      const sendSpy = vi.spyOn(connection as any, 'send');
+      const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
       (connection as any).setReady();
       const sourceAudio = Buffer.alloc(4800).toString('base64');
 
@@ -585,7 +586,7 @@ describe('GoogleLiveConnection', () => {
     });
 
     it('decodes compressed chunks before sending PCM input to Google Live', () => {
-      const sendSpy = vi.spyOn(connection as any, 'send');
+      const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
       (connection as any).setReady();
 
       connection.sendAudio({

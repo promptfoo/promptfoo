@@ -4,14 +4,10 @@ import {
   audioDataToPcm16,
   base64ToBuffer,
   bufferToBase64,
-  calculateBytes,
   calculateDuration,
-  createAudioChunk,
   createStereoWav,
-  mergeAudioBuffers,
   pcm16ToWav,
   resamplePcm16,
-  splitAudioBuffer,
 } from '../../../src/providers/voice/audioBuffer';
 
 import type { AudioChunk } from '../../../src/providers/voice/types';
@@ -318,17 +314,6 @@ describe('calculateDuration', () => {
   });
 });
 
-describe('calculateBytes', () => {
-  it('should calculate bytes for pcm16', () => {
-    expect(calculateBytes(1000, 24000, 'pcm16')).toBe(48000);
-    expect(calculateBytes(100, 24000, 'pcm16')).toBe(4800);
-  });
-
-  it('should calculate bytes for g711', () => {
-    expect(calculateBytes(1000, 8000, 'g711_ulaw')).toBe(8000);
-  });
-});
-
 describe('audioDataToPcm16', () => {
   it('passes PCM16 data through unchanged', () => {
     const pcm = Buffer.from([0, 1, 2, 3]);
@@ -352,87 +337,6 @@ describe('resamplePcm16', () => {
 
     expect(output).toHaveLength(32000);
     expect(output.readInt16LE(0)).toBe(1000);
-  });
-});
-
-describe('createAudioChunk', () => {
-  it('should create chunk from buffer', () => {
-    const data = Buffer.alloc(4800); // 100ms at 24kHz PCM16
-    const chunk = createAudioChunk(data, 500);
-
-    expect(chunk.data).toBe(bufferToBase64(data));
-    expect(chunk.timestamp).toBe(500);
-    expect(chunk.duration).toBe(100);
-    expect(chunk.format).toBe('pcm16');
-    expect(chunk.sampleRate).toBe(24000);
-  });
-
-  it('should create chunk from base64 string', () => {
-    const data = Buffer.alloc(4800);
-    const base64 = bufferToBase64(data);
-    const chunk = createAudioChunk(base64, 500);
-
-    expect(chunk.data).toBe(base64);
-    expect(chunk.timestamp).toBe(500);
-  });
-});
-
-describe('mergeAudioBuffers', () => {
-  it('should return empty buffer for empty array', () => {
-    const merged = mergeAudioBuffers([]);
-    expect(merged.isEmpty()).toBe(true);
-  });
-
-  it('should merge multiple buffers', () => {
-    const buffer1 = new AudioBuffer('pcm16', 24000);
-    const buffer2 = new AudioBuffer('pcm16', 24000);
-
-    buffer1.append({
-      data: bufferToBase64(Buffer.from([0, 1])),
-      timestamp: 0,
-      format: 'pcm16',
-      sampleRate: 24000,
-    });
-    buffer2.append({
-      data: bufferToBase64(Buffer.from([2, 3])),
-      timestamp: 100,
-      format: 'pcm16',
-      sampleRate: 24000,
-    });
-
-    const merged = mergeAudioBuffers([buffer1, buffer2]);
-    expect(merged.getChunkCount()).toBe(2);
-    expect(merged.toBuffer()).toEqual(Buffer.from([0, 1, 2, 3]));
-  });
-});
-
-describe('splitAudioBuffer', () => {
-  it('should split buffer at timestamp', () => {
-    const buffer = new AudioBuffer('pcm16', 24000);
-
-    buffer.append({
-      data: bufferToBase64(Buffer.from([0, 1])),
-      timestamp: 50,
-      format: 'pcm16',
-      sampleRate: 24000,
-    });
-    buffer.append({
-      data: bufferToBase64(Buffer.from([2, 3])),
-      timestamp: 150,
-      format: 'pcm16',
-      sampleRate: 24000,
-    });
-    buffer.append({
-      data: bufferToBase64(Buffer.from([4, 5])),
-      timestamp: 250,
-      format: 'pcm16',
-      sampleRate: 24000,
-    });
-
-    const [before, after] = splitAudioBuffer(buffer, 200);
-
-    expect(before.getChunkCount()).toBe(2);
-    expect(after.getChunkCount()).toBe(1);
   });
 });
 
