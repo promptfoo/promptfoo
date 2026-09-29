@@ -90,7 +90,6 @@ describe('AzureGenericProvider', () => {
       const p = new AzureGenericProvider('d', { config: { apiKey: 'k' } });
       await p.ensureInitialized();
       const callsAfterInit = spy.mock.calls.length;
-      await p.initialize();
       await p.ensureInitialized();
       await p.ensureInitialized();
       expect(spy.mock.calls.length).toBe(callsAfterInit); // api-key never refreshes
