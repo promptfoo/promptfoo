@@ -4,40 +4,15 @@ import { fileURLToPath } from 'url';
 
 import { z } from 'zod';
 import cliState from '../cliState';
-import { isCanonicalPathWithinDir, resolveCanonicalDir } from '../util/isPathWithinDir';
+import {
+  HttpGeneratedDocumentSourceSchema as GeneratedDocumentSourceSchema,
+  HttpPathFileSourceSchema as PathFileSourceSchema,
+  HttpMultipartConfigSchema as PortableHttpMultipartConfigSchema,
+} from '../contracts/providerConfig/httpMultipart';
+import { isPathWithinDir } from '../util/isPathWithinDir';
 import { getNunjucksEngine } from '../util/templates';
 
-const GeneratedDocumentSourceSchema = z.object({
-  type: z.literal('generated'),
-  generator: z.literal('basic-document').optional().default('basic-document'),
-  format: z.enum(['pdf', 'png', 'jpeg', 'jpg']).optional().default('pdf'),
-  text: z.string().optional(),
-});
-
-const PathFileSourceSchema = z.object({
-  type: z.literal('path'),
-  path: z.string(),
-});
-
-const MultipartFieldPartSchema = z.object({
-  kind: z.literal('field'),
-  name: z.string(),
-  value: z.union([z.string(), z.number(), z.boolean()]),
-});
-
-const MultipartFilePartSchema = z.object({
-  kind: z.literal('file'),
-  name: z.string(),
-  filename: z.string().optional(),
-  filenameTemplate: z.string().optional(),
-  contentType: z.string().optional(),
-  source: z.union([GeneratedDocumentSourceSchema, PathFileSourceSchema]),
-});
-
-export const HttpMultipartConfigSchema = z.object({
-  parts: z.array(z.union([MultipartFieldPartSchema, MultipartFilePartSchema])).min(1),
-});
-
+export const HttpMultipartConfigSchema = PortableHttpMultipartConfigSchema;
 export type HttpMultipartConfig = z.infer<typeof HttpMultipartConfigSchema>;
 
 export interface MultipartFileDescriptor {
@@ -248,47 +223,21 @@ function getContentTypeFromFilename(filename: string): string {
 async function loadFilePart(
   source: z.infer<typeof PathFileSourceSchema>,
   vars: Record<string, unknown>,
-  basePath: string,
-  baseIdentity: { dev: bigint; ino: bigint },
   abortSignal?: AbortSignal,
 ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
+  const basePath = cliState.basePath || process.cwd();
   const renderedPath = renderTemplate(source.path, vars);
   const resolvedPath = resolvePath(renderedPath);
-  const requested = await fs.stat(resolvedPath, { bigint: true });
   const canonicalPath = await fs.realpath(resolvedPath);
-  if (!isCanonicalPathWithinDir(canonicalPath, basePath)) {
+  if (!(await isPathWithinDir(canonicalPath, basePath))) {
     throw new Error(`File path escapes allowed base directory: ${renderedPath}`);
   }
-  const canonical = await fs.stat(canonicalPath, { bigint: true });
-  const file = await fs.open(canonicalPath, 'r');
-  try {
-    const [opened, currentBase] = await Promise.all([
-      file.stat({ bigint: true }),
-      fs.stat(basePath, { bigint: true }),
-    ]);
-    if (
-      canonical.dev === 0n ||
-      canonical.ino === 0n ||
-      requested.dev !== canonical.dev ||
-      requested.ino !== canonical.ino ||
-      opened.dev === 0n ||
-      opened.ino === 0n ||
-      opened.dev !== canonical.dev ||
-      opened.ino !== canonical.ino ||
-      currentBase.dev !== baseIdentity.dev ||
-      currentBase.ino !== baseIdentity.ino
-    ) {
-      throw new Error(`File path escapes allowed base directory: ${renderedPath}`);
-    }
-
-    return {
-      buffer: await file.readFile({ signal: abortSignal }),
-      filename: path.basename(resolvedPath),
-      contentType: getContentTypeFromFilename(resolvedPath),
-    };
-  } finally {
-    await file.close();
-  }
+  const buffer = await fs.readFile(canonicalPath, { signal: abortSignal });
+  return {
+    buffer,
+    filename: path.basename(resolvedPath),
+    contentType: getContentTypeFromFilename(resolvedPath),
+  };
 }
 
 export async function renderHttpMultipartBody(
@@ -299,8 +248,6 @@ export async function renderHttpMultipartBody(
   const formData = new FormData();
   const fields: MultipartFieldDescriptor[] = [];
   const files: MultipartFileDescriptor[] = [];
-  let basePath: string | undefined;
-  let baseIdentity: { dev: bigint; ino: bigint } | undefined;
 
   for (const part of config.parts) {
     abortSignal?.throwIfAborted();
@@ -317,12 +264,7 @@ export async function renderHttpMultipartBody(
     let defaultFilename: string;
 
     if (part.source.type === 'path') {
-      basePath ??= await resolveCanonicalDir(cliState.basePath || process.cwd());
-      baseIdentity ??= await fs.stat(basePath, { bigint: true });
-      if (baseIdentity.dev === 0n || baseIdentity.ino === 0n) {
-        throw new Error(`Directory does not have a stable identity: ${basePath}`);
-      }
-      const file = await loadFilePart(part.source, vars, basePath, baseIdentity, abortSignal);
+      const file = await loadFilePart(part.source, vars, abortSignal);
       loaded = file;
       defaultFilename = file.filename;
     } else {

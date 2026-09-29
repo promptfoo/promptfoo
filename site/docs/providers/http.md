@@ -114,9 +114,11 @@ tests. Supported formats are `pdf`, `png`, `jpeg`, and `jpg` (alias for `jpeg`).
 ### Uploading local files
 
 Use a `path` source to upload a file from the machine running promptfoo. Relative
-paths resolve from the promptfoo config directory. Local multipart files must stay
-inside that directory, including the targets of symlinks. If no config directory
-is set, the current working directory is used.
+paths resolve from the promptfoo config directory, or the current working directory
+when no config directory is set. Before reading a file, promptfoo resolves symlinks
+and checks that the path is inside that directory. Only use a trusted local
+filesystem: this check does not prevent another process from replacing files or
+directories during an upload.
 
 ```yaml
 providers:
@@ -348,6 +350,8 @@ transformRequest: 'file://transforms/request.js:transformRequest'
 ```
 
 ## Response Transform
+
+Compressed responses are decoded automatically. A request fails if a decompression stage produces more than 64 MiB of data.
 
 The `transformResponse` option allows you to extract and transform the API response. If no `transformResponse` is specified, the provider will attempt to parse the response as JSON. If JSON parsing fails, it will return the raw text response.
 

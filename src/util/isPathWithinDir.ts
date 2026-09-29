@@ -1,9 +1,7 @@
 /**
- * Symlink-safe directory containment check.
- *
- * Resolves symlinks via realpath to prevent symlink-based directory
- * traversal attacks. For non-existent paths (e.g., when creating new
- * files), recursively validates the parent directory.
+ * Resolve symlinks before checking directory containment. For paths that do not
+ * exist yet, check their parent directory. The filesystem must remain trusted
+ * between this check and the caller's file operation.
  */
 
 import * as fs from 'node:fs/promises';
@@ -19,37 +17,35 @@ import logger from '../logger';
  * @returns Promise that resolves to true if the path is within dir
  */
 export async function isPathWithinDir(filePath: string, dir: string): Promise<boolean> {
-  const target = path.isAbsolute(filePath) ? filePath : path.resolve(dir, filePath);
-  return isPathWithinCanonicalDir(target, await resolveCanonicalDir(dir));
-}
-
-/** Resolve a directory once when callers need to keep its identity stable. */
-export async function resolveCanonicalDir(dir: string): Promise<string> {
+  // Validate dir exists first — fail fast on configuration errors
+  let realDirRaw: string;
   try {
-    return await fs.realpath(dir);
+    realDirRaw = await fs.realpath(dir);
   } catch {
     throw new Error(`Directory does not exist or is inaccessible: ${dir}`);
   }
-}
 
-/**
- * Check against an already-resolved directory without resolving that directory again.
- * This keeps case-sensitive Windows directories distinct and lets callers pin the
- * allowed directory across multiple filesystem operations.
- */
-export async function isPathWithinCanonicalDir(
-  filePath: string,
-  realDir: string,
-): Promise<boolean> {
   try {
-    const absoluteTarget = path.isAbsolute(filePath) ? filePath : path.resolve(realDir, filePath);
+    const absoluteTarget = path.isAbsolute(filePath) ? filePath : path.resolve(dir, filePath);
     const realTargetRaw = await fs.realpath(absoluteTarget);
-    return isCanonicalPathWithinDir(realTargetRaw, realDir);
+
+    // Windows: compare case-insensitive
+    const realDir = process.platform === 'win32' ? realDirRaw.toLowerCase() : realDirRaw;
+    const realTarget = process.platform === 'win32' ? realTargetRaw.toLowerCase() : realTargetRaw;
+
+    // Equal means the dir itself
+    if (realTarget === realDir) {
+      return true;
+    }
+
+    // Containment check via relative() — avoids prefix gotchas like /foo/bar vs /foo/barista
+    const rel = path.relative(realDir, realTarget);
+    return rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
   } catch (error: any) {
     // If target doesn't exist (ENOENT), validate parent directory instead.
     // This allows writes to create new files in valid directories.
     if (error.code === 'ENOENT') {
-      const absoluteTarget = path.isAbsolute(filePath) ? filePath : path.resolve(realDir, filePath);
+      const absoluteTarget = path.isAbsolute(filePath) ? filePath : path.resolve(dir, filePath);
       const parentDir = path.dirname(absoluteTarget);
 
       // Stop recursion if we've reached root
@@ -58,19 +54,11 @@ export async function isPathWithinCanonicalDir(
         return false;
       }
 
-      return isPathWithinCanonicalDir(parentDir, realDir);
+      return isPathWithinDir(parentDir, dir);
     }
 
     // Fail safely on any other error (broken symlinks, permission errors, etc.)
     logger.warn(`Path validation failed for ${filePath}: ${error.message ?? error}`);
     return false;
   }
-}
-
-/** Check two already-resolved paths without another filesystem lookup. */
-export function isCanonicalPathWithinDir(realTarget: string, realDir: string): boolean {
-  const target = process.platform === 'win32' ? realTarget.toLowerCase() : realTarget;
-  const dir = process.platform === 'win32' ? realDir.toLowerCase() : realDir;
-  const prefix = dir.endsWith(path.sep) ? dir : `${dir}${path.sep}`;
-  return target === dir || target.startsWith(prefix);
 }

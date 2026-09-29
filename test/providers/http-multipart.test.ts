@@ -9,7 +9,11 @@ import { pathToFileURL } from 'url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { HttpProvider } from '../../src/providers/http';
-import { normalizeFilePath, resolvePath } from '../../src/providers/httpMultipart';
+import {
+  normalizeFilePath,
+  renderHttpMultipartBody,
+  resolvePath,
+} from '../../src/providers/httpMultipart';
 
 interface MockFileSummary {
   filename: string;
@@ -185,51 +189,6 @@ describe('HttpProvider structured multipart requests', () => {
     });
   });
 
-  it('uploads a generated PNG with the expected content type and bytes', async () => {
-    const mockServer = await createMultipartDocumentSummarizerServer();
-    const provider = new HttpProvider('http', {
-      config: {
-        url: mockServer.url,
-        headers: { 'X-API-Key': 'test-api-key' },
-        multipart: {
-          parts: [
-            {
-              kind: 'file',
-              name: 'files',
-              filename: 'sample-image.png',
-              source: {
-                type: 'generated',
-                format: 'png',
-                text: 'Benign generated image used to test multipart transport.',
-              },
-            },
-            {
-              kind: 'field',
-              name: 'documentQuery',
-              value: '{{prompt}}',
-            },
-          ],
-        },
-        transformResponse: 'json.summary',
-      },
-    });
-
-    await provider.callApi('Summarize this image');
-
-    expect(mockServer.getLastRequest()).toMatchObject({
-      documentQuery: 'Summarize this image',
-      files: [
-        expect.objectContaining({
-          filename: 'sample-image.png',
-          contentType: 'image/png',
-          prefix: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString('utf8'),
-        }),
-      ],
-    });
-    expect(mockServer.getLastRequest()?.files[0].sizeBytes).toBeGreaterThan(0);
-    expect(mockServer.getLastRequest()?.files[0].sha256).toMatch(/^[a-f0-9]{64}$/);
-  });
-
   it('renders path sources with per-test variables before reading local files', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-'));
     tempDirs.push(tempDir);
@@ -397,98 +356,39 @@ describe('HttpProvider structured multipart requests', () => {
     },
   );
 
-  it('rejects a canonical ancestor swapped after the file is opened', async () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-swap-'));
-    tempDirs.push(tempDir);
-    const baseDir = path.join(tempDir, 'workspace');
-    const safeDir = path.join(baseDir, 'safe');
-    const outsideDir = path.join(tempDir, 'outside');
-    fs.mkdirSync(safeDir, { recursive: true });
-    fs.mkdirSync(outsideDir);
-    fs.writeFileSync(path.join(safeDir, 'report.txt'), 'safe');
-    fs.writeFileSync(path.join(outsideDir, 'report.txt'), 'outside');
-    const link = path.join(baseDir, 'linked');
-    fs.symlinkSync(safeDir, link, 'junction');
-    const open = fs.promises.open;
-    let sourceOpens = 0;
-    vi.spyOn(fs.promises, 'open').mockImplementation(async (file, flags, mode) => {
-      if (String(file) === path.join(safeDir, 'report.txt') && ++sourceOpens === 1) {
-        fs.renameSync(safeDir, `${safeDir}-original`);
-        fs.symlinkSync(outsideDir, safeDir, 'junction');
-      }
-      return open(file, flags, mode);
-    });
-    const previousBasePath = cliState.basePath;
-    cliState.basePath = baseDir;
-    try {
-      const mockServer = await createMultipartDocumentSummarizerServer();
-      const provider = new HttpProvider('http', {
-        config: {
-          url: mockServer.url,
-          headers: { 'X-API-Key': 'test-api-key' },
-          multipart: {
-            parts: [
-              {
-                kind: 'file',
-                name: 'files',
-                source: { type: 'path', path: 'linked/report.txt' },
-              },
-              { kind: 'field', name: 'documentQuery', value: '{{prompt}}' },
-            ],
-          },
-        },
-      });
-      await expect(provider.callApi('test')).rejects.toThrow(
-        'File path escapes allowed base directory',
-      );
-      expect(mockServer.getLastRequest()).toBeUndefined();
-    } finally {
-      cliState.basePath = previousBasePath;
-    }
+  it('preserves file resolution errors', async () => {
+    const error = Object.assign(new Error('File unavailable'), { code: 'EIO' });
+    vi.spyOn(fs.promises, 'realpath').mockRejectedValueOnce(error);
+    await expect(
+      renderHttpMultipartBody(
+        { parts: [{ kind: 'file', name: 'files', source: { type: 'path', path: 'report.txt' } }] },
+        {},
+      ),
+    ).rejects.toBe(error);
   });
 
-  it('pins the allowed base across path-backed multipart parts', async () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-base-swap-'));
+  it('honors cancellation while resolving a local file', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-abort-'));
     tempDirs.push(tempDir);
-    const baseDir = path.join(tempDir, 'workspace');
-    const outsideDir = path.join(tempDir, 'outside');
-    fs.mkdirSync(baseDir);
-    fs.mkdirSync(outsideDir);
-    fs.writeFileSync(path.join(baseDir, 'first.txt'), 'safe');
-    fs.writeFileSync(path.join(outsideDir, 'second.txt'), 'outside');
-    const open = fs.promises.open;
-    vi.spyOn(fs.promises, 'open').mockImplementation(async (...args) => {
-      const file = await open(...args);
-      if (String(args[0]) === path.join(baseDir, 'first.txt')) {
-        const close = file.close.bind(file);
-        file.close = async () => {
-          await close();
-          fs.renameSync(baseDir, `${baseDir}-original`);
-          fs.renameSync(outsideDir, baseDir);
-        };
-      }
-      return file;
-    });
+    const filePath = path.join(tempDir, 'report.txt');
+    fs.writeFileSync(filePath, 'fixture');
     const previousBasePath = cliState.basePath;
-    cliState.basePath = baseDir;
+    cliState.basePath = tempDir;
+    const controller = new AbortController();
+    const realpath = fs.promises.realpath;
+    vi.spyOn(fs.promises, 'realpath').mockImplementationOnce(async (...args) => {
+      const resolved = await realpath(...args);
+      controller.abort();
+      return resolved;
+    });
     try {
-      const mockServer = await createMultipartDocumentSummarizerServer();
-      const provider = new HttpProvider('http', {
-        config: {
-          url: mockServer.url,
-          multipart: {
-            parts: ['first.txt', 'second.txt'].map((file) => ({
-              kind: 'file' as const,
-              name: 'files',
-              source: { type: 'path' as const, path: file },
-            })),
-          },
-        },
-      });
-      await expect(provider.callApi('test')).rejects.toThrow(
-        'File path escapes allowed base directory',
-      );
-      expect(mockServer.getLastRequest()).toBeUndefined();
+      await expect(
+        renderHttpMultipartBody(
+          { parts: [{ kind: 'file', name: 'files', source: { type: 'path', path: filePath } }] },
+          {},
+          controller.signal,
+        ),
+      ).rejects.toMatchObject({ name: 'AbortError' });
     } finally {
       cliState.basePath = previousBasePath;
     }
