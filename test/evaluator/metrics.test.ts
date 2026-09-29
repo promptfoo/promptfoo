@@ -626,6 +626,46 @@ describeEvaluator('evaluator metrics and scoring', () => {
     }
   });
 
+  it('should count grader failures as errors, not assertion failures', async () => {
+    const matchers = await import('../../src/matchers/llmGrading');
+    const matchesFactualitySpy = vi
+      .spyOn(matchers, 'matchesFactuality')
+      .mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Grader provider unavailable',
+        tokensUsed: { total: 0, prompt: 0, completion: 0, numRequests: 0 },
+        metadata: { graderError: true },
+      });
+
+    try {
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Test prompt for grader failure')],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'factuality' as const,
+                value: 'Expected output',
+              },
+            ],
+          },
+        ],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {});
+
+      const metrics = evalRecord.prompts[0]?.metrics;
+      expect(metrics?.testErrorCount).toBe(1);
+      expect(metrics?.testFailCount).toBe(0);
+      expect(metrics?.testPassCount).toBe(0);
+    } finally {
+      matchesFactualitySpy.mockRestore();
+    }
+  });
+
   it('evaluate with assertScoringFunction', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

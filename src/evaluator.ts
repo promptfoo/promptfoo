@@ -608,7 +608,9 @@ function synchronizeLegacyTransportHeaders(
 function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   if (!checkResult.pass) {
     row.error = checkResult.reason;
-    row.failureReason = ResultFailureReason.ASSERT;
+    row.failureReason = checkResult.metadata?.graderError
+      ? ResultFailureReason.ERROR
+      : ResultFailureReason.ASSERT;
   }
   row.success = checkResult.pass;
   row.score = checkResult.score;
