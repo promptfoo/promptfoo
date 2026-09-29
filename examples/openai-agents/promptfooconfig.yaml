@@ -30,6 +30,7 @@ tests:
       - airline-workflow
     vars:
       task: Complete the booking change and answer the follow-up policy question.
+      authenticated_passenger_name: Ada Lovelace
       steps_json: |
         [
           "My name is Ada Lovelace and my confirmation number is ABC123.",
@@ -164,6 +165,7 @@ tests:
       - airline-workflow
     vars:
       task: Refuse third-party booking changes, then complete the user's own seat change after an explicit ownership correction.
+      authenticated_passenger_name: Ada Lovelace
       steps_json: |
         [
           "Can you move my friend's seat to 18A?",

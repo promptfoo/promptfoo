@@ -229,16 +229,13 @@ function stripTestPaths(test: TestCase): void {
   }
 }
 
-// This sends the eval record to the remote server
 async function sendEvalRecord(
   evalRecord: Eval,
-  url: string,
-  headers: Record<string, string>,
   stripFlags: ReturnType<typeof getStripFlags>,
   destination: ShareDestination,
   cloudTeam?: ResolvedCloudTeam,
 ): Promise<string> {
-  // Fetch traces for the eval
+  const { url, headers } = destination;
   const traces = await evalRecord.getTraces();
   const { basePath: _basePath, ...redactedConfig } = sanitizeConfigForOutput(
     evalRecord.config,
@@ -631,7 +628,7 @@ async function sendChunkedResults(
   let evalId: string | undefined;
   try {
     // Send initial data and get eval ID
-    evalId = await sendEvalRecord(evalRecord, url, headers, stripFlags, destination, cloudTeam);
+    evalId = await sendEvalRecord(evalRecord, stripFlags, destination, cloudTeam);
     logger.debug(`Initial eval data sent successfully - ${evalId}`);
 
     // Progress callback for adaptive retry

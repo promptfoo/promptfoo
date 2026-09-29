@@ -129,11 +129,10 @@ writing URLs to debug logs, but path-as-secret URLs (`/webhook/<unguessable-id>`
 those logs by design — keep `LOG_LEVEL=debug` output out of shared transcripts when running
 against tokenized webhooks. URLs remain part of your configuration and the outbound request.
 
-For non-idempotent methods (`POST` / `PATCH`, the default), the provider passes `maxRetries: 0` to
-the shared fetch helper. Transient network failures fail through to the caller rather than
-re-delivering a workflow that may have already accepted the request and dispatched side-effects
-(sending messages, writing to a database). Idempotent methods (`GET` / `HEAD` / `PUT`) keep the default
-retry budget.
+The provider disables automatic transport, response-body, and scheduler retries for every HTTP
+method, including `GET`, `HEAD`, and `PUT`. A webhook can start a workflow with side effects
+(sending messages, writing to a database) regardless of its HTTP method. Failures are returned
+without replaying the workflow; check its execution status before running the eval again.
 
 :::
 

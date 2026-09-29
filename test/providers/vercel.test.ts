@@ -1,6 +1,9 @@
 import { context as otelContext, propagation, trace } from '@opentelemetry/api';
-import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import {
+  InMemorySpanExporter,
+  NodeTracerProvider,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
 import {
@@ -98,6 +101,17 @@ describe('VercelAiProvider', () => {
   });
 
   describe('constructor', () => {
+    it('preserves gateway initialization errors', async () => {
+      const { createGateway } = await import('ai');
+      vi.mocked(createGateway).mockImplementationOnce(() => {
+        throw new Error('invalid gateway configuration');
+      });
+
+      await expect(
+        new VercelAiProvider('openai/gpt-4o-mini').callApi('prompt'),
+      ).resolves.toMatchObject({ error: 'API call error: invalid gateway configuration' });
+    });
+
     it('should create a provider with default options', () => {
       const provider = new VercelAiProvider('openai/gpt-4o-mini');
       expect(provider.modelName).toBe('openai/gpt-4o-mini');
