@@ -1,4 +1,6 @@
+import { sql } from 'drizzle-orm';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { getDb } from '../../src/database/index';
 import { runDbMigrations } from '../../src/migrate';
 import { createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
@@ -8,6 +10,17 @@ import type { EvalResultsFilterMode, EvaluateResult } from '../../src/types/inde
 describe('table search and filtered metrics', () => {
   beforeAll(async () => {
     await runDbMigrations();
+    // Legacy/imported databases may contain invalid JSON and lack expression indexes.
+    // This test file uses its own temporary database, removed by vitest.setup.ts.
+    const db = await getDb();
+    await db.run(sql`DROP INDEX eval_result_grading_result_reason_idx`);
+    await db.run(sql`DROP INDEX eval_result_grading_result_comment_idx`);
+    await db.run(sql`DROP INDEX eval_result_test_case_vars_idx`);
+    await db.run(sql`DROP INDEX eval_result_test_case_metadata_idx`);
+    await db.run(sql`DROP INDEX eval_result_named_scores_idx`);
+    await db.run(sql`DROP INDEX eval_result_metadata_idx`);
+    await db.run(sql`DROP INDEX eval_result_metadata_plugin_id_idx`);
+    await db.run(sql`DROP INDEX eval_result_metadata_strategy_id_idx`);
   });
 
   const fieldCases: [string, Partial<EvaluateResult>][] = [
@@ -63,6 +76,32 @@ describe('table search and filtered metrics', () => {
       expect(page.totalCount).toBe(2);
     },
   );
+
+  it.each([
+    ['grading_result', sql`grading_result`],
+    ['named_scores', sql`named_scores`],
+    ['metadata', sql`metadata`],
+    ['test_case', sql`test_case`],
+  ])('ignores malformed %s in unrelated persisted rows', async (_name, column) => {
+    const eval_ = await create([
+      { response: { output: 'needle' } },
+      {},
+      { metadata: { note: 'needle' } },
+    ]);
+    const db = await getDb();
+    await db.run(sql`UPDATE eval_results SET ${column} = ${'{invalid JSON'}
+      WHERE eval_id = ${eval_.id} AND test_idx = 1`);
+
+    const page = await eval_.getTablePage({ searchQuery: 'needle', offset: 1, limit: 1 });
+    expect(page.body.map((row) => row.testIdx)).toEqual([2]);
+    expect(page.filteredCount).toBe(2);
+    expect(page.totalCount).toBe(3);
+    const metrics = await eval_.getFilteredMetrics({ searchQuery: 'needle' });
+    expect(
+      metrics.reduce((n, m) => n + m.testPassCount + m.testFailCount + m.testErrorCount, 0),
+    ).toBe(2);
+    expect((await eval_.getTablePage({ searchQuery: 'no match' })).filteredCount).toBe(0);
+  });
 
   it.each([
     'all',

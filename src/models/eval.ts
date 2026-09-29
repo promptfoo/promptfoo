@@ -1115,15 +1115,21 @@ export default class Eval {
     if (opts.searchQuery && opts.searchQuery.trim() !== '') {
       const searchPattern = `%${opts.searchQuery}%`;
 
+      // Legacy artifacts can contain malformed JSON. Treat only that artifact as absent.
+      const validJson = (column: SQL) => sql`CASE WHEN json_valid(${column}) THEN ${column} END`;
+      const grading = validJson(sql`grading_result`);
+      const scores = validJson(sql`named_scores`);
+      const metadata = validJson(sql`metadata`);
+      const testCase = validJson(sql`test_case`);
       const searchConditions = [
         sql`response LIKE ${searchPattern}`,
-        sql`json_extract(grading_result, '$.reason') LIKE ${searchPattern}`,
-        sql`json_extract(grading_result, '$.comment') LIKE ${searchPattern}`,
-        sql`json_extract(named_scores, '$') LIKE ${searchPattern}`,
-        // Hide internal trace linkage and remote dataset markers from search.
-        sql`json_remove(metadata, ${`$.${PROMPTFOO_METADATA_KEY}`}) LIKE ${searchPattern}`,
-        sql`json_extract(test_case, '$.vars') LIKE ${searchPattern}`,
-        sql`json_extract(json_remove(test_case, ${`$.metadata.${PROMPTFOO_METADATA_KEY}`}), '$.metadata') LIKE ${searchPattern}`,
+        sql`json_extract(${grading}, '$.reason') LIKE ${searchPattern}`,
+        sql`json_extract(${grading}, '$.comment') LIKE ${searchPattern}`,
+        sql`json_extract(${scores}, '$') LIKE ${searchPattern}`,
+        // Exclude internal trace links and dataset markers from metadata searches.
+        sql`json_remove(${metadata}, ${`$.${PROMPTFOO_METADATA_KEY}`}) LIKE ${searchPattern}`,
+        sql`json_extract(${testCase}, '$.vars') LIKE ${searchPattern}`,
+        sql`json_extract(json_remove(${testCase}, ${`$.metadata.${PROMPTFOO_METADATA_KEY}`}), '$.metadata') LIKE ${searchPattern}`,
       ];
 
       const searchClause = sql.join(searchConditions, sql` OR `);
