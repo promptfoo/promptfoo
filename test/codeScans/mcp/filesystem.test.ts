@@ -314,6 +314,25 @@ describe('filesystem MCP cleanup', () => {
     await expect(stopped).resolves.toBeUndefined();
   });
 
+  it('rejects when POSIX termination cannot be confirmed after SIGKILL', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    const child = createFakeProcess();
+    const onStopped = vi.fn();
+    const stopped = stopFilesystemMcpServer(child);
+    void stopped.then(onStopped, onStopped);
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(child.kill).toHaveBeenLastCalledWith('SIGKILL');
+    expect(onStopped).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(onStopped).toHaveBeenCalledOnce();
+    await expect(stopped).rejects.toThrow('Timed out waiting for process 1234 to exit');
+    expect(child.listenerCount('exit')).toBe(0);
+    expect(child.listenerCount('error')).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it.each([
     ['SIGTERM', 'false'],
     ['SIGTERM', 'throw'],

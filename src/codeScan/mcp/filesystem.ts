@@ -245,6 +245,7 @@ export async function stopFilesystemMcpServer(mcpProcess: ChildProcess): Promise
 
     const cleanup = () => {
       clearTimeout(timeout);
+      clearTimeout(exitTimeout);
       mcpProcess.off('exit', onExit);
       mcpProcess.off('error', onError);
     };
@@ -280,9 +281,13 @@ export async function stopFilesystemMcpServer(mcpProcess: ChildProcess): Promise
 
     const timeout = setTimeout(() => {
       logger.debug('MCP server did not exit gracefully, force killing...');
-      // Signal delivery does not confirm termination; keep waiting for the exit event.
       sendSignal('SIGKILL');
     }, 5000);
+
+    // Allow five more seconds to confirm termination after escalation.
+    const exitTimeout = setTimeout(() => {
+      onError(new Error(`Timed out waiting for process ${mcpProcess.pid} to exit`));
+    }, 10000);
 
     mcpProcess.once('exit', onExit);
     mcpProcess.once('error', onError);
