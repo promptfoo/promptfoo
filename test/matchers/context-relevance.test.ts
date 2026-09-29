@@ -452,6 +452,30 @@ This policy excludes all staff going on any outgoing structured programs, short 
       );
     });
 
+    describe.each([
+      { label: 'decimal values', sentences: ['1.2 is the value.', '2.2 is the value.'] },
+      { label: 'signed values', sentences: ['-5 is the value.', '5 is the value.'] },
+    ])('distinct $label', ({ sentences }) => {
+      it.each([
+        { format: 'prose', separator: ' ' },
+        { format: 'multiline', separator: '\n' },
+        { format: 'array', separator: null },
+      ])('should preserve both quotes in $format context', async ({ separator }) => {
+        const context = separator === null ? sentences : sentences.join(separator);
+        vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+          output: sentences.join('\n'),
+        });
+
+        const result = await matchesContextRelevance('What are the values?', context, 0.75);
+
+        expect(result.score).toBe(1);
+        expect(result.pass).toBe(true);
+        expect(result.metadata?.relevantSentenceCount).toBe(2);
+        expect(result.metadata?.extractedSentences).toEqual(sentences);
+        expect(result.metadata?.graderError).not.toBe(true);
+      });
+    });
+
     it('should handle empty context', async () => {
       const query = 'What is the answer?';
       const context = '';

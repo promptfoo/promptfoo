@@ -325,7 +325,8 @@ export async function matchesContextRelevance(
   const contextNormalized = normalizeForComparison(contextString);
   const quotedSegments = new Map<string, string>();
   for (const segment of segments) {
-    const key = normalizeForComparison(segment.replace(/^\s*(?:\d+[.)]|[-*])\s*/, ''));
+    // A list marker needs following whitespace; otherwise preserve numbers like 1.2 and -5.
+    const key = normalizeForComparison(segment.replace(/^\s*(?:\d+[.)]|[-*])\s+/, ''));
     if (key && contextNormalized.includes(key) && !quotedSegments.has(key)) {
       quotedSegments.set(key, segment);
     }
