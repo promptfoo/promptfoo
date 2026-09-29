@@ -10,6 +10,7 @@ import {
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isClaudeThinkingEnabled,
+  isForcedToolChoiceUnsupportedClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   isThinkingOnByDefaultClaudeModel,
   normalizeClaudeThinkingConfig,
@@ -20,7 +21,7 @@ import {
 import { parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import { calculateBedrockInvokeModelCost } from './pricing';
-import { novaOutputFromMessage, novaParseMessages } from './util';
+import { INFERENCE_PROFILE_PREFIX, novaOutputFromMessage, novaParseMessages } from './util';
 
 import type {
   ApiEmbeddingProvider,
@@ -30,6 +31,7 @@ import type {
   ProviderResponse,
 } from '../../types/providers';
 import type { TokenUsage, VarValue } from '../../types/shared';
+import type { ClaudeThinkingConfig } from '../anthropic/types';
 
 // Utility function to coerce string values to numbers
 export const coerceStrToNum = (value: string | number | undefined): number | undefined =>
@@ -103,7 +105,7 @@ export interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
     name?: string;
   };
   /** Same shape the Anthropic Messages provider accepts; see normalizeClaudeThinkingConfig. */
-  thinking?: Anthropic.Messages.ThinkingConfigParam;
+  thinking?: ClaudeThinkingConfig;
 }
 
 interface BedrockLlamaGenerationOptions extends BedrockOptions {
@@ -1626,7 +1628,8 @@ export const BEDROCK_MODEL = {
         alwaysOnAdaptiveThinking ||
         (!!modelName &&
           isThinkingOnByDefaultClaudeModel(modelName) &&
-          config?.thinking?.type !== 'disabled');
+          config?.thinking?.type !== 'disabled' &&
+          config?.thinking?.type !== 'between_tools');
       addConfigParam(
         params,
         'max_tokens',
@@ -1666,7 +1669,8 @@ export const BEDROCK_MODEL = {
       // The forced-tool-choice and disabled-thinking drops below normalize silently —
       // the Converse and Anthropic Messages providers surface the one-time warnings.
       const toolChoice =
-        alwaysOnAdaptiveThinking &&
+        (alwaysOnAdaptiveThinking ||
+          (!!modelName && isForcedToolChoiceUnsupportedClaudeModel(modelName))) &&
         (config?.tool_choice?.type === 'any' || config?.tool_choice?.type === 'tool')
           ? undefined
           : config?.tool_choice;
@@ -2367,6 +2371,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-opus-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-sonnet-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2588,6 +2593,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   // Claude Sonnet 5 uses the global endpoint like the other Claude 5-generation
   // models (Fable 5, Opus 4.7/4.8) rather than the older `apac.` prefix.
   'global.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'global.anthropic.claude-sonnet-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
@@ -2599,14 +2605,13 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
  * The Claude entries were verified absent from `list-foundation-models` in all 17 commercial
  * regions on 2026-09-04. Note this is Bedrock's lifecycle, not Anthropic's: several models
  * retired on the Anthropic API are still served here and must NOT be listed.
+ *
+ * Use bare IDs; the availability check removes inference-profile prefixes.
  */
 export const RETIRED_BEDROCK_MODELS = new Set([
   'anthropic.claude-3-opus-20240229-v1:0',
-  'us.anthropic.claude-3-opus-20240229-v1:0',
   'anthropic.claude-opus-4-20250514-v1:0',
-  'us.anthropic.claude-opus-4-20250514-v1:0',
   'anthropic.claude-3-5-haiku-20241022-v1:0',
-  'us.anthropic.claude-3-5-haiku-20241022-v1:0',
   'anthropic.claude-instant-v1',
   'anthropic.claude-v1',
   'anthropic.claude-v2',
@@ -2617,13 +2622,14 @@ export const RETIRED_BEDROCK_MODELS = new Set([
   'meta.llama2-70b-chat-v1',
 ]);
 
-/**
- * Throw for a model AWS has withdrawn. Called from both `getHandlerForModel` and the explicit
- * `bedrock:converse:` factory route, which builds its provider directly and would otherwise
- * skip the check entirely.
- */
+/** Reject withdrawn models before InvokeModel, Converse, or Knowledge Base requests. */
 export function assertBedrockModelIsAvailable(modelName: string): void {
-  if (RETIRED_BEDROCK_MODELS.has(modelName)) {
+  // A system inference profile or foundation model ARN ends in the ID it resolves to.
+  // Application inference profile ARNs hide the model, so they cannot be checked here.
+  const modelId = modelName.startsWith('arn:')
+    ? (/:(?:inference-profile|foundation-model)\/([^/]+)$/.exec(modelName)?.[1] ?? modelName)
+    : modelName;
+  if (RETIRED_BEDROCK_MODELS.has(modelId.replace(INFERENCE_PROFILE_PREFIX, ''))) {
     throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
   }
 }
@@ -2632,6 +2638,7 @@ export function getHandlerForModel(
   modelName: string,
   config?: BedrockInvokeModelOptions,
 ): IBedrockModel {
+  assertBedrockModelIsAvailable(modelName);
   const messagesOnlyModel = modelName.match(/^(?:[^.]+\.)?(anthropic\.claude-mythos-5)$/);
   if (messagesOnlyModel) {
     // Mythos has no geo/global inference profiles, so always point at the bare
@@ -2712,7 +2719,6 @@ export function getHandlerForModel(
   if (ret) {
     return ret;
   }
-  assertBedrockModelIsAvailable(modelName);
   if (modelName.startsWith('ai21.')) {
     return BEDROCK_MODEL.AI21;
   }
