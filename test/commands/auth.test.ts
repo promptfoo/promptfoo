@@ -229,6 +229,7 @@ describe('auth command', () => {
     });
 
     it.each([
+      '',
       'https://api.example.com/tenant?copied=true',
       'https://api.example.com/tenant#settings',
       'https://api.example.com/tenant?',

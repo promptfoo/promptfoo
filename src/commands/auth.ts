@@ -268,9 +268,10 @@ export function authCommand(program: Command) {
     .action(async (cmdObj: LoginCommandOptions) => {
       try {
         if (cmdObj.apiKey) {
-          const apiHost = cmdObj.host
-            ? normalizeApiHost(cmdObj.host)
-            : cloudConfig.getApiHost()?.replace(/\/+$/, '');
+          const apiHost =
+            cmdObj.host === undefined
+              ? cloudConfig.getApiHost()?.replace(/\/+$/, '')
+              : normalizeApiHost(cmdObj.host);
           await loginWithApiKey(cmdObj, apiHost);
           return;
         }
