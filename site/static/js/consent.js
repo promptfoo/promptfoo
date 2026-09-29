@@ -223,6 +223,41 @@
   function ensureGtagJs() {
     if (window.__pf_gtag_loaded) return;
     window.__pf_gtag_loaded = true;
+    window.dataLayer = window.dataLayer || [];
+    window.gtag =
+      window.gtag ||
+      function () {
+        window.dataLayer.push(arguments);
+      };
+    window.gtag('js', new Date());
+
+    // Both categories use gtag, so install one navigation handler for either choice.
+    var previousPath = location.pathname + location.search;
+    function onNavigation() {
+      var currentPath = location.pathname + location.search;
+      if (currentPath === previousPath) return;
+      previousPath = currentPath;
+      var consent = window.__pf_consent;
+      var destinations = [];
+      if (consent && consent.analytics) destinations.push('G-3TS8QLZQ93', 'G-3YM29CN26E');
+      if (consent && consent.marketing) destinations.push('AW-17347444171');
+      if (destinations.length) {
+        window.gtag('event', 'page_view', {
+          send_to: destinations,
+          page_path: currentPath,
+          page_location: location.href,
+        });
+      }
+    }
+    ['pushState', 'replaceState'].forEach(function (method) {
+      var original = history[method];
+      history[method] = function () {
+        original.apply(this, arguments);
+        onNavigation();
+      };
+    });
+    window.addEventListener('popstate', onNavigation);
+
     var g = document.createElement('script');
     g.async = true;
     g.src = 'https://www.googletagmanager.com/gtag/js?id=G-3TS8QLZQ93';

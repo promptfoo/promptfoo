@@ -1,47 +1,8 @@
-// Analytics scripts: GA4 + PostHog + SPA tracking
+// Analytics scripts: GA4 + PostHog
 // Loaded by consent.js when analytics consent is granted.
 
-// Define gtag stub if not already defined
-window.dataLayer = window.dataLayer || [];
-window.gtag =
-  window.gtag ||
-  function () {
-    window.dataLayer.push(arguments);
-  };
-
-// Configure GA4 (gtag.js is loaded by consent.js before this script)
-if (!window.__pf_gtag_initialized) {
-  gtag('js', new Date());
-  window.__pf_gtag_initialized = true;
-}
 gtag('config', 'G-3TS8QLZQ93', { anonymize_ip: true });
 gtag('config', 'G-3YM29CN26E', { anonymize_ip: true });
-
-// Track SPA route changes (replaces Docusaurus gtag plugin)
-(function () {
-  var prev = location.pathname + location.search;
-  function onNav() {
-    var current = location.pathname + location.search;
-    if (current !== prev) {
-      prev = current;
-      gtag('event', 'page_view', {
-        page_path: current,
-        page_location: location.href,
-      });
-    }
-  }
-  var origPush = history.pushState;
-  var origReplace = history.replaceState;
-  history.pushState = function () {
-    origPush.apply(this, arguments);
-    onNav();
-  };
-  history.replaceState = function () {
-    origReplace.apply(this, arguments);
-    onNav();
-  };
-  window.addEventListener('popstate', onNav);
-})();
 
 // PostHog
 !(function (t, e) {

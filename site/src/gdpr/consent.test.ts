@@ -4,6 +4,9 @@ import * as path from 'path';
 import { getByRole } from '@testing-library/dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const originalPushState = history.pushState;
+const originalReplaceState = history.replaceState;
+
 const CONSENT_JS = fs.readFileSync(path.resolve(__dirname, '../../static/js/consent.js'), 'utf-8');
 
 function setCookie(name: string, value: string) {
@@ -33,7 +36,6 @@ function resetGlobals() {
   (window as any).__pf_analytics_loaded = false;
   (window as any).__pf_marketing_loaded = false;
   (window as any).__pf_gtag_loaded = false;
-  (window as any).__pf_gtag_initialized = false;
   (window as any).__pf_manage_cookies = undefined;
   (window as any).__pf_privacy_region = undefined;
   (window as any).__pf_consent = undefined;
@@ -47,6 +49,9 @@ describe('consent.js', () => {
     document.head.querySelectorAll('#cc-styles').forEach((el) => el.remove());
     document.querySelectorAll('script[src]').forEach((el) => el.remove());
     resetGlobals();
+    (window as any).dataLayer = [];
+    (window as any).gtag = undefined;
+    vi.spyOn(window, 'addEventListener');
     Object.defineProperty(window, 'location', {
       writable: true,
       value: {
@@ -67,6 +72,11 @@ describe('consent.js', () => {
   });
 
   afterEach(() => {
+    for (const [event, listener] of vi.mocked(window.addEventListener).mock.calls) {
+      if (event === 'popstate') window.removeEventListener(event, listener);
+    }
+    history.pushState = originalPushState;
+    history.replaceState = originalReplaceState;
     vi.restoreAllMocks();
   });
 
@@ -576,6 +586,42 @@ describe('consent.js', () => {
       setCookie('pf_country', 'US');
       runConsent();
       expect((window as any).__pf_analytics_loaded).toBe(true);
+    });
+  });
+
+  describe('consent-scoped navigation', () => {
+    it.each([
+      ['v1.i.1.0', ['G-3TS8QLZQ93', 'G-3YM29CN26E']],
+      ['v1.i.0.1', ['AW-17347444171']],
+      ['v1.i.1.1', ['G-3TS8QLZQ93', 'G-3YM29CN26E', 'AW-17347444171']],
+    ])('tracks each route once for %s', (consent, destinations) => {
+      setCookie('pf_country', 'DE');
+      setCookie('pf_consent', consent as string);
+      runConsent();
+      const gtag = vi.spyOn(window as any, 'gtag');
+      for (const [index, method] of ['pushState', 'replaceState', 'popstate'].entries()) {
+        Object.assign(window.location, {
+          pathname: `/route-${index}`,
+          href: `http://localhost/route-${index}`,
+        });
+        if (method === 'popstate') {
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        } else {
+          history[method as 'pushState' | 'replaceState']({}, '');
+        }
+      }
+      expect(gtag).toHaveBeenCalledTimes(3);
+      expect(gtag).toHaveBeenLastCalledWith('event', 'page_view', {
+        send_to: destinations,
+        page_path: '/route-2',
+        page_location: 'http://localhost/route-2',
+      });
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      expect(gtag).toHaveBeenCalledTimes(3);
+      (window as any).__pf_consent = { analytics: 0, marketing: 0 };
+      Object.assign(window.location, { pathname: '/withdrawn' });
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      expect(gtag).toHaveBeenCalledTimes(3);
     });
   });
 

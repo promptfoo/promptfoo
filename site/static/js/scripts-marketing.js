@@ -1,19 +1,6 @@
 // Marketing scripts: Google Ads + Vector.co + Reo.dev
 // Loaded by consent.js when marketing consent is granted.
 
-// Define gtag stub if not already defined
-window.dataLayer = window.dataLayer || [];
-window.gtag =
-  window.gtag ||
-  function () {
-    window.dataLayer.push(arguments);
-  };
-
-// Google Ads
-if (!window.__pf_gtag_initialized) {
-  gtag('js', new Date());
-  window.__pf_gtag_initialized = true;
-}
 gtag('config', 'AW-17347444171', { anonymize_ip: true });
 
 // Vector.co
