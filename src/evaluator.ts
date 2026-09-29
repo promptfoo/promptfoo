@@ -4432,7 +4432,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
   }) {
-    this.store.evaluation.interrupted = true;
     logger.info('Evaluation interrupted, saving progress...');
     if (globalTimeout) {
       clearTimeout(globalTimeout);
@@ -4671,6 +4670,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         result.failureReason = ResultFailureReason.ERROR;
         result.success = false;
         result.score = 0;
+        this.recordResumedComparison(result, {
+          success: false,
+          latencyMs: 0,
+          error: reason,
+          failureReason: ResultFailureReason.ERROR,
+        });
         this.updateComparisonResultCounts(result, previous, prompts[result.promptIdx]?.metrics);
         this.trackFinalJsonlResult(result);
         if (this.store.persisted && !this.store.hasResultPersistenceFailure(result)) {
@@ -4841,6 +4846,20 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     };
   }
 
+  private recordResumedComparison(
+    result: TResult,
+    contribution: Omit<StatableResult, 'gradingOnly' | 'testIdx' | 'promptIdx'>,
+  ) {
+    if (cliState.resume && !this.currentResultKeys.has(getResultIndexKey(result))) {
+      this.invocationComparisonResults.push({
+        ...contribution,
+        gradingOnly: true,
+        testIdx: result.testIdx,
+        promptIdx: result.promptIdx,
+      });
+    }
+  }
+
   // Shared tail for the comparison graders: record the pass/score transition, capture the
   // canonical row for JSONL finalization, and persist (unless this row already failed to
   // persist, in which case re-saving would just re-throw). Capture the previous outcome
@@ -4858,16 +4877,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     wasSuccess: boolean;
     wasScore: number;
   }) {
-    if (cliState.resume && !this.currentResultKeys.has(getResultIndexKey(result))) {
-      this.invocationComparisonResults.push({
-        gradingOnly: true,
-        testIdx: result.testIdx,
-        promptIdx: result.promptIdx,
-        success: gradingResult.pass,
-        latencyMs: 0,
-        gradingResult: { tokensUsed: gradingResult.tokensUsed, componentResults: [gradingResult] },
-      });
-    }
+    this.recordResumedComparison(result, {
+      success: gradingResult.pass,
+      latencyMs: 0,
+      gradingResult: { tokensUsed: gradingResult.tokensUsed, componentResults: [gradingResult] },
+    });
     this.updateComparisonStats(
       result,
       gradingResult.pass,
@@ -5259,7 +5273,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   private async _runEvaluation(): Promise<TEvaluation> {
-    this.store.evaluation.interrupted = false;
     const { options } = this;
     let { testSuite } = this;
 

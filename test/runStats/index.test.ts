@@ -25,6 +25,91 @@ describe('computeRunStats', () => {
       id: () => id,
     }) as ApiProvider;
 
+  it('honors explicit provider request counts without changing result outcome rates', () => {
+    const runStats = computeRunStats({
+      results: [0, 4].map((numRequests) => ({
+        success: true,
+        latencyMs: 100,
+        provider: { id: 'openai:fixture' },
+        response: { output: 'hello', tokenUsage: { total: numRequests * 10, numRequests } },
+      })),
+      stats: createStats(),
+      providers: [],
+    });
+    expect(runStats.providers[0]).toMatchObject({
+      requests: 4,
+      successes: 2,
+      successRate: 1,
+      avgLatencyMs: 100,
+      tokensPerRequest: 10,
+    });
+  });
+
+  it('normalizes fresh grading requests and includes response-side judge usage', () => {
+    const runStats = computeRunStats({
+      results: [
+        {
+          success: true,
+          latencyMs: 1,
+          response: {
+            output: 'hello',
+            tokenUsage: {
+              assertions: {
+                total: 20,
+                prompt: 12,
+                completion: 8,
+                numRequests: 2,
+                completionDetails: { reasoning: 3 },
+              },
+            },
+          },
+          gradingResult: { tokensUsed: { total: 10, prompt: 8, completion: 2, numRequests: 0 } },
+        },
+      ],
+      stats: createStats(),
+      providers: [],
+    });
+    expect(runStats.assertions.tokenUsage).toMatchObject({
+      totalTokens: 30,
+      promptTokens: 20,
+      completionTokens: 10,
+      numRequests: 3,
+      reasoningTokens: 3,
+    });
+  });
+
+  it('groups result-derived assertion labels into a bounded custom category', () => {
+    const privateLabel = 'internal research cohort';
+    const runStats = computeRunStats({
+      results: [
+        {
+          success: true,
+          latencyMs: 1,
+          gradingResult: {
+            componentResults: [
+              { pass: true, score: 1, reason: '', assertion: { type: privateLabel as any } },
+              {
+                pass: false,
+                score: 0,
+                reason: '',
+                assertion: { type: 'promptfoo:redteam:private-project' },
+              },
+              { pass: true, score: 1, reason: '', assertion: { type: 'not-equals' } },
+            ],
+          },
+        },
+      ],
+      stats: createStats(),
+      providers: [],
+    });
+    expect(runStats.assertions.breakdown).toEqual([
+      { type: 'custom', pass: 1, fail: 1, total: 2, passRate: 0.5 },
+      { type: 'not-equals', pass: 1, fail: 0, total: 1, passRate: 1 },
+    ]);
+    expect(JSON.stringify(runStats)).not.toContain(privateLabel);
+    expect(JSON.stringify(runStats)).not.toContain('private-project');
+  });
+
   it.each([undefined, 1])(
     'deduplicates comparison calls across component positions with aggregate requests=%s',
     (numRequests) => {

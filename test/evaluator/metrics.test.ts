@@ -61,6 +61,37 @@ describeEvaluator('evaluator metrics and scoring', () => {
     });
   });
 
+  it('keeps result-derived grader labels out of outbound telemetry', async () => {
+    const recordEvent = vi.spyOn(telemetry, 'record');
+    const privateLabel = 'internal research cohort';
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Privacy fixture')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'javascript',
+              value: () => ({
+                pass: true,
+                score: 1,
+                reason: '',
+                assertion: { type: privateLabel },
+              }),
+            },
+          ],
+        },
+      ],
+    };
+    await evaluate(suite, new Eval({}), {});
+    const event = recordEvent.mock.calls.filter(([name]) => name === 'eval_ran').at(-1)?.[1];
+    expect(event).toBeDefined();
+    expect(JSON.stringify(event)).not.toContain(privateLabel);
+    expect(JSON.parse(String(event?.assertionBreakdown))).toEqual([
+      { type: 'custom', pass: 1, fail: 0, total: 1, passRate: 1 },
+    ]);
+  });
+
   it('sanitizes path-bearing provider identifiers in outbound telemetry', async () => {
     const provider: ApiProvider = {
       id: vi.fn().mockReturnValue('python:/Users/acme/private/grader.py:default'),

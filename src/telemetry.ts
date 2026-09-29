@@ -49,7 +49,7 @@ export function sanitizeTelemetryProviderBreakdown(
     aggregate.requests += stats.requests;
     aggregate.successes += stats.successes;
     aggregate.failures += stats.failures;
-    aggregate.totalLatencyMs += stats.avgLatencyMs * stats.requests;
+    aggregate.totalLatencyMs += stats.avgLatencyMs * (stats.successes + stats.failures);
     aggregate.totalTokens += stats.totalTokens;
     aggregate.promptTokens += stats.promptTokens;
     aggregate.completionTokens += stats.completionTokens;
@@ -63,9 +63,14 @@ export function sanitizeTelemetryProviderBreakdown(
       requests: aggregate.requests,
       successes: aggregate.successes,
       failures: aggregate.failures,
-      successRate: aggregate.requests > 0 ? aggregate.successes / aggregate.requests : 0,
+      successRate:
+        aggregate.successes + aggregate.failures > 0
+          ? aggregate.successes / (aggregate.successes + aggregate.failures)
+          : 0,
       avgLatencyMs:
-        aggregate.requests > 0 ? Math.round(aggregate.totalLatencyMs / aggregate.requests) : 0,
+        aggregate.successes + aggregate.failures > 0
+          ? Math.round(aggregate.totalLatencyMs / (aggregate.successes + aggregate.failures))
+          : 0,
       totalTokens: aggregate.totalTokens,
       promptTokens: aggregate.promptTokens,
       completionTokens: aggregate.completionTokens,

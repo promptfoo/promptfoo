@@ -360,7 +360,6 @@ export default class Eval {
    * Not persisted to database.
    */
   runStats?: EvalRunStats;
-  interrupted?: boolean;
 
   static async latest() {
     const db = await getDb();

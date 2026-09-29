@@ -189,10 +189,7 @@ describe('computeAssertionBreakdown', () => {
       },
     ];
     const breakdown = computeAssertionBreakdown(results);
-    expect(breakdown).toEqual([
-      { type: '__proto__', pass: 0, fail: 1, total: 1, passRate: 0 },
-      { type: 'constructor', pass: 1, fail: 0, total: 1, passRate: 1 },
-    ]);
+    expect(breakdown).toEqual([{ type: 'custom', pass: 1, fail: 1, total: 2, passRate: 0.5 }]);
   });
 });
 

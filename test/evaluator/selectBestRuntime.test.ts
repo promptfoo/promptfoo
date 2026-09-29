@@ -1070,6 +1070,26 @@ describeEvaluator('select-best runtime grading configuration', () => {
     ).toBe(secret);
   });
 
+  it('records failed resumed comparison work without inventing target calls', async () => {
+    const recordTelemetry = vi.spyOn(telemetry, 'record');
+    const { grader, suite, target } = makeSuite();
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    vi.mocked(grader.callApi).mockRejectedValueOnce(new Error('grader unavailable'));
+    cliState.resume = true;
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    const event = recordTelemetry.mock.calls.filter(([name]) => name === 'eval_ran').at(-1)?.[1];
+    expect(target.callApi).toHaveBeenCalledTimes(2);
+    expect(event).toMatchObject({
+      numResults: 0,
+      cacheHits: 0,
+      cacheMisses: 0,
+      errorTypes: ['other'],
+    });
+    expect(JSON.parse((event as any).errorBreakdown)).toMatchObject({ other: 2 });
+    expect(JSON.parse((event as any).providerBreakdown)).toEqual([]);
+  });
+
   it('uses the live grader when a resumed comparison row has no pending eval options', async () => {
     const recordTelemetry = vi.spyOn(telemetry, 'record');
     const { grader, seenKeys, suite, target } = makeSuite();

@@ -1,5 +1,11 @@
 import { MODEL_GRADED_ASSERTION_TYPES } from '../assertions/constants';
-import { type ApiProvider, type AssertionType, type EvaluateStats } from '../types/index';
+import {
+  type ApiProvider,
+  type AssertionType,
+  BaseAssertionTypesSchema,
+  type EvaluateStats,
+  SpecialAssertionTypesSchema,
+} from '../types/index';
 import { getCountableAssertionComponents } from './assertionComponents';
 import {
   accumulateResultAssertionTokenUsage,
@@ -18,6 +24,12 @@ import type {
   ProviderStats,
   StatableResult,
 } from './types';
+
+const KNOWN_ASSERTION_TYPES = new Set<string>([
+  ...BaseAssertionTypesSchema.options,
+  ...BaseAssertionTypesSchema.options.map((type) => `not-${type}`),
+  ...SpecialAssertionTypesSchema.options,
+]);
 
 interface ProviderAccumulator {
   requests: number;
@@ -144,14 +156,6 @@ export class RunStatsAccumulator {
       this.cacheMisses++;
     }
 
-    if (operationalError) {
-      this.errorCount++;
-      const category = categorizeError(result.error || '');
-      this.errors[category]++;
-      if (category === 'timeout') {
-        this.foundTimedOutResult = true;
-      }
-    }
     const providerId = result.provider?.id || 'unknown';
     this.modelProviderIds.add(providerId);
     const provider = this.providers.get(providerId) ?? {
@@ -164,7 +168,7 @@ export class RunStatsAccumulator {
       completionTokens: 0,
       cachedTokens: 0,
     };
-    provider.requests++;
+    provider.requests += result.response?.tokenUsage?.numRequests ?? 1;
     provider.totalLatencyMs += result.latencyMs || 0;
     if (targetError) {
       provider.failures++;
@@ -179,6 +183,12 @@ export class RunStatsAccumulator {
   }
 
   private addResult(result: StatableResult): void {
+    if (isOperationalError(result)) {
+      this.errorCount++;
+      const category = categorizeError(result.error || '');
+      this.errors[category]++;
+      this.foundTimedOutResult ||= category === 'timeout';
+    }
     if (!result.gradingOnly) {
       this.addProviderResult(result);
     }
@@ -195,9 +205,10 @@ export class RunStatsAccumulator {
         this.assertionPassCount++;
       }
 
-      const type = componentResult.assertion?.type || 'unknown';
+      const rawType = componentResult.assertion?.type;
+      const type = rawType ? (KNOWN_ASSERTION_TYPES.has(rawType) ? rawType : 'custom') : 'unknown';
       if (componentResult.assertion?.type) {
-        this.assertionTypes.add(componentResult.assertion.type);
+        this.assertionTypes.add(type);
       }
 
       const assertion = this.assertions.get(type) ?? { pass: 0, fail: 0 };
@@ -213,16 +224,14 @@ export class RunStatsAccumulator {
   getProviderStats(maxProviders?: number): ProviderStats[] {
     const providerStats = Array.from(this.providers.entries())
       .map(([provider, accumulated]): ProviderStats => {
+        const outcomes = accumulated.successes + accumulated.failures;
         return {
           provider,
           requests: accumulated.requests,
           successes: accumulated.successes,
           failures: accumulated.failures,
-          successRate: accumulated.requests > 0 ? accumulated.successes / accumulated.requests : 0,
-          avgLatencyMs:
-            accumulated.requests > 0
-              ? Math.round(accumulated.totalLatencyMs / accumulated.requests)
-              : 0,
+          successRate: outcomes > 0 ? accumulated.successes / outcomes : 0,
+          avgLatencyMs: outcomes > 0 ? Math.round(accumulated.totalLatencyMs / outcomes) : 0,
           totalTokens: accumulated.totalTokens,
           promptTokens: accumulated.promptTokens,
           completionTokens: accumulated.completionTokens,

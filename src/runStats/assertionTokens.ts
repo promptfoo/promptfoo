@@ -1,5 +1,5 @@
 import { safeJsonStringify } from '../util/json';
-import { createEmptyAssertions } from '../util/tokenUsageUtils';
+import { accumulateGradingTokenUsage, createEmptyAssertions } from '../util/tokenUsageUtils';
 
 import type { EvaluateStats, GradingResult } from '../types/index';
 import type { TokenUsage } from '../types/shared';
@@ -40,7 +40,11 @@ function accumulateAssertionTokens(
 
 function getComponentTokenUsage(component: GradingResult): Partial<TokenUsage> | undefined {
   if (component.tokensUsed) {
-    return component.tokensUsed;
+    const normalized: TokenUsage = {};
+    accumulateGradingTokenUsage(normalized, component.tokensUsed, {
+      cached: component.metadata?.cachedResponse,
+    });
+    return normalized.assertions;
   }
   const usage = createAssertionTokenAccumulator();
   let found = false;
@@ -86,22 +90,32 @@ export function accumulateResultAssertionTokenUsage(
     occurrences.set(identity, occurrence + 1);
     const key = `${result.testIdx}:${identity}:${occurrence}`;
     if (seenComparisonTokenUsage.has(key)) {
-      duplicates.push(component.tokensUsed);
+      duplicates.push(usage!);
     } else {
       seenComparisonTokenUsage.add(key);
     }
   }
   const rowUsage = createAssertionTokenAccumulator();
   const aggregate = result.gradingResult?.tokensUsed;
-  accumulateAssertionTokens(rowUsage, aggregate ?? componentUsage);
-  if (aggregate && aggregate.numRequests === undefined) {
-    rowUsage.numRequests = componentUsage.numRequests;
+  if (aggregate) {
+    const normalized: TokenUsage = {};
+    accumulateGradingTokenUsage(normalized, aggregate, {
+      cached: result.gradingResult?.metadata?.cachedResponse,
+    });
+    accumulateAssertionTokens(rowUsage, normalized.assertions);
+    if (!aggregate.numRequests) {
+      rowUsage.numRequests = Math.max(rowUsage.numRequests ?? 0, componentUsage.numRequests ?? 0);
+    }
+  } else {
+    accumulateAssertionTokens(rowUsage, componentUsage);
   }
   for (const duplicate of duplicates) {
     accumulateAssertionTokens(rowUsage, duplicate, -1);
   }
+  const responseGrading = result.response?.tokenUsage?.assertions;
+  accumulateAssertionTokens(rowUsage, responseGrading);
   accumulateAssertionTokens(target, rowUsage);
-  return found;
+  return found || Boolean(responseGrading);
 }
 
 export function getStatsAssertionTokenUsage(stats: EvaluateStats): AssertionTokenAccumulator {

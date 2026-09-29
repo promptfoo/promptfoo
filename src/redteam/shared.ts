@@ -7,7 +7,6 @@ import chalk from 'chalk';
 import * as yaml from 'js-yaml';
 import logger, { clearLogCallbackIfOwned, setLogCallback, setLogLevel } from '../logger';
 import { doEval } from '../node/doEval';
-import telemetry from '../telemetry';
 import { isCliEventSource } from '../types/eventSource';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
@@ -16,13 +15,10 @@ import { formatDuration } from '../util/formatDuration';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { initVerboseToggle } from '../util/verboseToggle';
 import { doGenerateRedteam } from './commands/generate';
-import { ALL_PLUGINS, COLLECTIONS } from './constants/plugins';
-import { ALL_STRATEGIES } from './constants/strategies';
 import { getRemoteHealthUrl } from './remoteGeneration';
 import { PartialGenerationError } from './types';
 
 import type Eval from '../models/eval';
-import type { UnifiedConfig } from '../types/index';
 import type { RedteamRunOptions } from './types';
 
 export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
@@ -182,16 +178,15 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
       );
     }
 
+    // Show appropriate completion message based on abort status
+    // Note: Detailed abort information is already shown in the summary, so we just show a brief message here
+    // Check if scan was aborted due to target error (efficient DB query, not loading all results)
     const hasTargetError = evalResult ? (await evalResult.findTargetErrorStatus()) != null : false;
-    const aborted =
-      hasTargetError || options.abortSignal?.aborted === true || evalResult?.interrupted === true;
-    if (!aborted) {
+    if (hasTargetError) {
+      // Abort details already shown in summary - no need to repeat
+    } else {
       logger.info(chalk.green('\nRed team scan complete!'));
     }
-    if (evalResult) {
-      recordRedteamCompletionTelemetry(evalResult, options, redteamConfig, aborted);
-    }
-
     if (!evalResult?.shared) {
       if (options.liveRedteamConfig) {
         logger.info(
@@ -213,79 +208,4 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
       verboseToggleCleanup();
     }
   }
-}
-
-function getConfigIds(values: unknown): string[] {
-  if (!Array.isArray(values)) {
-    return [];
-  }
-  return values
-    .map((value) => {
-      if (typeof value === 'string') {
-        return value;
-      }
-      if (value && typeof value === 'object' && 'id' in value) {
-        return String((value as { id?: unknown }).id ?? '');
-      }
-      return '';
-    })
-    .filter(Boolean);
-}
-
-function isSampleTarget(target: unknown): boolean {
-  if (typeof target === 'string') {
-    try {
-      const { hostname } = new URL(target);
-      return ['promptfoo.app', 'promptfoo.dev'].some(
-        (domain) => hostname === domain || hostname.endsWith(`.${domain}`),
-      );
-    } catch {
-      return false;
-    }
-  }
-  if (!target || typeof target !== 'object') {
-    return false;
-  }
-  const { id, config } = target as { id?: string; config?: { url?: string } };
-  return (
-    Object.keys(target).some(isSampleTarget) || isSampleTarget(id) || isSampleTarget(config?.url)
-  );
-}
-
-function recordRedteamCompletionTelemetry(
-  evalResult: Eval,
-  options: RedteamRunOptions,
-  config: Partial<UnifiedConfig>,
-  aborted: boolean,
-) {
-  const { successes: numPasses, failures: numFails, errors: numErrors } = evalResult.getStats();
-  const numTests = numPasses + numFails + numErrors;
-  const plugins = getConfigIds(config.redteam?.plugins).map((id) =>
-    ([...ALL_PLUGINS, ...COLLECTIONS] as readonly string[]).includes(id) ? id : 'custom',
-  );
-  const strategies = getConfigIds(config.redteam?.strategies).map((id) =>
-    (ALL_STRATEGIES as readonly string[]).includes(id) ? id : 'custom',
-  );
-  const targets = config.targets ?? config.providers;
-  const isPromptfooSampleTarget =
-    typeof targets === 'string'
-      ? isSampleTarget(targets)
-      : Array.isArray(targets)
-        ? targets.some(isSampleTarget)
-        : isSampleTarget(targets);
-
-  telemetry.record('redteam run', {
-    phase: aborted ? 'aborted' : 'completed',
-    numPlugins: plugins.length,
-    numStrategies: strategies.length,
-    plugins: plugins.slice(0, 50),
-    strategies: strategies.slice(0, 20),
-    numTests,
-    numPasses,
-    numFails,
-    numErrors,
-    passRate: numTests > 0 ? numPasses / numTests : 0,
-    isPromptfooSampleTarget,
-    loadedFromCloud: Boolean(options.loadedFromCloud),
-  });
 }

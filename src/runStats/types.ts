@@ -16,7 +16,7 @@ export interface StatableResult {
   failureReason?: ResultFailureReason;
   response?: Pick<ProviderResponse, 'cached' | 'tokenUsage' | 'output' | 'error'>;
   provider?: { id?: string };
-  gradingResult?: Pick<GradingResult, 'componentResults' | 'tokensUsed'> | null;
+  gradingResult?: Pick<GradingResult, 'componentResults' | 'tokensUsed' | 'metadata'> | null;
 }
 
 /**
@@ -66,9 +66,9 @@ export interface ProviderStats {
   provider: string;
   /** Total number of requests */
   requests: number;
-  /** Number of successful requests */
+  /** Number of successful result rows */
   successes: number;
-  /** Number of failed requests */
+  /** Number of failed result rows */
   failures: number;
   /** Success rate (0-1) */
   successRate: number;
