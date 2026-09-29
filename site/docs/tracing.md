@@ -106,24 +106,24 @@ Instrumented model and agent calls can include these attributes on their GenAI s
 Grading spans describe each assertion with `gen_ai.evaluation.name`,
 `gen_ai.evaluation.score.value`, and `gen_ai.evaluation.score.label`. When a grader supplies a
 reason, `gen_ai.evaluation.explanation` records a sanitized, shortened version. Any model call used
-by the grader appears in a child span.
+by the grader appears in a child span. See [`is-refusal`](/docs/configuration/expected-outputs/deterministic/#is-refusal) for how provider-reported refusals and output transforms affect grading.
 
 ### Example Trace Output
 
-When calling OpenAI's GPT-4:
+When calling OpenAI's GPT-6 Luna through Chat Completions with `reasoning_effort: none`:
 
 ```
-Span: chat gpt-4
+Span: chat gpt-6-luna
 ├─ gen_ai.provider.name: openai
 ├─ gen_ai.operation.name: chat
-├─ gen_ai.request.model: gpt-4
+├─ gen_ai.request.model: gpt-6-luna
 ├─ gen_ai.request.max_tokens: 1000
 ├─ gen_ai.request.temperature: 0.7
 ├─ gen_ai.usage.input_tokens: 150
 ├─ gen_ai.usage.output_tokens: 85
 ├─ promptfoo.usage.total_tokens: 235
 ├─ gen_ai.response.finish_reasons: ["stop"]
-├─ promptfoo.provider.id: openai:chat:gpt-4
+├─ promptfoo.provider.id: openai:chat:gpt-6-luna
 └─ promptfoo.test.index: 0
 ```
 
@@ -137,8 +137,7 @@ Add tracing configuration to your `promptfooconfig.yaml`:
 tracing:
   enabled: true # Required to send OTLP telemetry
   otlp:
-    http:
-      enabled: true # Required to start the built-in OTLP receiver
+    http: {} # Starts the built-in OTLP receiver with the defaults
 ```
 
 ### 2. Instrument Your Provider
@@ -147,9 +146,8 @@ Promptfoo passes a W3C trace context to providers via the `traceparent` field. U
 
 ```javascript
 const { trace, context, propagation, SpanStatusCode } = require('@opentelemetry/api');
-const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
+const { NodeTracerProvider, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
-const { SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 
 // Initialize tracer (SDK 2.x API - pass spanProcessors to constructor)
@@ -236,11 +234,6 @@ tests:
       - type: trajectory:tool-used
         value: search_orders
 
-      - type: trajectory:tool-set
-        value:
-          - search_orders
-          - compose_reply
-
       - type: trajectory:tool-args-match
         value:
           name: search_orders
@@ -255,14 +248,12 @@ tests:
 
       - type: trajectory:goal-success
         value: 'Determine the shipping status for order {{ order_id }} and tell the user whether it has shipped'
-        provider: openai:gpt-5-mini
+        provider: openai:gpt-6-luna
 ```
 
-Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments and `shell` calls with `commands` arrays, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, error detection, or token budgets, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans), or [`tokens-used`](/docs/configuration/expected-outputs/deterministic/#tokens-used).
+Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments and `shell` calls with `commands` arrays, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
 
-Use `not-trajectory:tool-used` to forbid a tool. Its object form accepts a name or pattern with no count bounds, or with `max: 0`; other inverse count ranges are rejected because their double-negative meaning is easy to misread.
-
-Trace span assertions match a subset of spans by pattern. Empty matches pass by default for budget-style checks such as duration or error thresholds; set `requirePresence: true` when the matching work must be present. For inverse `not-trace-*` assertions, an empty default match means the positive budget was satisfied and therefore fails the inverse assertion instead of proving forbidden traced work occurred. When `requirePresence` is true, missing matching work fails both positive and inverse assertions.
+To reject unexpected tools regardless of order, use [`trajectory:tool-set`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-set) with an array of exact tool names. It reads supported tool-name attributes, including those on command tools. [`tokens-used`](/docs/configuration/expected-outputs/deterministic/#tokens-used) separately checks provider response usage; it does not aggregate token attributes from spans.
 
 ### Turn marker spans {#per-llm-turn-spans}
 
@@ -325,7 +316,7 @@ tracing:
   commandToolNames: ['bash']
   otlp:
     http:
-      enabled: true # Required to start the OTLP receiver
+      enabled: true # Defaults to true when an http block is present; false disables the receiver
       # port: 4318   # Optional - defaults to 4318 (standard OTLP HTTP port)
       # host: '127.0.0.1'  # Optional - defaults to loopback
       # acceptFormats: ['json', 'protobuf']  # Optional - defaults to both
@@ -335,6 +326,8 @@ tracing:
     # Remove trace and span records older than this many days
     retentionDays: 30
 ```
+
+Omit `otlp.http` entirely if you do not want to start the built-in receiver. Tracing itself defaults to disabled unless you enable it.
 
 `redactAttributes` is matched case-insensitively as a **substring** of each attribute
 key, so short patterns over-match: `token` also matches `gen_ai.usage.input_tokens`, and
@@ -604,6 +597,8 @@ This is useful for inspecting the full request/response bodies (`promptfoo.reque
 
 Trace reads redact credential-like attribute keys such as authorization headers, cookies, API keys, tokens, secrets, and passwords before displaying or exporting spans. GenAI token counters such as `gen_ai.usage.input_tokens` and application token counters such as `llm.usage.prompt_tokens` and `llm.usage.completion_tokens` remain visible. Avoid placing secrets in custom span attributes because raw attributes may still be retained in the local trace store for internal evaluation workflows.
 
+Evaluation result exports and sharing also apply the eval's saved `PROMPTFOO_STRIP_*` settings to trace metadata, test variables, and Promptfoo request/response bodies. These settings do not change locally stored spans.
+
 ### Exporting Traces
 
 Click the **Export Traces** button to download all traces for the current evaluation or test case as a JSON file. The export includes:
@@ -657,7 +652,7 @@ Include context that helps debugging:
 span.setAttributes({
   'prompt.tokens': tokenCount,
   'documents.count': documents.length,
-  'model.name': 'gpt-4',
+  'model.name': 'gpt-6-luna',
   'cache.hit': false,
 });
 ```
@@ -703,7 +698,7 @@ span.setAttributes({
 Reduce overhead in high-volume scenarios:
 
 ```javascript
-const { TraceIdRatioBasedSampler } = require('@opentelemetry/sdk-trace-base');
+const { TraceIdRatioBasedSampler } = require('@opentelemetry/sdk-trace-node');
 
 const provider = new NodeTracerProvider({
   sampler: new TraceIdRatioBasedSampler(0.1), // Sample 10% of traces
@@ -770,24 +765,27 @@ OTEL_LOG_LEVEL=debug promptfoo eval
 ### RAG Pipeline Tracing
 
 ```javascript
+const { context: otelContext, trace, SpanStatusCode } = require('@opentelemetry/api');
+
 async function ragPipeline(query, context) {
   const span = tracer.startSpan('rag.pipeline');
+  const parentCtx = trace.setSpan(otelContext.active(), span);
 
   try {
     // Retrieval phase
-    const retrieveSpan = tracer.startSpan('rag.retrieve', { parent: span });
+    const retrieveSpan = tracer.startSpan('rag.retrieve', {}, parentCtx);
     const documents = await vectorSearch(query);
     retrieveSpan.setAttribute('documents.count', documents.length);
     retrieveSpan.end();
 
     // Reranking phase
-    const rerankSpan = tracer.startSpan('rag.rerank', { parent: span });
+    const rerankSpan = tracer.startSpan('rag.rerank', {}, parentCtx);
     const ranked = await rerank(query, documents);
     rerankSpan.setAttribute('documents.reranked', ranked.length);
     rerankSpan.end();
 
     // Generation phase
-    const generateSpan = tracer.startSpan('llm.generate', { parent: span });
+    const generateSpan = tracer.startSpan('llm.generate', {}, parentCtx);
     const response = await llm.generate(query, ranked);
     generateSpan.setAttribute('response.tokens', response.tokenCount);
     generateSpan.end();
@@ -807,25 +805,30 @@ async function ragPipeline(query, context) {
 ### Multi-Model Comparison
 
 ```javascript
+const { context: otelContext, trace } = require('@opentelemetry/api');
+
 async function compareModels(prompt, context) {
   const span = tracer.startSpan('compare.models');
+  const parentCtx = trace.setSpan(otelContext.active(), span);
 
-  const models = ['gpt-4', 'claude-3', 'llama-3'];
-  const promises = models.map(async (model) => {
-    const modelSpan = tracer.startSpan(`model.${model}`, { parent: span });
-    try {
-      const result = await callModel(model, prompt);
-      modelSpan.setAttribute('model.name', model);
-      modelSpan.setAttribute('response.latency', result.latency);
-      return result;
-    } finally {
-      modelSpan.end();
-    }
-  });
+  try {
+    const models = ['gpt-4', 'claude-3', 'llama-3'];
+    const promises = models.map(async (model) => {
+      const modelSpan = tracer.startSpan(`model.${model}`, undefined, parentCtx);
+      try {
+        const result = await callModel(model, prompt);
+        modelSpan.setAttribute('model.name', model);
+        modelSpan.setAttribute('response.latency', result.latency);
+        return result;
+      } finally {
+        modelSpan.end();
+      }
+    });
 
-  const results = await Promise.all(promises);
-  span.end();
-  return results;
+    return await Promise.all(promises);
+  } finally {
+    span.end();
+  }
 }
 ```
 

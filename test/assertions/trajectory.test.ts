@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { runAssertion } from '../../src/assertions';
 import {
   handleTrajectoryStepCount,
   handleTrajectoryToolArgsMatch,
   handleTrajectoryToolSequence,
-  handleTrajectoryToolSet,
   handleTrajectoryToolUsed,
 } from '../../src/assertions/trajectory';
 import {
@@ -682,32 +680,6 @@ describe('trajectory assertions', () => {
       });
     });
 
-    it('supports max-only count matching with patterns', () => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        baseType: 'trajectory:tool-used',
-        assertion: {
-          type: 'trajectory:tool-used',
-          value: {
-            pattern: 'delete*',
-            max: 0,
-          },
-        },
-        renderedValue: {
-          pattern: 'delete*',
-          max: 0,
-        },
-      };
-
-      const result = handleTrajectoryToolUsed(params);
-      expect(result).toEqual({
-        pass: true,
-        score: 1,
-        reason: 'Matched tool "delete*" 0 time(s) (expected 0-0)',
-        assertion: params.assertion,
-      });
-    });
-
     it('supports inverse assertions', () => {
       const params: AssertionParams = {
         ...defaultParams,
@@ -773,7 +745,7 @@ describe('trajectory assertions', () => {
       });
     });
 
-    it('passes inverse object assertions when the forbidden tool is absent', () => {
+    it('passes inverse count assertions when the forbidden count is not satisfied', () => {
       const params: AssertionParams = {
         ...defaultParams,
         baseType: 'trajectory:tool-used',
@@ -782,132 +754,22 @@ describe('trajectory assertions', () => {
           type: 'not-trajectory:tool-used',
           value: {
             name: 'missing_tool',
-          },
-        },
-        renderedValue: {
-          name: 'missing_tool',
-        },
-      };
-
-      const result = handleTrajectoryToolUsed(params);
-      expect(result).toEqual({
-        pass: true,
-        score: 1,
-        reason:
-          'Forbidden tool "missing_tool" was not used. Actual tools: tool:search_orders, tool:search_inventory, tool:compose_reply',
-        assertion: params.assertion,
-      });
-    });
-
-    it.each([
-      { name: 'search_orders', pattern: '   ' },
-      { name: 'search_orders', type: 'bogus' },
-    ])('rejects malformed inverse tool matchers before applying inversion', (value) => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        baseType: 'trajectory:tool-used',
-        inverse: true,
-        assertion: {
-          type: 'not-trajectory:tool-used',
-          value: value as any,
-        },
-        renderedValue: value as any,
-      };
-
-      expect(() => handleTrajectoryToolUsed(params)).toThrow();
-    });
-
-    it('rejects blank tool matcher list entries', () => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        baseType: 'trajectory:tool-used',
-        inverse: true,
-        assertion: { type: 'not-trajectory:tool-used', value: ['   '] },
-        renderedValue: ['   '],
-      };
-
-      expect(() => handleTrajectoryToolUsed(params)).toThrow(
-        'trajectory:tool-used assertion step 1 pattern must be a non-empty string',
-      );
-    });
-
-    it('fails inverse object assertions with max: 0 when the forbidden tool is present', () => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        baseType: 'trajectory:tool-used',
-        inverse: true,
-        assertion: {
-          type: 'not-trajectory:tool-used',
-          value: {
-            pattern: 'search*',
-            max: 0,
-          },
-        },
-        renderedValue: {
-          pattern: 'search*',
-          max: 0,
-        },
-      };
-
-      const result = handleTrajectoryToolUsed(params);
-      expect(result).toEqual({
-        pass: false,
-        score: 0,
-        reason:
-          'Forbidden tool "search*" was used 2 time(s). Matches: tool:search_orders, tool:search_inventory',
-        assertion: params.assertion,
-      });
-    });
-
-    it('passes inverse object assertions with max: 0 when the forbidden tool is absent', () => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        baseType: 'trajectory:tool-used',
-        inverse: true,
-        assertion: {
-          type: 'not-trajectory:tool-used',
-          value: {
-            name: 'missing_tool',
-            max: 0,
-          },
-        },
-        renderedValue: {
-          name: 'missing_tool',
-          max: 0,
-        },
-      };
-
-      const result = handleTrajectoryToolUsed(params);
-      expect(result).toEqual({
-        pass: true,
-        score: 1,
-        reason:
-          'Forbidden tool "missing_tool" was not used. Actual tools: tool:search_orders, tool:search_inventory, tool:compose_reply',
-        assertion: params.assertion,
-      });
-    });
-
-    it('rejects ambiguous inverse object count ranges', () => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        baseType: 'trajectory:tool-used',
-        inverse: true,
-        assertion: {
-          type: 'not-trajectory:tool-used',
-          value: {
-            name: 'search_orders',
             min: 1,
           },
         },
         renderedValue: {
-          name: 'search_orders',
+          name: 'missing_tool',
           min: 1,
         },
       };
 
-      expect(() => handleTrajectoryToolUsed(params)).toThrow(
-        'not-trajectory:tool-used object assertions only support name/pattern with no count bounds, or max: 0',
-      );
+      const result = handleTrajectoryToolUsed(params);
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Tool "missing_tool" did not satisfy the forbidden match condition',
+        assertion: params.assertion,
+      });
     });
 
     it('fails when required tools are missing', () => {
@@ -929,84 +791,6 @@ describe('trajectory assertions', () => {
           'Missing required tool(s): missing_tool. Actual tools: tool:search_orders, tool:search_inventory, tool:compose_reply',
         assertion: params.assertion,
       });
-    });
-
-    it('does not render an already-rendered scalar value a second time', () => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        assertionValueContext: {
-          ...defaultParams.assertionValueContext,
-          vars: { nestedTool: 'search_orders' },
-          trace: {
-            ...mockTraceData,
-            spans: [
-              {
-                spanId: 'literal-template-tool',
-                name: 'tool.call',
-                startTime: 1000,
-                endTime: 1100,
-                attributes: { 'tool.name': '{{ nestedTool }}' },
-              },
-            ],
-          },
-        },
-        baseType: 'trajectory:tool-used',
-        assertion: {
-          type: 'trajectory:tool-used',
-          value: '{{ expectedTool }}',
-        },
-        renderedValue: '{{ nestedTool }}',
-      };
-
-      expect(handleTrajectoryToolUsed(params).pass).toBe(true);
-    });
-
-    it('does not render already-rendered scalar array entries a second time', () => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        assertionValueContext: {
-          ...defaultParams.assertionValueContext,
-          vars: { nestedTool: 'search_orders' },
-          trace: {
-            ...mockTraceData,
-            spans: [
-              {
-                spanId: 'literal-template-tool',
-                name: 'tool.call',
-                startTime: 1000,
-                endTime: 1100,
-                attributes: { 'tool.name': '{{ nestedTool }}' },
-              },
-            ],
-          },
-        },
-        baseType: 'trajectory:tool-used',
-        assertion: {
-          type: 'trajectory:tool-used',
-          value: ['{{ expectedTool }}'],
-        },
-        renderedValue: ['{{ nestedTool }}'],
-      };
-
-      expect(handleTrajectoryToolUsed(params).pass).toBe(true);
-    });
-
-    it('renders scalar entries loaded from data files', () => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        assertionValueContext: {
-          ...defaultParams.assertionValueContext,
-          vars: { expectedTool: 'search_orders' },
-        },
-        baseType: 'trajectory:tool-used',
-        assertion: {
-          type: 'trajectory:tool-used',
-          value: 'file://tools.yaml',
-        },
-        renderedValue: ['{{ expectedTool }}'],
-      };
-
-      expect(handleTrajectoryToolUsed(params).pass).toBe(true);
     });
 
     it('rejects invalid matcher values', () => {
@@ -1042,41 +826,6 @@ describe('trajectory assertions', () => {
 
       expect(() => handleTrajectoryToolUsed(params)).toThrow(
         'trajectory:tool-used assertion object must include a name or pattern property',
-      );
-    });
-
-    it.each([Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5])(
-      'rejects invalid tool count bounds (%s)',
-      (min) => {
-        const params: AssertionParams = {
-          ...defaultParams,
-          baseType: 'trajectory:tool-used',
-          assertion: {
-            type: 'trajectory:tool-used',
-            value: { pattern: 'search*', min },
-          },
-          renderedValue: { pattern: 'search*', min },
-        };
-
-        expect(() => handleTrajectoryToolUsed(params)).toThrow(
-          'trajectory:tool-used assertion min must be a finite non-negative integer',
-        );
-      },
-    );
-
-    it('rejects tool max bounds below min bounds', () => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        baseType: 'trajectory:tool-used',
-        assertion: {
-          type: 'trajectory:tool-used',
-          value: { pattern: 'search*', min: 2, max: 1 },
-        },
-        renderedValue: { pattern: 'search*', min: 2, max: 1 },
-      };
-
-      expect(() => handleTrajectoryToolUsed(params)).toThrow(
-        'trajectory:tool-used assertion max must be greater than or equal to min',
       );
     });
   });
@@ -1274,28 +1023,6 @@ describe('trajectory assertions', () => {
       );
     });
 
-    it('rejects unknown sequence modes instead of relaxing exact matching', () => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        baseType: 'trajectory:tool-sequence',
-        assertion: {
-          type: 'trajectory:tool-sequence',
-          value: {
-            mode: 'exct' as unknown as 'exact',
-            steps: ['search_orders', 'compose_reply'],
-          },
-        },
-        renderedValue: {
-          mode: 'exct' as unknown as 'exact',
-          steps: ['search_orders', 'compose_reply'],
-        },
-      };
-
-      expect(() => handleTrajectoryToolSequence(params)).toThrow(
-        'trajectory:tool-sequence assertion mode must be "in_order" or "exact"',
-      );
-    });
-
     it('rejects empty sequence objects', () => {
       const params: AssertionParams = {
         ...defaultParams,
@@ -1314,240 +1041,6 @@ describe('trajectory assertions', () => {
       expect(() => handleTrajectoryToolSequence(params)).toThrow(
         'trajectory:tool-sequence assertion requires at least one expected step',
       );
-    });
-
-    it('rejects non-array object steps', () => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        baseType: 'trajectory:tool-sequence',
-        assertion: { type: 'trajectory:tool-sequence', value: { steps: 'search' } as any },
-        renderedValue: { steps: 'search' } as any,
-      };
-
-      expect(() => handleTrajectoryToolSequence(params)).toThrow(
-        'trajectory:tool-sequence assertion steps must be an array',
-      );
-    });
-  });
-
-  describe('trajectory:tool-set', () => {
-    const setTrace: TraceData = {
-      traceId: 'set-trace',
-      evaluationId: 'eval-1',
-      testCaseId: 'tc-1',
-      metadata: {},
-      spans: [
-        {
-          spanId: 'a',
-          name: 'tool.call',
-          startTime: 100,
-          endTime: 110,
-          attributes: { 'tool.name': 'rerank' },
-        },
-        {
-          spanId: 'b',
-          name: 'tool.call',
-          startTime: 120,
-          endTime: 130,
-          attributes: { 'tool.name': 'search_corpus' },
-        },
-        {
-          spanId: 'c',
-          name: 'tool.call',
-          startTime: 140,
-          endTime: 150,
-          attributes: { 'tool.name': 'fetch_document' },
-        },
-      ],
-    };
-
-    const baseSetParams = {
-      ...defaultParams,
-      assertionValueContext: { ...defaultParams.assertionValueContext, trace: setTrace },
-      baseType: 'trajectory:tool-set',
-    } satisfies Omit<AssertionParams, 'assertion' | 'renderedValue'>;
-
-    it('passes when all expected tools are present in any order (subset default)', () => {
-      const params: AssertionParams = {
-        ...baseSetParams,
-        assertion: {
-          type: 'trajectory:tool-set',
-          value: ['fetch_document', 'search_corpus', 'rerank'],
-        },
-        renderedValue: ['fetch_document', 'search_corpus', 'rerank'],
-      };
-      const result = handleTrajectoryToolSet(params);
-      expect(result.pass).toBe(true);
-      expect(result.score).toBe(1);
-      expect(result.reason).toContain('Observed expected tool set (mode=subset)');
-    });
-
-    it('fails when an expected tool is missing', () => {
-      const params: AssertionParams = {
-        ...baseSetParams,
-        assertion: {
-          type: 'trajectory:tool-set',
-          value: { tools: ['search_corpus', 'rerank', 'web_search'] },
-        },
-        renderedValue: { tools: ['search_corpus', 'rerank', 'web_search'] },
-      };
-      const result = handleTrajectoryToolSet(params);
-      expect(result.pass).toBe(false);
-      expect(result.reason).toContain('Missing expected tools: web_search');
-    });
-
-    it('fails mode=exact when extra tools are present', () => {
-      const params: AssertionParams = {
-        ...baseSetParams,
-        assertion: {
-          type: 'trajectory:tool-set',
-          value: { tools: ['search_corpus', 'rerank'], mode: 'exact' },
-        },
-        renderedValue: { tools: ['search_corpus', 'rerank'], mode: 'exact' },
-      };
-      const result = handleTrajectoryToolSet(params);
-      expect(result.pass).toBe(false);
-      expect(result.reason).toContain('Unexpected tools observed under mode=exact');
-      expect(result.reason).toContain('fetch_document');
-    });
-
-    it('renders templates in object-form tool sets', () => {
-      const params: AssertionParams = {
-        ...baseSetParams,
-        assertionValueContext: {
-          ...baseSetParams.assertionValueContext,
-          vars: { expectedTool: 'search_corpus' },
-        },
-        assertion: {
-          type: 'trajectory:tool-set',
-          value: { tools: ['{{ expectedTool }}', 'rerank', 'fetch_document'], mode: 'exact' },
-        },
-      };
-      const result = handleTrajectoryToolSet(params);
-      expect(result.pass).toBe(true);
-      expect(result.reason).toContain('search_corpus');
-    });
-
-    it('renders templates when the provided object-form rendered value is still unresolved', () => {
-      const params: AssertionParams = {
-        ...baseSetParams,
-        assertionValueContext: {
-          ...baseSetParams.assertionValueContext,
-          vars: { expected_tool: 'search_corpus' },
-        },
-        assertion: {
-          type: 'trajectory:tool-set',
-          value: {
-            tools: ['rerank', '{{ expected_tool }}', 'fetch_document'],
-            mode: 'exact',
-          },
-        },
-        renderedValue: {
-          tools: ['rerank', '{{ expected_tool }}', 'fetch_document'],
-          mode: 'exact',
-        },
-      };
-
-      expect(handleTrajectoryToolSet(params).pass).toBe(true);
-    });
-
-    it('preserves native matchers from full-expression array entries', async () => {
-      const result = await runAssertion({
-        assertion: {
-          type: 'trajectory:tool-set',
-          value: { tools: ['{{ expectedMatcher }}'] },
-        },
-        test: { vars: { expectedMatcher: { name: 'search_corpus' } } } as AtomicTestCase,
-        vars: { expectedMatcher: { name: 'search_corpus' } },
-        provider: mockProvider,
-        providerResponse: { output: 'test output' },
-        traceId: setTrace.traceId,
-        traceData: setTrace,
-      });
-
-      expect(result.pass).toBe(true);
-    });
-
-    it('inverts the result for not-trajectory:tool-set', () => {
-      const params: AssertionParams = {
-        ...baseSetParams,
-        inverse: true,
-        assertion: {
-          type: 'not-trajectory:tool-set',
-          value: ['rerank', 'search_corpus', 'fetch_document'],
-        },
-        renderedValue: ['rerank', 'search_corpus', 'fetch_document'],
-      };
-      const result = handleTrajectoryToolSet(params);
-      expect(result.pass).toBe(false);
-      expect(result.reason).toContain('Forbidden tool set was satisfied');
-    });
-
-    it('rejects an empty tools array', () => {
-      const params: AssertionParams = {
-        ...baseSetParams,
-        assertion: { type: 'trajectory:tool-set', value: [] },
-        renderedValue: [],
-      };
-      expect(() => handleTrajectoryToolSet(params)).toThrow(
-        'trajectory:tool-set assertion requires at least one expected tool',
-      );
-    });
-
-    it('rejects an unknown mode', () => {
-      const params: AssertionParams = {
-        ...baseSetParams,
-        assertion: {
-          type: 'trajectory:tool-set',
-          value: { tools: ['search_corpus'], mode: 'fuzzy' as unknown as 'subset' },
-        },
-        renderedValue: { tools: ['search_corpus'], mode: 'fuzzy' as unknown as 'subset' },
-      };
-      expect(() => handleTrajectoryToolSet(params)).toThrow(
-        'trajectory:tool-set assertion mode must be "subset" or "exact"',
-      );
-    });
-
-    it('rejects blank and malformed tool matchers before applying inversion', () => {
-      for (const tools of [
-        ['   '],
-        [{ name: 123 }],
-        [{ name: 'dangerous', pattern: '   ' }],
-        [{ name: 'dangerous', type: 'bogus' }],
-      ]) {
-        const params: AssertionParams = {
-          ...baseSetParams,
-          inverse: true,
-          assertion: {
-            type: 'not-trajectory:tool-set',
-            value: tools as unknown as string[],
-          },
-          renderedValue: tools as unknown as string[],
-        };
-
-        expect(() => handleTrajectoryToolSet(params)).toThrow(
-          'Each trajectory tool set entry needs a name or pattern.',
-        );
-      }
-    });
-
-    it('does not reinterpret script-returned tool configuration as a template', () => {
-      const scriptValue = { tools: ['{{ expectedTool }}'] };
-      const params: AssertionParams = {
-        ...baseSetParams,
-        assertionValueContext: {
-          ...baseSetParams.assertionValueContext,
-          vars: { expectedTool: 'search_corpus' },
-        },
-        assertion: { type: 'trajectory:tool-set', value: 'file://tools.js' },
-        renderedValue: scriptValue,
-        valueFromScript: scriptValue,
-      };
-
-      const result = handleTrajectoryToolSet(params);
-      expect(result.pass).toBe(false);
-      expect(result.reason).toContain('{{ expectedTool }}');
-      expect(result.reason).not.toContain('Missing expected tools: search_corpus');
     });
   });
 
@@ -1578,41 +1071,9 @@ describe('trajectory assertions', () => {
         pass: true,
         score: 1,
         reason:
-          'Tool "search_orders" matched expected arguments (partial) on tool:search_orders. Args: [redacted]',
+          'Tool "search_orders" matched expected arguments (partial) on tool:search_orders. Args: {"order_id":"123","include_history":false}',
         assertion: params.assertion,
       });
-    });
-
-    it('renders nested expected argument templates before matching', () => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        assertionValueContext: {
-          ...defaultParams.assertionValueContext,
-          vars: { order_id: '123', history: [false] },
-        },
-        baseType: 'trajectory:tool-args-match',
-        assertion: {
-          type: 'trajectory:tool-args-match',
-          value: {
-            name: 'search_orders',
-            args: {
-              order_id: '{{ order_id }}',
-              include_history: '{{ history[0] }}',
-            },
-          },
-        },
-        renderedValue: {
-          name: 'search_orders',
-          args: {
-            order_id: '{{ order_id }}',
-            include_history: '{{ history[0] }}',
-          },
-        },
-      };
-
-      const result = handleTrajectoryToolArgsMatch(params);
-      expect(result.pass).toBe(true);
-      expect(result.reason).toContain('Args: [redacted]');
     });
 
     it('supports partial array matching for argument subsets', () => {
@@ -1641,47 +1102,10 @@ describe('trajectory assertions', () => {
         pass: true,
         score: 1,
         reason:
-          'Tool "compose_reply" matched expected arguments (partial) on tool:compose_reply. Args: [redacted]',
+          'Tool "compose_reply" matched expected arguments (partial) on tool:compose_reply. Args: {"tone":"friendly","citations":["doc_1","doc_2"]}',
         assertion: params.assertion,
       });
     });
-
-    it.each(['partial', 'exact'] as const)(
-      'preserves expected __proto__ arguments in %s mode',
-      (mode) => {
-        const expectedArgs = JSON.parse('{"__proto__":{"polluted":true}}');
-        const params: AssertionParams = {
-          ...defaultParams,
-          baseType: 'trajectory:tool-args-match',
-          assertionValueContext: {
-            ...defaultParams.assertionValueContext,
-            vars: {},
-            trace: {
-              ...mockTraceData,
-              spans: [
-                {
-                  spanId: 'reserved-expected-key',
-                  name: 'tool.call',
-                  startTime: 0,
-                  endTime: 1,
-                  attributes: { 'tool.name': 'search', 'tool.arguments': '{}' },
-                },
-              ],
-            },
-          },
-          assertion: {
-            type: 'trajectory:tool-args-match',
-            value: { name: 'search', args: expectedArgs, mode },
-          },
-          renderedValue: { name: 'search', args: expectedArgs, mode },
-        };
-
-        const result = handleTrajectoryToolArgsMatch(params);
-        expect(result.pass).toBe(false);
-        expect(Object.hasOwn(expectedArgs, '__proto__')).toBe(true);
-        expect(({} as { polluted?: boolean }).polluted).toBeUndefined();
-      },
-    );
 
     it('supports exact mode for argument matching', () => {
       const params: AssertionParams = {
@@ -1713,7 +1137,7 @@ describe('trajectory assertions', () => {
         pass: true,
         score: 1,
         reason:
-          'Tool "compose_*" matched expected arguments (exact) on tool:compose_reply. Args: [redacted]',
+          'Tool "compose_*" matched expected arguments (exact) on tool:compose_reply. Args: {"tone":"friendly","citations":["doc_1","doc_2"]}',
         assertion: params.assertion,
       });
     });
@@ -1783,7 +1207,7 @@ describe('trajectory assertions', () => {
         pass: false,
         score: 0,
         reason:
-          'No call to tool "search_orders" matched expected arguments (partial): [redacted]. Observed args: [redacted]',
+          'No call to tool "search_orders" matched expected arguments (partial): {"order_id":"999"}. Observed args: {"order_id":"123","include_history":false}',
         assertion: params.assertion,
       });
     });
@@ -1894,27 +1318,9 @@ describe('trajectory assertions', () => {
         pass: false,
         score: 0,
         reason:
-          'Forbidden argument match for tool "search_orders" was observed on tool:search_orders. Args: [redacted]',
+          'Forbidden argument match for tool "search_orders" was observed on tool:search_orders. Args: {"order_id":"123","include_history":false}',
         assertion: params.assertion,
       });
-    });
-
-    it.each([
-      { name: 'search_orders', type: 'bogus', args: { order_id: '123' } },
-      { name: 'search_orders', pattern: '   ', args: { order_id: '123' } },
-    ])('rejects malformed inverse tool-args matchers before applying inversion', (value) => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        inverse: true,
-        baseType: 'trajectory:tool-args-match',
-        assertion: {
-          type: 'not-trajectory:tool-args-match',
-          value: value as any,
-        },
-        renderedValue: value as any,
-      };
-
-      expect(() => handleTrajectoryToolArgsMatch(params)).toThrow();
     });
 
     it('passes inverse assertions when no tool call matches the requested tool', () => {
@@ -1947,99 +1353,6 @@ describe('trajectory assertions', () => {
           'Forbidden argument match for tool "missing_tool" was not observed because no tool call matched it',
         assertion: params.assertion,
       });
-    });
-
-    it('redacts args in assertion reasons by default', () => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        assertionValueContext: {
-          ...defaultParams.assertionValueContext,
-          trace: {
-            traceId: 'sensitive-args',
-            evaluationId: 'eval-1',
-            testCaseId: 'tc-1',
-            metadata: {},
-            spans: [
-              {
-                spanId: 'tool-1',
-                name: 'tool.call',
-                startTime: 100,
-                endTime: 200,
-                attributes: {
-                  'tool.name': 'lookup_user',
-                  'tool.arguments': JSON.stringify({ ssn: '123-45-6789', tenant: 'public' }),
-                },
-              },
-            ],
-          },
-        },
-        baseType: 'trajectory:tool-args-match',
-        assertion: {
-          type: 'trajectory:tool-args-match',
-          value: {
-            name: 'lookup_user',
-            args: { tenant: 'private' },
-            mode: 'partial',
-          },
-        },
-        renderedValue: {
-          name: 'lookup_user',
-          args: { tenant: 'private' },
-          mode: 'partial',
-        },
-      };
-
-      const result = handleTrajectoryToolArgsMatch(params);
-      expect(result.pass).toBe(false);
-      // The expected and observed args must NOT appear verbatim in the reason.
-      expect(result.reason).not.toContain('123-45-6789');
-      expect(result.reason).not.toContain('private');
-      expect(result.reason).not.toContain('public');
-      expect(result.reason).toContain('[redacted]');
-    });
-
-    it('shows non-sensitive args in reasons only when redaction is explicitly disabled', () => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        baseType: 'trajectory:tool-args-match',
-        assertion: {
-          type: 'trajectory:tool-args-match',
-          value: {
-            name: 'search_orders',
-            args: { order_id: '123' },
-            redactArgsInFailures: false,
-          },
-        },
-        renderedValue: {
-          name: 'search_orders',
-          args: { order_id: '123' },
-          redactArgsInFailures: false,
-        },
-      };
-
-      const result = handleTrajectoryToolArgsMatch(params);
-      expect(result.pass).toBe(true);
-      expect(result.reason).toContain('{"order_id":"123","include_history":false}');
-    });
-
-    it('throws when redactArgsInFailures is not a boolean (must not silently fail open)', () => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        baseType: 'trajectory:tool-args-match',
-        assertion: {
-          type: 'trajectory:tool-args-match',
-          value: { name: 'search_orders', args: { id: 1 }, redactArgsInFailures: 'true' as any },
-        },
-        renderedValue: {
-          name: 'search_orders',
-          args: { id: 1 },
-          redactArgsInFailures: 'true' as any,
-        },
-      };
-
-      expect(() => handleTrajectoryToolArgsMatch(params)).toThrow(
-        'trajectory:tool-args-match assertion redactArgsInFailures must be a boolean',
-      );
     });
 
     it('rejects values without args', () => {
@@ -2142,7 +1455,6 @@ describe('trajectory assertions', () => {
               mode: 'exact',
               args: { order_id: '123' },
               defaults: { include_history: false },
-              redactArgsInFailures: false,
             },
           },
           renderedValue: {
@@ -2150,7 +1462,6 @@ describe('trajectory assertions', () => {
             mode: 'exact',
             args: { order_id: '123' },
             defaults: { include_history: false },
-            redactArgsInFailures: false,
           },
         };
 
@@ -2311,7 +1622,6 @@ describe('trajectory assertions', () => {
               mode: 'exact',
               args: { status: 'Q' },
               defaults: { page: 1 },
-              redactArgsInFailures: false,
             },
           },
           renderedValue: {
@@ -2319,7 +1629,6 @@ describe('trajectory assertions', () => {
             mode: 'exact',
             args: { status: 'Q' },
             defaults: { page: 1 },
-            redactArgsInFailures: false,
           },
         };
 
@@ -2710,7 +2019,6 @@ describe('trajectory assertions', () => {
               mode: 'exact',
               args: { status: 'Q' },
               defaults: { page: 1, page_size: 5 },
-              redactArgsInFailures: false,
             },
           },
           renderedValue: {
@@ -2718,7 +2026,6 @@ describe('trajectory assertions', () => {
             mode: 'exact',
             args: { status: 'Q' },
             defaults: { page: 1, page_size: 5 },
-            redactArgsInFailures: false,
           },
         };
 
@@ -2960,7 +2267,6 @@ describe('trajectory assertions', () => {
             mode: 'exact',
             args: { status: 'Q' },
             defaults: { fields: '*' },
-            redactArgsInFailures: false,
           };
           return handleTrajectoryToolArgsMatch({
             ...defaultParams,
@@ -3087,37 +2393,12 @@ describe('trajectory assertions', () => {
               args: { status: 'Q' },
               defaults: { page: 1 },
               ignore: ['request_id'],
-              redactArgsInFailures: false,
             },
           ),
         );
         expect(result.pass).toBe(true);
         expect(result.reason).toContain('Ignored argument(s): request_id');
         expect(result.reason).toContain('Ignored default argument(s): page');
-      });
-
-      it('redacts ignored and default argument diagnostics when requested', () => {
-        const result = handleTrajectoryToolArgsMatch(
-          makeIgnoreParams(
-            { status: 'Q', page: 1, request_id: 'sensitive-request-id' },
-            {
-              name: 'search_orders',
-              mode: 'exact',
-              args: { status: 'Q' },
-              defaults: { page: 1 },
-              ignore: ['request_id'],
-              redactArgsInFailures: true,
-            },
-          ),
-        );
-
-        expect(result.pass).toBe(true);
-        expect(result.reason).toBe(
-          'Tool "search_orders" matched expected arguments (exact) on tool:search_orders. Args: [redacted]',
-        );
-        expect(result.reason).not.toContain('request_id');
-        expect(result.reason).not.toContain('page');
-        expect(result.reason).not.toContain('sensitive-request-id');
       });
 
       it('works in partial mode', () => {
@@ -3174,13 +2455,7 @@ describe('trajectory assertions', () => {
         const result = handleTrajectoryToolArgsMatch(
           makeIgnoreParams(
             { status: 'Q', request_id: 'a1', order_id: 'b2' },
-            {
-              name: 'search_orders',
-              mode: 'exact',
-              args: { status: 'Q' },
-              ignore: ['*_id'],
-              redactArgsInFailures: false,
-            },
+            { name: 'search_orders', mode: 'exact', args: { status: 'Q' }, ignore: ['*_id'] },
           ),
         );
         expect(result.pass).toBe(true);
@@ -3351,25 +2626,6 @@ describe('trajectory assertions', () => {
       });
     });
 
-    it.each([
-      { name: 'search_orders', pattern: '   ', min: 1 },
-      { type: 'bogus', min: 1 },
-      { type: [], min: 1 },
-    ])('rejects malformed inverse step matchers before applying inversion', (value) => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        inverse: true,
-        baseType: 'trajectory:step-count',
-        assertion: {
-          type: 'not-trajectory:step-count',
-          value: value as any,
-        },
-        renderedValue: value as any,
-      };
-
-      expect(() => handleTrajectoryStepCount(params)).toThrow();
-    });
-
     it('rejects count assertions without min or max', () => {
       const params: AssertionParams = {
         ...defaultParams,
@@ -3403,41 +2659,6 @@ describe('trajectory assertions', () => {
 
       expect(() => handleTrajectoryStepCount(params)).toThrow(
         'trajectory:step-count assertion must have an object value',
-      );
-    });
-
-    it.each([Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5])(
-      'rejects invalid step count bounds (%s)',
-      (min) => {
-        const params: AssertionParams = {
-          ...defaultParams,
-          baseType: 'trajectory:step-count',
-          assertion: {
-            type: 'trajectory:step-count',
-            value: { type: 'tool', min },
-          },
-          renderedValue: { type: 'tool', min },
-        };
-
-        expect(() => handleTrajectoryStepCount(params)).toThrow(
-          'trajectory:step-count assertion min must be a finite non-negative integer',
-        );
-      },
-    );
-
-    it('rejects step max bounds below min bounds', () => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        baseType: 'trajectory:step-count',
-        assertion: {
-          type: 'trajectory:step-count',
-          value: { type: 'tool', min: 2, max: 1 },
-        },
-        renderedValue: { type: 'tool', min: 2, max: 1 },
-      };
-
-      expect(() => handleTrajectoryStepCount(params)).toThrow(
-        'trajectory:step-count assertion max must be greater than or equal to min',
       );
     });
   });

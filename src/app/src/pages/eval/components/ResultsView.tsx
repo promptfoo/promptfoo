@@ -24,7 +24,7 @@ import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import invariant from '@promptfoo/util/invariant';
 import { BarChart, Copy, Edit, Eye, Play, Settings, Share, Trash2, X } from 'lucide-react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { useDebouncedCallback } from 'use-debounce';
 import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
@@ -46,7 +46,7 @@ import SettingsModal from './TableSettings/TableSettingsModal';
 import { buildEvalUrlWithSearchParams, hashVarSchema, setEvalDetailsHash } from './utils';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { CopyEvalResponse } from '@promptfoo/types/api/eval';
-import type { VisibilityState } from '@tanstack/table-core';
+import type { VisibilityState } from '@tanstack/react-table';
 
 import type { ActiveView } from './EvalHeader';
 import type { ResultsFilter } from './store';
@@ -276,7 +276,7 @@ export default function ResultsView({
     setHiddenVarNamesForSchema,
   } = useResultsViewSettingsStore();
 
-  const { setConfig: setRerunConfig } = useMainStore();
+  const { updateConfig } = useMainStore();
 
   const { showToast } = useToast();
   const initialSearchText = searchParams.get('search') || '';
@@ -782,13 +782,8 @@ export default function ResultsView({
           if (!config) {
             return;
           }
-          setRerunConfig(config, validEvalId || undefined);
-          navigate(
-            validEvalId
-              ? `${ROUTES.SETUP}?${new URLSearchParams({ sourceEvalId: validEvalId })}`
-              : ROUTES.SETUP,
-            { state: validEvalId ? { sourceEvalId: validEvalId } : undefined },
-          );
+          updateConfig(config);
+          navigate(ROUTES.SETUP, { state: { sourceEvalId: evalId } });
         }}
       >
         <Play className="size-4 mr-2" />

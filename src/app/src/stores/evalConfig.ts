@@ -10,9 +10,8 @@ import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../
 
 export interface EvalConfigState {
   config: Partial<UnifiedConfig>;
-  sourceEvalId?: string;
   /** Replace the entire config */
-  setConfig: (config: Partial<UnifiedConfig>, sourceEvalId?: string) => void;
+  setConfig: (config: Partial<UnifiedConfig>) => void;
   /** Merge updates into the existing config */
   updateConfig: (updates: Partial<UnifiedConfig>) => void;
   /** Reset config to defaults */
@@ -1313,14 +1312,10 @@ const buildSanitizedConfig = (config: Partial<UnifiedConfig>): Partial<UnifiedCo
 // Fail closed: if redaction throws (e.g. on a pathological config) we must
 // never let zustand persist the raw state instead. Returning the defaults
 // loses unsaved UI work but never leaks credentials.
-const omitPersistedSensitiveValues = (
-  config: Partial<UnifiedConfig>,
-  onFailure?: () => void,
-): Partial<UnifiedConfig> => {
+const omitPersistedSensitiveValues = (config: Partial<UnifiedConfig>): Partial<UnifiedConfig> => {
   try {
     return buildSanitizedConfig(config);
   } catch (err) {
-    onFailure?.();
     if (typeof console !== 'undefined' && console.error) {
       console.error('[evalConfig] credential redaction failed; persisting defaults', err);
     }
@@ -1332,16 +1327,15 @@ export const useStore = create<EvalConfigState>()(
   persist(
     (set, get) => ({
       config: { ...DEFAULT_CONFIG },
-      sourceEvalId: undefined,
 
-      setConfig: (config, sourceEvalId) => set({ config, sourceEvalId }),
+      setConfig: (config) => set({ config }),
 
       updateConfig: (updates) =>
         set((state) => ({
           config: { ...state.config, ...updates },
         })),
 
-      reset: () => set({ config: { ...DEFAULT_CONFIG }, sourceEvalId: undefined }),
+      reset: () => set({ config: { ...DEFAULT_CONFIG } }),
 
       getTestSuite: () => {
         const { config } = get();
@@ -1366,31 +1360,24 @@ export const useStore = create<EvalConfigState>()(
     {
       name: 'promptfoo',
       skipHydration: true,
-      partialize: (state) => {
-        let sourceEvalId = state.sourceEvalId;
-        const config = omitPersistedSensitiveValues(state.config, () => {
-          sourceEvalId = undefined;
-        });
-        return { config, sourceEvalId };
-      },
+      partialize: (state) => ({
+        config: omitPersistedSensitiveValues(state.config),
+      }),
       merge: (persistedState, currentState) => {
         const persistedConfig = (persistedState as Partial<EvalConfigState> | undefined)?.config;
 
-        let sourceEvalId = (persistedState as Partial<EvalConfigState> | undefined)?.sourceEvalId;
-        const persisted = omitPersistedSensitiveValues(persistedConfig ?? {}, () => {
-          sourceEvalId = undefined;
-        });
-        const config = { ...DEFAULT_CONFIG, ...persisted };
         return {
           ...currentState,
           ...(persistedState as Partial<EvalConfigState> | undefined),
-          config,
-          sourceEvalId,
+          config: omitPersistedSensitiveValues({
+            ...DEFAULT_CONFIG,
+            ...persistedConfig,
+          }),
         };
       },
       onRehydrateStorage: () => (state) => {
         // Re-persist so credentials dropped during merge are also cleared from storage.
-        state?.setConfig(state.config, state.sourceEvalId);
+        state?.setConfig(state.config);
       },
     },
   ),

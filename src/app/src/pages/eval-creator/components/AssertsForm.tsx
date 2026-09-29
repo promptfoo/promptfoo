@@ -13,7 +13,6 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Textarea } from '@app/components/ui/textarea';
-import { STRUCTURED_VALUE_ASSERTION_TYPES } from './assertionValueValidation';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 interface AssertsFormProps {
@@ -66,19 +65,21 @@ const assertTypes: AssertionType[] = [
   'trajectory:goal-success',
   'trajectory:tool-args-match',
   'trajectory:tool-used',
-  'trajectory:tool-sequence',
   'trajectory:tool-set',
+  'not-trajectory:tool-set',
+  'trajectory:tool-sequence',
   'trajectory:step-count',
 
   // Metrics
   'bleu',
   'cost',
+  'tokens-used',
+  'not-tokens-used',
   'finish-reason',
   'latency',
   'perplexity',
   'perplexity-score',
   'rouge-n',
-  'tokens-used',
   'webhook',
 
   // Negations
@@ -199,25 +200,37 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                   </Label>
                   <Textarea
                     id={`assert-value-${index}`}
-                    placeholder="Enter expected value or criteria..."
+                    placeholder={
+                      assert.type.endsWith('tokens-used')
+                        ? '{"max": 1000}'
+                        : assert.type.endsWith('trajectory:tool-set')
+                          ? '["search", "summarize"]'
+                          : 'Enter expected value or criteria...'
+                    }
                     value={
                       typeof assert.value === 'string'
                         ? assert.value
                         : typeof assert.value === 'number'
                           ? String(assert.value)
-                          : assert.value && typeof assert.value === 'object'
-                            ? JSON.stringify(assert.value)
-                            : ''
+                          : assert.value === undefined
+                            ? ''
+                            : JSON.stringify(assert.value, null, 2)
                     }
                     onChange={(e) => {
-                      const newValue = e.target.value;
-                      let value: Assertion['value'] = newValue;
-                      if (STRUCTURED_VALUE_ASSERTION_TYPES.has(assert.type)) {
+                      let newValue: Assertion['value'] = e.target.value;
+                      if (
+                        assert.type.endsWith('tokens-used') ||
+                        assert.type.endsWith('trajectory:tool-set')
+                      ) {
                         try {
-                          value = JSON.parse(newValue);
-                        } catch {}
+                          newValue = JSON.parse(e.target.value);
+                        } catch {
+                          // Keep incomplete input visible until it is valid JSON.
+                        }
                       }
-                      const newAsserts = asserts.map((a, i) => (i === index ? { ...a, value } : a));
+                      const newAsserts = asserts.map((a, i) =>
+                        i === index ? { ...a, value: newValue } : a,
+                      );
                       setAsserts(newAsserts);
                       onAdd(newAsserts);
                     }}

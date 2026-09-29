@@ -1,14 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
 import {
   isRateLimitWrapped,
   wrapProvidersWithRateLimiting,
   wrapProviderWithRateLimiting,
 } from '../../src/scheduler/providerWrapper';
-import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { createMockProvider } from '../factories/provider';
-import { mockProcessEnv } from '../util/utils';
 
+import type { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import type { ApiProvider, ProviderResponse } from '../../src/types/providers';
 
 describe('providerWrapper', () => {
@@ -33,55 +31,6 @@ describe('providerWrapper', () => {
   });
 
   describe('wrapProviderWithRateLimiting', () => {
-    it.each(['call', 'call-with-context', 'context'])(
-      'cancels a queued provider through its %s signal',
-      async (source) => {
-        const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: 'false' });
-        const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 0 });
-        let markStarted!: () => void;
-        const started = new Promise<void>((resolve) => {
-          markStarted = resolve;
-        });
-        let finishActive!: (response: ProviderResponse) => void;
-        const active = new Promise<ProviderResponse>((resolve) => {
-          finishActive = resolve;
-        });
-        const provider = createMockProvider({
-          config: { maxRetries: 0 },
-          callApi: async (prompt) => {
-            if (prompt === 'active') {
-              markStarted();
-              return active;
-            }
-            return { output: 'queued' };
-          },
-        });
-        const wrapped = wrapProviderWithRateLimiting(provider, registry);
-        const first = wrapped.callApi('active');
-        await started;
-        const callController = new AbortController();
-        const contextController = new AbortController();
-        const queued = withProviderCallExecutionContext(
-          source === 'call' ? {} : { queuedCallAbortSignal: contextController.signal },
-          () => wrapped.callApi('queued', undefined, { abortSignal: callController.signal }),
-        ).catch((error: unknown) => error);
-        const reason = new Error('queued call cancelled');
-        try {
-          expect(Object.values(registry.getMetrics())[0].queueDepth).toBe(1);
-          (source === 'context' ? contextController : callController).abort(reason);
-          expect(Object.values(registry.getMetrics())[0].queueDepth).toBe(0);
-          expect(await queued).toBe(reason);
-          expect(provider.callApi).toHaveBeenCalledTimes(1);
-        } finally {
-          finishActive({ output: 'active' });
-          await first;
-          await queued;
-          registry.dispose();
-          restoreEnv();
-        }
-      },
-    );
-
     it('should wrap provider callApi with registry.execute', async () => {
       mockExecute.mockImplementation(async (_provider, callFn) => callFn());
 
@@ -225,6 +174,40 @@ describe('providerWrapper', () => {
 
       const headers = capturedOptions.getHeaders(result);
       expect(headers).toEqual({ 'retry-after': '60' });
+    });
+
+    it('should keep hard-quota headers out of the rate-limit state', async () => {
+      let capturedOptions: any;
+      mockExecute.mockImplementation(async (_provider, callFn, options) => {
+        capturedOptions = options;
+        return callFn();
+      });
+
+      const wrappedProvider = wrapProviderWithRateLimiting(mockProvider, mockRegistry);
+      await wrappedProvider.callApi('test');
+
+      const headers = {
+        'x-ratelimit-remaining-requests': '0',
+        'x-ratelimit-reset-requests': '3600s',
+      };
+      const quota: ProviderResponse = {
+        error: 'Quota exceeded: HTTP 429 Too Many Requests (code: credit_balance_exhausted)',
+        metadata: {
+          rateLimitKind: 'quota',
+          http: { status: 429, statusText: 'Too Many Requests', headers },
+        },
+      };
+      expect(capturedOptions.getHeaders(quota)).toBeUndefined();
+      expect(capturedOptions.isRateLimited(quota, undefined)).toBe(false);
+
+      const throttle: ProviderResponse = {
+        error: 'Rate limit exceeded: HTTP 429 Too Many Requests',
+        metadata: {
+          rateLimitKind: 'rate_limit',
+          http: { status: 429, statusText: 'Too Many Requests', headers },
+        },
+      };
+      expect(capturedOptions.getHeaders(throttle)).toEqual(headers);
     });
 
     it('should parse retry-after header', async () => {

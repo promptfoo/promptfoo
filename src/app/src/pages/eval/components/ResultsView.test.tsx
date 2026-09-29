@@ -3,17 +3,17 @@ import { callApi } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
 
 // Mock all the required modules - use vi.hoisted to ensure these are available in vi.mock factories
-const { mockShowToast, mockNavigate, mockSetRerunConfig } = vi.hoisted(() => ({
+const { mockShowToast, mockNavigate, mockUpdateConfig } = vi.hoisted(() => ({
   mockShowToast: vi.fn(),
   mockNavigate: vi.fn(),
-  mockSetRerunConfig: vi.fn(),
+  mockUpdateConfig: vi.fn(),
 }));
 
 vi.mock('@app/hooks/useToast', () => ({
@@ -24,7 +24,7 @@ vi.mock('@app/hooks/useToast', () => ({
 
 vi.mock('@app/stores/evalConfig', () => ({
   useStore: () => ({
-    setConfig: mockSetRerunConfig,
+    updateConfig: mockUpdateConfig,
   }),
 }));
 
@@ -240,7 +240,7 @@ function createCopyEvalResponse(): Response {
 
 beforeEach(() => {
   mockNavigate.mockReset();
-  mockSetRerunConfig.mockReset();
+  mockUpdateConfig.mockReset();
   mockUseFilterMode.mockReturnValue({
     filterMode: 'all',
     setFilterMode: vi.fn(),
@@ -254,8 +254,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual('react-router');
   return {
     ...actual,
     useNavigate: () => mockNavigate,
@@ -426,36 +426,11 @@ describe('ResultsView Share Button', () => {
     await userEvent.click(screen.getByText('Eval actions'));
     await userEvent.click(screen.getByText('Edit and re-run'));
 
-    expect(mockSetRerunConfig).toHaveBeenCalledWith(
+    expect(mockUpdateConfig).toHaveBeenCalledWith(
       expect.objectContaining({ description: 'Test Evaluation' }),
-      'test-eval-id',
     );
-    expect(mockNavigate).toHaveBeenCalledWith('/setup?sourceEvalId=test-eval-id', {
+    expect(mockNavigate).toHaveBeenCalledWith('/setup', {
       state: { sourceEvalId: 'test-eval-id' },
-    });
-  });
-
-  it('falls back to the loaded eval id when editing and rerunning a redacted config', async () => {
-    const tableStore = vi.mocked(useTableStore)();
-    vi.mocked(useTableStore).mockReturnValue({
-      ...tableStore,
-      evalId: '',
-    });
-
-    renderWithRouter(
-      <ResultsView
-        recentEvals={mockRecentEvals}
-        onRecentEvalSelected={mockOnRecentEvalSelected}
-        defaultEvalId="fallback-eval-id"
-      />,
-    );
-
-    await userEvent.click(screen.getByText('Eval actions'));
-    await userEvent.click(screen.getByText('Edit and re-run'));
-
-    expect(mockSetRerunConfig).toHaveBeenCalledWith(expect.any(Object), 'fallback-eval-id');
-    expect(mockNavigate).toHaveBeenCalledWith('/setup?sourceEvalId=fallback-eval-id', {
-      state: { sourceEvalId: 'fallback-eval-id' },
     });
   });
 

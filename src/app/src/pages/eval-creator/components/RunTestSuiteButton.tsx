@@ -8,15 +8,19 @@ import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useToast } from '@app/hooks/useToast';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { getSetupReadiness, normalizePromptsForJob } from './setupReadiness';
+import { useLocation, useNavigate } from 'react-router';
+import {
+  countTests,
+  normalizePrompts,
+  normalizePromptsForJob,
+  normalizeProviders,
+} from './setupReadiness';
 import type { CreateJobResponse, GetJobResponse } from '@promptfoo/types/api/eval';
 
 const RunTestSuiteButton = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [searchParams] = useSearchParams();
-  const { config, sourceEvalId: configSourceEvalId } = useStore();
+  const { config } = useStore();
   const { signalEvalCompleted } = useEvalHistoryRefresh();
   const { showToast } = useToast();
   const {
@@ -54,26 +58,29 @@ const RunTestSuiteButton = () => {
     };
   }, [clearPollInterval]);
 
+  const normalizedProviders = normalizeProviders(providers);
+  const normalizedPrompts = normalizePrompts(prompts);
   const jobPrompts = normalizePromptsForJob(prompts);
-  const readiness = getSetupReadiness(config);
+  const testCount = countTests(tests);
 
-  const isDisabled = isRunning || !readiness.isReadyToRun;
+  const isDisabled =
+    isRunning ||
+    normalizedProviders.length === 0 ||
+    normalizedPrompts.length === 0 ||
+    testCount === 0;
 
   const runTestSuite = async () => {
     setIsRunning(true);
     setRunError(null);
     setProgressPercent(0);
 
-    const requestedSourceEvalId =
-      searchParams.get('sourceEvalId') ||
-      (location.state &&
+    const sourceEvalId =
+      location.state &&
       typeof location.state === 'object' &&
       'sourceEvalId' in location.state &&
       typeof location.state.sourceEvalId === 'string'
         ? location.state.sourceEvalId
-        : undefined);
-    const sourceEvalId =
-      requestedSourceEvalId === configSourceEvalId ? requestedSourceEvalId : undefined;
+        : undefined;
     const testSuite = {
       defaultTest,
       derivedMetrics,
@@ -172,7 +179,6 @@ const RunTestSuiteButton = () => {
       <Button
         onClick={runTestSuite}
         disabled={isDisabled}
-        aria-describedby={!isRunning && isDisabled ? 'run-eval-help' : undefined}
         className="dark:bg-blue-600 dark:hover:bg-blue-500"
       >
         {isRunning ? (
@@ -184,12 +190,6 @@ const RunTestSuiteButton = () => {
           'Run Eval'
         )}
       </Button>
-      {!isRunning && isDisabled && (
-        <p id="run-eval-help" className="text-xs text-muted-foreground">
-          {readiness.issues[0]?.message ||
-            'Resolve the required setup items above to run this evaluation.'}
-        </p>
-      )}
       {runError && (
         <Alert variant="destructive">
           <AlertContent>

@@ -25,6 +25,25 @@ describe('AssertsForm', () => {
     initialValues = [];
   });
 
+  it.each([
+    { type: 'tokens-used', initial: { max: 100 }, next: { min: 0, max: 50 } },
+    { type: 'trajectory:tool-set', initial: ['lookup'], next: [] },
+  ] as const)('edits structured values for $type', async ({ type, initial, next }) => {
+    const user = userEvent.setup();
+    renderComponent(
+      <AssertsForm onAdd={onAdd} initialValues={[{ type, value: initial } as Assertion]} />,
+    );
+    const value = screen.getByRole('textbox', { name: 'Value' });
+    expect(value).toHaveValue(JSON.stringify(initial, null, 2));
+    await user.click(value);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(JSON.stringify(next));
+    expect(onAdd).toHaveBeenLastCalledWith([{ type, value: next }]);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('{');
+    expect(value).toHaveValue('{');
+  });
+
   it('should render all assertions from initialValues as rows with the correct type and value fields populated', () => {
     initialValues = [
       { type: 'equals', value: 'expected output' },
@@ -84,21 +103,6 @@ describe('AssertsForm', () => {
 
     expect(onAdd).toHaveBeenCalledTimes(1);
     expect(onAdd).toHaveBeenCalledWith([{ type: 'equals', value: 'new value' }]);
-  });
-
-  it('round-trips structured assertion values as JSON', async () => {
-    const user = userEvent.setup();
-    renderComponent(
-      <AssertsForm onAdd={onAdd} initialValues={[{ type: 'tokens-used', value: { max: 100 } }]} />,
-    );
-
-    const valueInput = screen.getByRole('textbox', { name: 'Value' });
-    expect(valueInput).toHaveValue('{"max":100}');
-    await user.click(valueInput);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste('{"max":50}');
-
-    expect(onAdd).toHaveBeenCalledWith([{ type: 'tokens-used', value: { max: 50 } }]);
   });
 
   it('should update the type of an assertion and call onAdd with the updated assertions array when the type is changed via the Select', async () => {

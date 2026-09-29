@@ -1,9 +1,6 @@
-import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import yaml from 'yaml';
 import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
@@ -134,36 +131,6 @@ describe('trace assertions', () => {
     ],
   };
 
-  describe.each(['json', 'yaml'])('external %s assertion configs', (extension) => {
-    it.each([
-      ['trace-error-spans', { pattern: 'http.*', max_count: 1 }],
-      ['trace-span-count', { pattern: 'http.*', min: 1, max: 1 }],
-      ['trace-span-duration', { pattern: 'http.*', max: 500 }],
-    ] as const)('loads structured %s values', async (type, value) => {
-      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-trace-assertions-'));
-      mockTraceStore.getTrace.mockResolvedValue({
-        ...mockTraceData,
-        spans: [{ ...mockTraceData.spans[0], statusCode: 500 }],
-      });
-      try {
-        const filename = path.join(directory, `${type}.${extension}`);
-        fs.writeFileSync(
-          filename,
-          extension === 'json' ? JSON.stringify(value) : yaml.stringify(value),
-        );
-        const result = await runAssertion({
-          assertion: { type, value: `file://${filename}` },
-          test: mockTest,
-          providerResponse: mockProviderResponse,
-          traceId: mockTraceData.traceId,
-        });
-        expect(result).toMatchObject({ pass: true, score: 1 });
-      } finally {
-        fs.rmSync(directory, { recursive: true, force: true });
-      }
-    });
-  });
-
   describe('javascript assertions with trace', () => {
     it('uses the evaluation tracing context for the grader test index', async () => {
       const graderSpan = vi.fn();
@@ -204,21 +171,6 @@ describe('trace assertions', () => {
         assertionUsesTrace({
           type: 'ruby',
           value: 'context.trace && context.trace.spans.length > 0',
-        }),
-      ).toBe(true);
-    });
-
-    it('should not treat response-only tokens-used assertions as trace-aware', () => {
-      expect(
-        assertionUsesTrace({
-          type: 'tokens-used',
-          value: { max: 100, source: 'response' },
-        }),
-      ).toBe(false);
-      expect(
-        assertionUsesTrace({
-          type: 'tokens-used',
-          value: { max: 100, source: 'auto' },
         }),
       ).toBe(true);
     });
@@ -374,28 +326,6 @@ describe('trace assertions', () => {
 
       expect(result.pass).toBe(true);
       expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(2);
-    });
-
-    it('should skip trace loading for response-only tokens-used assertions', async () => {
-      const result = await runAssertions({
-        test: {
-          ...mockTest,
-          assert: [
-            {
-              type: 'tokens-used',
-              value: { max: 100, source: 'response' },
-            },
-          ],
-        },
-        providerResponse: {
-          ...mockProviderResponse,
-          tokenUsage: { total: 42 },
-        },
-        traceId: 'unused-trace',
-      });
-
-      expect(result.pass).toBe(true);
-      expect(mockTraceStore.getTrace).not.toHaveBeenCalled();
     });
 
     it('should pass trace data to file:// scripts for non-trace assertion types', async () => {
