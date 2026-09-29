@@ -21,7 +21,7 @@ assert(fs.statSync(tarball).isFile(), 'Expected a package archive file');
 const repository = path.resolve(import.meta.dirname, '..');
 const lock = JSON.parse(fs.readFileSync(path.join(repository, 'package-lock.json'), 'utf8'));
 const dependencies = Object.fromEntries(
-  ['tsx', 'typescript', 'semver'].map((name) => {
+  ['tsx', 'typescript'].map((name) => {
     const version = lock.packages[`node_modules/${name}`]?.version;
     assert(
       typeof version === 'string' && /^\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?$/.test(version),

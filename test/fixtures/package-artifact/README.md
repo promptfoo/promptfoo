@@ -79,7 +79,7 @@ rejects malformed bytes; it does not start an OTLP receiver.
 | macOS and Windows Node 22.22 | Hoisted                               | Linux-produced archive, native SQLite and historical upgrade |
 
 The macOS/Windows jobs use `scripts/preparePackageArtifactTest.mjs` to copy only
-the acceptance scripts/fixtures into a temporary tool package. Its three tools
+the acceptance scripts/fixtures into a temporary tool package. Its two tools
 and their complete dependency graph are copied from the repository lockfile,
 including integrity hashes and optional native packages, then installed with `npm ci`.
 The installed Promptfoo consumer
