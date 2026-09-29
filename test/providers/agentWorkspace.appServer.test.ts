@@ -25,7 +25,7 @@ vi.mock('child_process', async (importOriginal) => ({
 // Speak the app-server protocol locally, inspecting Git from the requested thread directory.
 const appServerScript = `
 const { execFileSync } = require('node:child_process');
-const path = require('node:path');
+const fs = require('node:fs');
 const readline = require('node:readline');
 const threads = new Map();
 let nextId = 0;
@@ -42,7 +42,7 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
     const turnId = 'turn-' + nextId++;
     const cwd = threads.get(threadId);
     const output = JSON.stringify({
-      root: path.resolve(execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8' }).trim()),
+      root: fs.realpathSync.native(execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8' }).trim()),
       diff: execFileSync('git', ['diff', '--', 'file.txt'], { cwd, encoding: 'utf8' }),
       value: process.env.AGENT_WORKSPACE_TEST_VALUE,
       gitSshCommand: process.env.GIT_SSH_COMMAND,
@@ -141,7 +141,7 @@ describe('managed workspace environments for app-server graders', () => {
     expect(ordinary.error).toBeUndefined();
     const ordinaryOutput = JSON.parse(ordinary.output as string);
     expect(ordinaryOutput).toMatchObject({
-      root: fs.realpathSync(source),
+      root: fs.realpathSync.native(source),
       diff: '',
       repositorySelectors: ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE'],
     });
@@ -150,7 +150,7 @@ describe('managed workspace environments for app-server graders', () => {
     expect(first.error).toBeUndefined();
     const firstOutput = JSON.parse(first.output as string);
     expect(firstOutput).toMatchObject({
-      root: workspace.dir,
+      root: fs.realpathSync.native(workspace.dir),
       diff: expect.stringContaining('+after'),
       value: 'preserved',
       gitSshCommand: 'preserved-ssh-command',

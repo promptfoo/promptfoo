@@ -103,7 +103,9 @@ describe('copy_working_dir in agentic providers', () => {
   });
 
   const gitRoot = (cwd: string, env: NodeJS.ProcessEnv) =>
-    execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, env, encoding: 'utf8' }).trim();
+    fs.realpathSync.native(
+      execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, env, encoding: 'utf8' }).trim(),
+    );
 
   describe('Claude Agent SDK', () => {
     beforeEach(() => {
@@ -153,7 +155,7 @@ describe('copy_working_dir in agentic providers', () => {
         await provider.callApi('Inspect the repository', workspaceContext(workspace.dir));
 
         const { cwd, env } = mocks.query.mock.calls[0][0].options;
-        expect(gitRoot(cwd, env)).toBe(workspace.dir);
+        expect(gitRoot(cwd, env)).toBe(fs.realpathSync.native(workspace.dir));
         expect(env.AGENT_WORKSPACE_TEST_VALUE).toBe('preserved');
         if (location !== 'config') {
           expect(process.env.GIT_DIR).toBe(overrides.GIT_DIR);
@@ -232,7 +234,7 @@ describe('copy_working_dir in agentic providers', () => {
 
         const { env } = mocks.codex.mock.calls[0][0];
         const { workingDirectory } = mocks.startThread.mock.calls[0][0];
-        expect(gitRoot(workingDirectory, env)).toBe(workspace.dir);
+        expect(gitRoot(workingDirectory, env)).toBe(fs.realpathSync.native(workspace.dir));
         expect(env.AGENT_WORKSPACE_TEST_VALUE).toBe('preserved');
         if (location !== 'config') {
           expect(process.env.GIT_DIR).toBe(overrides.GIT_DIR);

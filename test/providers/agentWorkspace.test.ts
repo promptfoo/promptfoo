@@ -112,7 +112,7 @@ describe('agent workspaces', () => {
   };
 
   beforeEach(() => {
-    root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'agent-workspace-test-')));
+    root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'agent-workspace-test-')));
     workspaces = [];
     restoreBasePath = cliState.basePath;
   });
@@ -1326,7 +1326,9 @@ describe('agent workspaces', () => {
         await expect(create(source, mode)).rejects.toThrow('linked worktree metadata');
 
         expect(fs.readFileSync(path.join(linked, '.git'), 'utf8')).toBe(linkedGitFile);
-        expect(git(linked, 'rev-parse', '--show-toplevel')).toBe(linked);
+        expect(fs.realpathSync.native(git(linked, 'rev-parse', '--show-toplevel'))).toBe(
+          fs.realpathSync.native(linked),
+        );
       },
     );
 
@@ -1473,7 +1475,9 @@ describe('agent workspaces', () => {
         );
         git(source, 'config', 'core.worktree', target);
         write(path.join(source, 'README.md'), 'uncommitted\n');
-        expect(git(source, 'rev-parse', '--show-toplevel')).toBe(source);
+        expect(fs.realpathSync.native(git(source, 'rev-parse', '--show-toplevel'))).toBe(
+          fs.realpathSync.native(source),
+        );
 
         await expect(create(source, mode)).rejects.toThrow('core.worktree');
 
