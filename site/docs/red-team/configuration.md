@@ -1185,7 +1185,7 @@ The `redteam.yaml` file contains a metadata section with a configHash value at t
 1. Do not modify or remove the metadata section
 2. Keep a backup of your custom tests
 
-Configuration fingerprints use SHA-256 for compatibility with FIPS-enabled Node.js. Outputs with older MD5 fingerprints regenerate once on the next generation run; keep custom tests backed up before upgrading.
+Configuration fingerprints use SHA-256 so cache checks work when the crypto provider rejects MD5. Outputs with older MD5 fingerprints regenerate on the next generation run; back up custom tests before upgrading.
 
 :::
 
