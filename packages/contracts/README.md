@@ -12,6 +12,10 @@ implementation and declarations into the full `promptfoo` artifact, leaving Zod
 as a declared root runtime dependency. No private package installation is required
 by users of `promptfoo/contracts`.
 
+Cloud source consumers with composite TypeScript projects must include
+`promptfoo/packages/contracts/src/` before updating their gitlink. The existing
+compatibility imports now reach those files.
+
 The private package name uses `@promptfoo-internal` because existing `@promptfoo/*`
 aliases resolve to root source files. Internal imports should use the owning
 module directly; do not add unrelated helpers to the public contracts barrel.
@@ -39,6 +43,4 @@ The standalone test copies only this workspace's declared build inputs outside
 the repository, installs its declared dependencies, builds both formats, and
 installs its tarball in a second consumer. That consumer checks ESM/CommonJS
 runtime behavior and mode-specific TypeScript declarations without repository
-aliases or hoisted dependencies. The full-package artifact test separately proves
-that the public facade remains installable. This pilot establishes ownership and
-isolation; it does not claim a smaller full `promptfoo` installation.
+aliases or hoisted dependencies. The full-package artifact test checks that the public facade remains installable.

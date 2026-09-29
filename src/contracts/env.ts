@@ -1,2 +1,2 @@
-// Compatibility path for source consumers. Implementation lives in the private workspace.
+// Compatibility path for existing source consumers.
 export * from '../../packages/contracts/src/env.js';

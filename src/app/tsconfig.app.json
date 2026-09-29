@@ -19,11 +19,12 @@
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
-    "types": ["vitest/globals", "@testing-library/jest-dom", "vite/client", "node"],
+    "types": ["vitest/globals", "@testing-library/jest-dom/vitest", "vite/client", "node"],
 
     /* Linting */
     "strict": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["./src", "../types/optional-deps.d.ts"]
+  "include": ["./src", "../types/optional-deps.d.ts"],
+  "exclude": ["src/**/*.browser.ts", "src/**/*.browser.tsx"]
 }
