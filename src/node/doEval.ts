@@ -951,7 +951,6 @@ async function doEvalWithEnv(
       process.on('SIGTERM', terminationHandler);
     }
 
-    // Run the evaluation!!!!!!
     let ret;
     let cleanupFailure: PromiseRejectedResult | undefined;
     try {
