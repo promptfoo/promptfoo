@@ -253,6 +253,7 @@ type BilledCall = Pick<Anthropic.Messages.Message, 'stop_details' | 'stop_reason
 type CachedAnthropicMessage = Anthropic.Messages.Message & {
   billedCalls?: BilledCall[];
   finalText?: string;
+  fileReferences?: ReturnType<typeof getFileReferences>;
 };
 
 function toCachedMessage(
@@ -264,6 +265,7 @@ function toCachedMessage(
   }
   return {
     ...message,
+    fileReferences: responses.flatMap((response) => response.content.flatMap(getFileReferences)),
     finalText: responses
       .at(-1)!
       .content.filter((block) => block.type === 'text')
@@ -834,7 +836,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const finishReason = normalizeFinishReason(message.stop_reason);
     let output = outputFromMessage(message, config.showThinking ?? true);
     const isStructuredOutput = processedOutputFormat?.type === 'json_schema';
-    const fileReferences = isStructuredOutput ? message.content.flatMap(getFileReferences) : [];
+    const fileReferences = isStructuredOutput
+      ? (message.fileReferences ?? message.content.flatMap(getFileReferences))
+      : [];
 
     if (isStructuredOutput) {
       // Parse completed JSON text, keeping file references in metadata and unfinished

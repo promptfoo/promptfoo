@@ -2438,6 +2438,97 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.tokenUsage).toMatchObject({ prompt: 60, completion: 14, total: 74 });
     });
 
+    it.each([false, true])(
+      'retains paused file references across an MCP handoff (stream: %s)',
+      async (stream) => {
+        enableCache();
+        provider = createProvider('claude-sonnet-4-6', {
+          config: {
+            stream,
+            mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
+            output_format: {
+              type: 'json_schema',
+              schema: { type: 'object', properties: { answer: { type: 'string' } } },
+            },
+          },
+        });
+        mcpMocks.callTool.mockResolvedValueOnce({ content: 'Found Acme Solar.' });
+        const fileReferences = [
+          { type: 'container_upload', file_id: 'file_paused' },
+          { type: 'bash_code_execution_output', file_id: 'file_resumed' },
+          { type: 'code_execution_output', file_id: 'file_final' },
+        ] as const;
+        const responses = [
+          {
+            content: [{ type: 'text', text: 'Preparing the report.' }, fileReferences[0]],
+            stop_reason: 'pause_turn',
+            usage: { input_tokens: 10, output_tokens: 5 },
+          },
+          {
+            content: [
+              {
+                type: 'bash_code_execution_tool_result',
+                tool_use_id: 'srvtoolu_report',
+                content: {
+                  type: 'bash_code_execution_result',
+                  stdout: '',
+                  stderr: '',
+                  return_code: 0,
+                  content: [fileReferences[1]],
+                },
+              },
+              {
+                type: 'tool_use',
+                id: 'toolu_search',
+                name: 'search_companies',
+                input: { query: 'solar' },
+              },
+            ],
+            stop_reason: 'tool_use',
+            usage: { input_tokens: 20, output_tokens: 5 },
+          },
+          {
+            content: [
+              {
+                type: 'code_execution_tool_result',
+                tool_use_id: 'srvtoolu_summary',
+                content: {
+                  type: 'code_execution_result',
+                  stdout: '',
+                  stderr: '',
+                  return_code: 0,
+                  content: [fileReferences[2]],
+                },
+              },
+              { type: 'text', text: '{"answer":"solar"}' },
+            ],
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 30, output_tokens: 5 },
+          },
+        ] as Anthropic.Messages.Message[];
+        const create = vi.spyOn(provider.anthropic.messages, 'create');
+        const streamed = vi.spyOn(provider.anthropic.messages, 'stream');
+        for (const response of responses) {
+          if (stream) {
+            streamed.mockReturnValueOnce({
+              finalMessage: vi.fn().mockResolvedValue(response),
+            } as unknown as ReturnType<typeof provider.anthropic.messages.stream>);
+          } else {
+            create.mockResolvedValueOnce(response);
+          }
+        }
+
+        const result = await provider.callApi('Create a solar report');
+
+        expect(result.output).toEqual({ answer: 'solar' });
+        expect(result.metadata?.fileReferences).toEqual(fileReferences);
+        expect(result.metadata?.toolCalls).toHaveLength(1);
+        expect(result.cached).not.toBe(true);
+        expect(result.error).toBeUndefined();
+        expect(stream ? streamed : create).toHaveBeenCalledTimes(3);
+      },
+    );
+
     it('names the turn container in MCP follow-up requests', async () => {
       provider = createProvider('claude-sonnet-4-6', {
         config: { mcp: { enabled: true, server: { command: 'npm', args: ['start'] } } },
