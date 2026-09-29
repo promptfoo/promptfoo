@@ -59,8 +59,7 @@ type SynthesizeMockResult = {
 
 const { TEST_PROBE_LIMIT } = vi.hoisted(() => ({ TEST_PROBE_LIMIT: 100_000 }));
 
-// Exercise configuration caching with the same MD5 restriction as FIPS-enabled
-// OpenSSL, without changing the process-wide crypto configuration for the suite.
+// Simulate a crypto provider that rejects MD5 without changing process-wide crypto settings.
 vi.mock('crypto', async (importOriginal) => {
   const actual = await importOriginal<typeof import('crypto')>();
   return {

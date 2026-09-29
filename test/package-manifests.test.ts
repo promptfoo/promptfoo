@@ -46,7 +46,7 @@ function validateDockerInstallCommands(dockerfile: string): void {
       expect(args.some((arg) => arg.startsWith('--ignore-scripts='))).toBe(false);
     } else if (command === 'rebuild') {
       // Package names and globs can rebuild untrusted nested dependencies.
-      expect(args).toEqual(['./node_modules/esbuild', './node_modules/@swc/core']);
+      expect(args).toEqual(['./node_modules/esbuild']);
     }
   }
 }
@@ -61,6 +61,9 @@ const KNOWN_BAD_RELEASES = new Map([
   ['@hono/node-server', '<1.19.15 || >=2.0.0 <2.0.10'], // GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg
   ['cache-manager', '7.2.10'], // Shai-Hulud compromise (#10301)
   ['cacheable-request', '13.0.20'], // Shai-Hulud compromise (#10301)
+  ['extract-zip', '<=2.0.1'], // GHSA-jmr9-qjv8-65gv, GHSA-7pqw-9j4j-h8q3
+  ['fast-uri', '<2.4.7 || >=3.0.0 <3.1.8 || >=4.0.0 <4.1.5'], // GHSA-hrr3-gc8f-f4qj, GHSA-qw65-cvwx-89v3, GHSA-58mr-gqgx-xq4g
+  ['image-size', '>=0.6.3 <=2.0.2'], // GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr
   ['hono', '<4.13.7'], // GHSA-hxh3-vqpv-xpqv
   ['js-yaml', '<3.15.2 || >=4.0.0 <4.3.2 || >=5.0.0 <5.2.3'], // #10356, GHSA-2883-xcg3-v3hh
   ['keyv', '6.0.0'], // Shai-Hulud compromise (#10301)
@@ -103,13 +106,7 @@ describe('package manifests', () => {
     ['src/app/package.json', ['@vitest/browser', 'dedent', 'fast-deep-equal', 'zod']],
     [
       'site/package.json',
-      [
-        '@docusaurus/plugin-content-blog',
-        '@docusaurus/theme-common',
-        '@docusaurus/types',
-        '@swc/core',
-        'ajv',
-      ],
+      ['@docusaurus/plugin-content-blog', '@docusaurus/theme-common', '@docusaurus/types', 'ajv'],
     ],
   ] as const)('declares direct imports in their owning workspace: %s', (manifest, dependencies) => {
     const workspace = readPackageJson<PackageManifest>(manifest);
@@ -405,8 +402,7 @@ describe('package manifests', () => {
     'RUN node /usr/local/lib/node_modules/npm/bin/npm-cli.js ci',
     'RUN <<EOF\nnpm ci\nEOF',
   ])('rejects an additional unsafe Docker command: %s', (unsafeCommand) => {
-    const safeCommands =
-      'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild ./node_modules/@swc/core';
+    const safeCommands = 'RUN npm ci --ignore-scripts && npm rebuild ./node_modules/esbuild';
     expect(() => validateDockerInstallCommands(`${safeCommands}\n${unsafeCommand}`)).toThrow();
     expect(() =>
       validateDockerInstallCommands(`${safeCommands} && ${unsafeCommand.replace('RUN ', '')}`),
@@ -456,18 +452,11 @@ describe('package manifests', () => {
     }
   });
 
-  it('lets consumers omit separately installed features and platform binaries', () => {
+  it('lets consumers omit separately installed features', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const sitePackageJson = readPackageJson<PackageManifest>('site/package.json');
     const packageLock =
       readPackageJson<PackageLockManifest<{ optional?: boolean }>>('package-lock.json');
-    const platformBindings = Object.keys({
-      ...packageJson.dependencies,
-      ...packageJson.optionalDependencies,
-    }).filter((dependency) =>
-      ['@rollup/rollup-', '@swc/core-'].some((prefix) => dependency.startsWith(prefix)),
-    );
-
     for (const dependency of [
       '@alcalzone/ansi-tokenize',
       '@anthropic-ai/claude-agent-sdk',
@@ -476,12 +465,10 @@ describe('package manifests', () => {
       '@openai/codex-security',
       '@opencode-ai/sdk',
       '@slack/web-api',
-      '@swc/core',
       'hono',
       'ibm-cloud-sdk-core',
       'read-excel-file',
       'sharp',
-      ...platformBindings,
     ]) {
       expect(packageJson.optionalDependencies, dependency).toHaveProperty(dependency);
       expect(packageJson.dependencies, dependency).not.toHaveProperty(dependency);
@@ -496,7 +483,6 @@ describe('package manifests', () => {
       '@alcalzone/ansi-tokenize',
       '@openai/codex-security',
       '@opencode-ai/sdk',
-      '@rollup/rollup-linux-x64-gnu',
       '@slack/web-api',
     ]) {
       expect(packageLock.packages[`node_modules/${dependency}`]?.optional, dependency).toBe(true);
