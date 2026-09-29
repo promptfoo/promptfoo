@@ -1675,6 +1675,7 @@ async function runEvalInternal({
 
   let setup = state.setup;
   let latencyMs = 0;
+  let targetResult: EvaluateResult | undefined;
   let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined;
   // The step's copy_working_dir workspace, removed once its assertions have run.
   let workspace: AgentWorkspace | undefined;
@@ -1786,6 +1787,10 @@ async function runEvalInternal({
           invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
           trackProviderUsage(provider, response);
+          if (response.tokenUsage) {
+            accumulateResponseTokenUsage(ret.tokenUsage, response);
+          }
+          targetResult = ret;
           await applyRunEvalResponseOutcome({
             abortSignal,
             deferGrading,
@@ -1806,11 +1811,6 @@ async function runEvalInternal({
             traceContext: executionTraceContext,
             vars: persistedVars,
           });
-
-          // Update token usage stats
-          if (response.tokenUsage) {
-            accumulateResponseTokenUsage(ret.tokenUsage, response);
-          }
 
           if (test.options?.storeOutputAs && ret.response?.output && registers) {
             // Save the output in a register for later use
@@ -1857,8 +1857,9 @@ async function runEvalInternal({
     return [
       {
         ...setup,
+        ...targetResult,
         // Exclude the __eval* runtime vars from the persisted error result.
-        vars: omitEvalRuntimeVars(setup.vars),
+        vars: omitEvalRuntimeVars(targetResult?.vars ?? setup.vars),
         error: errorWithStack,
         success: false,
         failureReason: ResultFailureReason.ERROR,
@@ -1869,7 +1870,7 @@ async function runEvalInternal({
         testIdx: testIndex,
         testCase: test,
         promptId: prompt.id || '',
-        metadata,
+        metadata: { ...targetResult?.metadata, ...metadata },
         ...getTraceLinkage(traceContext, evalId),
       },
     ];

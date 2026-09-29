@@ -61,6 +61,50 @@ describeEvaluator('evaluator metrics and scoring', () => {
     });
   });
 
+  it.each([1, 2])(
+    'keeps the target response when a grader throws at concurrency %s',
+    async (maxConcurrency) => {
+      const target: ApiProvider = {
+        id: () => 'echo',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Hello fixture',
+          cached: true,
+          tokenUsage: { total: 12, prompt: 8, completion: 4, numRequests: 1 },
+        }),
+      };
+      const grader: ApiProvider = {
+        id: () => 'fixture-grader',
+        callApi: vi.fn().mockRejectedValue(new Error('Fixture grader unavailable')),
+      };
+      const suite: TestSuite = {
+        providers: [target],
+        prompts: [toPrompt('Hello fixture')],
+        tests: [
+          { assert: [{ type: 'llm-rubric', value: 'Contains a greeting', provider: grader }] },
+        ],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, record, { maxConcurrency });
+      const [result] = await record.getResults();
+      expect(result.success).toBe(false);
+      expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(result.error).toContain('Fixture grader unavailable');
+      expect(result.response).toMatchObject({ output: 'Hello fixture', cached: true });
+      expect(record.runStats?.cache).toEqual({ hits: 1, misses: 0, hitRate: 1 });
+      expect(record.runStats?.providers).toEqual([
+        expect.objectContaining({
+          requests: 1,
+          successes: 1,
+          failures: 0,
+          totalTokens: 12,
+          cachedTokens: 12,
+        }),
+      ]);
+      expect(target.callApi).toHaveBeenCalledTimes(1);
+      expect(grader.callApi).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('keeps result-derived grader labels out of outbound telemetry', async () => {
     const recordEvent = vi.spyOn(telemetry, 'record');
     const privateLabel = 'internal research cohort';
