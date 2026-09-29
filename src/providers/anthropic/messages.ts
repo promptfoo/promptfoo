@@ -39,6 +39,8 @@ import {
   getRefusalDetails,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
+  isBetweenToolsLowestThinkingClaudeModel,
+  isClaudeSonnet55Model,
   isClaudeThinkingEnabled,
   isDisabledThinkingRejectedAtEffort,
   isForcedToolChoiceUnsupportedClaudeModel,
@@ -59,7 +61,7 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { McpToolCallEntry } from '../mcp/types';
-import type { AnthropicMessageOptions, ClaudeEffort } from './types';
+import type { AnthropicMessageOptions, ClaudeEffort, ClaudeThinkingConfig } from './types';
 
 const DEFAULT_MAX_MCP_TOOL_CALLS = 8;
 // Each resume re-sends the turn so far, so a pausing run stops after this many.
@@ -761,7 +763,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
    * Warnings are emitted at most once per provider instance.
    */
   private resolveModelThinking(
-    requested: Anthropic.Messages.ThinkingConfigParam | undefined,
+    requested: ClaudeThinkingConfig | undefined,
     effort: ClaudeEffort | undefined,
     flags: {
       samplingParamsDeprecated: boolean;
@@ -769,7 +771,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       modelWarningName: string;
     },
   ): {
-    thinking: Anthropic.Messages.ThinkingConfigParam | undefined;
+    thinking: ClaudeThinkingConfig | undefined;
     /**
      * Thinking was explicitly turned on (or is always on). Gates the legacy
      * extended-thinking incompatibilities — forced `tool_choice`, `top_p` clamping,
@@ -795,6 +797,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         this.manualThinkingConversionWarned = true;
       }
     } else if (requested?.type === 'disabled' && !this.disabledThinkingRemovalWarned) {
+      const betweenTools = isBetweenToolsLowestThinkingClaudeModel(this.modelName);
       if (alwaysOnAdaptiveThinking) {
         logger.warn(
           `Adaptive thinking is always on for ${modelWarningName}. thinking.type "disabled" has been omitted.`,
@@ -802,15 +805,30 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         this.disabledThinkingRemovalWarned = true;
       } else if (isDisabledThinkingRejectedAtEffort(this.modelName, effort)) {
         logger.warn(
-          `${modelWarningName} only accepts thinking.type "disabled" at effort "high" or below (got "${effort}"), so thinking.type "disabled" has been omitted. Lower effort to "high" if you need thinking off.`,
+          `${modelWarningName} only accepts thinking.type "${betweenTools ? 'between_tools' : 'disabled'}" at effort "high" or below (got "${effort}"), so thinking.type "disabled" has been omitted. Lower effort to "high" if you need thinking off.`,
+        );
+        this.disabledThinkingRemovalWarned = true;
+      } else if (betweenTools) {
+        logger.warn(
+          `${modelWarningName} does not accept thinking.type "disabled", so it has been sent as "between_tools", the model's lowest setting, which turns off up-front thinking. Set thinking.type "between_tools" to silence this warning.`,
         );
         this.disabledThinkingRemovalWarned = true;
       }
+    } else if (
+      requested?.type === 'between_tools' &&
+      !this.disabledThinkingRemovalWarned &&
+      isBetweenToolsLowestThinkingClaudeModel(this.modelName) &&
+      isDisabledThinkingRejectedAtEffort(this.modelName, effort)
+    ) {
+      logger.warn(
+        `${modelWarningName} only accepts thinking.type "between_tools" at effort "high" or below (got "${effort}"), so it has been omitted and the model thinks adaptively. Lower effort to "high" to turn off up-front thinking.`,
+      );
+      this.disabledThinkingRemovalWarned = true;
     }
 
     const resolved = normalizeClaudeThinkingConfig(this.modelName, requested, effort, {
       allowGenerationFallback: samplingParamsDeprecated,
-    }) as Anthropic.Messages.ThinkingConfigParam | undefined;
+    });
     const thinkingEnabled = alwaysOnAdaptiveThinking || isClaudeThinkingEnabled(resolved);
     // Deliberately NOT folded into thinkingEnabled: adaptive thinking is compatible with a
     // forced tool_choice (verified against the live API on Opus 5 and Opus 4.8), so treating
@@ -1025,7 +1043,10 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       ...(config.metadata ? { metadata: config.metadata } : {}),
       ...(allTools.length > 0 ? { tools: allTools as any } : {}),
       ...(resolvedToolChoice ? { tool_choice: resolvedToolChoice } : {}),
-      ...(resolvedThinking ? { thinking: resolvedThinking } : {}),
+      // The pinned SDK forwards between_tools unchanged but does not yet type it.
+      ...(resolvedThinking
+        ? { thinking: resolvedThinking as Anthropic.Messages.ThinkingConfigParam }
+        : {}),
       ...(processedOutputFormat || config.effort
         ? {
             output_config: {
@@ -1197,7 +1218,28 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         }
       }
 
-      const response = this.buildMessageResponse(message, config, processedOutputFormat, false);
+      // Sonnet 5.5 returns progress between tool calls in thinking blocks.
+      const outputMessage = isClaudeSonnet55Model(this.modelName)
+        ? {
+            ...message,
+            content: [
+              ...responses
+                .slice(0, -1)
+                .flatMap((turn) =>
+                  turn.content.filter(
+                    (block) => block.type === 'thinking' && !message.content.includes(block),
+                  ),
+                ),
+              ...message.content,
+            ],
+          }
+        : message;
+      const response = this.buildMessageResponse(
+        outputMessage,
+        config,
+        processedOutputFormat,
+        false,
+      );
       return mcpMetadata
         ? { ...response, metadata: { ...response.metadata, ...mcpMetadata } }
         : response;
