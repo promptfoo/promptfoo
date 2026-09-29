@@ -249,6 +249,12 @@ function projectGradingResultForRedteamReport(
       ? gradingResult.componentResults
       : undefined;
   const compactComponents = components?.slice(0, MAX_REPORT_ITEMS);
+  const identityComponent = components?.find((component) =>
+    reportPluginIdFromMetric(component?.assertion?.metric),
+  );
+  if (identityComponent && compactComponents && !compactComponents.includes(identityComponent)) {
+    compactComponents.push(identityComponent);
+  }
   const blockedModeration = components?.find(
     (component) => component?.assertion?.type === 'moderation' && component.pass === false,
   );
@@ -357,6 +363,8 @@ function jsonBoundedValueOrNull(value: SQLWrapper, path: string): SQL<string | n
   return sql<string | null>`CASE
     WHEN json_type(${value}, ${path}) = 'text'
       THEN json_quote(substr(json_extract(${value}, ${path}), 1, ${MAX_REPORT_TEXT_LENGTH}))
+    WHEN json_type(${value}, ${path}) IN ('integer', 'real', 'true', 'false', 'null')
+      THEN ${value} -> ${path}
     WHEN json_type(${value}, ${path}) IN ('array', 'object')
       THEN CASE WHEN length(${value} -> ${path}) <= ${MAX_REPORT_TEXT_LENGTH}
         THEN ${value} -> ${path}
@@ -471,6 +479,9 @@ function createProjectedGradingResult(row: RedteamReportResultRow): GradingResul
 }
 
 function boundReportValue<T>(prompt: T): T | string | undefined {
+  if (prompt === null || typeof prompt === 'boolean' || typeof prompt === 'number') {
+    return prompt;
+  }
   if (typeof prompt === 'string') {
     return prompt.slice(0, MAX_REPORT_TEXT_LENGTH);
   }
@@ -702,8 +713,18 @@ function projectResultForRedteamReport(
 }
 
 function projectToolForRedteamReport(tool: unknown): Record<string, unknown> | undefined {
-  if (!isRecord(tool) || typeof tool.type !== 'string') {
+  if (!isRecord(tool)) {
     return undefined;
+  }
+  if (typeof tool.type !== 'string') {
+    return typeof tool.name === 'string'
+      ? {
+          name: tool.name,
+          ...(typeof tool.description === 'string' && {
+            description: tool.description.slice(0, MAX_REPORT_TEXT_LENGTH),
+          }),
+        }
+      : undefined;
   }
   if (tool.type === 'function' && isRecord(tool.function)) {
     return {
@@ -2494,6 +2515,26 @@ export default class Eval {
       ? sql`CASE WHEN json_type(report_result.value, '$.vars') = 'object' THEN json_extract(report_result.value, '$.vars') ELSE ${jsonObjectFieldOrEmpty(validTestCaseJson, '$.vars')} END`
       : sql`CASE WHEN json_type(${validTestCaseJson}, '$.vars') = 'object' THEN json_extract(${validTestCaseJson}, '$.vars') ELSE json('{}') END`;
     const validReportComponentJson = sql`CASE WHEN report_component.type = 'object' THEN report_component.value ELSE json('{}') END`;
+    const identityComponentKey = sql<number | null>`(
+        SELECT report_component.key
+        FROM json_each(CASE WHEN json_type(${validGradingResultJson}, '$.componentResults') = 'array'
+          THEN json_extract(${validGradingResultJson}, '$.componentResults') ELSE json('[]') END) AS report_component
+        WHERE report_component.type = 'object' AND (
+          json_extract(${validReportComponentJson}, '$.assertion.metric') IN (${sql.join(
+            Object.keys(categoryAliasesReverse).map((alias) => sql`${alias}`),
+            sql`, `,
+          )})
+          OR (${sql.join(
+            REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES.map(
+              (prefix) =>
+                sql`substr(json_extract(${validReportComponentJson}, '$.assertion.metric'), 1, ${prefix.length}) = ${prefix}`,
+            ),
+            sql` OR `,
+          )})
+        )
+        ORDER BY report_component.key
+        LIMIT 1
+      )`;
     const columns = {
       id: sources.id,
       promptIdx: sources.promptIdx,
@@ -2636,7 +2677,7 @@ export default class Eval {
               json_extract(${validGradingResultJson}, '$.componentResults')
             ) AS report_component
             WHERE report_component.type = 'object'
-              AND (report_component.key < ${MAX_REPORT_ITEMS} OR report_component.key = (
+              AND (report_component.key < ${MAX_REPORT_ITEMS} OR report_component.key = ${identityComponentKey} OR report_component.key = (
                 SELECT blocked_component.key FROM json_each(json_extract(${validGradingResultJson}, '$.componentResults')) AS blocked_component
                 WHERE blocked_component.type = 'object'
                   AND json_extract(blocked_component.value, '$.assertion.type') = 'moderation'
@@ -2650,19 +2691,7 @@ export default class Eval {
         SELECT ${jsonBoundedTextOrNull(validReportComponentJson, '$.assertion.metric')}
         FROM json_each(CASE WHEN json_type(${validGradingResultJson}, '$.componentResults') = 'array'
           THEN json_extract(${validGradingResultJson}, '$.componentResults') ELSE json('[]') END) AS report_component
-        WHERE report_component.type = 'object' AND (
-          json_extract(${validReportComponentJson}, '$.assertion.metric') IN (${sql.join(
-            Object.keys(categoryAliasesReverse).map((alias) => sql`${alias}`),
-            sql`, `,
-          )})
-          OR (${sql.join(
-            REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES.map(
-              (prefix) =>
-                sql`substr(json_extract(${validReportComponentJson}, '$.assertion.metric'), 1, ${prefix.length}) = ${prefix}`,
-            ),
-            sql` OR `,
-          )})
-        )
+        WHERE report_component.key = ${identityComponentKey}
         ORDER BY report_component.key
         LIMIT 1
       )`,

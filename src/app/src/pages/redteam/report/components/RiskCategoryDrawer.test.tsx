@@ -106,6 +106,25 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     mockWindowOpen();
   });
 
+  it('renders structured chat content as text in the prompt preview', () => {
+    const content = [
+      { type: 'text', text: 'Describe the fixture' },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,fixture' } },
+    ];
+    renderWithProviders(
+      <RiskCategoryDrawer
+        {...defaultProps}
+        failures={[
+          {
+            ...defaultProps.failures[0],
+            prompt: JSON.stringify([{ role: 'user', content }]),
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText(JSON.stringify(content))).toBeInTheDocument();
+  });
+
   it('should navigate to eval page when clicking View All Logs button', async () => {
     const user = userEvent.setup();
     renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);

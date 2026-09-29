@@ -1735,14 +1735,14 @@ describe('evaluator', () => {
         const metrics = report.results.results[0].gradingResult?.componentResults?.map(
           (component) => component.assertion?.metric,
         );
-        expect(metrics).toHaveLength(26);
+        expect(metrics).toHaveLength(27);
         expect(report.results.results[0].metadata?.pluginId).toBe('harmful');
         expect(
           report.results.results[0].gradingResult?.componentResults?.find(
             (component) => component.assertion?.type === 'moderation',
           )?.pass,
         ).toBe(false);
-        expect(metrics).not.toContain('Harmful');
+        expect(metrics).toContain('Harmful');
         expect(metrics).not.toContain('PolicyViolation:policy-id');
       }
     });
@@ -3695,7 +3695,7 @@ describe('evaluator', () => {
           expect(result.vars.harmCategory).toBe(42);
           expect(result.gradingResult?.reason?.length).toBeLessThanOrEqual(10_240);
           expect(result.provider.label?.length).toBeLessThanOrEqual(10_240);
-          expect(result.gradingResult?.componentResults).toHaveLength(25);
+          expect(result.gradingResult?.componentResults).toHaveLength(26);
           expect(result.gradingResult?.componentResults?.[0].componentResults).toBeUndefined();
           expect(result.gradingResult?.componentResults?.[0].reason.length).toBeLessThanOrEqual(
             10_240,
@@ -3712,6 +3712,106 @@ describe('evaluator', () => {
         expect(full.results.results[0].response?.output).toBe(longText);
         expect(full.results.results[0].gradingResult?.reason).toBe(longText);
       }
+    });
+
+    it('retains late category components when metadata is stripped', async () => {
+      const result = createEvaluateResult({
+        metadata: {},
+        testCase: {},
+        vars: {},
+        gradingResult: {
+          pass: false,
+          score: 0,
+          reason: 'fixture',
+          componentResults: Array.from({ length: 30 }, (_, index) => ({
+            pass: false,
+            score: 0,
+            reason: 'fixture',
+            assertion: {
+              type: 'contains',
+              metric: index === 29 ? 'PolicyViolation:late-policy' : 'Unrelated',
+            },
+          })),
+        },
+      });
+      const persisted = await EvalFactory.create({ numResults: 0 });
+      const memory = new Eval({});
+      await persisted.addResult(result);
+      await memory.addResult(result);
+      const legacy = new Eval({});
+      legacy.oldResults = createEvaluateSummaryV2({ results: [result] });
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
+      try {
+        for (const eval_ of [persisted, memory, legacy]) {
+          const compact = await eval_.toResultsFile({
+            resultProjection: 'redteamReport',
+            includeTraces: false,
+          });
+          const projected = compact.results.results[0];
+          expect(projected.metadata).toEqual({});
+          expect(projected.gradingResult?.componentResults).toHaveLength(26);
+          expect(projected.gradingResult?.componentResults?.at(-1)?.assertion?.metric).toBe(
+            'PolicyViolation:late-policy',
+          );
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('preserves scalar output previews in each compact storage mode', async () => {
+      const outputs = [42, 0, true, false, null];
+      const results = outputs.map((output, testIdx) =>
+        createEvaluateResult({
+          testIdx,
+          response: { output } as unknown as EvaluateResult['response'],
+        }),
+      );
+      const persisted = await EvalFactory.create({ numResults: 0 });
+      const memory = new Eval({});
+      for (const result of results) {
+        await persisted.addResult(result);
+        await memory.addResult(result);
+      }
+      const legacy = new Eval({});
+      legacy.oldResults = createEvaluateSummaryV2({ results });
+      for (const eval_ of [persisted, memory, legacy]) {
+        const compact = await eval_.toResultsFile({
+          resultProjection: 'redteamReport',
+          includeTraces: false,
+        });
+        expect(compact.results.results.map((result) => result.response?.output)).toEqual(outputs);
+      }
+    });
+
+    it('retains native tool summaries so complete definitions remain accessible', async () => {
+      const eval_ = new Eval({
+        providers: [
+          {
+            id: 'anthropic:messages:fixture',
+            config: {
+              tools: [
+                {
+                  name: 'lookup',
+                  description: 'Find a fixture',
+                  input_schema: { type: 'object', properties: { query: { type: 'string' } } },
+                },
+              ],
+            },
+          },
+        ],
+      });
+      const compact = await eval_.toResultsFile({
+        resultProjection: 'redteamReport',
+        includeTraces: false,
+      });
+      expect((compact.config.providers as any)[0].config.tools).toEqual([
+        { name: 'lookup', description: 'Find a fixture' },
+      ]);
+      const full = await eval_.toResultsFile({ includeTraces: false });
+      expect(
+        (full.config.providers as any)[0].config.tools[0].input_schema.properties.query.type,
+      ).toBe('string');
     });
 
     it('preserves metric-only category identity when grading details are stripped', async () => {
