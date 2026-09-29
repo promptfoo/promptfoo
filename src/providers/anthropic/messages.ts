@@ -666,6 +666,16 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         );
         this.disabledThinkingRemovalWarned = true;
       }
+    } else if (
+      requested?.type === 'between_tools' &&
+      !this.disabledThinkingRemovalWarned &&
+      isBetweenToolsLowestThinkingClaudeModel(this.modelName) &&
+      isDisabledThinkingRejectedAtEffort(this.modelName, effort)
+    ) {
+      logger.warn(
+        `${modelWarningName} only accepts thinking.type "between_tools" at effort "high" or below (got "${effort}"), so it has been omitted and the model thinks adaptively. Lower effort to "high" to turn off up-front thinking.`,
+      );
+      this.disabledThinkingRemovalWarned = true;
     }
 
     const resolved = normalizeClaudeThinkingConfig(this.modelName, requested, effort, {

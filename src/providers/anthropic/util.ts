@@ -542,6 +542,7 @@ export function isSamplingParamsDeprecatedClaudeModel(
  * omitted on effort-capped models (Opus 5, Sonnet 5.5) when `effort` is high
  * enough that turning thinking off would 400, and otherwise becomes
  * `between_tools` on models that use it in place of `disabled` (Sonnet 5.5).
+ * An explicit `between_tools` is omitted above that effort cap too.
  * The Anthropic, Bedrock InvokeModel/Converse, and Vertex paths all share this
  * transform; user-facing warnings stay at the call sites that surface them.
  */
@@ -570,6 +571,13 @@ export function normalizeClaudeThinkingConfig<
     if (isBetweenToolsLowestThinkingClaudeModel(modelId)) {
       return { type: 'between_tools' };
     }
+  }
+  if (
+    thinking?.type === 'between_tools' &&
+    isBetweenToolsLowestThinkingClaudeModel(modelId) &&
+    isDisabledThinkingRejectedAtEffort(modelId, effort)
+  ) {
+    return undefined;
   }
   return thinking;
 }

@@ -704,7 +704,7 @@ and Anthropic reports it is faster. Promptfoo adjusts requests to its rules:
   setting is `thinking: { type: 'between_tools' }`, which turns off up-front thinking.
   Promptfoo sends `between_tools` in place of `disabled` and logs a warning once.
   `between_tools` is only accepted at `effort` `high` or below, so with `xhigh` or `max`
-  promptfoo omits `disabled` instead and the model thinks adaptively.
+  promptfoo omits `disabled` or `between_tools`, warns, and the model thinks adaptively.
 - **`effort` defaults to `high`.** Anthropic recalibrated the levels, so re-run an effort
   sweep rather than reusing Sonnet 5's setting.
 - **Forced tool use is rejected.** Promptfoo omits `tool_choice` values of type `any` or

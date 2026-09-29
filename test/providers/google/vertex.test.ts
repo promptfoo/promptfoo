@@ -3201,6 +3201,12 @@ describe('VertexChatProvider.callClaudeApi', () => {
       maxTokens: 2048,
     },
     {
+      thinking: { type: 'between_tools' as const },
+      effort: 'xhigh' as const,
+      expected: undefined,
+      maxTokens: 2048,
+    },
+    {
       thinking: { type: 'enabled' as const, budget_tokens: 1024 },
       effort: 'high' as const,
       expected: { type: 'adaptive' },

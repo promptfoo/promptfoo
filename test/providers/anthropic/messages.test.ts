@@ -4389,6 +4389,19 @@ describe('AnthropicMessagesProvider', () => {
       );
     });
 
+    it('omits explicit between_tools above high effort, where the API rejects it', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      const params = await callWith({ thinking: { type: 'between_tools' }, effort: 'max' });
+
+      expect(params).not.toHaveProperty('thinking');
+      expect(params.output_config).toEqual({ effort: 'max' });
+      expect(params.max_tokens).toBe(2048);
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Claude Sonnet 5.5 only accepts thinking.type "between_tools" at effort "high" or below (got "max"), so it has been omitted and the model thinks adaptively. Lower effort to "high" to turn off up-front thinking.',
+      );
+    });
+
     it('passes explicit between_tools through without a warning', async () => {
       const warnSpy = vi.spyOn(logger, 'warn');
 

@@ -2595,6 +2595,16 @@ describe('Anthropic utilities', () => {
       expect(
         normalizeClaudeThinkingConfig('claude-sonnet-5-5', { type: 'between_tools' }, 'high'),
       ).toEqual({ type: 'between_tools' });
+      // Above high, the API rejects `between_tools` too, so it is omitted like `disabled`.
+      for (const effort of ['xhigh', 'max'] as const) {
+        expect(
+          normalizeClaudeThinkingConfig('claude-sonnet-5-5', { type: 'between_tools' }, effort),
+        ).toBeUndefined();
+      }
+      // Models without `between_tools` get it unchanged, so the API names the problem.
+      expect(
+        normalizeClaudeThinkingConfig('claude-opus-5', { type: 'between_tools' }, 'max'),
+      ).toEqual({ type: 'between_tools' });
       expect(
         normalizeClaudeThinkingConfig(
           'claude-sonnet-5-5',

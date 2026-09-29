@@ -2415,6 +2415,28 @@ Third line`;
       },
     );
 
+    it('drops explicit between_tools for Claude Sonnet 5.5 when raw fields carry a capped effort', async () => {
+      const provider = new AwsBedrockConverseProvider('global.anthropic.claude-sonnet-5-5', {
+        config: {
+          region: 'us-east-1',
+          thinking: { type: 'between_tools' },
+          additionalModelRequestFields: { output_config: { effort: 'xhigh' } },
+        },
+      });
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: { output_config: { effort: 'xhigh' } },
+        }),
+      );
+    });
+
     it('drops forced tool choice for Claude Sonnet 5.5 and names the model in the warning', async () => {
       const warnSpy = vi.spyOn(logger, 'warn');
       const provider = new AwsBedrockConverseProvider('global.anthropic.claude-sonnet-5-5', {
