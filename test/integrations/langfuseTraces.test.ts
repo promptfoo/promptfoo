@@ -6,25 +6,14 @@ vi.mock('../../src/envars', () => ({
   isCI: vi.fn().mockReturnValue(true),
 }));
 
-// Mock the langfuse package with hoisted mocks
 const mockTraceList = vi.hoisted(() => vi.fn());
-const mockShutdownAsync = vi.hoisted(() => vi.fn());
-const mockLangfuseConstructorError = vi.hoisted(() => ({
-  error: undefined as Error | undefined,
-}));
-
-vi.mock('langfuse', () => ({
-  Langfuse: class MockLangfuse {
-    constructor() {
-      if (mockLangfuseConstructorError.error) {
-        throw mockLangfuseConstructorError.error;
-      }
+const mockLangfuseConstructorError = vi.hoisted(() => ({ error: undefined as Error | undefined }));
+vi.mock('../../src/integrations/langfuse', () => ({
+  getLangfuseClient: async () => {
+    if (mockLangfuseConstructorError.error) {
+      throw mockLangfuseConstructorError.error;
     }
-
-    api = {
-      traceList: mockTraceList,
-    };
-    shutdownAsync = mockShutdownAsync;
+    return { api: { trace: { list: mockTraceList } } };
   },
 }));
 
@@ -34,7 +23,6 @@ import {
   fetchLangfuseTraces,
   isLangfuseTracesUrl,
   parseTracesUrl,
-  shutdownLangfuse,
 } from '../../src/integrations/langfuseTraces';
 
 describe('langfuseTraces', () => {
@@ -42,11 +30,8 @@ describe('langfuseTraces', () => {
     vi.clearAllMocks();
     // Reset mocks to ensure test isolation
     mockTraceList.mockReset();
-    mockShutdownAsync.mockReset();
     mockLangfuseConstructorError.error = undefined;
     vi.mocked(getEnvString).mockReset();
-    // Shutdown any existing langfuse instance to reset singleton state
-    await shutdownLangfuse();
   });
 
   afterEach(() => {
@@ -54,6 +39,13 @@ describe('langfuseTraces', () => {
   });
 
   describe('parseTracesUrl', () => {
+    it.each(['tag=production', 'sessionID=fixture', 'userId=a&userId=b', 'limit='])(
+      'rejects invalid selectors: %s',
+      (query) => {
+        expect(() => parseTracesUrl(`langfuse://traces?${query}`)).toThrow();
+      },
+    );
+
     it('should only accept the traces source URL and its query parameters', () => {
       expect(isLangfuseTracesUrl('langfuse://traces')).toBe(true);
       expect(isLangfuseTracesUrl('langfuse://traces?limit=1')).toBe(true);
@@ -172,6 +164,60 @@ describe('langfuseTraces', () => {
         }
         return '';
       });
+    });
+
+    it.each([
+      {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: [
+                { type: 'text', text: 'Checking weather' },
+                { type: 'tool_use', name: 'weather', input: {} },
+              ],
+            },
+          },
+        ],
+      },
+      {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'Checking weather',
+              tool_calls: [{ function: { name: 'weather', arguments: '{}' } }],
+            },
+          },
+        ],
+      },
+      {
+        content: [
+          { type: 'text', text: 'Checking weather' },
+          { type: 'tool_use', name: 'weather', input: {} },
+        ],
+      },
+      {
+        output: [
+          { type: 'message', content: [{ type: 'output_text', text: 'Checking weather' }] },
+          { type: 'function_call', name: 'weather', arguments: '{}' },
+        ],
+      },
+    ])('preserves text and tool calls from mixed stored outputs', async (output) => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [{ id: 'mixed', timestamp: '2026-01-01T00:00:00Z', input: 'Weather?', output }],
+      });
+      const [test] = await fetchLangfuseTraces('langfuse://traces');
+      expect(test.providerOutput).toContain('Checking weather');
+      expect(test.providerOutput).toContain('weather');
+      expect(test.providerOutput).toMatch(/tool_calls|tool_use|function_call/);
+    });
+
+    it.each([401, 403])('reports status from Fetch Response errors (%s)', async (status) => {
+      mockTraceList.mockRejectedValueOnce(new Response(null, { status }));
+      await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
+        status === 401 ? 'authentication failed' : 'access denied',
+      );
     });
 
     it('should throw error when credentials are missing', async () => {
@@ -733,7 +779,7 @@ describe('langfuseTraces', () => {
       );
     });
 
-    it('should prefer LANGFUSE_BASE_URL and normalize trace URLs', async () => {
+    it('should prefer LANGFUSE_HOST and normalize trace URLs', async () => {
       vi.mocked(getEnvString).mockImplementation((key: string) => {
         if (key === 'LANGFUSE_PUBLIC_KEY') {
           return 'pk-test';
@@ -763,7 +809,7 @@ describe('langfuseTraces', () => {
       const tests = await fetchLangfuseTraces('langfuse://traces');
 
       expect(tests[0].metadata?.langfuseTraceUrl).toBe(
-        'https://eu.cloud.langfuse.com/project/123/traces/trace-1',
+        'https://custom.langfuse.com/project/123/traces/trace-1',
       );
     });
 
@@ -771,7 +817,7 @@ describe('langfuseTraces', () => {
       mockTraceList.mockRejectedValueOnce(new Error('401 Unauthorized'));
 
       await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
-        'Langfuse authentication failed. Check your LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_BASE_URL or LANGFUSE_HOST environment variables.',
+        'Langfuse authentication failed. Check LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY.',
       );
     });
 

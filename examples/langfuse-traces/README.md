@@ -1,46 +1,12 @@
-# langfuse-traces (Evaluate Langfuse Traces)
+# Evaluate stored Langfuse outputs
 
-Evaluate LLM outputs stored in Langfuse traces without re-running them.
-
-## Setup
-
-1. Copy `.env.example` to `.env` and add your Langfuse credentials:
-
-   ```bash
-   npx promptfoo@latest init --example langfuse-traces
-   cd langfuse-traces
-   cp .env.example .env
-   # Edit .env with your credentials
-   ```
-
-2. Get your API keys from [Langfuse](https://langfuse.com) -> Settings -> API Keys
-
-## Usage
+Copy `.env.example` to `.env` and fill in your Langfuse API keys. Install the optional client, then run the example:
 
 ```bash
-npx promptfoo@latest eval
+npm install @langfuse/client
+npx promptfoo@latest eval -c promptfooconfig.yaml --env-file .env --no-cache
 ```
 
-## What This Example Shows
+The example loads ten traces and checks that each stored output is nonempty. It skips the response provider. Inputs and outputs are saved in local results; use care when exporting or sharing production data. Adding model-graded assertions can send trace data to the grading provider.
 
-- Loading traces from Langfuse using `langfuse://traces` URL scheme
-- Filtering traces by tags, limit, and other parameters
-- Running assertions on stored trace outputs without replaying a response provider
-
-## URL Parameters
-
-| Parameter       | Description                            | Example                    |
-| --------------- | -------------------------------------- | -------------------------- |
-| `limit`         | Maximum traces to fetch (default: 100) | `limit=50`                 |
-| `userId`        | Filter by user ID                      | `userId=user_123`          |
-| `sessionId`     | Filter by session ID                   | `sessionId=sess_456`       |
-| `tags`          | Filter by tags (comma-separated)       | `tags=production,gpt-4`    |
-| `name`          | Filter by trace name                   | `name=chat-completion`     |
-| `fromTimestamp` | Start timestamp (ISO 8601)             | `fromTimestamp=2024-01-01` |
-| `toTimestamp`   | End timestamp (ISO 8601)               | `toTimestamp=2024-01-31`   |
-| `version`       | Filter by trace version                | `version=1.0`              |
-| `release`       | Filter by release                      | `release=v2.0.0`           |
-
-## Learn More
-
-See the [Langfuse integration docs](https://promptfoo.dev/docs/integrations/langfuse#evaluating-langfuse-traces) for more details.
+See the [Langfuse integration docs](https://promptfoo.dev/docs/integrations/langfuse#evaluating-langfuse-traces) for filters and available variables.

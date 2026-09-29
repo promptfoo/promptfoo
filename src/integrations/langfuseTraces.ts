@@ -1,34 +1,7 @@
-/**
- * Langfuse Traces Integration
- *
- * Fetches traces from Langfuse and converts them to promptfoo TestCase objects.
- * This allows users to evaluate LLM outputs that are already stored in Langfuse.
- *
- * URL format: langfuse://traces?<params>
- *
- * Supported parameters:
- *   - limit: Maximum number of traces to fetch (default: 100, max: 1000)
- *   - userId: Filter by user ID
- *   - sessionId: Filter by session ID
- *   - tags: Filter by tags (comma-separated)
- *   - name: Filter by trace name
- *   - fromTimestamp: Start timestamp (ISO 8601)
- *   - toTimestamp: End timestamp (ISO 8601)
- *   - version: Filter by version
- *   - release: Filter by release
- *
- * Environment variables:
- *   - LANGFUSE_PUBLIC_KEY: Langfuse public key
- *   - LANGFUSE_SECRET_KEY: Langfuse secret key
- *   - LANGFUSE_BASE_URL or LANGFUSE_HOST: Langfuse host URL
- */
-
-import cliProgress from 'cli-progress';
-import cliState from '../cliState';
-import { getEnvString, isCI } from '../envars';
+import { getEnvString } from '../envars';
 import logger from '../logger';
-import { getLangfuseBaseUrl, LANGFUSE_AUTH_ENV_VARS } from './langfuseShared';
-import type { ApiTraceListParams, ApiTraces } from 'langfuse';
+import { getLangfuseClient } from './langfuse';
+import type { LangfuseClient } from '@langfuse/client';
 
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 1000;
@@ -36,24 +9,8 @@ const PAGE_SIZE = 100;
 const TRACE_LIST_FIELDS = 'core,io,metrics';
 const LANGFUSE_TRACES_PREFIX = 'langfuse://traces';
 
-interface LangfuseTrace {
-  id: string;
-  timestamp: string;
-  name?: string | null;
-  input?: unknown;
-  output?: unknown;
-  sessionId?: string | null;
-  release?: string | null;
-  version?: string | null;
-  userId?: string | null;
-  metadata?: Record<string, unknown> | null;
-  tags?: string[] | null;
-  htmlPath?: string;
-  latency?: number;
-  totalCost?: number;
-}
-
-type LangfuseTracesResponse = ApiTraces;
+type LangfuseTracesResponse = Awaited<ReturnType<LangfuseClient['api']['trace']['list']>>;
+type LangfuseTrace = LangfuseTracesResponse['data'][number];
 
 interface FetchTracesQuery {
   fields?: string;
@@ -67,13 +24,6 @@ interface FetchTracesQuery {
   toTimestamp?: string;
   version?: string;
   release?: string;
-}
-
-interface LangfuseTracesClient {
-  api: {
-    traceList(query: ApiTraceListParams): Promise<LangfuseTracesResponse>;
-  };
-  shutdownAsync(): Promise<void>;
 }
 
 type TraceVarValue = string | number | boolean | object | unknown[];
@@ -94,8 +44,6 @@ type MessageContent = {
 };
 
 const TEXT_BLOCK_TYPES = new Set(['text', 'input_text', 'output_text']);
-
-let langfuseInstance: LangfuseTracesClient | undefined;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -148,7 +96,6 @@ function extractMessageContent(messagesInput: unknown[]): unknown | undefined {
     return undefined;
   }
 
-  // Get the last user message, or the last message if no user message.
   const userMessages = messages.filter((message) => message.role === 'user');
   const lastMessage =
     userMessages.length > 0 ? userMessages[userMessages.length - 1] : messages[messages.length - 1];
@@ -173,8 +120,11 @@ function extractOutputItemText(item: unknown): unknown | undefined {
     return item.text;
   }
 
+  if ((item.tool_calls || item.function_call) && item.content != null) {
+    return item;
+  }
   if (Array.isArray(item.content)) {
-    return extractTextBlocks(item.content);
+    return item.content.every(isTextBlock) ? extractTextBlocks(item.content) : item.content;
   }
 
   if (item.type === 'message' || item.role === 'assistant') {
@@ -192,6 +142,18 @@ function extractOutputItemText(item: unknown): unknown | undefined {
 }
 
 function extractOutputItemsText(outputItems: unknown[]): unknown | undefined {
+  if (
+    outputItems.some(
+      (item) =>
+        isRecord(item) &&
+        !isTextBlock(item) &&
+        item.type !== 'message' &&
+        item.type !== 'reasoning' &&
+        item.role !== 'assistant',
+    )
+  ) {
+    return outputItems;
+  }
   const textValues = outputItems.map(extractOutputItemText).filter((value) => value !== undefined);
 
   return textValues.length > 0 ? joinTextValues(textValues) : undefined;
@@ -204,8 +166,13 @@ function extractChatChoiceText(choice: unknown): unknown | undefined {
 
   if (isRecord(choice.message)) {
     const content = choice.message.content;
+    if (content != null && (choice.message.tool_calls || choice.message.function_call)) {
+      return choice.message;
+    }
     if (content !== undefined && content !== null) {
-      return Array.isArray(content) ? extractTextBlocks(content) : content;
+      return Array.isArray(content) && content.every(isTextBlock)
+        ? extractTextBlocks(content)
+        : content;
     }
 
     const toolCall = choice.message.tool_calls ?? choice.message.function_call;
@@ -217,7 +184,7 @@ function extractChatChoiceText(choice: unknown): unknown | undefined {
   return choice.text;
 }
 
-function buildTraceUrl(baseUrl: string, htmlPath?: string): string | undefined {
+function buildTraceUrl(baseUrl: string, htmlPath?: string | null): string | undefined {
   if (!htmlPath) {
     return undefined;
   }
@@ -236,44 +203,6 @@ function redactTracesUrl(url: string): string {
   return queryString === undefined ? prefix : `${prefix}?<redacted>`;
 }
 
-/**
- * Get or create the Langfuse client instance
- */
-async function getLangfuseClient(): Promise<LangfuseTracesClient> {
-  if (langfuseInstance) {
-    return langfuseInstance;
-  }
-
-  const publicKey = getEnvString('LANGFUSE_PUBLIC_KEY');
-  const secretKey = getEnvString('LANGFUSE_SECRET_KEY');
-  const baseUrl = getLangfuseBaseUrl();
-
-  if (!publicKey || !secretKey) {
-    throw new Error(
-      'Langfuse credentials not configured. Set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY environment variables.',
-    );
-  }
-
-  let Langfuse: typeof import('langfuse').Langfuse;
-  try {
-    ({ Langfuse } = await import('langfuse'));
-  } catch (error) {
-    throw new Error(
-      `The langfuse package is required for Langfuse traces integration. Install it with: npm install langfuse. Original error: ${getFetchErrorMessage(error)}`,
-    );
-  }
-
-  langfuseInstance = new Langfuse({
-    publicKey,
-    secretKey,
-    baseUrl,
-  }) as unknown as LangfuseTracesClient;
-  return langfuseInstance;
-}
-
-/**
- * Parse the langfuse://traces URL and extract query parameters
- */
 export function parseTracesUrl(url: string): FetchTracesQuery {
   if (!isLangfuseTracesUrl(url)) {
     throw new Error(`Invalid Langfuse traces URL: ${redactTracesUrl(url)}`);
@@ -281,20 +210,36 @@ export function parseTracesUrl(url: string): FetchTracesQuery {
 
   const queryString = url.slice(LANGFUSE_TRACES_PREFIX.length).replace(/^\?/, '');
   const params = new URLSearchParams(queryString);
+  const supported = new Set([
+    'limit',
+    'userId',
+    'sessionId',
+    'tags',
+    'name',
+    'fromTimestamp',
+    'toTimestamp',
+    'version',
+    'release',
+  ]);
+  for (const key of params.keys()) {
+    if (!supported.has(key) || (key !== 'tags' && params.getAll(key).length > 1)) {
+      throw new Error(
+        'Unsupported or repeated Langfuse trace selector. Check the documented query parameters.',
+      );
+    }
+  }
 
   const query: FetchTracesQuery = {};
 
-  // Parse limit with validation
   const limitParam = params.get('limit');
-  if (limitParam) {
+  if (limitParam !== null) {
     const limit = Number(limitParam);
     if (!Number.isInteger(limit) || limit < 1) {
-      throw new Error(`Invalid limit parameter: ${limitParam}`);
+      throw new Error('Invalid limit parameter: expected a positive integer');
     }
     query.limit = Math.min(limit, MAX_LIMIT);
   }
 
-  // Parse other string parameters
   const stringParams = [
     'userId',
     'sessionId',
@@ -324,9 +269,6 @@ export function parseTracesUrl(url: string): FetchTracesQuery {
   return query;
 }
 
-/**
- * Extract text content from various input formats
- */
 function extractInputText(input: unknown): unknown {
   if (typeof input === 'string') {
     return input;
@@ -368,9 +310,6 @@ function extractInputText(input: unknown): unknown {
   return obj.text ?? input;
 }
 
-/**
- * Extract text content from various output formats
- */
 function extractOutputText(output: unknown): unknown {
   if (typeof output === 'string') {
     return output;
@@ -404,7 +343,7 @@ function extractOutputText(output: unknown): unknown {
   // Anthropic format: { content: [{type: 'text', text: '...'}] } or { content: '...' }
   if (obj.content !== undefined) {
     if (Array.isArray(obj.content)) {
-      return extractTextBlocks(obj.content);
+      return obj.content.every(isTextBlock) ? extractTextBlocks(obj.content) : obj.content;
     }
     return obj.content;
   }
@@ -428,25 +367,17 @@ function extractOutputText(output: unknown): unknown {
   );
 }
 
-/**
- * Convert a Langfuse trace to a promptfoo TestCase
- */
 function traceToTestCase(trace: LangfuseTrace, baseUrl: string): LangfuseTraceTestCase {
-  // Extract input and output, handling different formats
   const inputValue = extractInputText(trace.input);
   const outputValue = extractOutputText(trace.output);
 
   const traceUrl = buildTraceUrl(baseUrl, trace.htmlPath);
 
-  // Create the test case with vars populated from trace data
-  // Build vars object, filtering out undefined values
   const vars: Record<string, TraceVarValue> = {
-    // Prefixed Langfuse fields to avoid collisions
     __langfuse_trace_id: trace.id,
     __langfuse_timestamp: trace.timestamp,
   };
 
-  // Add optional fields only if they have values
   setVar(vars, '__langfuse_input', trace.input);
   setVar(vars, '__langfuse_output', trace.output);
   if (trace.name) {
@@ -461,20 +392,17 @@ function traceToTestCase(trace: LangfuseTrace, baseUrl: string): LangfuseTraceTe
   if (trace.tags) {
     vars.__langfuse_tags = trace.tags;
   }
-  if (trace.metadata) {
-    vars.__langfuse_metadata = trace.metadata as Record<string, unknown>;
-  }
-  if (trace.latency !== undefined) {
+  setVar(vars, '__langfuse_metadata', trace.metadata);
+  if (typeof trace.latency === 'number') {
     vars.__langfuse_latency = trace.latency;
   }
-  if (trace.totalCost !== undefined) {
+  if (typeof trace.totalCost === 'number') {
     vars.__langfuse_cost = trace.totalCost;
   }
   if (traceUrl) {
     vars.__langfuse_url = traceUrl;
   }
 
-  // Also provide convenient unprefixed access to main content
   setVar(vars, 'input', inputValue);
   setVar(vars, 'output', outputValue);
 
@@ -502,33 +430,19 @@ function traceToTestCase(trace: LangfuseTrace, baseUrl: string): LangfuseTraceTe
   return testCase;
 }
 
-function createProgressBar(limit: number): cliProgress.SingleBar | undefined {
-  if (cliState.webUI || isCI() || limit <= PAGE_SIZE) {
-    return undefined;
-  }
-
-  const progressBar = new cliProgress.SingleBar(
-    {
-      format: 'Fetching Langfuse traces [{bar}] {percentage}% | {value}/{total} traces',
-      hideCursor: true,
-      stopOnComplete: true,
-    },
-    cliProgress.Presets.shades_classic,
-  );
-  progressBar.start(limit, 0);
-  return progressBar;
-}
-
 function getFetchErrorMessage(error: unknown): string {
+  if (isRecord(error) && typeof (error.status ?? error.statusCode) === 'number') {
+    return `HTTP ${error.status ?? error.statusCode}`;
+  }
   return error instanceof Error ? error.message : String(error);
 }
 
 async function fetchTracePage(
-  langfuse: LangfuseTracesClient,
+  langfuse: LangfuseClient,
   fetchQuery: FetchTracesQuery,
 ): Promise<LangfuseTracesResponse> {
   try {
-    const response = await langfuse.api.traceList(fetchQuery);
+    const response = await langfuse.api.trace.list(fetchQuery);
     if (!response) {
       throw new Error(
         'Langfuse returned an empty response. Check your credentials and network connection.',
@@ -542,7 +456,7 @@ async function fetchTracePage(
     }
     if (message.includes('401') || message.includes('Unauthorized')) {
       throw new Error(
-        `Langfuse authentication failed. Check your ${LANGFUSE_AUTH_ENV_VARS} environment variables.`,
+        'Langfuse authentication failed. Check LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY.',
       );
     }
     if (message.includes('403') || message.includes('Forbidden')) {
@@ -565,12 +479,6 @@ function shouldFetchNextPage(
   return response.data.length === pageLimit;
 }
 
-/**
- * Fetch traces from Langfuse and convert them to TestCase objects
- *
- * @param url - The langfuse://traces URL with query parameters
- * @returns Array of TestCase objects
- */
 export async function fetchLangfuseTraces(url: string): Promise<LangfuseTraceTestCase[]> {
   const query = parseTracesUrl(url);
   const limit = query.limit ?? DEFAULT_LIMIT;
@@ -578,60 +486,53 @@ export async function fetchLangfuseTraces(url: string): Promise<LangfuseTraceTes
 
   logger.debug('[Langfuse Traces] Fetching traces', { limit, appliedFilters });
 
+  if (!getEnvString('LANGFUSE_PUBLIC_KEY') || !getEnvString('LANGFUSE_SECRET_KEY')) {
+    throw new Error(
+      'Langfuse credentials not configured. Set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY.',
+    );
+  }
+  const baseUrl = (
+    getEnvString('LANGFUSE_HOST') ||
+    getEnvString('LANGFUSE_BASE_URL') ||
+    'https://cloud.langfuse.com'
+  ).replace(/\/+$/, '');
   const langfuse = await getLangfuseClient();
-  const baseUrl = getLangfuseBaseUrl();
 
   const tests: LangfuseTraceTestCase[] = [];
   let page = 1;
   let hasMore = true;
   const pageLimit = Math.min(PAGE_SIZE, limit);
-  const progressBar = createProgressBar(limit);
+  while (hasMore && tests.length < limit) {
+    const fetchQuery: FetchTracesQuery = {
+      ...query,
+      fields: TRACE_LIST_FIELDS,
+      limit: pageLimit,
+      page,
+    };
 
-  try {
-    while (hasMore && tests.length < limit) {
-      // Build the query for this page
-      const fetchQuery: FetchTracesQuery = {
-        ...query,
-        fields: TRACE_LIST_FIELDS,
-        limit: pageLimit,
-        page,
-      };
+    logger.debug('[Langfuse Traces] Fetching page', { page, pageLimit });
 
-      logger.debug('[Langfuse Traces] Fetching page', { page, pageLimit });
+    const response = await fetchTracePage(langfuse, fetchQuery);
 
-      const response = await fetchTracePage(langfuse, fetchQuery);
+    if (!response.data || response.data.length === 0) {
+      logger.debug('[Langfuse Traces] No more traces found', { page });
+      break;
+    }
 
-      if (!response.data || response.data.length === 0) {
-        logger.debug('[Langfuse Traces] No more traces found', { page });
+    for (const trace of response.data) {
+      if (tests.length >= limit) {
         break;
       }
-
-      // Convert traces to test cases
-      for (const trace of response.data) {
-        if (tests.length >= limit) {
-          break;
-        }
-        tests.push(traceToTestCase(trace, baseUrl));
-      }
-
-      // Update progress
-      if (progressBar) {
-        progressBar.update(tests.length);
-      }
-
-      // If no metadata is present, assume more pages when the page is full.
-      hasMore = shouldFetchNextPage(response, page, pageLimit);
-
-      page++;
-
-      // Log progress for large fetches
-      if (tests.length > 0 && tests.length % 100 === 0) {
-        logger.debug('[Langfuse Traces] Fetch progress', { traceCount: tests.length });
-      }
+      tests.push(traceToTestCase(trace, baseUrl));
     }
-  } finally {
-    if (progressBar) {
-      progressBar.stop();
+
+    // If no metadata is present, assume more pages when the page is full.
+    hasMore = shouldFetchNextPage(response, page, pageLimit);
+
+    page++;
+
+    if (tests.length > 0 && tests.length % 100 === 0) {
+      logger.debug('[Langfuse Traces] Fetch progress', { traceCount: tests.length });
     }
   }
 
@@ -647,14 +548,4 @@ export async function fetchLangfuseTraces(url: string): Promise<LangfuseTraceTes
   }
 
   return tests;
-}
-
-/**
- * Shutdown the Langfuse client (call when done)
- */
-export async function shutdownLangfuse(): Promise<void> {
-  if (langfuseInstance) {
-    await langfuseInstance.shutdownAsync();
-    langfuseInstance = undefined;
-  }
 }
