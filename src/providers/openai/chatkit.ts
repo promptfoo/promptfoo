@@ -31,11 +31,11 @@
  *   - Empty responses: The workflow may not generate text for some inputs
  */
 
-import { AsyncLocalStorage } from 'node:async_hooks';
 import * as http from 'http';
 
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright';
 import cliState from '../../cliState';
+import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { providerRegistry } from '../providerRegistry';
@@ -714,10 +714,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
   private server: http.Server | null = null;
   private serverPort: number = 0;
   private initialized: boolean = false;
-  private readonly pooledSessions = new Map<
-    string,
-    { namespace: string; createClientSecret: (signal: AbortSignal) => Promise<string> }
-  >();
+  private readonly poolNamespace = crypto.randomUUID();
 
   // Static userId for consistent template keys across concurrent evaluations
   private static defaultUserId: string | null = null;
@@ -798,6 +795,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       {
         method: 'POST',
         signal,
+        rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
         headers,
         body: JSON.stringify({
           workflow: {
@@ -1209,25 +1207,17 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       cliState.envFileOverrides,
       cliState.basePath,
     ]);
-    let session = this.pooledSessions.get(sessionSettings);
-    if (!session) {
-      session = {
-        namespace: crypto.randomUUID(),
-        createClientSecret: AsyncLocalStorage.bind((signal: AbortSignal) =>
-          this.createChatKitClientSecret(signal),
-        ),
-      };
-      this.pooledSessions.set(sessionSettings, session);
-    }
-    const templateKey = ChatKitBrowserPool.generateTemplateKey(
-      workflowId,
-      this.chatKitConfig.version,
-      userId,
-      session.namespace,
+    const templateKey = pool.registerTemplate(
+      ChatKitBrowserPool.generateTemplateKey(
+        workflowId,
+        this.chatKitConfig.version,
+        userId,
+        this.poolNamespace,
+      ),
+      sessionSettings,
+      (key) => generateChatKitHTML(`/template/${encodeURIComponent(key)}/session`),
+      (signal) => this.createChatKitClientSecret(signal),
     );
-    const sessionEndpoint = `/template/${encodeURIComponent(templateKey)}/session`;
-    const html = generateChatKitHTML(sessionEndpoint);
-    pool.setTemplate(templateKey, html, session.createClientSecret);
 
     let pooledPage: Awaited<ReturnType<typeof pool.acquirePage>> | null = null;
     const startTime = Date.now();

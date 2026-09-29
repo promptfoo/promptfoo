@@ -167,7 +167,7 @@ describe('OpenAiChatKitProvider', () => {
         const acquire = vi
           .spyOn(pool, 'acquirePage')
           .mockRejectedValue(new Error('stop after registration'));
-        const registrations = vi.spyOn(pool, 'setTemplate');
+        const registrations = vi.spyOn(pool, 'registerTemplate');
         const fetchSpy = vi
           .spyOn(fetchModule, 'fetchWithRetries')
           .mockImplementation(
@@ -187,10 +187,9 @@ describe('OpenAiChatKitProvider', () => {
             cliState.withEnv(scopes[1], () => second.callApi('second')),
           ]);
           await cliState.withEnv(scopes[0], () => first.callApi('repeat'));
-          const keys = registrations.mock.calls.map(([key]) => key);
+          const keys = registrations.mock.results.map(({ value }) => value);
           expect(keys[0]).not.toBe(keys[1]);
           expect(keys[0]).toBe(keys[2]);
-          expect(registrations.mock.calls[0][2]).toBe(registrations.mock.calls[2][2]);
           const responses = keys.slice(0, 2).map((key) => {
             const response = Object.assign(new EventEmitter(), {
               writeHead: vi.fn(),
@@ -226,17 +225,11 @@ describe('OpenAiChatKitProvider', () => {
     );
 
     it('should keep pooled session factories isolated by provider instance', async () => {
-      const registeredTemplates = new Map<string, () => Promise<string>>();
-      const setTemplate = vi.fn(
-        (templateKey: string, _html: string, createClientSecret: () => Promise<string>) => {
-          registeredTemplates.set(templateKey, createClientSecret);
-        },
-      );
-      const getInstanceSpy = vi.spyOn(ChatKitBrowserPool, 'getInstance').mockReturnValue({
-        setTemplate,
-        acquirePage: vi.fn().mockRejectedValue(new Error('stop after template registration')),
-        releasePage: vi.fn(),
-      } as unknown as ChatKitBrowserPool);
+      const pool = ChatKitBrowserPool.getInstance();
+      const registrations = vi.spyOn(pool, 'registerTemplate');
+      const acquire = vi
+        .spyOn(pool, 'acquirePage')
+        .mockRejectedValue(new Error('stop after registration'));
       const sharedConfig = {
         usePool: true,
         workflowId: 'wf_shared',
@@ -256,16 +249,23 @@ describe('OpenAiChatKitProvider', () => {
         ]);
         await firstProvider.callApi('third prompt');
 
-        const [firstKey, secondKey, repeatedFirstKey] = setTemplate.mock.calls.map(
-          ([templateKey]) => templateKey,
+        const [firstKey, secondKey, repeatedFirstKey] = registrations.mock.results.map(
+          ({ value }) => value,
         );
         expect(firstKey).toBe(repeatedFirstKey);
         expect(firstKey).not.toBe(secondKey);
-        expect(registeredTemplates.size).toBe(2);
+        expect(pool.getStats().templates).toBe(2);
+        await pool.shutdown();
+        expect(pool.getStats().templates).toBe(0);
+        await firstProvider.callApi('after shutdown');
+        expect(registrations.mock.results[3].value).not.toBe(firstKey);
         expect(firstKey).not.toContain('first-key');
         expect(secondKey).not.toContain('second-key');
       } finally {
-        getInstanceSpy.mockRestore();
+        acquire.mockRestore();
+        registrations.mockRestore();
+        await pool.shutdown();
+        ChatKitBrowserPool.resetInstance();
       }
     });
   });
@@ -334,6 +334,26 @@ describe('OpenAiChatKitProvider', () => {
   });
 
   describe('session route', () => {
+    it.each([undefined, 'false', 'true'])(
+      'verifies TLS unless explicitly disabled: %s',
+      async (insecure) => {
+        const restore = mockProcessEnv({ PROMPTFOO_INSECURE_SSL: insecure });
+        const fetchSpy = vi
+          .spyOn(fetchModule, 'fetchWithRetries')
+          .mockResolvedValue(new Response(JSON.stringify({ client_secret: 'fixture-session' })));
+        const provider = new OpenAiChatKitProvider('wf_fixture', {
+          config: { apiKey: 'fixture-key' },
+        });
+        try {
+          await (provider as any).createChatKitClientSecret();
+          expect(fetchSpy.mock.calls[0][1]?.rejectUnauthorized).toBe(insecure !== 'true');
+        } finally {
+          fetchSpy.mockRestore();
+          restore();
+        }
+      },
+    );
+
     it('uses provider configuration and keeps sessions out of the response cache', async () => {
       const fetchSpy = vi.spyOn(fetchModule, 'fetchWithRetries').mockImplementation(
         async () =>

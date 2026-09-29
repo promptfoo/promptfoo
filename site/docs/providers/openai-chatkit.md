@@ -353,6 +353,9 @@ The provider:
 
 ChatKit workflows require browser automation because they don't expose a direct API.
 
+Session requests verify TLS certificates by default and use the configured proxy and custom CA.
+Set `PROMPTFOO_CA_CERT_PATH` for a private CA; `PROMPTFOO_INSECURE_SSL=true` disables verification.
+
 ## Environment Variables
 
 | Variable                    | Description                            |

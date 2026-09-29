@@ -12,10 +12,12 @@
  *   - Pages are workflow-specific (different workflows get different pages)
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import * as http from 'http';
 
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright';
 import logger from '../../logger';
+import { isHttpRateLimitError } from '../../util/fetch/errors';
 import { providerRegistry } from '../providerRegistry';
 
 // Pool configuration constants
@@ -40,6 +42,8 @@ interface ChatKitPoolConfig {
 
 type ChatKitTemplateRegistration = {
   html: string;
+  providerNamespace?: string;
+  settings?: string;
   createClientSecret?: (signal: AbortSignal) => Promise<string>;
 };
 
@@ -70,8 +74,14 @@ export async function serveChatKitSession(
   } catch (error) {
     if (!controller.signal.aborted) {
       logger.error('[ChatKit] Failed to create client secret', { error });
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Failed to create ChatKit session' }));
+      const rateLimit = isHttpRateLimitError(error);
+      const message = rateLimit
+        ? error.kind === 'quota'
+          ? 'Quota exceeded: ChatKit session unavailable'
+          : 'ChatKit session rate limit exceeded'
+        : 'Failed to create ChatKit session';
+      res.writeHead(rateLimit ? 429 : 500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: message }));
     }
   } finally {
     res.removeListener('close', abort);
@@ -235,6 +245,27 @@ export class ChatKitBrowserPool {
         }
       }
     }
+  }
+
+  registerTemplate(
+    providerNamespace: string,
+    settings: string,
+    createHtml: (key: string) => string,
+    createClientSecret: (signal: AbortSignal) => Promise<string>,
+  ): string {
+    for (const [key, template] of this.templates) {
+      if (template.providerNamespace === providerNamespace && template.settings === settings) {
+        return key;
+      }
+    }
+    const key = `${providerNamespace}:${crypto.randomUUID()}`;
+    this.templates.set(key, {
+      providerNamespace,
+      settings,
+      html: createHtml(key),
+      createClientSecret: AsyncLocalStorage.bind(createClientSecret),
+    });
+    return key;
   }
 
   /**
@@ -644,6 +675,7 @@ export class ChatKitBrowserPool {
       return page;
     } finally {
       this.pendingPageCreations--;
+      this.scheduleIdleShutdown();
     }
   }
 

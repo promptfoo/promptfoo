@@ -53,16 +53,8 @@ async function resolveAuthenticationHeaders(
   return Object.fromEntries(headers);
 }
 
-// Cached agents to avoid recreating on every request.
-// Keep separate entries per resolved connection count so overlapping requests
-// with different request-scoped concurrency caps do not evict each other.
-// Without caching, concurrent requests race on setGlobalDispatcher(),
-// corrupting TLS session state and producing "bad record mac" errors.
-//
-// Note: TLS options (rejectUnauthorized, CA cert) are captured at agent
-// creation time. This is acceptable because these env vars don't change
-// mid-process. If that assumption changes, add cache-invalidation logic.
-const cachedAgents: Map<number, Dispatcher> = new Map();
+// Reuse agents only when connection count and TLS policy match.
+const cachedAgents: Map<string, Dispatcher> = new Map();
 const cachedProxyAgents: Map<string, Dispatcher> = new Map();
 
 /**
@@ -104,7 +96,8 @@ export function clearAgentCache(): void {
 
 function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
   const concurrency = getConnectionPoolSize();
-  const existing = cachedAgents.get(concurrency);
+  const cacheKey = JSON.stringify([concurrency, tlsOptions]);
+  const existing = cachedAgents.get(cacheKey);
   if (existing) {
     return existing;
   }
@@ -117,17 +110,13 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
   })
     .compose(interceptors.decompress({ skipErrorResponses: false }))
     .compose(stripDecompressionHeaders());
-  cachedAgents.set(concurrency, agent);
+  cachedAgents.set(cacheKey, agent);
   return agent;
-}
-
-function getProxyAgentCacheKey(proxyUrl: string, concurrency: number): string {
-  return `${proxyUrl}::${concurrency}`;
 }
 
 function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions): Dispatcher {
   const concurrency = getConnectionPoolSize();
-  const cacheKey = getProxyAgentCacheKey(proxyUrl, concurrency);
+  const cacheKey = JSON.stringify([proxyUrl, concurrency, tlsOptions]);
   const existing = cachedProxyAgents.get(cacheKey);
   if (existing) {
     return existing;
@@ -225,7 +214,11 @@ export async function fetchWithProxy(
     : options.signal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
-  const { getAuthHeaders, ...requestOptions } = options;
+  const {
+    getAuthHeaders,
+    rejectUnauthorized = !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+    ...requestOptions
+  } = options;
   const finalOptions: FetchOptions & { dispatcher?: any } = {
     ...requestOptions,
     headers: getFetchWithProxyHeaders(url, options),
@@ -271,9 +264,7 @@ export async function fetchWithProxy(
     }
   }
 
-  const tlsOptions: ConnectionOptions = {
-    rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
-  };
+  const tlsOptions: ConnectionOptions = { rejectUnauthorized };
 
   // Support custom CA certificates
   const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');

@@ -1,11 +1,14 @@
 import { EventEmitter } from 'node:events';
-import type { IncomingMessage } from 'http';
+import type { IncomingMessage, ServerResponse } from 'http';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ChatKitBrowserPool,
   isLocalChatKitRequest,
+  serveChatKitSession,
 } from '../../../src/providers/openai/chatkit-pool';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
+import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 
 // Create hoisted mocks to access them in tests
 const mockPage = vi.hoisted(() => ({
@@ -449,6 +452,27 @@ describe('ChatKitBrowserPool', () => {
       expect(secondEnd).toHaveBeenCalledWith(JSON.stringify({ client_secret: 'second-secret' }));
     });
 
+    it.each(['rate_limit', 'quota'] as const)(
+      'preserves sanitized %s classification',
+      async (kind) => {
+        const res = Object.assign(new EventEmitter(), { writeHead: vi.fn(), end: vi.fn() });
+        await serveChatKitSession(res as unknown as ServerResponse, async () => {
+          throw new HttpRateLimitError({
+            status: 429,
+            code: kind === 'quota' ? 'insufficient_quota' : 'rate_limit_exceeded',
+            body: { error: 'private-upstream-detail' },
+          });
+        });
+        expect(res.writeHead).toHaveBeenCalledWith(429, { 'Content-Type': 'application/json' });
+        const body = res.end.mock.calls[0][0];
+        expect(body).not.toContain('private-upstream-detail');
+        expect(
+          isProviderResponseRateLimited({ error: `Session failed: 429 ${body}` }, undefined),
+        ).toBe(kind === 'rate_limit');
+        expect(res.listenerCount('close')).toBe(0);
+      },
+    );
+
     it('should redact pooled session minting failures in browser responses', async () => {
       const instance = ChatKitBrowserPool.getInstance();
       instance.setTemplate(
@@ -763,6 +787,31 @@ describe('ChatKitBrowserPool', () => {
       expect(mockBrowser.close).not.toHaveBeenCalled();
       finish(mockContext);
       await expect(creating).resolves.toMatchObject({ inUse: true });
+    });
+
+    it('shuts down after the last pending page creation fails while idle', async () => {
+      vi.useFakeTimers();
+      const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 2 });
+      instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML);
+      const first = await instance.acquirePage(TEST_TEMPLATE_KEY);
+      let fail!: (error: Error) => void;
+      mockBrowser.newContext.mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            fail = reject;
+          }),
+      );
+      const creating = instance.acquirePage(TEST_TEMPLATE_KEY);
+      const rejected = expect(creating).rejects.toThrow('fixture page creation failed');
+      await vi.waitFor(() => expect(mockBrowser.newContext).toHaveBeenCalledTimes(2));
+      await instance.releasePage(first);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(mockBrowser.close).not.toHaveBeenCalled();
+      fail(new Error('fixture page creation failed'));
+      await rejected;
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(mockBrowser.close).toHaveBeenCalledOnce();
+      expect(instance.getStats().templates).toBe(0);
     });
 
     it('closes a page whose creation completes after shutdown', async () => {
