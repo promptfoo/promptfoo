@@ -41,7 +41,7 @@ The Vercel provider uses the format: `vercel:<provider>/<model>`
 ```yaml
 providers:
   - vercel:openai/gpt-4o-mini
-  - vercel:anthropic/claude-sonnet-4.5
+  - vercel:anthropic/claude-sonnet-5
   - vercel:google/gemini-2.5-flash
 ```
 
@@ -70,7 +70,7 @@ providers:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: vercel:anthropic/claude-sonnet-4.5
+  - id: vercel:openai/gpt-4o-mini
     config:
       # Authentication
       apiKey: '{{env.VERCEL_AI_GATEWAY_API_KEY}}'
@@ -94,6 +94,8 @@ providers:
       # Streaming
       streaming: true
 ```
+
+When using Claude 5, omit `temperature`, `topP`, and `topK`.
 
 ### Configuration Parameters
 
@@ -157,7 +159,7 @@ Use Vercel's streaming API for text generation. Promptfoo collects the chunks an
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: vercel:anthropic/claude-sonnet-4.5
+  - id: vercel:anthropic/claude-sonnet-5
     config:
       streaming: true
       maxTokens: 2000
@@ -169,16 +171,16 @@ The provider normalizes the AI SDK's `tool-calls` and `content-filter` finish re
 
 The Vercel AI Gateway supports models from these providers:
 
-| Provider   | Example Models                                              |
-| ---------- | ----------------------------------------------------------- |
-| OpenAI     | `openai/gpt-5`, `openai/o3-mini`, `openai/gpt-4o-mini`      |
-| Anthropic  | `anthropic/claude-sonnet-4.5`, `anthropic/claude-haiku-4.5` |
-| Google     | `google/gemini-2.5-flash`, `google/gemini-2.5-pro`          |
-| Mistral    | `mistral/mistral-large`, `mistral/magistral-medium`         |
-| Cohere     | `cohere/command-a`                                          |
-| DeepSeek   | `deepseek/deepseek-r1`, `deepseek/deepseek-v3`              |
-| Perplexity | `perplexity/sonar-pro`, `perplexity/sonar-reasoning`        |
-| xAI        | `xai/grok-3`, `xai/grok-4`                                  |
+| Provider   | Example Models                                            |
+| ---------- | --------------------------------------------------------- |
+| OpenAI     | `openai/gpt-5`, `openai/o3-mini`, `openai/gpt-4o-mini`    |
+| Anthropic  | `anthropic/claude-sonnet-5`, `anthropic/claude-haiku-4.5` |
+| Google     | `google/gemini-2.5-flash`, `google/gemini-2.5-pro`        |
+| Mistral    | `mistral/mistral-large`, `mistral/magistral-medium`       |
+| Cohere     | `cohere/command-a`                                        |
+| DeepSeek   | `deepseek/deepseek-r1`, `deepseek/deepseek-v3`            |
+| Perplexity | `perplexity/sonar-pro`, `perplexity/sonar-reasoning`      |
+| xAI        | `xai/grok-3`, `xai/grok-4`                                |
 
 For a complete list, see the [Vercel AI Gateway documentation](https://vercel.com/docs/ai-gateway/models-and-providers).
 
@@ -228,9 +230,9 @@ providers:
   - id: vercel:openai/gpt-4o-mini
     config:
       temperature: 0.7
-  - id: vercel:anthropic/claude-sonnet-4.5
+  - id: vercel:anthropic/claude-sonnet-5
     config:
-      temperature: 0.7
+      maxTokens: 1000
   - id: vercel:google/gemini-2.5-flash
     config:
       temperature: 0.7

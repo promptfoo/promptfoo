@@ -827,9 +827,8 @@ describe('JavaScript file references', () => {
 
     const result = await runAssertion({
       prompt: 'Some prompt',
-      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
       assertion,
-      test: {} as AtomicTestCase,
+      test: {},
       providerResponse: { output: 'Expected output' },
     });
 
@@ -950,7 +949,12 @@ describe('JavaScript file references', () => {
     '({ pass: true, score: 1, reason: "Custom", namedScores: { quality: NaN } })',
     '({ pass: true, score: 1, reason: "Custom", namedScoreWeights: { quality: Infinity } })',
     '({ pass: true, score: 1, reason: "Custom", componentResults: [{ pass: true, score: Infinity, reason: "Nested" }] })',
-  ])('rejects nonfinite inline results: %s', async (value) => {
+    '({ pass: true, score: 1, reason: "Custom", namedScores: new Date(0) })',
+    '({ pass: true, score: 1, reason: "Custom", namedScoreWeights: new Map([["quality", 1]]) })',
+    '({ pass: true, score: 1, reason: "Custom", namedScores: new Set([1]) })',
+    '({ pass: true, score: 1, reason: "Custom", namedScores: Object.defineProperty([1], Symbol.toStringTag, { value: "Object" }) })',
+    '({ pass: true, score: 1, reason: "Custom", namedScoreWeights: Object.defineProperty(new Map([["quality", 1]]), Symbol.toStringTag, { value: "Object" }) })',
+  ])('rejects invalid inline assertion results: %s', async (value) => {
     const result = await runAssertion({
       prompt: 'Some prompt',
       assertion: { type: 'javascript', value },
@@ -1033,26 +1037,6 @@ describe('JavaScript file references', () => {
     expect(result).toMatchObject({ pass: false, score: 0 });
     expect(result.reason).toContain(value);
     expect(result.assertion?.value).toBe(value);
-  });
-
-  it.each([
-    '({ pass: true, score: 1, reason: "Custom", namedScores: new Date(0) })',
-    '({ pass: true, score: 1, reason: "Custom", namedScoreWeights: new Map([["quality", 1]]) })',
-    '({ pass: true, score: 1, reason: "Custom", namedScores: new Set([1]) })',
-    '({ pass: true, score: 1, reason: "Custom", namedScores: Object.defineProperty([1], Symbol.toStringTag, { value: "Object" }) })',
-    '({ pass: true, score: 1, reason: "Custom", namedScoreWeights: Object.defineProperty(new Map([["quality", 1]]), Symbol.toStringTag, { value: "Object" }) })',
-  ])('rejects built-in containers instead of numeric records: %s', async (value) => {
-    const result = await runAssertion({
-      prompt: 'Some prompt',
-      assertion: { type: 'javascript', value },
-      test: {},
-      providerResponse: { output: 'Test output' },
-    });
-
-    expect(result).toMatchObject({ pass: false, score: 0 });
-    expect(result.reason).toContain('Custom function threw error:');
-    expect(result.namedScores).toBeUndefined();
-    expect(result.namedScoreWeights).toBeUndefined();
   });
 
   it.each(['namedScores', 'namedScoreWeights', 'componentResults'])(
@@ -1175,6 +1159,68 @@ describe('JavaScript file references', () => {
     });
   });
 
+  describe.each(['inherited', 'non-enumerable'] as const)('%s numeric threshold', (kind) => {
+    it.each([
+      ['javascript', 0.25, false],
+      ['javascript', 0.5, true],
+      ['javascript', 0.75, true],
+      ['not-javascript', 0.25, true],
+      ['not-javascript', 0.5, false],
+      ['not-javascript', 0.75, false],
+    ] as const)('grades %s score %s before serializing metadata', async (type, score, pass) => {
+      const value = () => score;
+      const assertion: Assertion = Object.assign(
+        kind === 'inherited' ? Object.create({ threshold: 0.5 }) : {},
+        { type, value },
+      );
+      if (kind === 'non-enumerable') {
+        Object.defineProperty(assertion, 'threshold', { value: 0.5 });
+      }
+      Object.freeze(assertion);
+
+      const result = await runAssertion({
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Threshold fixture' },
+      });
+
+      expect(result).toMatchObject({ pass, score });
+      expect(result.assertion).toEqual({ type, value: value.toString() });
+      expect(assertion.value).toBe(value);
+      expect(assertion.threshold).toBe(0.5);
+    });
+  });
+
+  it.each(['javascript', 'not-javascript'] as const)(
+    'preserves threshold getter ordering for %s numeric results',
+    async (type) => {
+      const reads: number[] = [];
+      const assertion: Assertion = {
+        type,
+        value: () => 0.6,
+        get threshold() {
+          const value = [0.7, 0.7, 0.7, 0.5][reads.length] ?? 0.5;
+          reads.push(value);
+          return value;
+        },
+      };
+
+      const result = await runAssertion({
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Threshold getter fixture' },
+      });
+
+      expect(result).toMatchObject({
+        pass: type === 'javascript',
+        score: 0.6,
+        assertion: { type, threshold: 0.7, value: expect.any(String) },
+      });
+      // The dispatcher serializes once, followed by metadata serialization and two comparisons.
+      expect(reads).toEqual([0.7, 0.7, 0.7, 0.5]);
+    },
+  );
+
   const inverseFunctionAssertionCases: [string, Assertion, boolean, number, string][] = [
     [
       'boolean results for not-javascript assertions',
@@ -1209,6 +1255,13 @@ describe('JavaScript file references', () => {
       },
       false,
       0.75,
+      'Custom reason',
+    ],
+    [
+      'empty-reason GradingResult results for not-javascript assertions',
+      { type: 'not-javascript', value: () => ({ pass: true, score: 1, reason: '' }) },
+      false,
+      1,
       'Custom function returned true',
     ],
   ];
@@ -1238,7 +1291,71 @@ describe('JavaScript file references', () => {
     },
   );
 
+  it.each(['prototype', 'non-enumerable'] as const)(
+    'preserves %s grading fields from frozen custom results',
+    async (storage) => {
+      for (const rawPass of [false, true]) {
+        for (const inverse of [false, true]) {
+          class CustomResult {
+            score = 0.4;
+            namedScores = { safety: 0.7 };
+            tokensUsed = { total: 3 };
+            get pass() {
+              return rawPass;
+            }
+            get reason() {
+              return 'Custom reason';
+            }
+            get assertion(): Assertion {
+              return { type: 'javascript', value: () => false };
+            }
+          }
+          const grading = new CustomResult();
+          if (storage === 'non-enumerable') {
+            Object.defineProperties(grading, {
+              pass: { value: rawPass },
+              reason: { value: 'Custom reason' },
+            });
+          }
+          Object.freeze(grading);
+          const assertion: Assertion = {
+            type: inverse ? 'not-javascript' : 'javascript',
+            value: () => grading,
+          };
+          const result = await runAssertion({
+            prompt: 'Some prompt',
+            provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+            assertion,
+            test: {} as AtomicTestCase,
+            providerResponse: { output: 'Expected output' },
+          });
+          expect(result).toMatchObject({
+            pass: rawPass !== inverse,
+            score: 0.4,
+            reason: inverse && !rawPass ? 'Assertion passed' : 'Custom reason',
+            namedScores: { safety: 0.7 },
+            tokensUsed: { total: 3 },
+            assertion: { type: 'javascript', value: '() => false' },
+          });
+          expect(Object.isFrozen(grading)).toBe(true);
+          expect(grading.pass).toBe(rawPass);
+          expect(grading.reason).toBe('Custom reason');
+        }
+      }
+    },
+  );
+
   const inverseStringAssertionCases: [string, Assertion, boolean, number, string][] = [
+    [
+      'empty-reason GradingResult results for not-javascript assertions',
+      {
+        type: 'not-javascript',
+        value: "({ pass: true, score: 1, reason: '' })",
+      },
+      false,
+      1,
+      'Custom function returned true',
+    ],
     [
       'boolean results for not-javascript assertions',
       {
@@ -1274,7 +1391,7 @@ describe('JavaScript file references', () => {
       },
       false,
       0.75,
-      'Custom function returned true',
+      'Custom reason',
     ],
   ];
 

@@ -378,7 +378,7 @@ describe('isGradingResult', () => {
     expect(isGradingResult(result)).toBe(true);
   });
 
-  it('validates nested components with an iterative traversal', () => {
+  it('validates deeply nested component results', () => {
     const leaf: GradingResult = { pass: true, score: 0.75, reason: '' };
     let result = leaf;
     for (let depth = 0; depth < 200; depth++) {
