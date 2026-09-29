@@ -255,6 +255,7 @@ describe('Local blob extraction', () => {
     expect(result).toBe(response);
     expect(result?.audio?.data).toBe(largeBase64);
     expect(blobIndexModule.isEvalPersisted).toHaveBeenCalledWith('eval-no-write');
+    expect(blobIndexModule.isEvalPersisted).toHaveBeenCalledTimes(1);
     expect(mockStoreBlob).not.toHaveBeenCalled();
     expect(blobIndexModule.recordBlobReference).not.toHaveBeenCalled();
   });

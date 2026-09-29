@@ -154,13 +154,7 @@ type StoreOnce = (
   minSizeBytes?: number,
 ) => Promise<BlobRef | null>;
 
-/**
- * Evals run with --no-write have no database row to own stored media, and an unreferenced blob
- * cannot be served or shared, so their media stays inline as PROMPTFOO_INLINE_MEDIA does. The
- * lookup runs at most once, and only when a response has media to store or reference, so text-only
- * and in-memory evaluations never query a database that may not be migrated. A failed lookup also
- * keeps media inline.
- */
+/** Check once per response, only when media needs storage or an existing blob needs a reference. */
 function createPersistenceCheck(context: BlobContext): () => Promise<boolean> {
   let persisted: Promise<boolean> | undefined;
   return () => {
@@ -179,9 +173,11 @@ function createPersistenceCheck(context: BlobContext): () => Promise<boolean> {
   };
 }
 
-function createStoreOnce(blobContext: BlobContext): StoreOnce {
+function createStoreOnce(
+  blobContext: BlobContext,
+  isPersisted: () => Promise<boolean>,
+): StoreOnce {
   const cache = new Map<string, Promise<BlobRef | null>>();
-  const isPersisted = createPersistenceCheck(blobContext);
   return async (base64OrDataUrl, defaultMimeType, location, kind, minSizeBytes) => {
     // Canonicalize the cache key on the parsed bytes (not the raw input string)
     // so a `data:image/png;base64,XYZ` URL and the bare `XYZ` base64 hit the
@@ -427,7 +423,8 @@ export async function extractAndStoreBinaryData(
   let mutated = false;
   const next: ProviderResponse = { ...response };
   const blobContext = context || {};
-  const storeOnce = createStoreOnce(blobContext);
+  const isPersisted = createPersistenceCheck(blobContext);
+  const storeOnce = createStoreOnce(blobContext, isPersisted);
 
   // Audio at top level
   if (response.audio?.data && typeof response.audio.data === 'string') {
@@ -619,7 +616,7 @@ export async function extractAndStoreBinaryData(
       finalResponse,
       blobContext,
       'response',
-      createPersistenceCheck(blobContext),
+      isPersisted,
     );
   }
 
