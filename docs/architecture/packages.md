@@ -127,34 +127,31 @@ path from the allowlist. Avoid adding paths unless the dependency is
 intentionally browser-safe. Allowlist entries are exact files, not directory
 roots.
 
-## Future Package Source Coverage
+## Package Source Coverage
 
 Architecture checks scan `src/`, `packages/`, and every configured layer root.
-New package source files therefore fail as unclassified until their ownership is
-reviewed in `architecture/layers.json`. Classification alone never exempts their
-imports from leaf rules, allowed paths, forbidden dependencies, or edge baselines.
-Nested `node_modules`, declaration files, and `packages/**/dist` output are excluded;
-use `ignoredRoots` for other generated directories. Ignored roots may name a file
-or directory.
+Assign new package source to a layer in `architecture/layers.json`. The same
+import, dependency, and edge-count rules apply to all classified files.
+Nested `node_modules`, declaration files, and `packages/**/dist` output are
+excluded. Add other generated files or directories to `ignoredRoots`.
 
-When moving a layer into a private workspace, include its implementation root and
-its compatibility shims in that layer. Configure an exact source alias such as
-`"@promptfoo/contracts": "packages/contracts/src"` if it is used; exact package
-aliases take precedence over the broad `@promptfoo` source alias. These mappings
-are architecture-analysis inputs, not a replacement for compiler/bundler aliases
-or package export validation.
+When moving a layer into a private workspace, include its implementation root
+and compatibility shims in that layer. An exact source alias such as
+`"@promptfoo/contracts": "packages/contracts/src"` takes precedence over the
+broader `@promptfoo` alias. Architecture aliases do not configure the compiler,
+bundler, or package exports.
 
-The TypeScript coverage check treats tracked `packages/` TypeScript files and
-configured product roots outside the usual directories as root-owned by default. Separate package compiler projects must be explicitly
-referenced from the root `tsconfig.json` (solution references are traversed).
-The nearest referenced package project owns membership even when the root or a
-parent includes the same files; configurations in the same directory combine.
-Referenced package projects own only files below their own directory; a package
-project cannot excuse missing root-source coverage. Coverage checks verify tracked
-file membership and compiler-configuration validity, including root project
-references. They do not typecheck package
-source: wire each separate package's actual typecheck into CI as part of its
-extraction, alongside artifact consumer checks.
+Tracked TypeScript files under `packages/` or other configured product roots
+must belong to the root compiler project unless a package project owns them.
+Reference separate package projects from the root `tsconfig.json`; the check
+also follows solution references. The nearest referenced package project owns
+files below its directory, even if a parent project also includes them. Projects
+in the same directory combine their file lists. A package project cannot cover
+files outside its own directory.
+
+The coverage check validates compiler configuration and tracked-file membership.
+It does not typecheck package source. When extracting a package, add its actual
+typecheck and artifact consumer checks to CI.
 
 ```bash
 npm run check:typescript-coverage
