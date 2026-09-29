@@ -236,6 +236,29 @@ describe('runEval', () => {
     );
   });
 
+  it('shares bare aliases whose values contain literal template text', async () => {
+    const provider: ApiProvider = {
+      id: () => 'echo-fixture',
+      callApi: vi.fn(async (prompt, context) => {
+        expect(context?.vars.alias).toBe('{{missing}}');
+        return { output: prompt };
+      }),
+    };
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: '{{alias}}', label: 'literal alias' },
+      test: {
+        vars: { source: '{{missing}}', alias: '{{source}}' },
+        assert: [{ type: 'equals', value: '{{alias}}' }],
+      },
+      conversations: {},
+      registers: {},
+    });
+    expect(result.success).toBe(true);
+    expect(result.response?.output).toBe('{{missing}}');
+  });
+
   it('shares resolved ordinary aliases with provider and assertion contexts', async () => {
     const provider: ApiProvider = {
       id: () => 'echo-fixture',

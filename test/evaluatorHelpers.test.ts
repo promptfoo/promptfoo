@@ -177,6 +177,23 @@ describe('evaluatorHelpers', () => {
   });
 
   describe('renderPrompt', () => {
+    it('keeps unskipped structured values literal in JSON prompts', async () => {
+      const vars = {
+        input: 'ordinary input',
+        generated: '{{settings.marker}}',
+        settings: { marker: 'local fixture value' },
+      };
+      const result = await renderPrompt(
+        { raw: '{"input":"{{input}}","data":"{{generated}}"}', label: 'JSON fixture' },
+        vars,
+        {},
+        undefined,
+        ['input'],
+      );
+      expect(JSON.parse(result)).toEqual({ input: 'ordinary input', data: '{{settings.marker}}' });
+      expect(vars.generated).toBe('{{settings.marker}}');
+    });
+
     it('preserves filtered alias templates across repeated renders with literal input', async () => {
       const vars = {
         input: '{{settings.marker}}',

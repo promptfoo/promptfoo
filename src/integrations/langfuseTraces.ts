@@ -83,6 +83,9 @@ function joinTextValues(textValues: unknown[]): unknown {
 
 function extractTextBlocksIfPresent(content: unknown[]): unknown | undefined {
   const textValues = getTextBlockValues(content);
+  if (textValues.some((value) => typeof value === 'object' && value !== null)) {
+    return textValues.length === 1 ? textValues[0] : textValues.flat();
+  }
   return textValues.length > 0 ? joinTextValues(textValues) : undefined;
 }
 
@@ -168,6 +171,9 @@ function extractOutputItemsText(outputItems: unknown[]): unknown | undefined {
   }
   const textValues = outputItems.map(extractOutputItemText).filter((value) => value !== undefined);
 
+  if (textValues.some((value) => typeof value === 'object' && value !== null)) {
+    return textValues.length === 1 ? textValues[0] : textValues.flat();
+  }
   return textValues.length > 0 ? joinTextValues(textValues) : undefined;
 }
 
@@ -438,10 +444,31 @@ function traceToTestCase(trace: LangfuseTrace, baseUrl: string): LangfuseTraceTe
   if (outputValue === undefined || outputValue === null) {
     testCase.providerOutput = '';
   } else if (Array.isArray(outputValue)) {
-    const toolCalls =
-      outputValue.length > 0 &&
-      outputValue.every((item) => isRecord(item) && isRecord(item.function));
-    testCase.providerOutput = toolCalls ? { tool_calls: outputValue } : JSON.stringify(outputValue);
+    const toolCalls = outputValue.flatMap((item) => {
+      if (!isRecord(item)) {
+        return [];
+      }
+      if (isRecord(item.function)) {
+        return [item];
+      }
+      if (item.type === 'function_call') {
+        return [
+          {
+            id: item.call_id ?? item.id,
+            type: 'function',
+            function: { name: item.name, arguments: item.arguments },
+          },
+        ];
+      }
+      return Array.isArray(item.tool_calls) ? item.tool_calls : [];
+    });
+    const onlyToolCalls = outputValue.every(
+      (item) => isRecord(item) && (isRecord(item.function) || item.type === 'function_call'),
+    );
+    testCase.providerOutput =
+      toolCalls.length > 0
+        ? { tool_calls: toolCalls, ...(!onlyToolCalls && { content: outputValue }) }
+        : JSON.stringify(outputValue);
   } else {
     testCase.providerOutput =
       isRecord(outputValue) || typeof outputValue === 'string'

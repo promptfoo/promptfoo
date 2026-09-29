@@ -641,6 +641,48 @@ describe('langfuseTraces', () => {
       expect(tests[0].providerOutput).toBe('Final answer\nAdditional detail');
     });
 
+    it.each(
+      [
+        [
+          {
+            role: 'assistant',
+            content: null,
+            tool_calls: [{ type: 'function', function: { name: 'first', arguments: '{}' } }],
+          },
+          {
+            role: 'assistant',
+            content: null,
+            tool_calls: [{ type: 'function', function: { name: 'second', arguments: '{}' } }],
+          },
+        ],
+        [
+          { type: 'function_call', name: 'first', arguments: '{}', call_id: 'one' },
+          { type: 'function_call', name: 'second', arguments: '{}', call_id: 'two' },
+        ],
+      ].map((output) => ({ output })),
+    )(
+      'preserves multiple archived tool calls as structured values: $output',
+      async ({ output }) => {
+        mockTraceList.mockResolvedValueOnce({
+          data: [
+            {
+              id: 'tools-fixture',
+              timestamp: '2024-01-15T10:00:00Z',
+              input: 'ordinary input',
+              output,
+            },
+          ],
+        });
+        const [test] = await fetchLangfuseTraces('langfuse://traces');
+        expect(test.providerOutput).toMatchObject({
+          tool_calls: [
+            { type: 'function', function: { name: 'first', arguments: '{}' } },
+            { type: 'function', function: { name: 'second', arguments: '{}' } },
+          ],
+        });
+      },
+    );
+
     it('should preserve OpenAI chat tool calls when assistant content is null', async () => {
       const toolCalls = [
         {

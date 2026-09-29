@@ -439,23 +439,19 @@ export async function renderPrompt(
       vars[key] = (vars[key] as string).replace(/\n$/, '');
     }
   }
-  // Share resolved bare aliases with provider and assertion contexts, but keep
-  // templates that still contain expressions or inserted template text intact.
+  const originalVars = { ...vars };
   const aliases = resolveVariables({ ...vars }, skipRenderVars);
+  // Share bare aliases with downstream contexts, preserving local expression templates.
   for (const [key, value] of Object.entries(aliases)) {
-    if (!skipRenderVars?.includes(key) && typeof value === 'string' && !/{[{%#]/.test(value)) {
+    const original = originalVars[key];
+    if (
+      typeof original === 'string' &&
+      !/{[{%#]/.test(original.replace(/\{\{\s*\w+\s*\}\}/g, ''))
+    ) {
       vars[key] = value;
     }
   }
-  const renderedVarNames = new Set<string>();
-  vars = resolveVariables(
-    { ...vars },
-    skipRenderVars,
-    renderedVarNames,
-    skipRenderVars?.length
-      ? (template, values) => nunjucks.renderString(autoWrapRawIfPartialNunjucks(template), values)
-      : undefined,
-  );
+  vars = aliases;
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
@@ -543,23 +539,13 @@ export async function renderPrompt(
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
     return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
   } catch {
-    // Vars values can be template strings, so we need to render them first:
-    const renderedVars = Object.fromEntries(
-      Object.entries(vars).map(([key, value]) => {
-        if (
-          typeof value !== 'string' ||
-          skipRenderVars?.includes(key) ||
-          renderedVarNames.has(key)
-        ) {
-          return [key, value];
-        }
-
-        if (referencesUndefinedVariables(value, vars)) {
-          return [key, value];
-        }
-
-        return [key, nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)];
-      }),
+    // Resolve local expressions only for text prompts. JSON prompts insert variable
+    // values as data, and rendered expressions must not replace caller-owned templates.
+    const renderedVars = resolveVariables(
+      originalVars,
+      skipRenderVars,
+      undefined,
+      (template, values) => nunjucks.renderString(autoWrapRawIfPartialNunjucks(template), values),
     );
 
     // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected
