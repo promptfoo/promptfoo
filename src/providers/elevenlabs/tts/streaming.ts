@@ -26,7 +26,14 @@ export async function createStreamingConnection(
   });
 
   // Connect to TTS streaming endpoint
-  const endpoint = `/v1/text-to-speech/${voiceId}/stream-input?model_id=${config.modelId}`;
+  const query = new URLSearchParams({ model_id: config.modelId });
+  if (config.outputFormat) {
+    query.set('output_format', config.outputFormat);
+  }
+  if (config.seed !== undefined) {
+    query.set('seed', String(config.seed));
+  }
+  const endpoint = `/v1/text-to-speech/${voiceId}/stream-input?${query}`;
 
   // Initial configuration
   const streamConfig: Record<string, any> = {
@@ -43,7 +50,12 @@ export async function createStreamingConnection(
     streamConfig.pronunciation_dictionary_locators = config.pronunciationDictionaryLocators;
   }
 
-  await client.connect(endpoint, streamConfig);
+  try {
+    await client.connect(endpoint, streamConfig);
+  } catch (error) {
+    client.close();
+    throw error;
+  }
 
   return client;
 }
@@ -68,18 +80,33 @@ export async function handleStreamingTTS(
 
   return new Promise((resolve, reject) => {
     let completionTimeout: NodeJS.Timeout | undefined;
+    let settled = false;
     const audioChunks: Buffer[] = [];
     let totalChunks = 0;
 
+    const settle = (error?: Error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(completionTimeout);
+      if (error) {
+        reject(error);
+      } else {
+        resolve(session);
+      }
+    };
+
     // Set up message handler
     client.onMessage((message: StreamingMessage) => {
-      // Reset timeout on any message
-      if (completionTimeout) {
-        clearTimeout(completionTimeout);
+      if (settled) {
+        return;
       }
+      // Reset timeout on any message.
+      clearTimeout(completionTimeout);
       completionTimeout = setTimeout(() => {
         logger.debug('[ElevenLabs Streaming] Stream complete (timeout)');
-        resolve(session);
+        settle();
       }, 2000); // 2 second silence = complete
 
       switch (message.type) {
@@ -117,13 +144,13 @@ export async function handleStreamingTTS(
           const errorMsg = message.data?.message || 'Unknown streaming error';
           session.errors.push(errorMsg);
           logger.error('[ElevenLabs Streaming] Error', { error: errorMsg });
-          reject(new Error(errorMsg));
+          settle(new Error(errorMsg));
           break;
         }
 
         case 'flush': {
           logger.debug('[ElevenLabs Streaming] Received flush signal');
-          resolve(session);
+          settle();
           break;
         }
       }
@@ -131,30 +158,23 @@ export async function handleStreamingTTS(
 
     // Send the text for generation
     try {
-      // Split text into smaller chunks for better streaming latency
-      const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+      // Start before sending so synchronous messages can replace or clear the timer.
+      completionTimeout = setTimeout(() => {
+        logger.debug('[ElevenLabs Streaming] Stream complete (initial timeout)');
+        settle();
+      }, 5000); // 5 second initial timeout
 
-      for (const sentence of sentences) {
-        client.sendText(sentence.trim(), false);
-      }
+      client.sendText(text, false);
 
       // Send flush to signal end of input
       client.flush();
 
       logger.debug('[ElevenLabs Streaming] Text sent', {
-        totalSentences: sentences.length,
         totalLength: text.length,
       });
-
-      // Set initial timeout
-      completionTimeout = setTimeout(() => {
-        logger.debug('[ElevenLabs Streaming] Stream complete (initial timeout)');
-        resolve(session);
-      }, 5000); // 5 second initial timeout
     } catch (error) {
-      if (completionTimeout) {
-        clearTimeout(completionTimeout);
-      }
+      settled = true;
+      clearTimeout(completionTimeout);
       reject(error);
     }
   });

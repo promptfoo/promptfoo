@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import {
   applyQueryParams,
   discoverTokenEndpoint,
@@ -10,7 +11,8 @@ import {
   isMcpErrorResult,
   isMcpToolNameFilter,
   joinMcpErrors,
-  normalizeMcpContent,
+  normalizeMcpToolContent,
+  renderAuthVars,
 } from '../../../src/providers/mcp/util';
 
 import type {
@@ -20,9 +22,93 @@ import type {
 
 // Mock fetchWithProxy for discovery tests
 const mockFetch = vi.fn();
+
+it('resolves MCP auth from file defaults unless explicit vars replace them', () => {
+  const server: MCPServerConfig = { auth: { type: 'bearer', token: '{{MCP_TOKEN}}' } };
+  cliState.withEnvFileOverrides({ MCP_TOKEN: 'file-token' }, () => {
+    expect(renderAuthVars(server).auth).toEqual({ type: 'bearer', token: 'file-token' });
+    expect(renderAuthVars(server, { MCP_TOKEN: 'explicit-token' }).auth).toEqual({
+      type: 'bearer',
+      token: 'explicit-token',
+    });
+  });
+});
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetch(...args),
 }));
+
+describe('normalizeMcpToolContent', () => {
+  it.each([
+    { type: 'image', mimeType: 'image/png', data: 'YWJj' },
+    { type: 'audio', mimeType: 'audio/wav', data: 'ZGVm' },
+  ])('preserves $type block metadata', (block) => {
+    expect(JSON.parse(normalizeMcpToolContent([block]))).toEqual(block);
+  });
+  it.each([
+    { name: 'null', content: null, expected: '' },
+    { name: 'undefined', content: undefined, expected: '' },
+    { name: 'literal text', content: '{{secret}}', expected: '{{secret}}' },
+    { name: 'number', content: 42, expected: '42' },
+    { name: 'object', content: { text: 'whole object' }, expected: '{"text":"whole object"}' },
+    { name: 'empty array', content: [], expected: '' },
+    {
+      name: 'mixed blocks and property precedence',
+      content: [
+        'literal',
+        { text: 0, json: 'ignored', data: 'ignored' },
+        { text: false },
+        { text: '', data: 'ignored' },
+        { text: null, json: { count: 2 }, data: 'ignored' },
+        { data: ['value'] },
+        { resource: { uri: 'file:///literal.txt' } },
+        null,
+        undefined,
+      ],
+      expected:
+        'literal\n0\nfalse\n\n{"count":2}\n["value"]\n{"resource":{"uri":"file:///literal.txt"}}\nnull\nundefined',
+    },
+    {
+      name: 'undefined property values and sparse entries',
+      content: [{ json: undefined, data: 'ignored' }, , { data: undefined }],
+      expected: '\n\n',
+    },
+  ])('renders $name without changing content semantics', ({ content, expected }) => {
+    expect(normalizeMcpToolContent(content)).toBe(expected);
+  });
+
+  it('only reports unknown object blocks, before serializing each block', () => {
+    const events: string[] = [];
+    const unknown = {
+      toJSON: () => {
+        events.push('serialize');
+        return 'serialized';
+      },
+    };
+    const onUnknownContent = vi.fn(() => {
+      events.push('diagnostic');
+    });
+
+    expect(
+      normalizeMcpToolContent(
+        [{ text: 'known' }, { json: 1 }, { data: 2 }, unknown, 'plain', 3],
+        onUnknownContent,
+      ),
+    ).toBe('known\n1\n2\n"serialized"\nplain\n3');
+    expect(onUnknownContent).toHaveBeenCalledExactlyOnceWith(unknown);
+    expect(events).toEqual(['diagnostic', 'serialize']);
+  });
+
+  it('decodes Buffer content', () => {
+    expect(normalizeMcpToolContent(Buffer.from('buffered'))).toBe('buffered');
+  });
+
+  it('preserves serialization failures for the provider error handler', () => {
+    const cyclic: { self?: unknown } = {};
+    cyclic.self = cyclic;
+    expect(() => normalizeMcpToolContent([{ json: cyclic }])).toThrow(TypeError);
+    expect(() => normalizeMcpToolContent([{ data: 1n }])).toThrow(TypeError);
+  });
+});
 
 describe('isMcpToolNameFilter', () => {
   it('identifies plain tool names as MCP filters', () => {
@@ -92,62 +178,6 @@ describe('getThrownMcpErrorMessage', () => {
 
   it('serializes thrown objects without message text', () => {
     expect(getThrownMcpErrorMessage({ code: 'ECONNRESET' })).toBe('{"code":"ECONNRESET"}');
-  });
-});
-
-describe('normalizeMcpContent', () => {
-  it('returns an empty string for nullish content', () => {
-    expect(normalizeMcpContent(null)).toBe('');
-    expect(normalizeMcpContent(undefined)).toBe('');
-  });
-
-  it('passes strings through unchanged', () => {
-    expect(normalizeMcpContent('plain text')).toBe('plain text');
-  });
-
-  it('decodes Buffer content', () => {
-    expect(normalizeMcpContent(Buffer.from('buffered'))).toBe('buffered');
-  });
-
-  it('joins text content blocks', () => {
-    expect(
-      normalizeMcpContent([
-        { type: 'text', text: 'line one' },
-        { type: 'text', text: 'line two' },
-      ]),
-    ).toBe('line one\nline two');
-  });
-
-  it('serializes json and data blocks', () => {
-    expect(normalizeMcpContent([{ type: 'json', json: { a: 1 } }])).toBe('{"a":1}');
-    expect(normalizeMcpContent([{ type: 'image', data: 'abc' }])).toBe('"abc"');
-  });
-
-  it('serializes unknown block shapes as JSON', () => {
-    expect(normalizeMcpContent([{ type: 'mystery', foo: 'bar' }])).toBe(
-      '{"type":"mystery","foo":"bar"}',
-    );
-  });
-
-  it('serializes non-array objects as JSON', () => {
-    expect(normalizeMcpContent({ answer: 42 })).toBe('{"answer":42}');
-  });
-
-  it('serializes BigInt values without throwing', () => {
-    expect(normalizeMcpContent({ count: 42n })).toBe('{"count":"42"}');
-  });
-
-  it('stringifies primitive and nullish array elements', () => {
-    expect(normalizeMcpContent(['raw', 42, null, undefined])).toBe('raw\n42\nnull\nundefined');
-  });
-
-  it('degrades gracefully on circular content instead of throwing', () => {
-    const circular: any = { a: 1 };
-    circular.self = circular;
-    expect(() => normalizeMcpContent([{ type: 'json', json: circular }])).not.toThrow();
-    const result = normalizeMcpContent(circular);
-    expect(typeof result).toBe('string');
-    expect(result).not.toContain('[object Object]');
   });
 });
 
@@ -446,6 +476,30 @@ describe('discoverTokenEndpoint', () => {
 });
 
 describe('getOAuthTokenWithExpiry', () => {
+  it('normalizes string scopes for the request and cache key', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: 'scope-token', expires_in: 3600 }),
+    });
+    const auth: MCPOAuthClientCredentialsAuth = {
+      type: 'oauth',
+      grantType: 'client_credentials',
+      clientId: 'scope-client',
+      clientSecret: 'secret',
+      tokenUrl: 'https://scope-auth.example.com/token',
+      scopes: ' read  write ',
+    };
+
+    const token = await getOAuthTokenWithExpiry(auth);
+    const cached = await getOAuthTokenWithExpiry({ ...auth, scopes: ['read', 'write'] });
+
+    expect(token.accessToken).toBe('scope-token');
+    expect(cached).toEqual(token);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const request = mockFetch.mock.calls[0][1];
+    expect(new URLSearchParams(request.body).get('scope')).toBe('read write');
+  });
+
   beforeEach(() => {
     mockFetch.mockReset();
   });

@@ -29,14 +29,7 @@ export type FunctionCallback = (args: string, context?: any) => string | Promise
  */
 export type FunctionCallbackConfig = Record<string, FunctionCallback | string>;
 
-/**
- * Result of processing function calls
- */
-/**
- * Result of processing a single function/tool call. Modeled as a union so
- * `isMcpError` (set only when an MCP tool — not a regular callback — failed)
- * cannot be combined with `isError: false`.
- */
+/** Result of one call, with MCP failures distinguished from ordinary callbacks. */
 export type FunctionCallResult =
   | { output: string | any; isError: false }
   | { output: string | any; isError: true; isMcpError?: boolean };

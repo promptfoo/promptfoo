@@ -1,7 +1,10 @@
+import { getProcessEnv } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
+import { sanitizeObject } from '../../util/sanitizer';
+import { normalizeRenderedOAuthScopes } from './auth';
 
 import type { VarValue } from '../../types/shared';
 import type {
@@ -13,6 +16,54 @@ import type {
 } from './types';
 
 export type { OAuthTokenResult };
+
+export function sanitizeMcpToolData<T>(value: T): T {
+  return sanitizeObject(value, { context: 'MCP tool data', sanitizeUrls: true });
+}
+
+/** Join text blocks while preserving structured and binary content metadata. */
+export function normalizeMcpToolContent(
+  content: unknown,
+  onUnknownContent?: (part: object) => void,
+): string {
+  if (content == null) {
+    return '';
+  }
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Buffer.isBuffer(content)) {
+    return content.toString();
+  }
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') {
+          return part;
+        }
+        if (part && typeof part === 'object') {
+          if (typeof part.type === 'string' && part.type !== 'text' && part.type !== 'json') {
+            onUnknownContent?.(part);
+            return JSON.stringify(part);
+          }
+          if ('text' in part && (part as { text?: unknown }).text != null) {
+            return String((part as { text: unknown }).text);
+          }
+          if ('json' in part) {
+            return JSON.stringify((part as { json: unknown }).json);
+          }
+          if ('data' in part) {
+            return JSON.stringify((part as { data: unknown }).data);
+          }
+          onUnknownContent?.(part);
+          return JSON.stringify(part);
+        }
+        return String(part);
+      })
+      .join('\n');
+  }
+  return JSON.stringify(content);
+}
 
 export function isMcpToolNameFilter(tools: unknown): tools is string | string[] {
   const isPlainToolName = (tool: unknown): tool is string =>
@@ -58,7 +109,14 @@ export function getThrownMcpErrorMessage(error: unknown): string {
     }
   }
 
-  return normalizeMcpContent(error) || String(error);
+  if (typeof error === 'string') {
+    return error;
+  }
+  try {
+    return JSON.stringify(error) ?? String(error);
+  } catch {
+    return String(error);
+  }
 }
 
 /**
@@ -80,76 +138,7 @@ export function formatMcpToolError(name: string, message: string): string {
  * `[object Object]`.
  */
 export function formatMcpToolResult(name: string, content: unknown): string {
-  return `MCP Tool Result (${name}): ${normalizeMcpContent(content)}`;
-}
-
-function stringifyMcpContent(value: unknown): string {
-  const ancestors: unknown[] = [];
-
-  try {
-    return (
-      JSON.stringify(value, function (_key, nestedValue) {
-        if (typeof nestedValue === 'bigint') {
-          return nestedValue.toString();
-        }
-        if (typeof nestedValue === 'object' && nestedValue !== null) {
-          while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
-            ancestors.pop();
-          }
-          if (ancestors.includes(nestedValue)) {
-            return '[Circular]';
-          }
-          ancestors.push(nestedValue);
-        }
-        return nestedValue;
-      }) ?? String(value)
-    );
-  } catch {
-    return typeof value === 'object'
-      ? '{"error":"Unable to serialize MCP content"}'
-      : String(value);
-  }
-}
-
-/**
- * Normalize MCP tool content into a readable string. MCP servers return content
- * as an array of typed blocks (`{ type: 'text', text }`, etc.); this joins the
- * human-readable parts so consumers, assertions, and transforms see plain text
- * rather than a JSON-encoded block array.
- */
-export function normalizeMcpContent(content: unknown): string {
-  if (content == null) {
-    return '';
-  }
-  if (typeof content === 'string') {
-    return content;
-  }
-  if (Buffer.isBuffer(content)) {
-    return content.toString();
-  }
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === 'string') {
-          return part;
-        }
-        if (part && typeof part === 'object') {
-          if ('text' in part && (part as { text?: unknown }).text != null) {
-            return String((part as { text: unknown }).text);
-          }
-          if ('json' in part) {
-            return stringifyMcpContent((part as { json: unknown }).json);
-          }
-          if ('data' in part) {
-            return stringifyMcpContent((part as { data: unknown }).data);
-          }
-          return stringifyMcpContent(part);
-        }
-        return String(part);
-      })
-      .join('\n');
-  }
-  return stringifyMcpContent(content);
+  return `MCP Tool Result (${name}): ${normalizeMcpToolContent(content)}`;
 }
 
 /**
@@ -165,7 +154,7 @@ export function renderAuthVars(
   }
 
   // Use process.env as default vars if none provided
-  const renderVars = vars || (process.env as Record<string, string>);
+  const renderVars = vars || (getProcessEnv() as Record<string, string>);
 
   return {
     ...server,
@@ -190,7 +179,7 @@ function getOAuthCacheKey(
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
   tokenUrl: string,
 ): string {
-  return `${tokenUrl}:${auth.grantType}:${'clientId' in auth ? auth.clientId : ''}:${'username' in auth ? auth.username : ''}:${auth.scopes?.join(' ') ?? ''}`;
+  return `${tokenUrl}:${auth.grantType}:${'clientId' in auth ? auth.clientId : ''}:${'username' in auth ? auth.username : ''}:${normalizeRenderedOAuthScopes(auth.scopes)?.join(' ') ?? ''}`;
 }
 
 // Cache for discovered token endpoints
@@ -300,7 +289,7 @@ export async function getOAuthTokenWithExpiry(
     clientSecret: auth.clientSecret,
     username: 'username' in auth ? auth.username : undefined,
     password: 'password' in auth ? auth.password : undefined,
-    scopes: auth.scopes,
+    scopes: normalizeRenderedOAuthScopes(auth.scopes),
   });
 
   // Cache the token

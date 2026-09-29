@@ -1,7 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResponsesProcessor } from '../../../src/providers/responses/processor';
 
-// Mock dependencies
 vi.mock('../../../src/providers/functionCallbackUtils');
 
 const mockFunctionCallbackHandler = {
@@ -14,7 +13,7 @@ describe('ResponsesProcessor', () => {
   let processor: ResponsesProcessor;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockCostCalculator.mockReturnValue(0.001);
 
     processor = new ResponsesProcessor({
       modelName: 'gpt-4.1',
@@ -22,6 +21,10 @@ describe('ResponsesProcessor', () => {
       functionCallbackHandler: mockFunctionCallbackHandler,
       costCalculator: mockCostCalculator,
     });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('processResponseOutput', () => {
@@ -65,6 +68,7 @@ describe('ResponsesProcessor', () => {
           input_tokens: 11,
           output_tokens: 7,
           total_tokens: 21,
+          cache_write_input_tokens: 2,
           input_tokens_details: {
             cached_tokens: 3,
           },
@@ -88,6 +92,7 @@ describe('ResponsesProcessor', () => {
           acceptedPrediction: 2,
           rejectedPrediction: 1,
           cacheReadInputTokens: 3,
+          cacheCreationInputTokens: 2,
         },
       });
     });
@@ -316,24 +321,44 @@ describe('ResponsesProcessor', () => {
       expect(result.error).toBe('MCP Tool Error (read_file): Path traversal not allowed');
     });
 
-    it('surfaces a failed-status hosted MCP call even when error is null', async () => {
-      const mockData = {
-        output: [
-          {
-            type: 'mcp_call',
-            name: 'read_file',
-            server_label: 'test_server',
-            error: null,
-            output: null,
-            status: 'failed',
-          },
-        ],
-        usage: { input_tokens: 8, output_tokens: 6 },
-      };
+    it.each(['failed', 'incomplete', 'calling', 'in_progress'])(
+      'surfaces a final hosted MCP call with status %s even when error is null',
+      async (status) => {
+        const mockData = {
+          id: 'resp_unfinished_tool',
+          output: [
+            {
+              type: 'mcp_call',
+              name: 'read_file',
+              server_label: 'test_server',
+              error: null,
+              output: 'partial output',
+              status,
+            },
+          ],
+          usage: { input_tokens: 8, output_tokens: 6 },
+        };
 
-      const result = await processor.processResponseOutput(mockData, {}, false);
+        const result = await processor.processResponseOutput(mockData, {}, false);
 
-      expect(result.error).toBe('MCP Tool Error (read_file): tool call failed');
+        const message = `MCP Tool Error (read_file): tool call ${status}`;
+        expect(result.error).toBe(message);
+        expect(result.output).toBe(message);
+        expect(result.raw).toBe(mockData);
+        expect(result.tokenUsage).toMatchObject({ prompt: 8, completion: 6, total: 14 });
+        expect(result.cost).toBe(0.001);
+        expect(result.metadata?.responseId).toBe('resp_unfinished_tool');
+      },
+    );
+
+    it('preserves legacy hosted MCP output when no status is supplied', async () => {
+      const result = await processor.processResponseOutput(
+        { output: [{ type: 'mcp_call', name: 'test_tool', output: 'legacy result' }] },
+        {},
+        false,
+      );
+      expect(result.output).toBe('MCP Tool Result (test_tool): legacy result');
+      expect(result.error).toBeUndefined();
     });
 
     it('should handle refusals correctly', async () => {

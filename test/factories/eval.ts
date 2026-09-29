@@ -3,7 +3,6 @@ import {
   type EvaluateResult,
   type EvaluateStats,
   type EvaluateSummaryV2,
-  type EvaluateSummaryV3,
   type EvaluateTable,
   type EvaluateTableOutput,
   type EvaluateTableRow,
@@ -126,19 +125,6 @@ export function createEvaluateTable(overrides: Partial<EvaluateTable> = {}): Eva
       vars: [],
     },
     body: [createEvaluateTableRow()],
-    ...overrides,
-  };
-}
-
-export function createEvaluateSummaryV3(
-  overrides: Partial<EvaluateSummaryV3> = {},
-): EvaluateSummaryV3 {
-  return {
-    version: 3,
-    timestamp: new Date(0).toISOString(),
-    results: [createEvaluateResult()],
-    prompts: [createCompletedPrompt()],
-    stats: createEvaluateStats(),
     ...overrides,
   };
 }
