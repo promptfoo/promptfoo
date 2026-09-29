@@ -1,3 +1,4 @@
+import cliState from '../cliState';
 import logger from '../logger';
 import { getDefaultProviders } from '../providers/defaults';
 import type { Command } from 'commander';
@@ -10,7 +11,9 @@ export function providersCommand(program: Command, defaultConfig: Partial<Unifie
     .description('Show automatic default provider assignments')
     .action(async () => {
       try {
-        const providers = await getDefaultProviders(defaultConfig.env);
+        const providers = await cliState.withEnv(defaultConfig.env, () =>
+          getDefaultProviders(defaultConfig.env),
+        );
         logger.info('Automatic default providers:');
         for (const [slot, provider] of Object.entries(providers)) {
           if (provider) {

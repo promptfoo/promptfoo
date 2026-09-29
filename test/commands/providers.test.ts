@@ -1,6 +1,8 @@
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { providersCommand } from '../../src/commands/providers';
+import { getEnvString } from '../../src/envars';
 import logger from '../../src/logger';
 import { getDefaultProviders } from '../../src/providers/defaults';
 
@@ -70,6 +72,18 @@ describe('providers command', () => {
     expect(logger.info).toHaveBeenCalledWith('  llmRubricProvider: test:rubric');
     expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('webSearchProvider'));
     expect(callApi).not.toHaveBeenCalled();
+  });
+
+  it('scopes config environment overrides to provider resolution', async () => {
+    const defaults = await getDefaultProviders();
+    vi.mocked(getDefaultProviders).mockImplementation(async () => {
+      expect(getEnvString('ANTHROPIC_API_KEY')).toBe('configured-key');
+      return defaults;
+    });
+    await cliState.withEnv({ ANTHROPIC_API_KEY: 'outer-key' }, async () => {
+      await program.parseAsync(['node', 'test', 'providers']);
+      expect(getEnvString('ANTHROPIC_API_KEY')).toBe('outer-key');
+    });
   });
 
   it('reports resolution errors and exits unsuccessfully', async () => {
