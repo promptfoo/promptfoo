@@ -14,7 +14,7 @@ function getSkillCalls(params: AssertionParams): SkillCallEntry[] {
   const skillCalls = normalizeSkillCalls(metadata?.skillCalls);
 
   if (params.inverse === true) {
-    return dedupeSkillCalls([...skillCalls, ...normalizeSkillCalls(metadata?.attemptedSkillCalls)]);
+    return [...skillCalls, ...normalizeSkillCalls(metadata?.attemptedSkillCalls)];
   }
 
   // skill-used counts only confirmed successful invocations.
@@ -30,18 +30,6 @@ function normalizeSkillCalls(rawSkillCalls: unknown): SkillCallEntry[] {
     (entry): entry is SkillCallEntry =>
       Boolean(entry) && typeof entry === 'object' && typeof entry.name === 'string',
   );
-}
-
-function dedupeSkillCalls(skillCalls: SkillCallEntry[]): SkillCallEntry[] {
-  const seen = new Set<string>();
-  return skillCalls.filter((skillCall) => {
-    const key = [skillCall.name, skillCall.source, skillCall.path, skillCall.is_error].join('\0');
-    if (seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
 }
 
 function matchesSkill(skillCall: SkillCallEntry, matcher: { name?: string; pattern?: string }) {
@@ -191,7 +179,7 @@ function handleCountSkillAssertion(
       score: pass ? 1 : 0,
       reason: pass
         ? `Forbidden skill "${matcherLabel}" was not used. Actual skills: ${actualSummary}`
-        : `Forbidden skill "${matcherLabel}" was used ${count} time(s). Matches: ${matchingSkillCalls.map(formatSkillCall).join(', ')}`,
+        : `Forbidden skill "${matcherLabel}" was used or attempted. Matches: ${[...new Set(matchingSkillCalls.map(formatSkillCall))].join(', ')}`,
       assertion: params.assertion,
     };
   }
