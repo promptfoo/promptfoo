@@ -175,6 +175,36 @@ describe('matchesAnswerRelevance', () => {
     );
   });
 
+  it('tags a grading provider error as a grader error so inverse assertions cannot pass it', async () => {
+    // Without the graderError tag, applyRagInverse() cannot tell an infrastructure
+    // failure apart from a genuine low score, and `not-answer-relevance` would flip
+    // a grading outage into a silent pass.
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      error: 'grading provider exploded',
+      tokenUsage: { total: 0, prompt: 0, completion: 0 },
+    });
+
+    const result = await matchesAnswerRelevance('q', 'a', 0.5);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('grading provider exploded');
+    expect(result.metadata).toMatchObject({ graderError: true });
+  });
+
+  it('tags an embedding provider error as a grader error', async () => {
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
+      error: 'embedding provider exploded',
+      tokenUsage: { total: 0, prompt: 0, completion: 0 },
+    });
+
+    const result = await matchesAnswerRelevance('q', 'a', 0.5);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.metadata).toMatchObject({ graderError: true });
+  });
+
   it('tracks token usage for successful calls', async () => {
     const input = 'Input text';
     const output = 'Sample output';
@@ -228,6 +258,37 @@ describe('matchesAnswerRelevance', () => {
       tokensUsed: { total: 30, prompt: 15, completion: 15 },
     });
   });
+
+  it.each([1, 2])(
+    'retains usage from %i generated questions when the next text call aborts',
+    async (completedCalls) => {
+      let calls = 0;
+      const callApi = vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(async () => {
+        if (calls++ === completedCalls) {
+          throw new DOMException('question generation cancelled', 'AbortError');
+        }
+        return {
+          output: 'Generated question',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        };
+      });
+
+      await expect(
+        matchesAnswerRelevance('Input text', 'Sample output', 0.5),
+      ).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'question generation cancelled',
+        tokensUsed: {
+          total: completedCalls * 10,
+          prompt: completedCalls * 5,
+          completion: completedCalls * 5,
+        },
+      });
+      expect(callApi).toHaveBeenCalledTimes(completedCalls + 1);
+      expect(DefaultEmbeddingProvider.callEmbeddingApi).not.toHaveBeenCalled();
+    },
+  );
 
   it('rethrows ordinary candidate embedding failures', async () => {
     vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi')

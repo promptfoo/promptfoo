@@ -3,8 +3,9 @@ import crypto from 'node:crypto';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { awaitWithAbort } from '../../util/abort';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { awaitProviderOperation, getRequestSignal } from '../shared';
+import { getRequestSignal } from '../shared';
 import { AzureGenericProvider } from './generic';
 
 import type { EnvVarKey } from '../../envars';
@@ -249,10 +250,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       );
       const cache = await getCache();
       options?.abortSignal?.throwIfAborted();
-      const cachedResponse = await awaitProviderOperation(
-        cache.get(cacheKey),
-        options?.abortSignal,
-      );
+      const cachedResponse = await awaitWithAbort(cache.get(cacheKey), options?.abortSignal);
       options?.abortSignal?.throwIfAborted();
 
       if (cachedResponse) {
@@ -319,7 +317,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
         options?.abortSignal?.throwIfAborted();
         const cache = await getCache();
         options?.abortSignal?.throwIfAborted();
-        await awaitProviderOperation(cache.set(cacheKey, result), options?.abortSignal);
+        await awaitWithAbort(cache.set(cacheKey, result), options?.abortSignal);
       }
 
       options?.abortSignal?.throwIfAborted();

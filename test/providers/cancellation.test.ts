@@ -12,7 +12,6 @@ import {
   AIStudioChatProvider,
   AIStudioEmbeddingProvider,
 } from '../../src/providers/google/ai.studio';
-import { GoogleProvider } from '../../src/providers/google/provider';
 import {
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceSentenceSimilarityProvider,
@@ -66,13 +65,6 @@ const textProviders = [
   ['OpenAI chat', () => new OpenAiChatCompletionProvider('gpt-4o-mini', config)],
   ['OpenAI completion', () => new OpenAiCompletionProvider('gpt-3.5-turbo-instruct', config)],
   ['AI Studio', () => new AIStudioChatProvider('gemini-2.5-flash', config)],
-  [
-    'Google',
-    () =>
-      new GoogleProvider('gemini-2.5-flash', {
-        config: { apiKey: 'fixture-key', vertexai: false },
-      }),
-  ],
 ] as const;
 const embeddingProviders = [
   ['Docker embeddings', () => new DMREmbeddingProvider('fixture', config)],

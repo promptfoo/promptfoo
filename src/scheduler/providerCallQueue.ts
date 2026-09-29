@@ -1,5 +1,7 @@
 import { AsyncResource } from 'node:async_hooks';
 
+import { awaitWithAbort } from '../util/abort';
+
 export interface QueuedProviderCall<T> {
   call: () => Promise<T>;
   providerId: string;
@@ -25,7 +27,7 @@ export class ProviderGroupedCallQueue implements ProviderCallQueue {
         call: AsyncResource.bind(() => {
           cleanup();
           signal?.throwIfAborted();
-          return call();
+          return awaitWithAbort(call(), signal);
         }),
         providerId,
         reject: (error) => {

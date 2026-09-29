@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureGenericProvider } from '../../src/providers/azure/generic';
+import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';
 import { GoogleAuthManager } from '../../src/providers/google/auth';
-import { GoogleProvider } from '../../src/providers/google/provider';
 import { VertexChatProvider } from '../../src/providers/google/vertex';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { createDeferred } from '../util/utils';
@@ -41,20 +41,26 @@ afterEach(() => vi.restoreAllMocks());
 const providers = [
   ['OpenAI', OpenAiChatCompletionProvider, 'gpt-4o'],
   ['Azure', AzureChatCompletionProvider, 'gpt-4o'],
-  ['Google', GoogleProvider, 'gemini-2.5-flash'],
+  ['AI Studio', AIStudioChatProvider, 'gemini-2.5-flash'],
   ['Vertex', VertexChatProvider, 'gemini-2.5-flash'],
 ] as const;
 
 describe.each(providers)('%s callback cancellation', (_name, Provider, model) => {
   it('retains completed output and billing when a callback is cancelled', async () => {
+    if (_name === 'AI Studio') {
+      vi.mocked(GoogleAuthManager.getApiKey).mockReturnValue({
+        apiKey: 'fixture-key',
+        source: 'config',
+      });
+    }
     const started = createDeferred<void>();
     const callback = createDeferred<string>();
     const controller = new AbortController();
     const provider = new Provider(model, {
       config: {
-        apiKey: _name === 'OpenAI' || _name === 'Azure' ? 'fixture-key' : undefined,
+        apiKey: _name === 'Vertex' ? undefined : 'fixture-key',
         apiHost: 'fixture.invalid',
-        vertexai: true,
+        vertexai: _name === 'Vertex',
         projectId: 'fixture-project',
         modelName: 'gpt-4o',
         cost: 0.001,
@@ -161,6 +167,6 @@ it('retains completed Azure callback output when a later callback is cancelled',
   const result = await pending;
   waiting.resolve('late result');
 
-  expect(result.output).toContain('done result');
+  expect(result.output).toBe('done result');
   expect(result.error).toContain('cancelled later callback');
 });

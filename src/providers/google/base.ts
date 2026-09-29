@@ -15,6 +15,7 @@
  */
 
 import logger from '../../logger';
+import { awaitWithAbort } from '../../util/abort';
 import {
   CallbackPathTraversalError,
   loadCallbackFromFileUrl,
@@ -24,7 +25,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
-import { awaitProviderOperation, getRequestTimeoutMs, transformTools } from '../shared';
+import { getRequestTimeoutMs, transformTools } from '../shared';
 import { withGenAIToolSpan } from '../tracing';
 import { GoogleAuthManager } from './auth';
 import {
@@ -554,7 +555,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       ? stripExecutableToolFileReferences(configTools, context?.vars)
       : configTools;
     const loadedTools = requestTools
-      ? await awaitProviderOperation(
+      ? await awaitWithAbort(
           maybeLoadToolsFromExternalFile(requestTools, context?.vars),
           options.abortSignal,
         )
@@ -629,7 +630,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
         if (callbackRef && typeof callbackRef === 'string') {
           const callbackStr: string = callbackRef;
           if (callbackStr.startsWith('file://')) {
-            callback = await awaitProviderOperation(this.loadExternalFunction(callbackStr), signal);
+            callback = await awaitWithAbort(this.loadExternalFunction(callbackStr), signal);
           } else {
             // Inline function string (backward compatibility with existing behavior)
             // This uses Function constructor which has security implications
@@ -668,7 +669,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       // Execute the callback
       logger.debug(`Executing function '${functionName}' with args: ${args}`);
       signal?.throwIfAborted();
-      const result = await awaitProviderOperation(
+      const result = await awaitWithAbort(
         withGenAIToolSpan({ name: functionName, arguments: args, callId }, () => callback(args)),
         signal,
       );

@@ -127,6 +127,47 @@ describe('scheduler cancellation', () => {
     await rejected;
   });
 
+  it.each(['resolve', 'reject'] as const)(
+    'stops waiting for a running legacy grouped call before its late %s',
+    async (settlement) => {
+      const queue = new ProviderGroupedCallQueue();
+      const controller = new AbortController();
+      const reason = new Error('stop waiting for legacy provider');
+      const started = createDeferred<void>();
+      const finish = createDeferred<string>();
+      const call = vi.fn(() => {
+        started.resolve();
+        return finish.promise;
+      });
+      const pending = queue.enqueue('grader', call, controller.signal);
+      const rejected = expect(pending).rejects.toBe(reason);
+      const running = queue.run(queue.takeNextGroup()[0]);
+
+      try {
+        await started.promise;
+        controller.abort(reason);
+        await rejected;
+        await running;
+        expect(call).toHaveBeenCalledOnce();
+        expect(queue.hasJobs()).toBe(false);
+
+        if (settlement === 'resolve') {
+          finish.resolve('late response');
+        } else {
+          finish.reject(new Error('late provider failure'));
+        }
+        await expect(pending).rejects.toBe(reason);
+
+        const next = queue.enqueue('grader', async () => 'next response');
+        await queue.run(queue.takeNextGroup()[0]);
+        await expect(next).resolves.toBe('next response');
+      } finally {
+        finish.resolve('cleanup');
+        await running;
+      }
+    },
+  );
+
   it.each(['response', 'error'] as const)(
     'aborts %s retry backoff without releasing another request slot',
     async (mode) => {

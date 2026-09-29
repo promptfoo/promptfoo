@@ -1,11 +1,11 @@
 import logger from '../logger';
+import { awaitWithAbort } from '../util/abort';
 import {
   CallbackPathTraversalError,
   loadCallbackFromFileUrl,
   wrapError,
 } from '../util/functions/loadFunction';
-import { getMcpErrorMessage, isMcpErrorResult } from './mcp/util';
-import { awaitProviderOperation } from './shared';
+import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from './mcp/util';
 import { withGenAIToolSpan } from './tracing';
 
 import type {
@@ -78,10 +78,7 @@ export async function executeProviderFunctionCallback({
 
       if (callbackRef && typeof callbackRef === 'string') {
         callback = callbackRef.startsWith('file://')
-          ? await awaitProviderOperation(
-              loadProviderCallbackFromFileUrl(callbackRef, logPrefix),
-              signal,
-            )
+          ? await awaitWithAbort(loadProviderCallbackFromFileUrl(callbackRef, logPrefix), signal)
           : new Function('return ' + callbackRef)();
         cache[functionName] = callback;
       } else if (typeof callbackRef === 'function') {
@@ -96,7 +93,7 @@ export async function executeProviderFunctionCallback({
 
     logger.debug(`${prefix}Executing function '${functionName}' with args: ${args}`);
     signal?.throwIfAborted();
-    const result = await awaitProviderOperation(
+    const result = await awaitWithAbort(
       withGenAIToolSpan({ name: functionName, arguments: args, callId }, () => callback(args)),
       signal,
     );
@@ -258,7 +255,11 @@ export class FunctionCallbackHandler {
     }
 
     if (hasSuccess) {
-      const outputs = results.map((r) => r.output);
+      const outputs = results.flatMap((result, index) =>
+        options?.abortSignal?.aborted && (settled[index].status === 'rejected' || result.isError)
+          ? []
+          : [result.output],
+      );
       // For single call with successful callback, return just the output
       if (!isArray && outputs.length === 1) {
         return outputs[0];
@@ -325,10 +326,7 @@ export class FunctionCallbackHandler {
         if (typeof callbackConfig === 'string') {
           // String callback - either file reference or inline code
           if (callbackConfig.startsWith('file://')) {
-            callback = await awaitProviderOperation(
-              this.loadExternalFunction(callbackConfig),
-              signal,
-            );
+            callback = await awaitWithAbort(this.loadExternalFunction(callbackConfig), signal);
           } else {
             // Inline function string
             callback = new Function('return ' + callbackConfig)() as FunctionCallback;
@@ -344,7 +342,7 @@ export class FunctionCallbackHandler {
       }
 
       signal?.throwIfAborted();
-      const result = await awaitProviderOperation(Promise.resolve(callback(args, context)), signal);
+      const result = await awaitWithAbort(Promise.resolve(callback(args, context)), signal);
       return typeof result === 'string' ? result : JSON.stringify(result);
     });
   }
@@ -394,40 +392,7 @@ export class FunctionCallbackHandler {
         };
       }
 
-      // Normalize MCP content to a readable string to avoid "[object Object]"
-      const normalizeContent = (content: any): string => {
-        if (content == null) {
-          return '';
-        }
-        if (typeof content === 'string') {
-          return content;
-        }
-        if (Array.isArray(content)) {
-          return content
-            .map((part) => {
-              if (typeof part === 'string') {
-                return part;
-              }
-              if (part && typeof part === 'object') {
-                if ('text' in part && (part as any).text != null) {
-                  return String((part as any).text);
-                }
-                if ('json' in part) {
-                  return JSON.stringify((part as any).json);
-                }
-                if ('data' in part) {
-                  return JSON.stringify((part as any).data);
-                }
-                return JSON.stringify(part);
-              }
-              return String(part);
-            })
-            .join('\n');
-        }
-        return JSON.stringify(content);
-      };
-
-      const content = normalizeContent(result?.content);
+      const content = normalizeMcpToolContent(result?.content);
       return { output: `MCP Tool Result (${toolName}): ${content}`, isError: false };
     } catch (error) {
       signal?.throwIfAborted();

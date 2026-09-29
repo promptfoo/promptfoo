@@ -12,6 +12,7 @@ import { __resetPromptConversationCacheForTests, evaluate } from '../../src/eval
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { asEvaluateResult } from '../../src/models/evalResult';
+import { EchoProvider } from '../../src/providers/echo';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import {
   type ApiProvider,
@@ -215,6 +216,40 @@ describeEvaluator('evaluator execution control', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
+  it('spaces a grading request after the target response', async () => {
+    const events: string[] = [];
+    const sleep = vi.spyOn(time, 'sleep').mockImplementation(async () => {
+      events.push('delay');
+    });
+    const provider: ApiProvider = {
+      id: () => 'shared-target-and-grader',
+      delay: 100,
+      callApi: vi
+        .fn()
+        .mockImplementationOnce(async () => {
+          events.push('target');
+          return { output: 'ready' };
+        })
+        .mockImplementationOnce(async () => {
+          events.push('grader');
+          return { output: '{"pass":true,"score":1,"reason":"ready"}' };
+        }),
+    };
+    const suite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('hello')],
+      tests: [{ assert: [{ type: 'llm-rubric', value: 'ready', provider }] }],
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    try {
+      await evaluate(suite, record, {});
+      expect(events).toEqual(['target', 'delay', 'grader']);
+      expect((await record.getResults())[0]).toMatchObject({ success: true, score: 1 });
+    } finally {
+      sleep.mockRestore();
+    }
+  });
+
   it('interrupts a post-provider delay when the evaluation is cancelled', async () => {
     const controller = new AbortController();
     const provider: ApiProvider = {
@@ -251,6 +286,24 @@ describeEvaluator('evaluator execution control', () => {
       controller.abort();
       delay.mockRestore();
     }
+  });
+
+  it.each([
+    ['the provider', 100, undefined],
+    ['the evaluation', undefined, 125],
+  ])('applies the Echo delay only once when set on %s', async (_name, providerDelay, evalDelay) => {
+    const provider = new EchoProvider({ delay: providerDelay });
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Echo test')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { delay: evalDelay });
+
+    expect(time.sleep).toHaveBeenCalledTimes(1);
+    expect(time.sleep).toHaveBeenCalledWith(providerDelay ?? evalDelay);
   });
 
   it('evaluates with no provider delay', async () => {

@@ -14,7 +14,8 @@ let mockStateToReturn: any = null;
 const mockStateQueue: any[] = [];
 
 // Mock dependencies before imports
-vi.mock('../../src/scheduler/providerRateLimitState', () => ({
+vi.mock('../../src/scheduler/providerRateLimitState', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/scheduler/providerRateLimitState')>()),
   ProviderRateLimitState: class extends EventEmitter {
     executeWithRetry: any;
     getMetrics: any;

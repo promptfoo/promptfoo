@@ -12,8 +12,8 @@ import {
   executeProviderFunctionCallback,
   FunctionCallbackHandler,
 } from '../../src/providers/functionCallbackUtils';
+import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';
 import { GoogleAuthManager } from '../../src/providers/google/auth';
-import { GoogleProvider } from '../../src/providers/google/provider';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import { OpenAiModerationProvider } from '../../src/providers/openai/moderation';
 import { fetchWithProxy } from '../../src/util/fetch';
@@ -141,13 +141,6 @@ const googleOperations = [
         abortSignal: signal,
       }),
   },
-  {
-    name: 'Google OAuth',
-    call: (signal: AbortSignal) =>
-      new GoogleProvider('gemini-2.5-flash', {
-        config: { vertexai: true, projectId: 'fixture-project' },
-      }).callApi('hello', undefined, { abortSignal: signal }),
-  },
 ];
 
 it.each(vertexModels)('retains Vertex %s output when caching is cancelled', async (model) => {
@@ -232,59 +225,59 @@ describe.each(googleOperations)('$name SDK cancellation', ({ call }) => {
   });
 });
 
-describe.each([
-  ['Vertex', VertexChatProvider],
-  ['Google', GoogleProvider],
-] as const)('%s express cancellation', (_name, Provider) => {
-  it('preserves the transport deadline when a caller signal is present', async () => {
-    const caller = new AbortController();
-    const deadline = new AbortController();
-    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
-    const started = createDeferred<void>();
-    vi.mocked(fetchWithProxy).mockImplementation(async (_url, request) => {
-      started.resolve();
-      return waitForAbort(request?.signal);
+describe.each([['Vertex', VertexChatProvider]] as const)(
+  '%s express cancellation',
+  (_name, Provider) => {
+    it('preserves the transport deadline when a caller signal is present', async () => {
+      const caller = new AbortController();
+      const deadline = new AbortController();
+      vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal);
+      const started = createDeferred<void>();
+      vi.mocked(fetchWithProxy).mockImplementation(async (_url, request) => {
+        started.resolve();
+        return waitForAbort(request?.signal);
+      });
+      const provider = new Provider('gemini-2.5-flash', {
+        config: { vertexai: true, apiKey: 'fixture-key' },
+      });
+      const result = provider.callApi('hello', undefined, { abortSignal: caller.signal });
+      await Promise.race([
+        started.promise,
+        result.then((response) => {
+          throw new Error(response.error || 'Operation completed before dispatch');
+        }),
+      ]);
+      deadline.abort(new Error('deadline exceeded'));
+      expect((await result).error).toContain('deadline exceeded');
+      expect(caller.signal.aborted).toBe(false);
     });
-    const provider = new Provider('gemini-2.5-flash', {
-      config: { vertexai: true, apiKey: 'fixture-key' },
-    });
-    const result = provider.callApi('hello', undefined, { abortSignal: caller.signal });
-    await Promise.race([
-      started.promise,
-      result.then((response) => {
-        throw new Error(response.error || 'Operation completed before dispatch');
-      }),
-    ]);
-    deadline.abort(new Error('deadline exceeded'));
-    expect((await result).error).toContain('deadline exceeded');
-    expect(caller.signal.aborted).toBe(false);
-  });
 
-  it('combines caller cancellation with the transport timeout', async () => {
-    const controller = new AbortController();
-    const started = createDeferred<void>();
-    let transportSignal: AbortSignal | null | undefined;
-    vi.mocked(fetchWithProxy).mockImplementation(async (_url, request) => {
-      transportSignal = request?.signal;
-      started.resolve();
-      return waitForAbort(transportSignal);
+    it('combines caller cancellation with the transport timeout', async () => {
+      const controller = new AbortController();
+      const started = createDeferred<void>();
+      let transportSignal: AbortSignal | null | undefined;
+      vi.mocked(fetchWithProxy).mockImplementation(async (_url, request) => {
+        transportSignal = request?.signal;
+        started.resolve();
+        return waitForAbort(transportSignal);
+      });
+      const provider = new Provider('gemini-2.5-flash', {
+        config: { vertexai: true, apiKey: 'fixture-key' },
+      });
+      const result = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+      await Promise.race([
+        started.promise,
+        result.then((response) => {
+          throw new Error(response.error || 'Operation completed before dispatch');
+        }),
+      ]);
+      expect(transportSignal?.aborted).toBe(false);
+      controller.abort(new Error('cancelled'));
+      expect((await result).error).toContain('cancelled');
+      expect(transportSignal?.aborted).toBe(true);
     });
-    const provider = new Provider('gemini-2.5-flash', {
-      config: { vertexai: true, apiKey: 'fixture-key' },
-    });
-    const result = provider.callApi('hello', undefined, { abortSignal: controller.signal });
-    await Promise.race([
-      started.promise,
-      result.then((response) => {
-        throw new Error(response.error || 'Operation completed before dispatch');
-      }),
-    ]);
-    expect(transportSignal?.aborted).toBe(false);
-    controller.abort(new Error('cancelled'));
-    expect((await result).error).toContain('cancelled');
-    expect(transportSignal?.aborted).toBe(true);
-  });
-});
+  },
+);
 
 describe('Azure moderation cancellation', () => {
   const create = () =>
@@ -375,7 +368,7 @@ describe.each([
   });
 });
 
-describe.each([VertexChatProvider, GoogleProvider])('%s authentication waits', (Provider) => {
+describe.each([VertexChatProvider])('%s authentication waits', (Provider) => {
   it('stops waiting for OAuth discovery without dispatching a request', async () => {
     const controller = new AbortController();
     const started = createDeferred<void>();
@@ -452,7 +445,7 @@ it('forwards cancellation to Bedrock embedding transport', async () => {
 });
 
 it('does not dispatch a Google callback after cancellation', async () => {
-  const provider = new GoogleProvider('gemini-2.5-flash', { config: { apiKey: 'fixture' } });
+  const provider = new AIStudioChatProvider('gemini-2.5-flash', { config: { apiKey: 'fixture' } });
   const callback = vi.fn();
   await expect(
     (provider as any).executeFunctionCallback(
@@ -467,7 +460,7 @@ it('does not dispatch a Google callback after cancellation', async () => {
 });
 
 it('stops waiting for a Google callback already in progress', async () => {
-  const provider = new GoogleProvider('gemini-2.5-flash', { config: { apiKey: 'fixture' } });
+  const provider = new AIStudioChatProvider('gemini-2.5-flash', { config: { apiKey: 'fixture' } });
   const controller = new AbortController();
   const started = createDeferred<void>();
   const result = createDeferred<string>();

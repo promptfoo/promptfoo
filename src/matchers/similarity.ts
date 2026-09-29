@@ -1,12 +1,12 @@
 import cliState from '../cliState';
 import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
-import { isAbortError } from '../util/fetch/errors';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
   callGradingProvider,
   getAndCheckProvider,
   getRemoteGradingContext,
+  isGradingCancellation,
   shouldUseRemoteGrading,
 } from './providers';
 import {
@@ -173,8 +173,8 @@ async function calculateProviderSimilarity(
     const reasons = [expectedResult, outputResult]
       .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
       .map((result) => result.reason);
-    const reason = reasons.find((error) => !isAbortError(error)) ?? reasons[0];
-    if (!isAbortError(reason)) {
+    const reason = reasons.find((error) => !isGradingCancellation(error)) ?? reasons[0];
+    if (!isGradingCancellation(reason)) {
       throw reason;
     }
     return fail(reason instanceof Error ? reason.message : String(reason), tokensUsed);

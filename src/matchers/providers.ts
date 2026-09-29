@@ -9,6 +9,7 @@ import {
   getProviderCallTracingContext,
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
+import { isAbortError } from '../util/fetch/errors';
 import invariant from '../util/invariant';
 
 import type {
@@ -44,6 +45,12 @@ export function shouldUseRemoteGrading(
 export function getGradingProviderCallOptions(): CallApiOptionsParams | undefined {
   const abortSignal = getProviderCallExecutionContext()?.abortSignal;
   return abortSignal ? { abortSignal } : undefined;
+}
+
+/** Recognize custom abort reasons without hiding unrelated provider failures. */
+export function isGradingCancellation(error: unknown): boolean {
+  const signal = getProviderCallExecutionContext()?.abortSignal;
+  return isAbortError(error) || (signal?.aborted === true && error === signal.reason);
 }
 
 /**
@@ -106,12 +113,14 @@ export function callProviderWithContext(
   label: string,
   vars: Record<string, VarValue>,
   context?: CallApiContextParams,
+  promptConfig?: Record<string, unknown>,
 ): Promise<ProviderResponse> {
   const callApiContext = {
     ...context,
     prompt: {
       raw: prompt,
       label,
+      ...(promptConfig && { config: promptConfig }),
     },
     vars,
   };

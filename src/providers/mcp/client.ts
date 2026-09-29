@@ -1,11 +1,12 @@
 import path from 'path';
 
 import cliState from '../../cliState';
-import { getEnvBool, getEnvInt } from '../../envars';
+import { type McpConfigParsed, McpConfigSchema } from '../../contracts/providerConfig/mcp';
+import { getEnvBool, getEnvInt, getProcessEnv } from '../../envars';
 import logger from '../../logger';
+import { awaitWithAbort } from '../../util/abort';
 import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../../util/oauth';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
-import { awaitProviderOperation } from '../shared';
 import { withGenAIToolSpan } from '../tracing';
 import {
   applyQueryParams,
@@ -13,6 +14,7 @@ import {
   getAuthQueryParams,
   getOAuthTokenWithExpiry,
   renderAuthVars,
+  sanitizeMcpToolData,
 } from './util';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
@@ -43,7 +45,7 @@ interface OAuthServerConfig {
  * override an inherited variable (e.g. a scoped token) without unsetting the rest.
  */
 function getStdioEnv(server: MCPServerConfig): Record<string, string> {
-  const parentEnv = process.env as Record<string, string>;
+  const parentEnv = getProcessEnv() as Record<string, string>;
   return server.env ? { ...parentEnv, ...server.env } : parentEnv;
 }
 
@@ -104,7 +106,7 @@ export class MCPClient {
   private clients: Map<string, Client> = new Map();
   private pendingConnections = new Set<() => Promise<void>>();
   private tools: Map<string, MCPTool[]> = new Map();
-  private config: MCPConfig;
+  private config: McpConfigParsed;
   private transports: Map<
     string,
     StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport
@@ -141,8 +143,8 @@ export class MCPClient {
     return this.config.verbose ?? getEnvBool('MCP_VERBOSE') ?? false;
   }
 
-  constructor(config: MCPConfig) {
-    this.config = config;
+  constructor(config: unknown) {
+    this.config = McpConfigSchema.parse(config);
   }
 
   private assertActive(generation = this.generation): void {
@@ -177,7 +179,7 @@ export class MCPClient {
       usedKeys.add(serverKey);
       logger.info(`connecting to server ${serverKey}`);
       startupSignal.throwIfAborted();
-      await awaitProviderOperation(
+      await awaitWithAbort(
         this.connectToServer(server, serverKey, startupSignal, generation),
         startupSignal,
       );
@@ -215,20 +217,13 @@ export class MCPClient {
       if (!closePromise || closingClient !== client || closingTransport !== transport) {
         closingClient = client;
         closingTransport = transport;
-        closePromise = awaitProviderOperation(
-          this.closeConnection(client, transport),
-          operationSignal,
-        ).catch((error) => {
-          if (!operationSignal.aborted) {
-            throw error;
-          }
-        });
+        closePromise = this.closeConnection(client, transport);
       }
       return closePromise;
     };
     this.pendingConnections.add(closePendingConnection);
     const onAbort = () => {
-      void closePendingConnection();
+      void closePendingConnection().catch(() => undefined);
     };
     operationSignal.addEventListener('abort', onAbort, { once: true });
     try {
@@ -289,7 +284,7 @@ export class MCPClient {
           // Fetch token using configured tokenUrl or OAuth discovery
           // This avoids SDK's OAuth discovery which requires authorization_endpoint
           logger.debug('[MCP] Fetching OAuth token');
-          const { accessToken, expiresAt } = await awaitProviderOperation(
+          const { accessToken, expiresAt } = await awaitWithAbort(
             getOAuthTokenWithExpiry(oauthAuth, server.url, operationSignal),
             operationSignal,
           );
@@ -530,17 +525,14 @@ export class MCPClient {
     this.clients.delete(serverKey);
     this.transports.delete(serverKey);
     if (existingTransport || existingClient) {
-      await awaitProviderOperation(this.closeConnection(existingClient, existingTransport), signal);
+      await this.closeConnection(existingClient, existingTransport);
     }
 
     // Reconnect with fresh token
     if (this.shuttingDown) {
       return;
     }
-    await awaitProviderOperation(
-      this.connectToServer(oauthConfig.serverConfig, serverKey, signal),
-      signal,
-    );
+    await awaitWithAbort(this.connectToServer(oauthConfig.serverConfig, serverKey, signal), signal);
     logger.debug(`[MCP] Successfully refreshed OAuth token for server ${serverKey}`);
   }
 
@@ -549,8 +541,9 @@ export class MCPClient {
     args: Record<string, unknown>,
     signal?: AbortSignal,
   ): Promise<MCPToolResult> {
-    return await withGenAIToolSpan({ name, arguments: args, resultFormat: 'mcp' }, () =>
-      this.callToolInternal(name, args, signal),
+    return await withGenAIToolSpan(
+      { name, arguments: sanitizeMcpToolData(args), resultFormat: 'mcp' },
+      () => this.callToolInternal(name, args, signal),
     );
   }
 
@@ -569,7 +562,7 @@ export class MCPClient {
       if (serverTools.some((tool) => tool.name === name)) {
         // Proactively refresh token if close to expiration (with locking)
         try {
-          await awaitProviderOperation(this.refreshOAuthTokenIfNeeded(serverKey), signal);
+          await awaitWithAbort(this.refreshOAuthTokenIfNeeded(serverKey), signal);
         } catch (error) {
           signal?.throwIfAborted();
           const errorMessage = error instanceof Error ? error.message : String(error);
@@ -595,7 +588,7 @@ export class MCPClient {
         while (true) {
           try {
             signal?.throwIfAborted();
-            const result = await awaitProviderOperation(
+            const result = await awaitWithAbort(
               currentClient.callTool(
                 { name, arguments: args },
                 undefined, // use default result schema
@@ -644,10 +637,7 @@ export class MCPClient {
               logger.debug(`[MCP] Auth error for ${serverKey}, attempting reactive token refresh`);
               retried = true;
               try {
-                await awaitProviderOperation(
-                  this.refreshOAuthToken(serverKey, oauthConfig, true),
-                  signal,
-                );
+                await awaitWithAbort(this.refreshOAuthToken(serverKey, oauthConfig, true), signal);
                 // Get the new client after reconnection
                 const newClient = this.clients.get(serverKey);
                 if (newClient) {
@@ -711,10 +701,7 @@ export class MCPClient {
     await Promise.all([...this.pendingConnections].map((close) => close()));
     await Promise.allSettled([...this.tokenRefreshLocks.values()].map(({ promise }) => promise));
     for (const [serverKey, client] of this.clients.entries()) {
-      await awaitProviderOperation(
-        this.closeConnection(client, this.transports.get(serverKey)),
-        this.lifecycleController.signal,
-      ).catch(() => {});
+      await this.closeConnection(client, this.transports.get(serverKey));
     }
     this.clients.clear();
     this.transports.clear();

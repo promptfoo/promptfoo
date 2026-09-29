@@ -2,7 +2,8 @@ import { createHmac } from 'crypto';
 
 import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
-import { awaitProviderOperation, getRequestTimeoutMs } from '../shared';
+import { awaitWithAbort } from '../../util/abort';
+import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { appendOpenAiApiPath } from './util';
 
@@ -270,10 +271,7 @@ export class OpenAiModerationProvider
 
     if (useCache) {
       const cache = getCache();
-      const cachedResponse = await awaitProviderOperation(
-        cache.get(cacheKey),
-        options?.abortSignal,
-      );
+      const cachedResponse = await awaitWithAbort(cache.get(cacheKey), options?.abortSignal);
       options?.abortSignal?.throwIfAborted();
 
       if (cachedResponse) {
@@ -332,10 +330,7 @@ export class OpenAiModerationProvider
       if (useCache) {
         options?.abortSignal?.throwIfAborted();
         const cache = getCache();
-        await awaitProviderOperation(
-          cache.set(cacheKey, JSON.stringify(response)),
-          options?.abortSignal,
-        );
+        await awaitWithAbort(cache.set(cacheKey, JSON.stringify(response)), options?.abortSignal);
       }
 
       options?.abortSignal?.throwIfAborted();

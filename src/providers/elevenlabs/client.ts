@@ -76,7 +76,7 @@ export class ElevenLabsClient {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeout);
       try {
-        // Handle FormData for multipart uploads
+        // Handle FormData for multipart uploads.
         const isFormData = body instanceof FormData;
         headers['xi-api-key'] = this.apiKey;
 
@@ -96,8 +96,6 @@ export class ElevenLabsClient {
             : controller.signal,
           ...restOptions,
         });
-
-        clearTimeout(timeoutId);
 
         if (!response.ok) {
           await this.handleErrorResponse(response, attempt, effectiveRetries);
@@ -291,6 +289,8 @@ export class ElevenLabsClient {
     const mimeTypes: Record<string, string> = {
       // Audio formats
       mp3: 'audio/mpeg',
+      mpeg: 'audio/mpeg',
+      mpga: 'audio/mpeg',
       wav: 'audio/wav',
       flac: 'audio/flac',
       ogg: 'audio/ogg',

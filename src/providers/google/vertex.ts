@@ -9,6 +9,7 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { awaitWithAbort } from '../../util/abort';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
@@ -19,17 +20,14 @@ import {
   clampMaxTokensForThinkingBudget,
   claudeThinkingConsumesTokens,
   getTokenUsage,
+  isClaudeThinkingEnabled,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeClaudeThinkingConfig,
   outputFromMessage,
   parseMessages,
+  resolveClaudeSamplingParams,
 } from '../anthropic/util';
-import {
-  awaitProviderOperation,
-  getRequestSignal,
-  getRequestTimeoutMs,
-  parseChatPrompt,
-} from '../shared';
+import { getRequestSignal, getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions, getCallbackErrorOutput } from './base';
 import { getVertexApiHostForRegion } from './shared';
 import {
@@ -392,19 +390,27 @@ export class VertexChatProvider extends GoogleGenericProvider {
     const resolvedTemperature = samplingParamsDeprecated ? undefined : this.config.temperature;
     const resolvedTopP = samplingParamsDeprecated
       ? undefined
-      : this.config.top_p || this.config.topP;
+      : (this.config.top_p ?? this.config.topP);
     const resolvedTopK = samplingParamsDeprecated
       ? undefined
-      : this.config.top_k || this.config.topK;
+      : (this.config.top_k ?? this.config.topK);
+
+    // Vertex forwards the body verbatim, so apply the same combination rules the Anthropic
+    // API enforces (temperature vs top_p, and the limits extended thinking imposes).
+    const { sampling, warnings: samplingWarnings } = resolveClaudeSamplingParams(
+      { temperature: resolvedTemperature, top_p: resolvedTopP, top_k: resolvedTopK },
+      { thinkingEnabled: isClaudeThinkingEnabled(thinkingConfig), samplingParamsDeprecated },
+    );
+    for (const warning of samplingWarnings) {
+      logger.warn(warning);
+    }
 
     const body: ClaudeRequest = {
       anthropic_version:
         this.config.anthropicVersion || this.config.anthropic_version || 'vertex-2023-10-16',
       stream: false,
       max_tokens: maxTokens,
-      temperature: resolvedTemperature,
-      top_p: resolvedTopP,
-      top_k: resolvedTopK,
+      ...sampling,
       ...(mergedSystem ? { system: mergedSystem } : {}),
       ...(thinkingConfig ? { thinking: thinkingConfig } : {}),
       // Claude on Vertex accepts output_config.effort the same way the Anthropic API does;
@@ -414,12 +420,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
       messages: extractedMessages as ClaudeRequest['messages'],
     };
 
-    // Default off the *effective* thinking state, not just an explicit `thinking` block, so a
-    // thinks-by-default model (Opus 5) renders reasoning like the Anthropic path does. Today
-    // this is a no-op — those responses carry an empty thinking block because `display`
-    // defaults to `omitted`, and outputFromMessage drops empty thinking either way — but it
-    // keeps the two paths consistent if that default ever changes, as it did in 4.6 -> 4.7.
-    const showThinking = this.config.showThinking ?? thinkingConsumesTokens;
+    // Between-tool progress is visible even though it needs no up-front thinking budget.
+    const showThinking =
+      this.config.showThinking ??
+      (thinkingConsumesTokens || thinkingConfig?.type === 'between_tools');
 
     const cache = await getCache();
     const cacheKey = getVertexBodyCacheKey(
@@ -430,7 +434,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let cachedResponse;
     if (isCacheEnabled()) {
-      cachedResponse = await awaitProviderOperation(cache.get(cacheKey), options?.abortSignal);
+      cachedResponse = await awaitWithAbort(cache.get(cacheKey), options?.abortSignal);
       options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
@@ -449,11 +453,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
     let data: ClaudeResponse;
     try {
       options?.abortSignal?.throwIfAborted();
-      const client = await awaitProviderOperation(
-        this.getClientWithCredentials(),
-        options?.abortSignal,
-      );
-      const projectId = await awaitProviderOperation(this.getProjectId(), options?.abortSignal);
+      const client = await awaitWithAbort(this.getClientWithCredentials(), options?.abortSignal);
+      const projectId = await awaitWithAbort(this.getProjectId(), options?.abortSignal);
       const url = `https://${apiHost}/v1/projects/${projectId}/locations/${this.getRegion()}/publishers/anthropic/models/${this.modelName}:rawPredict`;
 
       const res = await client.request({
@@ -529,10 +530,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
       if (isCacheEnabled()) {
         options?.abortSignal?.throwIfAborted();
-        await awaitProviderOperation(
-          cache.set(cacheKey, JSON.stringify(response)),
-          options?.abortSignal,
-        );
+        await awaitWithAbort(cache.set(cacheKey, JSON.stringify(response)), options?.abortSignal);
       }
 
       options?.abortSignal?.throwIfAborted();
@@ -707,7 +705,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     let response;
     let cachedResponse;
     if (isCacheEnabled()) {
-      cachedResponse = await awaitProviderOperation(cache.get(cacheKey), options?.abortSignal);
+      cachedResponse = await awaitWithAbort(cache.get(cacheKey), options?.abortSignal);
       options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
@@ -757,11 +755,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
         } else {
           // Standard mode: use OAuth and full endpoint
           options?.abortSignal?.throwIfAborted();
-          const client = await awaitProviderOperation(
+          const client = await awaitWithAbort(
             this.getClientWithCredentials(),
             options?.abortSignal,
           );
-          const projectId = await awaitProviderOperation(this.getProjectId(), options?.abortSignal);
+          const projectId = await awaitWithAbort(this.getProjectId(), options?.abortSignal);
           const url = `https://${apiHost}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
             this.modelName
           }:${endpoint}`;
@@ -980,10 +978,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
         if (isCacheEnabled()) {
           options?.abortSignal?.throwIfAborted();
-          await awaitProviderOperation(
-            cache.set(cacheKey, JSON.stringify(response)),
-            options?.abortSignal,
-          );
+          await awaitWithAbort(cache.set(cacheKey, JSON.stringify(response)), options?.abortSignal);
         }
         options?.abortSignal?.throwIfAborted();
       } catch (err) {
@@ -1043,7 +1038,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let cachedResponse;
     if (isCacheEnabled()) {
-      cachedResponse = await awaitProviderOperation(cache.get(cacheKey), options?.abortSignal);
+      cachedResponse = await awaitWithAbort(cache.get(cacheKey), options?.abortSignal);
       options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
@@ -1062,11 +1057,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
     let data: Palm2ApiResponse;
     try {
       options?.abortSignal?.throwIfAborted();
-      const client = await awaitProviderOperation(
-        this.getClientWithCredentials(),
-        options?.abortSignal,
-      );
-      const projectId = await awaitProviderOperation(this.getProjectId(), options?.abortSignal);
+      const client = await awaitWithAbort(this.getClientWithCredentials(), options?.abortSignal);
+      const projectId = await awaitWithAbort(this.getProjectId(), options?.abortSignal);
       const url = `https://${apiHost}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
         this.modelName
       }:predict`;
@@ -1109,10 +1101,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
       if (isCacheEnabled()) {
         options?.abortSignal?.throwIfAborted();
-        await awaitProviderOperation(
-          cache.set(cacheKey, JSON.stringify(response)),
-          options?.abortSignal,
-        );
+        await awaitWithAbort(cache.set(cacheKey, JSON.stringify(response)), options?.abortSignal);
       }
 
       options?.abortSignal?.throwIfAborted();
@@ -1204,7 +1193,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     let cachedResponse;
     if (isCacheEnabled()) {
-      cachedResponse = await awaitProviderOperation(cache.get(cacheKey), options?.abortSignal);
+      cachedResponse = await awaitWithAbort(cache.get(cacheKey), options?.abortSignal);
       options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
@@ -1237,11 +1226,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
     let data: LlamaResponse;
     try {
       options?.abortSignal?.throwIfAborted();
-      const client = await awaitProviderOperation(
-        this.getClientWithCredentials(),
-        options?.abortSignal,
-      );
-      const projectId = await awaitProviderOperation(this.getProjectId(), options?.abortSignal);
+      const client = await awaitWithAbort(this.getClientWithCredentials(), options?.abortSignal);
+      const projectId = await awaitWithAbort(this.getProjectId(), options?.abortSignal);
       // Llama models use a different endpoint format
       const url = `https://${apiHost}/v1beta1/projects/${projectId}/locations/${this.getRegion()}/endpoints/openapi/chat/completions`;
 
@@ -1314,10 +1300,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
       if (isCacheEnabled()) {
         options?.abortSignal?.throwIfAborted();
-        await awaitProviderOperation(
-          cache.set(cacheKey, JSON.stringify(response)),
-          options?.abortSignal,
-        );
+        await awaitWithAbort(cache.set(cacheKey, JSON.stringify(response)), options?.abortSignal);
       }
 
       options?.abortSignal?.throwIfAborted();
@@ -1399,11 +1382,8 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
     let data: VertexEmbeddingPredictResponse = {};
     try {
       options?.abortSignal?.throwIfAborted();
-      const client = await awaitProviderOperation(
-        this.getClientWithCredentials(),
-        options?.abortSignal,
-      );
-      const projectId = await awaitProviderOperation(this.getProjectId(), options?.abortSignal);
+      const client = await awaitWithAbort(this.getClientWithCredentials(), options?.abortSignal);
+      const projectId = await awaitWithAbort(this.getProjectId(), options?.abortSignal);
       const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/google/models/${
         this.modelName
       }:predict`;

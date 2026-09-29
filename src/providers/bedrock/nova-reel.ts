@@ -10,9 +10,9 @@ import * as path from 'path';
 
 import { storeBlob } from '../../blobs';
 import logger from '../../logger';
+import { awaitWithAbort } from '../../util/abort';
 import { ellipsize } from '../../util/text';
 import { sleep, sleepWithAbort } from '../../util/time';
-import { awaitProviderOperation } from '../shared';
 import { AwsBedrockGenericProvider } from './base';
 
 import type { BlobRef } from '../../blobs';
@@ -201,12 +201,12 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
     options?: CallApiOptionsParams,
   ): Promise<{ invocationArn?: string; error?: string }> {
     try {
-      const { BedrockRuntimeClient, StartAsyncInvokeCommand } = await awaitProviderOperation(
+      const { BedrockRuntimeClient, StartAsyncInvokeCommand } = await awaitWithAbort(
         import('@aws-sdk/client-bedrock-runtime'),
         options?.abortSignal,
       );
 
-      const credentials = await awaitProviderOperation(this.getCredentials(), options?.abortSignal);
+      const credentials = await awaitWithAbort(this.getCredentials(), options?.abortSignal);
       options?.abortSignal?.throwIfAborted();
 
       const client = new BedrockRuntimeClient({
@@ -247,12 +247,12 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
     const startTime = Date.now();
 
     try {
-      const { BedrockRuntimeClient, GetAsyncInvokeCommand } = await awaitProviderOperation(
+      const { BedrockRuntimeClient, GetAsyncInvokeCommand } = await awaitWithAbort(
         import('@aws-sdk/client-bedrock-runtime'),
         options?.abortSignal,
       );
 
-      const credentials = await awaitProviderOperation(this.getCredentials(), options?.abortSignal);
+      const credentials = await awaitWithAbort(this.getCredentials(), options?.abortSignal);
       options?.abortSignal?.throwIfAborted();
 
       const client = new BedrockRuntimeClient({
@@ -321,11 +321,11 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
       const [, bucket, keyPrefix] = match;
 
       // Download from S3
-      const { S3Client, GetObjectCommand } = await awaitProviderOperation(
+      const { S3Client, GetObjectCommand } = await awaitWithAbort(
         import('@aws-sdk/client-s3'),
         options?.abortSignal,
       );
-      const credentials = await awaitProviderOperation(this.getCredentials(), options?.abortSignal);
+      const credentials = await awaitWithAbort(this.getCredentials(), options?.abortSignal);
       options?.abortSignal?.throwIfAborted();
 
       const s3 = new S3Client({
@@ -353,13 +353,13 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
       }
 
       const buffer = Buffer.from(
-        await awaitProviderOperation(response.Body.transformToByteArray(), options?.abortSignal),
+        await awaitWithAbort(response.Body.transformToByteArray(), options?.abortSignal),
       );
 
       options?.abortSignal?.throwIfAborted();
 
       // Store to blob storage
-      const { ref } = await awaitProviderOperation(
+      const { ref } = await awaitWithAbort(
         storeBlob(buffer, 'video/mp4', {
           evalId: context?.evaluationId,
           kind: 'video',
