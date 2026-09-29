@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { testCaseFromCsvRow } from '../../src/csv';
 
 import type { ApiProvider, Assertion, ProviderResponse } from '../../src/types/index';
@@ -32,6 +32,8 @@ vi.mock('../../src/providers/defaults', () => ({
   getDefaultProviders: mocks.getDefaultProviders,
   getDefaultVideoGradingProvider: mocks.getDefaultVideoGradingProvider,
 }));
+
+afterEach(() => vi.resetAllMocks());
 
 describe('matchesVideoRubric', () => {
   beforeEach(() => {
@@ -147,6 +149,55 @@ describe('matchesVideoRubric', () => {
     expect(prompt[0].parts).toEqual([
       { text: 'Visible cat' },
       { inlineData: { mimeType: 'video/mp4', data: 'ZmFrZSB2aWRlbyBieXRlcw==' } },
+    ]);
+  });
+
+  it.each(['user', undefined] as const)(
+    'preserves a native Google request with role %s',
+    async (role) => {
+      const { matchesVideoRubric } = await import('../../src/matchers/rubric');
+      const rubricPrompt = {
+        system_instruction: { parts: [{ text: 'Judge only visible motion.' }] },
+        contents: [{ ...(role && { role }), parts: [{ text: '{{rubric}}' }] }],
+      };
+      await matchesVideoRubric(
+        'Visible cat',
+        { url: 'promptfoo://blob/fixture-hash' },
+        { provider: mocks.gradingProvider, rubricPrompt: JSON.stringify(rubricPrompt) },
+      );
+      const prompt = JSON.parse(vi.mocked(mocks.gradingProvider.callApi).mock.calls[0][0]);
+      expect(prompt.system_instruction).toEqual(rubricPrompt.system_instruction);
+      expect(prompt.contents).toEqual([
+        {
+          ...(role && { role }),
+          parts: [
+            { text: 'Visible cat' },
+            { inlineData: { mimeType: 'video/mp4', data: 'ZmFrZSB2aWRlbyBieXRlcw==' } },
+          ],
+        },
+      ]);
+      expect(rubricPrompt.contents[0].parts).toEqual([{ text: '{{rubric}}' }]);
+    },
+  );
+
+  it('adds a user turn to a native Google request without user messages', async () => {
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
+    const rubricPrompt = {
+      system_instruction: { parts: [{ text: 'Judge the video.' }] },
+      contents: [],
+    };
+    await matchesVideoRubric(
+      '',
+      { url: 'promptfoo://blob/fixture-hash' },
+      { provider: mocks.gradingProvider, rubricPrompt: JSON.stringify(rubricPrompt) },
+    );
+    const prompt = JSON.parse(vi.mocked(mocks.gradingProvider.callApi).mock.calls[0][0]);
+    expect(prompt.system_instruction).toEqual(rubricPrompt.system_instruction);
+    expect(prompt.contents).toEqual([
+      {
+        role: 'user',
+        parts: [{ inlineData: { mimeType: 'video/mp4', data: 'ZmFrZSB2aWRlbyBieXRlcw==' } }],
+      },
     ]);
   });
 

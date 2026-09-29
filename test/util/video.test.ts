@@ -1,11 +1,18 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getBlobByHash, isBlobAllowedForShare } from '../../src/blobs';
-import { resolveVideoBytes, VIDEO_INLINE_LIMIT_BYTES } from '../../src/util/video';
+import { BoundedReadError } from '../../src/storage/boundedRead';
+import {
+  resolveVideoBytes,
+  VIDEO_INLINE_LIMIT_BYTES,
+  videoResolutionErrorMessage,
+} from '../../src/util/video';
 
 vi.mock('../../src/blobs', () => ({
   getBlobByHash: vi.fn(),
   isBlobAllowedForShare: vi.fn(),
 }));
+
+afterEach(() => vi.resetAllMocks());
 
 describe('resolveVideoBytes', () => {
   beforeEach(() => {
@@ -32,6 +39,28 @@ describe('resolveVideoBytes', () => {
     expect(getBlobByHash).toHaveBeenCalledWith('fixture-hash', expect.any(Number));
     expect(result).toEqual({ buffer: Buffer.from('Benign video fixture'), mimeType: 'video/webm' });
   });
+
+  it.each(['image/png', 'audio/wav', 'application/octet-stream', '', 'video/'])(
+    'rejects stored MIME %j even when the reference claims video',
+    async (mimeType) => {
+      vi.mocked(getBlobByHash).mockResolvedValue({
+        data: Buffer.from('Non-video fixture'),
+        metadata: {
+          mimeType,
+          sizeBytes: 17,
+          createdAt: new Date().toISOString(),
+          provider: 'filesystem',
+          key: 'fixture-hash',
+        },
+      });
+      await expect(
+        resolveVideoBytes(
+          { blobRef: { hash: 'fixture-hash', mimeType: 'video/mp4' } },
+          'eval-fixture',
+        ),
+      ).rejects.toThrow('video MIME type');
+    },
+  );
 
   it('does not read when trusted provenance is absent', async () => {
     vi.mocked(isBlobAllowedForShare).mockResolvedValue(false);
@@ -70,5 +99,21 @@ describe('resolveVideoBytes', () => {
       ),
     ).rejects.toThrow('size budget');
     expect(getBlobByHash).not.toHaveBeenCalled();
+  });
+});
+
+describe('video resolution failures', () => {
+  it.each(['too-large', 'unsupported'] as const)('reports the %s storage limit', (code) => {
+    const error = new BoundedReadError(code);
+    expect(videoResolutionErrorMessage(error)).toBe(error.message);
+  });
+
+  it('keeps arbitrary storage errors out of persisted grading reasons', () => {
+    const reason = videoResolutionErrorMessage(
+      new Error('Download failed: https://example.test/?sig=fixture-secret'),
+    );
+    expect(reason).toContain('requires a trusted blob');
+    expect(reason).not.toContain('fixture-secret');
+    expect(reason).not.toContain('example.test');
   });
 });

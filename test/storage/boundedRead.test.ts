@@ -1,9 +1,11 @@
 import { open } from 'node:fs/promises';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileBounded } from '../../src/storage/boundedRead';
 
 vi.mock('node:fs/promises', () => ({ open: vi.fn() }));
+
+afterEach(() => vi.resetAllMocks());
 
 describe('bounded managed-file reads', () => {
   beforeEach(() => vi.resetAllMocks());

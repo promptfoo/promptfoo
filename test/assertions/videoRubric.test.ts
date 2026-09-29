@@ -1,16 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleVideoRubric } from '../../src/assertions/llmRubric';
 
 import type { AssertionParams, GradingResult } from '../../src/types/index';
 
-// Mock the matcher
 vi.mock('../../src/matchers/rubric', () => ({
   matchesVideoRubric: vi.fn(),
 }));
 
 import { matchesVideoRubric } from '../../src/matchers/rubric';
 
-// Helper to create minimal valid AssertionParams
 function createParams(overrides: Partial<AssertionParams> = {}): AssertionParams {
   const test = overrides.test ?? { vars: {}, options: {} };
   const providerResponse = overrides.providerResponse ?? { output: 'test output' };
@@ -36,7 +34,6 @@ function createParams(overrides: Partial<AssertionParams> = {}): AssertionParams
   };
 }
 
-// Helper to create valid BlobRef
 function createBlobRef(
   overrides: Partial<{
     uri: string;
@@ -55,6 +52,8 @@ function createBlobRef(
     ...overrides,
   };
 }
+
+afterEach(() => vi.resetAllMocks());
 
 describe('handleVideoRubric', () => {
   beforeEach(() => {

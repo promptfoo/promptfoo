@@ -5,7 +5,7 @@ import { BoundedReadError } from '../storage/boundedRead';
 export const VIDEO_INLINE_LIMIT_BYTES = 20 * 1024 * 1024;
 const MAX_VIDEO_BYTES = Math.floor((VIDEO_INLINE_LIMIT_BYTES - 1) / 4) * 3;
 const TRUSTED_VIDEO_REQUIRED =
-  'Video grading requires a trusted blob from this evaluation. Legacy storage references and external URLs are unsupported.';
+  'Video grading requires a trusted blob from this evaluation. The blob must have a video MIME type. Legacy storage references and external URLs are unsupported.';
 
 export interface VideoRef {
   blobRef?: { hash?: string; mimeType?: string; sizeBytes?: number };
@@ -30,10 +30,10 @@ export async function resolveVideoBytes(
     throw new BoundedReadError('too-large');
   }
   const blob = await getBlobByHash(hash, MAX_VIDEO_BYTES);
-  return {
-    buffer: blob.data,
-    mimeType: blob.metadata.mimeType || 'video/mp4',
-  };
+  if (!/^video\/[a-z0-9.+-]+$/i.test(blob.metadata.mimeType)) {
+    throw new Error(TRUSTED_VIDEO_REQUIRED);
+  }
+  return { buffer: blob.data, mimeType: blob.metadata.mimeType };
 }
 
 export function videoResolutionErrorMessage(error: unknown): string {

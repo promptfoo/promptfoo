@@ -145,6 +145,28 @@ describe('getRunnableAssertionValueError', () => {
     },
   );
 
+  describe.each(['video-rubric', 'not-video-rubric'] as const)('%s rubric forms', (type) => {
+    it.each([
+      { value: { criteria: ['Visible bicycle', 'Continuous motion'] } },
+      { value: ['Visible bicycle', 'Continuous motion'] },
+      { rubricPrompt: 'Judge the visible motion.' },
+      {
+        rubricPrompt: [{ role: 'system', content: 'Judge the motion.' }],
+      },
+    ])('accepts a runtime-supported rubric %j', (rubric) => {
+      expect(getRunnableAssertionValueError(make({ type, ...rubric }))).toBeUndefined();
+    });
+    it.each([
+      { value: 42 },
+      { value: {} },
+      { value: [] },
+      { rubricPrompt: '' },
+      { rubricPrompt: [] },
+    ])('rejects missing or invalid criteria %j', (rubric) => {
+      expect(getRunnableAssertionValueError(make({ type, ...rubric }))).toBeDefined();
+    });
+  });
+
   describe('LLM-graded assertions', () => {
     it('requires criteria for select-best', () => {
       expect(

@@ -206,8 +206,6 @@ const REQUIRED_STRING_OR_ARRAY_ASSERTION_TYPES = new Set<AssertionType>([
   'not-gleu',
   'g-eval',
   'not-g-eval',
-  'video-rubric',
-  'not-video-rubric',
   'meteor',
   'not-meteor',
   'similar',
@@ -524,6 +522,19 @@ function getModerationValueError(assertion: Assertion): string | undefined {
 }
 
 function getBasicExpectedValueError(assertion: Assertion): string | undefined {
+  if (assertion.type === 'video-rubric' || assertion.type === 'not-video-rubric') {
+    const value = assertion.value;
+    const rubric =
+      value === undefined || (typeof value === 'string' && value.trim() === '')
+        ? assertion.rubricPrompt
+        : value;
+    return hasNonBlankString(rubric) ||
+      (Array.isArray(rubric) && rubric.length > 0) ||
+      (isRecord(rubric) && Object.keys(rubric).length > 0)
+      ? undefined
+      : 'Enter video grading criteria or a rubric prompt.';
+  }
+
   if (
     ARRAY_VALUE_ASSERTION_TYPES.has(assertion.type) &&
     !hasNonBlankStringOrStringArray(assertion.value)

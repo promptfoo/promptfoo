@@ -2,6 +2,7 @@
 sidebar_label: Video rubric
 title: Video rubric
 description: Grade generated videos against a written rubric with a video-capable model. Configure the judge and score threshold, and understand managed storage and size limits.
+sidebar_position: 30
 ---
 
 `video-rubric` sends a generated video and your rubric to a video-capable grading model.
@@ -24,7 +25,7 @@ or `GEMINI_API_KEY`; `GOOGLE_API_KEY` takes precedence when both are set.
 The assertion requires a blob stored for the current evaluation by a trusted provider
 or included in a portable import. Google Veo and Gemini Interactions record this
 provenance when they save generated videos. A copied blob URI alone does not authorize
-grading its contents.
+grading its contents. The stored MIME type must identify a video.
 
 Sora's legacy `storageRef` output is not supported. External video URLs, including S3
 and cloud-storage URLs, are not downloaded by the assertion. Custom blob adapters must

@@ -187,14 +187,20 @@ type ChatMessageLike = {
   [key: string]: unknown;
 };
 
-function isChatMessageArray(value: unknown): value is ChatMessageLike[] {
+function isChatMessageArray(
+  value: unknown,
+  format: MultimodalPromptFormat,
+): value is ChatMessageLike[] {
   return (
     Array.isArray(value) &&
     value.every(
       (message) =>
         message !== null &&
         typeof message === 'object' &&
-        typeof (message as ChatMessageLike).role === 'string',
+        (typeof (message as ChatMessageLike).role === 'string' ||
+          (format === 'google' &&
+            (message as ChatMessageLike).role === undefined &&
+            Array.isArray((message as ChatMessageLike).parts))),
     )
   );
 }
@@ -667,11 +673,11 @@ function appendMediaToChatPrompt(
   mediaParts: MultimodalPromptPart[],
   format: MultimodalPromptFormat,
 ): string {
-  let parsed: ChatMessageLike[] | undefined;
+  let parsed: unknown;
   const trimmedPrompt = renderedPrompt.trim();
   if (trimmedPrompt.startsWith('- role:')) {
     try {
-      parsed = loadYaml(renderedPrompt) as ChatMessageLike[] | undefined;
+      parsed = loadYaml(renderedPrompt);
     } catch (err) {
       throw new Error(
         `Chat Completion prompt is not a valid YAML string: ${err}\n\n${renderedPrompt}`,
@@ -684,11 +690,16 @@ function appendMediaToChatPrompt(
       // Non-JSON prompts are still valid text prompts. Wrap them below.
     }
   }
-  if (isChatMessageArray(parsed)) {
-    const messages = parsed.map((message) => ({ ...message }));
+  const request =
+    format === 'google' && parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  const contents = request?.contents ?? parsed;
+  if (isChatMessageArray(contents, format)) {
+    const messages = contents.map((message) => ({ ...message }));
     let userMessageIndex = -1;
     for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'user') {
+      if (messages[i].role === 'user' || (format === 'google' && messages[i].role === undefined)) {
         userMessageIndex = i;
         break;
       }
@@ -703,10 +714,13 @@ function appendMediaToChatPrompt(
           : { content: appendMediaToContent(userMessage.content, mediaParts, format) }),
       };
     } else {
-      messages.push({ role: 'user', content: mediaParts });
+      messages.push({
+        role: 'user',
+        ...(format === 'google' ? { parts: mediaParts } : { content: mediaParts }),
+      });
     }
 
-    return JSON.stringify(messages);
+    return JSON.stringify(request ? { ...request, contents: messages } : messages);
   }
 
   return JSON.stringify([
