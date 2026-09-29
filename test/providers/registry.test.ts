@@ -64,6 +64,56 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
+  describe('OpenAI Decisions', () => {
+    it.each([
+      ['openai:decisions:gpt-6-luna', undefined, 'gpt-6-luna'],
+      ['openai:decisions', 'configured-decision-model', 'configured-decision-model'],
+      ['openai:decisions:gpt-6-luna', 'configured-decision-model', 'gpt-6-luna'],
+    ])('routes %s to the Decisions endpoint', async (providerPath, configuredModel, model) => {
+      const factory = providerMap.find((entry) => entry.test(providerPath))!;
+      const provider = await factory.create(
+        providerPath,
+        {
+          id: 'decision-fixture',
+          config: { model: configuredModel },
+          env: { OPENAI_API_KEY: 'provider-key' },
+        },
+        {
+          options: {},
+          env: { OPENAI_API_KEY: 'suite-key', OPENAI_API_BASE_URL: 'https://suite.example/v1' },
+        },
+      );
+
+      expect(provider.constructor.name).toBe('OpenAiDecisionsProvider');
+      expect(provider.id()).toBe('decision-fixture');
+      expect(provider).toHaveProperty('modelName', model);
+      expect(provider).toHaveProperty('env', {
+        OPENAI_API_KEY: 'provider-key',
+        OPENAI_API_BASE_URL: 'https://suite.example/v1',
+      });
+    });
+
+    it('loads Decisions with suite-scoped credentials', async () => {
+      const provider = await loadApiProvider('openai:decisions:gpt-6-luna', {
+        env: { OPENAI_API_KEY: 'suite-key' },
+      });
+
+      expect(provider.constructor.name).toBe('OpenAiDecisionsProvider');
+      expect(provider).toHaveProperty('env.OPENAI_API_KEY', 'suite-key');
+    });
+
+    it('requires an explicit Decisions model', async () => {
+      await expect(loadApiProvider('openai:decisions')).rejects.toThrow(/model/i);
+    });
+
+    it.each(['azure:decisions:gpt-6-luna', 'azureopenai:decisions:gpt-6-luna'])(
+      'rejects unsupported endpoint %s',
+      async (providerPath) => {
+        await expect(loadApiProvider(providerPath)).rejects.toThrow('openai:decisions:');
+      },
+    );
+  });
+
   it.each(['openai:agents-api', 'openai:agents-api:gpt-6-astra'])(
     'routes %s to the hosted Agents API with scoped credentials',
     async (providerPath) => {

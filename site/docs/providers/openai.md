@@ -65,6 +65,7 @@ For GPT-5.6 and newer models, use `openai:<model>`, such as `openai:gpt-6-luna`.
 | -------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------ |
 | GPT-5.6+ text, image inputs, and tools | `openai:<model>`                           | [Responses API](#responses-api)                                          |
 | Chat Completions                       | `openai:chat:<model>`                      | [Parameters](#configuring-parameters)                                    |
+| Classification and scoring             | `openai:decisions:<model>`                 | [Decisions API](./openai-decisions.md)                                   |
 | Embeddings                             | `openai:embedding:<model>`                 | [Embedding dimensions](#reducing-embedding-dimensions)                   |
 | Moderation                             | `openai:moderation:omni-moderation-latest` | [Moderation assertions](/docs/configuration/expected-outputs/moderation) |
 | Image generation                       | `openai:image:<model>`                     | [Images](#images)                                                        |
