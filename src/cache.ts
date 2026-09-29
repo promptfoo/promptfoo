@@ -1,20 +1,3 @@
-/**
- * Cache helpers exposed through the Node.js package.
- *
- * Use this namespace when custom providers need shared cache access or when
- * related evals need isolated cache namespaces.
- *
- * @example
- * ```ts
- * import { cache } from 'promptfoo';
- *
- * await cache.withCacheNamespace('preview', async () => {
- *   await cache.getCache().set('last-provider', 'openai:chat:gpt-5.5');
- * });
- * ```
- *
- * @module
- */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import crypto from 'node:crypto';
 import fs from 'fs';
@@ -36,12 +19,14 @@ import {
   getCloudTaskTeamId,
   getRequestUrlString,
   PROMPTFOO_TEAM_ID_HEADER,
+  preserveCloudAuthRedirects,
 } from './util/fetch/monkeyPatchFetch';
 import { isSecretField, looksLikeSecret, sanitizeUrlForLogging } from './util/sanitizer';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
 
 import type { CacheOptions } from './types/cache';
+import type { FetchOptions } from './util/fetch/types';
 
 let cacheInstance: Cache | undefined;
 const namespacedCacheInstances = new Map<string, Cache>();
@@ -61,34 +46,25 @@ const DEFAULT_CACHE_TTL_SECONDS = 60 * 60 * 24 * 14;
 /**
  * Get the cache TTL in milliseconds.
  * Reads from PROMPTFOO_CACHE_TTL environment variable (in seconds) or uses default.
- * @internal
  */
 export function getCacheTtlMs(): number {
   return getEnvInt('PROMPTFOO_CACHE_TTL', DEFAULT_CACHE_TTL_SECONDS) * 1000;
 }
 
 /**
- * Return the active promptfoo cache instance.
+ * Get the cache instance with optional namespace isolation.
  *
- * Most callers should prefer the higher-level cache helpers. Reach for the raw
- * cache only when a custom provider needs to manage its own cached values.
- *
- * @returns The active cache instance for the current namespace.
+ * @returns The current cache instance (namespace-aware if inside withCacheNamespace)
  *
  * @example
- * ```ts
+ * ```typescript
  * import { cache } from 'promptfoo';
  *
- * const value = await cache.getCache().get('provider:last-response');
+ * const cacheInstance = cache.getCache();
+ * const value = await cacheInstance.get('my-key');
  * ```
- *
- * @public
  */
 export function getCache() {
-  if (!getEffectiveCacheEnabled()) {
-    return createCache({ stores: [], ttl: getCacheTtlMs(), refreshThreshold: 0 });
-  }
-
   const namespace = cacheNamespaceStorage.getStore()?.namespace;
   if (namespace) {
     return getNamespacedCache(namespace);
@@ -209,16 +185,10 @@ function shouldApplyRepeatCacheSuffix(repeatIndex?: number) {
   );
 }
 
-/**
- * Build the implementation-level cache key for the current namespace.
- *
- * @internal
- */
 export function getScopedCacheKey(cacheKey: string, namespace = getCurrentCacheNamespace()) {
   return namespace ? `${namespace}:${cacheKey}` : cacheKey;
 }
 
-/** @internal */
 export function getCacheClearGeneration() {
   return cacheClearGeneration;
 }
@@ -267,30 +237,29 @@ async function clearNamespacedCache(cache: Cache, namespace: string) {
 }
 
 /**
- * Run an async operation inside an isolated cache namespace.
+ * Run a function with isolated cache namespace.
  *
- * Namespaces are useful when two related runs should not reuse each other's
- * cached responses, such as baseline and candidate comparisons.
+ * All cache operations within the function will be scoped to the namespace,
+ * preventing cache collisions between different test runs or environments.
+ *
+ * @param namespace Namespace prefix for cache keys (undefined = no namespace)
+ * @param fn Async function to run with the namespace
+ *
+ * @returns Result of the function
  *
  * @example
- * ```ts
+ * ```typescript
  * import { cache, evaluate } from 'promptfoo';
  *
- * const baseline = await cache.withCacheNamespace('baseline', () =>
- *   evaluate(baselineSuite),
- * );
- * const candidate = await cache.withCacheNamespace('candidate', () =>
- *   evaluate(candidateSuite),
- * );
+ * // Run v1 and v2 evals with separate caches
+ * const v1Results = await cache.withCacheNamespace('v1', async () => {
+ *   return evaluate(testSuiteV1);
+ * });
+ *
+ * const v2Results = await cache.withCacheNamespace('v2', async () => {
+ *   return evaluate(testSuiteV2);
+ * });
  * ```
- *
- * @param namespace - Namespace suffix to apply for the duration of the call.
- * Pass `undefined` to reuse the current namespace unchanged.
- * @param fn - Async operation to run inside the scoped namespace.
- * @returns The value returned by `fn`.
- *
- * @typeParam T - Value returned by `fn`.
- * @public
  */
 export function withCacheNamespace<T>(namespace: string | undefined, fn: () => Promise<T>) {
   if (!namespace) {
@@ -306,11 +275,6 @@ export function withCacheNamespace<T>(namespace: string | undefined, fn: () => P
   return cacheNamespaceStorage.run({ namespace: scopedNamespace }, fn);
 }
 
-/**
- * Run an operation with a request-local cache override.
- *
- * @internal
- */
 export function withCacheEnabled<T>(enabledOverride: boolean | undefined, fn: () => Promise<T>) {
   if (enabledOverride === undefined) {
     return fn();
@@ -323,38 +287,15 @@ function getEffectiveCacheEnabled() {
   return cacheEnabledStorage.getStore()?.enabled ?? enabled;
 }
 
-/**
- * Metadata returned by `fetchWithCache()`.
- *
- * @example
- * ```ts
- * const result: FetchWithCacheResult<{ ok: boolean }> = {
- *   data: { ok: true },
- *   cached: false,
- *   status: 200,
- *   statusText: 'OK',
- * };
- * ```
- *
- * @typeParam T - Parsed response payload type.
- * @public
- */
 export type FetchWithCacheResult<T> = {
-  /** Parsed response payload. */
   data: T;
-  /** Whether the response was served from cache. */
   cached: boolean;
   /** Another concurrent caller owns the upstream request that produced this response. */
   coalesced?: boolean;
-  /** HTTP response status code. */
   status: number;
-  /** HTTP response status text. */
   statusText: string;
-  /** Response headers normalized to string values. */
   headers?: Record<string, string>;
-  /** End-to-end fetch latency in milliseconds. */
   latencyMs?: number;
-  /** Delete this response from cache when it was cache-backed. */
   deleteFromCache?: () => Promise<void>;
   updateCache?: (
     data: unknown,
@@ -490,7 +431,6 @@ function getUrlForFetchCacheKey(url: RequestInfo) {
   }
 }
 
-/** @internal */
 export function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
   const headers = new Headers(getFetchWithProxyHeaders(url, options));
 
@@ -664,7 +604,6 @@ function getInflightFetchCacheKey(cacheKey: string, url: RequestInfo, options: R
 /**
  * Atomically claim a cache-scoped one-time action. Disk-backed claims use an exclusive file so
  * separate eval processes cannot both attribute the same background response's usage.
- * @internal
  */
 export function claimCacheKeyOnce(cacheKey: string): boolean {
   const scopedCacheKey = getScopedCacheKey(cacheKey);
@@ -747,7 +686,7 @@ function deserializeFetchResponse<T>(
 
 async function fetchAndReadBody(
   url: RequestInfo,
-  options: RequestInit,
+  options: FetchOptions,
   timeout: number,
   maxRetries: number | undefined,
   isIdempotent: boolean,
@@ -865,47 +804,49 @@ async function prepareFetchResponse(
 }
 
 /**
- * Fetch a URL through promptfoo's retrying cache wrapper.
+ * Fetch a URL with automatic caching.
  *
- * Use this in custom providers when you want the same retry and response-cache
- * behavior as built-in HTTP-backed providers.
+ * Caches HTTP responses with configurable TTL. Useful for fetching external
+ * data files, embeddings, or API responses that don't change frequently.
  *
- * @param url - Target URL or `Request` to fetch.
- * @param options - Fetch options (method, headers, body) passed through to the
- * underlying request.
- * @param timeout - Request timeout in milliseconds. Defaults to the value of the
- * `REQUEST_TIMEOUT_MS` environment variable.
- * @param format - `'json'` (default) parses the response body as JSON;
- * `'text'` returns the raw response body unchanged.
- * @param bustOrOptions - Skip the cache, or provide per-request cache options.
- * @param maxRetries - Maximum retry attempts on transient errors. Defaults to
- * the active retry context, or 4. `PROMPTFOO_REQUEST_BACKOFF_MS` controls the
- * base delay between retries.
- * @returns Parsed response data plus cache and HTTP metadata.
- * @throws When `format` is `'json'` and the response body is not valid JSON.
+ * @param url URL to fetch
+ * @param options Fetch options (method, headers, body, etc.)
+ * @param timeout Request timeout in milliseconds (default: standard timeout)
+ * @param format Response format: 'json' or 'text' (default: 'json')
+ * @param bustOrOptions Bypass cache or provide cache options for this request
+ * @param maxRetries Maximum number of retries on transient errors
+ *
+ * @returns FetchWithCacheResult with data, cache status, and HTTP metadata
  *
  * @example
- * ```ts
+ * ```typescript
  * import { cache } from 'promptfoo';
  *
- * type Echo = { args: Record<string, string> };
- * const { data, cached } = await cache.fetchWithCache<Echo>(
- *   'https://httpbin.org/get?model=gpt-4o-mini',
+ * // Fetch with 1-hour TTL
+ * const result = await cache.fetchWithCache(
+ *   'https://api.example.com/data',
+ *   { method: 'GET' },
+ *   undefined,
+ *   'json'
  * );
- * console.log(cached, data.args.model);
+ *
+ * console.log(result.cached); // true if from cache
+ * console.log(result.data); // the fetched data
+ * console.log(result.status); // HTTP status code
  * ```
  *
- * @typeParam T - Parsed response payload type returned from JSON mode.
- * @public
+ * @see withCacheNamespace for cache isolation
+ * @see enableCache / disableCache for cache control
  */
 export async function fetchWithCache<T = unknown>(
   url: RequestInfo,
-  options: RequestInit = {},
+  options: FetchOptions = {},
   timeout: number = getRequestTimeoutMs(),
   format: 'json' | 'text' = 'json',
   bustOrOptions: boolean | CacheOptions | undefined = false,
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
+  const fetchOptions = preserveCloudAuthRedirects(url, options);
   const cacheOptions: CacheOptions =
     typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
   const { bust = false, repeatIndex, cacheKey: providedCacheKey } = cacheOptions;
@@ -913,22 +854,33 @@ export async function fetchWithCache<T = unknown>(
   // Only retry body-read for idempotent methods to avoid double-submitting
   // POST/PATCH requests (the server already processed the request once
   // headers arrived; only the response body stream failed).
-  const method = (options.method ?? (url instanceof Request ? url.method : 'GET')).toUpperCase();
+  const method = (
+    fetchOptions.method ?? (url instanceof Request ? url.method : 'GET')
+  ).toUpperCase();
   const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
 
   const cacheEnabled = getEffectiveCacheEnabled();
+  if (cacheEnabled && !bust && fetchOptions.getAuthHeaders && !providedCacheKey) {
+    throw new Error(
+      'Request-time authentication requires cache bypass or an explicit principal-scoped cache key.',
+    );
+  }
   const repeatSuffix = shouldApplyRepeatCacheSuffix(repeatIndex) ? `:repeat${repeatIndex}` : '';
+  // Caller-provided keys must not reuse responses accepted without Cloud redirect protection.
+  const providedKeyPrefix = fetchOptions.restrictCloudAuthRedirects
+    ? 'fetch:cloud-auth:v3'
+    : 'fetch:v3';
   const cacheKey =
     cacheEnabled && !bust
       ? providedCacheKey
-        ? getScopedCacheKey(`fetch:v3:${providedCacheKey}${repeatSuffix}`)
-        : getFetchCacheKey(url, options, method, format, repeatIndex)
+        ? getScopedCacheKey(`${providedKeyPrefix}:${providedCacheKey}${repeatSuffix}`)
+        : getFetchCacheKey(url, fetchOptions, method, format, repeatIndex)
       : null;
 
   if (!cacheEnabled || bust || cacheKey == null) {
     const { respText, resp, fetchLatencyMs } = await fetchAndReadBody(
       url,
-      options,
+      fetchOptions,
       timeout,
       maxRetries,
       isIdempotent,
@@ -964,14 +916,14 @@ export async function fetchWithCache<T = unknown>(
     return deserializeFetchResponse<T>(cachedResponse, true, cache, cacheKey);
   }
 
-  const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, options);
+  const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, fetchOptions);
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
   const coalesced = inflightResponse !== undefined;
   if (!inflightResponse) {
     inflightResponse = (async () => {
       const preparedResponse = await prepareFetchResponse(
         url,
-        options,
+        fetchOptions,
         timeout,
         maxRetries,
         isIdempotent,
@@ -993,59 +945,48 @@ export async function fetchWithCache<T = unknown>(
 }
 
 /**
- * Enable the shared promptfoo cache.
- *
- * Call this after a previous `disableCache()` when later work in the same
- * process should resume normal cache reads and writes.
+ * Enable caching for all provider calls (default behavior).
  *
  * @example
- * ```ts
+ * ```typescript
  * import { cache } from 'promptfoo';
- *
  * cache.enableCache();
  * ```
- *
- * @public
  */
 export function enableCache() {
   enabled = true;
 }
 
 /**
- * Disable the shared promptfoo cache for future calls.
+ * Disable caching. Provider calls will hit the API every time.
  *
- * This changes process-level cache behavior for subsequent calls; it does not
- * delete entries that are already stored.
+ * Useful during development or testing when you want fresh results.
  *
  * @example
- * ```ts
- * import { cache } from 'promptfoo';
+ * ```typescript
+ * import { cache, evaluate } from 'promptfoo';
  *
  * cache.disableCache();
+ * const results = await evaluate(testSuite);  // Always fresh
+ * cache.enableCache();
  * ```
- *
- * @public
  */
 export function disableCache() {
   enabled = false;
 }
 
 /**
- * Clear the shared promptfoo cache.
+ * Clear all cached results.
  *
- * Use this when tests or scripts need to remove existing shared entries before
- * running a fresh request path.
- *
- * @returns `true` after the active cache store has been cleared.
+ * Removes all cached provider responses. The cache will refetch on next access.
  *
  * @example
- * ```ts
- * import { cache } from 'promptfoo';
+ * ```typescript
+ * import { cache, evaluate } from 'promptfoo';
  *
  * await cache.clearCache();
+ * const results = await evaluate(testSuite);  // Refetches all
  * ```
- *
- * @public
  */
 export async function clearCache() {
   inflightFetchResponses.clear();
@@ -1061,23 +1002,18 @@ export async function clearCache() {
 }
 
 /**
- * Return whether the shared promptfoo cache is enabled.
+ * Check if caching is currently enabled.
  *
- * This reports the effective state for the current call context, including any
- * scoped override applied by internal helpers.
- *
- * @returns `true` when cache reads and writes are enabled for the current call.
+ * @returns true if cache is enabled, false otherwise
  *
  * @example
- * ```ts
+ * ```typescript
  * import { cache } from 'promptfoo';
  *
  * if (cache.isCacheEnabled()) {
- *   console.log('cache is active');
+ *   console.log('Cache is active');
  * }
  * ```
- *
- * @public
  */
 export function isCacheEnabled() {
   return getEffectiveCacheEnabled();

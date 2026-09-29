@@ -15,7 +15,6 @@ import {
   neverGenerateRemote,
   neverGenerateRemoteForRegularEvals,
   shouldGenerateRemote,
-  withRemoteGeneration,
 } from '../../src/redteam/remoteGeneration';
 
 vi.mock('../../src/envars');
@@ -207,22 +206,6 @@ describe('shouldGenerateRemote', () => {
     });
     cliState.remote = true;
     expect(shouldGenerateRemote()).toBe(false);
-  });
-
-  it('keeps overlapping remote overrides isolated', async () => {
-    vi.mocked(getEnvBool).mockReturnValue(false);
-    vi.mocked(getEnvString).mockImplementation((key) => (key === 'OPENAI_API_KEY' ? 'sk' : ''));
-    const results = await Promise.all([
-      withRemoteGeneration(true, async () => {
-        await Promise.resolve();
-        return shouldGenerateRemote();
-      }),
-      withRemoteGeneration(false, async () => {
-        await Promise.resolve();
-        return shouldGenerateRemote();
-      }),
-    ]);
-    expect(results).toEqual([true, false]);
   });
 });
 

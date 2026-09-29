@@ -1,13 +1,3 @@
-/**
- * Programmatic API for running promptfoo evals from Node.js.
- *
- * The root package entrypoint is the supported public boundary for the Node.js
- * API. Use the exported functions, namespaces, and types from this module rather
- * than importing deep source files directly.
- *
- * @packageDocumentation
- */
-
 import assertions from './assertions/index';
 import * as cache from './cache';
 import guardrails from './guardrails';
@@ -20,15 +10,10 @@ import { extractSystemPurpose } from './redteam/extraction/purpose';
 import { GRADERS } from './redteam/graders';
 import { RedteamGraderBase, RedteamPluginBase } from './redteam/plugins/base';
 import { Plugins } from './redteam/plugins/index';
-import { doRedteamRun, withRedteamEnvIsolation } from './redteam/shared';
+import { doRedteamRun } from './redteam/shared';
 import { Strategies } from './redteam/strategies/index';
 
-import type Eval from './models/eval';
-import type {
-  RedteamRunOptions as InternalRedteamRunOptions,
-  RedteamGenerateOptions,
-} from './redteam/types';
-import type { UnifiedConfig } from './types/index';
+import type { RedteamRunOptions } from './redteam/types';
 
 export { PromptSuggestionsRejectedError } from './evaluator';
 export { EmailValidationError } from './globalConfig/accounts';
@@ -42,11 +27,6 @@ export * from './types/index';
 export { isTransformFunction } from './types/transform';
 export { ConfigResolutionError } from './util/config/load';
 
-export type {
-  RunAssertionOptions,
-  RunAssertionsOptions,
-} from './assertions/index';
-export type { BlobRef } from './blobs/types';
 // Extension hook context types for users writing custom extensions
 export type {
   AfterAllExtensionHookContext,
@@ -55,141 +35,15 @@ export type {
   BeforeEachExtensionHookContext,
   ExtensionHookContextMap,
 } from './evaluatorHelpers';
-export type { ConversationRelevanceMessage } from './external/matchers/deepeval';
-export type {
-  AdaptiveModification,
-  AdaptiveRequest,
-  AdaptiveResult,
-  GuardPiiFinding,
-  GuardResult,
-  GuardResultEntry,
-} from './guardrails';
-export type { ModerationMatchOptions } from './matchers/moderation';
-export type { LoadApiProvidersOptions } from './providers/index';
-export type {
-  PluginConfig,
-  PluginGraderExample,
-  RedteamGenerateOptions,
-  StrategyConfig,
-} from './redteam/types';
-export type { EnvOverrides } from './types/env';
-export type {
-  Assertion,
-  AssertionOrSet,
-  AssertionSet,
-  AssertionValueFunction,
-  AssertionValueFunctionContext,
-  AtomicTestCase,
-  CompletedPrompt,
-  EvaluateOptions,
-  EvaluateProgressCallback,
-  EvaluateTable,
-  EvaluateTableHead,
-  EvaluateTableOutput,
-  EvaluateTableRow,
-  EvaluateTestSuite,
-  GradingResult,
-  LoadApiProviderContext,
-  PromptMetrics,
-  ScoringFunction,
-  TestCase,
-  TestCaseMetadata,
-  TestCaseOptions,
-} from './types/index';
-export type {
-  Prompt,
-  PromptConfig,
-  PromptContent,
-  PromptFunction,
-  PromptFunctionResult,
-} from './types/prompts';
-export type {
-  ApiProvider,
-  AudioOutput,
-  CallApiContextParams,
-  CallApiFunction,
-  CallApiOptionsParams,
-  ChatMessage,
-  GuardrailResponse,
-  ImageOutput,
-  ProviderClassificationResponse,
-  ProviderConfig,
-  ProviderEmbeddingResponse,
-  ProviderFunction,
-  ProviderOptions,
-  ProviderResponse,
-  ProviderSimilarityResponse,
-  ProvidersConfig,
-  VideoOutput,
-} from './types/providers';
-export type {
-  AssertionTokenUsage,
-  CompletionTokenDetails,
-  TokenUsage,
-} from './types/shared';
 export type { TransformContext, TransformFunction, TransformPrompt } from './types/transform';
 
-export type RedteamRunOptions = Omit<InternalRedteamRunOptions, 'eventSource' | 'target'>;
+type LibraryRedteamRunOptions = Omit<RedteamRunOptions, 'eventSource'>;
 
-async function runRedteam(options: RedteamRunOptions = {}) {
-  if ('target' in options && options.target !== undefined) {
-    throw new Error(
-      'redteam.run() does not support target selection. Define providers in the configuration file.',
-    );
-  }
+async function runRedteam(options: LibraryRedteamRunOptions = {}) {
   return doRedteamRun({ ...options, eventSource: 'library' });
 }
 
-/**
- * Return type produced by `redteam.generate()`.
- *
- * @beta
- */
-export type RedteamGenerateResult = Partial<UnifiedConfig> | null;
-
-/**
- * Resolved eval record returned by `redteam.run()`. `undefined` when the run
- * was started but produced no eval (for example, when the operation was
- * cancelled before any results were written).
- *
- * @beta
- */
-export type RedteamRunResult = Eval | undefined;
-
-/**
- * Advanced red team helpers exposed through the Node.js package.
- *
- * This surface is still evolving; prefer the CLI and documented red team config
- * flows unless you specifically need programmatic orchestration.
- *
- * @beta
- */
-export interface RedteamApi {
-  /** Helpers for extracting target metadata before generation. */
-  Extractors: {
-    extractEntities: typeof extractEntities;
-    extractMcpToolsInfo: typeof extractMcpToolsInfo;
-    extractSystemPurpose: typeof extractSystemPurpose;
-  };
-  /** Registered red team graders. */
-  Graders: typeof GRADERS;
-  /** Built-in red team plugins. */
-  Plugins: typeof Plugins;
-  /** Built-in red team strategies. */
-  Strategies: typeof Strategies;
-  /** Base classes for advanced extension points. */
-  Base: {
-    Plugin: typeof RedteamPluginBase;
-    Grader: typeof RedteamGraderBase;
-  };
-  /** Generate a red team config programmatically. */
-  generate(options: RedteamGenerateOptions): Promise<RedteamGenerateResult>;
-  /** Run a red team eval programmatically with library-owned event attribution. */
-  run(options?: RedteamRunOptions): Promise<RedteamRunResult>;
-}
-
-/** Implementation of {@link RedteamApi}. @beta */
-const redteam: RedteamApi = {
+const redteam = {
   Extractors: {
     extractEntities,
     extractMcpToolsInfo,
@@ -202,7 +56,7 @@ const redteam: RedteamApi = {
     Plugin: RedteamPluginBase,
     Grader: RedteamGraderBase,
   },
-  generate: (options) => withRedteamEnvIsolation(() => doGenerateRedteam(options)),
+  generate: doGenerateRedteam,
   run: runRedteam,
 };
 

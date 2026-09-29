@@ -1,15 +1,14 @@
 import { callGradingProvider, getAndCheckProvider } from './providers';
-import { fail } from './shared';
+import { graderFail } from './shared';
 
 import type { ApiClassificationProvider, GradingConfig, GradingResult } from '../types/index';
 
 /**
- * Score whether provider classification output meets a threshold.
  *
  * @param expected Expected classification. If undefined, matches any classification.
  * @param output Text to classify.
  * @param threshold Value between 0 and 1. If the expected classification is undefined, the threshold is the minimum score for any classification. If the expected classification is defined, the threshold is the minimum score for that classification.
- * @param grading Provider and rubric overrides for the classifier.
+ * @param grading
  * @returns Pass if the output matches the classification with a score greater than or equal to the threshold.
  */
 export async function matchesClassification(
@@ -30,18 +29,16 @@ export async function matchesClassification(
   );
 
   if (!resp.classification) {
-    return fail(resp.error || 'Unknown error fetching classification');
+    return graderFail(resp.error || 'Unknown error fetching classification');
   }
+  const scores = Object.values(resp.classification);
+  if (scores.length === 0) {
+    // No scores means there is no verdict, even when a specific label was requested.
+    return graderFail('No classification scores returned');
+  }
+
   let score: number;
   if (expected === undefined) {
-    const scores = Object.values(resp.classification);
-    if (scores.length === 0) {
-      return {
-        pass: false,
-        score: 0,
-        reason: 'No classification scores returned',
-      };
-    }
     score = Math.max(...scores);
   } else {
     score = resp.classification[expected] || 0;

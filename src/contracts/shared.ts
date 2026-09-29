@@ -1,45 +1,14 @@
 import { z } from 'zod';
 
-/**
- * Detailed completion-token breakdown reported by reasoning-capable models.
- *
- * @example
- * ```ts
- * const details: CompletionTokenDetails = {
- *   reasoning: 32,
- *   cacheReadInputTokens: 128,
- * };
- * ```
- *
- * @public
- */
+// for reasoning models
 export const CompletionTokenDetailsSchema = z.object({
-  /** Tokens spent on hidden model reasoning when the provider reports them. */
   reasoning: z.number().optional(),
-  /** Prediction tokens accepted by speculative decoding, when reported. */
   acceptedPrediction: z.number().optional(),
-  /** Prediction tokens rejected by speculative decoding, when reported. */
   rejectedPrediction: z.number().optional(),
-  /** Input tokens read from a provider cache. */
   cacheReadInputTokens: z.number().optional(),
-  /** Input tokens written into a provider cache. */
   cacheCreationInputTokens: z.number().optional(),
 });
 
-/**
- * Detailed completion-token breakdown reported by reasoning-capable models.
- *
- * @example
- * ```ts
- * const details: CompletionTokenDetails = {
- *   reasoning: 32,
- *   cacheReadInputTokens: 128,
- * };
- * ```
- *
- * @interface
- * @public
- */
 export type CompletionTokenDetails = z.infer<typeof CompletionTokenDetailsSchema>;
 
 const TokenUsageCoreSchema = z.object({
@@ -66,18 +35,6 @@ export const BaseTokenUsageSchema = TokenUsageBreakdownSchema.extend({
   incurredTokenUsage: TokenUsageBreakdownSchema.optional(),
 });
 
-/**
- * Token accounting attributed to model-graded assertions.
- * @interface
- * @public
- */
-export type AssertionTokenUsage = NonNullable<TokenUsage['assertions']>;
-
-/**
- * Provider usage with independent generation, attacker, grading, and incurred breakdowns.
- * @interface
- * @public
- */
 export type TokenUsage = z.infer<typeof BaseTokenUsageSchema>;
 export type NormalizedTokenUsage = Required<
   Omit<TokenUsage, 'attacker' | 'generation' | 'incurredTokenUsage'>

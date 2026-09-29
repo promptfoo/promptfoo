@@ -16,7 +16,7 @@ import { callGradingProvider, callProviderWithContext, getAndCheckProvider } fro
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import {
   cosineSimilarity,
-  fail,
+  graderFail,
   normalizeMatcherTokenUsage,
   splitIntoSentences,
   splitTextIntoSentences,
@@ -25,16 +25,6 @@ import {
 
 import type { CallApiContextParams, GradingConfig, GradingResult, VarValue } from '../types/index';
 
-/**
- * Score how relevant a generated answer is to the original input question.
- *
- * @param input - Original user question or prompt.
- * @param output - Model answer to grade.
- * @param threshold - Minimum average relevance score required to pass.
- * @param grading - Optional provider and rubric overrides.
- * @param providerCallContext - Provider context forwarded to grader calls.
- * @returns Relevance grading result without the surrounding assertion payload.
- */
 export async function matchesAnswerRelevance(
   input: string,
   output: string,
@@ -75,7 +65,7 @@ export async function matchesAnswerRelevance(
     );
     accumulateTokenUsage(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.output) {
-      return fail(resp.error || 'No output', tokensUsed);
+      return graderFail(resp.error || 'No output', tokensUsed);
     }
 
     invariant(
@@ -99,7 +89,7 @@ export async function matchesAnswerRelevance(
   );
   accumulateTokenUsage(tokensUsed, inputEmbeddingResp.tokenUsage);
   if (inputEmbeddingResp.error || !inputEmbeddingResp.embedding) {
-    return fail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
+    return graderFail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
   }
   const inputEmbedding = inputEmbeddingResp.embedding;
 
@@ -115,7 +105,7 @@ export async function matchesAnswerRelevance(
     );
     accumulateTokenUsage(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.embedding) {
-      return fail(resp.error || 'No embedding', tokensUsed);
+      return graderFail(resp.error || 'No embedding', tokensUsed);
     }
     const questionSimilarity = cosineSimilarity(inputEmbedding, resp.embedding);
     similarities.push(questionSimilarity);
@@ -153,17 +143,6 @@ export async function matchesAnswerRelevance(
   };
 }
 
-/**
- * Score how much of the ground truth is supported by the supplied context.
- *
- * @param context - Retrieved context chunks or a serialized context string.
- * @param groundTruth - Reference answer whose claims should be attributable.
- * @param threshold - Minimum recall score required to pass.
- * @param grading - Optional provider and rubric overrides.
- * @param vars - Template variables available while rendering custom rubrics.
- * @param providerCallContext - Provider context forwarded to grader calls.
- * @returns Context-recall grading result without the surrounding assertion payload.
- */
 export async function matchesContextRecall(
   context: string | string[],
   groundTruth: string,
@@ -200,7 +179,7 @@ export async function matchesContextRecall(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'context-recall produced malformed response');
@@ -236,7 +215,28 @@ export async function matchesContextRecall(
     });
   }
 
-  const score = sentences.length > 0 ? numerator / sentences.length : 0;
+  // A well-formed recall response classifies every answer sentence with
+  // [Attributed] / [Not Attributed]. Nonempty output with no classification
+  // lines at all -- a refusal, an apology, an out-of-format explanation -- is a
+  // malformed grading attempt, not a genuine 0.00 recall verdict. Tag it as a
+  // grader error so inverse assertions cannot turn it into a spurious pass.
+  if (sentences.length === 0) {
+    return {
+      pass: false,
+      score: 0,
+      reason: 'Grader returned no [Attributed]/[Not Attributed] classifications',
+      tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
+      metadata: {
+        sentenceAttributions: [],
+        totalSentences: 0,
+        attributedSentences: 0,
+        score: 0,
+        graderError: true,
+      },
+    };
+  }
+
+  const score = numerator / sentences.length;
   const pass = score >= threshold - Number.EPSILON;
 
   const metadata = {
@@ -257,16 +257,6 @@ export async function matchesContextRecall(
   };
 }
 
-/**
- * Score how much of the supplied context is relevant to the question.
- *
- * @param question - Question used to judge whether context is relevant.
- * @param context - Retrieved context chunks or a serialized context string.
- * @param threshold - Minimum relevance score required to pass.
- * @param grading - Optional provider and rubric overrides.
- * @param providerCallContext - Provider context forwarded to grader calls.
- * @returns Context-relevance grading result without the surrounding assertion payload.
- */
 export async function matchesContextRelevance(
   question: string,
   context: string | string[],
@@ -300,7 +290,7 @@ export async function matchesContextRelevance(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'context-relevance produced malformed response');
@@ -326,9 +316,48 @@ export async function matchesContextRelevance(
   // would score 1/N instead of 1.0).
   const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
   const segmentRelevant = contextIsPreSegmented ? splitIntoSentences : splitTextIntoSentences;
-  const relevantSentences = insufficientInformation
-    ? []
-    : [...new Set(segmentRelevant(resp.output))];
+  const segments = insufficientInformation ? [] : segmentRelevant(resp.output);
+
+  // Only count segments whose sentences are quoted from the context. A grader line can
+  // join nonadjacent sentences from a chunk, but still counts as one selected unit.
+  // Dedupe on normalized text so reformatted repeats count once.
+  const normalizeForComparison = (value: string) => value.toLowerCase().replace(/\s+/g, ' ').trim();
+  const contextNormalized = normalizeForComparison(contextString);
+  const quotedSegments = new Map<string, string>();
+  for (const segment of segments) {
+    // A list marker needs following whitespace; otherwise preserve numbers like 1.2 and -5.
+    const key = normalizeForComparison(segment.replace(/^\s*(?:\d+[.)]|[-*])\s+/, ''));
+    const sentences = splitTextIntoSentences(key);
+    if (
+      sentences.length > 0 &&
+      sentences.every((sentence) => contextNormalized.includes(sentence)) &&
+      !quotedSegments.has(key)
+    ) {
+      quotedSegments.set(key, segment);
+    }
+  }
+  const relevantSentences = [...quotedSegments.values()];
+
+  // Nonempty output that quotes nothing from the context (a refusal, an apology, an
+  // out-of-format explanation) is a malformed grading attempt, not a low-relevance verdict.
+  // Tag it as a grader error so inverse assertions cannot turn it into a spurious pass.
+  const graderError = segments.length > 0 && relevantSentences.length === 0;
+
+  if (graderError) {
+    return {
+      pass: false,
+      score: 0,
+      reason: 'Grader output does not quote the provided context',
+      tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
+      metadata: {
+        graderError: true,
+        graderOutputs: {
+          final: resp.output,
+        },
+      },
+    };
+  }
+
   // Cap at the total so the score never exceeds 1.
   const numerator = Math.min(relevantSentences.length, totalContextUnits);
 
@@ -360,18 +389,6 @@ export async function matchesContextRelevance(
   };
 }
 
-/**
- * Score whether the answer is faithful to the supplied context.
- *
- * @param query - Original question posed to the model.
- * @param output - Model answer to grade.
- * @param context - Retrieved context chunks or a serialized context string.
- * @param threshold - Minimum faithfulness score required to pass.
- * @param grading - Optional provider and rubric overrides.
- * @param vars - Template variables available while rendering custom rubrics.
- * @param providerCallContext - Provider context forwarded to grader calls.
- * @returns Context-faithfulness grading result without the surrounding assertion payload.
- */
 export async function matchesContextFaithfulness(
   query: string,
   output: string,
@@ -424,7 +441,7 @@ export async function matchesContextFaithfulness(
   );
   accumulateTokenUsage(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', tokensUsed);
+    return graderFail(resp.error || 'No output', tokensUsed);
   }
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
@@ -432,6 +449,9 @@ export async function matchesContextFaithfulness(
   const contextString = serializeContext(context);
 
   const statements = splitIntoSentences(resp.output);
+  if (statements.length === 0) {
+    return graderFail('Could not extract context-faithfulness statements', tokensUsed);
+  }
   promptText = await renderLlmRubricPrompt(nliPrompt, {
     ...(vars || {}),
     context: contextString,
@@ -451,7 +471,7 @@ export async function matchesContextFaithfulness(
   );
   accumulateTokenUsage(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', tokensUsed);
+    return graderFail(resp.error || 'No output', tokensUsed);
   }
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
@@ -460,25 +480,30 @@ export async function matchesContextFaithfulness(
   finalAnswer = finalAnswer.toLowerCase();
   let verdicts = resp.output.toLowerCase().trim();
   let score = 0;
-  if (statements.length > 0) {
-    if (verdicts.includes(finalAnswer)) {
-      verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
-      const parsedVerdicts = verdicts.split('.').filter((answer) => answer.trim() !== '');
-      if (parsedVerdicts.length > 0) {
-        const unsupportedVerdicts = parsedVerdicts.filter(
-          (answer) => !answer.includes('yes'),
-        ).length;
-        const missingVerdicts = Math.max(0, statements.length - parsedVerdicts.length);
-        score = 1 - (unsupportedVerdicts + missingVerdicts) / statements.length;
-      }
-    } else {
-      const noVerdictCount = verdicts.split('verdict: no').length - 1;
-      const yesVerdictCount = verdicts.split('verdict: yes').length - 1;
-      if (noVerdictCount + yesVerdictCount > 0) {
-        const missingVerdicts = Math.max(0, statements.length - noVerdictCount - yesVerdictCount);
-        score = 1 - (noVerdictCount + missingVerdicts) / statements.length;
-      }
+  let parsedVerdict = false;
+  if (verdicts.includes(finalAnswer)) {
+    verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
+    const parsedVerdicts = verdicts.split('.').filter((answer) => answer.trim() !== '');
+    if (
+      parsedVerdicts.length > 0 &&
+      parsedVerdicts.every((answer) => /\b(?:yes|no)\b/.test(answer))
+    ) {
+      parsedVerdict = true;
+      const unsupportedVerdicts = parsedVerdicts.filter((answer) => !answer.includes('yes')).length;
+      const missingVerdicts = Math.max(0, statements.length - parsedVerdicts.length);
+      score = 1 - (unsupportedVerdicts + missingVerdicts) / statements.length;
     }
+  } else {
+    const noVerdictCount = verdicts.split('verdict: no').length - 1;
+    const yesVerdictCount = verdicts.split('verdict: yes').length - 1;
+    if (noVerdictCount + yesVerdictCount > 0) {
+      parsedVerdict = true;
+      const missingVerdicts = Math.max(0, statements.length - noVerdictCount - yesVerdictCount);
+      score = 1 - (noVerdictCount + missingVerdicts) / statements.length;
+    }
+  }
+  if (!parsedVerdict) {
+    return graderFail('Could not parse context-faithfulness verdicts', tokensUsed);
   }
   score = Math.min(1, Math.max(0, score));
   const pass = score >= threshold - Number.EPSILON;

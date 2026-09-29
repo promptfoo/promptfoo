@@ -114,7 +114,7 @@ import type {
   ScoringFunction,
 } from '../types/index';
 
-const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
+const DEFAULT_ASSERTIONS_MAX_CONCURRENCY = 3;
 const DEFAULT_TRACE_FETCH_MAX_ATTEMPTS = 6;
 const DEFAULT_TRACE_FETCH_RETRY_DELAY_MS = 250;
 const DEFAULT_TRACE_FETCH_STABLE_POLLS = 2;
@@ -369,54 +369,67 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
 }
 
 /**
- * Options for `runAssertion()`.
+ * Execute a single assertion against provider output.
  *
- * @example
- * ```ts
- * const options: RunAssertionOptions = {
- *   assertion: { type: 'contains', value: 'Ada' },
- *   test: { vars: {} },
- *   providerResponse: { output: 'Hello Ada' },
- * };
+ * This is a core API for programmatic assertion execution. Use this when:
+ * - Running assertions independently outside of the main evaluate() flow
+ * - Implementing custom evaluation pipelines
+ * - Testing specific provider outputs
+ * - Building custom grading systems
+ *
+ * @param params Configuration for assertion execution
+ * @param params.prompt The prompt that was sent to the provider (optional, for context)
+ * @param params.provider The API provider instance (optional, for context in assertions)
+ * @param params.assertion The assertion to run (e.g., `{ type: 'contains', value: 'expected' }`)
+ * @param params.test The test case context containing variables and configuration
+ * @param params.vars Template variables from the test (overrides test.vars if provided)
+ * @param params.providerResponse The provider's response to evaluate
+ * @param params.latencyMs Provider response latency in milliseconds (optional)
+ * @param params.traceId Distributed trace ID for debugging (optional)
+ * @param params.traceData Trace spans with timing information (optional)
+ *
+ * @returns GradingResult with pass/fail status, score, and reason
+ *
+ * @example Basic usage
+ * ```typescript
+ * import { assertions } from 'promptfoo';
+ *
+ * const result = await assertions.runAssertion({
+ *   assertion: { type: 'contains', value: '4' },
+ *   test: { vars: { question: 'What is 2+2?' } },
+ *   providerResponse: { output: 'The answer is 4' }
+ * });
+ *
+ * console.log(`Pass: ${result.pass}, Score: ${result.score}`);
  * ```
  *
- * @public
+ * @see runAssertions for batch assertion execution
+ * @see evaluate for full evaluation pipeline
  */
-export interface RunAssertionOptions {
-  /** Rendered prompt for the response being graded, when available. */
+async function runAssertionInternal({
+  prompt,
+  provider,
+  assertion,
+  test,
+  vars,
+  latencyMs,
+  providerResponse,
+  traceId,
+  traceData,
+  claimStoredGradingUsage,
+}: {
   prompt?: string;
-  /** Provider that produced the response, when model-graded assertions need it. */
   provider?: ApiProvider;
-  /** Assertion to run against the response. */
   assertion: Assertion;
-  /** Test case context associated with the response. */
   test: AtomicTestCase;
-  /** Rendered variables to use instead of `test.vars`, when already resolved. */
   vars?: Record<string, VarValue>;
-  /** Response to grade. */
   providerResponse: ProviderResponse;
-  /** Latency for latency-based assertions, in milliseconds. */
   latencyMs?: number;
-  /** Trace identifier for trace-aware assertions, when tracing is enabled. */
-  traceId?: string;
-  /** @internal */
   assertIndex?: number;
-  /** @internal */
+  traceId?: string;
   traceData?: TraceData | null;
-}
-
-async function runAssertionInternal(options: RunAssertionOptions): Promise<GradingResult> {
-  const {
-    prompt,
-    provider,
-    assertion,
-    test,
-    vars,
-    latencyMs,
-    providerResponse,
-    traceId,
-    traceData,
-  } = options;
+  claimStoredGradingUsage?: () => boolean;
+}): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
 
@@ -637,7 +650,7 @@ async function runAssertionInternal(options: RunAssertionOptions): Promise<Gradi
 
   // Check for redteam assertions first
   if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
-    return handleRedteam(assertionParams);
+    return handleRedteam(assertionParams, claimStoredGradingUsage);
   }
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
@@ -669,30 +682,9 @@ async function runAssertionInternal(options: RunAssertionOptions): Promise<Gradi
   throw new Error(`Unknown assertion type: ${assertion.type}`);
 }
 
-/**
- * Run one assertion against a provider response.
- *
- * This is the supported low-level hook for advanced callers that want to reuse
- * promptfoo assertion logic outside a full eval run.
- *
- * @example
- * ```ts
- * import { assertions } from 'promptfoo';
- *
- * const result = await assertions.runAssertion({
- *   assertion: { type: 'contains', value: 'Ada' },
- *   test: { vars: {} },
- *   providerResponse: { output: 'Hello Ada' },
- * });
- *
- * console.log(result.pass);
- * ```
- *
- * @param options - Assertion, provider response, and supporting runtime context.
- * @returns The grading result for this single assertion.
- * @public
- */
-export async function runAssertion(options: RunAssertionOptions): Promise<GradingResult> {
+export async function runAssertion(
+  options: Parameters<typeof runAssertionInternal>[0],
+): Promise<GradingResult> {
   if (!options.traceId) {
     return runAssertionInternal(options);
   }
@@ -713,79 +705,71 @@ export async function runAssertion(options: RunAssertionOptions): Promise<Gradin
 }
 
 /**
- * Options for `runAssertions()`.
+ * Execute multiple assertions in batch against provider output.
  *
- * @example
- * ```ts
- * const options: RunAssertionsOptions = {
- *   test: {
- *     vars: {},
- *     assert: [{ type: 'contains', value: 'Ada' }],
- *   },
- *   providerResponse: { output: 'Hello Ada' },
- * };
- * ```
+ * This function runs all assertions defined in a test case and returns aggregated results.
+ * It handles:
+ * - Multiple assertion types (contains, regex, LLM-graded, etc.)
+ * - Nested assertion-sets with logical operators
+ * - Custom scoring functions
+ * - Combined pass/fail and scoring logic
  *
- * @public
- */
-export interface RunAssertionsOptions {
-  /** Custom aggregation function for assertion results, when needed. */
-  assertScoringFunction?: ScoringFunction;
-  /** Latency for latency-based assertions, in milliseconds. */
-  latencyMs?: number;
-  /** Rendered prompt for the response being graded, when available. */
-  prompt?: string;
-  /** Provider that produced the response, when model-graded assertions need it. */
-  provider?: ApiProvider;
-  /** Response to grade. */
-  providerResponse: ProviderResponse;
-  /** Test case containing the assertions to run. */
-  test: AtomicTestCase;
-  /** Rendered variables to use instead of `test.vars`, when already resolved. */
-  vars?: Record<string, VarValue>;
-  /** Trace identifier for trace-aware assertions, when tracing is enabled. */
-  traceId?: string;
-}
-
-/**
- * Run all assertions for one test case and aggregate the grading result.
+ * @param params Configuration for batch assertion execution
+ * @param params.assertScoringFunction Custom scoring function (optional)
+ * @param params.latencyMs Provider response latency in milliseconds
+ * @param params.prompt The prompt that was sent to the provider (optional)
+ * @param params.provider The API provider instance (optional)
+ * @param params.providerResponse The provider's response to evaluate
+ * @param params.test The test case with assertions to run
+ * @param params.vars Template variables (overrides test.vars if provided)
+ * @param params.traceId Distributed trace ID (optional)
  *
- * This is the supported batch counterpart to `runAssertion()` for advanced
- * callers that already have a provider response and test case in hand.
+ * @returns GradingResult aggregating all assertion results. The returned result
+ *          includes `componentResults` and `namedScores` rather than a nested
+ *          `results` array.
  *
- * @example
- * ```ts
+ * @example Basic usage
+ * ```typescript
  * import { assertions } from 'promptfoo';
  *
  * const result = await assertions.runAssertions({
- *   test: {
- *     vars: {},
- *     assert: [
- *       { type: 'contains', value: 'Ada' },
- *       { type: 'word-count', value: 2 },
- *     ],
- *   },
- *   providerResponse: { output: 'Hello Ada' },
+ *   assertions: [
+ *     { type: 'contains', value: '4' },
+ *     { type: 'regex', value: '^The answer is' }
+ *   ],
+ *   test: { vars: { question: 'What is 2+2?' } },
+ *   providerResponse: { output: 'The answer is 4' }
  * });
  *
- * console.log(result.pass, result.score);
+ * console.log(`All passed: ${result.pass}`);
+ * console.log(`Average score: ${result.score}`);
+ * result.componentResults.forEach((r) => {
+ *   console.log(`  ${r.assertion?.type}: ${r.pass ? '✓' : '✗'} (${r.score})`);
+ * });
  * ```
  *
- * @param options - Test case, provider response, and aggregation controls.
- * @returns The aggregated grading result for the test case.
- * @public
+ * @see runAssertion for single assertion execution
+ * @see evaluate for full evaluation pipeline
  */
-export async function runAssertions(options: RunAssertionsOptions): Promise<GradingResult> {
-  const {
-    assertScoringFunction,
-    latencyMs,
-    prompt,
-    provider,
-    providerResponse,
-    test,
-    vars,
-    traceId,
-  } = options;
+export async function runAssertions({
+  assertScoringFunction,
+  latencyMs,
+  prompt,
+  provider,
+  providerResponse,
+  test,
+  vars,
+  traceId,
+}: {
+  assertScoringFunction?: ScoringFunction;
+  latencyMs?: number;
+  prompt?: string;
+  provider?: ApiProvider;
+  providerResponse: ProviderResponse;
+  test: AtomicTestCase;
+  vars?: Record<string, VarValue>;
+  traceId?: string;
+}): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
   }
@@ -838,11 +822,31 @@ export async function runAssertions(options: RunAssertionsOptions): Promise<Grad
 
   // Serialize when the grouping queue is active: concurrent dispatch can
   // reorder provider enqueues and split same-judge groups.
+  // Read at call time: --env-file and the config's `env:` block are applied after this module is imported.
+  // async rejects a limit below 1, which would fail every assertion.
   const concurrency = getProviderCallExecutionContext()?.providerCallQueue
     ? 1
-    : ASSERTIONS_MAX_CONCURRENCY;
+    : Math.max(
+        1,
+        getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', DEFAULT_ASSERTIONS_MAX_CONCURRENCY),
+      );
 
-  await async.forEachOfLimit(asserts, concurrency, async ({ assertion, assertResult, index }) => {
+  // All assertions (including assertion sets) share one historical strategy cost.
+  // Keep ownership local to this run so replaying a saved response starts fresh.
+  let storedGradingUsageClaimed = false;
+  const claimStoredGradingUsage = () => {
+    if (storedGradingUsageClaimed) {
+      return false;
+    }
+    storedGradingUsageClaimed = true;
+    return true;
+  };
+
+  const runAndRecordAssertion = async ({
+    assertion,
+    assertResult,
+    index,
+  }: (typeof asserts)[number]) => {
     if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
       // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
       return;
@@ -859,6 +863,7 @@ export async function runAssertions(options: RunAssertionsOptions): Promise<Grad
       assertIndex: index,
       traceId,
       traceData: preloadedTraceData,
+      claimStoredGradingUsage,
     });
 
     assertResult.addResult({
@@ -867,7 +872,23 @@ export async function runAssertions(options: RunAssertionsOptions): Promise<Grad
       metric: renderMetricName(assertion.metric, vars || test.vars || {}),
       weight: assertion.weight,
     });
-  });
+  };
+
+  const activeAssertions = new Set<Promise<void>>();
+  try {
+    await async.forEachOfLimit(asserts, concurrency, async (entry) => {
+      const pending = runAndRecordAssertion(entry);
+      activeAssertions.add(pending);
+      try {
+        await pending;
+      } finally {
+        activeAssertions.delete(pending);
+      }
+    });
+  } finally {
+    // async stops scheduling on the first error, but active graders still need their workspace.
+    await Promise.allSettled(activeAssertions);
+  }
 
   await async.forEach(subAssertResults, async (subAssertResult) => {
     const result = await subAssertResult.testResult();
@@ -894,7 +915,9 @@ export async function runCompareAssertion(
   context?: CallApiContextParams,
 ): Promise<GradingResult[]> {
   invariant(typeof assertion.value === 'string', 'select-best must have a string value');
-  test = getFinalTest(test, assertion);
+  // The matcher needs options and vars, not the assertion list. A runtime assertion can
+  // contain a provider with a circular SDK client, which getFinalTest cannot deep-clone.
+  test = getFinalTest({ ...test, assert: undefined }, assertion);
   const comparisonResults = await matchesSelectBest(
     assertion.value,
     outputs,
@@ -902,9 +925,17 @@ export async function runCompareAssertion(
     test.vars,
     context,
   );
+  // The runtime assertion may contain a live grader and secrets. Results only need
+  // the comparison criteria and scoring labels, so keep provider config out of memory.
+  const safeAssertion: Assertion = {
+    type: assertion.type,
+    value: assertion.value,
+    metric: assertion.metric,
+    weight: assertion.weight,
+  };
   return comparisonResults.map((result) => ({
     ...result,
-    assertion,
+    assertion: safeAssertion,
   }));
 }
 
@@ -920,26 +951,7 @@ export async function readAssertions(filePath: string): Promise<Assertion[]> {
   }
 }
 
-/**
- * Assertion helpers exposed through the Node.js package.
- *
- * `runAssertion()` and `runAssertions()` are the supported low-level execution
- * hooks. The matcher helpers are also public and are useful when integrating
- * promptfoo with test frameworks such as Jest or Vitest.
- *
- * @example
- * ```ts
- * import { assertions } from 'promptfoo';
- *
- * const result = await assertions.runAssertion({
- *   assertion: { type: 'contains', value: 'Ada' },
- *   test: { vars: {} },
- *   providerResponse: { output: 'Hello Ada' },
- * });
- * ```
- *
- * @public
- */
+// These exports are used by the node.js package (index.ts)
 export default {
   runAssertion,
   runAssertions,

@@ -7,7 +7,6 @@ import logger from '../src/logger';
 import Eval from '../src/models/eval';
 import { readProviderPromptMap } from '../src/prompts/index';
 import * as providers from '../src/providers/index';
-import { doGenerateRedteam } from '../src/redteam/commands/generate';
 import { doRedteamRun } from '../src/redteam/shared';
 import * as fileUtils from '../src/util/file';
 import { warnOnDegradedJsonlRecovery, writeMultipleOutputs, writeOutput } from '../src/util/index';
@@ -79,9 +78,6 @@ vi.mock('../src/redteam/shared', async () => {
     doRedteamRun: vi.fn(),
   };
 });
-vi.mock('../src/redteam/commands/generate', () => ({
-  doGenerateRedteam: vi.fn(),
-}));
 vi.mock('../src/providers', async () => {
   const originalModule =
     await vi.importActual<typeof import('../src/providers')>('../src/providers');
@@ -223,24 +219,6 @@ describe('index.ts exports', () => {
       loadApiProviders: index.loadApiProviders,
       redteam: index.redteam,
     });
-  });
-
-  it('should retain distinct conversation message contracts', () => {
-    const redteamMessage: index.ConversationMessage = { role: 'user', content: 'hello' };
-    const relevanceMessage: index.ConversationRelevanceMessage = {
-      input: 'hello',
-      output: 'hi',
-    };
-
-    expect(redteamMessage).toEqual({ role: 'user', content: 'hello' });
-    expect(relevanceMessage).toEqual({ input: 'hello', output: 'hi' });
-  });
-
-  it('should preserve permissive prompt function contracts', async () => {
-    const promptContent: index.PromptContent = 42;
-    const promptFunction: index.PromptFunction = async ({ vars }) => vars.value;
-
-    await expect(promptFunction({ vars: { value: promptContent } })).resolves.toBe(42);
   });
 
   it('should export cache with correct methods', () => {
@@ -1125,7 +1103,7 @@ describe('evaluate function', () => {
         );
       });
 
-      it('preserves suite env for deferred grading provider map entries', async () => {
+      it('keeps deferred grading provider map entries in the suite environment', async () => {
         const mockTargetProvider = createMockProvider({ id: 'echo' });
 
         loadApiProvidersSpy.mockResolvedValueOnce([mockTargetProvider]);
@@ -1167,12 +1145,8 @@ describe('evaluate function', () => {
                   text: {
                     id: 'litellm:inline-judge',
                     config: { apiKey: '{{ env.GRADER_API_KEY }}' },
-                    env: { GRADER_API_KEY: 'suite-key' },
                   },
-                  embedding: {
-                    id: 'unsupported-provider:unused-embedding',
-                    env: { GRADER_API_KEY: 'suite-key' },
-                  },
+                  embedding: 'unsupported-provider:unused-embedding',
                 },
               }),
             }),
@@ -1180,6 +1154,22 @@ describe('evaluate function', () => {
           expect.anything(),
           expect.anything(),
         );
+      });
+
+      it('preserves suite env for nested test providers', async () => {
+        loadApiProvidersSpy.mockResolvedValueOnce([createMockProvider({ id: 'echo' })]);
+
+        await evaluate({
+          env: { OPENAI_API_KEY: 'suite-key' },
+          prompts: ['Test prompt'],
+          providers: ['echo'],
+          tests: [{ provider: 'openai:chat:test-model', vars: { input: 'hello' } }],
+        });
+
+        expect(loadApiProviderSpy).toHaveBeenCalledWith('openai:chat:test-model', {
+          basePath: process.cwd(),
+          env: { OPENAI_API_KEY: 'suite-key' },
+        });
       });
 
       it('should fall back to loadApiProvider for model-graded assertions when provider not in main array', async () => {
@@ -1237,31 +1227,10 @@ describe('redteam package wrapper', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(doRedteamRun).mockResolvedValue(undefined);
-    vi.mocked(doGenerateRedteam).mockResolvedValue({});
   });
 
   afterEach(() => {
     vi.mocked(doRedteamRun).mockReset();
-    vi.mocked(doGenerateRedteam).mockReset();
-  });
-
-  it('rejects an unsupported cloud target selector before running a scan', async () => {
-    await expect(
-      index.redteam.run({
-        config: 'config.yaml',
-        // @ts-expect-error The Node API accepts targets through its config providers.
-        target: 'cloud-target',
-      }),
-    ).rejects.toThrow('Define providers in the configuration file');
-    expect(doRedteamRun).not.toHaveBeenCalled();
-  });
-
-  it('should accept omitted options for package callers', async () => {
-    await index.redteam.run();
-
-    expect(doRedteamRun).toHaveBeenCalledWith({
-      eventSource: 'library',
-    });
   });
 
   it('should pin package callers to library semantics', async () => {
@@ -1272,26 +1241,6 @@ describe('redteam package wrapper', () => {
         eventSource: 'library',
       }),
     );
-  });
-
-  it('serializes overlapping public generation calls', async () => {
-    let releaseFirst!: () => void;
-    vi.mocked(doGenerateRedteam).mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          releaseFirst = () => resolve({});
-        }),
-    );
-
-    const first = index.redteam.generate({ envFile: 'first.env' } as never);
-    await vi.waitFor(() => expect(doGenerateRedteam).toHaveBeenCalledTimes(1));
-    const second = index.redteam.generate({ envFile: 'second.env' } as never);
-
-    await Promise.resolve();
-    expect(doGenerateRedteam).toHaveBeenCalledTimes(1);
-    releaseFirst();
-    await Promise.all([first, second]);
-    expect(doGenerateRedteam).toHaveBeenCalledTimes(2);
   });
 });
 

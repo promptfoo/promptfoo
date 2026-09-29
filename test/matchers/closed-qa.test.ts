@@ -22,17 +22,18 @@ describe('matchesClosedQa', () => {
     vi.restoreAllMocks();
   });
 
-  it('should use default grading when the closed QA check passes', async () => {
+  it('should pass when the closed QA check passes', async () => {
     const input = 'Input text';
     const expected = 'Expected output';
     const output = 'Sample output';
+    const grading = {};
 
     vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
       output: 'foo \n \n bar\n Y Y \n',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
-    await expect(matchesClosedQa(input, expected, output)).resolves.toEqual({
+    await expect(matchesClosedQa(input, expected, output, grading)).resolves.toEqual({
       pass: true,
       reason: 'The submission meets the criterion:\nfoo \n \n bar\n Y Y \n',
       score: 1,
@@ -85,6 +86,47 @@ describe('matchesClosedQa', () => {
 
     await expect(matchesClosedQa(input, expected, output, grading)).rejects.toThrow(
       'An error occurred',
+    );
+  });
+
+  it('should tag a grading provider error as a grader failure', async () => {
+    // `metadata.graderError` lets inverse-aware callers (e.g.
+    // not-model-graded-closedqa) propagate the failure instead of flipping a
+    // transport error into a pass.
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      error: 'Grader provider unavailable',
+    });
+
+    await expect(
+      matchesClosedQa('Input text', 'Expected output', 'Sample output', {}),
+    ).resolves.toEqual({
+      pass: false,
+      reason: 'Grader provider unavailable',
+      score: 0,
+      tokensUsed: {
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+        cached: expect.any(Number),
+        completionDetails: expect.any(Object),
+        numRequests: 0,
+      },
+      metadata: { graderError: true },
+    });
+  });
+
+  it('should tag an empty grading provider response as a grader failure', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({ output: undefined });
+
+    const result = await matchesClosedQa('Input text', 'Expected output', 'Sample output', {});
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        pass: false,
+        reason: 'No output',
+        score: 0,
+        metadata: { graderError: true },
+      }),
     );
   });
 
