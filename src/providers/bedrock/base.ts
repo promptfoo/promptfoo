@@ -13,7 +13,7 @@ import telemetry from '../../telemetry';
 import { fingerprintCacheIdentity } from '../cacheFingerprint';
 import { createBedrockRequestHandler } from './util';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
-import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
+import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@smithy/types';
 
 import type { EnvOverrides } from '../../types/env';
 
