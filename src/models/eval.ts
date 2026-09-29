@@ -1780,12 +1780,7 @@ export async function getEvalSummaries(
     .orderBy(desc(evalsTable.createdAt), desc(evalsTable.id))
     .all();
 
-  /**
-   * Deserialize the evals. A few things to note:
-   *
-   * - Outcome counts come from V4 prompt metrics, including partially uploaded evals.
-   * - Persisted test indices distinguish test cases from runs across provider/prompt columns.
-   */
+  // V4 prompt metrics count outcomes; persisted test indices distinguish cases from runs.
   const distinctCounts = await getCachedResultsCounts(results.map((result) => result.evalId));
   return results.map((result) => {
     let passCount = 0;

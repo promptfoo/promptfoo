@@ -474,6 +474,22 @@ describe('init command', () => {
     });
 
     describe('alias resolution', () => {
+      it.each(['anthropic/opus-4-6-coding', 'anthropic/opus-4-8-coding'])(
+        'downloads the maintained Opus example for %s',
+        async (exampleName) => {
+          mockFetchWithProxy.mockRejectedValue(new Error('404 Not Found'));
+          vi.mocked(confirm).mockResolvedValue(false);
+
+          const result = await init.handleExampleDownload('.', exampleName);
+
+          expect(result).toBe('anthropic/opus-5-coding');
+          expect(mockFetchWithProxy).toHaveBeenCalled();
+          for (const [url] of mockFetchWithProxy.mock.calls) {
+            expect(url.toString()).toContain('/contents/examples/anthropic/opus-5-coding?ref=');
+          }
+        },
+      );
+
       it('should resolve old example name to new name via EXAMPLE_ALIASES', async () => {
         // Download will fail, but we're testing alias resolution, not download
         mockFetchWithProxy.mockRejectedValue(new Error('404 Not Found'));
