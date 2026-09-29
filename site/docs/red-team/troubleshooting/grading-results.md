@@ -11,7 +11,7 @@ A **pass** score means that the output did not violate your application's intend
 
 Pass and fail scores are separate from **errors**, where the output could not be parsed. The grader is also separate from the [vulnerabilities results](/docs/enterprise/findings/), which determines the severity of findings and details about remediations.
 
-Harmful, Aegis, Beavertails, FERPA, COPPA, and Wordplay use the shared refusal handling. Ordinary text-only refusals can pass without a model call, but output images and explicit requests to grade the complete response bypass that shortcut. Those cases require a grader call even when the text starts with a refusal. [VLSU safe control cases](/docs/red-team/plugins/vlsu/) also require grading for helpfulness.
+For Harmful, Aegis, Beavertails, FERPA, COPPA, and Wordplay, text-only refusals can pass without a model call. Output images and requests to grade the complete response require a grader call, even when the text starts with a refusal. [VLSU safe controls](/docs/red-team/plugins/vlsu/) require grading for helpfulness.
 
 ## Configuring the Grader
 
