@@ -25,8 +25,7 @@ describe('GoogleInteractionsProvider', () => {
     vi.stubEnv('VERTEX_API_HOST', '');
     vi.stubEnv('GOOGLE_API_HOST', '');
     vi.stubEnv('PALM_API_HOST', '');
-    // Likewise for credentials: an ambient key satisfies the auth check the
-    // missing-key tests assert on, and outranks the fixtures asserted on the wire.
+    // Shell credentials must not override fixtures or satisfy missing-key checks.
     vi.stubEnv('GOOGLE_API_KEY', '');
     vi.stubEnv('GEMINI_API_KEY', '');
     vi.stubEnv('PALM_API_KEY', '');

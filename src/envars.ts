@@ -1,17 +1,15 @@
-import dotenv from 'dotenv';
-import { getEnvOverrides } from './envOverrides';
+import { getEnvOverridesProvider } from './envOverrides';
+import { loadEnvFiles } from './util/envFile';
 
 import type { EnvOverrides } from './types/env';
 
-// Never load the developer's `.env` inside a test run: unit tests would silently pick up
-// real credentials and behave differently from CI, which has none. Mirrors the guard on
-// the default database path in src/database/index.ts, including its runner-owned global:
-// helpers that wipe process.env drop VITEST, but the global survives them.
+// Test workers must not inherit local .env files. The worker marker survives
+// tests that clear process.env and remove VITEST.
 const isTestProcess =
   process.env.VITEST === 'true' ||
   Object.prototype.hasOwnProperty.call(globalThis, '__vitest_worker__');
 if (!isTestProcess) {
-  dotenv.config({ quiet: true });
+  loadEnvFiles();
 }
 
 // Define the supported environment variables and their types
@@ -273,6 +271,7 @@ type EnvVars = {
   ATLASCLOUD_API_KEY?: string;
 
   // AWS Bedrock
+  AWS_ACCESS_KEY_ID?: string;
   AWS_BEARER_TOKEN_BEDROCK?: string;
   AWS_BEDROCK_FREQUENCY_PENALTY?: string;
   AWS_BEDROCK_MAX_GEN_LEN?: number;
@@ -284,6 +283,11 @@ type EnvVars = {
   AWS_BEDROCK_STOP?: string;
   AWS_BEDROCK_TEMPERATURE?: number;
   AWS_BEDROCK_TOP_P?: string;
+  AWS_DEFAULT_REGION?: string;
+  AWS_PROFILE?: string;
+  AWS_REGION?: string;
+  AWS_SECRET_ACCESS_KEY?: string;
+  AWS_SESSION_TOKEN?: string;
 
   // AWS Bedrock Agents
   AWS_BEDROCK_AGENT_ID?: string;
@@ -348,6 +352,7 @@ type EnvVars = {
   HYPERBOLIC_API_KEY?: string;
 
   // Langfuse
+  LANGFUSE_BASE_URL?: string;
   LANGFUSE_HOST?: string;
   LANGFUSE_PUBLIC_KEY?: string;
   LANGFUSE_SECRET_KEY?: string;
@@ -484,6 +489,27 @@ type EnvVars = {
 // Allow string access to any key for environment variables not explicitly listed
 export type EnvVarKey = keyof EnvVars;
 
+/** Reads one config layer without mixing in process.env; a missing or failed provider is unset. */
+export function getEnvOverrides(layer: 'suite' | 'file' = 'suite'): EnvOverrides | undefined {
+  try {
+    return getEnvOverridesProvider()?.(layer);
+  } catch {
+    // All environment reads must still fall back normally when registration fails.
+    return undefined;
+  }
+}
+
+/** Environment inherited by child processes, including invocation-local file values. */
+export function getProcessEnv(): NodeJS.ProcessEnv {
+  const fileEnv = getEnvOverrides('file');
+  return fileEnv
+    ? {
+        ...process.env,
+        ...Object.fromEntries(Object.entries(fileEnv).filter(([, value]) => value !== undefined)),
+      }
+    : process.env;
+}
+
 /**
  * Get an environment variable.
  * @param key The name of the environment variable.
@@ -501,8 +527,7 @@ export function getEnvString(key: EnvVarKey, defaultValue?: string): string | un
     }
   }
 
-  // Fallback to process.env
-  const value = process.env[key as string];
+  const value = getEnvOverrides('file')?.[key as string] ?? process.env[key as string];
   if (value === undefined) {
     return defaultValue;
   }
@@ -516,7 +541,11 @@ export function getEnvString(key: EnvVarKey, defaultValue?: string): string | un
  * @returns The boolean value of the environment variable, or the default value if provided.
  */
 export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
-  const value = getEnvString(key) || defaultValue;
+  return parseEnvBool(getEnvString(key), defaultValue);
+}
+
+export function parseEnvBool(input: string | undefined, defaultValue?: boolean): boolean {
+  const value = input || defaultValue;
   if (typeof value === 'boolean') {
     return value;
   }
@@ -524,6 +553,17 @@ export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
     return ['1', 'true', 'yes', 'yup', 'yeppers'].includes(value.toLowerCase());
   }
   return Boolean(defaultValue);
+}
+
+/** Suite flags can restrict template access to process.env, but cannot lift operator restrictions. */
+export function isTemplateProcessEnvDisabled(): boolean {
+  const disabled = (env: Record<string, string | undefined>) =>
+    parseEnvBool(env.PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS, parseEnvBool(env.PROMPTFOO_SELF_HOSTED));
+  return (
+    disabled(process.env) ||
+    disabled(getEnvOverrides('file') ?? {}) ||
+    disabled(getEnvOverrides() ?? {})
+  );
 }
 
 /**

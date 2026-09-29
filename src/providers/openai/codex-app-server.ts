@@ -8,7 +8,7 @@ import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@op
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
-import { getEnvString } from '../../envars';
+import { getEnvString, getProcessEnv } from '../../envars';
 import logger from '../../logger';
 import {
   addActiveSpanRoleAttribute,
@@ -24,6 +24,7 @@ import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { VERSION } from '../../version';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
+import { clearRepositoryEnv, isAgentWorkspace } from '../agentWorkspace';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 import {
@@ -679,8 +680,9 @@ function mergeCodexAppServerConfig(
 
 function getMinimalProcessEnv(): Record<string, string> {
   const env: Record<string, string> = {};
+  const processEnv = getProcessEnv();
   for (const key of MINIMAL_CLI_ENV_KEYS) {
-    const value = process.env[key];
+    const value = processEnv[key];
     if (typeof value === 'string' && value.length > 0) {
       env[key] = value;
     }
@@ -1598,7 +1600,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       Object.entries(config.cli_env ?? {}).map(([key, value]) => [key, String(value)]),
     );
     const env: Record<string, string> = {
-      ...(inheritProcessEnv ? (process.env as Record<string, string>) : getMinimalProcessEnv()),
+      ...(inheritProcessEnv ? (getProcessEnv() as Record<string, string>) : getMinimalProcessEnv()),
       ...cliEnv,
     };
 
@@ -1662,6 +1664,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       }
     } else {
       delete sortedEnv.TRACEPARENT;
+    }
+
+    if (config.working_dir && isAgentWorkspace(config.working_dir)) {
+      clearRepositoryEnv(sortedEnv);
     }
 
     return sortedEnv;

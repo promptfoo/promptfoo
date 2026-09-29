@@ -8,8 +8,10 @@ import {
   getEnvBool,
   getEnvFloat,
   getEnvInt,
+  getEnvOverrides,
   getEnvString,
   getMaxEvalTimeMs,
+  getProcessEnv,
   isCI,
 } from '../src/envars';
 import { setEnvOverridesProvider } from '../src/envOverrides';
@@ -157,25 +159,63 @@ describe('envars', () => {
     it('should auto-register the provider when cliState is imported', async () => {
       vi.resetModules();
 
-      const [dynEnvOverrides, dynCliState] = await Promise.all([
-        import('../src/envOverrides'),
-        import('../src/cliState'),
-      ]);
+      // Resolve pending mock cleanup before importing cliState again.
+      const dynEnvars = await import('../src/envars');
+      const dynCliState = await import('../src/cliState');
 
       dynCliState.default.config = { env: { OPENAI_API_KEY: 'wired-key' } };
 
-      expect(dynEnvOverrides.getEnvOverrides()).toEqual({ OPENAI_API_KEY: 'wired-key' });
+      expect(dynEnvars.getEnvOverrides()).toEqual({ OPENAI_API_KEY: 'wired-key' });
+    });
+  });
+
+  describe('invocation environment views', () => {
+    it('keeps child-process and suite environments separate without changing process.env', () => {
+      mockProcessEnv({ CONTRACT_PARENT: 'parent', CONTRACT_INHERITED: 'parent' });
+      const suite = { CONTRACT_PARENT: 'suite', CONTRACT_SUITE_ONLY: 'suite' };
+      const file = {
+        CONTRACT_PARENT: 'file',
+        CONTRACT_FILE_ONLY: 'file',
+        CONTRACT_INHERITED: undefined,
+      };
+      setEnvOverridesProvider((layer) => (layer === 'suite' ? suite : file));
+
+      expect(getEnvOverrides()).toBe(suite);
+      expect(getEnvOverrides('file')).toBe(file);
+      const inherited = getProcessEnv();
+      expect(inherited).toMatchObject({
+        CONTRACT_PARENT: 'file',
+        CONTRACT_FILE_ONLY: 'file',
+        CONTRACT_INHERITED: 'parent',
+      });
+      expect(inherited).not.toHaveProperty('CONTRACT_SUITE_ONLY');
+      expect(process.env.CONTRACT_PARENT).toBe('parent');
+      expect(process.env).not.toHaveProperty('CONTRACT_FILE_ONLY');
+    });
+
+    it('keeps the parent environment when no invocation provider can supply overrides', () => {
+      setEnvOverridesProvider(undefined);
+      expect(getEnvOverrides()).toBeUndefined();
+      expect(getProcessEnv()).toBe(process.env);
+
+      setEnvOverridesProvider(() => {
+        throw new Error('unavailable');
+      });
+      expect(getEnvOverrides('file')).toBeUndefined();
+      expect(getProcessEnv()).toBe(process.env);
     });
   });
 
   describe('dotenv loading', () => {
-    // A developer's gitignored .env must never reach the suite: tests would pick up
-    // real credentials and diverge from CI, which has none.
-    // Resolved up front because os.tmpdir() reads TEMP/TMP, which the cleared-environment
-    // case below wipes: on Windows that yields the unusable path "undefined\temp".
+    // Capture Windows TEMP/TMP before the test clears process.env.
     const tmpRoot = os.tmpdir();
 
-    async function reimportEnvarsBesideDotenv(): Promise<void> {
+    async function expectImportToIgnoreDotenv(): Promise<void> {
+      const restoreEnv = mockProcessEnv({
+        DOTENV_PATH: undefined,
+        DOTENV_CONFIG_PATH: undefined,
+        PROMPTFOO_DOTENV_PROBE: undefined,
+      });
       const originalCwd = process.cwd();
       const dir = fs.mkdtempSync(path.join(tmpRoot, 'promptfoo-dotenv-'));
       fs.writeFileSync(path.join(dir, '.env'), 'PROMPTFOO_DOTENV_PROBE=leaked\n');
@@ -184,27 +224,23 @@ describe('envars', () => {
         process.chdir(dir);
         vi.resetModules();
         await import('../src/envars');
+        expect(process.env.PROMPTFOO_DOTENV_PROBE).toBeUndefined();
       } finally {
         process.chdir(originalCwd);
         fs.rmSync(dir, { recursive: true, force: true });
+        restoreEnv();
       }
     }
 
     it('does not load a .env file into a test process', async () => {
-      await reimportEnvarsBesideDotenv();
-
-      expect(process.env.PROMPTFOO_DOTENV_PROBE).toBeUndefined();
+      await expectImportToIgnoreDotenv();
     });
 
     it('does not load a .env file after a test clears process.env', async () => {
-      // Clearing process.env drops VITEST, so the guard has to fall back to the
-      // runner-owned global. Assert before restoring: the restore would erase the leak.
       const restoreEnv = mockProcessEnv({}, { clear: true });
 
       try {
-        await reimportEnvarsBesideDotenv();
-
-        expect(process.env.PROMPTFOO_DOTENV_PROBE).toBeUndefined();
+        await expectImportToIgnoreDotenv();
       } finally {
         restoreEnv();
       }
