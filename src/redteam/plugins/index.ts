@@ -85,7 +85,7 @@ import { TeenSafetyDangerousContentPlugin } from './teenSafety/dangerousContent'
 import { TeenSafetyDangerousRoleplayPlugin } from './teenSafety/dangerousRoleplay';
 import { TEEN_SAFETY_DEFAULT_GRADER_EXAMPLES } from './teenSafety/graderExamples';
 import { TeenSafetyHarmfulBodyIdealsPlugin } from './teenSafety/harmfulBodyIdeals';
-import { ToolDiscoveryPlugin } from './toolDiscovery';
+import { TOOL_DISCOVERY_ATTACK_CONSTRAINTS, ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { UnverifiableClaimsPlugin } from './unverifiableClaims';
@@ -952,10 +952,11 @@ function validateRemoteCrossSessionLeakPairs(
         "expected each cross-session-leak setup row's injection variable to contain the probe `metadata.crossSessionLeakMatch` marker",
       );
     }
-    // The probe input must NOT already contain the marker. Otherwise an echo-only or
-    // stateless target trivially returns the marker from the current request, and the
-    // cross-session-leak grader misreads it as a leak from the setup session.
-    if (typeof probeValue !== 'string' || probeValue.includes(crossSessionLeakMatch)) {
+    // Match the grader's case-insensitive comparison so echoed input is not reported as a leak.
+    if (
+      typeof probeValue !== 'string' ||
+      probeValue.toLowerCase().includes(crossSessionLeakMatch.toLowerCase())
+    ) {
       throw new InvalidRemoteRedteamAssertionPayloadError(
         key,
         'test case',
@@ -1390,7 +1391,17 @@ function createPluginFactory<T extends PluginConfig>(
       targetId,
       redteamGenerationContext,
     }: PluginActionParams) => {
-      const configWithDefaults = applyDefaultGraderExamples(key, config as T);
+      let configWithDefaults = applyDefaultGraderExamples(key, config as T);
+      // Send the constraint to remote generation and retain it for every strategy turn.
+      if (key === 'tool-discovery') {
+        configWithDefaults = {
+          ...configWithDefaults,
+          modifiers: {
+            ...configWithDefaults?.modifiers,
+            toolDiscoveryAttackConstraints: TOOL_DISCOVERY_ATTACK_CONSTRAINTS,
+          },
+        };
+      }
 
       if ((PluginClass as any).canGenerateRemote === false || !shouldGenerateRemote()) {
         logger.debug(`Using local redteam generation for ${key}`);

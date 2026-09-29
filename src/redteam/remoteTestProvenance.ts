@@ -70,9 +70,7 @@ export function setRemoteGeneratedTestProvenance<T extends Record<string, unknow
   } as T;
 }
 
-// Remote-origin string values shorter than this are ignored for substring-based
-// derivation checks: a 1–3 character remote value would spuriously match freshly minted
-// local values, wrongly marking them as remote-derived (the very bug this guards against).
+// Ignore short substring matches that would incorrectly classify local values as remote data.
 const MIN_REMOTE_DERIVED_SUBSTRING_LENGTH = 4;
 
 function collectRemoteOriginValues(
@@ -105,8 +103,7 @@ function collectRemoteOriginValues(
   return [...values];
 }
 
-// Preserve copies and embedded remote content without distrusting freshly minted
-// local secrets, canaries, and workspace paths used by deterministic verifiers.
+// Track copied remote content while preserving locally created verifier inputs.
 function isValueDerivedFromRemoteContent(
   value: unknown,
   remoteOriginValues: unknown[],
