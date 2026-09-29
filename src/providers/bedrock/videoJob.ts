@@ -27,26 +27,19 @@ function awaitVideoOperation<T>(operation: Promise<T>, signal?: AbortSignal): Pr
   if (!signal) {
     return operation;
   }
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => {
-      signal.removeEventListener('abort', onAbort);
-      reject(signal.reason);
-    };
-    signal.addEventListener('abort', onAbort, { once: true });
-    operation.then(
-      (value) => {
-        signal.removeEventListener('abort', onAbort);
-        resolve(value);
-      },
-      (error) => {
-        signal.removeEventListener('abort', onAbort);
-        reject(error);
-      },
-    );
+  let onAbort!: () => void;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(signal.reason);
     if (signal.aborted) {
       onAbort();
+    } else {
+      signal.addEventListener('abort', onAbort, { once: true });
     }
   });
+  // Preserve an already-settled operation when cancellation arrives in the same turn.
+  return Promise.race([operation, aborted]).finally(() =>
+    signal.removeEventListener('abort', onAbort),
+  );
 }
 
 async function clientConfig(provider: VideoProvider, signal?: AbortSignal) {
@@ -157,7 +150,7 @@ export async function runBedrockVideoJob(
   }
 }
 
-// Attach downloaded videos to their evaluation before releasing the S3 client.
+// Store downloaded videos with evaluation metadata and release the S3 client.
 export async function storeBedrockVideo(
   provider: VideoProvider,
   label: string,

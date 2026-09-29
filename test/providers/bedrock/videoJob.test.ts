@@ -158,6 +158,22 @@ describe('Bedrock async video jobs', () => {
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
+  it('retains an accepted submission when cancellation arrives before its continuation', async () => {
+    const controller = new AbortController();
+    mocks.send.mockImplementationOnce(() => {
+      const submitted = Promise.resolve({ invocationArn: 'job-1' });
+      controller.abort(new Error('cancelled after submission'));
+      return submitted;
+    });
+
+    await expect(runBedrockVideoJob(provider, config, controller.signal)).resolves.toEqual({
+      error: 'Polling error: cancelled after submission',
+      invocationArn: 'job-1',
+    });
+    expect(mocks.send).toHaveBeenCalledOnce();
+    expect(mocks.destroy).toHaveBeenCalledOnce();
+  });
+
   it('cancels an active SDK wait and destroys the owned client', async () => {
     const controller = new AbortController();
     const entered = createDeferred<void>();

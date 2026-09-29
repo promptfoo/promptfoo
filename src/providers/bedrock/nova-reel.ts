@@ -220,6 +220,7 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
       ...(context?.prompt?.config as Partial<NovaReelVideoOptions>),
     };
 
+    const durationSeconds = config.durationSeconds || DEFAULT_DURATION_SECONDS;
     const startTime = Date.now();
 
     // Build model input
@@ -232,7 +233,7 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
     // Start async job
     logger.info(`[Nova Reel] Starting video generation job...`, {
       taskType: config.taskType || 'TEXT_VIDEO',
-      durationSeconds: config.durationSeconds || DEFAULT_DURATION_SECONDS,
+      durationSeconds,
       s3OutputUri,
     });
 
@@ -293,7 +294,6 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
       }
 
       const latencyMs = Date.now() - startTime;
-      const durationSeconds = config.durationSeconds || DEFAULT_DURATION_SECONDS;
 
       // Format output
       const sanitizedPrompt = prompt
