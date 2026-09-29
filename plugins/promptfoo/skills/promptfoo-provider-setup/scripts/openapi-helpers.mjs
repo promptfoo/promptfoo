@@ -13,11 +13,8 @@ export const PROMPT_FIELDS = new Set([
   'text',
 ]);
 
-// Parameters with these names (or these suffixes) are treated as credentials
-// even when they are modeled as plain header/query/cookie parameters rather
-// than as OpenAPI securitySchemes. Copying their literal `example` values into
-// the generated config could leak real tokens, so the helper forces
-// `{{env.<UPPER_NAME>}}` placeholders for them instead.
+// Use environment placeholders for credential-like parameters, including those
+// outside securitySchemes, so generated configs do not copy example secrets.
 const CREDENTIAL_PARAM_NAMES = new Set([
   'authorization',
   'bearer',

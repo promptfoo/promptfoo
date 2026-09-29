@@ -25,7 +25,6 @@ const expectedSkillDirs = [
   'promptfoo-redteam-run',
   'promptfoo-redteam-setup',
 ];
-const expectedPluginVersion = '0.1.4';
 const expectedFixtureDirs = [
   'evals-json-rubric',
   'evals-local-js',
@@ -2022,8 +2021,8 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
     // One plugin identity across both marketplaces: same name, version, and author.
     expect(codexManifest.name).toBe('promptfoo');
     expect(claudeManifest.name).toBe('promptfoo');
-    expect(codexManifest.version).toBe(expectedPluginVersion);
-    expect(claudeManifest.version).toBe(expectedPluginVersion);
+    expect(codexManifest.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(claudeManifest.version).toBe(codexManifest.version);
     expect(claudeManifest.author.name).toBe('Promptfoo');
     expect(JSON.stringify(claudeManifest)).not.toContain('[TODO:');
 
