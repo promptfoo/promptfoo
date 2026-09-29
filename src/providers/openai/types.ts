@@ -15,6 +15,8 @@ export interface CallbackContext {
   assistantId: string;
   /** The provider type (e.g., 'openai', 'azure') */
   provider: string;
+  /** Caller cancellation signal, when supported by the provider (including Azure Foundry). */
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -114,10 +116,10 @@ export interface OpenAiMCPTool {
 }
 
 // Responses API specific tool types
-export interface OpenAiWebSearchTool {
+export interface OpenAiWebSearchTool extends Omit<OpenAI.Responses.WebSearchTool, 'type'> {
   type: 'web_search' | 'web_search_preview';
-  search_context_size?: 'small' | 'medium' | 'large';
-  user_location?: string;
+  external_web_access?: boolean;
+  return_token_budget?: 'default' | 'unlimited';
 }
 
 export interface OpenAiCodeInterpreterTool {
@@ -208,7 +210,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   mcp?: MCPConfig;
 
   /**
-   * Controls response verbosity for GPT-5 models and GPT-6 Astra.
+   * Controls response verbosity for GPT-5 and GPT-6 models.
    */
   verbosity?: GPT5Verbosity;
 

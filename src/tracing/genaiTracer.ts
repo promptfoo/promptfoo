@@ -760,8 +760,9 @@ export function extractProviderResponseAttributes(response: ProviderResponse): G
   if (response.finishReason) {
     result.finishReasons = [response.finishReason];
   }
-  if (response.cached !== undefined) {
-    result.cacheHit = response.cached;
+  const cacheHit = response.cacheHit ?? response.cached;
+  if (cacheHit !== undefined) {
+    result.cacheHit = cacheHit;
   }
   if (response.output !== undefined) {
     result.responseBody =

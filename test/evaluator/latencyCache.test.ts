@@ -5,6 +5,7 @@ import { HuggingfaceTextGenerationProvider } from '../../src/providers/huggingfa
 import { LocalAiChatProvider, LocalAiCompletionProvider } from '../../src/providers/localai';
 import { OllamaChatProvider, OllamaCompletionProvider } from '../../src/providers/ollama';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
+import { ReplicateImageProvider, ReplicateProvider } from '../../src/providers/replicate';
 import { ResultFailureReason } from '../../src/types/index';
 import { fetchWithRetries } from '../../src/util/fetch/index';
 import { createDeferred } from '../util/utils';
@@ -74,31 +75,27 @@ const providers = [
 ];
 
 describe('latency assertions with real provider caching', () => {
-  it.each(providers)(
-    'rejects stored $name responses even without a cached flag',
-    async (fixture) => {
-      vi.mocked(fetchWithRetries).mockImplementation(async () => Response.json(fixture.response));
-      const provider = fixture.create();
+  it.each(providers)('rejects stored $name responses', async (fixture) => {
+    vi.mocked(fetchWithRetries).mockImplementation(async () => Response.json(fixture.response));
+    const provider = fixture.create();
 
-      const [fresh] = await evaluateLatency(provider);
-      expect(fresh.success).toBe(true);
-      expect(fresh.response?.output).toBe(output);
+    const [fresh] = await evaluateLatency(provider);
+    expect(fresh.success).toBe(true);
+    expect(fresh.response?.output).toBe(output);
 
-      const rawReplay = await provider.callApi('hello');
-      expect(rawReplay.cached).toBeUndefined();
-      expect(rawReplay.output).toBe(output);
-      const [replay] = await evaluateLatency(provider);
-      expect(replay.success).toBe(false);
-      expect(replay.failureReason).toBe(ResultFailureReason.ERROR);
-      expect(replay.error).toContain('does not support cached results');
-      expect(replay.error).toContain('--no-cache');
-      expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+    const rawReplay = await provider.callApi('hello');
+    expect(rawReplay.output).toBe(output);
+    const [replay] = await evaluateLatency(provider);
+    expect(replay.success).toBe(false);
+    expect(replay.failureReason).toBe(ResultFailureReason.ERROR);
+    expect(replay.error).toContain('does not support cached results');
+    expect(replay.error).toContain('--no-cache');
+    expect(fetchWithRetries).toHaveBeenCalledTimes(1);
 
-      const [uncached] = await withCacheEnabled(false, () => evaluateLatency(provider));
-      expect(uncached.success).toBe(true);
-      expect(fetchWithRetries).toHaveBeenCalledTimes(2);
-    },
-  );
+    const [uncached] = await withCacheEnabled(false, () => evaluateLatency(provider));
+    expect(uncached.success).toBe(true);
+    expect(fetchWithRetries).toHaveBeenCalledTimes(2);
+  });
 
   it('isolates cached and fresh concurrent evaluations and rejects inverse cache assertions', async () => {
     vi.mocked(fetchWithRetries).mockImplementation(async () =>
@@ -117,6 +114,47 @@ describe('latency assertions with real provider caching', () => {
     expect(fresh.response?.cacheHit).toBeUndefined();
     expect(fetchWithRetries).toHaveBeenCalledTimes(2);
   });
+
+  it.each([
+    {
+      name: 'text',
+      create: () => new ReplicateProvider('fixture/model', { config: { apiKey: 'fixture-key' } }),
+    },
+    {
+      name: 'image',
+      create: () =>
+        new ReplicateImageProvider('fixture/model', { config: { apiKey: 'fixture-key' } }),
+    },
+  ])(
+    'grades a live Replicate $name poll after replaying an intermediate job',
+    async ({ create }) => {
+      vi.mocked(fetchWithRetries)
+        .mockResolvedValueOnce(Response.json({ id: 'prediction', status: 'processing' }))
+        .mockResolvedValueOnce(
+          Response.json({ id: 'prediction', status: 'failed', error: 'Unavailable' }),
+        )
+        .mockResolvedValueOnce(
+          Response.json({
+            id: 'prediction',
+            status: 'succeeded',
+            output: ['https://example.com/output'],
+          }),
+        );
+      const provider = create();
+      expect((await provider.callApi('hello')).error).toContain('Unavailable');
+
+      const [fresh] = await evaluateLatency(provider);
+      expect(fresh.success).toBe(true);
+      expect(fresh.response?.cacheHit).toBe(false);
+      expect(fresh.response?.output).toContain('https://example.com/output');
+      expect(fetchWithRetries).toHaveBeenCalledTimes(3);
+
+      const [replay] = await evaluateLatency(provider);
+      expect(replay.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(replay.error).toContain('does not support cached results');
+      expect(fetchWithRetries).toHaveBeenCalledTimes(3);
+    },
+  );
 
   it('grades a fresh replacement after discarding an expired cached background job', async () => {
     vi.mocked(fetchWithRetries)

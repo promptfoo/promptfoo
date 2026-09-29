@@ -1,6 +1,7 @@
 import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  extractProviderResponseAttributes,
   GenAIAttributes,
   type GenAISpanContext,
   type GenAISpanResult,
@@ -579,6 +580,17 @@ describe('genaiTracer', () => {
         'tool.output',
         expect.stringContaining('[truncated]'),
       );
+    });
+  });
+
+  describe('extractProviderResponseAttributes', () => {
+    it.each([
+      { response: { cached: true, cacheHit: false }, expected: false },
+      { response: { cached: false, cacheHit: true }, expected: true },
+      { response: { cached: true }, expected: true },
+      { response: {}, expected: undefined },
+    ])('records cache provenance for $response', ({ response, expected }) => {
+      expect(extractProviderResponseAttributes(response).cacheHit).toBe(expected);
     });
   });
 

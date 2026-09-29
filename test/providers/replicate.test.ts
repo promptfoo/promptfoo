@@ -439,6 +439,7 @@ describe('ReplicateProvider', () => {
     expect(mockCache.set).toHaveBeenCalledWith(cacheKey, expect.any(String));
     expect(JSON.parse(mockCache.set.mock.calls[0][1])).toEqual({
       output: 'test response',
+      cacheHit: false,
       tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 },
     });
   });
