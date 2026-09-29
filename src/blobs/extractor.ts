@@ -173,10 +173,7 @@ function createPersistenceCheck(context: BlobContext): () => Promise<boolean> {
   };
 }
 
-function createStoreOnce(
-  blobContext: BlobContext,
-  isPersisted: () => Promise<boolean>,
-): StoreOnce {
+function createStoreOnce(blobContext: BlobContext, isPersisted: () => Promise<boolean>): StoreOnce {
   const cache = new Map<string, Promise<BlobRef | null>>();
   return async (base64OrDataUrl, defaultMimeType, location, kind, minSizeBytes) => {
     // Canonicalize the cache key on the parsed bytes (not the raw input string)
@@ -612,12 +609,7 @@ export async function extractAndStoreBinaryData(
 
   const finalResponse = mutated ? next : response;
   if (blobContext.evalId) {
-    await recordExistingBlobReferences(
-      finalResponse,
-      blobContext,
-      'response',
-      isPersisted,
-    );
+    await recordExistingBlobReferences(finalResponse, blobContext, 'response', isPersisted);
   }
 
   return finalResponse;
