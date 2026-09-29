@@ -2,7 +2,8 @@ import './setup';
 
 import { randomUUID } from 'crypto';
 
-import { expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { handleRedteam } from '../../src/assertions/redteam';
 import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
@@ -13,12 +14,20 @@ import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 vi.mock('../../src/assertions/redteam', () => ({
-  handleRedteam: vi
-    .fn()
-    .mockResolvedValue({ pass: true, score: 1, reason: 'Fixture category only' }),
+  handleRedteam: vi.fn(),
 }));
 
 describeEvaluator('evaluator metrics and scoring', () => {
+  beforeEach(() => {
+    vi.mocked(handleRedteam)
+      .mockReset()
+      .mockResolvedValue({ pass: true, score: 1, reason: 'Fixture category only' });
+  });
+
+  afterEach(() => {
+    vi.mocked(handleRedteam).mockReset();
+    vi.restoreAllMocks();
+  });
   it.each([
     ['promptfoo:redteam:pii', 'promptfoo:redteam:pii'],
     ['promptfoo:redteam:policy', 'promptfoo:redteam:policy'],
@@ -35,7 +44,6 @@ describeEvaluator('evaluator metrics and scoring', () => {
     const event = record.mock.calls.find(([name]) => name === 'eval_ran')?.[1];
     expect(event).toMatchObject({ assertionTypes: [category] });
     expect(JSON.stringify(event)).not.toContain('fixture-private');
-    record.mockRestore();
   });
 
   it('retains the built-in category for assertion sets', async () => {
@@ -58,7 +66,6 @@ describeEvaluator('evaluator metrics and scoring', () => {
     await evaluate(suite, evalRecord, {});
     const event = record.mock.calls.find(([name]) => name === 'eval_ran')?.[1];
     expect(event).toMatchObject({ assertionTypes: ['assert-set'], numPasses: 1 });
-    record.mockRestore();
   });
 
   it('emits bounded provider and assertion categories without changing evaluation counters', async () => {
@@ -122,7 +129,6 @@ describeEvaluator('evaluator metrics and scoring', () => {
     });
     expect(JSON.stringify(event)).not.toContain('private');
     expect(JSON.stringify(event)).not.toContain('local-provider');
-    record.mockRestore();
   });
 
   it('categorizes unrecognized assertion types without emitting their names', async () => {
@@ -137,7 +143,6 @@ describeEvaluator('evaluator metrics and scoring', () => {
     const event = record.mock.calls.find(([name]) => name === 'eval_ran')?.[1];
     expect(event).toMatchObject({ assertionTypes: ['custom'] });
     expect(JSON.stringify(event)).not.toContain('fixture-private');
-    record.mockRestore();
   });
 
   it('evaluator should count named score assertions per metric', async () => {
