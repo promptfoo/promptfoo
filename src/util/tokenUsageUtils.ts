@@ -292,7 +292,7 @@ export function accumulateAttackerTokenUsage(
   });
 }
 
-/** Record one strategy grading task while retaining all model usage reported for that task. */
+/** Record one grading task and retain its reported model usage. */
 export function accumulateGradingResponseTokenUsage(
   target: TokenUsage,
   response: { cached?: boolean; tokenUsage?: Partial<TokenUsage> } | undefined,

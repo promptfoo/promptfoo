@@ -734,7 +734,7 @@ describe('tokenUsageUtils', () => {
       });
     });
 
-    it.each([false, undefined])('counts unmetered strategy grading when cached is %s', (cached) => {
+    it.each([false, undefined])('counts unmetered grading when cached is %s', (cached) => {
       const target = createEmptyTokenUsage();
 
       accumulateGradingResponseTokenUsage(target, {
@@ -769,6 +769,26 @@ describe('tokenUsageUtils', () => {
         total: 50,
         prompt: 30,
         completion: 20,
+        numRequests: 1,
+      });
+    });
+
+    it('counts fresh grading after a cached response', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateGradingResponseTokenUsage(target, {
+        cached: true,
+        tokenUsage: { total: 25, prompt: 15, completion: 10, cached: 25, numRequests: 0 },
+      });
+      accumulateGradingResponseTokenUsage(target, {
+        cached: false,
+        tokenUsage: createEmptyTokenUsage(),
+      });
+
+      expect(target.assertions).toMatchObject({ total: 25, cached: 25, numRequests: 2 });
+      expect(target.incurredTokenUsage?.assertions).toMatchObject({
+        total: 0,
+        cached: 0,
         numRequests: 1,
       });
     });
