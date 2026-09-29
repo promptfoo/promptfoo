@@ -4732,7 +4732,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           ),
       );
     } catch (error) {
-      if (providerAbortSignal?.aborted && isAbortError(error)) {
+      if (isGradingAbort(error, providerAbortSignal)) {
         throw error;
       }
       const graderId = comparisonProviderId(assertion.provider ?? savedTest.options?.provider);
