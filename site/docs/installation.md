@@ -1,22 +1,7 @@
 ---
 title: Install Promptfoo
-description: Install Promptfoo with standalone shell and PowerShell installers, pip, npm, npx, or Homebrew, verify the CLI, and begin running local evals on your system.
-keywords:
-  [
-    install,
-    installation,
-    pip,
-    python,
-    npm,
-    npx,
-    homebrew,
-    curl,
-    powershell,
-    shell,
-    windows,
-    setup,
-    promptfoo,
-  ]
+description: Learn how to install promptfoo using npm, npx, or Homebrew. Set up promptfoo for command-line usage or as a library in your project.
+keywords: [install, installation, npm, npx, homebrew, windows, setup, promptfoo]
 sidebar_position: 4
 ---
 
@@ -26,25 +11,10 @@ import TabItem from '@theme/TabItem';
 
 # Installation
 
-Install promptfoo using a standalone installer, [pip](https://pip.pypa.io/), [npm](https://nodejs.org/en/download), [npx](https://nodejs.org/en/download), or [Homebrew](https://brew.sh):
+Install promptfoo using [npm](https://nodejs.org/en/download), [npx](https://nodejs.org/en/download), or [Homebrew](https://brew.sh) (Mac, Linux):
 
 <Tabs groupId="promptfoo-command">
-  <TabItem value="curl" label="curl" default>
-    ```bash
-    curl -fsSL https://promptfoo.dev/install.sh | bash
-    ```
-  </TabItem>
-  <TabItem value="powershell" label="PowerShell">
-    ```powershell
-    irm https://promptfoo.dev/install.ps1 | iex
-    ```
-  </TabItem>
-  <TabItem value="pip" label="pip">
-    ```bash
-    python -m pip install promptfoo
-    ```
-  </TabItem>
-  <TabItem value="npm" label="npm">
+  <TabItem value="npm" label="npm" default>
     ```bash
     npm install -g promptfoo
     ```
@@ -62,26 +32,49 @@ Install promptfoo using a standalone installer, [pip](https://pip.pypa.io/), [np
 </Tabs>
 
 :::note
-The standalone installers include their own runtime on macOS 13.5+ (x64 and arm64),
-Linux with glibc 2.28+ (x64 and arm64), and Windows x64. The Python package supports
-those Linux and Windows platforms and macOS 14+ (x64 and arm64). Other environments
-fall back to npm and require [Node.js](https://nodejs.org/en/download) `^20.20.0` or
-`>=22.22.0`.
-
-Providers that rely on optional Node packages, such as local Transformers models,
-browser automation, or some cloud-provider SDKs, require the npm or npx installation
-instead of the standalone installer or Python package.
+npm and npx require [Node.js](https://nodejs.org/en/download) `>=22.22.0`.
 :::
 
-To pass explicit options to the PowerShell installer without first installing the
-default latest version, load its function with auto-install disabled and invoke it once:
+For Python-managed environments, install the official [pip wrapper](https://pypi.org/project/promptfoo/):
 
-```powershell
-$env:PROMPTFOO_NO_AUTO_INSTALL = '1'
-irm https://promptfoo.dev/install.ps1 | iex
-Remove-Item Env:PROMPTFOO_NO_AUTO_INSTALL
-Install-Promptfoo -Version 0.120.0
+```bash
+python -m pip install promptfoo
 ```
+
+The wrapper requires Python `3.10` or newer, Node.js `22.22.0` or newer, and npm/npx on your `PATH`. It runs the official npm CLI. See the [Python wrapper documentation](https://github.com/promptfoo/promptfoo-python) for version pinning and Python environment setup.
+
+## Node.js runtime support
+
+Promptfoo requires Node.js `22.22.0` or newer. Node.js 24 LTS is recommended.
+
+If you are on an older release, upgrade Node.js before installing or updating promptfoo.
+
+<Tabs groupId="node-version-manager">
+  <TabItem value="nvm" label="nvm" default>
+    ```bash
+    nvm install 24
+    nvm use 24
+    ```
+  </TabItem>
+  <TabItem value="fnm" label="fnm">
+    ```bash
+    fnm install 24
+    fnm use 24
+    ```
+  </TabItem>
+  <TabItem value="volta" label="Volta">
+    ```bash
+    volta install node@24
+    ```
+  </TabItem>
+  <TabItem value="other" label="Other">
+    Download a current LTS release from the [Node.js download page](https://nodejs.org/en/download).
+  </TabItem>
+</Tabs>
+
+For CI, set the configured Node.js version to `24`. For a custom Docker image, use a current
+Node.js base image such as `node:24`. After switching runtimes, verify the active version with
+`node --version`, then install or update promptfoo.
 
 To use promptfoo as a library in your project, run `npm install promptfoo --save`.
 
@@ -90,22 +83,7 @@ To use promptfoo as a library in your project, run `npm install promptfoo --save
 To verify that promptfoo is installed correctly, run:
 
 <Tabs groupId="promptfoo-command">
-  <TabItem value="curl" label="curl" default>
-    ```bash
-    promptfoo --version
-    ```
-  </TabItem>
-  <TabItem value="powershell" label="PowerShell">
-    ```powershell
-    promptfoo --version
-    ```
-  </TabItem>
-  <TabItem value="pip" label="pip">
-    ```bash
-    python -m promptfoo --version
-    ```
-  </TabItem>
-  <TabItem value="npm" label="npm">
+  <TabItem value="npm" label="npm" default>
     ```bash
     promptfoo --version
     ```
@@ -129,22 +107,7 @@ This should display the current version number of promptfoo.
 After installation, you can start using promptfoo by running:
 
 <Tabs groupId="promptfoo-command">
-  <TabItem value="curl" label="curl" default>
-    ```bash
-    promptfoo init
-    ```
-  </TabItem>
-  <TabItem value="powershell" label="PowerShell">
-    ```powershell
-    promptfoo init
-    ```
-  </TabItem>
-  <TabItem value="pip" label="pip">
-    ```bash
-    python -m promptfoo init
-    ```
-  </TabItem>
-  <TabItem value="npm" label="npm">
+  <TabItem value="npm" label="npm" default>
     ```bash
     promptfoo init
     ```
@@ -172,24 +135,7 @@ For a guide on running your first evaluation, please refer to our [Getting Start
 If you installed promptfoo with more than one method (for example, both npm and Homebrew), repeat the relevant steps for each.
 
 <Tabs groupId="promptfoo-command">
-  <TabItem value="curl" label="curl" default>
-    ```bash
-    rm -rf ~/.promptfoo/bin
-    ```
-    Remove the `# Promptfoo` PATH entry from your shell profile if the installer added it.
-  </TabItem>
-  <TabItem value="powershell" label="PowerShell">
-    ```powershell
-    Remove-Item -Recurse -Force "$env:LOCALAPPDATA\promptfoo\bin"
-    ```
-    Remove the promptfoo `bin` directory from your user `PATH` if the installer added it.
-  </TabItem>
-  <TabItem value="pip" label="pip">
-    ```bash
-    python -m pip uninstall promptfoo
-    ```
-  </TabItem>
-  <TabItem value="npm" label="npm">
+  <TabItem value="npm" label="npm" default>
     ```bash
     npm uninstall -g promptfoo
     ```
