@@ -262,7 +262,10 @@ export class CloudflareGatewayOpenAiProvider extends OpenAiChatCompletionProvide
     modelName: string,
     providerOptions: CloudflareGatewayProviderOptions,
   ) {
-    const providerConfig = Object.hasOwn(PROVIDER_CONFIGS, underlyingProvider)
+    const providerConfig = Object.prototype.hasOwnProperty.call(
+      PROVIDER_CONFIGS,
+      underlyingProvider,
+    )
       ? PROVIDER_CONFIGS[underlyingProvider]
       : undefined;
     if (!providerConfig) {
