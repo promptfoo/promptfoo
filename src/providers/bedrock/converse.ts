@@ -24,8 +24,10 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import {
   getClaudeModelWarningName,
   isAlwaysOnAdaptiveThinkingClaudeModel,
+  isClaudeThinkingEnabled,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeClaudeThinkingConfig,
+  resolveClaudeSamplingParams,
 } from '../anthropic/util';
 import {
   executeProviderFunctionCallback,
@@ -861,8 +863,28 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // ValidationException. Drop both regardless of where they came from (config
     // or AWS_BEDROCK_TEMPERATURE / AWS_BEDROCK_TOP_P).
     const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
-    const temperature = reasoningEnabled || samplingParamsDeprecated ? undefined : temperatureValue;
-    const topP = reasoningEnabled || samplingParamsDeprecated ? undefined : topPValue;
+    let temperature = reasoningEnabled || samplingParamsDeprecated ? undefined : temperatureValue;
+    let topP = reasoningEnabled || samplingParamsDeprecated ? undefined : topPValue;
+    // Converse relays Claude's own rules as ValidationExceptions: no temperature with topP,
+    // and with extended thinking no temperature and a topP of at least 0.95. Other model
+    // families accept both, so only Claude models go through the shared resolver.
+    if (this.modelName.includes('anthropic.claude')) {
+      const rawThinking = this.config.additionalModelRequestFields?.thinking as
+        | { type?: string }
+        | undefined;
+      const { sampling, warnings } = resolveClaudeSamplingParams(
+        { temperature, top_p: topP },
+        {
+          thinkingEnabled: isClaudeThinkingEnabled(this.config.thinking ?? rawThinking),
+          samplingParamsDeprecated,
+        },
+      );
+      for (const warning of warnings) {
+        logger.warn(warning);
+      }
+      temperature = sampling.temperature;
+      topP = sampling.top_p;
+    }
 
     // Only return config if at least one field is set
     if (

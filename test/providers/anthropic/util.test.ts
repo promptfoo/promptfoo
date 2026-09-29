@@ -21,6 +21,7 @@ import {
   outputFromMessage,
   parseMessages,
   processAnthropicTools,
+  resolveClaudeSamplingParams,
 } from '../../../src/providers/anthropic/util';
 import type Anthropic from '@anthropic-ai/sdk';
 
@@ -42,6 +43,62 @@ type AnthropicTestMessage = Anthropic.Messages.Message & {
 };
 
 describe('Anthropic utilities', () => {
+  // Claude's sampling rules, verified live against the Messages API and Bedrock.
+  describe('resolveClaudeSamplingParams', () => {
+    const plain = { thinkingEnabled: false, samplingParamsDeprecated: false };
+    const thinking = { thinkingEnabled: true, samplingParamsDeprecated: false };
+    it.each([
+      [
+        'keeps temperature and top_k',
+        { temperature: 0.3, top_k: 5 },
+        plain,
+        { temperature: 0.3, top_k: 5 },
+        0,
+      ],
+      [
+        'drops temperature next to top_p',
+        { temperature: 0.3, top_p: 0.9 },
+        plain,
+        { top_p: 0.9 },
+        1,
+      ],
+      [
+        'fills the default temperature',
+        {},
+        { ...plain, defaultTemperature: 0 },
+        { temperature: 0 },
+        0,
+      ],
+      [
+        'keeps the default away from top_p',
+        { top_p: 0.9 },
+        { ...plain, defaultTemperature: 0 },
+        { top_p: 0.9 },
+        0,
+      ],
+      [
+        'drops temperature and top_k with thinking',
+        { temperature: 0, top_k: 5 },
+        { ...thinking, defaultTemperature: 0 },
+        {},
+        2,
+      ],
+      ['clamps a low top_p with thinking', { top_p: 0.5 }, thinking, { top_p: 0.95 }, 1],
+      ['keeps a valid top_p with thinking', { top_p: 0.97 }, thinking, { top_p: 0.97 }, 0],
+      [
+        'sends nothing where sampling is deprecated',
+        { temperature: 0.3, top_p: 0.9, top_k: 5 },
+        { ...plain, samplingParamsDeprecated: true, defaultTemperature: 0 },
+        {},
+        0,
+      ],
+    ] as const)('%s', (_, requested, options, sampling, warningCount) => {
+      const result = resolveClaudeSamplingParams(requested, options);
+      expect(result.sampling).toEqual(sampling);
+      expect(result.warnings).toHaveLength(warningCount);
+    });
+  });
+
   describe('calculateAnthropicCost', () => {
     it('should calculate cost for valid input and output tokens', () => {
       const cost = calculateAnthropicCost('claude-3-5-sonnet-20241022', { cost: 0.015 }, 100, 200);
