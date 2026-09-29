@@ -1026,10 +1026,11 @@ export function buildArchitectureReport(
           ? [{ from: reference.importer, to: reference.resolvedImport }]
           : [],
       );
+      const selfImports = new Set(
+        fileEdges.filter((edge) => edge.from === edge.to).map((edge) => edge.from),
+      );
       const fileCycles = stronglyConnectedComponents(sourceScan.sourceFiles, fileEdges).filter(
-        (component) =>
-          component.length > 1 ||
-          fileEdges.some((edge) => edge.from === component[0] && edge.to === component[0]),
+        (component) => component.length > 1 || selfImports.has(component[0]),
       );
       return [
         kind,
@@ -1057,6 +1058,7 @@ export function buildArchitectureReport(
           (alias) => reference.specifier === alias || reference.specifier.startsWith(`${alias}/`),
         )),
   );
+  const unresolvedSet = new Set(unresolvedInternal);
   const byImporter = new Map<string, ArchitectureModuleReference[]>();
   for (const reference of sourceScan.references) {
     const outgoing = byImporter.get(reference.importer) ?? [];
@@ -1067,7 +1069,6 @@ export function buildArchitectureReport(
     const files = new Set([entrypoint]);
     const externalSpecifiers = new Set<string>();
     const unresolvedReferences: ArchitectureModuleReference[] = [];
-    const unresolvedSet = new Set(unresolvedInternal);
     const includesKind = (reference: ModuleReference) =>
       mode === 'combined' ||
       reference.kind === 'value' ||

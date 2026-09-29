@@ -32,8 +32,8 @@ if (reportMode) {
     entrypoints.length > 0 ? entrypoints : undefined,
   );
   if (jsonMode) {
-    console.log(JSON.stringify(report, null, 2));
     // Keep stdout machine-readable; normal checks still run and set the exit status.
+    console.log(JSON.stringify(report, null, 2));
   } else {
     log('Architecture source views (syntax classification; not emitted or bundled code):');
     for (const [kind, view] of Object.entries(report.views)) {
@@ -46,7 +46,7 @@ if (reportMode) {
     );
     for (const [entrypoint, reach] of Object.entries(report.entrypoints)) {
       log(
-        `- ${entrypoint}: ${reach.combined.files.length} combined / ${reach.value.files.length} value-capable / ${reach.valueAndDeferred.files.length} value-capable plus deferred reachable files`,
+        `- ${entrypoint}: ${reach.combined.files.length} combined / ${reach.value.files.length} value / ${reach.valueAndDeferred.files.length} value plus dynamic reachable files`,
       );
     }
     log('Use --json for reference locations, cycles, and reachable files.');
