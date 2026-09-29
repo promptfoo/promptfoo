@@ -23,10 +23,16 @@ describeEvaluator('evaluator assertions', () => {
       tests: [{ assert: [{ type: 'equals', value: 'fixture' }] }],
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await expect(evaluate(testSuite, evalRecord, { maxConcurrency: 1 })).rejects.toThrow(
-      'defaultTest.assert[0]',
-    );
+    vi.useFakeTimers();
+    const setTimer = vi.spyOn(globalThis, 'setTimeout');
+    const clearTimer = vi.spyOn(globalThis, 'clearTimeout');
+    await expect(
+      evaluate(testSuite, evalRecord, { maxConcurrency: 1, maxEvalTimeMs: 60_000 }),
+    ).rejects.toThrow('defaultTest.assert[0]');
     expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+    const timeoutCall = setTimer.mock.calls.findIndex(([, delay]) => delay === 60_000);
+    expect(timeoutCall).toBeGreaterThanOrEqual(0);
+    expect(clearTimer).toHaveBeenCalledWith(setTimer.mock.results[timeoutCall].value);
   });
 
   it.each(['failed', 'aborted'])(

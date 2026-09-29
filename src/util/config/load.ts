@@ -847,6 +847,7 @@ async function prepareCombinedConfig(
       }
       // Otherwise merge objects
       const currDefaultTest = typeof curr.defaultTest === 'object' ? curr.defaultTest : {};
+      validateAssertions([], currDefaultTest);
       const prevObj = typeof prev === 'object' ? prev : {};
       return {
         ...prevObj,

@@ -1170,6 +1170,41 @@ describe('combineConfigs', () => {
     });
   });
 
+  it('rejects fallback chains that cross configuration files', async () => {
+    vi.mocked(fs.readFileSync)
+      .mockReturnValueOnce(
+        JSON.stringify({
+          defaultTest: { assert: [{ type: 'equals', value: 'fixture', fallback: 'next' }] },
+        }),
+      )
+      .mockReturnValueOnce(
+        JSON.stringify({
+          defaultTest: { assert: [{ type: 'contains', value: 'fixture' }] },
+        }),
+      );
+
+    await expect(combineConfigs(['config1.json', 'config2.json'])).rejects.toThrow(
+      'defaultTest.assert[0]',
+    );
+  });
+
+  it('combines complete fallback chains from separate configuration files', async () => {
+    const first = [
+      { type: 'equals', value: 'first', fallback: 'next' },
+      { type: 'contains', value: 'first' },
+    ];
+    const second = [
+      { type: 'equals', value: 'second', fallback: 'next' },
+      { type: 'contains', value: 'second' },
+    ];
+    vi.mocked(fs.readFileSync)
+      .mockReturnValueOnce(JSON.stringify({ defaultTest: { assert: first } }))
+      .mockReturnValueOnce(JSON.stringify({ defaultTest: { assert: second } }));
+
+    const result = await combineConfigs(['config1.json', 'config2.json']);
+    expect(result.defaultTest).toMatchObject({ assert: [...first, ...second] });
+  });
+
   it('should handle undefined defaultTest in configs', async () => {
     const config = {
       providers: ['provider1'],
