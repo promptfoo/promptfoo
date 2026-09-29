@@ -31,9 +31,7 @@ export const getPluginSeverity = (pluginId: string): Severity =>
   riskCategorySeverityMap[getFrameworkPluginId(pluginId) as keyof typeof riskCategorySeverityMap] ||
   Severity.Low;
 
-/**
- * Expands plugin collections like 'harmful' into their individual plugins
- */
+/** Resolves mapped plugins to the keys present in the report. */
 export const expandPluginCollections = (
   plugins: string[],
   categoryStats: CategoryStats,
@@ -62,9 +60,7 @@ export const expandPluginCollections = (
   return expandedPlugins;
 };
 
-/**
- * Categorizes plugins into compliant, non-compliant, and untested based on pass rates
- */
+/** Groups results by the report's pass-rate threshold. */
 export const categorizePlugins = (
   plugins: Set<string> | string[],
   categoryStats: CategoryStats,
@@ -74,9 +70,9 @@ export const categorizePlugins = (
   const nonCompliantPlugins: string[] = [];
   const untestedPlugins: string[] = [];
 
-  Array.from(plugins).forEach((plugin) => {
-    if (categoryStats[plugin] && categoryStats[plugin].total > 0) {
-      const stats = categoryStats[plugin];
+  for (const plugin of plugins) {
+    const stats = categoryStats[plugin];
+    if (stats && stats.total > 0) {
       if (stats.pass / stats.total >= passRateThreshold) {
         compliantPlugins.push(plugin);
       } else {
@@ -85,7 +81,7 @@ export const categorizePlugins = (
     } else {
       untestedPlugins.push(plugin);
     }
-  });
+  }
 
   return {
     compliant: compliantPlugins,
@@ -94,9 +90,6 @@ export const categorizePlugins = (
   };
 };
 
-/**
- * Gets a display name for a plugin
- */
 export const getPluginDisplayName = (plugin: string): string => {
   const shortPluginId = getFrameworkPluginId(plugin);
   return (

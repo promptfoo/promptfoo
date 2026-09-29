@@ -1,5 +1,5 @@
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   categorizePlugins,
   expandPluginCollections,
@@ -167,8 +167,6 @@ describe('expandPluginCollections', () => {
 });
 
 describe('categorizePlugins', () => {
-  beforeEach(() => {});
-
   const createCategoryStats = (
     stats: Record<string, { pass: number; total: number; failCount: number }>,
   ): CategoryStats => {
