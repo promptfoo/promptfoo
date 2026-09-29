@@ -89,7 +89,6 @@ import { handleSimilar } from './similar';
 import { handleSkillUsed } from './skill';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
-import { handleTokensUsed } from './tokensUsed';
 import { handleToolCallF1 } from './toolCallF1';
 import { handleTraceErrorSpans } from './traceErrorSpans';
 import { handleTraceSpanCount } from './traceSpanCount';
@@ -315,7 +314,6 @@ const ASSERTION_HANDLERS: Record<
   'trajectory:tool-sequence': handleTrajectoryToolSequence,
   'trajectory:tool-set': handleTrajectoryToolSet,
   'trajectory:tool-used': handleTrajectoryToolUsed,
-  'tokens-used': handleTokensUsed,
   'trace-error-spans': handleTraceErrorSpans,
   'trace-span-count': handleTraceSpanCount,
   'trace-span-duration': handleTraceSpanDuration,
@@ -762,7 +760,6 @@ export async function runAssertions({
   prompt,
   provider,
   providerResponse,
-  reportedTokenUsage,
   test,
   vars,
   traceId,
@@ -772,8 +769,6 @@ export async function runAssertions({
   prompt?: string;
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
-  // null means the provider reported no usage; omitted preserves direct-call behavior.
-  reportedTokenUsage?: ProviderResponse['tokenUsage'] | null;
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   traceId?: string;
@@ -863,10 +858,7 @@ export async function runAssertions({
     const result = await runAssertion({
       prompt,
       provider,
-      providerResponse:
-        reportedTokenUsage !== undefined && getAssertionBaseType(assertion) === 'tokens-used'
-          ? { ...providerResponse, tokenUsage: reportedTokenUsage ?? undefined }
-          : providerResponse,
+      providerResponse,
       assertion,
       test,
       vars,

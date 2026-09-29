@@ -40,7 +40,6 @@ These assertions can check LLM output or provider metadata directly. Configured 
 | [contains-sql](#contains-sql)                                   | output is valid SQL or contains a valid SQL code block             |
 | [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                              |
 | [cost](#cost)                                                   | Inference cost is below a threshold                                |
-| [tokens-used](#tokens-used)                                     | Check reported response tokens against a budget                    |
 | [equals](#equality)                                             | output matches exactly                                             |
 | [finish-reason](#finish-reason)                                 | model stopped for the expected reason                              |
 | [icontains](#contains)                                          | output contains substring, case insensitive                        |
@@ -310,21 +309,6 @@ assert:
   - type: cost
     threshold: 0.001
 ```
-
-### Tokens-Used {#tokens-used}
-
-`tokens-used` checks the token usage reported in the provider response. Set `min`, `max`, or both as non-negative integers. Bounds are inclusive.
-
-```yaml
-assert:
-  - type: tokens-used
-    value:
-      max: 2000
-```
-
-The check uses `tokenUsage.total`, or the sum of `prompt` and `completion` when both are reported. Missing or invalid usage produces an error, including for `not-tokens-used`. It does not infer usage from trace spans or add cached, grader, or incurred-usage breakdowns to the reported total. A cached response is checked against its reported token footprint, not the cost of replaying it.
-
-`not-tokens-used` passes when reported usage falls outside the budget.
 
 ### Equality
 

@@ -1,4 +1,4 @@
-import { tokenBudgetError, toolSetError } from '@promptfoo/contracts/validators/usageAssertions';
+import { toolSetError } from '@promptfoo/contracts/validators/trajectoryToolSet';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 const BASE_ASSERTION_TYPES = [
@@ -58,7 +58,6 @@ const BASE_ASSERTION_TYPES = [
   'skill-used',
   'starts-with',
   'tool-call-f1',
-  'tokens-used',
   'trace-error-spans',
   'trace-span-count',
   'trace-span-duration',
@@ -432,9 +431,6 @@ function getTrajectoryToolSequenceValueError(value: unknown): string | undefined
 }
 
 function getStructuredValueError(assertion: Assertion): string | undefined {
-  if (assertion.type === 'tokens-used' || assertion.type === 'not-tokens-used') {
-    return tokenBudgetError(assertion.value);
-  }
   if (assertion.type === 'trajectory:tool-set' || assertion.type === 'not-trajectory:tool-set') {
     return toolSetError(assertion.value);
   }

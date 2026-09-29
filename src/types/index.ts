@@ -698,7 +698,6 @@ export const BaseAssertionTypesSchema = z.enum([
   'trajectory:tool-sequence',
   'trajectory:tool-set',
   'trajectory:tool-used',
-  'tokens-used',
   'trace-error-spans',
   'trace-span-count',
   'trace-span-duration',

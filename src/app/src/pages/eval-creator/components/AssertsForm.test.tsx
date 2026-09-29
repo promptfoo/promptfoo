@@ -26,7 +26,6 @@ describe('AssertsForm', () => {
   });
 
   it.each([
-    { type: 'tokens-used', initial: { max: 100 }, next: { min: 0, max: 50 } },
     { type: 'trajectory:tool-set', initial: ['lookup'], next: [] },
     { type: 'contains-any', initial: ['foo', 'bar'], next: ['word, with comma', 'quote\"'] },
     { type: 'contains-all', initial: ['foo', 'bar'], next: ['baz', 'qux'] },
@@ -49,7 +48,6 @@ describe('AssertsForm', () => {
   });
 
   it.each([
-    { type: 'tokens-used', raw: '{"max":100}', value: { max: 100 } },
     { type: 'trajectory:tool-set', raw: '["lookup"]', value: ['lookup'] },
     { type: 'contains-any', raw: '["foo","bar"]', value: ['foo', 'bar'] },
   ] as const)('parses existing JSON when selecting $type', async ({ type, raw, value }) => {
@@ -64,19 +62,27 @@ describe('AssertsForm', () => {
     expect(onAdd).toHaveBeenLastCalledWith([{ type, value }]);
   });
 
-  it('preserves the caret and raw JSON while editing a structured value', async () => {
+  it('keeps raw text when switching structured values to text and back', async () => {
     const user = userEvent.setup();
     renderComponent(
-      <AssertsForm onAdd={onAdd} initialValues={[{ type: 'tokens-used', value: { max: 100 } }]} />,
+      <AssertsForm
+        onAdd={onAdd}
+        initialValues={[{ type: 'trajectory:tool-set', value: ['old'] }]}
+      />,
     );
     const input = screen.getByRole('textbox', { name: 'Value' }) as HTMLTextAreaElement;
     await user.click(input);
-    const digits = input.value.indexOf('100');
-    input.setSelectionRange(digits, digits + 3);
-    await user.keyboard('250');
-    expect(input.value).toBe('{\n  "max": 250\n}');
-    expect(input.selectionStart).toBe(digits + 3);
-    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'tokens-used', value: { max: 250 } }]);
+    const word = input.value.indexOf('old');
+    input.setSelectionRange(word, word + 3);
+    await user.keyboard('new');
+    expect(input.value).toBe('[\n  "new"\n]');
+    expect(input.selectionStart).toBe(word + 3);
+    await user.click(screen.getByRole('combobox', { name: 'Type' }));
+    await user.click(screen.getByRole('option', { name: 'equals' }));
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'equals', value: input.value }]);
+    await user.click(screen.getByRole('combobox', { name: 'Type' }));
+    await user.click(screen.getByRole('option', { name: 'trajectory:tool-set' }));
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'trajectory:tool-set', value: ['new'] }]);
   });
 
   it('should render all assertions from initialValues as rows with the correct type and value fields populated', () => {

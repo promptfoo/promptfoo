@@ -73,8 +73,6 @@ const assertTypes: AssertionType[] = [
   // Metrics
   'bleu',
   'cost',
-  'tokens-used',
-  'not-tokens-used',
   'finish-reason',
   'latency',
   'perplexity',
@@ -106,9 +104,7 @@ const ARRAY_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
 ]);
 
 const usesStructuredValue = (type: AssertionType) =>
-  ARRAY_VALUE_ASSERTION_TYPES.has(type) ||
-  type.endsWith('tokens-used') ||
-  type.endsWith('trajectory:tool-set');
+  ARRAY_VALUE_ASSERTION_TYPES.has(type) || type.endsWith('trajectory:tool-set');
 
 function parseAssertionValue(type: AssertionType, value: Assertion['value']): Assertion['value'] {
   if (typeof value === 'string' && usesStructuredValue(type)) {
@@ -202,7 +198,11 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                         ? {
                             ...a,
                             type: newValue as AssertionType,
-                            value: parseAssertionValue(newValue as AssertionType, a.value),
+                            value: usesStructuredValue(newValue as AssertionType)
+                              ? parseAssertionValue(newValue as AssertionType, a.value)
+                              : usesStructuredValue(a.type)
+                                ? (rawValues[index] ?? JSON.stringify(a.value, null, 2))
+                                : a.value,
                           }
                         : a,
                     );
@@ -231,11 +231,9 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                   <Textarea
                     id={`assert-value-${index}`}
                     placeholder={
-                      assert.type.endsWith('tokens-used')
-                        ? '{"max": 1000}'
-                        : assert.type.endsWith('trajectory:tool-set')
-                          ? '["search", "summarize"]'
-                          : 'Enter expected value or criteria...'
+                      assert.type.endsWith('trajectory:tool-set')
+                        ? '["search", "summarize"]'
+                        : 'Enter expected value or criteria...'
                     }
                     value={
                       rawValues[index] ??

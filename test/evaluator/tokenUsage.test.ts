@@ -9,86 +9,11 @@ import {
   getGradingAssertionHash,
   getGradingInputHash,
 } from '../../src/redteam/grading/storedResult';
-import {
-  type ApiProvider,
-  ResultFailureReason,
-  type TestSuite,
-  type TokenUsage,
-} from '../../src/types/index';
+import { type ApiProvider, type TestSuite } from '../../src/types/index';
 import { mockApiProvider, mockGradingApiProviderPasses, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator token usage', () => {
-  it.each([1, 2])(
-    'grades reported token usage before accounting at concurrency %i',
-    async (maxConcurrency) => {
-      const cases: { usage?: TokenUsage; cached?: boolean; error: boolean }[] = [
-        { error: true },
-        { usage: {}, error: true },
-        { usage: { prompt: 3 }, error: true },
-        { usage: { completion: 2 }, error: true },
-        { cached: true, error: true },
-        { usage: { total: -1 }, error: true },
-        { usage: { total: 0 }, error: false },
-        { usage: { prompt: 3, completion: 2 }, error: false },
-        { usage: { total: 8, prompt: 3 }, error: false },
-      ];
-      const providers: ApiProvider[] = cases.map(({ usage, cached }, index) => ({
-        id: () => `usage-fixture-${index}`,
-        callApi: vi
-          .fn()
-          .mockResolvedValue({ output: 'ordinary response', tokenUsage: usage, cached }),
-      }));
-      const suite: TestSuite = {
-        providers,
-        prompts: [toPrompt('An ordinary fixture')],
-        tests: [{ assert: [{ type: 'tokens-used', value: { max: 10 } }] }],
-      };
-      const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
-      await evaluate(suite, evalRecord, { maxConcurrency });
-      const summary = await evalRecord.toEvaluateSummary();
-      expect(summary.results).toHaveLength(cases.length);
-      for (const [index, fixture] of cases.entries()) {
-        const row = summary.results.find((result) => result.provider.id === providers[index].id())!;
-        expect(row.success).toBe(!fixture.error);
-        expect(row.failureReason).toBe(
-          fixture.error ? ResultFailureReason.ERROR : ResultFailureReason.NONE,
-        );
-        if (fixture.error) {
-          expect(row.error).toContain('tokens-used requires');
-        } else {
-          expect(row.response?.output).toBe('ordinary response');
-        }
-      }
-    },
-  );
-
-  it.each([1, 2])(
-    'does not invent token usage for precomputed output at concurrency %i',
-    async (maxConcurrency) => {
-      const provider = { id: () => 'unused-fixture', callApi: vi.fn() };
-      const suite: TestSuite = {
-        providers: [provider],
-        prompts: [toPrompt('Ordinary fixture')],
-        tests: [
-          {
-            providerOutput: 'Saved ordinary response',
-            assert: [{ type: 'tokens-used', value: { max: 0 } }],
-          },
-        ],
-      };
-      const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
-      await evaluate(suite, evalRecord, { maxConcurrency });
-      const summary = await evalRecord.toEvaluateSummary();
-      expect(provider.callApi).not.toHaveBeenCalled();
-      expect(summary.results[0]).toMatchObject({
-        success: false,
-        failureReason: ResultFailureReason.ERROR,
-      });
-      expect(summary.results[0].error).toContain('tokens-used requires');
-    },
-  );
-
   it('does not count deterministic assertions as grading-provider requests', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

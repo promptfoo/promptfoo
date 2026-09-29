@@ -1,4 +1,4 @@
-import { toolSetError } from '../contracts/validators/usageAssertions';
+import { toolSetError } from '../contracts/validators/trajectoryToolSet';
 import { getToolNameFromAttributes } from '../tracing/toolAttributes';
 
 import type { AssertionParams, GradingResult } from '../types/index';

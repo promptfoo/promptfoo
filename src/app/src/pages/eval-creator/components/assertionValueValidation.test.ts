@@ -13,18 +13,6 @@ const make = (overrides: Partial<Assertion>): Assertion =>
   ({ type: 'contains', value: '', ...overrides }) as Assertion;
 
 describe('getRunnableAssertionValueError', () => {
-  it.each(['tokens-used', 'not-tokens-used'] as const)(
-    'validates response budgets for %s',
-    (type) => {
-      expect(getRunnableAssertionValueError(make({ type, value: { max: 0 } }))).toBeUndefined();
-      expect(getRunnableAssertionValueError(make({ type, value: { min: 4, max: 2 } }))).toContain(
-        'min',
-      );
-      expect(
-        getRunnableAssertionValueError(make({ type, value: { max: 10, source: 'trace' } })),
-      ).toContain('provider response');
-    },
-  );
   it.each(['trajectory:tool-set', 'not-trajectory:tool-set'] as const)(
     'validates exact tool sets for %s',
     (type) => {
