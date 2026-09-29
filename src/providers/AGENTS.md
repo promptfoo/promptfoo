@@ -150,7 +150,7 @@ ls examples/myprovider/promptfooconfig.yaml
 
 ## Request cancellation
 
-Adaptive scheduler slot queues, grouped grading queues, and retry waits also receive the request signal. Cancellation removes waiting work without releasing another call's slot or suppressing errors from already-running callbacks.
+Scheduler slots, grouped grading, and retry waits receive the request signal. Cancelling queued work leaves active calls' slots unchanged. A callback that ignores the signal can continue running after its caller stops waiting.
 
 All operation interfaces accept optional request options with `abortSignal`. Implementations should check it before dispatch and pass it to their fetch or SDK transport, retry waits, and polling. Authentication and callback waits can use `awaitWithAbort` from `src/util/abort.ts`; this stops waiting but cannot undo a callback already started or cancel a vendor job already accepted.
 
