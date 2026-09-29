@@ -95,8 +95,7 @@ export class ScriptCompletionProvider implements ApiProvider {
 
     const command = scriptParts.shift();
     invariant(command, 'No command found in script path');
-    // Remove properties not useful in shell scripts and non-serializable objects
-    // These can contain circular references (e.g., Timeout objects) that break JSON serialization
+    // Omit nonserializable context helpers from the script arguments.
     delete context?.getCache;
     delete context?.logger;
     delete context?.filters; // NunjucksFilterMap contains functions
@@ -112,9 +111,7 @@ export class ScriptCompletionProvider implements ApiProvider {
     };
 
     const execution = execFileAsync(command, scriptArgs, options);
-    // Close stdin immediately so child processes that read stdin don't hang.
-    // execFile pipes stdin by default but never writes to it, causing tools
-    // like opencode to block forever waiting for input.
+    // execFile leaves stdin open; close it so programs waiting for EOF can finish.
     execution.child?.stdin?.end();
     const { stdout, stderr } = await execution.catch((error: Error) => {
       logger.debug(`Error running script ${this.scriptPath}: ${error.message}`);
