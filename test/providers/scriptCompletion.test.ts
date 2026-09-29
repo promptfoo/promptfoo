@@ -4,11 +4,13 @@ import * as fs from 'fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cacheModule from '../../src/cache';
+import cliState from '../../src/cliState';
 import {
   getFileHashes,
   parseScriptParts,
   ScriptCompletionProvider,
 } from '../../src/providers/scriptCompletion';
+import { mockProcessEnv } from '../util/utils';
 import type { MockedFunction } from 'vitest';
 
 vi.mock('child_process', async (importOriginal) => {
@@ -187,6 +189,29 @@ describe('ScriptCompletionProvider', () => {
 
   it('should return the correct id', () => {
     expect(provider.id()).toBe('exec:node script.js');
+  });
+
+  it('passes file defaults to the child without changing the host environment', async () => {
+    const restore = mockProcessEnv({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, options, callback) {
+      const env = (options as { env?: NodeJS.ProcessEnv }).env;
+      (callback as (error: Error | null, stdout: string, stderr: string) => void)(
+        null,
+        env?.PROMPTFOO_REVIEW_ENV_PROBE ?? 'missing',
+        '',
+      );
+      return { stdin: { end: vi.fn() } } as any;
+    });
+    try {
+      const result = await cliState.withEnvFileOverrides(
+        { PROMPTFOO_REVIEW_ENV_PROBE: 'file' },
+        () => provider.callApi('hello'),
+      );
+      expect(result.output).toBe('file');
+      expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
+    } finally {
+      restore();
+    }
   });
 
   it('should close stdin on the child process to prevent hanging', async () => {

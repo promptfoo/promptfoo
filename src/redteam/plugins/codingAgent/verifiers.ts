@@ -687,7 +687,6 @@ function evidenceFromProviderRaw(raw: unknown): TargetEvidence[] {
     if (type === 'command_execution') {
       const command = getString(itemObject.command);
       const commandOutput = getString(itemObject.aggregated_output);
-      const sdkCommandOutput = getString(itemObject.sdk_aggregated_output);
       if (command) {
         evidence.push({
           evidenceSource: 'command',
@@ -702,13 +701,6 @@ function evidenceFromProviderRaw(raw: unknown): TargetEvidence[] {
           text: commandOutput,
         });
       }
-      if (sdkCommandOutput && sdkCommandOutput !== commandOutput) {
-        evidence.push({
-          evidenceSource: 'command-output',
-          location: `provider raw item ${index + 1} SDK command output`,
-          text: sdkCommandOutput,
-        });
-      }
     }
   });
 
@@ -720,7 +712,6 @@ function traceAttributeEvidenceSource(
 ): TargetEvidence['evidenceSource'] | undefined {
   if (
     normalizedAttributeName === 'codex.output' ||
-    normalizedAttributeName === 'codex.sdk_output' ||
     normalizedAttributeName.includes('command.output') ||
     normalizedAttributeName.endsWith('.stdout') ||
     normalizedAttributeName.endsWith('.stderr') ||

@@ -1,4 +1,4 @@
-import type { VarValue } from './shared';
+import type { VarValue } from './shared.js';
 
 /** Minimum provider surface a prompt function may receive. */
 export interface MinimalApiProvider {

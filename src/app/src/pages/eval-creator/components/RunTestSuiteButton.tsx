@@ -8,7 +8,7 @@ import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useToast } from '@app/hooks/useToast';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import {
   countTests,
   normalizePrompts,
@@ -33,6 +33,7 @@ const RunTestSuiteButton = () => {
     providers,
     scenarios,
     tests,
+    tracing,
     extensions,
   } = config;
   const [isRunning, setIsRunning] = useState(false);
@@ -90,6 +91,7 @@ const RunTestSuiteButton = () => {
       providers,
       scenarios,
       tests, // Note: This is 'tests' in the API, not 'testCases'
+      tracing,
       extensions,
       ...(sourceEvalId && { sourceEvalId }),
     };
