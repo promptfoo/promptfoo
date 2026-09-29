@@ -219,6 +219,32 @@ describe('getFinalTest', () => {
     expect(result.provider).toBe(directProvider);
     expect(result.options?.provider).toBe(assertionProvider);
   });
+
+  it('should not throw when assertion contains a provider with circular references', () => {
+    const circularProvider = createMockProvider('circularProvider') as ApiProvider & {
+      _client?: unknown;
+    };
+    circularProvider._client = { messages: { _client: circularProvider } };
+
+    const testCase: TestCase = {
+      vars: { test: 'value' },
+      assert: [
+        {
+          type: 'llm-rubric',
+          value: 'is this a reasonable response?',
+          provider: circularProvider,
+        },
+      ],
+    };
+
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: 'is this a reasonable response?',
+      provider: circularProvider,
+    };
+
+    expect(() => getFinalTest(testCase, assertion)).not.toThrow();
+  });
 });
 
 describe('loadFromJavaScriptFile', () => {

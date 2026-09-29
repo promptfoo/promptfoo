@@ -7,7 +7,7 @@ import { importModule } from '../esm';
 import { type Assertion, type TestCase } from '../types/index';
 import { loadYaml } from '../util/yamlLoad';
 
-const clone = Clone();
+const clone = Clone({ circles: true });
 
 export function getFinalTest(test: TestCase, assertion: Assertion) {
   // Deep copy
