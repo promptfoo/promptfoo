@@ -1,5 +1,3 @@
-import type { AssistantCreationOptions, FunctionDefinition } from '@azure/openai-assistants';
-
 import type { EnvOverrides } from '../../types/env';
 import type { MCPConfig } from '../mcp/types';
 import type { AssistantFunctionCallback, GPT5ReasoningEffort } from '../openai/types';
@@ -30,7 +28,10 @@ export interface AzureCompletionOptions {
   /** @deprecated Use isReasoningModel instead. Indicates if the model should be treated as a reasoning model */
   o1?: boolean;
   isReasoningModel?: boolean; // Indicates if the model should be treated as a reasoning model (o1, o3-mini, etc.)
-  /** Treat a custom-named deployment as Claude Opus 4.7 or 4.8 for sampling compatibility. */
+  /**
+   * Treat a custom-named deployment as Claude Opus 4.7 or later for sampling compatibility
+   * (Opus 4.7/4.8/5, Sonnet 5, and Fable/Mythos 5 all reject temperature/top_p/top_k).
+   */
   isClaudeOpus47OrLater?: boolean;
   max_completion_tokens?: number; // Maximum number of tokens to generate for reasoning models
 
@@ -149,40 +150,58 @@ export interface AzureModelCost {
   };
 }
 
-export type AzureAssistantOptions = AzureCompletionOptions &
-  Partial<AssistantCreationOptions> & {
-    /**
-     * If set, automatically call these functions when the assistant activates
-     * these function tools.
-     */
-    functionToolCallbacks?: Record<FunctionDefinition['name'], AssistantFunctionCallback | string>;
-    /**
-     * Model to use for the assistant.
-     */
-    modelName?: string;
-    /**
-     * Tool resources configuration, including vector store IDs.
-     */
-    tool_resources?: {
-      file_search?: {
-        vector_store_ids?: string[];
-      };
+export type AzureAssistantOptions = AzureCompletionOptions & {
+  // Preserve the legacy Azure assistant options independently of the retired SDK.
+  model?: string;
+  name?: string | null;
+  description?: string | null;
+  instructions?: string | null;
+  tools?: (
+    | { type: 'code_interpreter' }
+    | { type: 'retrieval' }
+    | {
+        type: 'function';
+        function: {
+          name: string;
+          description: string;
+          parameters: unknown;
+        };
+      }
+  )[];
+  fileIds?: string[];
+  metadata?: Record<string, string> | null;
+  /**
+   * If set, automatically call these functions when the assistant activates
+   * these function tools.
+   */
+  functionToolCallbacks?: Record<string, AssistantFunctionCallback | string>;
+  /**
+   * Model to use for the assistant.
+   */
+  modelName?: string;
+  /**
+   * Tool resources configuration, including vector store IDs.
+   */
+  tool_resources?: {
+    file_search?: {
+      vector_store_ids?: string[];
     };
-    /**
-     * Maximum timeout in milliseconds for API client requests
-     */
-    timeoutMs?: number;
-    /**
-     * Maximum time in milliseconds to poll for a run to complete before timing out
-     */
-    maxPollTimeMs?: number;
-    /** Foundry: maximum callback batches; defaults to 8 (valid range 1–64). */
-    maxToolIterations?: number;
-    /**
-     * Configuration for network request retry behavior
-     */
-    retryOptions?: RetryOptions;
   };
+  /**
+   * Maximum timeout in milliseconds for API client requests
+   */
+  timeoutMs?: number;
+  /**
+   * Maximum time in milliseconds to poll for a run to complete before timing out
+   */
+  maxPollTimeMs?: number;
+  /** Foundry: maximum callback batches; defaults to 8 (valid range 1–64). */
+  maxToolIterations?: number;
+  /**
+   * Configuration for network request retry behavior
+   */
+  retryOptions?: RetryOptions;
+};
 
 export interface AzureProviderOptions<
   TConfig extends AzureCompletionOptions = AzureCompletionOptions,

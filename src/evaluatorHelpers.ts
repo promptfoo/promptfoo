@@ -38,12 +38,14 @@ type FileMetadata = Record<string, { path: string; type: string; format?: string
 
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
+  const installHelp =
+    'Install it alongside promptfoo with: npm install promptfoo pdf-parse@^2.4.5 (or npm install -g promptfoo pdf-parse@^2.4.5 for a global install).';
   try {
     const entryPoint = createRequire(import.meta.url).resolve('pdf-parse');
     const version = getPackageVersion('pdf-parse', entryPoint);
     if (!version || !semverSatisfies(version, '^2.4.5')) {
       throw new Error(
-        `pdf-parse ${version ?? '(unknown version)'} is not supported. Install it alongside promptfoo with: npm install promptfoo pdf-parse@^2.4.5 (or npm install -g promptfoo pdf-parse@^2.4.5 for a global install).`,
+        `pdf-parse ${version ?? '(unknown version)'} is not supported. ${installHelp}`,
       );
     }
     const { PDFParse } = await import('pdf-parse');
@@ -54,9 +56,7 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
     return result.text.trim();
   } catch (error) {
     if (isMissingPackageImportError(error, 'pdf-parse')) {
-      throw new Error(
-        'pdf-parse is not installed. Install it alongside promptfoo with: npm install promptfoo pdf-parse@^2.4.5 (or npm install -g promptfoo pdf-parse@^2.4.5 for a global install).',
-      );
+      throw new Error(`pdf-parse is not installed. ${installHelp}`);
     }
     throw new Error(
       `Failed to extract text from PDF ${pdfPath}: ${error instanceof Error ? error.message : String(error)}`,

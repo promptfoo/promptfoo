@@ -122,15 +122,16 @@ type SqlParserModule = {
 };
 
 async function createSqlParser() {
-  const installMessage =
-    'node-sql-parser is not installed. Install it alongside promptfoo with: npm install promptfoo node-sql-parser@^5.4.0 (or npm install -g promptfoo node-sql-parser@^5.4.0 for a global install).';
+  const installHelp =
+    'Install it alongside promptfoo with: npm install promptfoo node-sql-parser@^5.4.0 (or npm install -g promptfoo node-sql-parser@^5.4.0 for a global install).';
+  const installMessage = `node-sql-parser is not installed. ${installHelp}`;
   let sqlParserModule: SqlParserModule;
   try {
     const entryPoint = createRequire(import.meta.url).resolve('node-sql-parser');
     const version = getPackageVersion('node-sql-parser', entryPoint);
     if (!version || !semverSatisfies(version, '^5.4.0')) {
       throw new Error(
-        `node-sql-parser ${version ?? '(unknown version)'} is not supported. Install it alongside promptfoo with: npm install promptfoo node-sql-parser@^5.4.0 (or npm install -g promptfoo node-sql-parser@^5.4.0 for a global install).`,
+        `node-sql-parser ${version ?? '(unknown version)'} is not supported. ${installHelp}`,
       );
     }
     sqlParserModule = await import('node-sql-parser');

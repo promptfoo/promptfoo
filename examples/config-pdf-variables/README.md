@@ -21,7 +21,7 @@ Then download some PDFs from arxiv.org:
 ./fetch_pdfs.sh
 ```
 
-This example is pre-configured in `promptfooconfig.yaml`. That means you can just run:
+Run the eval with the included `promptfooconfig.yaml`:
 
 ```bash
 npx promptfoo eval

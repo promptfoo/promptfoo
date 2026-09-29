@@ -15,14 +15,10 @@ Install Promptfoo and the SQL parser together in this example directory:
 npm install promptfoo node-sql-parser@^5.4.0
 ```
 
-Then set your OPENAI_API_KEY environment variable.
-
-Next, edit promptfooconfig.yaml.
-
-Then run:
+Set `OPENAI_API_KEY`, edit `promptfooconfig.yaml`, and run:
 
 ```bash
 npx promptfoo eval
 ```
 
-Afterwards, you can view the results by running `npx promptfoo view`
+View the results with `npx promptfoo view`.
