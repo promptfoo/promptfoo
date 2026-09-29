@@ -1,10 +1,11 @@
+import { EnvHttpProxyAgent } from 'undici';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockProcessEnv } from './util/utils';
 
 // Create mock for exec - using vi.hoisted to ensure it's available in vi.mock factory
-const { mockExecAsync } = vi.hoisted(() => {
+const { mockExecAsync, closeDispatcher } = vi.hoisted(() => {
   const mockExecAsync = vi.fn();
-  return { mockExecAsync };
+  return { mockExecAsync, closeDispatcher: vi.fn().mockResolvedValue(undefined) };
 });
 
 // Mock child_process.exec with custom promisify symbol
@@ -18,6 +19,13 @@ vi.mock('child_process', async () => {
     exec: mockExec,
   };
 });
+
+vi.mock('undici', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('undici')>()),
+  EnvHttpProxyAgent: vi.fn(function () {
+    return { close: closeDispatcher };
+  }),
+}));
 
 vi.mock('../src/util/fetch/index.ts', () => ({
   fetchWithTimeout: vi.fn(),
@@ -42,6 +50,8 @@ import { VERSION } from '../src/version';
 
 beforeEach(() => {
   vi.mocked(fetchWithTimeout).mockReset();
+  vi.mocked(EnvHttpProxyAgent).mockClear();
+  closeDispatcher.mockReset().mockResolvedValue(undefined);
   mockExecAsync.mockReset();
   mockExecAsync.mockResolvedValue({
     stdout: 'modelaudit, version 0.0.0',
@@ -58,6 +68,36 @@ describe('getLatestVersion', () => {
 
     const latestVersion = await getLatestVersion();
     expect(latestVersion).toBe('1.1.0');
+  });
+
+  it('requires certificate verification for direct and proxied version metadata', async () => {
+    const restore = mockProcessEnv({ PROMPTFOO_INSECURE_SSL: 'true' });
+    try {
+      vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ latestVersion: '1.2.3' }),
+      } as never);
+      await getLatestVersion();
+      expect(EnvHttpProxyAgent).toHaveBeenCalledWith({
+        connect: { rejectUnauthorized: true },
+        proxyTls: { rejectUnauthorized: true },
+        requestTls: { rejectUnauthorized: true },
+      });
+      expect(fetchWithTimeout).toHaveBeenCalledWith(
+        'https://api.promptfoo.dev/api/latestVersion',
+        expect.objectContaining({ redirect: 'error', dispatcher: { close: closeDispatcher } }),
+        10000,
+      );
+      expect(closeDispatcher).toHaveBeenCalledOnce();
+    } finally {
+      restore();
+    }
+  });
+
+  it('closes the metadata dispatcher when the request fails', async () => {
+    vi.mocked(fetchWithTimeout).mockRejectedValueOnce(new Error('fixture request failed'));
+    await expect(getLatestVersion()).rejects.toThrow('fixture request failed');
+    expect(closeDispatcher).toHaveBeenCalledOnce();
   });
 
   it('should throw an error if the response is not ok', async () => {

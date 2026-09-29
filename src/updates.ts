@@ -3,6 +3,7 @@ import { promisify } from 'util';
 
 import chalk from 'chalk';
 import semverGt from 'semver/functions/gt.js';
+import { EnvHttpProxyAgent } from 'undici';
 import { TERMINAL_MAX_WIDTH, VERSION } from './constants';
 import { getEnvBool } from './envars';
 import logger from './logger';
@@ -12,18 +13,30 @@ import { fetchWithTimeout } from './util/fetch/index';
 const execAsync = promisify(exec);
 
 export async function getLatestVersion() {
-  const response = await fetchWithTimeout(
-    `https://api.promptfoo.dev/api/latestVersion`,
-    {
+  const dispatcher = new EnvHttpProxyAgent({
+    connect: { rejectUnauthorized: true },
+    proxyTls: { rejectUnauthorized: true },
+    requestTls: { rejectUnauthorized: true },
+  });
+  try {
+    const options = {
+      dispatcher,
+      redirect: 'error' as const,
       headers: { 'x-promptfoo-silent': 'true' },
-    },
-    10000,
-  );
-  if (!response.ok) {
-    throw new Error(`Failed to fetch package information for promptfoo`);
+    };
+    const response = await fetchWithTimeout(
+      'https://api.promptfoo.dev/api/latestVersion',
+      options,
+      10000,
+    );
+    if (!response.ok) {
+      throw new Error('Failed to fetch package information for promptfoo');
+    }
+    const data = (await response.json()) as { latestVersion: string };
+    return data.latestVersion;
+  } finally {
+    await dispatcher.close();
   }
-  const data = (await response.json()) as { latestVersion: string };
-  return data.latestVersion;
 }
 
 export async function checkForUpdates(): Promise<boolean> {

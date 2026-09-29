@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -58,6 +58,7 @@ describe('update execution context', () => {
     const projectBin = path.join(project, 'bin');
     const alias = path.join(directory, 'alias');
     mkdirSync(projectBin, { recursive: true });
+    writeFileSync(path.join(project, 'package.json'), '{}');
     symlinkSync(projectBin, alias, 'junction');
     const runtimeBin = path.dirname(process.execPath);
     const context = createUpdateContext(
@@ -65,6 +66,12 @@ describe('update execution context', () => {
       project,
     );
     expect(context.env.PATH).toBe(realpathSync(runtimeBin));
+  });
+
+  it('preserves version-manager shims when invoked from a home directory', () => {
+    const shims = path.join(directory, '.asdf', 'shims');
+    mkdirSync(shims, { recursive: true });
+    expect(createUpdateContext({ PATH: shims }, directory).env.PATH).toBe(realpathSync(shims));
   });
 
   it('preserves a symlink to the active runtime when invoked from its home directory', () => {
@@ -77,6 +84,7 @@ describe('update execution context', () => {
   });
 
   it('fails closed when no launch PATH entries are eligible', () => {
+    writeFileSync(path.join(directory, 'package.json'), '{}');
     expect(() =>
       createUpdateContext({ PATH: ['.', directory].join(path.delimiter) }, directory),
     ).toThrow('No trusted npm');
@@ -108,9 +116,9 @@ describe('npm update lifecycle', () => {
     const result = runNpmUpdate('latest', launchEnvironment, directory);
     const added = process.listeners(signal).find((listener) => !existing.includes(listener));
     expect(added).toBeDefined();
-    added!(signal);
+    process.emit(signal, signal);
     expect(process.kill).toHaveBeenCalledWith(-child.pid, signal);
-    added!(signal);
+    process.emit(signal, signal);
     expect(process.kill).toHaveBeenCalledTimes(1);
     expect(process.exitCode).toBe(exitCode);
     expect(process.listeners(signal)).toContain(added);

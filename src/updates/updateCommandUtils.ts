@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { realpathSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 
 import semver from 'semver';
@@ -8,6 +8,7 @@ import semver from 'semver';
 export function createUpdateContext(sourceEnvironment: NodeJS.ProcessEnv, projectRoot: string) {
   const root = realpathSync(projectRoot);
   const runtimeBin = realpathSync(path.dirname(process.execPath));
+  const isProjectDirectory = existsSync(path.join(root, 'package.json'));
   const entries = (sourceEnvironment.PATH ?? '/usr/bin:/bin').split(path.delimiter);
   const trustedPaths = entries.flatMap((entry) => {
     if (!path.isAbsolute(entry) || entry.includes('/node_modules/.bin')) {
@@ -19,8 +20,9 @@ export function createUpdateContext(sourceEnvironment: NodeJS.ProcessEnv, projec
         return [];
       }
       const insideProject =
-        canonical === root ||
-        canonical.startsWith(root.endsWith(path.sep) ? root : `${root}${path.sep}`);
+        isProjectDirectory &&
+        (canonical === root ||
+          canonical.startsWith(root.endsWith(path.sep) ? root : `${root}${path.sep}`));
       return canonical === runtimeBin || !insideProject ? [canonical] : [];
     } catch {
       return [];
@@ -69,8 +71,8 @@ export async function runNpmUpdate(
   };
   const forwardInterrupt = () => forwardSignal('SIGINT', 130);
   const forwardTermination = () => forwardSignal('SIGTERM', 143);
-  process.once('SIGINT', forwardInterrupt);
-  process.once('SIGTERM', forwardTermination);
+  process.on('SIGINT', forwardInterrupt);
+  process.on('SIGTERM', forwardTermination);
   try {
     await new Promise<void>((resolve, reject) => {
       child.once('error', reject);

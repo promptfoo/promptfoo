@@ -92,7 +92,7 @@ describe('checkForUpdates', () => {
 
     expect(mockFetchWithTimeout).toHaveBeenCalledWith(
       'https://api.promptfoo.dev/api/latestVersion',
-      { headers: { 'x-promptfoo-silent': 'true' } },
+      expect.objectContaining({ headers: { 'x-promptfoo-silent': 'true' }, redirect: 'error' }),
       10000,
     );
   });
