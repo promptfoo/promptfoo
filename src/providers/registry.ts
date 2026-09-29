@@ -1339,6 +1339,26 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('typesafe:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { TypeSafeProvider } = await import('./typesafe');
+      const modelName = modelNameFromProviderPath(providerPath, 1);
+      if (!modelName) {
+        throw new Error(
+          `Invalid typesafe provider path: ${providerPath}. Model name is required. Use: typesafe:jev-latest`,
+        );
+      }
+      return new TypeSafeProvider(modelName, {
+        ...providerOptions,
+        env: providerOptions.env ?? context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('llamaapi:'),
     create: async (
       providerPath: string,
