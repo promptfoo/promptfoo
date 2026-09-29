@@ -99,14 +99,17 @@ function getSseData(line: string): string | undefined {
   return data.startsWith(' ') ? data.slice(1) : data;
 }
 
-function validateStreamingError(error: unknown): void {
-  if (
-    error != null &&
-    !(typeof error === 'string' && error.trim()) &&
-    !(typeof error === 'object' && !Array.isArray(error))
-  ) {
-    throw new Error('Invalid streaming error');
+function normalizeStreamingError(error: unknown): unknown {
+  if (error == null) {
+    return error;
   }
+  if (typeof error === 'string' && error.trim()) {
+    return { message: error };
+  }
+  if (typeof error === 'object' && !Array.isArray(error)) {
+    return error;
+  }
+  throw new Error('Invalid streaming error');
 }
 
 function appendFunctionCall(
@@ -210,13 +213,18 @@ function appendStreamingChoice(
   if (!choice || typeof choice !== 'object') {
     throw new Error('Invalid streaming choice');
   }
+  if (
+    choice.delta !== undefined &&
+    (!choice.delta || typeof choice.delta !== 'object' || Array.isArray(choice.delta))
+  ) {
+    throw new Error('Invalid streaming delta');
+  }
   const streamingChoice = getOpenAiStreamingChoice(state, choice.index ?? 0);
   if (choice.delta?.content != null) {
     streamingChoice.content = appendText(streamingChoice.content ?? '', choice.delta.content);
   }
-  validateStreamingError(choice.error);
   if (choice.error != null) {
-    streamingChoice.error = choice.error;
+    streamingChoice.error = normalizeStreamingError(choice.error);
   }
   streamingChoice.refusal = appendText(streamingChoice.refusal, choice.delta?.refusal);
   streamingChoice.reasoning = appendText(streamingChoice.reasoning, choice.delta?.reasoning);
@@ -241,8 +249,12 @@ function appendStreamingChoice(
   }
 }
 
-function processOpenAiStreamingChunk(state: OpenAiStreamingState, data: string): boolean {
-  if (data === '[DONE]') {
+function processOpenAiStreamingChunk(
+  state: OpenAiStreamingState,
+  data: string,
+  errorEvent = false,
+): boolean {
+  if (data === '[DONE]' && !errorEvent) {
     state.completed = true;
     return true;
   }
@@ -260,9 +272,9 @@ function processOpenAiStreamingChunk(state: OpenAiStreamingState, data: string):
     if (!chunk || typeof chunk !== 'object' || Array.isArray(chunk)) {
       throw new Error('Invalid streaming chunk');
     }
-    validateStreamingError(chunk.error);
-    if (chunk.error !== undefined && chunk.error !== null) {
-      state.error = chunk.error;
+    const error = errorEvent ? (chunk.error ?? chunk) : chunk.error;
+    if (error != null) {
+      state.error = normalizeStreamingError(error);
     }
     if (chunk.choices !== undefined && !Array.isArray(chunk.choices)) {
       throw new Error('Invalid streaming choices');
@@ -291,10 +303,14 @@ function processOpenAiStreamingChunk(state: OpenAiStreamingState, data: string):
 }
 
 function processOpenAiSseEvent(state: OpenAiStreamingState, event: string): boolean {
-  const dataLines = event
-    .split(/\r\n|\r|\n/)
-    .map(getSseData)
-    .filter((data): data is string => data !== undefined);
+  const lines = event.split(/\r\n|\r|\n/);
+  const errorEvent =
+    lines
+      .filter((line) => line.startsWith('event:'))
+      .at(-1)
+      ?.slice(6)
+      .trim() === 'error';
+  const dataLines = lines.map(getSseData).filter((data): data is string => data !== undefined);
   if (dataLines.length === 0) {
     return false;
   }
@@ -304,7 +320,7 @@ function processOpenAiSseEvent(state: OpenAiStreamingState, event: string): bool
     if (joinedData !== '[DONE]') {
       JSON.parse(joinedData);
     }
-    return processOpenAiStreamingChunk(state, joinedData);
+    return processOpenAiStreamingChunk(state, joinedData, errorEvent);
   } catch {
     // Some OpenAI-compatible proxies omit blank event separators and emit each
     // data line as an independent JSON chunk. Preserve that compatibility only
@@ -321,9 +337,9 @@ function processOpenAiSseEvent(state: OpenAiStreamingState, event: string): bool
       }
     });
     if (independentlyValid && dataLines.length > 1) {
-      return dataLines.some((data) => processOpenAiStreamingChunk(state, data));
+      return dataLines.some((data) => processOpenAiStreamingChunk(state, data, errorEvent));
     }
-    return processOpenAiStreamingChunk(state, joinedData);
+    return processOpenAiStreamingChunk(state, joinedData, errorEvent);
   }
 }
 

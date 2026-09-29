@@ -42,6 +42,81 @@ function createMockSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
 }
 
 describe('Streaming API', () => {
+  it.each(['choice', 'outer', 'named', 'named-wrapped'])(
+    'surfaces a %s streaming error without invoking completed tools',
+    async (location) => {
+      const callback = vi.fn().mockResolvedValue('sunny');
+      const toolChunk = {
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'fixture-call',
+                  type: 'function',
+                  function: { name: 'weather', arguments: '{}' },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+      };
+      const message = 'Fixture upstream failed';
+      const error = { message, code: 'server_error' };
+      const chunk =
+        location === 'choice'
+          ? { choices: [{ index: 0, error: message }] }
+          : location === 'outer'
+            ? { error: message }
+            : location === 'named-wrapped'
+              ? { error }
+              : error;
+      const body =
+        'data: ' +
+        JSON.stringify(toolChunk) +
+        '\n\n' +
+        (location.startsWith('named') ? 'event: error\n' : '') +
+        'data: ' +
+        JSON.stringify(chunk) +
+        '\n\n';
+      const response = new Response(createMockSSEStream([body]));
+      mockFetchWithRetries.mockResolvedValue(response);
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true, functionToolCallbacks: { weather: callback } },
+      });
+
+      const result = await provider.callApi('A benign weather question');
+
+      expect(result.error).toContain(message);
+      expect(callback).not.toHaveBeenCalled();
+      expect(response.body?.locked).toBe(false);
+    },
+  );
+
+  it.each(['invalid', false, 7, [], null])(
+    'rejects a non-object streaming delta: %j',
+    async (delta) => {
+      const body =
+        'data: ' +
+        JSON.stringify({ choices: [{ index: 0, delta, finish_reason: 'stop' }] }) +
+        '\n\ndata: [DONE]\n\n';
+      const response = new Response(createMockSSEStream([body]));
+      mockFetchWithRetries.mockResolvedValue(response);
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+
+      const result = await provider.callApi('A benign greeting');
+
+      expect(result.error).toContain('malformed SSE');
+      expect(result.output).toBeUndefined();
+      expect(response.body?.locked).toBe(false);
+    },
+  );
+
   it.each(['timeout', 'caller'])(
     'terminates a stalled body on %s and releases its reader',
     async (cause) => {
