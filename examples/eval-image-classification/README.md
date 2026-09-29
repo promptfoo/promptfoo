@@ -7,7 +7,7 @@ npx promptfoo@latest init --example eval-image-classification
 cd eval-image-classification
 ```
 
-This example demonstrates how to use Promptfoo for image classification tasks using the Fashion MNIST dataset. The example uses GPT-4o and GPT-4.1-mini with a structured json schema to analyze images, including classification, color analysis, and additional attributes.
+Classify Fashion MNIST images with two OpenAI vision models and a JSON response schema. The evaluation checks the response format and compares each predicted class with its dataset label.
 
 ## Getting Started
 
@@ -38,7 +38,7 @@ This example demonstrates how to use Promptfoo for image classification tasks us
    python dataset_gen.py
    ```
 
-   The generator downloads the official Fashion MNIST training images and labels and writes 100 sampled grayscale JPEGs with their class labels. It uses Pillow and Python's standard library; no machine-learning framework is needed. Samples are drawn without replacement with a fixed seed, then sorted by label and original index. The sampler differs from the old NumPy-based generator, so regenerated rows will differ from older versions.
+   The generator downloads the official Fashion MNIST training data and writes 100 grayscale JPEGs with their class labels. It samples without replacement using a fixed seed, then sorts by label and original index. Regenerated rows differ from the older NumPy-based sampler.
 
    Use `--num_samples 10 --filename sample.csv` to choose a sample size and output file. To reuse downloaded data offline, pass `--data-dir /path/to/fashion-mnist` containing `train-images-idx3-ubyte.gz` and `train-labels-idx1-ubyte.gz`. The output columns remain `index`, `label`, and `image_base64`.
 

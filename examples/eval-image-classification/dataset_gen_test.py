@@ -80,8 +80,8 @@ class DatasetGenerationTest(unittest.TestCase):
             (self.images, self.labels[:8] + b"\xff" * 20),
         ]:
             with self.subTest(images=len(images), labels=len(labels)):
-                self.images, self.labels = images, labels
-                self.write_fixture()
+                (self.path / dataset_gen.IMAGE_FILE).write_bytes(gzip.compress(images))
+                (self.path / dataset_gen.LABEL_FILE).write_bytes(gzip.compress(labels))
                 with self.assertRaises(ValueError):
                     dataset_gen.load_dataset(self.path)
 
