@@ -41,6 +41,104 @@ function createMockSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
 }
 
 describe('Streaming API', () => {
+  it('preserves explicitly empty text and aborts the request after DONE', async () => {
+    mockFetchWithRetries.mockResolvedValue(
+      new Response(
+        'data: {"choices":[{"index":0,"delta":{"content":""},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+      ),
+    );
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', { config: { stream: true } });
+    const result = await provider.callApi('Hello.');
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('');
+    expect(mockFetchWithRetries.mock.calls[0][1]?.signal?.aborted).toBe(true);
+  });
+
+  it.each([false, true])(
+    'rejects unnamed tool calls, including mixed calls (%s)',
+    async (mixed) => {
+      const callback = vi.fn();
+      const calls = [
+        { index: 0, id: 'missing-name', function: { arguments: '{}' } },
+        ...(mixed
+          ? [{ index: 1, id: 'complete', function: { name: 'weather', arguments: '{}' } }]
+          : []),
+      ];
+      mockFetchWithRetries.mockResolvedValue(
+        new Response(
+          'data: ' +
+            JSON.stringify({
+              choices: [{ index: 0, delta: { tool_calls: calls }, finish_reason: 'tool_calls' }],
+            }) +
+            '\n\ndata: [DONE]\n\n',
+        ),
+      );
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true, functionToolCallbacks: { weather: callback } },
+      });
+      const result = await provider.callApi('Weather?');
+      expect(result.error).toContain('incomplete tool call');
+      expect(callback).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['outer', 'choice'])('retains gateway quota classification at %s', async (location) => {
+    const error = {
+      message: 'Fixture credits exhausted',
+      metadata: { error_type: 'rate_limit_exceeded', provider_code: 'credit_balance_exhausted' },
+    };
+    const chunk =
+      location === 'outer'
+        ? { error }
+        : {
+            choices: [
+              { index: 0, delta: { content: 'Partial reply' }, finish_reason: 'error', error },
+            ],
+          };
+    mockFetchWithRetries.mockResolvedValue(new Response('data: ' + JSON.stringify(chunk) + '\n\n'));
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+      config: { stream: true, apiBaseUrl: 'https://gateway.example.test/v1' },
+    });
+    const result = await provider.callApi('A benign greeting');
+    expect(result.error).toContain('Fixture credits exhausted');
+    expect(result.metadata?.rateLimitKind).toBe('quota');
+    expect(result.isRefusal).toBeUndefined();
+  });
+
+  it.each(['outer', 'choice', 'choiceWithoutFinish'])(
+    'normalizes structured gateway refusals at %s',
+    async (location) => {
+      const error = {
+        message: 'The model declined this request.',
+        metadata: { error_type: 'content_policy_violation' },
+      };
+      const chunk =
+        location === 'outer'
+          ? { error }
+          : {
+              choices: [
+                {
+                  index: 0,
+                  delta: { content: 'Partial reply' },
+                  finish_reason: location === 'choiceWithoutFinish' ? undefined : 'error',
+                  error,
+                },
+              ],
+            };
+      mockFetchWithRetries.mockResolvedValue(
+        new Response('data: ' + JSON.stringify(chunk) + '\n\n'),
+      );
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true, apiBaseUrl: 'https://gateway.example.test/v1' },
+      });
+      const result = await provider.callApi('A benign greeting');
+      expect(result.error).toBeUndefined();
+      expect(result.isRefusal).toBe(true);
+      expect(result.guardrails?.flagged).toBe(true);
+      expect(result.output).toBe(location === 'outer' ? error.message : 'Partial reply');
+    },
+  );
+
   it.each(['refusal', 'content_filter'])(
     'does not execute local or MCP callbacks for a streamed %s',
     async (kind) => {
@@ -966,7 +1064,7 @@ describe('Streaming API', () => {
     });
     const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
 
-    expect(result.error).toContain('API returned streaming error: Upstream provider overloaded');
+    expect(result.error).toContain('Upstream provider overloaded');
     expect(result.output).toBeUndefined();
   });
 

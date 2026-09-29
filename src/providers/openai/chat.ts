@@ -753,7 +753,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       if (
         streaming &&
         Array.isArray(body.tools) &&
-        body.tools.some((tool) => tool.type === 'custom')
+        body.tools.some((tool: OpenAI.ChatCompletionTool) => tool.type === 'custom')
       ) {
         return {
           error:
@@ -782,14 +782,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       if (streaming) {
         const start = Date.now();
         const deadline = new AbortController();
+        const transport = new AbortController();
         const timer = setTimeout(
           () => deadline.abort(new DOMException('Request timed out', 'TimeoutError')),
           timeoutMs,
         );
         timer.unref();
-        const signal = callApiOptions?.abortSignal
-          ? AbortSignal.any([callApiOptions.abortSignal, deadline.signal])
-          : deadline.signal;
+        const signal = AbortSignal.any([
+          deadline.signal,
+          transport.signal,
+          ...(callApiOptions?.abortSignal ? [callApiOptions.abortSignal] : []),
+        ]);
         try {
           const response = await fetchProviderRequestWithRetries(
             url,
@@ -801,7 +804,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           statusText = response.statusText;
           responseHeaders = Object.fromEntries(response.headers?.entries() ?? []);
           if (response.ok) {
-            data = await readOpenAiChatStream(response);
+            data = await readOpenAiChatStream(response, () => transport.abort());
           } else {
             const text = await readProviderErrorText(response);
             try {
@@ -823,6 +826,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           }
           throw error;
         } finally {
+          transport.abort();
           clearTimeout(timer);
         }
       } else {
@@ -875,7 +879,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
       const choiceError =
-        (this.usesOpenRouter() ||
+        (streaming ||
+          this.usesOpenRouter() ||
           (gatewayErrorFormat && getOpenAiGatewayErrorType(data) !== undefined)) &&
         !data?.error
           ? getOpenAiChatChoiceError(data)
@@ -899,7 +904,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
 
-      if (status < 200 || status >= 300) {
+      if (status < 200 || status >= 300 || (streaming && data?.error)) {
         const errorMessage = `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`;
         const rateLimitKind = getOpenAiGatewayRateLimitKind(data);
 

@@ -460,8 +460,20 @@ export async function logRequestResponse(options: {
 
   const logMethod = error ? logger.error : logger.debug;
 
+  let streamed = response?.headers
+    ?.get('content-type')
+    ?.toLowerCase()
+    .includes('text/event-stream');
+  if (typeof requestBody === 'string') {
+    try {
+      streamed ||= JSON.parse(requestBody)?.stream === true;
+    } catch {
+      // Non-JSON request bodies have no stream flag.
+    }
+  }
   let responseText = '';
-  if (response) {
+  // A logging clone would drain a second stream branch past the caller's limits.
+  if (response && !streamed) {
     try {
       responseText = await response.clone().text();
     } catch {

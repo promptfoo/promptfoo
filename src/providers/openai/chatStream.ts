@@ -69,12 +69,13 @@ type OpenAiStreamingToolCall = {
 
 type OpenAiStreamingChoice = {
   index: number;
-  content: string;
+  content: string | null;
   refusal: string;
   reasoning: string;
   reasoningContent: string;
   logProbs: number[];
   finishReason: string | null;
+  error?: unknown;
   functionCall: OpenAiStreamingFunctionCall | null;
   toolCalls: Map<number, OpenAiStreamingToolCall>;
 };
@@ -83,7 +84,7 @@ type OpenAiStreamingState = {
   choices: Map<number, OpenAiStreamingChoice>;
   usage?: OpenAiStreamingUsage;
   serviceTier?: string | null;
-  error?: string;
+  error?: unknown;
   completed: boolean;
   malformed: boolean;
   response: Record<string, unknown>;
@@ -96,23 +97,6 @@ function getSseData(line: string): string | undefined {
   }
   const data = line.slice(5);
   return data.startsWith(' ') ? data.slice(1) : data;
-}
-
-function getOpenAiStreamingErrorMessage(error: unknown): string {
-  if (typeof error === 'string') {
-    return error;
-  }
-  if (error && typeof error === 'object' && 'message' in error) {
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === 'string' && message) {
-      return message;
-    }
-  }
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return String(error);
-  }
 }
 
 function appendFunctionCall(
@@ -172,7 +156,7 @@ function getOpenAiStreamingChoice(
   if (!choice) {
     choice = {
       index,
-      content: '',
+      content: null,
       refusal: '',
       reasoning: '',
       reasoningContent: '',
@@ -206,13 +190,19 @@ function appendStreamingChoice(
       content?: Array<{ token?: string; logprob?: number }>;
     } | null;
     finish_reason?: string | null;
+    error?: unknown;
   },
 ) {
   if (!choice || typeof choice !== 'object') {
     throw new Error('Invalid streaming choice');
   }
   const streamingChoice = getOpenAiStreamingChoice(state, choice.index ?? 0);
-  streamingChoice.content = appendText(streamingChoice.content, choice.delta?.content);
+  if (choice.delta?.content != null) {
+    streamingChoice.content = appendText(streamingChoice.content ?? '', choice.delta.content);
+  }
+  if (choice.error != null) {
+    streamingChoice.error = choice.error;
+  }
   streamingChoice.refusal = appendText(streamingChoice.refusal, choice.delta?.refusal);
   streamingChoice.reasoning = appendText(streamingChoice.reasoning, choice.delta?.reasoning);
   streamingChoice.reasoningContent = appendText(
@@ -256,8 +246,7 @@ function processOpenAiStreamingChunk(state: OpenAiStreamingState, data: string):
       throw new Error('Invalid streaming chunk');
     }
     if (chunk.error !== undefined && chunk.error !== null) {
-      state.error = getOpenAiStreamingErrorMessage(chunk.error);
-      return true;
+      state.error = chunk.error;
     }
     if (chunk.choices !== undefined && !Array.isArray(chunk.choices)) {
       throw new Error('Invalid streaming choices');
@@ -273,6 +262,9 @@ function processOpenAiStreamingChunk(state: OpenAiStreamingState, data: string):
     state.response = { ...state.response, ...metadata };
     if (chunk.service_tier !== undefined) {
       state.serviceTier = chunk.service_tier;
+    }
+    if (state.error != null || chunk.choices?.some((choice) => choice?.error != null)) {
+      return true;
     }
   } catch {
     state.malformed = true;
@@ -319,7 +311,10 @@ function processOpenAiSseEvent(state: OpenAiStreamingState, event: string): bool
   }
 }
 
-export async function readOpenAiChatStream(response: Response): Promise<OpenAI.ChatCompletion> {
+export async function readOpenAiChatStream(
+  response: Response,
+  abortRequest: () => void,
+): Promise<OpenAI.ChatCompletion> {
   if (!response.body) {
     throw new Error('No response body for streaming request');
   }
@@ -377,19 +372,21 @@ export async function readOpenAiChatStream(response: Response): Promise<OpenAI.C
     }
     return {
       ...state.response,
+      ...(state.error != null && { error: state.error }),
       usage: state.usage,
       service_tier: state.serviceTier,
       choices: [...state.choices.values()]
         .sort((a, b) => a.index - b.index)
         .map((choice) => ({
           index: choice.index,
-          finish_reason: choice.finishReason,
+          finish_reason: choice.error == null ? choice.finishReason : 'error',
+          ...(choice.error != null && { error: choice.error }),
           ...(choice.logProbs.length && {
             logprobs: { content: choice.logProbs.map((logprob) => ({ logprob })) },
           }),
           message: {
             role: 'assistant',
-            content: choice.content || null,
+            content: choice.content,
             ...(choice.refusal && { refusal: choice.refusal }),
             ...(choice.reasoning && { reasoning: choice.reasoning }),
             ...(choice.reasoningContent && { reasoning_content: choice.reasoningContent }),
@@ -399,17 +396,18 @@ export async function readOpenAiChatStream(response: Response): Promise<OpenAI.C
         })),
     } as OpenAI.ChatCompletion;
   } finally {
+    abortRequest();
     await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
 }
 
 function getOpenAiStreamingValidationError(state: OpenAiStreamingState): string | undefined {
-  if (state.error) {
-    return `API returned streaming error: ${state.error}`;
-  }
   if (state.malformed) {
     return 'API returned malformed SSE data during streaming request';
+  }
+  if (state.error != null || state.choices.get(0)?.error != null) {
+    return undefined;
   }
   if (!state.completed) {
     return 'Streaming response ended before the [DONE] completion marker was received';
@@ -423,12 +421,21 @@ function getOpenAiStreamingValidationError(state: OpenAiStreamingState): string 
   if ([...state.choices.values()].some((choice) => !choice.finishReason)) {
     return 'Streaming response ended before every choice finished';
   }
+  for (const choice of state.choices.values()) {
+    if (choice.functionCall && !choice.functionCall.name.trim()) {
+      return 'Streaming response contains an incomplete function call';
+    }
+    for (const tool of choice.toolCalls.values()) {
+      if (!tool.id.trim() || !tool.function.name.trim()) {
+        return 'Streaming response contains an incomplete tool call';
+      }
+    }
+  }
   return undefined;
 }
 
 function getOpenAiStreamingToolCalls(choice: OpenAiStreamingChoice): OpenAiStreamingToolCall[] {
   return Array.from(choice.toolCalls.entries())
     .sort(([left], [right]) => left - right)
-    .map(([, toolCall]) => toolCall)
-    .filter((toolCall) => toolCall.function?.name);
+    .map(([, toolCall]) => toolCall);
 }
