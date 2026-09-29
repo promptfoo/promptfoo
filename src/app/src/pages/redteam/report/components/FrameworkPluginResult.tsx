@@ -37,7 +37,9 @@ export default function FrameworkPluginResult({
     const filterParam = encodeURIComponent(
       JSON.stringify([
         {
-          type: 'plugin',
+          ...(pluginId === 'harmful'
+            ? { type: 'metadata', field: 'pluginId' }
+            : { type: 'plugin' }),
           operator: 'equals',
           value: pluginId,
         },

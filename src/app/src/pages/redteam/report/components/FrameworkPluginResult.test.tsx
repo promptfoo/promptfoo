@@ -128,6 +128,28 @@ describe('FrameworkPluginResult', () => {
     expect(mockNavigate).toHaveBeenCalledWith(expectedUrl);
   });
 
+  it('opens the aggregate harmful rows without expanding to child plugins', async () => {
+    renderWithProviders(
+      <FrameworkPluginResult
+        evalId="test-eval-123"
+        plugin="harmful"
+        getPluginASR={() => ({ asr: 50, total: 2, failCount: 1 })}
+        type="failed"
+      />,
+    );
+    await userEvent.click(screen.getByText('harmful'));
+    const destination = new URL(mockNavigate.mock.calls[0][0], 'https://example.com');
+    expect(destination.searchParams.get('mode')).toBe('failures');
+    expect(JSON.parse(destination.searchParams.get('filter')!)).toEqual([
+      {
+        type: 'metadata',
+        field: 'pluginId',
+        operator: 'equals',
+        value: 'harmful',
+      },
+    ]);
+  });
+
   it('should not trigger navigation when an untested plugin is clicked', async () => {
     const props = {
       evalId: 'test-eval-123',
