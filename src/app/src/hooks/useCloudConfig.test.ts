@@ -1,3 +1,5 @@
+import { createElement, type ReactNode } from 'react';
+
 import {
   createMockResponse,
   getCallApiMock,
@@ -8,19 +10,29 @@ import {
   resetCallApiMock,
 } from '@app/tests/apiMocks';
 import { callApi } from '@app/utils/api';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import useCloudConfig from './useCloudConfig';
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  getApiBaseUrl: () => '',
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 describe('useCloudConfig', () => {
+  let client: QueryClient;
+  const mount = () =>
+    renderHook(() => useCloudConfig(), {
+      wrapper: ({ children }: { children: ReactNode }) =>
+        createElement(QueryClientProvider, { client, children }),
+    });
+  afterEach(() => client.clear());
   beforeEach(() => {
+    client = new QueryClient();
     resetCallApiMock();
     // Note: Do NOT use vi.useFakeTimers() here - it breaks waitFor
     // Only use fake timers in specific tests that need timer control
@@ -29,7 +41,7 @@ describe('useCloudConfig', () => {
   it('should initialize with isLoading=true, data=null, and error=null', () => {
     mockCallApiResponse({ appUrl: 'https://app.promptfoo.com', isEnabled: true });
 
-    const { result } = renderHook(() => useCloudConfig());
+    const { result } = mount();
 
     expect(result.current.isLoading).toBe(true);
     expect(result.current.data).toBeNull();
@@ -44,7 +56,7 @@ describe('useCloudConfig', () => {
 
     mockCallApiResponse(mockCloudConfig);
 
-    const { result } = renderHook(() => useCloudConfig());
+    const { result } = mount();
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
@@ -53,13 +65,17 @@ describe('useCloudConfig', () => {
     expect(result.current.data).toEqual(mockCloudConfig);
     expect(result.current.error).toBeNull();
     expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
+    expect(callApi).toHaveBeenCalledWith(
+      '/user/cloud-config',
+      { signal: expect.any(AbortSignal) },
+      '',
+    );
   });
 
   it('should set error and isLoading=false when API returns ok=false', async () => {
     mockCallApiResponse({}, { ok: false });
 
-    const { result } = renderHook(() => useCloudConfig());
+    const { result } = mount();
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
@@ -68,14 +84,18 @@ describe('useCloudConfig', () => {
     expect(result.current.data).toBeNull();
     expect(result.current.error).toBe('Failed to fetch cloud config');
     expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
+    expect(callApi).toHaveBeenCalledWith(
+      '/user/cloud-config',
+      { signal: expect.any(AbortSignal) },
+      '',
+    );
   });
 
   it('should handle network errors gracefully', async () => {
     const networkError = new Error('Network error');
     rejectCallApi(networkError);
 
-    const { result } = renderHook(() => useCloudConfig());
+    const { result } = mount();
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
@@ -84,22 +104,29 @@ describe('useCloudConfig', () => {
     expect(result.current.data).toBeNull();
     expect(result.current.error).toBe('Network error');
     expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
+    expect(callApi).toHaveBeenCalledWith(
+      '/user/cloud-config',
+      { signal: expect.any(AbortSignal) },
+      '',
+    );
   });
 
-  it('should handle non-Error exceptions', async () => {
-    rejectCallApi('String error');
+  it.each(['String error', null, undefined, 0, false])(
+    'should handle non-Error exception %j',
+    async (error) => {
+      rejectCallApi(error);
 
-    const { result } = renderHook(() => useCloudConfig());
+      const { result } = mount();
 
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
 
-    expect(result.current.data).toBeNull();
-    expect(result.current.error).toBe('Unknown error');
-    expect(callApi).toHaveBeenCalledTimes(1);
-  });
+      expect(result.current.data).toBeNull();
+      expect(result.current.error).toBe('Unknown error');
+      expect(callApi).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('should fetch cloud config on mount', async () => {
     const mockCloudConfig = {
@@ -109,13 +136,17 @@ describe('useCloudConfig', () => {
 
     mockCallApiResponse(mockCloudConfig);
 
-    renderHook(() => useCloudConfig());
+    mount();
 
     await waitFor(() => {
       expect(callApi).toHaveBeenCalledTimes(1);
     });
 
-    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
+    expect(callApi).toHaveBeenCalledWith(
+      '/user/cloud-config',
+      { signal: expect.any(AbortSignal) },
+      '',
+    );
   });
 
   describe('refetch', () => {
@@ -132,7 +163,7 @@ describe('useCloudConfig', () => {
 
       mockCallApiResponseOnce(initialConfig);
 
-      const { result } = renderHook(() => useCloudConfig());
+      const { result } = mount();
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -155,7 +186,12 @@ describe('useCloudConfig', () => {
 
       expect(result.current.error).toBeNull();
       expect(callApi).toHaveBeenCalledTimes(2);
-      expect(callApi).toHaveBeenNthCalledWith(2, '/user/cloud-config');
+      expect(callApi).toHaveBeenNthCalledWith(
+        2,
+        '/user/cloud-config',
+        { signal: expect.any(AbortSignal) },
+        '',
+      );
     });
 
     it('should set isLoading=true during refetch and back to false after completion', async () => {
@@ -172,7 +208,7 @@ describe('useCloudConfig', () => {
       // First call resolves immediately
       mockCallApiResponseOnce(mockCloudConfig);
 
-      const { result } = renderHook(() => useCloudConfig());
+      const { result } = mount();
 
       // Wait for initial fetch to complete
       await waitFor(() => {
@@ -187,8 +223,8 @@ describe('useCloudConfig', () => {
         result.current.refetch();
       });
 
-      // Check that loading is true
-      expect(result.current.isLoading).toBe(true);
+      // Query observers deliver subscription updates asynchronously.
+      await waitFor(() => expect(result.current.isLoading).toBe(true));
 
       // Resolve the delayed promise
       resolveFetch(createMockResponse(mockCloudConfig));
@@ -208,7 +244,7 @@ describe('useCloudConfig', () => {
       // Initial successful fetch
       mockCallApiResponseOnce(mockCloudConfig);
 
-      const { result } = renderHook(() => useCloudConfig());
+      const { result } = mount();
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -239,7 +275,7 @@ describe('useCloudConfig', () => {
       // Initial failed fetch
       rejectCallApiOnce(new Error('Initial fetch failed'));
 
-      const { result } = renderHook(() => useCloudConfig());
+      const { result } = mount();
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -279,7 +315,7 @@ describe('useCloudConfig', () => {
 
     mockCallApiResponseOnce(mockCloudConfig);
 
-    const { result, rerender } = renderHook(() => useCloudConfig());
+    const { result, rerender } = mount();
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);

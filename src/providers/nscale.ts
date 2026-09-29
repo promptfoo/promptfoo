@@ -3,6 +3,7 @@ import { createNscaleImageProvider } from './nscale/image';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { splitLocalOptions } from './openai/localOptions';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
@@ -15,34 +16,6 @@ import type { ApiProvider, ProviderOptions } from '../types/index';
  *
  * Documentation: https://docs.nscale.com/
  */
-/**
- * Config keys promptfoo consumes itself rather than forwarding to the model.
- *
- * `passthrough` is serialized verbatim into the request body, so anything spread
- * into it is sent to Nscale as a model parameter. Spreading the whole user config
- * put `apiKey` — the raw service token — into the JSON body, and diverted
- * `headers` there too so custom headers never became HTTP headers.
- *
- * Mirrors `OpenAiSharedOptions` in `./openai/types`.
- */
-const NSCALE_PROVIDER_LEVEL_OPTIONS = new Set([
-  'apiKey',
-  'apiKeyEnvar',
-  'apiKeyRequired',
-  'useDefaultApiKey',
-  'apiHost',
-  'apiBaseUrl',
-  'organization',
-  'headers',
-  'maxRetries',
-  'cost',
-  'inputCost',
-  'outputCost',
-  'audioCost',
-  'audioInputCost',
-  'audioOutputCost',
-]);
-
 export function createNscaleProvider(
   providerPath: string,
   options: {
@@ -54,20 +27,7 @@ export function createNscaleProvider(
   const splits = providerPath.split(':');
 
   const config = options.config?.config || {};
-
-  // Split the user's config into settings promptfoo handles (auth, routing,
-  // headers, cost overrides) and genuine model parameters, so only the latter
-  // reach the request body.
-  const { passthrough: explicitPassthrough, ...configOptions } = config;
-  const providerLevelOptions: Record<string, any> = {};
-  const modelParameters: Record<string, any> = {};
-  for (const [key, value] of Object.entries(configOptions)) {
-    if (NSCALE_PROVIDER_LEVEL_OPTIONS.has(key)) {
-      providerLevelOptions[key] = value;
-    } else {
-      modelParameters[key] = value;
-    }
-  }
+  const { localOptions, modelParameters } = splitLocalOptions(config);
 
   const getApiKeyEnvar = () => {
     if (config.apiKeyEnvar) {
@@ -85,15 +45,12 @@ export function createNscaleProvider(
   const nscaleConfig = {
     ...options,
     config: {
-      ...providerLevelOptions,
+      ...localOptions,
       apiKeyEnvar: getApiKeyEnvar(),
       // Honor an explicit apiBaseUrl (private/regional Nscale endpoints) instead
       // of silently ignoring it while still shipping it in the request body.
-      apiBaseUrl: providerLevelOptions.apiBaseUrl || 'https://inference.api.nscale.com/v1',
-      passthrough: {
-        ...modelParameters,
-        ...explicitPassthrough,
-      },
+      apiBaseUrl: localOptions.apiBaseUrl || 'https://inference.api.nscale.com/v1',
+      passthrough: { ...modelParameters, ...config.passthrough },
     },
   };
 

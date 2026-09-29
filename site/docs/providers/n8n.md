@@ -49,16 +49,16 @@ providers:
 
 ### Config Options
 
-| Option              | Type          | Default     | Description                                                                                                   |
-| ------------------- | ------------- | ----------- | ------------------------------------------------------------------------------------------------------------- |
-| `url`               | string        | -           | Webhook URL (alternative to provider path)                                                                    |
-| `method`            | string        | `POST`      | `GET`, `HEAD`, `POST`, `PUT`, or `PATCH`; `GET` and `HEAD` send no body and encode fields as query parameters |
-| `headers`           | object        | -           | Additional request headers with Nunjucks templating                                                           |
-| `body`              | object/string | `{prompt}`  | Request/body-query template; object form is recommended for JSON requests                                     |
-| `transformResponse` | string        | -           | JavaScript expression to extract output                                                                       |
-| `sessionHeader`     | string        | -           | Request header name for the session ID                                                                        |
-| `sessionParser`     | string        | -           | JavaScript expression to extract a session ID                                                                 |
-| `sessionField`      | string        | `sessionId` | Body field name for a supplied session ID                                                                     |
+| Option              | Type          | Default     | Description                                                                                                      |
+| ------------------- | ------------- | ----------- | ---------------------------------------------------------------------------------------------------------------- |
+| `url`               | string        | -           | Webhook URL (alternative to provider path)                                                                       |
+| `method`            | string        | `POST`      | `GET`, `HEAD`, `POST`, `PUT`, or `PATCH`; `GET` encodes body fields as query parameters and `HEAD` sends no body |
+| `headers`           | object        | -           | Additional request headers with Nunjucks templating                                                              |
+| `body`              | object/string | `{prompt}`  | Request/body-query template; object form is recommended for JSON requests                                        |
+| `transformResponse` | string        | -           | JavaScript expression to extract output                                                                          |
+| `sessionHeader`     | string        | -           | Request header name for the session ID                                                                           |
+| `sessionParser`     | string        | -           | JavaScript expression to extract a session ID                                                                    |
+| `sessionField`      | string        | `sessionId` | Body field name for a supplied session ID                                                                        |
 
 YAML method values are case-insensitive. TypeScript configurations using `N8nProviderConfig` use the uppercase names above.
 
@@ -129,11 +129,10 @@ writing URLs to debug logs, but path-as-secret URLs (`/webhook/<unguessable-id>`
 those logs by design — keep `LOG_LEVEL=debug` output out of shared transcripts when running
 against tokenized webhooks. URLs remain part of your configuration and the outbound request.
 
-For non-idempotent methods (`POST` / `PATCH`, the default), the provider passes `maxRetries: 0` to
-the shared fetch helper. Transient network failures fail through to the caller rather than
-re-delivering a workflow that may have already accepted the request and dispatched side-effects
-(sending messages, writing to a database). Idempotent methods (`GET` / `HEAD` / `PUT`) keep the default
-retry budget.
+The provider disables automatic transport, response-body, and scheduler retries for every HTTP
+method, including `GET`, `HEAD`, and `PUT`. A webhook can start a workflow with side effects
+(sending messages, writing to a database) regardless of its HTTP method. Failures are returned
+without replaying the workflow; check its execution status before running the eval again.
 
 :::
 

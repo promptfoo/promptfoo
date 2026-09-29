@@ -175,7 +175,7 @@ describe('createDummyFiles', () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it('should generate a valid YAML configuration file that matches TestSuiteConfigSchema', async () => {
+  it('should generate a valid YAML configuration with the current OpenAI models', async () => {
     await createDummyFiles(tempDir, false);
 
     const configCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
@@ -202,9 +202,46 @@ describe('createDummyFiles', () => {
     const config = validationResult.data!;
     expect(config.prompts).toHaveLength(2);
     expect(config.providers).toHaveLength(2);
-    expect(config.providers).toContain('openai:gpt-5-mini');
-    expect(config.providers).toContain('openai:gpt-5');
+    expect(config.providers).toContain('openai:gpt-6-luna');
+    expect(config.providers).toContain('openai:gpt-6-sol');
   });
+
+  it.each(['compare', 'rag', 'agent'])(
+    'writes the advertised OpenAI models for an interactive %s setup',
+    async (action) => {
+      mockSelect.mockResolvedValueOnce(action);
+      if (action !== 'compare') {
+        mockSelect.mockResolvedValueOnce('javascript');
+      }
+      mockSelect.mockImplementationOnce(({ choices }) => {
+        const choice = choices.find(({ name }: { name: string }) => name.startsWith('[OpenAI]'));
+        expect(choice.name).toBe(
+          action === 'agent' ? '[OpenAI] GPT-6 Sol' : '[OpenAI] GPT-6 Luna and Sol',
+        );
+        return choice.value;
+      });
+
+      await createDummyFiles(tempDir, true);
+
+      const configCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
+        call[0].toString().endsWith('promptfooconfig.yaml'),
+      );
+      const config = TestSuiteConfigSchema.parse(yaml.load(configCall?.[1] as string));
+      if (action === 'agent') {
+        expect(config.providers).toEqual([
+          expect.objectContaining({
+            id: 'openai:chat:gpt-6-sol',
+            config: expect.objectContaining({
+              reasoning_effort: 'none',
+              tools: [expect.objectContaining({ type: 'function' })],
+            }),
+          }),
+        ]);
+      } else {
+        expect(config.providers).toEqual(['openai:gpt-6-luna', 'openai:gpt-6-sol']);
+      }
+    },
+  );
 
   it('should generate valid YAML configuration for RAG setup', async () => {
     mockSelect
@@ -255,6 +292,39 @@ describe('createDummyFiles', () => {
     expect(mockSelect).toHaveBeenCalledTimes(3);
     expect(mockCheckbox).toHaveBeenCalledTimes(0);
     expect(mockConfirm).toHaveBeenCalledTimes(0);
+
+    const providerPrompt = mockSelect.mock.calls[2]?.[0];
+    expect(
+      providerPrompt.choices.find((choice: { name: string }) => choice.name.startsWith('[Google]'))
+        .value,
+    ).toEqual([
+      { id: 'vertex:gemini-3.8-flash', config: { region: 'global' } },
+      { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
+      { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
+      { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
+      'vertex:gemini-3.1-pro-preview',
+      'vertex:gemini-2.5-pro',
+    ]);
+  });
+
+  it('should report Vertex provider prefixes when Google object providers are selected', async () => {
+    const googleProviders = [
+      { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
+      { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
+    ];
+    mockSelect.mockResolvedValueOnce('compare').mockResolvedValueOnce(googleProviders);
+
+    const result = await createDummyFiles(tempDir, true);
+
+    expect(result.providerPrefixes).toEqual(['vertex', 'vertex']);
+
+    const configCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
+      call[0].toString().endsWith('promptfooconfig.yaml'),
+    );
+    const parsedConfig = yaml.load(configCall?.[1] as string) as {
+      providers: Array<{ id: string; config: { region: string } }>;
+    };
+    expect(parsedConfig.providers).toEqual(googleProviders);
   });
 
   it('offers current Gemini Flash models during interactive onboarding', async () => {
