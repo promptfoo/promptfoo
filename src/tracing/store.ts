@@ -2,6 +2,9 @@ import { asc, eq, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
+import { sanitizeTraceAttributes } from './sanitizeAttributes';
+import { isRelevantSpan, matchesSpanFilter } from './spanFilter';
+import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
 import type { TraceData, TraceSpanEvent } from '../types/tracing';
 
@@ -45,93 +48,32 @@ export interface AddSpansOptions {
   warnIfMissingTrace?: boolean;
 }
 
-const SENSITIVE_ATTRIBUTE_KEYS = [
-  'authorization',
-  'cookie',
-  'set-cookie',
-  'token',
-  'api_key',
-  'apikey',
-  'secret',
-  'password',
-  'passphrase',
-];
-
-const NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS = SENSITIVE_ATTRIBUTE_KEYS.map((key) =>
-  key.replace(/[^a-z0-9]/g, ''),
-);
-
-const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
-  'gen_ai.request.max_tokens',
-  'gen_ai.usage.input_tokens',
-  'gen_ai.usage.output_tokens',
-  'gen_ai.usage.total_tokens',
-  'gen_ai.usage.cached_tokens',
-  'gen_ai.usage.reasoning_tokens',
-  'gen_ai.usage.accepted_prediction_tokens',
-  'gen_ai.usage.rejected_prediction_tokens',
-  'gen_ai.usage.cache_read_input_tokens',
-  'gen_ai.usage.cache_creation_input_tokens',
-]);
-
-function isSensitiveAttributeKey(key: string): boolean {
-  const lowerKey = key.toLowerCase();
-  if (SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey)) {
-    return false;
+function normalizeEvents(events: unknown): TraceSpanEvent[] | undefined {
+  if (!Array.isArray(events)) {
+    return undefined;
   }
-
-  const normalizedKey = lowerKey.replace(/[^a-z0-9]/g, '');
-
-  return SENSITIVE_ATTRIBUTE_KEYS.some((sensitiveKey, index) => {
-    return (
-      lowerKey.includes(sensitiveKey) ||
-      normalizedKey.includes(NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS[index])
-    );
+  return events.flatMap((event) => {
+    if (
+      !event ||
+      typeof event !== 'object' ||
+      typeof event.name !== 'string' ||
+      typeof event.timestamp !== 'number' ||
+      !Number.isFinite(event.timestamp)
+    ) {
+      return [];
+    }
+    return [
+      {
+        name: event.name,
+        timestamp: event.timestamp,
+        ...(event.attributes &&
+        typeof event.attributes === 'object' &&
+        !Array.isArray(event.attributes)
+          ? { attributes: event.attributes }
+          : {}),
+      },
+    ];
   });
-}
-
-function sanitizeAttributes(
-  attributes: Record<string, any> | null | undefined,
-): Record<string, any> {
-  if (!attributes) {
-    return {};
-  }
-
-  const sanitizeValue = (value: any): any => {
-    if (typeof value === 'string') {
-      return value.length > 400 ? `${value.slice(0, 400)}…` : value;
-    }
-    if (Array.isArray(value)) {
-      return value.map(sanitizeValue);
-    }
-    if (value && typeof value === 'object') {
-      return sanitizeAttributes(value as Record<string, any>);
-    }
-    return value;
-  };
-
-  const sanitized: Record<string, any> = {};
-  for (const [key, value] of Object.entries(attributes)) {
-    if (isSensitiveAttributeKey(key)) {
-      sanitized[key] = '<redacted>';
-      continue;
-    }
-    sanitized[key] = sanitizeValue(value);
-  }
-
-  return sanitized;
-}
-
-function sanitizeEvents(
-  events: TraceSpanEvent[] | null | undefined,
-  shouldSanitizeAttributes: boolean,
-): TraceSpanEvent[] | undefined {
-  return events?.map((event) => ({
-    ...event,
-    attributes: shouldSanitizeAttributes
-      ? sanitizeAttributes(event.attributes)
-      : (event.attributes ?? undefined),
-  }));
 }
 
 function serializeSpan(
@@ -139,26 +81,65 @@ function serializeSpan(
   shouldSanitizeAttributes = true,
 ): SpanData {
   const rawAttributes = span.attributes ?? undefined;
+  const redactedValues = new Set<string>();
+  const attributes =
+    rawAttributes && shouldSanitizeAttributes
+      ? sanitizeTraceAttributes(rawAttributes, { redactedValues })
+      : rawAttributes;
+  const events = normalizeEvents(span.events)?.map((event) => ({
+    ...event,
+    attributes: shouldSanitizeAttributes
+      ? sanitizeTraceAttributes(event.attributes, { redactedValues })
+      : event.attributes,
+  }));
+  const scrubEcho = <T extends string | null | undefined>(value: T): T =>
+    typeof value === 'string' && redactedValues.has(value) ? ('<redacted>' as T) : value;
 
   return {
     spanId: span.spanId,
     parentSpanId: span.parentSpanId ?? undefined,
-    name: span.name,
+    name: scrubEcho(span.name),
     startTime: span.startTime,
     endTime: span.endTime ?? undefined,
-    attributes: rawAttributes
-      ? shouldSanitizeAttributes
-        ? sanitizeAttributes(rawAttributes)
-        : rawAttributes
-      : undefined,
-    ...(span.events
-      ? {
-          events: sanitizeEvents(span.events, shouldSanitizeAttributes),
-        }
+    attributes,
+    ...(events
+      ? { events: events.map((event) => ({ ...event, name: scrubEcho(event.name) })) }
       : {}),
     statusCode: span.statusCode ?? undefined,
-    statusMessage: span.statusMessage ?? undefined,
+    statusMessage: scrubEcho(span.statusMessage) ?? undefined,
   };
+}
+
+function isGraderOwnedSpan(
+  span: typeof spansTable.$inferSelect,
+  spansById: ReadonlyMap<string, typeof spansTable.$inferSelect>,
+  ownershipCache: Map<string, boolean>,
+): boolean {
+  let ancestor: typeof spansTable.$inferSelect | undefined = span;
+  const visitedSpanIds = new Set<string>();
+  let belongsToGrader = false;
+
+  while (ancestor && !visitedSpanIds.has(ancestor.spanId)) {
+    const cached = ownershipCache.get(ancestor.spanId);
+    if (cached !== undefined) {
+      belongsToGrader = cached;
+      break;
+    }
+
+    visitedSpanIds.add(ancestor.spanId);
+    if (ancestor.attributes?.[SPAN_ROLE_ATTRIBUTE] === 'grader') {
+      belongsToGrader = true;
+      break;
+    }
+
+    ancestor = ancestor.parentSpanId ? spansById.get(ancestor.parentSpanId) : undefined;
+  }
+
+  for (const spanId of visitedSpanIds) {
+    ownershipCache.set(spanId, belongsToGrader);
+  }
+
+  return belongsToGrader;
 }
 
 function sqliteTimestampFromMs(timestampMs: number): string {
@@ -203,19 +184,6 @@ function computeDepth(
   const currentDepth = parentDepth + 1;
   depthCache.set(span.spanId, currentDepth);
   return currentDepth;
-}
-
-function deriveSpanKind(span: SpanData): string {
-  const attributes = span.attributes || {};
-  const attributeKind = (attributes['span.kind'] ||
-    attributes['otel.span.kind'] ||
-    attributes['spanKind']) as string | undefined;
-
-  if (typeof attributeKind === 'string') {
-    return attributeKind.toLowerCase();
-  }
-
-  return 'internal';
 }
 
 export class TraceStore {
@@ -288,7 +256,6 @@ export class TraceStore {
         logger.debug(`[TraceStore] Trace ${traceId} found, proceeding with span insertion`);
       }
 
-      // Insert spans
       const spanRecords = spans.map((span) => {
         logger.debug(`[TraceStore] Preparing span ${span.spanId} (${span.name}) for insertion`);
         return {
@@ -300,7 +267,7 @@ export class TraceStore {
           startTime: span.startTime,
           endTime: span.endTime,
           attributes: span.attributes,
-          ...(span.events ? { events: span.events } : {}),
+          events: normalizeEvents(span.events),
           statusCode: span.statusCode,
           statusMessage: span.statusMessage,
         };
@@ -310,8 +277,14 @@ export class TraceStore {
         return { stored: true };
       }
 
-      await db.insert(spansTable).values(spanRecords).run();
-      logger.debug(`[TraceStore] Successfully added ${spans.length} spans to trace ${traceId}`);
+      await db
+        .insert(spansTable)
+        .values(spanRecords)
+        .onConflictDoNothing({ target: [spansTable.traceId, spansTable.spanId] })
+        .run();
+      logger.debug(
+        `[TraceStore] Successfully added ${spanRecords.length} spans to trace ${traceId}`,
+      );
       return { stored: true };
     } catch (error) {
       logger.error(`[TraceStore] Failed to add spans: ${error}`);
@@ -468,8 +441,10 @@ export class TraceStore {
         .select()
         .from(spansTable)
         .where(eq(spansTable.traceId, traceId))
-        .orderBy(asc(spansTable.startTime));
+        .orderBy(asc(spansTable.startTime), asc(spansTable.spanId));
 
+      const rowsBySpanId = new Map(rows.map((row) => [row.spanId, row]));
+      const graderOwnedSpanIds = new Map<string, boolean>();
       const spanMap = new Map<string, SpanData>();
       const depthCache = new Map<string, number>();
 
@@ -480,34 +455,24 @@ export class TraceStore {
 
         const rawAttributes = row.attributes ?? {};
 
-        const spanData: SpanData = {
-          spanId: row.spanId,
-          parentSpanId: row.parentSpanId ?? undefined,
-          name: row.name,
-          startTime: row.startTime,
-          endTime: row.endTime ?? undefined,
-          attributes: shouldSanitize ? sanitizeAttributes(rawAttributes) : rawAttributes,
-          ...(row.events ? { events: sanitizeEvents(row.events, shouldSanitize) } : {}),
-          statusCode: row.statusCode ?? undefined,
-          statusMessage: row.statusMessage ?? undefined,
-        };
-
-        const spanKind = deriveSpanKind({
-          ...spanData,
-          attributes: rawAttributes,
-        });
-
-        if (!includeInternalSpans && spanKind === 'internal') {
+        if (!includeInternalSpans && isGraderOwnedSpan(row, rowsBySpanId, graderOwnedSpanIds)) {
           continue;
         }
 
-        if (spanFilter && spanFilter.length > 0) {
-          const matchesFilter = spanFilter.some((filterName) =>
-            spanData.name.toLowerCase().includes(filterName.toLowerCase()),
-          );
-          if (!matchesFilter) {
-            continue;
-          }
+        const spanData = serializeSpan({ ...row, attributes: rawAttributes }, shouldSanitize);
+
+        const hasExplicitFilter = Boolean(spanFilter?.length);
+
+        if (hasExplicitFilter && !matchesSpanFilter(spanData.name, spanFilter!)) {
+          continue;
+        }
+
+        if (
+          !includeInternalSpans &&
+          !hasExplicitFilter &&
+          !isRelevantSpan({ attributes: rawAttributes, statusCode: spanData.statusCode })
+        ) {
+          continue;
         }
 
         spanMap.set(spanData.spanId, spanData);

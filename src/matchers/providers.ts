@@ -3,13 +3,17 @@ import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
 import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
-import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
+import {
+  getProviderCallExecutionContext,
+  getProviderCallTracingContext,
+} from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
 import invariant from '../util/invariant';
 
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   GradingConfig,
   ProviderOptions,
   ProviderResponse,
@@ -36,50 +40,44 @@ export function shouldUseRemoteGrading(
   return shouldGenerateRemote(options);
 }
 
+export function getGradingProviderCallOptions(): CallApiOptionsParams | undefined {
+  const abortSignal = getProviderCallExecutionContext()?.abortSignal;
+  return abortSignal ? { abortSignal } : undefined;
+}
+
 /**
- * Helper to call provider with consistent context propagation pattern.
- * Spreads the optional context and merges with prompt label and vars.
- * Also reuses evaluator scheduler context for cancellation, rate limits,
- * and grouped grading provider calls when present.
- *
- * IMPORTANT: Spread order matters - context is spread first, then prompt/vars
- * override. This ensures originalProvider from context is preserved while
- * allowing this call to specify its own prompt metadata.
+ * Apply tracing, rate limits, and grouped scheduling to every grading-provider modality.
  */
-export function callProviderWithContext(
+export function callGradingProvider<T extends ProviderResponse>(
   provider: ApiProvider,
-  prompt: string,
   label: string,
-  vars: Record<string, VarValue>,
-  context?: CallApiContextParams,
-): Promise<ProviderResponse> {
-  const callApiContext = {
-    ...context,
-    prompt: {
-      raw: prompt,
-      label,
-    },
-    vars,
-  };
+  invoke: (context: CallApiContextParams | undefined) => Promise<T>,
+  options: {
+    callContext?: CallApiContextParams;
+    operationName?: 'embeddings';
+  } = {},
+): Promise<T> {
+  const { callContext, operationName } = options;
   const executionContext = getProviderCallExecutionContext();
-  const callApiOptions = executionContext?.abortSignal
-    ? { abortSignal: executionContext.abortSignal }
-    : undefined;
-  const callApi = () =>
-    callApiOptions
-      ? provider.callApi(prompt, callApiContext, callApiOptions)
-      : provider.callApi(prompt, callApiContext);
+  const tracingContext = getProviderCallTracingContext();
+  const callProvider = (): Promise<T> =>
+    tracingContext
+      ? (tracingContext.withProviderSpan(
+          { provider, callContext, operationName, role: 'grader', promptLabel: label },
+          invoke,
+        ) as Promise<T>)
+      : invoke(callContext);
 
   const executeCall = () => {
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
       return executionContext.rateLimitRegistry.execute(
         provider,
-        callApi,
+        callProvider,
         createProviderRateLimitOptions(),
       );
     }
 
-    return callApi();
+    return callProvider();
   };
 
   if (executionContext?.providerCallQueue) {
@@ -87,6 +85,36 @@ export function callProviderWithContext(
   }
 
   return executeCall();
+}
+
+/** Preserve evaluator context while adding this grading call's prompt metadata and cancellation. */
+export function callProviderWithContext(
+  provider: ApiProvider,
+  prompt: string,
+  label: string,
+  vars: Record<string, VarValue>,
+  context?: CallApiContextParams,
+  promptConfig?: Record<string, unknown>,
+): Promise<ProviderResponse> {
+  const callApiContext = {
+    ...context,
+    prompt: {
+      raw: prompt,
+      label,
+      ...(promptConfig && { config: promptConfig }),
+    },
+    vars,
+  };
+  const callApiOptions = getGradingProviderCallOptions();
+  return callGradingProvider(
+    provider,
+    label,
+    (tracedContext) =>
+      callApiOptions
+        ? provider.callApi(prompt, tracedContext, callApiOptions)
+        : provider.callApi(prompt, tracedContext),
+    { callContext: callApiContext },
+  );
 }
 
 async function loadFromProviderOptions(provider: ProviderOptions) {

@@ -70,6 +70,26 @@ describe('TraceStore', () => {
     vi.clearAllMocks();
   });
 
+  it('normalizes event arrays before persisting imported spans', async () => {
+    const valid = { name: 'ordinary event', timestamp: 12, attributes: { detail: 'ok' } };
+    await traceStore.addSpans(
+      'trace-events',
+      [
+        { spanId: 'one', name: 'span', startTime: 1, events: 'invalid' as any },
+        {
+          spanId: 'two',
+          name: 'span',
+          startTime: 1,
+          events: [null, { name: 'bad', timestamp: NaN }, valid] as any,
+        },
+      ],
+      { skipTraceCheck: true },
+    );
+    const values = mockDb.insert().values.mock.calls[0][0];
+    expect(values[0].events).toBeUndefined();
+    expect(values[1].events).toEqual([valid]);
+  });
+
   describe('createTrace', () => {
     it('should create a new trace record', async () => {
       const traceData = {
@@ -147,6 +167,27 @@ describe('TraceStore', () => {
   });
 
   describe('addSpans', () => {
+    it('ignores existing and repeated spans through the database uniqueness constraint', async () => {
+      await traceStore.addSpans(
+        'test-trace-id',
+        [
+          { spanId: 'existing', name: 'existing', startTime: 1 },
+          { spanId: 'new', name: 'new', startTime: 2 },
+          { spanId: 'new', name: 'duplicate', startTime: 3 },
+        ],
+        { skipTraceCheck: true },
+      );
+
+      expect(mockDb.insert().values).toHaveBeenCalledWith([
+        expect.objectContaining({ spanId: 'existing' }),
+        expect.objectContaining({ spanId: 'new', name: 'new' }),
+        expect.objectContaining({ spanId: 'new', name: 'duplicate' }),
+      ]);
+      expect(mockDb.insert().values().onConflictDoNothing).toHaveBeenCalledWith(
+        expect.objectContaining({ target: expect.any(Array) }),
+      );
+    });
+
     it('should add spans to an existing trace', async () => {
       // Mock trace exists check
       mockDb
@@ -425,6 +466,9 @@ describe('TraceStore', () => {
             'gen_ai.usage.input_tokens': 100,
             'gen_ai.usage.output_tokens': 50,
             'gen_ai.usage.total_tokens': 150,
+            'llm.usage.prompt_tokens': 100,
+            'llm.usage.completion_tokens': 50,
+            'llm.usage.total_tokens': 150,
           },
           statusCode: null,
           statusMessage: null,
@@ -463,6 +507,9 @@ describe('TraceStore', () => {
         'gen_ai.usage.input_tokens': 100,
         'gen_ai.usage.output_tokens': 50,
         'gen_ai.usage.total_tokens': 150,
+        'llm.usage.prompt_tokens': 100,
+        'llm.usage.completion_tokens': 50,
+        'llm.usage.total_tokens': 150,
       });
     });
 

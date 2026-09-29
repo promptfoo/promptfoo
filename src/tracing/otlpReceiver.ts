@@ -10,13 +10,15 @@ import {
   type DecodedScopeSpans,
   type DecodedSpan,
   decodeExportTraceServiceRequest,
-  longToNumber,
 } from './protobuf';
 import {
   PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
 } from './resourceAttributes';
+import { sanitizeTraceAttributes } from './sanitizeAttributes';
 import { getTraceStore, type ParsedTrace, type SpanData, type TraceStore } from './store';
+
+class InvalidSpanEventError extends Error {}
 
 interface OTLPAttribute {
   key: string;
@@ -325,83 +327,43 @@ export class OTLPReceiver {
     }
   }
 
-  private shouldRedactAttribute(key: string, redactAttributePatterns: string[]): boolean {
-    if (redactAttributePatterns.length === 0) {
-      return false;
-    }
-    const lowered = key.toLowerCase();
-    return redactAttributePatterns.some((pattern) => lowered.includes(pattern));
-  }
-
-  private redactAttributeValue(value: unknown, redactAttributePatterns: string[]): unknown {
-    if (Array.isArray(value)) {
-      return value.map((item) => this.redactAttributeValue(item, redactAttributePatterns));
-    }
-    if (!value || typeof value !== 'object') {
-      return value;
-    }
-
-    return Object.fromEntries(
-      Object.entries(value).map(([key, nestedValue]) => [
-        key,
-        this.shouldRedactAttribute(key, redactAttributePatterns)
-          ? '[REDACTED]'
-          : this.redactAttributeValue(nestedValue, redactAttributePatterns),
-      ]),
-    );
-  }
-
   redactAttributes(
     attributes: Record<string, unknown> | undefined,
     redactAttributePatterns = this.redactAttributePatterns,
+    redactedValues?: Set<string>,
   ): Record<string, unknown> {
-    if (!attributes || redactAttributePatterns.length === 0) {
-      return attributes ?? {};
-    }
-    const redacted: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(attributes)) {
-      redacted[key] = this.shouldRedactAttribute(key, redactAttributePatterns)
-        ? '[REDACTED]'
-        : this.redactAttributeValue(value, redactAttributePatterns);
-    }
-    return redacted;
+    return sanitizeTraceAttributes(attributes, {
+      redactAttributes: redactAttributePatterns,
+      sanitizeSensitiveAttributes: false,
+      truncateValues: false,
+      redactedValues,
+    });
   }
 
   private redactSpan(span: SpanData, redactAttributePatterns: string[]): SpanData {
     if (redactAttributePatterns.length === 0) {
       return span;
     }
-    const attributes = span.attributes ?? {};
-    // Collect the values of attributes whose KEY will be redacted. A span `name` or
-    // `statusMessage` that echoes one of those values (e.g. an exporter copies a redacted
-    // attribute such as `otel.log.body` or `event.name` into the span name, or echoes a
-    // credential into an error message) must be scrubbed too — otherwise the secret leaks
-    // through a span field the operator believes `redactAttributes` covers.
-    const redactedSourceValues = new Set<string>();
-    for (const attributeSet of [
-      attributes,
-      ...(span.events ?? []).map((event) => event.attributes ?? {}),
-    ]) {
-      for (const [key, value] of Object.entries(attributeSet)) {
-        if (typeof value === 'string' && this.shouldRedactAttribute(key, redactAttributePatterns)) {
-          redactedSourceValues.add(value);
-        }
-      }
-    }
-    // `redactedSourceValues` only holds strings, so an undefined statusMessage passes through.
+    const redactedValues = new Set<string>();
+    const attributes = this.redactAttributes(
+      span.attributes,
+      redactAttributePatterns,
+      redactedValues,
+    );
+    const events = span.events?.map((event) => ({
+      ...event,
+      attributes: this.redactAttributes(event.attributes, redactAttributePatterns, redactedValues),
+    }));
     const scrubEcho = <T extends string | undefined>(value: T): T =>
-      typeof value === 'string' && redactedSourceValues.has(value) ? ('[REDACTED]' as T) : value;
-
+      typeof value === 'string' && redactedValues.has(value) ? ('[REDACTED]' as T) : value;
     return {
       ...span,
       name: scrubEcho(span.name),
       statusMessage: scrubEcho(span.statusMessage),
-      attributes: this.redactAttributes(attributes, redactAttributePatterns),
-      events: span.events?.map((event) => ({
-        ...event,
-        name: scrubEcho(event.name),
-        attributes: this.redactAttributes(event.attributes, redactAttributePatterns),
-      })),
+      attributes,
+      ...(events
+        ? { events: events.map((event) => ({ ...event, name: scrubEcho(event.name) })) }
+        : {}),
     };
   }
 
@@ -688,7 +650,10 @@ export class OTLPReceiver {
     );
 
     const errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage.toLowerCase().includes('invalid protobuf')) {
+    if (
+      errorMessage.toLowerCase().includes('invalid protobuf') ||
+      error instanceof InvalidSpanEventError
+    ) {
       res.status(400).json({ error: errorMessage });
       return;
     }
@@ -731,7 +696,7 @@ export class OTLPReceiver {
             'otel.span.kind': spanKindName,
             'otel.span.kind_code': span.kind,
           };
-          const startTime = Number(span.startTimeUnixNano) / 1_000_000;
+          const startTime = this.toMilliseconds(span.startTimeUnixNano) ?? 0;
 
           traces.push({
             traceId,
@@ -739,14 +704,12 @@ export class OTLPReceiver {
               spanId,
               parentSpanId,
               name: span.name,
-              startTime, // Convert to ms
-              endTime: span.endTimeUnixNano ? Number(span.endTimeUnixNano) / 1_000_000 : undefined,
+              startTime,
+              endTime: this.toMilliseconds(span.endTimeUnixNano),
               attributes,
-              events: (span.events ?? []).map((event) => ({
-                name: event.name,
-                timestamp: event.timeUnixNano ? Number(event.timeUnixNano) / 1_000_000 : startTime,
-                attributes: this.parseAttributes(event.attributes),
-              })),
+              events: this.parseEvents(span.events, startTime, (attributes) =>
+                this.parseAttributes(attributes),
+              ),
               statusCode: span.status?.code,
               statusMessage: span.status?.message,
             },
@@ -926,14 +889,11 @@ export class OTLPReceiver {
           'otel.span.kind': spanKindName,
           'otel.span.kind_code': spanKindCode,
         },
-        events: (span.events ?? []).map((event) => ({
-          name: event.name,
-          timestamp:
-            this.toMilliseconds(event.timeUnixNano) ??
-            this.toMilliseconds(span.startTimeUnixNano) ??
-            0,
-          attributes: this.parseDecodedAttributes(event.attributes),
-        })),
+        events: this.parseEvents(
+          span.events,
+          this.toMilliseconds(span.startTimeUnixNano) ?? 0,
+          (attributes) => this.parseDecodedAttributes(attributes),
+        ),
         statusCode: span.status?.code,
         statusMessage: span.status?.message,
       },
@@ -1127,13 +1087,52 @@ export class OTLPReceiver {
     this.acceptFormats = normalizeAcceptFormats(acceptFormats);
   }
 
-  private toMilliseconds(
-    value: DecodedSpan['startTimeUnixNano'] | DecodedSpan['endTimeUnixNano'],
-  ): number | undefined {
-    if (value === undefined) {
+  private parseEvents(
+    events: unknown,
+    startTime: number,
+    parseAttributes: (attributes: any[]) => Record<string, any>,
+  ): NonNullable<SpanData['events']> {
+    if (events === undefined || events === null) {
+      return [];
+    }
+    if (!Array.isArray(events)) {
+      throw new InvalidSpanEventError('Invalid OTLP span events: expected an array');
+    }
+    return events.map((event) => {
+      if (!event || typeof event !== 'object' || typeof event.name !== 'string') {
+        throw new InvalidSpanEventError('Invalid OTLP span event: expected a name');
+      }
+      const timestamp =
+        event.timeUnixNano === undefined || String(event.timeUnixNano) === '0'
+          ? startTime
+          : this.toMilliseconds(event.timeUnixNano);
+      if (timestamp === undefined || !Number.isFinite(timestamp)) {
+        throw new InvalidSpanEventError('Invalid OTLP span event timestamp');
+      }
+      if (event.attributes !== undefined && !Array.isArray(event.attributes)) {
+        throw new InvalidSpanEventError('Invalid OTLP span event attributes');
+      }
+      try {
+        return { name: event.name, timestamp, attributes: parseAttributes(event.attributes ?? []) };
+      } catch {
+        throw new InvalidSpanEventError('Invalid OTLP span event attributes');
+      }
+    });
+  }
+
+  private toMilliseconds(value: unknown): number | undefined {
+    if (value === undefined || value === null || !/^\d+$/.test(String(value))) {
       return undefined;
     }
-    return longToNumber(value) / 1_000_000;
+    try {
+      const nanoseconds = BigInt(String(value));
+      const milliseconds = Number((nanoseconds / 1_000_000n).toString());
+      return Number.isSafeInteger(milliseconds)
+        ? milliseconds + Number((nanoseconds % 1_000_000n).toString()) / 1_000_000
+        : undefined;
+    } catch {
+      return undefined;
+    }
   }
 }
 

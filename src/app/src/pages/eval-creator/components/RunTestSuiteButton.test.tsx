@@ -19,7 +19,7 @@ const renderWithProvider = (ui: React.ReactElement) => {
 const mockShowToast = vi.fn();
 let sourceEvalId: string | undefined;
 
-vi.mock('react-router-dom', () => ({
+vi.mock('react-router', () => ({
   useNavigate: () => vi.fn(),
   useLocation: () => ({ state: sourceEvalId ? { sourceEvalId } : null }),
 }));
@@ -136,6 +136,38 @@ describe('RunTestSuiteButton', () => {
       providers: 'openai:gpt-4',
       tests: 'file://tests.csv',
     });
+  });
+
+  it('includes trace-provider settings and runtime credentials in submitted eval jobs', async () => {
+    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    const tracing = {
+      enabled: true,
+      queryDelay: 3000,
+      provider: {
+        id: 'tempo' as const,
+        endpoint: 'https://tempo.example.com/team-west',
+        auth: { token: 'browser-runtime-secret' },
+        headers: { 'X-Scope-OrgID': 'tenant-a' },
+      },
+    };
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['echo'],
+      tests: [{ vars: { prompt: 'hello' } }],
+      tracing,
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+    await act(async () => {
+      screen
+        .getByRole('button', { name: 'Run Eval' })
+        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const [, requestInit] = getCallApiMock().mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(requestInit.body as string)).toMatchObject({ tracing });
+    expect(localStorage.getItem('promptfoo')).not.toContain('browser-runtime-secret');
   });
 
   it('should include the source eval id when rerunning a loaded evaluation', async () => {

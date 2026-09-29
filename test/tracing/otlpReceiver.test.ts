@@ -118,6 +118,117 @@ describe('OTLPReceiver', () => {
     vi.restoreAllMocks();
   });
 
+  describe('span events', () => {
+    const payload = (events: unknown) => ({
+      resourceSpans: [
+        {
+          scopeSpans: [
+            {
+              spans: [
+                {
+                  traceId: 'a'.repeat(32),
+                  spanId: 'b'.repeat(16),
+                  name: 'event fixture',
+                  startTimeUnixNano: '1700000000000000000',
+                  endTimeUnixNano: '1700000000000750000',
+                  attributes: [{ key: 'promptfoo.eval.id', value: { stringValue: 'eval-events' } }],
+                  events,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    it.each([
+      {},
+      [null],
+      [{ name: 'event', timeUnixNano: 'invalid' }],
+      [{ name: 'event', attributes: {} }],
+      [{ name: 'event', attributes: [null] }],
+    ])('rejects malformed optional events with a client error: %j', async (events) => {
+      await request(receiver.getApp()).post('/v1/traces').send(payload(events)).expect(400);
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+    });
+
+    it.each(['json', 'protobuf'])(
+      'preserves fractional milliseconds and missing timestamp fallback in %s',
+      async (format) => {
+        const body = payload([
+          { name: 'precise', timeUnixNano: '1700000000000250000' },
+          { name: 'fallback' },
+        ]);
+        body.resourceSpans[0].scopeSpans[0].spans[0].startTimeUnixNano = '1700000000000250000';
+        const encoded =
+          format === 'protobuf'
+            ? await (await import('../../src/tracing/protobuf')).encodeExportTraceServiceRequest(
+                body,
+              )
+            : body;
+        await request(receiver.getApp())
+          .post('/v1/traces')
+          .set(
+            'Content-Type',
+            format === 'protobuf' ? 'application/x-protobuf' : 'application/json',
+          )
+          .send(encoded)
+          .expect(200);
+        expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.arrayContaining([
+            expect.objectContaining({
+              startTime: 1700000000000.25,
+              endTime: 1700000000000.75,
+              events: [
+                { name: 'precise', timestamp: 1700000000000.25, attributes: {} },
+                { name: 'fallback', timestamp: 1700000000000.25, attributes: {} },
+              ],
+            }),
+          ]),
+          expect.any(Object),
+        );
+      },
+    );
+
+    it('redacts nested configured attributes and matching event names through the shared sanitizer', async () => {
+      receiver.setRedactAttributes(['private_marker']);
+      const body = payload([
+        {
+          name: 'fixture-private-value',
+          attributes: [
+            {
+              key: 'arguments',
+              value: {
+                kvlistValue: {
+                  values: [
+                    { key: 'private_marker', value: { stringValue: 'fixture-private-value' } },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      ]);
+      await request(receiver.getApp()).post('/v1/traces').send(body).expect(200);
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.arrayContaining([
+          expect.objectContaining({
+            events: [
+              {
+                name: '[REDACTED]',
+                timestamp: 1700000000000,
+                attributes: { arguments: { private_marker: '[REDACTED]' } },
+              },
+            ],
+          }),
+        ]),
+        expect.any(Object),
+      );
+    });
+  });
+
   describe('Health check', () => {
     it('should respond to health check endpoint', async () => {
       const response = await request(receiver.getApp()).get('/health').expect(200);
@@ -1555,49 +1666,52 @@ describe('OTLPReceiver', () => {
         Buffer.alloc(16).toString('base64'),
         Buffer.alloc(8).toString('base64'),
       ],
-    ])('falls back to resource trace context for a Codex log with %s', async (_label, inlineTraceId, inlineSpanId) => {
-      const req = {
-        resourceLogs: [
-          {
-            resource: {
-              attributes: [
-                { key: 'service.name', value: { stringValue: 'codex-cli' } },
-                { key: 'promptfoo.trace_id', value: { stringValue: hexTraceId } },
-                { key: 'promptfoo.parent_span_id', value: { stringValue: hexParentSpanId } },
-              ],
-            },
-            scopeLogs: [
-              {
-                scope: { name: 'codex_otel' },
-                logRecords: [
-                  {
-                    timeUnixNano: '1700000000000000000',
-                    traceId: inlineTraceId,
-                    spanId: inlineSpanId,
-                    body: { stringValue: 'codex.api_request' },
-                    attributes: [
-                      { key: 'event.name', value: { stringValue: 'codex.api_request' } },
-                    ],
-                  },
+    ])(
+      'falls back to resource trace context for a Codex log with %s',
+      async (_label, inlineTraceId, inlineSpanId) => {
+        const req = {
+          resourceLogs: [
+            {
+              resource: {
+                attributes: [
+                  { key: 'service.name', value: { stringValue: 'codex-cli' } },
+                  { key: 'promptfoo.trace_id', value: { stringValue: hexTraceId } },
+                  { key: 'promptfoo.parent_span_id', value: { stringValue: hexParentSpanId } },
                 ],
               },
-            ],
-          },
-        ],
-      };
+              scopeLogs: [
+                {
+                  scope: { name: 'codex_otel' },
+                  logRecords: [
+                    {
+                      timeUnixNano: '1700000000000000000',
+                      traceId: inlineTraceId,
+                      spanId: inlineSpanId,
+                      body: { stringValue: 'codex.api_request' },
+                      attributes: [
+                        { key: 'event.name', value: { stringValue: 'codex.api_request' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        };
 
-      await request(receiver.getApp())
-        .post('/v1/logs')
-        .set('Content-Type', 'application/json')
-        .send(req)
-        .expect(200);
+        await request(receiver.getApp())
+          .post('/v1/logs')
+          .set('Content-Type', 'application/json')
+          .send(req)
+          .expect(200);
 
-      const [persistedTraceId, spans] = mockTraceStore.addSpans.mock.calls[0];
-      expect(persistedTraceId).toBe(hexTraceId);
-      const span = (spans as any[])[0];
-      expect(span.parentSpanId).toBe(hexParentSpanId);
-      expect(span.name).toBe('codex.api_request');
-    });
+        const [persistedTraceId, spans] = mockTraceStore.addSpans.mock.calls[0];
+        expect(persistedTraceId).toBe(hexTraceId);
+        const span = (spans as any[])[0];
+        expect(span.parentSpanId).toBe(hexParentSpanId);
+        expect(span.name).toBe('codex.api_request');
+      },
+    );
 
     it('is advertised on the service info endpoint', async () => {
       // Sanity check that /v1/traces stays stable despite the new /v1/logs route.
