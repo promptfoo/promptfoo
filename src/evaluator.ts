@@ -1364,8 +1364,12 @@ async function applyRunEvalResponseOutcome({
   }
 
   if (response.output === null || response.output === undefined) {
-    applyEmptyResponseOutcome(ret, isRedteam);
-    return;
+    if (!test.assert?.some(hasVlsuAssertion)) {
+      applyEmptyResponseOutcome(ret, isRedteam);
+      return;
+    }
+    // VLSU controls need the same grading for absent text as for an empty string.
+    response = { ...response, output: '' };
   }
 
   await gradeRunEvalResponse({
@@ -1387,6 +1391,12 @@ async function applyRunEvalResponseOutcome({
     traceContext,
     vars,
   });
+}
+
+function hasVlsuAssertion(assertion: AssertionOrSet): boolean {
+  return assertion.type === 'assert-set'
+    ? assertion.assert.some(hasVlsuAssertion)
+    : assertion.type === 'promptfoo:redteam:vlsu';
 }
 
 function applyEmptyResponseOutcome(ret: EvaluateResult, isRedteam: boolean) {
