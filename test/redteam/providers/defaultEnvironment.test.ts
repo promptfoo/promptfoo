@@ -1,3 +1,5 @@
+import os from 'node:os';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { getEnvOverrides } from '../../../src/envars';
@@ -27,6 +29,7 @@ vi.mock('../../../src/providers/openai/codexDefaults', async (importOriginal) =>
 
 describe('automatic redteam provider call environment', () => {
   const originalEnv = { ...process.env };
+  const temporaryDirectory = os.tmpdir();
   const originalConfig = cliState.config;
   const requests: { url: string; authorization: string | null; body: any }[] = [];
 
@@ -37,6 +40,9 @@ describe('automatic redteam provider call environment', () => {
       {
         PATH: originalEnv.PATH,
         HOME: originalEnv.HOME,
+        TMPDIR: temporaryDirectory,
+        TMP: temporaryDirectory,
+        TEMP: temporaryDirectory,
         NODE_ENV: 'test',
         PROMPTFOO_DISABLE_TELEMETRY: 'true',
         PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
