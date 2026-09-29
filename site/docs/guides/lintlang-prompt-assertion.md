@@ -2,14 +2,7 @@
 title: Lint your prompts with LintLang
 description: Use LintLang as a custom Python assertion in promptfoo to structurally lint every prompt under test — vague instructions, missing output contracts, ambiguous tool descriptions, and role confusion — with pass/fail verdicts and scores.
 keywords:
-  [
-    lintlang,
-    prompt linting,
-    prompt quality,
-    custom assertion,
-    python assertion,
-    structural linter,
-  ]
+  [lintlang, prompt linting, prompt quality, custom assertion, python assertion, structural linter]
 sidebar_label: Linting Prompts with LintLang
 ---
 
@@ -37,9 +30,9 @@ Wire it in `promptfooconfig.yaml`:
         - type: python
           value: file://lintlang_assert.py:get_assert
 
-The assertion lints the raw prompt sent to the LLM (`context['prompt']`),
-falling back to the test case's string `vars` when no rendered prompt is
-available. It returns a dict so promptfoo records pass, score, and reason.
+The assertion lints the rendered prompt sent to the provider
+(`context['prompt']`) and fails if it is unavailable. It returns a dict so
+promptfoo records pass, score, and reason.
 
 Environment:
 
@@ -65,24 +58,13 @@ SEVERITY_WEIGHT = {
 }
 
 
-def _prompt_under_test(context):
-    """Extract the prompt text from the promptfoo assertion context."""
-    prompt = context.get("prompt")
-    if isinstance(prompt, str) and prompt.strip():
-        return prompt
-    parts = [
-        str(v) for v in (context.get("vars") or {}).values() if isinstance(v, str)
-    ]
-    return "\n\n".join(p for p in parts if p.strip())
-
-
 def get_assert(output, context):
-    prompt = _prompt_under_test(context or {})
-    if not prompt:
+    prompt = (context or {}).get("prompt")
+    if not isinstance(prompt, str) or not prompt.strip():
         return {
             "pass": False,
             "score": 0.0,
-            "reason": "lintlang: no prompt text found in context['prompt'] or context['vars']",
+            "reason": "lintlang: no rendered prompt found in context['prompt']",
         }
 
     lintlang = os.environ.get("LINTLANG_BIN") or shutil.which("lintlang")
@@ -103,7 +85,7 @@ def get_assert(output, context):
                 lintlang,
                 "scan",
                 "--stdin-filename",
-                "prompt.md",
+                "prompt",
                 "--format",
                 "json",
                 "--min-severity",
@@ -127,19 +109,51 @@ def get_assert(output, context):
             "reason": f"lintlang: failed to run the CLI: {exc}",
         }
 
-    try:
-        results = json.loads(proc.stdout.decode("utf-8") or "[]")
-    except json.JSONDecodeError:
+    if proc.returncode != 0:
         return {
             "pass": False,
             "score": 0.0,
-            "reason": "lintlang: could not parse CLI JSON output: "
+            "reason": f"lintlang: scan exited with code {proc.returncode}: "
             + proc.stderr.decode("utf-8", "replace")[:200],
         }
 
-    findings = []
-    for file_result in results if isinstance(results, list) else []:
-        findings.extend(file_result.get("structural_findings") or [])
+    try:
+        results = json.loads(proc.stdout.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return {
+            "pass": False,
+            "score": 0.0,
+            "reason": "lintlang: could not parse CLI JSON output",
+        }
+
+    if not (
+        isinstance(results, list)
+        and len(results) == 1
+        and isinstance(results[0], dict)
+    ):
+        return {"pass": False, "score": 0.0, "reason": "lintlang: invalid scan result"}
+
+    result = results[0]
+    if (
+        result.get("input_error") is not None
+        or result.get("skipped") is not None
+        or result.get("verdict") not in ("PASS", "REVIEW", "FAIL")
+    ):
+        return {
+            "pass": False,
+            "score": 0.0,
+            "reason": "lintlang: scan did not complete: "
+            + str(result.get("input_error") or result.get("skipped") or result.get("verdict")),
+        }
+
+    findings = result.get("structural_findings")
+    if (
+        not {"input_error", "skipped"}.issubset(result)
+        or not isinstance(findings, list)
+        or any(not isinstance(f, dict) for f in findings)
+        or (not findings and result["verdict"] != "PASS")
+    ):
+        return {"pass": False, "score": 0.0, "reason": "lintlang: invalid scan result"}
 
     if not findings:
         return {
@@ -188,10 +202,12 @@ defaultTest:
 
 tests:
   - vars:
-      account_summary: "Plan: Pro. Balance due: $42.00."
+      account_summary: 'Plan: Pro. Balance due: $42.00.'
 ```
 
-Because the assertion reads `context['prompt']`, it lints the fully rendered prompt for each test case — including the `vars` above. If your setup doesn't expose a rendered prompt, it falls back to linting the test case's string `vars`.
+Because the assertion reads `context['prompt']`, it lints the fully rendered prompt for each test case — including any `vars` referenced by the template. It fails explicitly when that prompt is unavailable; test variables alone cannot reconstruct it.
+
+The extensionless stdin filename lets LintLang detect JSON, YAML, or plain text, preserving message roles and structured fields in rendered chat/object prompts. Tool definitions configured separately on a provider are outside this prompt assertion's coverage. A nonzero CLI exit, input error, skipped scan, or malformed result fails the assertion instead of reporting a clean pass.
 
 ## Tuning the threshold
 
