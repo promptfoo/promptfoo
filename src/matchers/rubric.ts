@@ -711,28 +711,33 @@ function appendMediaToChatPrompt(
   ]);
 }
 
-/**
- * A grader that cannot hear the clip grades whatever text the output carries.
- * When that text is only the placeholder — the output was the audio itself and
- * there is no transcript — there is nothing to grade, so fail instead of
- * returning a confident, meaningless verdict.
- */
-export function requireAudioGradingEvidence(gradedOutput: unknown, grader: string): void {
-  if (gradedOutput === ATTACHED_AUDIO_OUTPUT_PLACEHOLDER) {
+/** Select text evidence when the grader cannot receive the audio. */
+export function getAudioGradingFallback<T>(
+  output: T,
+  audio: NonNullable<ProviderResponse['audio']>,
+  grader: string,
+): T | string {
+  const evidence = audio.transcript?.trim() ? audio.transcript : output;
+  if (
+    evidence == null ||
+    (typeof evidence === 'string' &&
+      (!evidence.trim() || evidence.trim() === ATTACHED_AUDIO_OUTPUT_PLACEHOLDER))
+  ) {
     throw new Error(
-      `${grader} cannot listen to audio output and the output has no transcript. Grade with an audio-capable provider such as openai:chat:gpt-audio.`,
+      `${grader} cannot listen to audio output and the output has no transcript or usable text. Grade with an audio-capable provider such as openai:chat:gpt-audio-1.5.`,
     );
   }
   logger.warn('[Grading] Grader cannot listen to audio; grading the text output instead', {
     grader,
   });
+  return evidence;
 }
 
 function buildAudioGradingPart(
   audio: NonNullable<ProviderResponse['audio']>,
   provider: ApiProvider,
 ): MultimodalPromptPart | undefined {
-  if (!provider.supportsAudioInput?.()) {
+  if (provider.getAudioInputFormat?.() !== 'openai') {
     return undefined;
   }
   if (audio.blobRef || hasBlobRefImageValue(audio.data)) {
@@ -866,6 +871,7 @@ export async function runJsonGradingPrompt({
   grading,
   label,
   providerCallContext,
+  providerPromptConfig,
   throwOnError,
   vars,
   images,
@@ -877,14 +883,14 @@ export async function runJsonGradingPrompt({
   grading: GradingConfig;
   label: string;
   providerCallContext?: CallApiContextParams;
+  /** Prompt config for the grader call, which providers merge over their own config. */
+  providerPromptConfig?: Record<string, unknown>;
   throwOnError?: boolean;
   vars: Record<string, VarValue>;
   images?: ImageOutput[];
   audio?: ProviderResponse['audio'];
 }): Promise<GradingResult> {
   const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, defaultPrompt);
-  const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
-
   const defaultProviders = await getDefaultProviders();
   const defaultProvider =
     defaultProviders.llmRubricProvider || defaultProviders.gradingJsonProvider;
@@ -894,22 +900,25 @@ export async function runJsonGradingPrompt({
     defaultProvider,
     checkName,
   );
+  if (audio?.data && finalProvider.getAudioInputFormat?.() !== 'openai') {
+    vars = {
+      ...vars,
+      output: getAudioGradingFallback(vars.output, audio, `Grading provider ${finalProvider.id()}`),
+    };
+  }
+  const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
   const {
     prompt: providerPrompt,
     imageCount,
     audioAttached,
   } = await buildGradingProviderPrompt(renderedPrompt, images, finalProvider, audio);
-  if (audio?.data && !audioAttached) {
-    requireAudioGradingEvidence(vars.output, `Grading provider ${finalProvider.id()}`);
-  }
   const resp = await callProviderWithContext(
     finalProvider,
     providerPrompt,
     label,
     vars,
     providerCallContext,
-    // Native-audio graders speak their answer by default; grading needs text back.
-    audioAttached ? { modalities: ['text'] } : undefined,
+    audioAttached ? { ...providerPromptConfig, modalities: ['text'] } : providerPromptConfig,
   );
   if (resp.error || !resp.output) {
     if (throwOnError) {

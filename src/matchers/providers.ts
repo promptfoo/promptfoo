@@ -101,7 +101,7 @@ export function callProviderWithContext(
     prompt: {
       raw: prompt,
       label,
-      ...(promptConfig ? { config: promptConfig } : {}),
+      ...(promptConfig && { config: promptConfig }),
     },
     vars,
   };

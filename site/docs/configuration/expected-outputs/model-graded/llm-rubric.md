@@ -28,7 +28,7 @@ Under the hood, `llm-rubric` uses a model to evaluate the output based on the cr
 
 - **OpenAI API key**: `gpt-5`
 - **Codex/ChatGPT login**: `openai:codex-sdk` when the Codex SDK package is installed, Codex is signed in, and no higher-priority API credentials are set
-- **Anthropic API key**: `claude-sonnet-4-5-20250929`
+- **Anthropic API key**: `claude-sonnet-5`
 - **Google AI Studio API key**: `gemini-2.5-pro` (GEMINI_API_KEY, GOOGLE_API_KEY, or PALM_API_KEY)
 - **Google Vertex credentials**: `gemini-2.5-pro` (service account credentials)
 - **Mistral API key**: `mistral-large-latest`
@@ -76,11 +76,11 @@ assert:
     provider: openai:chat:gpt-audio-1.5
 ```
 
-Promptfoo requests the grade as text, so the grader spends its completion budget on the JSON verdict rather than on speech. The grader listens to the attached audio and uses the transcript as supporting context. This works with audio from [OpenAI Realtime](/docs/providers/openai#realtime-api-models), audio chat, text to speech, or a custom target provider that returns the same audio fields.
+Promptfoo requests the JSON grade as text. The grader listens to the attached audio and uses the transcript as supporting context. This works with audio from [OpenAI Realtime](/docs/providers/openai#realtime-api-models), audio chat, text to speech, or a custom target provider that returns the same audio fields.
 
 The target must return inline base64 audio with `format: wav` or `format: mp3`, up to 20 MiB. Blob references and other formats produce a grading error. The built-in Realtime provider converts its default PCM16 output to WAV, including in persistent conversations; use `output_audio_format: pcm16` for grading.
 
-A grader that cannot listen to audio grades the text output instead and logs a warning. If the output is the audio itself and there is no transcript, the assertion errors rather than grading a placeholder.
+A grader that cannot listen to audio uses the transcript, or the text output when no transcript is available, and logs a warning. The assertion errors if the only evidence is audio, an empty output, or an audio placeholder.
 
 An assertion with `transform` grades the transformed text and does not attach the original audio. Successful audio grades include `renderedGradingPromptAudio: true` in assertion metadata; `renderedGradingPrompt` contains the text prompt without the attached audio bytes.
 

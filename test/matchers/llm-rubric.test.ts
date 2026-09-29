@@ -21,7 +21,6 @@ import type { Assertion, GradingConfig } from '../../src/types/index';
 vi.mock('../../src/esm', () => ({
   importModule: vi.fn(),
 }));
-vi.mock('../../src/cliState');
 vi.mock('../../src/remoteGrading', () => ({
   doRemoteGrading: vi.fn(),
 }));
@@ -2484,6 +2483,41 @@ Evaluate the response
       targetId: 'selected-target',
     });
   });
+
+  it.each(['status: complete', ''])(
+    'sends the audio transcript to the remote grader for output %j',
+    async (output) => {
+      const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+      cliState.config = { redteam: {} };
+      const audio = { data: 'UklGRgAAAABXQVZF', format: 'wav', transcript: 'Hello.' };
+
+      await matchesLlmRubric('Contains hello', output, {}, {}, undefined, {
+        providerResponse: { output, audio },
+      });
+
+      expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith(
+        expect.objectContaining({ output: 'Hello.' }),
+      );
+    },
+  );
+
+  it.each(['', '   ', '[Audio output]'])(
+    'rejects output %j without evidence before remote grading',
+    async (output) => {
+      const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+      cliState.config = { redteam: {} };
+      const audio = { data: 'UklGRgAAAABXQVZF', format: 'wav', transcript: '   ' };
+
+      await expect(
+        matchesLlmRubric('Contains hello', output, {}, {}, undefined, {
+          providerResponse: { output, audio },
+        }),
+      ).rejects.toThrow('no transcript or usable text');
+      expect(remoteGrading.doRemoteGrading).not.toHaveBeenCalled();
+    },
+  );
 
   it('should call remote with image outputs when multimodal grading is remote-eligible', async () => {
     const rubric = 'Does the image match?';
