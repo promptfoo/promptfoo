@@ -3,7 +3,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const https = require('https');
 // Load environment variables from .env file
-require('dotenv').config({ path: path.join(__dirname, '..', '.env'), quiet: true });
+require('../src/util/envFile.ts').loadEnvFiles([path.join(__dirname, '..', '.env')]);
 // Get OpenAI API key from environment
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 if (!OPENAI_API_KEY) {
@@ -141,15 +141,15 @@ async function main() {
   try {
     console.log('Generating image with gpt-image-1...');
     const imageData = await generateImage();
-    const outputPath = path.join(__dirname, '..', 'site', 'static', 'img', outputDir, filename);
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
     if (imageData.b64_json) {
       // If we get base64 data, save it directly
+      const outputPath = path.join(__dirname, '..', 'site', 'static', 'img', outputDir, filename);
       const buffer = Buffer.from(imageData.b64_json, 'base64');
       await fs.writeFile(outputPath, buffer);
       console.log(`Image saved to: ${outputPath}`);
     } else if (imageData.url) {
       // If we get a URL, download the image
+      const outputPath = path.join(__dirname, '..', 'site', 'static', 'img', outputDir, filename);
       await downloadImage(imageData.url, outputPath);
       console.log(`Image downloaded and saved to: ${outputPath}`);
     } else {

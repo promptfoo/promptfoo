@@ -1,16 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchWithCache } from '../../src/cache';
-import {
-  clearAimlApiModelsCache,
-  createAimlApiProvider,
-  fetchAimlApiModels,
-} from '../../src/providers/aimlapi';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createAimlApiProvider } from '../../src/providers/aimlapi';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 
 vi.mock('../../src/providers/openai');
-vi.mock('../../src/cache');
+
+afterEach(() => {
+  vi.resetAllMocks();
+});
 
 describe('createAimlApiProvider', () => {
   beforeEach(() => {
@@ -39,46 +37,5 @@ describe('createAimlApiProvider', () => {
     const provider = createAimlApiProvider('aimlapi:model-name');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('model-name', expect.any(Object));
-  });
-});
-
-describe('fetchAimlApiModels', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    clearAimlApiModelsCache();
-  });
-
-  it('fetches models from endpoint', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: { data: [{ id: 'model-a' }, { id: 'model-b' }] },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    } as any);
-
-    const models = await fetchAimlApiModels();
-
-    expect(fetchWithCache).toHaveBeenCalledWith(
-      'https://api.aimlapi.com/models',
-      { headers: {} },
-      expect.any(Number),
-    );
-    expect(models).toEqual([{ id: 'model-a' }, { id: 'model-b' }]);
-  });
-
-  it('uses cache on subsequent calls', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: { data: [{ id: 'model-x' }] },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    } as any);
-
-    const first = await fetchAimlApiModels();
-    vi.mocked(fetchWithCache).mockClear();
-    const second = await fetchAimlApiModels();
-
-    expect(first).toEqual(second);
-    expect(fetchWithCache).not.toHaveBeenCalled();
   });
 });

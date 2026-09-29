@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
   <title id="title">Recovered December benchmark composition</title>
-  <desc id="desc">A visual summary of the recovered December benchmark: 620 original cases, 611 replayed cleanly today, with 210 baseline, 196 Hydra, 205 Meta, and 9 skipped Hydra traces.</desc>
+  <desc id="desc">A visual summary of the recovered December benchmark: 620 original cases, 611 replayed in March 2026, with 210 baseline, 196 Hydra, 205 Meta, and 9 skipped Hydra traces.</desc>
   <defs>
     <style>
       .bg { fill: #f6f1e7; }
@@ -51,7 +51,7 @@
   <text class="ink small center" x="463" y="329">recovered</text>
 
   <rect class="card" x="560" y="174" width="520" height="360" rx="24" />
-  <text class="muted small" x="592" y="214">Replayable today</text>
+  <text class="muted small" x="592" y="214">March replay</text>
   <text class="ink value" x="592" y="266">611</text>
   <text class="ink section" x="592" y="300">clean payloads</text>
 

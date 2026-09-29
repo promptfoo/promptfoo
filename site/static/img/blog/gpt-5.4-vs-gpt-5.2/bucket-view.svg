@@ -116,5 +116,5 @@
   </g>
 
   <line class="rule" x1="80" y1="788" x2="1120" y2="788" />
-  <text class="muted small" x="80" y="814">GPT-5.4 loosened on commitments and persuasion, stayed flat on imitation, and improved on misinformation.</text>
+  <text class="muted small" x="80" y="814">Reported failures rose for commitments and persuasion, stayed flat for imitation, and fell for misinformation.</text>
 </svg>

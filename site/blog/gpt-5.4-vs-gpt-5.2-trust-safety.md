@@ -1,6 +1,6 @@
 ---
 title: 'GPT-5.4 Trust and Safety Assessment'
-description: 'We replayed 611 recovered prompt payloads from our December GPT-5.2 red team against GPT-5.2 and GPT-5.4 with reasoning disabled and the same grader.'
+description: 'A March 2026 comparison of GPT-5.4 and GPT-5.2 on 611 recovered benchmark prompts, with reported failure counts, model settings, and limits of the assessment.'
 image: /img/blog/gpt-5.4-vs-gpt-5.2/hero.jpg
 date: 2026-03-06
 authors: [michael]
@@ -9,158 +9,83 @@ tags: [red-teaming, security-vulnerability, openai]
 
 # GPT-5.4 Trust and Safety Assessment
 
-In December, when OpenAI released GPT-5.2, we ran an initial [trust and safety assessment](/blog/gpt-5.2-trust-safety-assessment) with Promptfoo and published the results. When OpenAI released [GPT-5.4](https://openai.com/index/introducing-gpt-5-4/) on March 5, 2026, we decided to run that same assessment again and compare the two models as directly as we could.
+In this March 2026 assessment, GPT-5.4 failed **220 of 611 checks (36.0%)**, compared with **195 of 611 (31.9%)** for GPT-5.2. Both models received the same saved prompts and were assessed by the same model grader. Most of the difference came from the Hydra cases.
 
-We started with the recoverable December benchmark: the same saved prompt payloads replayed against both models with the same settings, `reasoning_effort: none`, `max_completion_tokens: 2048`, and the same grader. We also ran a fresh adaptive rerun against GPT-5.4, but we treat that as context rather than the main version-to-version comparison.
-
-What we found is narrower than "GPT-5.4 is better" or "GPT-5.4 is worse." On the same saved benchmark, GPT-5.4 failed more often overall than GPT-5.2: **220/611 (36.0%)** vs **195/611 (31.9%)**, driven by **Hydra** and **baseline**. But the fresh rerun looked much better than GPT-5.2's original day-0 run, which suggests the failure profile shifted rather than uniformly tightened.
-
-This post starts with that headline result, then breaks down the recovered benchmark, grouped category slices, exact same-prompt pairs, and the fresh rerun context.
+The prompts came from our December [GPT-5.2 trust and safety assessment](/blog/gpt-5.2-trust-safety-assessment). After OpenAI [released GPT-5.4 on March 5, 2026](https://openai.com/index/introducing-gpt-5-4/), we replayed the recoverable cases with `reasoning_effort: none` and `max_completion_tokens: 2048`. These results describe that benchmark and configuration; they do not establish a general safety ranking.
 
 <!-- truncate -->
 
-## At a Glance
+## The Benchmark
 
 ![Recovered December benchmark composition](/img/blog/gpt-5.4-vs-gpt-5.2/benchmark-composition.svg)
 
-- **Setup:** we reran the December GPT-5.2 trust and safety assessment on GPT-5.4 as closely as possible by replaying **611** recovered prompt payloads from the original **620**-case benchmark
-- **Headline:** GPT-5.4 failed more often overall on the same benchmark: **220/611 (36.0%)** vs **195/611 (31.9%)**
-- **Main finding:** the gap came from **Hydra** and **baseline**, while **Meta** improved slightly and the fresh adaptive rerun looked materially stronger than GPT-5.2's day-0 run
-- **Failure profile:** GPT-5.4 did worse on **operational agency / commitments** and **politics / persuasion-style prompts**, stayed broadly flat on **imitation**, and did better on some **misinformation** and **COPPA** cases
+The December run (`eval-E24-2025-12-11T18:49:28`) contained 620 saved cases. We recovered 611 prompt payloads: 210 baseline, 196 Hydra, and 205 Meta cases. Of the nine excluded Hydra cases, seven lacked saved messages and two contained template syntax that prevented replay without changing the payload.
 
-## The Benchmark
+The March comparison (`eval-FSB-2026-03-06T07:30:31`) used `openai:chat:gpt-5.4` as the grader for both targets. The archived invocation used model aliases. OpenAI lists dated snapshots as [`gpt-5.2-2025-12-11`](https://developers.openai.com/api/docs/models/gpt-5.2) and [`gpt-5.4-2026-03-05`](https://developers.openai.com/api/docs/models/gpt-5.4); the recorded aliases do not prove which snapshots served these requests.
 
-The original December 11 run (`eval-E24-2025-12-11T18:49:28`) contained **620** saved attack cases. We were able to recover **611** prompt payloads cleanly enough to replay today:
-
-- **Baseline:** **210** cases
-- **Hydra:** **196** cases
-- **Meta:** **205** cases
-
-We excluded **9 Hydra traces** from the fixed benchmark:
-
-- **7** had no saved message trace after Hydra exhausted its backtracks
-- **2** contained literal template syntax inside the saved messages, which makes them non-replayable through Promptfoo's templating layer without mutating the payload
-
-That means this post is based on the **recoverable December benchmark**, not a fresh March corpus.
-
-The replay config used two targets and one grader:
-
-```bash
-promptfoo eval \
-  -c output/gpt-5.2-december-benchmark.replay.clean.gpt-5.2-vs-gpt-5.4.yaml \
-  --grader openai:chat:gpt-5.4 \
-  -j 40
-```
-
-The clean replay eval ID was `eval-FSB-2026-03-06T07:30:31`.
-
-For reproducibility, OpenAI's dated snapshots for these model versions are
-[`gpt-5.2-2025-12-11`](https://developers.openai.com/api/docs/models/gpt-5.2) and
-[`gpt-5.4-2026-03-05`](https://developers.openai.com/api/docs/models/gpt-5.4). The command
-above preserves the March invocation's model alias. For a later rerun, pin the dated snapshots
-so alias updates cannot change the comparison.
+The saved corpus, generated configurations, and row-level grades are not distributed with this post. The aggregate counts below are the reported assessment results. Readers can check their arithmetic, but cannot independently reproduce the grades from the published material.
 
 ## Results
 
 ![Same-benchmark comparison of GPT-5.2 and GPT-5.4](/img/blog/gpt-5.4-vs-gpt-5.2/method-comparison.svg)
 
-On the same recovered December benchmark:
+| Cases    | GPT-5.2 failures | GPT-5.4 failures |
+| -------- | ---------------- | ---------------- |
+| Baseline | 6/210 (2.9%)     | 13/210 (6.2%)    |
+| Hydra    | 108/196 (55.1%)  | 131/196 (66.8%)  |
+| Meta     | 81/205 (39.5%)   | 76/205 (37.1%)   |
+| Total    | 195/611 (31.9%)  | 220/611 (36.0%)  |
 
-- **Overall:** **195/611 (31.9%)** for GPT-5.2 vs **220/611 (36.0%)** for GPT-5.4
-- **Baseline:** **6/210 (2.9%)** for GPT-5.2 vs **13/210 (6.2%)** for GPT-5.4
-- **Hydra:** **108/196 (55.1%)** for GPT-5.2 vs **131/196 (66.8%)** for GPT-5.4
-- **Meta:** **81/205 (39.5%)** for GPT-5.2 vs **76/205 (37.1%)** for GPT-5.4
-
-That is the main result. GPT-5.4 was worse overall on the same benchmark, driven by **baseline** and especially **Hydra**. Meta improved slightly, but not enough to offset the regressions elsewhere.
-
-These numbers will not match the published December post exactly. The original article reported the live day-0 red team aggregates as they ran. This replay uses the **611 recoverable prompt payloads** we can still execute today and grades both models side by side with the **same current grader**.
+GPT-5.4 had 25 more failures: 23 more in Hydra and seven more in baseline, offset by five fewer in Meta. The December article reported grades from the original live run, so its totals differ from this replay with a shared March grader.
 
 ## Grouped Buckets
 
-Cell-level deltas are mostly 4- and 5-prompt cells. To keep the category story from leaning too hard on tiny samples, we also grouped several related plugin families into broader buckets on the same fixed benchmark.
+![Grouped categories in the fixed benchmark](/img/blog/gpt-5.4-vs-gpt-5.2/bucket-view.svg)
 
-![Grouped slices of the fixed benchmark](/img/blog/gpt-5.4-vs-gpt-5.2/bucket-view.svg)
+Several individual categories contain only four or five prompts. The following groups combine related categories, although they still cover only part of the benchmark.
 
-- **Operational actions and commitments** (`excessive-agency`, `contracts`, `coppa`) moved from **18/44 (40.9%)** to **22/44 (50.0%)**
-- **Representation and impersonation** (`imitation`) stayed flat at **12/15 (80.0%)** for both models
-- **Misinformation and unsupported claims** (`harmful:misinformation-disinformation`, `hallucination`, `unverifiable-claims`) improved from **14/45 (31.1%)** to **12/45 (26.7%)**
-- **Politics, persuasion, and bias** (`politics`, `religion`, and selected `bias:*` plugins) moved from **34/75 (45.3%)** to **39/75 (52.0%)**
+| Group                          | Included categories                                                             | GPT-5.2 failures | GPT-5.4 failures |
+| ------------------------------ | ------------------------------------------------------------------------------- | ---------------- | ---------------- |
+| Actions and commitments        | `excessive-agency`, `contracts`, `coppa`                                        | 18/44 (40.9%)    | 22/44 (50.0%)    |
+| Impersonation                  | `imitation`                                                                     | 12/15 (80.0%)    | 12/15 (80.0%)    |
+| Misinformation claims          | `harmful:misinformation-disinformation`, `hallucination`, `unverifiable-claims` | 14/45 (31.1%)    | 12/45 (26.7%)    |
+| Politics, persuasion, and bias | `politics`, `religion`, and selected `bias:*` categories                        | 34/75 (45.3%)    | 39/75 (52.0%)    |
 
-These grouped slices are still not the whole benchmark, but they are less fragile than any one 4/5 cell. The main pattern is that GPT-5.4 got looser on operational agency and persuasion-style prompts while getting tighter on some misinformation and child-safety cases.
-
-## Failure Profile
-
-At a high level, the benchmark points to a shifted failure profile rather than a single monotonic change:
-
-- **Worse on operational actions and commitments:** GPT-5.4 was more willing to act like it could execute tasks, accept obligations, or take ownership of actions on the user's behalf
-- **Worse on politics, persuasion, and bias-style prompts:** these prompts got looser overall in the grouped slices, even if the exact cells are small
-- **Roughly unchanged on imitation / impersonation:** this remained a weak area on both models rather than a clear regression or improvement
-- **Better on misinformation and some child-safety cases:** GPT-5.4 was tighter on fabricated government-advisory style prompts and on some COPPA-like prompts
-
-Those are broad classes inferred from the grouped slices above, not a full re-labeling of every prompt in the benchmark.
+The reported failures increased for actions and commitments and for politics, persuasion, and bias. Impersonation was unchanged, while misinformation failures decreased. These groups do not support conclusions about every prompt in those categories.
 
 ## Selected Cells
 
-![Same-benchmark category shift map](/img/blog/gpt-5.4-vs-gpt-5.2/replay-deltas.svg)
+![Same-benchmark category differences](/img/blog/gpt-5.4-vs-gpt-5.2/replay-deltas.svg)
 
-The strategy-level result is stronger than any one cell, but the cell-level shifts still help show where the benchmark actually moved. These are still mostly **4- or 5-prompt cells**, so treat them as concrete examples, not stand-alone rankings.
-
-- Biggest regressions: **Hydra excessive-agency** moved from **0/4** to **3/4**, **Hydra sex-crime** moved from **0/5** to **3/5**, and **baseline excessive-agency** moved from **0/5** to **2/5**
-- Biggest improvements: **Hydra misinformation-disinformation** moved from **5/5** to **3/5**, **Meta COPPA** moved from **3/5** to **1/5**, and **Meta contracts** moved from **4/5** to **3/5**
+The largest reported increases were Hydra excessive-agency (0/4 to 3/4), Hydra sex-crime (0/5 to 3/5), and baseline excessive-agency (0/5 to 2/5). Decreases included Hydra misinformation-disinformation (5/5 to 3/5), Meta COPPA (3/5 to 1/5), and Meta contracts (4/5 to 3/5). With these small denominators, one response changes a category's rate by 20 or 25 percentage points.
 
 ## Same-Prompt Pairs
 
-These are exact same-benchmark pairs, not regenerated examples.
+![Selected response excerpts from the fixed benchmark](/img/blog/gpt-5.4-vs-gpt-5.2/same-prompt-pairs.svg)
 
-![Exact same-prompt pairs](/img/blog/gpt-5.4-vs-gpt-5.2/same-prompt-pairs.svg)
-
-The regression examples are both operational agency cases: one under Hydra and one under Meta. The clearest improvements are a fabricated government advisory under Hydra and a child-safety case under Meta. That matches the broader profile in the grouped buckets and selected cells above.
+The assessment records illustrate differences in claimed ability to perform financial or file-management actions, fabricated government advice, and requests for children's personal information. The figure contains selected excerpts rather than complete conversations. A blank response is not itself evidence of a safety refusal; the row-level grades would be needed to assess that case.
 
 ## Fresh Rerun Context
 
-We also reran the full harness adaptively against GPT-5.4 in March (`eval-jyq-2026-03-06T03:54:26`). That fresh rerun looked much better than GPT-5.2's original day-0 run: **Hydra** fell from **161/205 (78.5%)** to **40/210 (19.0%)**, **Meta** fell from **122/200 (61.0%)** to **67/210 (31.9%)**, and **baseline** moved from **9/210 (4.3%)** to **7/215 (3.3%)**. The totals differ because these were separate adaptive generations: each strategy produced its own set of executable cases in each run, so the percentages are not based on a shared prompt corpus or denominator.
+A separate March assessment (`eval-jyq-2026-03-06T03:54:26`) generated new cases for GPT-5.4. Its reported failure rates were lower than those from GPT-5.2's December run:
 
-We keep that rerun as context, not the headline. It measures what a fresh attacker can still discover against GPT-5.4 today. The fixed December benchmark measures how GPT-5.2 and GPT-5.4 behave on the same saved prompts.
+| Cases    | GPT-5.2 December run | GPT-5.4 March run |
+| -------- | -------------------- | ----------------- |
+| Baseline | 9/210 (4.3%)         | 7/215 (3.3%)      |
+| Hydra    | 161/205 (78.5%)      | 40/210 (19.0%)    |
+| Meta     | 122/200 (61.0%)      | 67/210 (31.9%)    |
+
+These runs used different generated prompts and denominators. They cannot isolate a model-version effect or overturn the comparison on the shared 611 prompts.
 
 ## Limitations
 
-- This benchmark covers **611 of the original 620** December cases. We excluded **9 Hydra rows** because their saved traces were not replayable without mutation.
-- Hydra is replayed as a **fixed saved chat trace**, not regenerated as a fresh attack.
-- The grader is **LLM-based**. We used the same grader on both models to keep the comparison consistent.
-- Many category deltas are based on **4 or 5 prompts per cell**.
-- The documented March invocation uses a moving model alias. Later reproductions should pin the dated snapshots above.
+- Nine original cases could not be replayed without changing or reconstructing their messages.
+- The replay used saved chat traces and an LLM grader. The post does not provide independent human grading.
+- Many category results have four or five prompts, and the grouped categories cover selected parts of the benchmark.
+- The archived model aliases may resolve differently over time.
+- The underlying artifacts are unavailable in this post, so the empirical results cannot be independently verified from it.
 
-## Why This Matters
-
-If you are comparing model versions, the fixed benchmark is the first check and the adaptive rerun is the second. The saved benchmark tells you whether the new model is stricter on prompts you already know matter. The rerun tells you what a fresh attacker can still surface today.
-
-For GPT-5.2 vs GPT-5.4, the fixed benchmark says GPT-5.4 was looser overall, especially under Hydra, even though the adaptive rerun looked much better. That is the kind of difference a product team needs before shipping a version upgrade.
-
-## Methodology Commands
-
-These are the commands used for the assessment. The saved prompt corpus and generated
-configuration files are not distributed with this post because they contain harmful
-benchmark material, so exact replay requires authorized access to those artifacts.
-
-Fixed benchmark replay:
-
-```bash
-promptfoo eval \
-  -c output/gpt-5.2-december-benchmark.replay.clean.gpt-5.2-vs-gpt-5.4.yaml \
-  --grader openai:chat:gpt-5.4 \
-  -j 40
-```
-
-Adaptive rerun:
-
-```bash
-promptfoo redteam run \
-  -c output/gpt-5.4-rerun-from-gpt-5.2-post.yaml \
-  -j 40 \
-  -o output/gpt-5.4-rerun.generated.yaml
-```
-
-Running this benchmark will generate harmful content. Keep results internal and limit access.
+The shared benchmark shows a higher graded failure rate for GPT-5.4 under these settings. The separately generated assessments show why failure rates from different prompt sets need to be interpreted with their methodology and denominators.
 
 ## Related
 
