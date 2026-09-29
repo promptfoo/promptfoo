@@ -86,6 +86,23 @@ describe('ScalarApiReference', () => {
     expectFallback();
   });
 
+  it('retries a failed script when the reference mounts again', () => {
+    const { unmount } = render(<ScalarApiReference {...props} />);
+    const failedScript = getScript();
+    act(() => failedScript.dispatchEvent(new Event('error')));
+    expectFallback();
+    unmount();
+
+    render(<ScalarApiReference {...props} />);
+    expect(getScript()).not.toBe(failedScript);
+    const createApiReference = vi.fn().mockReturnValue({});
+    loadScript(createApiReference);
+
+    expect(createApiReference).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.getElementById('api-reference')).toHaveAttribute('aria-busy', 'false');
+  });
+
   it.each(['throws', 'returns nothing', 'is missing'])(
     'retains the raw spec link when initialization %s',
     (failure) => {

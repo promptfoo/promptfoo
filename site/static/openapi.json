@@ -823,8 +823,7 @@
                     ]
                   },
                   "packageVersion": {
-                    "type": "string",
-                    "default": "0.0.0-development"
+                    "type": "string"
                   },
                   "properties": {
                     "type": "object",

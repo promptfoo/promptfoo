@@ -391,7 +391,13 @@ export function createServerOpenApiRegistry() {
     tags: ['Telemetry'],
     summary: 'Record a web UI telemetry event',
     request: {
-      body: jsonBody('TelemetryEvent', ServerSchemas.Telemetry.Request),
+      body: jsonBody(
+        'TelemetryEvent',
+        ServerSchemas.Telemetry.Request.extend({
+          // The server supplies its installed version when this field is absent.
+          packageVersion: z.string().optional(),
+        }),
+      ),
     },
     responses: {
       200: jsonResponse('TelemetryResponse', ServerSchemas.Telemetry.Response),

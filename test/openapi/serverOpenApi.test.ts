@@ -66,6 +66,12 @@ describe('server OpenAPI generation', () => {
     expect(createServerOpenApiDocument({ serverUrl: '/' }).servers).toEqual([
       expect.objectContaining({ url: '/' }),
     ]);
+    const telemetry = snapshot.paths!['/api/telemetry']!.post!.requestBody as {
+      content: { 'application/json': { schema: { properties: Record<string, unknown> } } };
+    };
+    expect(telemetry.content['application/json'].schema.properties.packageVersion).toEqual({
+      type: 'string',
+    });
   });
 
   it('publishes hash and filename patterns that accept both letter cases', () => {

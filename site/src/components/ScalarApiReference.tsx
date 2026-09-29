@@ -86,7 +86,7 @@ export default function ScalarApiReference({
     };
 
     const handleError = () => {
-      script.dataset.status = 'error';
+      script.remove();
       setLoadState('error');
     };
 
@@ -105,8 +105,6 @@ export default function ScalarApiReference({
       (window as ScalarWindow).Scalar?.createApiReference
     ) {
       renderReference();
-    } else if (script.dataset.status === 'error') {
-      setLoadState('error');
     } else {
       script.addEventListener('load', handleLoad);
       script.addEventListener('error', handleError);
