@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { testCaseFromCsvRow } from '../../src/csv';
 
 import type { ApiProvider, Assertion, ProviderResponse } from '../../src/types/index';
 
@@ -48,6 +49,28 @@ describe('matchesVideoRubric', () => {
       tokenUsage: { total: 8, prompt: 5, completion: 3 },
     } satisfies ProviderResponse);
     mocks.getDefaultVideoGradingProvider.mockReturnValue(mocks.defaultVideoGradingProvider);
+  });
+
+  it('enforces the threshold parsed from a compact CSV assertion', async () => {
+    const { matchesVideoRubric } = await import('../../src/matchers/rubric');
+    vi.mocked(mocks.gradingProvider.callApi).mockResolvedValue({
+      output: { pass: true, score: 0.5, reason: 'Some visible detail' },
+    });
+    const assertion = testCaseFromCsvRow({
+      __expected: 'video-rubric(0.8): A bicycle stays visible.',
+    }).assert![0] as Assertion;
+    const result = await matchesVideoRubric(
+      assertion.value as string,
+      { url: 'promptfoo://blob/fixture-hash' },
+      { provider: mocks.gradingProvider },
+      {},
+      assertion,
+    );
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0.5,
+      reason: 'Score 0.5 below threshold 0.8',
+    });
   });
 
   it('sends inline video content to the grading provider and parses JSON results', async () => {
