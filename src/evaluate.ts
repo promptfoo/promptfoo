@@ -1,5 +1,7 @@
+import * as path from 'path';
+
 import * as cache from './cache';
-import cliState, { withGradingProviderTracker } from './cliState';
+import cliState from './cliState';
 import { evaluate as doEvaluate } from './evaluator';
 import { getAuthor } from './globalConfig/accounts';
 import logger from './logger';
@@ -8,7 +10,7 @@ import Eval from './models/eval';
 import { sanitizeProvider } from './models/evalResult';
 import { processPrompts, readProviderPromptMap } from './prompts/index';
 import { loadApiProviders, resolveProvider } from './providers/index';
-import { providerRegistry } from './providers/providerRegistry';
+import { withProviderCleanup } from './providers/lifecycle';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
 import { isTransformFunction } from './types/transform';
@@ -181,6 +183,7 @@ function createSerializableUnifiedConfig(
   const droppedRef = { value: false };
   const config = {
     ...testSuite,
+    basePath: cliState.basePath,
     providers: toSerializableProviderRef(testSuite.providers),
     defaultTest: toSerializableTestCase(testSuite.defaultTest, droppedRef),
     tests: Array.isArray(testSuite.tests)
@@ -213,13 +216,12 @@ async function resolveGradingProvider(
   // A typed map can carry alternatives for assertion types that never run.
   // Reuse configured provider instances, but leave all other entries for
   // getGradingProvider() to instantiate only when its type is selected.
-  return resolveConfiguredProviderReference(provider, providerMap, context.env);
+  return resolveConfiguredProviderReference(provider, providerMap);
 }
 
 async function createRuntimeTestSuite(
   testSuiteConfig: Omit<EvaluateTestSuite, 'author'>,
   loadedProviders: ApiProvider[],
-  onProviderConstructed: (provider: ApiProvider) => void,
 ): Promise<TestSuite> {
   const defaultTest =
     typeof testSuiteConfig.defaultTest === 'string' &&
@@ -232,9 +234,12 @@ async function createRuntimeTestSuite(
     defaultTest: defaultTest as TestSuite['defaultTest'],
     scenarios: testSuiteConfig.scenarios as Scenario[],
     providers: loadedProviders,
-    tests: await readTests(testSuiteConfig.tests, '', onProviderConstructed),
-    nunjucksFilters: await readFilters(testSuiteConfig.nunjucksFilters || {}),
-    prompts: await processPrompts(testSuiteConfig.prompts),
+    tests: await readTests(testSuiteConfig.tests, testSuiteConfig.basePath, testSuiteConfig.env),
+    nunjucksFilters: await readFilters(
+      testSuiteConfig.nunjucksFilters || {},
+      testSuiteConfig.basePath,
+    ),
+    prompts: await processPrompts(testSuiteConfig.prompts, testSuiteConfig.basePath),
   };
 }
 
@@ -242,42 +247,7 @@ async function resolveNestedProviders(
   testSuiteConfig: Omit<EvaluateTestSuite, 'author'>,
   constructedTestSuite: TestSuite,
   providerMap: Record<string, ApiProvider>,
-  ownedProviders: Set<ApiProvider>,
 ): Promise<void> {
-  const callerOwnedProviders = new Set<ApiProvider>();
-  const collectCallerOwned = (provider: GradingConfig['provider']) => {
-    if (isApiProvider(provider)) {
-      callerOwnedProviders.add(provider);
-    } else if (isProviderTypeMap(provider)) {
-      Object.values(provider).forEach(collectCallerOwned);
-    }
-  };
-  if (typeof constructedTestSuite.defaultTest === 'object') {
-    collectCallerOwned(constructedTestSuite.defaultTest?.options?.provider);
-  }
-  for (const test of constructedTestSuite.tests || []) {
-    collectCallerOwned(test.options?.provider);
-    for (const assertion of test.assert || []) {
-      if (assertion.type !== 'assert-set') {
-        collectCallerOwned(assertion.provider);
-      }
-    }
-  }
-  const track = async (provider: Promise<GradingConfig['provider']>) => {
-    const resolved = await provider;
-    const providers = isProviderTypeMap(resolved) ? Object.values(resolved) : [resolved];
-    for (const provider of providers) {
-      if (
-        isApiProvider(provider) &&
-        !callerOwnedProviders.has(provider) &&
-        !Object.values(providerMap).includes(provider) &&
-        !providerRegistry.has(provider)
-      ) {
-        ownedProviders.add(provider);
-      }
-    }
-    return resolved;
-  };
   if (typeof constructedTestSuite.defaultTest === 'object' && constructedTestSuite.defaultTest) {
     constructedTestSuite.defaultTest = cloneTestForResolve(constructedTestSuite.defaultTest);
 
@@ -285,22 +255,20 @@ async function resolveNestedProviders(
       constructedTestSuite.defaultTest.provider &&
       !isApiProvider(constructedTestSuite.defaultTest.provider)
     ) {
-      constructedTestSuite.defaultTest.provider = await track(
-        resolveProvider(constructedTestSuite.defaultTest.provider, providerMap, {
-          env: testSuiteConfig.env,
-          basePath: cliState.basePath,
-        }),
+      constructedTestSuite.defaultTest.provider = await resolveProvider(
+        constructedTestSuite.defaultTest.provider,
+        providerMap,
+        { env: testSuiteConfig.env, basePath: cliState.basePath },
       );
     }
     if (
       constructedTestSuite.defaultTest.options?.provider &&
       !isApiProvider(constructedTestSuite.defaultTest.options.provider)
     ) {
-      constructedTestSuite.defaultTest.options.provider = await track(
-        resolveGradingProvider(constructedTestSuite.defaultTest.options.provider, providerMap, {
-          env: testSuiteConfig.env,
-          basePath: cliState.basePath,
-        }),
+      constructedTestSuite.defaultTest.options.provider = await resolveGradingProvider(
+        constructedTestSuite.defaultTest.options.provider,
+        providerMap,
+        { env: testSuiteConfig.env, basePath: cliState.basePath },
       );
     }
   }
@@ -309,24 +277,20 @@ async function resolveNestedProviders(
 
   for (const test of constructedTestSuite.tests) {
     if (test.options?.provider && !isApiProvider(test.options.provider)) {
-      test.options.provider = await track(
-        resolveGradingProvider(test.options.provider, providerMap, {
-          env: testSuiteConfig.env,
-          basePath: cliState.basePath,
-        }),
-      );
+      test.options.provider = await resolveGradingProvider(test.options.provider, providerMap, {
+        env: testSuiteConfig.env,
+        basePath: cliState.basePath,
+      });
     }
     for (const assertion of test.assert || []) {
       if (assertion.type === 'assert-set' || typeof assertion.provider === 'function') {
         continue;
       }
       if (assertion.provider && !isApiProvider(assertion.provider)) {
-        assertion.provider = await track(
-          resolveGradingProvider(assertion.provider, providerMap, {
-            env: testSuiteConfig.env,
-            basePath: cliState.basePath,
-          }),
-        );
+        assertion.provider = await resolveGradingProvider(assertion.provider, providerMap, {
+          env: testSuiteConfig.env,
+          basePath: cliState.basePath,
+        });
       }
     }
   }
@@ -361,6 +325,17 @@ export async function evaluateWithSource(
   testSuite: EvaluateTestSuite,
   options: InternalEvaluateOptions = {},
 ) {
+  const { prompts: _prompts, providers: _providers, ...config } = testSuite;
+  return cliState.withConfig(config, () =>
+    cliState.withBasePath(path.resolve(testSuite.basePath ?? ''), () =>
+      cliState.withEnv(testSuite.env ?? {}, () =>
+        withProviderCleanup(() => evaluateWithEnv(testSuite, options)),
+      ),
+    ),
+  );
+}
+
+async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEvaluateOptions) {
   const { author: suiteAuthor, ...testSuiteConfig } = testSuite;
 
   if (testSuiteConfig.writeLatestResults) {
@@ -370,98 +345,50 @@ export async function evaluateWithSource(
   const loadedProviders = await loadApiProviders(testSuiteConfig.providers, {
     env: testSuiteConfig.env,
   });
-  const callerOwnedProviders = new Set(
-    (Array.isArray(testSuiteConfig.providers)
-      ? testSuiteConfig.providers
-      : [testSuiteConfig.providers]
-    ).filter(isApiProvider),
+  const providerMap = buildConfiguredProviderMap(loadedProviders);
+  const constructedTestSuite = await createRuntimeTestSuite(testSuiteConfig, loadedProviders);
+  await resolveNestedProviders(testSuiteConfig, constructedTestSuite, providerMap);
+
+  const parsedProviderPromptMap = readProviderPromptMap(
+    testSuiteConfig,
+    constructedTestSuite.prompts,
   );
-  const ownedProviders = new Set(
-    loadedProviders.filter((provider) => !callerOwnedProviders.has(provider)),
+  const unifiedConfig = createSerializableUnifiedConfig(
+    testSuiteConfig,
+    constructedTestSuite.prompts,
+  );
+  const author = getAuthor(suiteAuthor);
+  const evalRecord = testSuiteConfig.writeLatestResults
+    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, { author })
+    : new Eval(unifiedConfig, { author });
+
+  const ret = await cache.withCacheEnabled(options.cache === false ? false : undefined, () =>
+    doEvaluate(
+      {
+        ...constructedTestSuite,
+        providerPromptMap: parsedProviderPromptMap,
+      },
+      evalRecord,
+      {
+        isRedteam: Boolean(testSuiteConfig.redteam),
+        ...options,
+      },
+    ),
   );
 
-  let evaluationError: unknown;
-  try {
-    const providerMap = buildConfiguredProviderMap(loadedProviders);
-    const constructedTestSuite = await createRuntimeTestSuite(
-      testSuiteConfig,
-      loadedProviders,
-      (provider) => ownedProviders.add(provider),
-    );
-    await resolveNestedProviders(
-      testSuiteConfig,
-      constructedTestSuite,
-      providerMap,
-      ownedProviders,
-    );
-
-    const parsedProviderPromptMap = readProviderPromptMap(
-      testSuiteConfig,
-      constructedTestSuite.prompts,
-    );
-    const unifiedConfig = createSerializableUnifiedConfig(
-      testSuiteConfig,
-      constructedTestSuite.prompts,
-    );
-    const author = getAuthor(suiteAuthor);
-    const evalRecord = testSuiteConfig.writeLatestResults
-      ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, { author })
-      : new Eval(unifiedConfig, { author });
-
-    const ret = await cache.withCacheEnabled(options.cache === false ? false : undefined, () =>
-      withGradingProviderTracker(
-        (provider) => {
-          if (!Object.values(providerMap).includes(provider)) {
-            ownedProviders.add(provider);
-          }
-        },
-        () =>
-          doEvaluate(
-            {
-              ...constructedTestSuite,
-              providerPromptMap: parsedProviderPromptMap,
-            },
-            evalRecord,
-            {
-              isRedteam: Boolean(testSuiteConfig.redteam),
-              ...options,
-            },
-          ),
-      ),
-    );
-
-    await maybeShareEval(testSuiteConfig, ret);
-    if (testSuiteConfig.outputPath) {
-      const outputPaths =
-        typeof testSuiteConfig.outputPath === 'string'
-          ? [testSuiteConfig.outputPath]
-          : testSuiteConfig.outputPath;
-      warnOnDegradedJsonlRecovery(evalRecord, outputPaths);
-      // writeMultipleOutputs maps each path through writeOutput, so it covers the single-path
-      // case too — matching the doEval call site in src/node/doEval.ts.
-      if (outputPaths.length) {
-        await writeMultipleOutputs(outputPaths, evalRecord, null);
-      }
-    }
-
-    return ret;
-  } catch (error) {
-    evaluationError = error;
-    throw error;
-  } finally {
-    let cleanupError: unknown;
-    for (const provider of ownedProviders) {
-      try {
-        await provider.cleanup?.();
-      } catch (error) {
-        cleanupError ??= error;
-      }
-    }
-    if (cleanupError && evaluationError === undefined) {
-      throw cleanupError;
-    }
-    if (cleanupError) {
-      logger.warn('Provider cleanup failed after evaluation error', { error: cleanupError });
+  await maybeShareEval(testSuiteConfig, ret);
+  if (testSuiteConfig.outputPath) {
+    const outputPaths =
+      typeof testSuiteConfig.outputPath === 'string'
+        ? [testSuiteConfig.outputPath]
+        : testSuiteConfig.outputPath;
+    warnOnDegradedJsonlRecovery(evalRecord, outputPaths);
+    // writeMultipleOutputs maps each path through writeOutput, so it covers the single-path
+    // case too — matching the doEval call site in src/node/doEval.ts.
+    if (outputPaths.length) {
+      await writeMultipleOutputs(outputPaths, evalRecord, null);
     }
   }
+
+  return ret;
 }

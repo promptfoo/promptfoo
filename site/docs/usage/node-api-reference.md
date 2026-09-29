@@ -41,6 +41,11 @@ async function evaluate(testSuite: EvaluateTestSuite, options?: EvaluateOptions)
 
 **Returns:** `Eval` record. Call `toEvaluateSummary()` when you need the serializable results summary.
 
+Providers created from configuration belong to that evaluation. Promptfoo awaits their
+`cleanup()` hooks when the run finishes, including failed runs. Provider instances
+passed in by the caller remain caller-owned; close them after all evaluations using
+them have finished.
+
 **Example:**
 
 ```typescript
@@ -48,7 +53,7 @@ import { evaluate } from 'promptfoo';
 
 const evalRecord = await evaluate({
   prompts: ['What is 2+2?'],
-  providers: ['openai:chat:gpt-5.5', 'anthropic:messages:claude-opus-4-7'],
+  providers: ['openai:chat:gpt-5.5', 'anthropic:messages:claude-opus-5'],
   tests: [
     {
       vars: { query: 'math question' },
@@ -98,7 +103,8 @@ interface EvaluateOptions {
 
 ### `loadApiProvider(providerPath, context?)`
 
-Load a single provider instance by path or identifier.
+Load a single provider instance by path or identifier. You own the returned instance and
+should call `await provider.cleanup?.()` when finished.
 
 ```typescript
 async function loadApiProvider(
@@ -109,7 +115,7 @@ async function loadApiProvider(
 
 **Parameters:**
 
-- `providerPath`: Provider identifier (e.g., `'openai:chat:gpt-5.5'`, `'anthropic:messages:claude-opus-4-7'`, or `'file://./custom-provider.js'`)
+- `providerPath`: Provider identifier (e.g., `'openai:chat:gpt-5.5'`, `'anthropic:messages:claude-opus-5'`, or `'file://./custom-provider.js'`)
 - `context`: Optional context with environment overrides
 
 **Returns:** Configured `ApiProvider` instance ready to call
@@ -168,7 +174,7 @@ import { loadApiProviders } from 'promptfoo';
 
 const providers = await loadApiProviders([
   'openai:chat:gpt-5.5',
-  'anthropic:messages:claude-opus-4-7',
+  'anthropic:messages:claude-opus-5',
   {
     id: 'custom-provider',
     config: {
@@ -188,29 +194,12 @@ for (const provider of providers) {
 
 ## Assertions API
 
-For deterministic checks such as `contains`, `equals`, or `regex`, import the standalone
-runner. It supports ESM and CommonJS without loading Node services or provider packages:
-
-```typescript
-import { runPureAssertion } from 'promptfoo/assertions/pure';
-
-const result = await runPureAssertion({
-  assertion: { type: 'contains', value: 'expected' },
-  providerResponse: { output: 'expected output' },
-});
-```
-
-Pass already-rendered values to this runner; template expressions and file references are
-literal content. Use `assertions.runAssertion` for templates, scripts, and model graders.
-
 ### `assertions.runAssertion(params)`
 
-Execute a single assertion against provider output. To register custom assertion names,
-parameterize `AssertionParams<Type>` and `GradingResult<Type>` with those names, then pass
-the matching `AssertionRegistry` as `registry`. Custom names require an explicit registry.
+Execute a single assertion against provider output. **Powerful for custom evaluation logic.**
 
 ```typescript
-async function runAssertion({
+declare function runAssertion(params: {
   prompt?: string;
   provider?: ApiProvider;
   assertion: Assertion;
@@ -220,8 +209,7 @@ async function runAssertion({
   providerResponse: ProviderResponse;
   traceId?: string;
   traceData?: TraceData | null;
-  registry?: AssertionRegistry<AssertionParams, GradingResult>;
-}): Promise<GradingResult>
+}): Promise<GradingResult>;
 ```
 
 **Parameters:**
@@ -238,11 +226,12 @@ async function runAssertion({
 ```typescript
 interface GradingResult {
   pass: boolean; // Did the assertion pass?
-  score?: number; // 0-1 score
-  reason?: string; // Explanation
-  assertion: Assertion; // The original assertion
-  metric?: string; // Metric name
-  error?: string; // Error message if failed
+  score: number; // Finite score, typically between 0 and 1
+  reason: string; // Explanation
+  assertion?: Assertion; // The original assertion
+  namedScores?: Record<string, number> | null;
+  namedScoreWeights?: Record<string, number> | null;
+  componentResults?: GradingResult[] | null;
 }
 ```
 
@@ -256,7 +245,7 @@ const result = await assertions.runAssertion({
     type: 'javascript',
     value: (output, context) => {
       // Custom grading logic
-      const score = output.includes('yes') ? 1.0 : 0.0;
+      const score = output.toLowerCase().includes('yes') ? 1.0 : 0.0;
       return {
         pass: score >= 0.8,
         score,
@@ -266,7 +255,6 @@ const result = await assertions.runAssertion({
   },
   test: {
     vars: { question: 'Is the sky blue?' },
-    assert: [], // populated with assertion
   },
   providerResponse: {
     output: 'Yes, the sky is blue in most places.',
@@ -311,20 +299,26 @@ const result = await assertions.runAssertion({
       // Access trace data for latency analysis
       if (context.trace?.spans) {
         const ttft = context.trace.spans.find((s) => s.name === 'time_to_first_token');
-        console.log(`Time to first token: ${ttft?.duration}ms`);
+        if (ttft?.endTime !== undefined) {
+          console.log(`Time to first token: ${ttft.endTime - ttft.startTime}ms`);
+        }
       }
-      return { pass: true };
+      return true;
     },
   },
   test: { vars: {} },
   providerResponse: { output: 'test' },
   traceId: 'trace-123',
   traceData: {
+    traceId: 'trace-123',
+    evaluationId: 'eval-123',
+    testCaseId: 'test-123',
     spans: [
       {
+        spanId: 'span-123',
         name: 'time_to_first_token',
-        startTime: Date.now(),
-        duration: 250,
+        startTime: 1000,
+        endTime: 1250,
       },
     ],
   },
@@ -338,16 +332,16 @@ const result = await assertions.runAssertion({
 Execute multiple assertions in batch against provider output.
 
 ```typescript
-async function runAssertions({
-  assertions: (Assertion | AssertionSet)[];
+declare function runAssertions(params: {
+  assertScoringFunction?: ScoringFunction;
   prompt?: string;
   test: AtomicTestCase;
   provider?: ApiProvider;
   vars?: Record<string, VarValue>;
   providerResponse: ProviderResponse;
   latencyMs?: number;
-  traceData?: TraceData | null;
-}): Promise<AssertionsResult>
+  traceId?: string;
+}): Promise<GradingResult>;
 ```
 
 **Returns:**
@@ -356,16 +350,17 @@ async function runAssertions({
 interface GradingResult {
   pass: boolean;
   score: number; // Aggregate score across all assertions
-  reason?: string;
-  componentResults?: GradingResult[]; // Per-assertion results
-  namedScores?: Record<string, number>;
-  tokensUsed?: {
+  reason: string;
+  componentResults?: GradingResult[] | null; // Per-assertion results
+  namedScores?: Record<string, number> | null;
+  namedScoreWeights?: Record<string, number> | null;
+  tokensUsed?: Partial<{
     total: number;
     prompt: number;
     completion: number;
     cached: number;
     numRequests: number;
-  };
+  }>;
 }
 ```
 
@@ -375,12 +370,14 @@ interface GradingResult {
 import { assertions } from 'promptfoo';
 
 const result = await assertions.runAssertions({
-  assertions: [
-    { type: 'contains', value: '4' },
-    { type: 'regex', value: '^The answer is \\d+$' },
-    { type: 'not-regex', value: '(?i)error|failed' },
-  ],
-  test: { vars: { question: 'What is 2+2?' } },
+  test: {
+    vars: { question: 'What is 2+2?' },
+    assert: [
+      { type: 'contains', value: '4' },
+      { type: 'regex', value: '^The answer is \\d+\\.$' },
+      { type: 'not-regex', value: '[Ee]rror|[Ff]ailed' },
+    ],
+  },
   providerResponse: { output: 'The answer is 4.' },
 });
 
@@ -918,8 +915,10 @@ const evalRecord = await evaluate({
           value: (output, context) => {
             // Access token usage from provider response
             const tokens = context.providerResponse?.tokenUsage?.total || 0;
+            const pass = tokens < 100;
             return {
-              pass: tokens < 100,
+              pass,
+              score: pass ? 1 : 0,
               reason: `Used ${tokens} tokens`,
             };
           },
@@ -941,7 +940,7 @@ import { assertions, loadApiProviders } from 'promptfoo';
 
 const providers = await loadApiProviders([
   'openai:chat:gpt-5.5',
-  'anthropic:messages:claude-opus-4-7',
+  'anthropic:messages:claude-opus-5',
 ]);
 
 const testCases = ['2+2=?', 'What is AI?'];

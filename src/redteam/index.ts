@@ -4,7 +4,7 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
-import cliState, { withGradingProviderTracker } from '../cliState';
+import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
 import { checkRemoteHealth } from '../util/apiHealth';
@@ -960,19 +960,7 @@ function isStrategyCollection(id: string): id is keyof typeof STRATEGY_COLLECTIO
  * @param options - The options for test case synthesis.
  * @returns A promise that resolves to an object containing the purpose, entities, and test cases.
  */
-export async function synthesize(options: SynthesizeOptions) {
-  const ownedProviders = new Set<ApiProvider>();
-  try {
-    return await withGradingProviderTracker(
-      (provider) => ownedProviders.add(provider),
-      () => synthesizeInternal(options),
-    );
-  } finally {
-    await Promise.allSettled([...ownedProviders].map((provider) => provider.cleanup?.()));
-  }
-}
-
-async function synthesizeInternal({
+export async function synthesize({
   abortSignal,
   cloudTargetDatabaseId: explicitCloudTargetDatabaseId,
   delay,

@@ -20,7 +20,7 @@ own their returned providers, and caller-supplied instances remain caller-owned.
 
 - Implement a `cleanup()` method on your provider
 - Ensure the owner that constructs the provider reaches its `cleanup()` hook
-- Evaluation-owned resources are released in the evaluator's `finally` block
+- Evaluation-owned resources are released by `src/providers/lifecycle.ts` after the run
 
 **Reference implementations:**
 

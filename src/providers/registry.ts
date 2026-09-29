@@ -25,7 +25,6 @@ import { AzureRealtimeProvider } from './azure/realtime';
 import { AzureResponsesProvider } from './azure/responses';
 import { AzureVideoProvider } from './azure/video';
 import { BrowserProvider } from './browser';
-import { builtinProviderPlugins } from './builtinProviderPlugins';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
@@ -89,8 +88,6 @@ import { createOpenRouterProvider } from './openrouter';
 import { createOrcaRouterProvider } from './orcarouter';
 import { parsePackageProvider } from './packageParser';
 import { createPerplexityProvider } from './perplexity';
-import { ProviderPluginRegistry } from './pluginRegistry';
-import { providerPluginRegistry } from './plugins';
 import { PortkeyChatCompletionProvider } from './portkey';
 import { PromptfooModelProvider } from './promptfooModel';
 import { PythonProvider } from './pythonCompletion';
@@ -103,6 +100,7 @@ import { RubyProvider } from './rubyCompletion';
 import { createScriptBasedProviderFactory } from './scriptBasedProvider';
 import { ScriptCompletionProvider } from './scriptCompletion';
 import { SequenceProvider } from './sequence';
+import { modelNameFromProviderPath } from './shared';
 import { SimulatedUser } from './simulatedUser';
 import { createSnowflakeProvider } from './snowflake';
 import { createTogetherAiProvider } from './togetherai';
@@ -119,12 +117,33 @@ import { createXAIResponsesProvider } from './xai/responses';
 import { createXAIVideoProvider } from './xai/video';
 import { createXAIVoiceProvider } from './xai/voice';
 
+import type { LoadApiProviderContext } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
-import type { ProviderFactory, ProviderLoadContext } from './registryTypes';
+import type { ProviderFactory, ProviderFamily } from './registryTypes';
 
-// Built-ins stay local to the active host bundle so their lazy imports and
-// lifecycle registrations cannot cross ESM/CommonJS host boundaries.
-const builtinProviderPluginRegistry = new ProviderPluginRegistry(builtinProviderPlugins);
+/** Merge low-to-high priority scopes without letting a lower-priority key alias win. */
+export function mergeProviderEnv(
+  providerPath: string,
+  ...layers: (NonNullable<ProviderOptions['env']> | undefined)[]
+): NonNullable<ProviderOptions['env']> | undefined {
+  const isCodexSDK = /^openai:(?:codex-sdk|codex)(?::|$)/.test(providerPath);
+  let merged: NonNullable<ProviderOptions['env']> | undefined;
+  for (const layer of layers) {
+    if (!layer) {
+      continue;
+    }
+    merged ??= {};
+    if (isCodexSDK && (layer.OPENAI_API_KEY || layer.CODEX_API_KEY)) {
+      delete merged.OPENAI_API_KEY;
+      delete merged.CODEX_API_KEY;
+    }
+    Object.assign(
+      merged,
+      Object.fromEntries(Object.entries(layer).filter(([, value]) => value !== undefined)),
+    );
+  }
+  return merged;
+}
 
 function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | undefined {
   const configuredModel = providerOptions.config?.model;
@@ -153,7 +172,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new A2AProvider(providerPath, providerOptions);
     },
@@ -167,7 +186,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       return createAbliterationProvider(providerPath, {
         providerOptions,
@@ -180,9 +199,9 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
+      const modelName = modelNameFromProviderPath(providerPath, 1);
       return new AI21ChatCompletionProvider(modelName, providerOptions);
     },
   },
@@ -195,7 +214,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
@@ -213,7 +232,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       const { OpenCodeSDKProvider } = await import('./opencode-sdk');
 
@@ -221,7 +240,7 @@ export const providerMap: ProviderFactory[] = [
       // Model selection uses OpenCode configuration or explicit provider_id/model options.
       return new OpenCodeSDKProvider({
         ...providerOptions,
-        id: providerPath,
+        id: providerOptions.id ?? providerPath,
         config: providerOptions.config,
         env: context.env,
       });
@@ -233,7 +252,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       const { OpenInterpreterProvider } = await import('./openinterpreter');
       const model = providerPath.split(':').slice(1).join(':');
@@ -252,7 +271,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       const { createOpenClawProvider } = await import('./openclaw');
       return createOpenClawProvider(providerPath, providerOptions, context.env);
@@ -265,7 +284,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       _providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       const { ClaudeCodeSDKProvider } = await import('./claude-agent-sdk');
       return new ClaudeCodeSDKProvider({
@@ -278,11 +297,11 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
-      const modelName = splits[2];
+      const modelName = modelNameFromProviderPath(providerPath, 2);
 
       if (modelType === 'messages') {
         return new AnthropicMessagesProvider(modelName, providerOptions);
@@ -291,7 +310,10 @@ export const providerMap: ProviderFactory[] = [
         return new AnthropicCompletionProvider(modelName, providerOptions);
       }
       if (AnthropicCompletionProvider.ANTHROPIC_COMPLETION_MODELS.includes(modelType)) {
-        return new AnthropicCompletionProvider(modelType, providerOptions);
+        return new AnthropicCompletionProvider(
+          modelNameFromProviderPath(providerPath, 1),
+          providerOptions,
+        );
       }
 
       // The second part is a model name: route it to the Messages API. Catalogued ids
@@ -301,7 +323,10 @@ export const providerMap: ProviderFactory[] = [
       // not_found_error if the id is not real.
       const modelIds = ANTHROPIC_MODELS.map((model) => model.id);
       if (modelIds.includes(modelType) || looksLikeClaudeModelId(modelType)) {
-        return new AnthropicMessagesProvider(modelType, providerOptions);
+        return new AnthropicMessagesProvider(
+          modelNameFromProviderPath(providerPath, 1),
+          providerOptions,
+        );
       }
 
       throw new Error(
@@ -317,7 +342,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       return createAtlasCloudProvider(providerPath, {
         config: providerOptions,
@@ -331,11 +356,11 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
-      const deploymentName = splits[2];
+      const deploymentName = modelNameFromProviderPath(providerPath, 2);
 
       // Azure model types that have no sensible default deployment must name one in
       // the provider path (`azure:<type>:<name>`). Without this, the registry would
@@ -404,6 +429,11 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'responses') {
         return new AzureResponsesProvider(deploymentName || 'gpt-4.1-2025-04-14', providerOptions);
       }
+      if (modelType === 'live') {
+        throw new Error(
+          'GPT-Live is available through openai:live:<model name>, not the Azure provider.',
+        );
+      }
       if (modelType === 'realtime') {
         requirePathSegment('realtime', 'a deployment name', 'deployment');
         if (NON_CONVERSATIONAL_REALTIME_MODELS.has(deploymentName)) {
@@ -436,7 +466,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       return createCerebrasProvider(providerPath, {
         config: providerOptions,
@@ -449,7 +479,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       return createNovitaProvider(providerPath, {
         config: providerOptions,
@@ -462,7 +492,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       const modelName = providerPath.split(':')[1];
       return new ClouderaAiChatCompletionProvider(modelName, {
@@ -476,7 +506,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       const { createCloudflareAiProvider } = await import('./cloudflare-ai');
       return createCloudflareAiProvider(providerPath, {
@@ -490,7 +520,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       const { createCloudflareGatewayProvider } = await import('./cloudflare-gateway');
       return createCloudflareGatewayProvider(providerPath, {
@@ -504,7 +534,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
@@ -528,7 +558,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelName = splits.slice(1).join(':');
@@ -543,7 +573,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelName = splits.slice(1).join(':');
@@ -558,7 +588,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       return createDeepSeekProvider(providerPath, {
         config: providerOptions,
@@ -571,7 +601,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       _providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new EchoProvider(providerOptions);
     },
@@ -581,7 +611,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const capability = splits[1]; // tts, stt, agents, history, isolation, alignment
@@ -631,7 +661,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       return createEnvoyProvider(providerPath, {
         config: providerOptions,
@@ -644,19 +674,25 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      let endpoint = splits.slice(1).join(':');
-      if (endpoint.startsWith('/')) {
-        endpoint = endpoint.slice(1);
+      const endpoint = providerPath.slice('f5:'.length).replace(/^\/+/, '');
+      const configuredBaseUrl =
+        providerOptions.config?.apiBaseUrl ??
+        providerOptions.env?.F5_API_BASE_URL ??
+        getEnvString('F5_API_BASE_URL');
+      if (!configuredBaseUrl) {
+        throw new Error(
+          'F5 provider requires a gateway URL. Set `apiBaseUrl` in the provider config or the F5_API_BASE_URL environment variable.',
+        );
       }
+      const baseUrl = configuredBaseUrl.replace(/\/+$/, '');
       return new OpenAiChatCompletionProvider(endpoint, {
         ...providerOptions,
         config: {
           ...providerOptions.config,
-          apiBaseUrl: providerOptions.config?.apiBaseUrl + '/' + endpoint,
-          apiKeyEnvar: 'F5_API_KEY',
+          apiBaseUrl: `${baseUrl}/${endpoint}`,
+          apiKeyEnvar: providerOptions.config?.apiKeyEnvar ?? 'F5_API_KEY',
         },
       });
     },
@@ -666,7 +702,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       const [_, modelType, modelName] = providerPath.split(':');
       if (modelType === 'image') {
@@ -682,7 +718,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       const { createFireworksProvider } = await import('./fireworks/chat');
       return createFireworksProvider(providerPath, {
@@ -699,7 +735,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => createGitHubProvider(providerPath, providerOptions, context),
   },
   {
@@ -707,7 +743,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       // Handle groq:responses:<model> format for Responses API
       if (providerPath.startsWith('groq:responses:')) {
@@ -737,14 +773,14 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       // Parse helicone:model format (e.g., helicone:openai/gpt-4o)
       const model = providerPath.substring('helicone:'.length);
 
       if (!model) {
         throw new Error(
-          'Helicone provider requires a model in format helicone:<provider/model> (e.g., helicone:openai/gpt-4o, helicone:anthropic/claude-3-5-sonnet)',
+          'Helicone provider requires a model in format helicone:<provider/model> (e.g., helicone:openai/gpt-4o, helicone:anthropic/claude-sonnet-5)',
         );
       }
 
@@ -756,7 +792,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
@@ -789,7 +825,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       const { createLiteLLMProvider } = await import('./litellm');
       return createLiteLLMProvider(providerPath, {
@@ -803,7 +839,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
@@ -825,7 +861,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       return createMetaProvider(providerPath, {
         ...providerOptions,
@@ -838,7 +874,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       return createMiniMaxProvider(providerPath, {
         config: providerOptions,
@@ -851,7 +887,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
@@ -870,7 +906,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       return createMoonshotProvider(providerPath, {
         ...providerOptions,
@@ -892,7 +928,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       const { createNvidiaProvider } = await import('./nvidia/chat');
       return createNvidiaProvider(providerPath, {
@@ -906,7 +942,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const firstPart = splits[1];
@@ -933,7 +969,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       const { OpenAICodexSecurityProvider } = await import('./openai/codex-security');
       const modelName = providerPath.split(':').slice(2).join(':');
@@ -960,13 +996,21 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       // Load OpenAI module
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
       const configuredModel = getConfiguredOpenAiModel(providerOptions);
+
+      if (modelType === 'agents-api') {
+        const { OpenAiAgentsApiProvider } = await import('./openai/agents-api');
+        return new OpenAiAgentsApiProvider(modelName, {
+          ...providerOptions,
+          env: { ...context.env, ...providerOptions.env },
+        });
+      }
 
       // Codex app-server providers (openai:codex-app-server or openai:codex-desktop)
       if (modelType === 'codex-app-server' || modelType === 'codex-desktop') {
@@ -1003,12 +1047,25 @@ export const providerMap: ProviderFactory[] = [
                 model: codexModel,
               }
             : providerOptions.config,
-          env: context.env,
+          env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
         });
       }
       const requestedApiModel = modelName || configuredModel || modelType;
-      if (!['agents', 'chatkit', 'assistant'].includes(modelType)) {
-        const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
+      const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
+      if (
+        [modelType, requestedApiModel, passthrough?.model].some(
+          (model) =>
+            typeof model === 'string' &&
+            (model === 'gpt-live-transcribe' || model.startsWith('gpt-live-transcribe-')),
+        )
+      ) {
+        throw new Error(
+          'gpt-live-transcribe requires a dedicated Realtime transcription session, which this provider does not support.',
+        );
+      }
+      const isLiveProvider =
+        modelType === 'live' || /^gpt-live-1(?:-\d{4}-\d{2}-\d{2})?$/.test(modelType);
+      if (!isLiveProvider && !['agents', 'chatkit', 'assistant'].includes(modelType)) {
         const apiHost =
           providerOptions.config?.apiHost ||
           providerOptions.env?.OPENAI_API_HOST ||
@@ -1027,7 +1084,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(
-          modelName || configuredModel || 'gpt-5.6-terra',
+          modelName || configuredModel || 'gpt-6-sol',
           providerOptions,
         );
       }
@@ -1057,7 +1114,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'responses') {
         return new OpenAiResponsesProvider(
-          modelName || configuredModel || 'gpt-5.6-terra',
+          modelName || configuredModel || 'gpt-6-sol',
           providerOptions,
         );
       }
@@ -1071,6 +1128,14 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'tts' || modelType === 'speech') {
         return new OpenAiTtsProvider(
           modelName || configuredModel || 'gpt-4o-mini-tts',
+          providerOptions,
+        );
+      }
+      // Conversational GPT-Live snapshots use the Live endpoint.
+      if (isLiveProvider) {
+        const { OpenAiLiveProvider } = await import('./openai/live');
+        return new OpenAiLiveProvider(
+          modelType === 'live' ? modelName || configuredModel || 'gpt-live-1' : modelType,
           providerOptions,
         );
       }
@@ -1120,7 +1185,7 @@ export const providerMap: ProviderFactory[] = [
       }
       // Assume user did not provide model type, and it's a chat model
       logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:tts:<model name>, openai:transcription:<model name>, openai:realtime:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:tts:<model name>, openai:transcription:<model name>, openai:realtime:<model name>, openai:live:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
       );
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },
@@ -1130,7 +1195,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       return createOpenRouterProvider(providerPath, {
         config: providerOptions,
@@ -1143,7 +1208,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       return createOrcaRouterProvider(providerPath, {
         config: providerOptions,
@@ -1156,7 +1221,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       return parsePackageProvider(providerPath, context.basePath || process.cwd(), providerOptions);
     },
@@ -1166,7 +1231,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       return createPerplexityProvider(providerPath, {
         config: providerOptions,
@@ -1179,7 +1244,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelName = splits.slice(1).join(':');
@@ -1191,7 +1256,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       const { createQuiverAiProvider } = await import('./quiverai');
       return createQuiverAiProvider(providerPath, providerOptions, context.env);
@@ -1202,7 +1267,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
@@ -1225,7 +1290,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       const { ModelsLabImageProvider } = await import('./modelslab');
       const splits = providerPath.split(':');
@@ -1252,7 +1317,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       return createTogetherAiProvider(providerPath, {
         config: providerOptions,
@@ -1265,7 +1330,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       return createTrueFoundryProvider(providerPath, {
         config: providerOptions,
@@ -1278,7 +1343,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       return createLlamaApiProvider(providerPath, {
         config: providerOptions,
@@ -1291,7 +1356,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       const { createAimlApiProvider } = await import('./aimlapi');
       return createAimlApiProvider(providerPath, {
@@ -1312,7 +1377,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       const { createDockerProvider } = await import('./docker');
       return createDockerProvider(providerPath, {
@@ -1326,7 +1391,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       return createVercelProvider(providerPath, {
         ...providerOptions,
@@ -1339,9 +1404,12 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
-      return new VoyageEmbeddingProvider(providerPath.split(':')[1], providerOptions);
+      return new VoyageEmbeddingProvider(
+        modelNameFromProviderPath(providerPath, 1),
+        providerOptions,
+      );
     },
   },
   {
@@ -1349,7 +1417,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
@@ -1370,7 +1438,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       return createN8nProvider(providerPath, providerOptions);
     },
@@ -1380,7 +1448,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       const webhookUrl = providerPath.substring('webhook:'.length);
       return new WebhookProvider(webhookUrl, providerOptions);
@@ -1391,7 +1459,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
@@ -1449,7 +1517,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new BrowserProvider(providerPath, providerOptions);
     },
@@ -1463,7 +1531,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new HttpProvider(providerPath, providerOptions);
     },
@@ -1473,7 +1541,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      context: ProviderLoadContext,
+      context: LoadApiProviderContext,
     ) => {
       // Preserve the original path as the provider ID
       const providerId = providerOptions.id ?? providerPath;
@@ -1496,7 +1564,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelName = splits.slice(1).join(':');
@@ -1508,9 +1576,9 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
+      const modelName = providerPath.slice('llama:'.length);
       return new LlamaProvider(modelName, providerOptions);
     },
   },
@@ -1519,10 +1587,13 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
-      let config = providerOptions.config || { enabled: true };
+      let config = {
+        ...providerOptions.config,
+        enabled: providerOptions.config?.enabled ?? true,
+      };
 
       // Handle mcp:<server_name> format for server-specific configs
       if (splits.length > 1) {
@@ -1545,7 +1616,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       _providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new ManualInputProvider(providerOptions);
     },
@@ -1555,7 +1626,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       _providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new SimulatedUser(providerOptions);
     },
@@ -1565,9 +1636,9 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[2];
+      const modelName = modelNameFromProviderPath(providerPath, 2);
       return new PromptfooModelProvider(modelName, {
         ...providerOptions,
         model: modelName,
@@ -1579,7 +1650,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       _providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new SequenceProvider(providerOptions);
     },
@@ -1594,7 +1665,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       return new WebSocketProvider(providerPath, providerOptions);
     },
@@ -1605,7 +1676,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       if (splits.length < 3) {
@@ -1643,7 +1714,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       // Validate dependency is available early, before parsing config
       const { validateTransformersDependency } = await import('./transformersAvailability');
@@ -1680,7 +1751,7 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: ProviderLoadContext,
+      _context: LoadApiProviderContext,
     ) => {
       try {
         const { SlackProvider } = await import('./slack');
@@ -1743,26 +1814,101 @@ export const providerMap: ProviderFactory[] = [
   },
 ];
 
+function isRedteamProviderPath(providerPath: string): boolean {
+  return (
+    providerPath === 'agentic:memory-poisoning' || providerPath.startsWith('promptfoo:redteam:')
+  );
+}
+
+function isAwsProviderPath(providerPath: string): boolean {
+  return (
+    providerPath.startsWith('bedrock:') ||
+    providerPath.startsWith('bedrock-agent:') ||
+    providerPath.startsWith('sagemaker:')
+  );
+}
+
+function isGoogleProviderPath(providerPath: string): boolean {
+  return (
+    providerPath.startsWith('vertex:') ||
+    providerPath.startsWith('google:') ||
+    providerPath.startsWith('palm:')
+  );
+}
+
+const providerFamilies: ProviderFamily[] = [
+  {
+    canHandle: isAwsProviderPath,
+    factories: async () => {
+      const { awsProviderFactories } = await import('./families/aws');
+      return awsProviderFactories;
+    },
+  },
+  {
+    canHandle: isGoogleProviderPath,
+    factories: async () => {
+      const { googleProviderFactories } = await import('./families/google');
+      return googleProviderFactories;
+    },
+  },
+  {
+    canHandle: isRedteamProviderPath,
+    factories: async () => {
+      const { redteamProviderFactories } = await import('../redteam/providers/registry');
+      return redteamProviderFactories;
+    },
+  },
+];
+
 export async function getProviderFactories(
   providerPath: string,
 ): Promise<readonly ProviderFactory[]> {
-  const builtinFactories = await builtinProviderPluginRegistry.getFactories(providerPath, []);
-  if (builtinFactories.length > 0) {
-    return [...builtinFactories, ...providerMap];
-  }
-  return providerPluginRegistry.getFactories(providerPath, providerMap);
-}
+  const matchingFamilies = providerFamilies.filter((family) => family.canHandle(providerPath));
 
-export async function getProviderFactory(
-  providerPath: string,
-): Promise<ProviderFactory | undefined> {
-  const builtinFactories = await builtinProviderPluginRegistry.getFactories(providerPath, []);
-  if (builtinFactories.length > 0) {
-    return builtinFactories[0];
+  // Hot path: return the module-scoped providerMap directly for the common
+  // no-family-match case instead of copying ~100 entries into a fresh array.
+  // The return type is readonly so callers cannot mutate the shared array.
+  if (matchingFamilies.length === 0) {
+    return providerMap;
   }
 
-  const factories = await providerPluginRegistry.getFactories(providerPath, providerMap);
-  return factories === providerMap
-    ? providerMap.find((factory) => factory.test(providerPath))
-    : factories[0];
+  // Wrap each family load so a broken dynamic import (renamed file, circular
+  // cycle, downstream ESM resolution error) surfaces with the requested
+  // providerPath and the family boundary identified — without this, a
+  // regression in the lazy-load path looks like a raw ERR_MODULE_NOT_FOUND
+  // pointing at an internal file with no connection to the user's config.
+  //
+  // `cause` is assigned as a property rather than passed through the
+  // two-argument Error constructor so this file type-checks under both the
+  // root (ES2022) and the app (ES2020) tsconfig libs — the app build pulls
+  // backend files in via path aliases and the ES2020 lib does not declare
+  // the two-argument Error overload.
+  const extraFactorySets = await Promise.all(
+    matchingFamilies.map(async (family) => {
+      try {
+        return await family.factories();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const wrapped = new Error(
+          `Failed to load provider family for '${providerPath}': ${message}`,
+        );
+        if (err instanceof Error) {
+          (wrapped as Error & { cause?: unknown }).cause = err;
+        }
+        throw wrapped;
+      }
+    }),
+  );
+  // Family factories take precedence over the module-scoped providerMap so a
+  // provider ID a family claims (bedrock:/bedrock-agent:/sagemaker:,
+  // vertex:/google:/palm:, redteam) is not first intercepted by a broader
+  // providerMap entry — notably the generic JS/TS-file factory
+  // (`isJavascriptFile`), which is a prefix-agnostic suffix match and would
+  // otherwise hijack any such path whose final segment ends in
+  // .js/.cjs/.mjs/.ts/.cts/.mts and try to load it as a custom module. Each
+  // family is gated by `canHandle`, and the family prefixes are disjoint from
+  // one another and from every concrete providerMap prefix, so prepending only
+  // changes precedence against that file-suffix catch-all — which is the bug we
+  // are fixing — and is otherwise order-neutral.
+  return [...extraFactorySets.flat(), ...providerMap];
 }

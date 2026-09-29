@@ -182,16 +182,6 @@ vi.mock('../../src/evaluatorHelpers', async () => {
   };
 });
 
-vi.mock('../../src/cliState', () => ({
-  __esModule: true,
-  trackGradingProvider: vi.fn(),
-  default: {
-    resume: false,
-    basePath: '',
-    webUI: false,
-  },
-}));
-
 vi.mock('../../src/models/prompt', () => ({
   generateIdFromPrompt: vi.fn((prompt) => `prompt-${prompt.label || 'default'}`),
 }));

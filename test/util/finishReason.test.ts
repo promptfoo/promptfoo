@@ -30,6 +30,13 @@ describe('normalizeFinishReason', () => {
     });
   });
 
+  describe('Vercel AI SDK mappings', () => {
+    it('should map hyphenated AI SDK reasons to standard values', () => {
+      expect(normalizeFinishReason('tool-calls')).toBe('tool_calls');
+      expect(normalizeFinishReason('content-filter')).toBe('content_filter');
+    });
+  });
+
   describe('case normalization', () => {
     it('should handle uppercase input', () => {
       expect(normalizeFinishReason('STOP')).toBe('stop');
@@ -74,7 +81,7 @@ describe('normalizeFinishReason', () => {
       expect(normalizeFinishReason('custom_stop')).toBe('custom_stop');
     });
 
-    it('should preserve case for unknown reasons after normalization', () => {
+    it('should lowercase unknown reasons after normalization', () => {
       expect(normalizeFinishReason('CUSTOM_REASON')).toBe('custom_reason');
     });
   });

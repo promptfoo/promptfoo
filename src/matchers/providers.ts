@@ -1,4 +1,4 @@
-import cliState, { trackGradingProvider } from '../cliState';
+import cliState from '../cliState';
 import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
 import { shouldGenerateRemote } from '../redteam/remoteGeneration';
@@ -22,8 +22,6 @@ import type {
   TestCase,
   VarValue,
 } from '../types/index';
-
-export { trackGradingProvider };
 
 // These wrappers keep src/matchers' imports of the redteam layer confined to this file.
 // Inlining shouldGenerateRemote (or a context-payload helper) into similarity.ts and
@@ -96,12 +94,14 @@ export function callProviderWithContext(
   label: string,
   vars: Record<string, VarValue>,
   context?: CallApiContextParams,
+  promptConfig?: Record<string, unknown>,
 ): Promise<ProviderResponse> {
   const callApiContext = {
     ...context,
     prompt: {
       raw: prompt,
       label,
+      ...(promptConfig && { config: promptConfig }),
     },
     vars,
   };
@@ -162,11 +162,9 @@ export async function getGradingProvider(
   defaultProvider: ApiProvider | null,
 ): Promise<ApiProvider | null> {
   let finalProvider: ApiProvider | null;
-  let created = false;
   if (typeof provider === 'string') {
     // Defined as a string
     finalProvider = await loadApiProvider(provider, { basePath: cliState.basePath });
-    created = true;
   } else if (
     provider != null &&
     typeof provider === 'object' &&
@@ -182,7 +180,6 @@ export async function getGradingProvider(
     } else if ((provider as ProviderOptions).id) {
       // Defined as ProviderOptions
       finalProvider = await loadFromProviderOptions(provider as ProviderOptions);
-      created = true;
     } else if (Array.isArray(provider)) {
       throw new Error(
         `Provider must be an object or string, but received an array.\n\nCheck that the provider ${JSON.stringify(
@@ -234,9 +231,6 @@ export async function getGradingProvider(
     } else {
       finalProvider = defaultProvider;
     }
-  }
-  if (created && finalProvider) {
-    trackGradingProvider(finalProvider);
   }
   return finalProvider;
 }
