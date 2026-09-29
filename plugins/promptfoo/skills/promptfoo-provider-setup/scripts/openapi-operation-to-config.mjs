@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 
-import * as yaml from 'js-yaml';
+import { responseTransform, smokeAssertions } from './response-contract.mjs';
+
+import * as yaml from './vendor/js-yaml.mjs';
 import { createOpenApiCore, PROMPT_FIELDS } from '../../openapi-converter-core.mjs';
 
 const {
@@ -13,11 +15,9 @@ const {
   isMultipartFileSchema,
   analyzeOperation,
   isCredentialParamName,
-  credentialPlaceholder,
   appendCookieHeader,
   authConfigs,
   authValue,
-  responseAccessor,
 } = createOpenApiCore(usage, schemaSample);
 
 function usage(message) {
@@ -25,7 +25,7 @@ function usage(message) {
     console.error(message);
   }
   console.error(
-    'Usage: node openapi-operation-to-config.mjs --spec openapi.yaml --operation-id op --base-url-env API_BASE_URL [--token-env API_TOKEN] [--auth-header Authorization] [--auth-prefix Bearer|none|custom] [--label label] [--output promptfooconfig.yaml]',
+    'Usage: node openapi-operation-to-config.mjs --spec openapi.yaml --operation-id op --base-url-env API_BASE_URL [--token-env API_TOKEN] [--auth-header Authorization] [--auth-prefix Bearer|none|custom] [--label label] [--smoke-assert text] [--output promptfooconfig.yaml]',
   );
   process.exit(1);
 }
@@ -72,13 +72,51 @@ function multipartPart(document, name, schema) {
   return { kind: 'field', name, value: inputTemplate(name) };
 }
 
+// Parameters with these names (or these suffixes) are treated as credentials
+// even when they are modeled as plain header/query/cookie parameters rather
+// than as OpenAPI securitySchemes. Copying their literal `example` values into
+// the generated config could leak real tokens, so the helper forces
+// `{{env.<UPPER_NAME>}}` placeholders for them instead.
+const CREDENTIAL_PARAM_NAMES = new Set([
+  'authorization',
+  'bearer',
+  'token',
+  'access_token',
+  'auth_token',
+  'api_key',
+  'apikey',
+  'x_api_key',
+  'x_auth_token',
+  'x_access_token',
+  'secret',
+  'password',
+  'csrf_token',
+  'xsrf_token',
+  'session',
+  'sessionid',
+  'session_id',
+  'sid',
+]);
+const CREDENTIAL_SUFFIX_REGEX =
+  /(^|_)(api_key|apikey|auth_token|access_token|bearer|password|secret|token|authorization)$/;
+
+function credentialEnvName(paramName) {
+  return varName(paramName).toUpperCase();
+}
+function credentialPlaceholder(paramName) {
+  return `{{env.${credentialEnvName(paramName)}}}`;
+}
+
 const args = parseArgs(process.argv.slice(2));
 if (!args.spec || !args['operation-id'] || !args['base-url-env']) {
   usage('Missing --spec, --operation-id, or --base-url-env');
 }
 
+const document = yaml.load(fs.readFileSync(args.spec, 'utf8'), {
+  // Preserve js-yaml v4's support for YAML merge keys in user-supplied specs.
+  schema: yaml.CORE_SCHEMA.withTags(yaml.mergeTag),
+});
 const {
-  document,
   pathTemplate,
   method,
   operation,
@@ -100,7 +138,9 @@ const {
   responseMediaEntry,
   responseField,
   responseIsArray,
-} = analyzeOperation(args);
+  responseProperties,
+  responseSchema,
+} = analyzeOperation(document, args['operation-id']);
 const promptPath = pathTemplate.replace(/\{([^}]+)\}/g, (_match, name) =>
   encodedInputTemplate(name),
 );
@@ -178,11 +218,13 @@ if (bodyFields.length > 0) {
 if (Object.keys(queryParams).length > 0) {
   providerConfig.queryParams = queryParams;
 }
-if (responseField) {
-  providerConfig.transformResponse = responseAccessor(
-    responseIsArray ? 'json[0]' : 'json',
-    responseField,
-  );
+if (responseMediaEntry) {
+  providerConfig.transformResponse = responseTransform({
+    field: responseField,
+    array: responseIsArray,
+    schema: responseField ? responseProperties[responseField] : responseSchema,
+    resolveRef: (schema) => resolveRef(document, schema),
+  });
 }
 
 const nonCredentialQueryFields = queryFields.filter((name) => !credentialParamNames.has(name));
@@ -209,32 +251,15 @@ for (const name of bodyFields) {
       : (requestExampleFields[name] ?? schemaSample(document, requestProperties[name], name));
   }
 }
-// The canned "Say exactly PONG." prompt is only meaningful when the request
-// carries a prompt field (path/query/body) — otherwise the message never reaches
-// the target and `contains: PONG` fails by construction. Fall back to a safer
-// response-shape assertion.
-const promptReachesTarget =
-  pathVars.some((name) => PROMPT_FIELDS.has(name)) ||
-  queryFields.some((name) => PROMPT_FIELDS.has(name)) ||
-  bodyFields.some((name) => PROMPT_FIELDS.has(name)) ||
-  (bodyFields.length > 0 && (requestIsText || requestBodyIsScalar));
-const responseIsJson = Boolean(responseMediaEntry);
-const smokeAssert = promptReachesTarget
-  ? [{ type: 'contains', value: 'PONG' }]
-  : responseIsJson
-    ? [{ type: 'is-json' }]
-    : [{ type: 'javascript', value: "typeof output === 'string' && output.length > 0" }];
 const config = {
   description: args.description || `Provider setup generated from ${args['operation-id']}`,
   prompts: ['{{message}}'],
   providers: [{ id: 'https', label: args.label || args['operation-id'], config: providerConfig }],
   tests: [
     {
-      description: promptReachesTarget
-        ? `${args['operation-id']} returns text`
-        : `${args['operation-id']} responds successfully`,
+      description: `${args['operation-id']} responds successfully`,
       vars,
-      assert: smokeAssert,
+      assert: smokeAssertions(Boolean(responseMediaEntry), args['smoke-assert']),
     },
   ],
 };

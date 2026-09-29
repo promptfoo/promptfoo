@@ -1,7 +1,3 @@
-import fs from 'node:fs';
-
-import * as yaml from 'js-yaml';
-
 const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete']);
 export const PROMPT_FIELDS = new Set([
   'message',
@@ -352,12 +348,6 @@ export function createOpenApiCore(usage, schemaSample) {
     return Object.keys(responseProperties)[0];
   }
 
-  function responseAccessor(base, field) {
-    return /^[A-Za-z_$][0-9A-Za-z_$]*$/.test(field)
-      ? `${base}.${field}`
-      : `${base}[${JSON.stringify(field)}]`;
-  }
-
   function successResponse(document, operation) {
     const responses = asRecord(operation.responses || {}, 'responses');
     const status = responses['200']
@@ -522,10 +512,6 @@ export function createOpenApiCore(usage, schemaSample) {
     return CREDENTIAL_PARAM_NAMES.has(normalized) || CREDENTIAL_SUFFIX_REGEX.test(normalized);
   }
 
-  function credentialPlaceholder(paramName) {
-    return `{{env.${varName(paramName).toUpperCase()}}}`;
-  }
-
   function authFromScheme(scheme) {
     if (scheme.type === 'apiKey' && typeof scheme.name === 'string') {
       if (scheme.in === 'header') {
@@ -638,14 +624,10 @@ export function createOpenApiCore(usage, schemaSample) {
     };
   }
 
-  function analyzeOperation(args) {
-    const document = yaml.load(fs.readFileSync(args.spec, 'utf8'), {
-      // Preserve js-yaml v4's support for YAML merge keys in user-supplied specs.
-      schema: yaml.CORE_SCHEMA.withTags(yaml.mergeTag),
-    });
+  function analyzeOperation(document, operationId) {
     const { pathTemplate, pathItem, method, operation } = findOperation(
       asRecord(document, 'OpenAPI document'),
-      args['operation-id'],
+      operationId,
     );
     const pathVars = [...pathTemplate.matchAll(/\{([^}]+)\}/g)].map((match) => match[1]);
     const parameters = effectiveParameters(document, pathItem, operation);
@@ -789,6 +771,8 @@ export function createOpenApiCore(usage, schemaSample) {
       responseMediaEntry,
       responseField,
       responseIsArray,
+      responseProperties,
+      responseSchema,
     };
   }
 
@@ -802,10 +786,8 @@ export function createOpenApiCore(usage, schemaSample) {
     isMultipartFileSchema,
     analyzeOperation,
     isCredentialParamName,
-    credentialPlaceholder,
     appendCookieHeader,
     authConfigs,
     authValue,
-    responseAccessor,
   };
 }

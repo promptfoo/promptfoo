@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 
-import * as yaml from 'js-yaml';
+import { responseTransform, smokeAssertions } from '../../promptfoo-provider-setup/scripts/response-contract.mjs';
+
+import * as yaml from '../../promptfoo-provider-setup/scripts/vendor/js-yaml.mjs';
 import { createOpenApiCore, PROMPT_FIELDS } from '../../openapi-converter-core.mjs';
 
 const {
@@ -13,12 +15,11 @@ const {
   isMultipartFileSchema,
   analyzeOperation,
   isCredentialParamName,
-  credentialPlaceholder,
   appendCookieHeader,
   authConfigs,
   authValue,
-  responseAccessor,
 } = createOpenApiCore(usage, schemaSample);
+
 const IDENTITY_FIELDS = new Set(['user_id', 'tenant_id', 'account_id', 'customer_id', 'org_id']);
 const TECHNICAL_ID_FIELDS = new Set(['trace_id', 'request_id', 'correlation_id', 'span_id']);
 
@@ -38,6 +39,38 @@ function unique(values) {
 
 function isTruthy(value) {
   return ['1', 'true', 'yes'].includes(String(value).toLowerCase());
+}
+
+// Parameters with these names (or suffixes) are treated as credentials even
+// when the spec models them as plain header/query/cookie parameters rather
+// than as securitySchemes. Their example values are replaced with
+// `{{env.<UPPER_NAME>}}` placeholders so generated configs never embed real
+// tokens.
+const CREDENTIAL_PARAM_NAMES = new Set([
+  'authorization',
+  'bearer',
+  'token',
+  'access_token',
+  'auth_token',
+  'api_key',
+  'apikey',
+  'x_api_key',
+  'x_auth_token',
+  'x_access_token',
+  'secret',
+  'password',
+  'csrf_token',
+  'xsrf_token',
+  'session',
+  'sessionid',
+  'session_id',
+  'sid',
+]);
+const CREDENTIAL_SUFFIX_REGEX =
+  /(^|_)(api_key|apikey|auth_token|access_token|bearer|password|secret|token|authorization)$/;
+
+function credentialPlaceholder(paramName) {
+  return `{{env.${varName(paramName).toUpperCase()}}}`;
 }
 
 function isIdentityField(name) {
@@ -155,8 +188,11 @@ if (!args.spec || !args['operation-id'] || !args['base-url-env']) {
   usage('Missing --spec, --operation-id, or --base-url-env');
 }
 
+const document = yaml.load(fs.readFileSync(args.spec, 'utf8'), {
+  // Preserve js-yaml v4's support for YAML merge keys in user-supplied specs.
+  schema: yaml.CORE_SCHEMA.withTags(yaml.mergeTag),
+});
 const {
-  document,
   pathTemplate,
   method,
   operation,
@@ -175,12 +211,13 @@ const {
   requestProperties,
   requestExampleFields,
   bodyFields,
+  responseMediaEntry,
   responseField,
   responseIsArray,
-} = analyzeOperation(args);
-const promptPath = pathTemplate.replace(/\{([^}]+)\}/g, (_match, name) =>
-  encodedInputTemplate(name),
-);
+  responseProperties,
+  responseSchema,
+} = analyzeOperation(document, args['operation-id']);
+
 const fieldSamples = Object.fromEntries([
   ...Object.entries(parameterSamples),
   ...bodyFields.map((name) => [
@@ -210,6 +247,9 @@ const fields = unique([
   ...headerVars,
   ...cookieVars,
 ]);
+if (fields.length === 0) {
+  usage('Selected operation has no controllable request inputs; use provider setup for response checks.');
+}
 const numTests = Number.parseInt(args['num-tests'] || '1', 10);
 if (!Number.isInteger(numTests) || numTests < 1) {
   usage('--num-tests must be a positive integer');
@@ -281,11 +321,13 @@ if (bodyFields.length > 0) {
 if (Object.keys(queryParams).length > 0) {
   targetConfig.queryParams = queryParams;
 }
-if (responseField) {
-  targetConfig.transformResponse = responseAccessor(
-    responseIsArray ? 'json[0]' : 'json',
-    responseField,
-  );
+if (responseMediaEntry) {
+  targetConfig.transformResponse = responseTransform({
+    field: responseField,
+    array: responseIsArray,
+    schema: responseField ? responseProperties[responseField] : responseSchema,
+    resolveRef: (schema) => resolveRef(document, schema),
+  });
 }
 
 const redteam = {
@@ -293,7 +335,7 @@ const redteam = {
   maxConcurrency: 1,
   numTests,
   plugins: inferPlugins(fields, policy, numTests),
-  strategies: ['jailbreak:meta'],
+  strategies: [{ id: 'jailbreak:meta', config: { numIterations: 2 } }],
 };
 if (args['generator-provider']) {
   redteam.provider = args['generator-provider'];
@@ -322,7 +364,7 @@ const config = {
           {
             description: `${args['operation-id']} smoke test`,
             vars: defaultVars,
-            assert: [{ type: 'contains', value: args['smoke-assert'] || 'PONG' }],
+            assert: smokeAssertions(Boolean(responseMediaEntry), args['smoke-assert']),
           },
         ],
       }
