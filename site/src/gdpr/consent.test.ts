@@ -325,6 +325,26 @@ describe('consent.js', () => {
   });
 
   describe('preferences panel', () => {
+    it.each(['Escape', 'Close', 'Save'])('returns focus to the opener after %s', (action) => {
+      setCookie('pf_country', 'DE');
+      setCookie('pf_consent', 'v1.i.0.0');
+      runConsent();
+      const opener = document.createElement('button');
+      opener.textContent = 'Cookie preferences';
+      opener.onclick = () => (window as any).__pf_manage_cookies();
+      document.body.appendChild(opener);
+      opener.focus();
+      opener.click();
+      expect(document.activeElement).toBe(document.getElementById('cc-prefs-close'));
+      if (action === 'Escape') {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      } else {
+        getByRole(document.body, 'button', { name: action, exact: true }).click();
+      }
+      expect(document.getElementById('cc-overlay')).not.toBeInTheDocument();
+      expect(document.activeElement).toBe(opener);
+    });
+
     it('opens via __pf_manage_cookies global', () => {
       setCookie('pf_country', 'US');
       runConsent();

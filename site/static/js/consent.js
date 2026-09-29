@@ -370,6 +370,7 @@
     if (document.getElementById('cc-overlay')) return;
     injectStyles();
 
+    var opener = document.activeElement;
     var consent = parseConsent(getCookie(COOKIE));
     var region = getRegion();
 
@@ -463,6 +464,7 @@
       var el = document.getElementById('cc-overlay');
       if (el) el.remove();
       document.removeEventListener('keydown', onKeydown);
+      if (opener && opener.isConnected && typeof opener.focus === 'function') opener.focus();
     }
 
     document.getElementById('cc-prefs-close').addEventListener('click', closePrefs);
