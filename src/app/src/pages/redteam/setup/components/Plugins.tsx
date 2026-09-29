@@ -205,7 +205,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         (p) => typeof p === 'object' && p.id === 'intent',
       );
 
-      // Preserve every option of plugins that remain selected.
+      // Keep count, severity, and config overrides when changing the selection.
       const newPluginsArray: Config['plugins'] = Array.from(newSelectedPlugins).map(
         (plugin) =>
           config.plugins.find((p) => (typeof p === 'string' ? p : p.id) === plugin) ?? plugin,
