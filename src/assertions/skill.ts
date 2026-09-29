@@ -135,7 +135,7 @@ function handleListSkillAssertion(
   if (params.inverse) {
     reason = pass
       ? `Forbidden skill(s) were not used: ${expectedSkills.join(', ')}`
-      : `Forbidden skill(s) were used: ${matched.map((matcher) => matcher.name).join(', ')}. Actual skills: ${actualSummary}`;
+      : `Forbidden skill(s) were used or attempted: ${matched.map((matcher) => matcher.name).join(', ')}. Actual skills: ${actualSummary}`;
   } else if (pass) {
     reason = `Observed required skill(s): ${expectedSkills.join(', ')}. Actual skills: ${actualSummary}`;
   } else {

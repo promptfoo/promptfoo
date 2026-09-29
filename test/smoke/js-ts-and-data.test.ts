@@ -212,7 +212,9 @@ describe('JavaScript/TypeScript Provider Smoke Tests', () => {
           expect.arrayContaining([
             expect.objectContaining({
               pass: false,
-              reason: expect.stringContaining(`Forbidden skill(s) were used: ${skillName}`),
+              reason: expect.stringContaining(
+                `Forbidden skill(s) were used or attempted: ${skillName}`,
+              ),
               assertion: expect.objectContaining({ type: 'not-skill-used' }),
             }),
           ]),
