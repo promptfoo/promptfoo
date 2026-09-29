@@ -1,6 +1,9 @@
 import './setup';
 
 import { randomUUID } from 'node:crypto';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 import { expect, it, vi } from 'vitest';
 import { runCompareAssertion } from '../../src/assertions';
@@ -10,7 +13,9 @@ import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
 import EvalResult, { sanitizeResultForJsonlArtifact } from '../../src/models/evalResult';
 import { EchoProvider } from '../../src/providers/echo';
+import { HttpProvider } from '../../src/providers/http';
 import { ResultFailureReason } from '../../src/types/index';
+import { sanitizeProviderIdForLog } from '../../src/util/provider';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -714,6 +719,99 @@ describeEvaluator('select-best runtime grading configuration', () => {
     expect(JSON.stringify(persisted.map((row) => row.gradingResult))).not.toContain(secret);
     expect(persisted[0].gradingResult?.componentResults?.[0].assertion?.provider).toBeUndefined();
     expect(persisted[0].gradingResult?.componentResults?.[0].assertion?.config).toBeUndefined();
+  });
+
+  it.each([
+    ['runtime', 'query'],
+    ['runtime', 'basic'],
+    ['declarative', 'query'],
+    ['declarative', 'basic'],
+    ['string', 'query'],
+    ['string', 'basic'],
+    ['typed', 'query'],
+  ])('keeps %s HTTP grader %s credentials live and out of saved results', async (kind, auth) => {
+    const { suite, target } = makeSuite();
+    const originalKey = 'fixture-url-original-secret';
+    const rotatedKey = 'fixture-url-rotated-secret';
+    const makeUrl = (key: string, host = 'grader.example') =>
+      auth === 'basic'
+        ? `https://fixture-user:${key}@${host}/grade`
+        : `https://${host}/grade?api_key=${key}`;
+    const provider = (url: string) => {
+      const options = { id: url, config: { method: 'GET' } };
+      if (kind === 'runtime') {
+        return new HttpProvider(url, options);
+      }
+      if (kind === 'string') {
+        suite.providers = [target, new HttpProvider(url, options)];
+        suite.providerPromptMap = { [url]: [] };
+        return url;
+      }
+      return kind === 'typed' ? { text: options } : options;
+    };
+    const setProvider = (url: string) => {
+      (suite.tests![0].assert![0] as Assertion).provider = provider(url);
+    };
+    setProvider(makeUrl(originalKey));
+    const calls: string[] = [];
+    const call = vi.spyOn(HttpProvider.prototype, 'callApi').mockImplementation(async function (
+      this: HttpProvider,
+    ) {
+      calls.push(this.id());
+      return { output: '0' };
+    });
+    const directory = await mkdtemp(path.join(tmpdir(), 'comparison-http-'));
+    const outputPath = path.join(directory, 'results.jsonl');
+    const record = await Eval.create({ outputPath }, suite.prompts, { id: randomUUID() });
+    const expectRedacted = async () => {
+      const rows = await record.fetchResultsByTestIdx(0);
+      for (const serialized of [
+        JSON.stringify(rows),
+        JSON.stringify(await record.toResultsFile()),
+        await readFile(outputPath, 'utf8'),
+      ]) {
+        expect(serialized).not.toContain(originalKey);
+        expect(serialized).not.toContain(rotatedKey);
+        expect(serialized).not.toContain('fixture-user');
+      }
+      return rows;
+    };
+
+    try {
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      expect(calls).toEqual([makeUrl(originalKey)]);
+      await expectRedacted();
+
+      setProvider(makeUrl(rotatedKey));
+      cliState.resume = true;
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      expect(calls).toEqual([makeUrl(originalKey), makeUrl(rotatedKey)]);
+      await expectRedacted();
+
+      for (const url of [
+        makeUrl(rotatedKey, 'different.example'),
+        sanitizeProviderIdForLog(makeUrl(rotatedKey)),
+      ]) {
+        setProvider(url);
+        await evaluate(suite, record, { maxConcurrency: 1 });
+        for (const row of await expectRedacted()) {
+          expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+          expect(row.error).toContain('Supply a grader configuration matching the saved result');
+        }
+        expect(calls).toHaveLength(2);
+      }
+
+      setProvider(makeUrl(rotatedKey));
+      call.mockRejectedValue(new Error(`Request failed for ${makeUrl(rotatedKey)}`));
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      for (const row of await expectRedacted()) {
+        expect(row.error).toContain('Request failed for');
+      }
+      expect(target.callApi).toHaveBeenCalledTimes(2);
+    } finally {
+      call.mockRestore();
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it('redacts a raw grader key when updating an existing result', async () => {

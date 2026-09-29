@@ -24,7 +24,6 @@ import { selectMaxScore } from './matchers/comparison';
 import {
   getResultIndexKey,
   PROMPTFOO_METADATA_KEY,
-  sanitizeProvider,
   sanitizeResultForJsonlArtifact,
 } from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
@@ -3012,35 +3011,33 @@ const COMPARISON_ERROR_PREFIX = 'Error grading select-best';
 const COMPARISON_RESUME_ERROR =
   'Cannot resume select-best with this grader configuration. Supply a grader configuration matching the saved result, or rerun the evaluation.';
 
-function restoreComparisonCredentials(
-  saved: unknown,
-  configured: unknown,
-  canRestore: boolean,
-): unknown {
-  if (saved === REDACTED) {
-    invariant(configured != null && configured !== REDACTED && canRestore, COMPARISON_RESUME_ERROR);
-    return configured;
-  }
-  if (!saved || typeof saved !== 'object' || saved === configured) {
-    return saved;
-  }
-  const current =
-    configured && typeof configured === 'object' ? (configured as Record<string, unknown>) : {};
-  if (Array.isArray(saved)) {
-    return saved.map((value, index) =>
-      restoreComparisonCredentials(value, current[index], canRestore),
+function hasComparisonRedactions(value: unknown, seen = new WeakSet<object>()): boolean {
+  if (typeof value === 'string') {
+    return (
+      value.includes(REDACTED) ||
+      /%(?:25)*5BREDACTED%(?:25)*5D/i.test(value) ||
+      value.includes('***:***@')
     );
   }
-  return Object.fromEntries(
-    Object.entries(saved).map(([key, value]) => [
-      key,
-      restoreComparisonCredentials(
-        value,
-        Object.hasOwn(current, key) ? current[key] : undefined,
-        canRestore,
-      ),
-    ]),
+  if (!value || typeof value !== 'object' || seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
+  return Object.entries(value).some(
+    ([key, entry]) => hasComparisonRedactions(key, seen) || hasComparisonRedactions(entry, seen),
   );
+}
+
+function comparisonProviderOptions(provider: GradingConfig['provider']) {
+  if (isApiProvider(provider)) {
+    return {
+      id: provider.id(),
+      label: provider.label,
+      config: provider.config,
+      env: (provider as ApiProvider & { env?: EnvOverrides }).env,
+    };
+  }
+  return provider;
 }
 
 function comparisonProviderId(provider: GradingConfig['provider']): string | undefined {
@@ -3050,20 +3047,18 @@ function comparisonProviderId(provider: GradingConfig['provider']): string | und
       : isApiProvider(provider)
         ? provider.id()
         : provider?.id;
-  return typeof id === 'string' ? providerToIdentifier(id) : undefined;
+  return typeof id === 'string'
+    ? sanitizeProviderIdForLog(providerToIdentifier(id) ?? id)
+    : undefined;
 }
 
 function comparisonProviderSettings(provider: GradingConfig['provider']) {
-  const options = persistComparisonProvider(provider);
+  const persisted = persistComparisonProvider(provider);
+  const options = typeof persisted === 'string' ? { id: persisted } : persisted;
   // Compare every nonsecret option, including endpoint/account settings and env overrides.
   // Strip functions and undefined fields exactly as persistence does.
   return JSON.parse(
-    safeJsonStringify(
-      sanitizeObject(
-        { ...options, id: comparisonProviderId(provider), label: undefined },
-        { maxDepth: Number.POSITIVE_INFINITY, sanitizeUrls: true, throwOnError: true },
-      ),
-    )!,
+    safeJsonStringify({ ...options, id: comparisonProviderId(provider), label: undefined })!,
   );
 }
 
@@ -3081,23 +3076,33 @@ function restoreComparisonProvider(
   }
   const savedId = comparisonProviderId(saved);
   invariant(
-    savedId && !savedId.startsWith('[Function] ') && !/^\[.+ Instance\]$/.test(savedId),
+    savedId &&
+      savedId !== REDACTED &&
+      !savedId.startsWith('[Function] ') &&
+      !/^\[.+ Instance\]$/.test(savedId),
     'Cannot resume select-best because the saved runtime grader has no provider ID. Rerun the evaluation.',
   );
-  if (savedId !== comparisonProviderId(configuredText)) {
-    return restoreComparisonCredentials(saved, undefined, false);
-  }
+  const sameId = savedId === comparisonProviderId(configuredText);
   const canRestore =
-    currentResult ||
-    isDeepStrictEqual(
-      comparisonProviderSettings(saved),
-      comparisonProviderSettings(configuredText),
+    sameId &&
+    (currentResult ||
+      isDeepStrictEqual(
+        comparisonProviderSettings(saved),
+        comparisonProviderSettings(configuredText),
+      ));
+  if (canRestore) {
+    invariant(
+      !hasComparisonRedactions(comparisonProviderOptions(configuredText)),
+      COMPARISON_RESUME_ERROR,
     );
-  if (isApiProvider(configuredText)) {
-    invariant(canRestore, COMPARISON_RESUME_ERROR);
+    // Use the actual descriptor or handle, including credentials embedded in URLs.
     return configuredText;
   }
-  return restoreComparisonCredentials(saved, configuredText, canRestore);
+  invariant(
+    !hasComparisonRedactions(saved) && !(sameId && isApiProvider(configuredText)),
+    COMPARISON_RESUME_ERROR,
+  );
+  return saved;
 }
 
 function snapshotComparisonProvider(
@@ -3128,19 +3133,14 @@ function snapshotComparisonProvider(
 }
 
 function persistComparisonProvider(provider: GradingConfig['provider']): GradingConfig['provider'] {
-  if (isApiProvider(provider)) {
-    const env = (provider as ApiProvider & { env?: EnvOverrides }).env;
-    return {
-      ...sanitizeProvider(provider),
-      ...(env && {
-        env: sanitizeObject(env, { sanitizeUrls: true, maxDepth: Number.POSITIVE_INFINITY }),
-      }),
-    };
-  }
-  if (isProviderTypeMap(provider)) {
-    return { ...provider, text: persistComparisonProvider(provider.text) };
-  }
-  return provider;
+  const options = isProviderTypeMap(provider)
+    ? { ...provider, text: persistComparisonProvider(provider.text) }
+    : comparisonProviderOptions(provider);
+  return sanitizeObject(options, {
+    sanitizeUrls: true,
+    maxDepth: Number.POSITIVE_INFINITY,
+    throwOnError: true,
+  });
 }
 
 function getComparisonProviders(test: AtomicTestCase, currentResult = false) {
@@ -4624,7 +4624,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         throw error;
       }
       const graderId = comparisonProviderId(assertion.provider ?? savedTest.options?.provider);
-      const reason = `${COMPARISON_ERROR_PREFIX}${graderId ? ` (${graderId})` : ''}: ${error instanceof Error ? error.message : String(error)}`;
+      const message = (error instanceof Error ? error.message : String(error)).replace(
+        /\b[a-z][a-z0-9+.-]*:\/\/[^\s<>"']+/gi,
+        sanitizeProviderIdForLog,
+      );
+      const reason = `${COMPARISON_ERROR_PREFIX}${graderId ? ` (${graderId})` : ''}: ${message}`;
       gradingResults = [];
       for (const result of resultsToCompare) {
         if (result.failureReason === ResultFailureReason.ERROR && !getComparisonError(result)) {

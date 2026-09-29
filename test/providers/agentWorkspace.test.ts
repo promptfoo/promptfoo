@@ -234,6 +234,83 @@ describe('agent workspaces', () => {
   });
 
   describe('git repositories', () => {
+    it('copies when Git cannot pin attributes and rejects explicit git mode', async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source, { 'app.ts': 'const value = 1;\n' });
+      const actualGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
+      const bin = path.join(root, 'bin');
+      const wrapper = path.join(bin, 'git');
+      write(
+        wrapper,
+        [
+          `#!${process.execPath}`,
+          "const { spawnSync } = require('node:child_process');",
+          'const args = process.argv.slice(2);',
+          // Git before 2.41 ignores the environment variable and rejects the option.
+          "if (args.some((arg) => arg.startsWith('--attr-source='))) { process.exit(129); }",
+          'const { GIT_ATTR_SOURCE, ...env } = process.env;',
+          `const result = spawnSync(${JSON.stringify(actualGit)}, args, { env, stdio: 'inherit' });`,
+          'process.exit(result.status ?? 1);',
+        ].join('\n'),
+      );
+      fs.chmodSync(wrapper, 0o755);
+      const restoreEnv = mockProcessEnv({ PATH: `${bin}${path.delimiter}${process.env.PATH}` });
+      try {
+        const workspace = await create(source);
+        write(path.join(workspace.dir, '.gitattributes'), '*.ts -diff\n');
+        write(path.join(workspace.dir, 'app.ts'), 'const value = 2;\n');
+
+        expect(workspace.strategy).toBe('copy');
+        expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+        await expect(create(source, 'git')).rejects.toThrow(
+          'requires Git with --attr-source support',
+        );
+        expect(fs.readFileSync(path.join(source, 'app.ts'), 'utf8')).toBe('const value = 1;\n');
+        expect(fs.existsSync(path.join(source, '.gitattributes'))).toBe(false);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('records code changes when the agent marks them as binary in attributes', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source, { 'app.ts': 'const value = 1;\n' });
+      const workspace = await create(source, 'git');
+      write(path.join(workspace.dir, '.gitattributes'), '*.ts -diff\n');
+      write(path.join(workspace.dir, 'app.ts'), 'const value = 2;\n');
+
+      const { workspaceDiff } = await workspace.metadata();
+
+      expect(workspaceDiff).toContain('-const value = 1;');
+      expect(workspaceDiff).toContain('+const value = 2;');
+      expect(workspaceDiff).not.toContain('Binary files');
+      expect(fs.readFileSync(path.join(source, 'app.ts'), 'utf8')).toBe('const value = 1;\n');
+    });
+
+    it('keeps the workspace and diff scratch outside a source-local temp directory', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const tempDir = path.join(source, '.tmp');
+      fs.mkdirSync(tempDir);
+      const sourceFiles = listFiles(source);
+      const tmpdir = vi.spyOn(os, 'tmpdir').mockReturnValue(tempDir);
+      try {
+        const workspace = await create(source, 'git');
+        write(path.join(workspace.dir, 'README.md'), 'changed\n');
+
+        expect((await workspace.metadata()).workspaceDiff).toContain('+changed');
+        expect(listFiles(source)).toEqual(sourceFiles);
+        expect(fs.readFileSync(path.join(source, 'README.md'), 'utf8')).toBe('original\n');
+        await workspace.remove();
+        expect(fs.existsSync(path.dirname(workspace.dir))).toBe(false);
+      } finally {
+        tmpdir.mockRestore();
+      }
+    });
+
     it('cancels a Git command blocked on a source index without falling back to copying', async () => {
       if (process.platform === 'win32') {
         return;
@@ -1274,6 +1351,46 @@ describe('agent workspaces', () => {
       await expect(createAgentWorkspace(source)).rejects.toThrow(
         'it belongs to a git worktree or submodule',
       );
+    });
+
+    it.each([
+      ['auto', 'source'],
+      ['copy', 'source'],
+      ['auto', 'nested'],
+      ['copy', 'nested'],
+      ['auto', 'symlink'],
+      ['copy', 'symlink'],
+    ] as const)('copies with %s mode when the temp directory is %s', async (mode, location) => {
+      if (location === 'symlink' && process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'fixture');
+      write(path.join(source, 'file.txt'), 'original\n');
+      let tempDir = source;
+      if (location !== 'source') {
+        tempDir = path.join(source, '.tmp');
+        fs.mkdirSync(tempDir);
+      }
+      if (location === 'symlink') {
+        const link = path.join(root, 'temp-link');
+        fs.symlinkSync(tempDir, link);
+        tempDir = link;
+      }
+      const sourceFiles = listFiles(source);
+      const tmpdir = vi.spyOn(os, 'tmpdir').mockReturnValue(tempDir);
+      try {
+        const workspace = await create(source, mode);
+
+        expect(workspace.strategy).toBe('copy');
+        expect(fs.readFileSync(path.join(workspace.dir, 'file.txt'), 'utf8')).toBe('original\n');
+        write(path.join(workspace.dir, 'file.txt'), 'changed\n');
+        expect(listFiles(source)).toEqual(sourceFiles);
+        expect(fs.readFileSync(path.join(source, 'file.txt'), 'utf8')).toBe('original\n');
+        await workspace.remove();
+        expect(fs.existsSync(path.dirname(workspace.dir))).toBe(false);
+      } finally {
+        tmpdir.mockRestore();
+      }
     });
 
     it('rejects a missing working_dir and leaves nothing behind', async () => {

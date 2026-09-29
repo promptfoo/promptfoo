@@ -167,7 +167,7 @@ async function git(
   return stdout;
 }
 
-class UnsupportedGitFilterError extends Error {}
+class UnsupportedGitAttributesError extends Error {}
 class UnsupportedGitSubmoduleError extends Error {}
 
 /**
@@ -202,6 +202,19 @@ async function getCloneableRepository(
     if ((await fs.realpath(topLevel)) !== source) {
       return undefined;
     }
+    // Older Git silently ignores GIT_ATTR_SOURCE; the equivalent option fails explicitly.
+    await git(['--attr-source=' + head, 'check-attr', '-z', 'diff', '--', '.'], {
+      cwd: source,
+      signal,
+    }).catch((error: unknown) => {
+      if (error instanceof Error && 'code' in error && error.code === 129) {
+        throw new UnsupportedGitAttributesError(
+          "copy_working_dir: 'git' requires Git with --attr-source support (2.41 or newer); " +
+            "upgrade Git or use 'copy' or true.",
+        );
+      }
+      throw error;
+    });
     const trackedEntries = (
       await git(['ls-files', '--stage', '-z'], { cwd: source, signal })
     ).split('\0');
@@ -237,7 +250,7 @@ async function getCloneableRepository(
         continue;
       }
       if (attribute === 'filter') {
-        throw new UnsupportedGitFilterError(
+        throw new UnsupportedGitAttributesError(
           "copy_working_dir: 'git' does not support tracked Git filter attributes; use 'copy' or true to preserve materialized files.",
         );
       }
@@ -294,7 +307,7 @@ async function getCloneableRepository(
     }
     if (
       error instanceof UnsupportedGitSubmoduleError ||
-      (allowIgnored && error instanceof UnsupportedGitFilterError)
+      (allowIgnored && error instanceof UnsupportedGitAttributesError)
     ) {
       throw error;
     }
@@ -505,7 +518,7 @@ async function getWorkspaceDiff(
     // Otherwise the diff would copy whatever the link points to into the results.
     throw new Error('the workspace directory was replaced by a link');
   }
-  const scratch = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-workspace-diff-'));
+  const scratch = await fs.mkdtemp(path.join(path.dirname(dir), 'diff-'));
   try {
     const gitDir = path.join(scratch, 'git');
     const isolatedConfig = {
@@ -598,7 +611,12 @@ export async function createAgentWorkspace(
     throw new Error(`copy_working_dir does not support git submodules yet: ${source}`);
   }
 
-  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-workspace-')));
+  const tempDir = await fs.realpath(os.tmpdir());
+  const tempParent = isInside(realSource, tempDir) ? path.dirname(realSource) : tempDir;
+  if (isInside(realSource, tempParent)) {
+    throw new Error(`copy_working_dir cannot create a workspace outside working_dir: ${source}`);
+  }
+  const root = await fs.realpath(await fs.mkdtemp(path.join(tempParent, 'promptfoo-workspace-')));
   const dir = path.join(root, 'workspace');
   liveWorkspaces.set(dir, root);
   registerExitCleanup();
