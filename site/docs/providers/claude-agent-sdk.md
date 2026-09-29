@@ -262,6 +262,8 @@ Control Claude Agent SDK's permissions for modifying files and running system co
 | `dontAsk`           | Deny permissions that aren't pre-approved (no prompts)                |
 | `auto`              | Use a model classifier to approve or deny permission prompts          |
 
+[Claude Code 2.1.278](https://github.com/anthropics/claude-code/releases/tag/v2.1.278), bundled with SDK 0.3.278, makes server-side permission classification the default for `auto` mode for Claude API and Enterprise users, as well as Bedrock, Vertex, Foundry, and gateway users. For Bedrock, Vertex, Foundry, and gateways, set `CLAUDE_CODE_AUTO_MODE_SERVER: '0'` in the provider's `config.env` to opt out and use the client-side classifier.
+
 :::warning
 Using `bypassPermissions` requires setting `allow_dangerously_skip_permissions: true` as a safety measure:
 
