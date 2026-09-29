@@ -66,6 +66,7 @@ const AZURE_CACHE_READ_RATE_GROUPS: Array<[number, string[]]> = [
   [
     0.5,
     [
+      'claude-opus-5',
       'claude-opus-4-8',
       'claude-opus-4-7',
       'claude-opus-4-6',

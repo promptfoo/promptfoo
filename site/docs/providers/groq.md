@@ -11,7 +11,7 @@ Groq provides access to a wide range of models including reasoning models with c
 
 :::warning Model availability changes frequently
 
-Groq has deprecated its Llama chat models (including `llama-3.3-70b-versatile` and `llama-3.1-8b-instant`). For general-purpose and reasoning workloads, use `openai/gpt-oss-120b` or the smaller `openai/gpt-oss-20b`. Check the [Groq deprecations page](https://console.groq.com/docs/deprecations) for current shutdown dates before selecting a model.
+Groq lists `llama-3.3-70b-versatile` and `llama-3.1-8b-instant` as Enterprise models with contact-sales access. Their Free and Developer tier deprecation does not apply to Enterprise customers with committed-spend contracts. Check the [model catalog](https://console.groq.com/docs/models) and [deprecation notices](https://console.groq.com/docs/deprecations) for availability on your account.
 
 :::
 
@@ -118,7 +118,7 @@ Groq hosts additional models that use audio or classification endpoints, so they
 
 See the [Groq Models page](https://console.groq.com/docs/models) for these models' specifications.
 
-**Being retired:** Groq has deprecated its Llama chat models (`llama-3.3-70b-versatile`, `llama-3.1-8b-instant`) along with `qwen/qwen3-32b` and `meta-llama/llama-4-scout-17b-16e-instruct`. See the [deprecations page](https://console.groq.com/docs/deprecations) for shutdown dates, and migrate to `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, or the multimodal `qwen/qwen3.6-27b`.
+**Lifecycle qualification:** The deprecation notices for `llama-3.3-70b-versatile`, `llama-3.1-8b-instant`, `qwen/qwen3-32b`, and `meta-llama/llama-4-scout-17b-16e-instruct` apply to Free and Developer tier usage; Enterprise customers with committed-spend contracts are exempt. Confirm your account's access with Groq and check the [deprecations page](https://console.groq.com/docs/deprecations) for model-specific dates.
 
 ### Using Groq Models
 
@@ -330,6 +330,8 @@ Combine with the `stop` parameter for precise output control.
 ## Responses API
 
 Groq's Responses API provides a structured approach to conversational AI, with built-in support for tools, structured outputs, and reasoning. Use the `groq:responses:` prefix to access this API. Note: This API is currently in beta.
+
+Groq's Responses API is stateless: include the conversation history in `input` on every request. Groq does not support `previous_response_id` or `store`, even when using an OpenAI-compatible client. See the [multi-turn conversation guide](https://console.groq.com/docs/responses-api#multi-turn-conversations) and [unsupported features](https://console.groq.com/docs/responses-api#unsupported-features).
 
 ### Basic Usage
 

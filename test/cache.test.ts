@@ -18,6 +18,7 @@ import {
   enableCache,
   fetchWithCache,
   getCache,
+  getHeadersForCacheKey,
   isCacheEnabled,
   withCacheEnabled,
   withCacheNamespace,
@@ -35,6 +36,7 @@ vi.mock('../src/globalConfig/cloud', () => ({
   cloudConfig: {
     getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app'),
     getApiKey: vi.fn(() => process.env.PROMPTFOO_API_KEY),
+    getAuthHeaderName: vi.fn().mockReturnValue('Authorization'),
     getCurrentOrganizationId: vi.fn().mockReturnValue('org-1'),
     getCurrentTeamId: vi.fn(),
   },
@@ -257,144 +259,19 @@ describe('cache configuration', () => {
     expect(fs.mkdirSync).toHaveBeenCalledWith(expectedCachePath, { recursive: true });
   });
 
-  it('should fall back to a process-local one-time claim when the disk cache is read-only', async () => {
+  it('should surface a failed durable claim without memoizing success', async () => {
     mockProcessEnv({ NODE_ENV: 'production' });
-    mkdirSyncMock.mockImplementationOnce(() => {
+    mkdirSyncMock.mockImplementation(() => {
       throw Object.assign(new Error('Permission denied'), { code: 'EACCES' });
     });
     const cacheModule = await import('../src/cache');
-    const key = `background-billing-read-only:${Date.now()}`;
 
-    expect(cacheModule.claimCacheKeyOnce(key)).toBe(true);
-    expect(cacheModule.claimCacheKeyOnce(key)).toBe(false);
-  });
-
-  it('should memoize an existing disk-backed one-time claim', async () => {
-    mockProcessEnv({ NODE_ENV: 'production' });
-    const openSync = vi.spyOn(fs, 'openSync').mockImplementation(() => {
-      throw Object.assign(new Error('Already claimed'), { code: 'EEXIST' });
-    });
-    const cacheModule = await import('../src/cache');
-    const key = `background-billing-existing:${Date.now()}`;
-
-    expect(cacheModule.claimCacheKeyOnce(key)).toBe(false);
-    expect(cacheModule.claimCacheKeyOnce(key)).toBe(false);
-    expect(openSync).toHaveBeenCalledOnce();
-
-    openSync.mockRestore();
-  });
-
-  it('should clear persistent one-time claims with the disk cache', async () => {
-    mockProcessEnv({ NODE_ENV: 'production', PROMPTFOO_CACHE_PATH: '/custom/cache/path' });
-    const openSync = vi.spyOn(fs, 'openSync').mockReturnValue(42);
-    const closeSync = vi.spyOn(fs, 'closeSync').mockImplementation(() => undefined);
-    const rmSync = vi.spyOn(fs, 'rmSync').mockImplementation(() => undefined);
-    const cacheModule = await import('../src/cache');
-    const key = `background-billing-clear:${Date.now()}`;
-
-    expect(cacheModule.claimCacheKeyOnce(key)).toBe(true);
-    await cacheModule.clearCache();
-    expect(rmSync).toHaveBeenCalledWith(path.join('/custom/cache/path', 'claims'), {
-      force: true,
-      recursive: true,
-    });
-    expect(cacheModule.claimCacheKeyOnce(key)).toBe(true);
-
-    openSync.mockRestore();
-    closeSync.mockRestore();
-    rmSync.mockRestore();
-  });
-
-  it('should prune disk-backed claims older than the cache TTL', async () => {
-    mockProcessEnv({ NODE_ENV: 'production', PROMPTFOO_CACHE_PATH: '/custom/cache/path' });
-    const claimsDir = path.join('/custom/cache/path', 'claims');
-    const now = Date.now();
-    const readdirSync = vi
-      .spyOn(fs, 'readdirSync')
-      .mockReturnValue(['stale-claim', 'fresh-claim'] as unknown as never);
-    const statSync = vi
-      .spyOn(fs, 'statSync')
-      .mockImplementation(
-        (target) =>
-          ({ mtimeMs: String(target).includes('stale-claim') ? 0 : now }) as unknown as fs.Stats,
-      );
-    const rmSync = vi.spyOn(fs, 'rmSync').mockImplementation(() => undefined);
-    const openSync = vi.spyOn(fs, 'openSync').mockReturnValue(42);
-    const closeSync = vi.spyOn(fs, 'closeSync').mockImplementation(() => undefined);
-    const cacheModule = await import('../src/cache');
-
-    expect(cacheModule.claimCacheKeyOnce(`background-billing-prune:${now}`)).toBe(true);
-
-    expect(readdirSync).toHaveBeenCalledWith(claimsDir);
-    // The stale claim (older than the TTL) is removed; the fresh one is left in place.
-    expect(rmSync).toHaveBeenCalledWith(path.join(claimsDir, 'stale-claim'), { force: true });
-    expect(rmSync).not.toHaveBeenCalledWith(path.join(claimsDir, 'fresh-claim'), { force: true });
-
-    readdirSync.mockRestore();
-    statSync.mockRestore();
-    rmSync.mockRestore();
-    openSync.mockRestore();
-    closeSync.mockRestore();
-  });
-
-  it('should sweep claims at most once per throttle interval', async () => {
-    mockProcessEnv({ NODE_ENV: 'production', PROMPTFOO_CACHE_PATH: '/custom/cache/path' });
-    const readdirSync = vi.spyOn(fs, 'readdirSync').mockReturnValue([] as unknown as never);
-    const openSync = vi.spyOn(fs, 'openSync').mockReturnValue(42);
-    const closeSync = vi.spyOn(fs, 'closeSync').mockImplementation(() => undefined);
-    const cacheModule = await import('../src/cache');
-
-    cacheModule.claimCacheKeyOnce('background-billing-throttle-a');
-    cacheModule.claimCacheKeyOnce('background-billing-throttle-b');
-
-    // Both claims happen within the same interval, so the directory is only swept once.
-    expect(readdirSync).toHaveBeenCalledTimes(1);
-
-    readdirSync.mockRestore();
-    openSync.mockRestore();
-    closeSync.mockRestore();
-  });
-
-  it('should not prune claims when the cache TTL is disabled', async () => {
-    mockProcessEnv({
-      NODE_ENV: 'production',
-      PROMPTFOO_CACHE_PATH: '/custom/cache/path',
-      PROMPTFOO_CACHE_TTL: '0',
-    });
-    const readdirSync = vi
-      .spyOn(fs, 'readdirSync')
-      .mockReturnValue(['stale-claim'] as unknown as never);
-    const rmSync = vi.spyOn(fs, 'rmSync').mockImplementation(() => undefined);
-    const openSync = vi.spyOn(fs, 'openSync').mockReturnValue(42);
-    const closeSync = vi.spyOn(fs, 'closeSync').mockImplementation(() => undefined);
-    const cacheModule = await import('../src/cache');
-
-    expect(cacheModule.claimCacheKeyOnce('background-billing-ttl0')).toBe(true);
-
-    // With expiry disabled, claims live as long as their (non-expiring) cache entries.
-    expect(readdirSync).not.toHaveBeenCalled();
-    expect(rmSync).not.toHaveBeenCalled();
-
-    readdirSync.mockRestore();
-    rmSync.mockRestore();
-    openSync.mockRestore();
-    closeSync.mockRestore();
-  });
-
-  it('should still claim when the claims directory cannot be swept', async () => {
-    mockProcessEnv({ NODE_ENV: 'production', PROMPTFOO_CACHE_PATH: '/custom/cache/path' });
-    const readdirSync = vi.spyOn(fs, 'readdirSync').mockImplementation(() => {
-      throw Object.assign(new Error('missing'), { code: 'ENOENT' });
-    });
-    const openSync = vi.spyOn(fs, 'openSync').mockReturnValue(42);
-    const closeSync = vi.spyOn(fs, 'closeSync').mockImplementation(() => undefined);
-    const cacheModule = await import('../src/cache');
-
-    expect(cacheModule.claimCacheKeyOnce('background-billing-sweep-error')).toBe(true);
-
-    readdirSync.mockRestore();
-    openSync.mockRestore();
-    closeSync.mockRestore();
+    await expect(cacheModule.claimCacheKeyOnce('read-only-claim')).rejects.toThrow(
+      'Failed to persist a one-time cache claim',
+    );
+    await expect(cacheModule.claimCacheKeyOnce('read-only-claim')).rejects.toThrow(
+      'Failed to persist a one-time cache claim',
+    );
   });
 
   it('should respect custom cache path', async () => {
@@ -436,6 +313,7 @@ describe('fetchWithCache', () => {
     mockFetchWithRetries.mockReset();
     vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-1');
     vi.mocked(cloudConfig.getCurrentTeamId).mockReset().mockReturnValue(undefined);
+    vi.mocked(cloudConfig.getAuthHeaderName).mockReset().mockReturnValue('Authorization');
     await clearCache();
     enableCache();
   });
@@ -449,6 +327,40 @@ describe('fetchWithCache', () => {
   });
 
   describe('with cache enabled', () => {
+    it('requires explicit cache policy for request-time authentication', async () => {
+      const getAuthHeaders = vi.fn();
+      await expect(fetchWithCache(url, { getAuthHeaders }, 1000)).rejects.toThrow(
+        'Request-time authentication requires cache bypass or an explicit principal-scoped cache key',
+      );
+      expect(mockFetchWithRetries).not.toHaveBeenCalled();
+      expect(getAuthHeaders).not.toHaveBeenCalled();
+    });
+
+    it('passes request-time authentication through when cache is bypassed', async () => {
+      const getAuthHeaders = vi.fn();
+      mockFetchWithRetries.mockImplementation(async () => Response.json(response));
+      await fetchWithCache(url, { getAuthHeaders }, 1000, 'json', true);
+      await fetchWithCache(url, { getAuthHeaders }, 1000, 'json', true);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithRetries.mock.calls[0][1]?.getAuthHeaders).toBe(getAuthHeaders);
+    });
+
+    it('isolates dynamic-auth caches using explicit non-secret principal keys', async () => {
+      const getAuthHeaders = vi.fn();
+      mockFetchWithRetries.mockImplementation(async () => Response.json(response));
+      const first = await fetchWithCache(url, { getAuthHeaders }, 1000, 'json', {
+        cacheKey: 'principal-a:request',
+      });
+      const repeat = await fetchWithCache(url, { getAuthHeaders }, 1000, 'json', {
+        cacheKey: 'principal-a:request',
+      });
+      const other = await fetchWithCache(url, { getAuthHeaders }, 1000, 'json', {
+        cacheKey: 'principal-b:request',
+      });
+      expect([first.cached, repeat.cached, other.cached]).toEqual([false, true, false]);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
     it('should scope cache disabling to the current async context', async () => {
       expect(isCacheEnabled()).toBe(true);
 
@@ -632,9 +544,11 @@ describe('fetchWithCache', () => {
       });
       expect(result2).toMatchObject({
         cached: false,
+        coalesced: true,
         data: response,
         status: 200,
       });
+      expect(result1.coalesced).toBeUndefined();
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
 
       const cachedResult = await fetchWithCache(url, {}, 1000);
@@ -735,9 +649,11 @@ describe('fetchWithCache', () => {
       });
       expect(result2).toMatchObject({
         cached: false,
+        coalesced: true,
         status: 200,
         data: { error: 'Rate limit exceeded' },
       });
+      expect(result1.coalesced).toBeUndefined();
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
 
       const result3 = await fetchWithCache(url, {}, 1000);
@@ -772,9 +688,11 @@ describe('fetchWithCache', () => {
       });
       expect(result2).toMatchObject({
         cached: false,
+        coalesced: true,
         status: 400,
         data: { error: 'Bad Request' },
       });
+      expect(result1.coalesced).toBeUndefined();
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
 
       await fetchWithCache(url, {}, 1000);
@@ -953,6 +871,89 @@ describe('fetchWithCache', () => {
       mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
       await fetchWithCache(url, differentOptions, 1000);
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
+    it('should reuse cached responses across trace contexts without removing outgoing trace headers', async () => {
+      const firstTraceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+      const secondTraceparent = '00-fedcba9876543210fedcba9876543210-fedcba9876543210-01';
+      mockFetchWithRetries.mockResolvedValueOnce(mockFetchWithRetriesResponse(true, response));
+
+      const firstOptions = {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer shared-token',
+          traceparent: firstTraceparent,
+          tracestate: 'vendor=first',
+        },
+        body: JSON.stringify({ task: 'same-task' }),
+      };
+      const secondOptions = {
+        ...firstOptions,
+        headers: {
+          Authorization: 'Bearer shared-token',
+          traceparent: secondTraceparent,
+          tracestate: 'vendor=second',
+        },
+      };
+
+      const firstResult = await fetchWithCache(url, firstOptions, 1000);
+      const secondResult = await fetchWithCache(url, secondOptions, 1000);
+
+      expect(firstResult.cached).toBe(false);
+      expect(secondResult.cached).toBe(true);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(url, firstOptions, 1000, undefined);
+    });
+
+    it('should keep authorization and team isolation when trace contexts change', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'first identity' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'second identity' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'third identity' }));
+
+      const requestOptions = {
+        method: 'POST',
+        body: JSON.stringify({ task: 'same-task' }),
+      };
+
+      await fetchWithCache(
+        url,
+        {
+          ...requestOptions,
+          headers: {
+            Authorization: 'Bearer first-token',
+            'x-promptfoo-team-id': 'first-team',
+            traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+          },
+        },
+        1000,
+      );
+      await fetchWithCache(
+        url,
+        {
+          ...requestOptions,
+          headers: {
+            Authorization: 'Bearer second-token',
+            'x-promptfoo-team-id': 'first-team',
+            traceparent: '00-fedcba9876543210fedcba9876543210-fedcba9876543210-01',
+          },
+        },
+        1000,
+      );
+      await fetchWithCache(
+        url,
+        {
+          ...requestOptions,
+          headers: {
+            Authorization: 'Bearer second-token',
+            'x-promptfoo-team-id': 'second-team',
+            traceparent: '00-11111111111111111111111111111111-1111111111111111-01',
+          },
+        },
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(3);
     });
 
     it('should not cache opaque FormData request bodies', async () => {
@@ -1178,6 +1179,7 @@ describe('fetchWithCache', () => {
     });
 
     it('should isolate Cloud task responses by the current CLI team', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'saved-cloud-token' });
       mockFetchWithRetries
         .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'team one data' }))
         .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'team two data' }));
@@ -1188,22 +1190,26 @@ describe('fetchWithCache', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ task: 'extract-intent' }),
       };
-      const teamOneResult = await fetchWithCache(
-        'https://api.promptfoo.app/api/v1/task',
-        requestOptions,
-        1000,
-      );
+      try {
+        const teamOneResult = await fetchWithCache(
+          'https://api.promptfoo.app/api/v1/task',
+          requestOptions,
+          1000,
+        );
 
-      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-two');
-      const teamTwoResult = await fetchWithCache(
-        'https://api.promptfoo.app/api/v1/task',
-        requestOptions,
-        1000,
-      );
+        vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-two');
+        const teamTwoResult = await fetchWithCache(
+          'https://api.promptfoo.app/api/v1/task',
+          requestOptions,
+          1000,
+        );
 
-      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
-      expect(teamOneResult.data).toEqual({ data: 'team one data' });
-      expect(teamTwoResult.data).toEqual({ data: 'team two data' });
+        expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+        expect(teamOneResult.data).toEqual({ data: 'team one data' });
+        expect(teamTwoResult.data).toEqual({ data: 'team two data' });
+      } finally {
+        restoreEnv();
+      }
     });
 
     it('should prefer an explicit team header when computing the cache key', async () => {
@@ -1272,6 +1278,173 @@ describe('fetchWithCache', () => {
         }
       } finally {
         restoreEnv();
+      }
+    });
+
+    it('should key cloud requests by the configured auth header name, not always Authorization', async () => {
+      const cache = getCache();
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'same-cloud-token' });
+      mockFetchWithRetries.mockResolvedValue(mockFetchWithRetriesResponse(true, { data: 'ok' }));
+
+      try {
+        const requestOptions = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task: 'same-body' }),
+        };
+
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
+        await fetchWithCache('https://api.promptfoo.app/api/v1/task', requestOptions, 1000);
+
+        // Same token, same body, but a different configured header name — the request
+        // actually sent differs (the token is injected under a different header), so this
+        // must be a separate cache entry rather than a hit on the Authorization-keyed one.
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
+        await fetchWithCache('https://api.promptfoo.app/api/v1/task', requestOptions, 1000);
+
+        expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+
+        const cacheKeys = vi.mocked(cache.set).mock.calls.map(([cacheKey]) => String(cacheKey));
+        expect(cacheKeys).toHaveLength(2);
+        expect(cacheKeys[0]).not.toEqual(cacheKeys[1]);
+        for (const cacheKey of cacheKeys) {
+          expect(cacheKey).not.toContain('same-cloud-token');
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it.each([
+      { credentialSource: 'explicit', cacheKey: undefined },
+      { credentialSource: 'injected', cacheKey: undefined },
+      { credentialSource: 'explicit', cacheKey: 'shared-safe-key' },
+      { credentialSource: 'injected', cacheKey: 'shared-safe-key' },
+    ])(
+      'isolates cached responses when $credentialSource Cloud redirect protection becomes active (cache key: $cacheKey)',
+      async ({ credentialSource, cacheKey }) => {
+        const token = 'synthetic-cloud-token-for-cache-isolation';
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
+        const requestOptions = { headers: { 'X-Promptfoo-Api-Key': `Bearer ${token}` } };
+        mockFetchWithRetries
+          .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'unprotected' }))
+          .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'protected' }));
+        const fetch = (options: RequestInit = requestOptions) =>
+          fetchWithCache('https://api.promptfoo.app/api/v1/task', options, 1000, 'json', {
+            cacheKey,
+          });
+
+        try {
+          expect((await fetch()).data).toEqual({ data: 'unprotected' });
+
+          mockProcessEnv({ PROMPTFOO_API_KEY: token });
+          vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
+          const protectedOptions = credentialSource === 'explicit' ? requestOptions : {};
+          const protectedResult = await fetch(protectedOptions);
+
+          // A response accepted before the credential was identified as Cloud auth
+          // must not bypass the now-required redirect policy through a cache hit.
+          expect(protectedResult.cached).toBe(false);
+          expect(protectedResult.data).toEqual({ data: 'protected' });
+          expect((await fetch(protectedOptions)).cached).toBe(true);
+
+          mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
+          vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
+          const unprotectedResult = await fetch();
+          expect(unprotectedResult.cached).toBe(true);
+          expect(unprotectedResult.data).toEqual({ data: 'unprotected' });
+          expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+        } finally {
+          restoreEnv();
+          vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
+        }
+      },
+    );
+
+    it('should fingerprint the cloud auth value under a custom header name even for a short token', async () => {
+      // Regression guard: isSecretField/looksLikeSecret are name/pattern heuristics that
+      // miss a custom header name (e.g. X-Promptfoo-Api-Key normalizes to a name outside
+      // SECRET_FIELD_NAMES) and a short on-prem token (looksLikeSecret's Bearer pattern
+      // requires 20+ chars). getHeadersForCacheKey must fingerprint the injected cloud
+      // credential unconditionally, not rely on those heuristics, so a short token under a
+      // custom header name is still never embedded raw in the cache key.
+      const cache = getCache();
+      vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
+      mockFetchWithRetries.mockResolvedValue(mockFetchWithRetriesResponse(true, { data: 'ok' }));
+
+      try {
+        const requestOptions = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task: 'same-body' }),
+        };
+
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'short-tok-one' });
+        await fetchWithCache('https://api.promptfoo.app/api/v1/task', requestOptions, 1000);
+
+        // Different short token, same everything else — a distinct cache entry proves the
+        // token value is incorporated into the key (fingerprinted), not dropped or ignored.
+        mockProcessEnv({ PROMPTFOO_API_KEY: 'short-tok-two' });
+        await fetchWithCache('https://api.promptfoo.app/api/v1/task', requestOptions, 1000);
+
+        expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+
+        const cacheKeys = vi.mocked(cache.set).mock.calls.map(([cacheKey]) => String(cacheKey));
+        expect(cacheKeys).toHaveLength(2);
+        expect(cacheKeys[0]).not.toEqual(cacheKeys[1]);
+        for (const cacheKey of cacheKeys) {
+          expect(cacheKey).not.toContain('short-tok-one');
+          expect(cacheKey).not.toContain('short-tok-two');
+        }
+
+        restoreEnv();
+      } finally {
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReset().mockReturnValue('Authorization');
+      }
+    });
+
+    it('should fingerprint a custom cloud auth header even when a caller pre-sets it explicitly', () => {
+      // Regression guard: resolveGuardrailsApi() (src/guardrails.ts) attaches the cloud
+      // auth header itself, via cloudConfig.getAuthHeaders(), before the request reaches
+      // getHeadersForCacheKey. The header is then already present, so the old
+      // `!headers.has(cloudAuthHeaderName)` injection guard must not gate fingerprinting —
+      // otherwise this falls through to the generic isSecretField/looksLikeSecret
+      // heuristics, which miss both a custom header name and a short token.
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'short-tok' });
+      try {
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
+
+        const headers = getHeadersForCacheKey('https://api.promptfoo.app/api/v1/task', {
+          headers: { 'X-Promptfoo-Api-Key': 'Bearer short-tok' },
+        });
+
+        const entry = headers.find(([name]) => name === 'x-promptfoo-api-key');
+        expect(entry).toBeDefined();
+        expect(entry?.[1]).toEqual({ __promptfooSecretFingerprint: expect.any(String) });
+      } finally {
+        restoreEnv();
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReset().mockReturnValue('Authorization');
+      }
+    });
+
+    it('should fingerprint an injected cloud auth header under a mixed-case configured name', () => {
+      // Regression guard: Headers.entries() always lowercases names, but the header name
+      // this function injects under is recorded with whatever casing getAuthHeaderName()
+      // returns. A mixed-case configured name must still match at fingerprint time.
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'short-tok' });
+      try {
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
+
+        const headers = getHeadersForCacheKey('https://api.promptfoo.app/api/v1/task', {
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        const entry = headers.find(([name]) => name === 'x-promptfoo-api-key');
+        expect(entry).toBeDefined();
+        expect(entry?.[1]).toEqual({ __promptfooSecretFingerprint: expect.any(String) });
+      } finally {
+        restoreEnv();
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReset().mockReturnValue('Authorization');
       }
     });
 
@@ -1676,8 +1849,8 @@ describe('fetchWithCache', () => {
     it('should claim a cache-scoped one-time action only once per namespace', async () => {
       const key = `background-billing:${Date.now()}`;
 
-      expect(claimCacheKeyOnce(key)).toBe(true);
-      expect(claimCacheKeyOnce(key)).toBe(false);
+      expect(await claimCacheKeyOnce(key)).toBe(true);
+      expect(await claimCacheKeyOnce(key)).toBe(false);
       expect(await withCacheNamespace('repeat:1', async () => claimCacheKeyOnce(key))).toBe(true);
       expect(await withCacheNamespace('repeat:1', async () => claimCacheKeyOnce(key))).toBe(false);
     });
