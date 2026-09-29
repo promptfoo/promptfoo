@@ -22,12 +22,12 @@ import type {
 vi.mock('../../src/tracing/store');
 const mockFlushOtel = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockFetchTraceContext = vi.hoisted(() => vi.fn());
-const mockInitializeOtel = vi.hoisted(() => vi.fn());
+const mockAcquireOtel = vi.hoisted(() => vi.fn());
 const mockShutdownOtel = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 vi.mock('../../src/tracing/otelSdk', () => ({
   flushOtel: mockFlushOtel,
-  initializeOtel: mockInitializeOtel,
+  acquireOtel: mockAcquireOtel,
   shutdownOtel: mockShutdownOtel,
 }));
 
@@ -42,7 +42,8 @@ vi.mock('../../src/tracing/traceContext', async (importOriginal) => ({
 }));
 
 // Mock evaluatorTracing module
-vi.mock('../../src/tracing/evaluatorTracing', () => ({
+vi.mock('../../src/tracing/evaluatorTracing', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/evaluatorTracing')>()),
   generateTraceId: vi.fn(() => 'abcdef1234567890abcdef1234567890'),
   generateSpanId: vi.fn(() => '0123456789abcdef'),
   generateTraceparent: vi.fn((traceId, spanId) => `00-${traceId}-${spanId}-01`),
@@ -76,6 +77,10 @@ describe('evaluator trace integration', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    mockAcquireOtel.mockResolvedValue(async () => {
+      await mockFlushOtel();
+      await mockShutdownOtel();
+    });
     (getTraceStore as Mock).mockReturnValue(mockTraceStore);
   });
 
@@ -210,10 +215,11 @@ describe('evaluator trace integration', () => {
       close: vi.fn().mockResolvedValue(undefined),
     };
     const runtime: EvaluatorRuntime<Eval, EvalResult> = {
+      createTracingLifecycle: nodeEvaluatorRuntime.createTracingLifecycle,
       createEvaluationStore: nodeEvaluatorRuntime.createEvaluationStore,
       createResultWriters: vi.fn().mockReturnValue([writer]),
     };
-    mockInitializeOtel.mockImplementationOnce(() => {
+    mockAcquireOtel.mockImplementationOnce(() => {
       throw new Error('otel unavailable');
     });
 
@@ -253,7 +259,7 @@ describe('evaluator trace integration', () => {
       {},
     );
 
-    expect(mockInitializeOtel).toHaveBeenCalledOnce();
+    expect(mockAcquireOtel).toHaveBeenCalledOnce();
     expect(mockFlushOtel).toHaveBeenCalledOnce();
     expect(mockShutdownOtel).toHaveBeenCalledOnce();
   });

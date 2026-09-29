@@ -90,7 +90,7 @@ function acquireStartedOtlpReceiver(): boolean {
   return true;
 }
 
-function isTracingEnabledForSuite(testSuite: TestSuite): boolean {
+export function isTracingEnabledForSuite(testSuite: TestSuite): boolean {
   return (
     getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
     testSuite.tracing?.enabled === true ||
