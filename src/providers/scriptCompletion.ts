@@ -95,15 +95,16 @@ export class ScriptCompletionProvider implements ApiProvider {
 
     const command = scriptParts.shift();
     invariant(command, 'No command found in script path');
-    // Omit nonserializable context helpers from the script arguments.
-    delete context?.getCache;
-    delete context?.logger;
-    delete context?.filters; // NunjucksFilterMap contains functions
-    delete context?.originalProvider; // ApiProvider object with methods
+    // Keep caller context intact while omitting nonserializable script arguments.
+    const scriptContext = { ...context };
+    delete scriptContext.getCache;
+    delete scriptContext.logger;
+    delete scriptContext.filters;
+    delete scriptContext.originalProvider;
     const scriptArgs = scriptParts.concat([
       prompt,
       safeJsonStringify(this.options || {}) as string,
-      safeJsonStringify(context || {}) as string,
+      safeJsonStringify(scriptContext) as string,
     ]);
     const options = {
       ...(this.options?.config.basePath && { cwd: this.options.config.basePath }),

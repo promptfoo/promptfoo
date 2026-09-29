@@ -61,6 +61,22 @@ describe('script execution cache failures', () => {
     },
   );
 
+  it('serializes script context without changing the caller object', async () => {
+    const script = path.join(directory, 'fixture.cjs');
+    await writeFile(
+      script,
+      `require('node:fs').writeFileSync(${JSON.stringify(pidPath)}, String(process.pid));
+process.stdout.write(process.argv[4]);`,
+    );
+    const getCache = vi.fn();
+    const prompt = { raw: 'hello', label: 'fixture' };
+    const context = Object.freeze({ vars: { value: 'fixture' }, prompt, getCache });
+    const response = await new ScriptCompletionProvider(command).callApi('hello', context);
+
+    expect(JSON.parse(response.output as string)).toEqual({ vars: { value: 'fixture' }, prompt });
+    expect(context.getCache).toBe(getCache);
+  });
+
   it('closes provider stdin before awaiting child completion', async () => {
     const script = path.join(directory, 'fixture.cjs');
     await writeFile(
