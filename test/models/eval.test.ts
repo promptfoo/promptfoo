@@ -666,6 +666,27 @@ describe('evaluator', () => {
   });
 
   describe('create', () => {
+    it('redacts provider credentials when creating and saving eval configs', async () => {
+      const config = {
+        providers: [{ id: 'muse-code', config: { apiKey: 'fixture-create-key' } }],
+        env: { META_API_KEY: '{{ env.META_API_KEY }}' },
+        tests: [{ vars: { password: 'test-input' } }],
+      };
+      const evaluation = await Eval.create(config, []);
+      const readStored = async () => {
+        const db = await getDb();
+        return (await db.select().from(evalsTable).where(eq(evalsTable.id, evaluation.id)))[0]
+          .config;
+      };
+      expect(JSON.stringify(await readStored())).not.toContain('fixture-create-key');
+      expect((await readStored()).env).toEqual(config.env);
+      expect((await readStored()).tests).toEqual(config.tests);
+      expect(config.providers[0].config.apiKey).toBe('fixture-create-key');
+      evaluation.config.providers = [{ id: 'muse-code', config: { apiKey: 'fixture-save-key' } }];
+      await evaluation.save();
+      expect(JSON.stringify(await readStored())).not.toContain('fixture-save-key');
+    });
+
     it('keeps trace-provider credentials in memory while removing them from persisted evals', async () => {
       const config = {
         tracing: {

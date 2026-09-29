@@ -544,6 +544,8 @@ describe('Provider Registry', () => {
         'gpt-6-luna',
         'gpt-6-astra-2026-09-01',
         'gpt-6.1',
+        'gpt-6.1-sol',
+        'gpt-6.1-sol-2026-09-29',
         'gpt-7-mini',
       ])('defaults bare %s to Responses', async (model) => {
         const provider = await registry.create(`openai:${model}`);
@@ -553,15 +555,20 @@ describe('Provider Registry', () => {
         expect(provider.id()).toBe(`openai:${model}`);
       });
 
-      it.each(['gpt-5.6', 'gpt-5.6-luna', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-7-mini'])(
-        'honors the explicit Chat endpoint for %s',
-        async (model) => {
-          const provider = await registry.create(`openai:chat:${model}`);
+      it.each([
+        'gpt-5.6',
+        'gpt-5.6-luna',
+        'gpt-6-astra',
+        'gpt-6-sol',
+        'gpt-6-luna',
+        'gpt-6.1-sol',
+        'gpt-7-mini',
+      ])('honors the explicit Chat endpoint for %s', async (model) => {
+        const provider = await registry.create(`openai:chat:${model}`);
 
-          expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-          expect(provider).toHaveProperty('modelName', model);
-        },
-      );
+        expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+        expect(provider).toHaveProperty('modelName', model);
+      });
 
       it.each([
         'gpt-35-turbo',

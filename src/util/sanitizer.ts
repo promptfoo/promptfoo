@@ -516,6 +516,33 @@ function collectAuthorizationCredentials(value: string, credentials: Set<string>
   }
 }
 
+function collectStructuredCredentials(value: string, addCredential: (value: string) => void): void {
+  if (!/^\s*[\[{]/.test(value)) {
+    return;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return;
+  }
+  const pending: Array<{ value: unknown; credential: boolean }> = [
+    { value: parsed, credential: false },
+  ];
+  while (pending.length) {
+    const { value: item, credential } = pending.pop()!;
+    if (typeof item === 'string') {
+      if (item && (credential || isCredentialValue(item))) {
+        addCredential(item);
+      }
+    } else if (item && typeof item === 'object') {
+      for (const [key, child] of Object.entries(item)) {
+        pending.push({ value: child, credential: credential || isCredentialName(key) });
+      }
+    }
+  }
+}
+
 function collectRawUrlCredentials(
   value: string,
   addCredential: (raw: string, formEncoded?: boolean) => void,
@@ -523,8 +550,9 @@ function collectRawUrlCredentials(
   // URL parsing normalizes spaces, Unicode, and some punctuation. Keep the
   // original userinfo and query values so the child cannot echo those spellings.
   const schemeIndex = value.indexOf('://');
-  if (schemeIndex !== -1) {
-    const authority = value.slice(schemeIndex + 3).split(/[/?#]/, 1)[0];
+  const authorityStart = schemeIndex === -1 ? (value.startsWith('//') ? 2 : -1) : schemeIndex + 3;
+  if (authorityStart !== -1) {
+    const authority = value.slice(authorityStart).split(/[/?#]/, 1)[0];
     const atIndex = authority.lastIndexOf('@');
     if (atIndex !== -1) {
       const userinfo = authority.slice(0, atIndex);
@@ -543,6 +571,9 @@ function collectRawUrlCredentials(
     }
     const rawKey = pair.slice(0, equalsIndex);
     const rawValue = pair.slice(equalsIndex + 1);
+    collectStructuredCredentials(decodeFormComponent(rawValue) ?? rawValue, (credential) =>
+      addCredential(credential),
+    );
     if (
       isCredentialName(decodeFormComponent(rawKey) ?? rawKey) ||
       looksLikeSecret(decodeFormComponent(rawValue) ?? rawValue)
@@ -569,10 +600,11 @@ function collectRawUrlCredentials(
   }
 }
 
-function collectWebhookPathCredentials(
+function collectUrlPathCredentials(
   value: string,
   url: URL | undefined,
   addCredential: (raw: string) => void,
+  webhooksOnly = false,
 ): void {
   if (!url) {
     return;
@@ -585,10 +617,11 @@ function collectWebhookPathCredentials(
     const prefix = segments.map((part) => decodeFormComponent(part) ?? part);
     for (const [index, part] of prefix.entries()) {
       if (
-        isCredentialValue(part) ||
-        (index > 0 &&
-          getFieldNameWords(prefix[index - 1]).length === 1 &&
-          isCredentialName(prefix[index - 1]))
+        !webhooksOnly &&
+        (isCredentialValue(part) ||
+          (index > 0 &&
+            getFieldNameWords(prefix[index - 1]).length === 1 &&
+            isCredentialName(prefix[index - 1])))
       ) {
         addCredential(segments[index]);
       }
@@ -626,7 +659,7 @@ export function collectEnvCredentials(env: Record<string, unknown>, baseUrl?: st
   const addUrlCredentials = (value: string) => {
     let url: URL | undefined;
     try {
-      url = new URL(value);
+      url = new URL(value, value.startsWith('//') || /[?#]/.test(value) ? DUMMY_BASE : undefined);
     } catch {
       // Config exports can contain an unresolved hostname template.
       if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) {
@@ -662,7 +695,7 @@ export function collectEnvCredentials(env: Record<string, unknown>, baseUrl?: st
     }
 
     collectRawUrlCredentials(value, addRawCredential);
-    collectWebhookPathCredentials(value, url, addRawCredential);
+    collectUrlPathCredentials(value, url, addRawCredential);
     if (hasCredentials) {
       credentials.add(value);
     }
@@ -678,6 +711,10 @@ export function collectEnvCredentials(env: Record<string, unknown>, baseUrl?: st
         credentials.add(value);
         collectAuthorizationCredentials(value, credentials);
       }
+      collectStructuredCredentials(value, (credential) => {
+        credentials.add(credential);
+        collectAuthorizationCredentials(credential, credentials);
+      });
       addUrlCredentials(value);
     }
   }
@@ -963,6 +1000,50 @@ export function sanitizeTracingConfigForPersistence(
       provider: sanitizedProvider,
     },
   };
+}
+
+/** Redact provider settings in saved configs without changing replay inputs. */
+export function sanitizeConfigForPersistence(
+  config: Partial<UnifiedConfig>,
+): Partial<UnifiedConfig> {
+  const sanitizeProviders = <T>(value: T): T => {
+    if (Array.isArray(value)) {
+      return value.map(sanitizeProviders) as T;
+    }
+    if (!value || typeof value !== 'object') {
+      return value;
+    }
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => {
+        if (
+          ['env', 'provider', 'providers', 'options'].includes(key) ||
+          (key === 'config' && !Array.isArray(item))
+        ) {
+          return [
+            key,
+            sanitizeObject(
+              { [key]: item },
+              {
+                context: 'stored provider config',
+                sanitizeUrls: true,
+                throwOnError: true,
+                maxDepth: Number.POSITIVE_INFINITY,
+              },
+            )[key],
+          ];
+        }
+        return [
+          key,
+          ['defaultTest', 'tests', 'scenarios', 'config', 'assert', 'prompts', 'redteam'].includes(
+            key,
+          )
+            ? sanitizeProviders(item)
+            : item,
+        ];
+      }),
+    ) as T;
+  };
+  return sanitizeProviders(sanitizeTracingConfigForPersistence(config));
 }
 
 /** Sanitize exported/shared configuration while preserving safe tracing env references. */
@@ -1465,18 +1546,13 @@ function sanitizeEnvMap(
 }
 
 function sanitizeBaseUrl(value: string): string {
-  const literalUrl = value.replace(CREDENTIAL_REFERENCE_TEMPLATE, '');
-  let hasLiteralCredentials = false;
-  const collect = (raw: string) => {
-    hasLiteralCredentials ||= raw.length > 0;
-  };
-  collectRawUrlCredentials(literalUrl, collect);
-  if (value.includes('{{') && !literalUrl.includes('://')) {
-    // A leading origin reference can supply the scheme at runtime. Still inspect
-    // the literal userinfo/query fragments that follow it before saving the config.
-    collectRawUrlCredentials(`https://placeholder${literalUrl}`, collect);
-  }
-  return hasLiteralCredentials || collectEnvCredentials({}, literalUrl).length ? REDACTED : value;
+  // Keep references reusable, but give a templated authority a parseable hostname.
+  const literalUrl = value.replace(CREDENTIAL_REFERENCE_TEMPLATE, (_match, offset: number) =>
+    /[?#]/.test(value.slice(0, offset)) ? '' : 'placeholder',
+  );
+  const parsedValue =
+    value.startsWith('{{') && !literalUrl.includes('://') ? `https://${literalUrl}` : literalUrl;
+  return collectEnvCredentials({}, parsedValue).length ? REDACTED : value;
 }
 
 /**
@@ -1762,6 +1838,18 @@ export function sanitizeUrl(url: string): string {
     // Create a copy for sanitization to avoid modifying the original URL
     // Use href instead of toString() for better cross-platform compatibility
     const sanitizedUrl = new URL(parsedUrl.href);
+    let hasPathCredential = false;
+    collectUrlPathCredentials(
+      url,
+      parsedUrl,
+      () => {
+        hasPathCredential = true;
+      },
+      true,
+    );
+    if (hasPathCredential) {
+      return REDACTED;
+    }
 
     if (sanitizedUrl.username || sanitizedUrl.password) {
       sanitizedUrl.username = '***';

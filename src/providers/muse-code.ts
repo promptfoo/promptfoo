@@ -256,7 +256,7 @@ function parseResponse(result: ProcessResult): ProviderResponse {
       )
     : undefined;
   const response: ProviderResponse = {
-    sessionId,
+    sessionId: sessionId?.toLowerCase(),
     raw: events,
     metadata: { runId },
   };
@@ -281,16 +281,17 @@ function parseResponse(result: ProcessResult): ProviderResponse {
   return { ...response, output: terminal.payload.text };
 }
 
-function redactCredentials(
-  response: ProviderResponse,
-  credentials: string[],
-  historicalCredentials: string[] = [],
-): ProviderResponse {
-  const shouldStripRaw =
+function redactCredentials(response: ProviderResponse, credentials: string[]): ProviderResponse {
+  // Journal fields can split credentials across events. Omit the journal when
+  // the child received credentials.
+  const sanitizedResponse =
+    credentials.length ||
     getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false) ||
-    getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false);
+    getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false)
+      ? { ...response, raw: undefined }
+      : response;
   if (!credentials.length) {
-    return shouldStripRaw ? { ...response, raw: undefined } : response;
+    return sanitizedResponse;
   }
   const pattern = new RegExp(
     credentials
@@ -300,52 +301,12 @@ function redactCredentials(
     'g',
   );
   const redact = (value: string) => value.replace(pattern, REDACTED);
-  const rawStrings: string[] = [];
-  for (const value of Array.isArray(response.raw) ? response.raw : [response.raw]) {
-    JSON.stringify(value, (_key, item) => {
-      if (typeof item === 'string') {
-        rawStrings.push(item);
-      }
-      return item;
-    });
-  }
-  const eventTexts = Array.isArray(response.raw)
-    ? response.raw
-        .map((event) => event?.payload?.text)
-        .filter((value): value is string => typeof value === 'string')
-    : [];
-  const containsSplitCredential = (values: string[], credential: string) => {
-    let suffix = '';
-    for (const value of values) {
-      if (value.includes(credential)) {
-        suffix = '';
-        continue;
-      }
-      if (suffix && (suffix + value.slice(0, credential.length - 1)).includes(credential)) {
-        return true;
-      }
-      suffix = credential.length > 1 ? (suffix + value).slice(1 - credential.length) : '';
-    }
-    return false;
-  };
-  const hasSplitCredential = credentials.some(
-    (credential) =>
-      containsSplitCredential(rawStrings, credential) ||
-      containsSplitCredential(eventTexts, credential),
-  );
-  const hasHistoricalCredential = historicalCredentials.some((credential) =>
-    rawStrings.some((value) => value.includes(credential)),
-  );
-  const sanitizedResponse =
-    shouldStripRaw || hasSplitCredential || hasHistoricalCredential
-      ? { ...response, raw: undefined }
-      : response;
   return JSON.parse(
     JSON.stringify(sanitizedResponse, (_key, value) => {
       if (typeof value === 'string') {
         return redact(value);
       }
-      // Keep the provider's response field names even for an invalid, short credential.
+      // Preserve response field names even for an invalid, short credential.
       if (
         value !== sanitizedResponse &&
         value &&
@@ -362,6 +323,7 @@ function redactCredentials(
 /** Runs Meta's installed Muse Code CLI. Each call starts a new session unless explicitly resumed. */
 export class MuseCodeProvider implements ApiProvider {
   readonly supportsAgenticGrading = true;
+  readonly handlesOwnRetries = true;
   config: MuseCodeInputConfig;
   private readonly providerId: string;
   private readonly env: ProviderOptions['env'];
@@ -433,6 +395,9 @@ export class MuseCodeProvider implements ApiProvider {
     let config: MuseCodeConfig;
     try {
       config = MuseCodeConfigSchema.strict().parse(renderVarsInObject(merged, context?.vars));
+      if (config.no_session_log === false && !config.working_dir) {
+        throw new Error('no_session_log: false requires working_dir to retain a usable session');
+      }
       if (config.session_id && config.no_session_log) {
         throw new Error('session_id cannot be combined with no_session_log');
       }
@@ -547,8 +512,11 @@ export class MuseCodeProvider implements ApiProvider {
       signal.throwIfAborted();
       const basePath = config.basePath ?? cliState.basePath;
       let workspace = resolveAgenticWorkingDir(config.working_dir, basePath);
-      if (workspace && !(await fs.stat(workspace)).isDirectory()) {
-        throw new Error(`working_dir is not a directory: ${workspace}`);
+      if (workspace) {
+        workspace = await fs.realpath(workspace);
+        if (!(await fs.stat(workspace)).isDirectory()) {
+          throw new Error(`working_dir is not a directory: ${workspace}`);
+        }
       }
       if (config.session_id && this.sessionWorkspaces.get(config.session_id) !== workspace) {
         throw new Error('session_id requires its original working_dir');
@@ -586,7 +554,7 @@ export class MuseCodeProvider implements ApiProvider {
       if (config.session_id) {
         this.sessionCredentials.set(config.session_id, new Set(credentials));
       }
-      return redactCredentials(response, credentials, historicalCredentials);
+      return redactCredentials(response, credentials);
     } catch (error) {
       return redactCredentials(
         {

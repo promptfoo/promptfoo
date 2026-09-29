@@ -8,6 +8,7 @@ import {
   restoreAzureBlobSasTokens,
   sanitizeBody,
   sanitizeConfigForOutput,
+  sanitizeConfigForPersistence,
   sanitizeHeaders,
   sanitizeObject,
   sanitizeQueryParams,
@@ -201,6 +202,44 @@ describe('sanitizeConfigForOutput', () => {
     });
     expect(JSON.stringify(output)).not.toContain('private-value');
     expect(config.env.ACTUAL_SECRET).toBe('private-value');
+  });
+});
+
+describe('sanitizeConfigForPersistence', () => {
+  it('redacts provider settings at every config scope without changing replay inputs', () => {
+    const provider = { id: 'muse-code', config: { apiKey: 'fixture-key' } };
+    const test = {
+      vars: { password: 'test-input' },
+      provider,
+      options: { provider },
+      assert: [{ type: 'llm-rubric' as const, value: 'rubric', provider }],
+    };
+    const config = {
+      env: { META_API_KEY: '{{ env.META_API_KEY }}', DATABASE_PASSWORD: 'fixture-password' },
+      providers: [provider],
+      prompts: [{ raw: 'test-input', label: 'input', config: { apiKey: 'fixture-key' } }],
+      defaultTest: test,
+      redteam: { provider, purpose: 'test-input' },
+      tests: [test],
+      scenarios: [{ config: [test], tests: [test] }],
+    };
+    const saved = sanitizeConfigForPersistence(config);
+    expect(JSON.stringify(saved)).not.toContain('fixture-key');
+    expect(JSON.stringify(saved)).not.toContain('fixture-password');
+    expect(saved.env).toEqual({
+      META_API_KEY: '{{ env.META_API_KEY }}',
+      DATABASE_PASSWORD: '[REDACTED]',
+    });
+    expect(saved.tests).toEqual([expect.objectContaining({ vars: test.vars })]);
+    expect(saved.prompts).toEqual([
+      { raw: 'test-input', label: 'input', config: { apiKey: '[REDACTED]' } },
+    ]);
+    expect(saved.defaultTest).toMatchObject({ vars: test.vars });
+    expect(saved.redteam).toMatchObject({
+      provider: { config: { apiKey: '[REDACTED]' } },
+      purpose: 'test-input',
+    });
+    expect(provider.config.apiKey).toBe('fixture-key');
   });
 });
 
@@ -2239,6 +2278,34 @@ describe('sanitizeObject url-keyed fields', () => {
 });
 
 describe('collectEnvCredentials', () => {
+  it('collects credential leaves from structured environment values', () => {
+    const credentials = collectEnvCredentials({
+      AZURE_CREDENTIALS: JSON.stringify({
+        tenant: 'ordinary-tenant',
+        nested: [{ clientSecret: 'fixture-secret', clientId: 'ordinary-client' }],
+      }),
+    });
+    expect(credentials).toContain('fixture-secret');
+    expect(credentials).not.toContain('ordinary-tenant');
+    expect(credentials).not.toContain('ordinary-client');
+  });
+
+  it('collects structured credentials containing unpaired Unicode', () => {
+    const credential = 'fixture-\uD800';
+    expect(
+      collectEnvCredentials({ CREDENTIALS: JSON.stringify({ password: credential }) }),
+    ).toContain(credential);
+  });
+
+  it.each([
+    '//user:fixture-password@gateway.example',
+    '/callback?password=fixture-password',
+    'callback#password=fixture-password',
+    'https://gateway.example/?config=%7B%22clientSecret%22%3A%22fixture-password%22%7D',
+  ])('collects credentials from URL reference %s', (url) => {
+    expect(collectEnvCredentials({ SERVICE_URL: url })).toContain('fixture-password');
+  });
+
   it.each(['auth[password.type]', 'auth.password.type'])(
     'recognizes credential components in %s',
     (key) => {
@@ -2263,6 +2330,20 @@ describe('legacy sanitizer aliases', () => {
 });
 
 describe('sanitizeUrl', () => {
+  it.each([
+    'https://hooks.slack.com/services/T000/B000/fixture-token',
+    'https://discord.com/api/webhooks/123456/fixture-token',
+  ])('redacts webhook path credentials from generic URL fields: %s', (url) => {
+    expect(sanitizeObject({ url })).toEqual({ url: '[REDACTED]' });
+  });
+
+  it.each([
+    'https://gateway.example/?config=%7B%22clientSecret%22%3A%22fixture-value%22%7D',
+    'https://{{ env.HOST }}/token-deadbeef1234',
+  ])('redacts credentials from a base URL: %s', (base_url) => {
+    expect(sanitizeObject({ base_url })).toEqual({ base_url: '[REDACTED]' });
+  });
+
   it.each([
     'api_key_2',
     'apikey1',

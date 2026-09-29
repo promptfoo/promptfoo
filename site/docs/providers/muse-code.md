@@ -90,9 +90,13 @@ The child receives a small environment containing OS paths, locale, XDG director
 
 ## Sessions and results
 
-Every call starts a fresh Muse Code process and session by default. Promptfoo does not cache responses because agent tools, local settings, and workspace state can change between calls.
+Every call starts a fresh Muse Code process and session by default. Promptfoo does not cache responses or retry failed runs, because an attempt may have changed the workspace.
 
-To continue a session returned by this provider instance, set `session_id`, the same `working_dir`, and `evaluateOptions.maxConcurrency: 1`. Promptfoo rejects session IDs whose earlier credential history is unavailable, because it could not redact secrets recalled from that history. Concurrent calls to the same explicit session are rejected to prevent overlapping turns. Use an explicit `working_dir` and `no_session_log: false` on an initial run if you want to retain its session for later use. Promptfoo removes its temporary prompt files and terminates the CLI, including its process group on POSIX systems. It leaves Muse Code's retained sessions and user workspaces intact.
+To continue a session returned by this provider instance, set `session_id`, the same `working_dir`, and `evaluateOptions.maxConcurrency: 1`. Promptfoo rejects session IDs whose earlier credential history is unavailable, because it could not redact secrets recalled from that history. Concurrent calls to the same explicit session are rejected to prevent overlapping turns.
+
+Set `working_dir` and `no_session_log: false` on an initial run to retain its session. Retaining a session without an explicit workspace is rejected. Session reuse checks the canonical workspace path, including symlink targets.
+
+Promptfoo removes its temporary prompt files and terminates the CLI, including its process group on POSIX systems. It leaves Muse Code's retained sessions and user workspaces intact.
 
 If output pipes remain open after termination, Promptfoo closes them after a one-second cleanup grace period and returns an error.
 
@@ -100,12 +104,12 @@ The response contains:
 
 - `output`: the current run's final assistant text.
 - `sessionId` and `metadata.runId`: native identifiers for the session and run.
-- `raw`: the parsed Muse Code JSONL journal, including available task and tool events.
+- `raw`: the parsed Muse Code JSONL journal, when the child received no explicit credentials.
 
 Promptfoo redacts known credential values before tracing, saving, or sharing results.
 This covers the child environment, credentials in URLs, and credentials from earlier
-turns of a resumed session. Raw journal data is omitted when credentials span fields
-or events, when historical credentials appear, or when prompt/output stripping is enabled.
+turns of a resumed session. Raw journal data is omitted whenever credentials are
+present or prompt/output stripping is enabled.
 
 Saved configs preserve simple variable references, including `trim` and `urlencode`
 filters, and credential-file paths. Literal credentials and template fallbacks are

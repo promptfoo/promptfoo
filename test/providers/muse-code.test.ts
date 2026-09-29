@@ -9,6 +9,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { ProviderEnvOverridesSchema } from '../../src/contracts/env';
 import { MuseCodeProvider } from '../../src/providers/muse-code';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { withGenAISpan } from '../../src/tracing/genaiTracer';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { createDeferred, mockProcessEnv } from '../util/utils';
@@ -567,6 +569,7 @@ describe('MuseCodeProvider', () => {
     'https://meta.example/v1?api_key=short-secret',
     'https://meta.example/v1?github_pat=short-secret',
     'https://meta.example/v1#token=short-secret',
+    'https://meta.example/v1?config=%7B%22clientSecret%22%3A%22short-secret%22%7D',
   ])('rejects credentials in base_url before spawning: %s', async (baseUrl) => {
     expect(() => provider({ config: { base_url: baseUrl } })).toThrow(
       'base_url must not contain credentials',
@@ -655,10 +658,7 @@ describe('MuseCodeProvider', () => {
       } else {
         expect(response.error).toBe('Muse Code exited with code 1: backend rejected [REDACTED]');
       }
-      expect(response.raw.at(-1).payload.details).toEqual({
-        values: ['[REDACTED]', { echoed: '[REDACTED]' }],
-        '[REDACTED]': '[REDACTED]',
-      });
+      expect(response.raw).toBeUndefined();
       expect(tracedResponse).toEqual(response);
       expect(JSON.stringify(tracedResponse)).not.toContain(JSON.stringify(apiKey).slice(1, -1));
     },
@@ -804,6 +804,22 @@ describe('MuseCodeProvider', () => {
     } finally {
       restoreProxy();
     }
+  });
+
+  it.each([
+    { SERVICE_URL: '//user:fixture-password@gateway.example' },
+    { AZURE_CREDENTIALS: JSON.stringify({ clientSecret: 'fixture-password' }) },
+  ])('redacts extracted environment credentials before returning output: %j', async (env) => {
+    const events = structuredClone(fixtureEvents);
+    events.at(-1)!.payload.text = 'fixture-password';
+    onSpawn = (child) => {
+      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
+      child.close();
+    };
+    const response = await provider({ config: { env } }).callApi(prompt);
+    expect(response.error).toBeUndefined();
+    expect(response.output).toBe('[REDACTED]');
+    expect(response.raw).toBeUndefined();
   });
 
   it('redacts overlapping credentials in stderr without rewriting redaction markers', async () => {
@@ -1236,6 +1252,76 @@ describe('MuseCodeProvider', () => {
     await instance.shutdown();
     expect((await call).error).toContain('aborted');
     expect(providerRegistry.unregister).toHaveBeenCalledWith(instance);
+  });
+
+  it('does not replay a stateful run after a rate-limit error', async () => {
+    onSpawn = (child) => {
+      child.stderr.write('429 rate limit');
+      child.close(1);
+    };
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, minConcurrency: 1 });
+    try {
+      const response = await wrapProviderWithRateLimiting(provider(), registry).callApi(prompt);
+      expect(response.error).toContain('429 rate limit');
+      expect(spawn).toHaveBeenCalledTimes(1);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('requires an explicit workspace before retaining a new session', async () => {
+    const response = await provider({ config: { no_session_log: false } }).callApi(prompt);
+    expect(response.error).toContain('no_session_log: false requires working_dir');
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('canonicalizes a returned session UUID before resuming it', async () => {
+    const events = structuredClone(fixtureEvents);
+    for (const event of events) {
+      if (event.stream.kind === 'session') {
+        event.stream.id = sessionId.toUpperCase();
+      }
+    }
+    onSpawn = (child) => {
+      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
+      child.close();
+    };
+    const instance = provider({ config: { working_dir: testDir, no_session_log: false } });
+    const first = await instance.callApi(prompt);
+    expect(first.sessionId).toBe(sessionId);
+    const second = await instance.callApi(prompt, {
+      vars: {},
+      prompt: { raw: prompt, label: 'resume', config: { session_id: first.sessionId } },
+    });
+    expect(second.error).toBeUndefined();
+    expect(spawn).toHaveBeenCalledTimes(2);
+  });
+
+  it('binds a retained session to the canonical workspace', async () => {
+    const original = path.join(testDir, 'original');
+    const replacement = path.join(testDir, 'replacement');
+    const alias = path.join(testDir, 'alias');
+    await fs.mkdir(original);
+    await fs.mkdir(replacement);
+    await fs.symlink(original, alias, process.platform === 'win32' ? 'junction' : 'dir');
+    const instance = provider({ config: { working_dir: alias, no_session_log: false } });
+    expect((await instance.callApi(prompt)).error).toBeUndefined();
+    expect(vi.mocked(spawn).mock.calls[0][2]?.cwd).toBe(await fs.realpath(original));
+    await fs.unlink(alias);
+    await fs.symlink(replacement, alias, process.platform === 'win32' ? 'junction' : 'dir');
+    const response = await instance.callApi(prompt, {
+      vars: {},
+      prompt: { raw: prompt, label: 'resume', config: { session_id: sessionId } },
+    });
+    expect(response.error).toContain('requires its original working_dir');
+    expect(spawn).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits the journal whenever the child receives credentials', async () => {
+    const response = await provider({ config: { apiKey: 'fixture-secret' } }).callApi(prompt);
+    expect(response.error).toBeUndefined();
+    expect(response.output).toBe(`echo: ${prompt}`);
+    expect(response.raw).toBeUndefined();
   });
 
   it('requires a stable, retained workspace for session reuse', async () => {
