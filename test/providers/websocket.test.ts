@@ -866,6 +866,90 @@ describe('WebSocketProvider', () => {
     });
   });
 
+  describe('stream settlement', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.spyOn(logger, 'error').mockImplementation(() => {});
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it.each(['complete', 'error', 'timeout'])(
+      'ignores messages after %s without rearming the deadline',
+      async (terminal) => {
+        const transform = vi.fn(
+          (_accumulator, event) =>
+            [{ output: event.data }, event.data === 'done'] as [any, boolean],
+        );
+        provider = new WebSocketProvider('ws://test.com', {
+          config: { messageTemplate: '{{ prompt }}', timeoutMs: 100, streamResponse: transform },
+        });
+        const response = provider.callApi('hello').then(
+          (value) => value,
+          (error) => ({ error: error.message }),
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        if (terminal === 'complete') {
+          mockWs.onmessage?.({ data: 'done' } as WebSocket.MessageEvent);
+        } else if (terminal === 'error') {
+          mockWs.onerror?.({
+            error: new Error('fixture connection error'),
+            message: 'fixture connection error',
+          } as WebSocket.ErrorEvent);
+        } else {
+          await vi.advanceTimersByTimeAsync(100);
+        }
+        await response;
+        const calls = transform.mock.calls.length;
+        mockWs.onmessage?.({ data: 'late partial' } as WebSocket.MessageEvent);
+        expect(transform).toHaveBeenCalledTimes(calls);
+        expect(vi.getTimerCount()).toBe(0);
+        expect(mockWs.close).toHaveBeenCalledOnce();
+      },
+    );
+
+    it('does not send or restart a timer when open arrives after timeout', async () => {
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          timeoutMs: 100,
+          streamResponse: (accumulator: any) => [accumulator, false],
+        },
+      });
+      const response = provider.callApi('hello').catch((error) => ({ error: error.message }));
+      await vi.advanceTimersByTimeAsync(100);
+      await expect(response).resolves.toEqual({ error: 'WebSocket request timed out after 100ms' });
+      mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+      expect(mockWs.send).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('settles a closed stream immediately and clears the timer', async () => {
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          timeoutMs: 100,
+          streamResponse: (accumulator: any) => [accumulator, false],
+        },
+      });
+      const rejected = vi.fn();
+      const response = provider.callApi('hello').catch(rejected);
+      await vi.advanceTimersByTimeAsync(0);
+      mockWs.onclose?.({
+        type: 'close',
+        target: mockWs,
+        code: 1000,
+        reason: '',
+        wasClean: true,
+      } as WebSocket.CloseEvent);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(rejected).toHaveBeenCalledWith(
+        new Error('WebSocket connection closed before the response completed'),
+      );
+      expect(vi.getTimerCount()).toBe(0);
+      await response;
+    });
+  });
+
   describe('timeouts', () => {
     it('should timeout with streamResponse', async () => {
       vi.useFakeTimers();

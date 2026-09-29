@@ -19,6 +19,9 @@ export function mapSnakeCaseToCamelCase(obj: Record<string, any>): Record<string
   if ('named_scores' in result && !('namedScores' in result)) {
     result.namedScores = result.named_scores;
   }
+  if ('named_score_weights' in result && !('namedScoreWeights' in result)) {
+    result.namedScoreWeights = result.named_score_weights;
+  }
   if ('component_results' in result && !('componentResults' in result)) {
     result.componentResults = result.component_results;
   }
