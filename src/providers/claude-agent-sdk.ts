@@ -27,7 +27,7 @@ import {
   initializeAgenticCache,
   resolveAgenticWorkingDir,
 } from './agentic-utils';
-import { assertIsolatedWorkingDir } from './agentWorkspace';
+import { assertIsolatedWorkingDir, clearRepositoryEnv } from './agentWorkspace';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode, validateMCPConfigForClaudeCode } from './mcp/transform';
 import {
@@ -1479,6 +1479,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           env[key] = value;
         }
       }
+    }
+
+    if (inIsolatedWorkspace) {
+      clearRepositoryEnv(env);
     }
 
     if (config.deep_tracing) {

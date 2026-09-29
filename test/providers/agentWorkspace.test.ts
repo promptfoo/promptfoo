@@ -96,6 +96,36 @@ describe('agent workspaces', () => {
   });
 
   describe('git repositories', () => {
+    it('keeps an unchanged clone diff empty with global CRLF conversion enabled', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const configFile = path.join(root, 'global.gitconfig');
+      write(configFile, '[core]\n\tautocrlf = true\n');
+      const restoreEnv = mockProcessEnv({ GIT_CONFIG_GLOBAL: configFile });
+      try {
+        const workspace = await create(source);
+        expect(workspace.strategy).toBe('git');
+        expect((await workspace.metadata()).workspaceDiff).toBe('');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it.each(['local-fixture.txt', 'node_modules/pkg/index.js'])(
+      'preserves %s when git status is configured to hide untracked files',
+      async (file) => {
+        const source = path.join(root, 'repo');
+        makeRepository(source, { '.gitignore': 'node_modules/\n' });
+        git(source, 'config', 'status.showUntrackedFiles', 'no');
+        write(path.join(source, file), 'local fixture\n');
+
+        const workspace = await create(source);
+
+        expect(workspace.strategy).toBe('copy');
+        expect(fs.readFileSync(path.join(workspace.dir, file), 'utf8')).toBe('local fixture\n');
+      },
+    );
+
     it('clones a clean repository at its commit without writing to the source', async () => {
       const source = path.join(root, 'repo');
       const head = makeRepository(source);
@@ -136,6 +166,54 @@ describe('agent workspaces', () => {
       expect(metadata.workspaceDiff).toContain('diff --git a/src/app.txt b/src/app.txt');
       expect(metadata.workspaceDiff).toContain('deleted file mode');
       expect(metadata.workspaceDiff).toContain('+++ b/notes/new.txt');
+    });
+
+    it.each(['auto', 'git'] as const)(
+      'rejects tracked absolute links back into the source in %s mode',
+      async (mode) => {
+        if (process.platform === 'win32') {
+          return;
+        }
+        const source = path.join(root, 'repo');
+        makeRepository(source);
+        fs.symlinkSync(path.join(source, 'README.md'), path.join(source, 'linked-readme'));
+        git(source, 'add', 'linked-readme');
+        git(source, 'commit', '-q', '-m', 'tracked link');
+
+        await expect(create(source, mode)).rejects.toThrow('links outside working_dir');
+        expect(fs.readFileSync(path.join(source, 'README.md'), 'utf8')).toBe('original\n');
+      },
+    );
+
+    it('rejects tracked links that escape through another link', async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      fs.symlinkSync('.', path.join(source, 'alias'));
+      fs.symlinkSync('alias/../README.md', path.join(source, 'escape'));
+      git(source, 'add', 'alias', 'escape');
+      git(source, 'commit', '-q', '-m', 'tracked links');
+
+      await expect(create(source, 'git')).rejects.toThrow();
+    });
+
+    it('keeps tracked relative links inside the clone', async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      fs.symlinkSync('README.md', path.join(source, 'linked-readme'));
+      git(source, 'add', 'linked-readme');
+      git(source, 'commit', '-q', '-m', 'tracked link');
+
+      const workspace = await create(source);
+      fs.writeFileSync(path.join(workspace.dir, 'linked-readme'), 'changed\n');
+
+      expect(fs.readFileSync(path.join(source, 'README.md'), 'utf8')).toBe('original\n');
+      expect((await workspace.metadata()).workspaceDiff).toContain('+changed');
     });
 
     it('truncates a long diff', async () => {
@@ -388,6 +466,21 @@ describe('agent workspaces', () => {
   });
 
   describe('copies', () => {
+    it('rejects symbolic git metadata that redirects the working tree to the source', async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      git(source, 'config', 'core.worktree', source);
+      fs.renameSync(path.join(source, '.git'), path.join(source, 'metadata'));
+      fs.symlinkSync('metadata', path.join(source, '.git'));
+      write(path.join(source, 'README.md'), 'uncommitted\n');
+
+      await expect(create(source, 'copy')).rejects.toThrow('symbolic .git metadata');
+      expect(fs.readFileSync(path.join(source, 'README.md'), 'utf8')).toBe('uncommitted\n');
+    });
+
     it('preserves relative links that stay inside working_dir', async () => {
       if (process.platform === 'win32') {
         return;
@@ -546,6 +639,7 @@ describe('agent workspaces', () => {
       expect(assertIsolatedWorkingDir({ working_dir: workspace.dir, copy_working_dir: true })).toBe(
         true,
       );
+      expect(assertIsolatedWorkingDir({ working_dir: workspace.dir })).toBe(true);
       expect(() =>
         assertIsolatedWorkingDir({ working_dir: source, copy_working_dir: true }),
       ).toThrow(message);
@@ -570,10 +664,10 @@ describe('agent workspaces', () => {
         fs.renameSync(replaced, moved);
         fs.symlinkSync(moved, replaced);
         try {
-          expect(isAgentWorkspace(workspace.dir)).toBe(false);
+          expect(() => isAgentWorkspace(workspace.dir)).toThrow('workspace is no longer available');
           expect(() =>
             assertIsolatedWorkingDir({ working_dir: workspace.dir, copy_working_dir: true }),
-          ).toThrow('This call was not made by an eval step');
+          ).toThrow('workspace is no longer available');
         } finally {
           fs.unlinkSync(replaced);
           fs.renameSync(moved, replaced);

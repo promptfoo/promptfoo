@@ -17,6 +17,7 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
   let fixture: string;
   let workspaces: string[];
   let existedDuringGrading: boolean[];
+  let liveWorkspaceCounts: number[];
 
   // Writes into the working directory it is given and reports which workspace it used.
   const createTarget = (config: Record<string, unknown>): ApiProvider => ({
@@ -26,6 +27,7 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
       const dir = context?.prompt.config?.working_dir as string;
       fs.writeFileSync(path.join(dir, 'run.txt'), `repeat ${context?.repeatIndex}\n`);
       workspaces.push(dir);
+      liveWorkspaceCounts.push(workspaces.filter((workspace) => fs.existsSync(workspace)).length);
       return { output: `workspace-${workspaces.length - 1}` };
     }),
   });
@@ -46,6 +48,7 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
     fs.writeFileSync(path.join(fixture, 'README.md'), 'fixture\n');
     workspaces = [];
     existedDuringGrading = [];
+    liveWorkspaceCounts = [];
   });
 
   afterEach(() => {
@@ -77,6 +80,7 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
       expect(summary.stats.successes).toBe(3);
       expect(new Set(workspaces).size).toBe(3);
       expect(existedDuringGrading).toEqual([true, true, true]);
+      expect(Math.max(...liveWorkspaceCounts)).toBeLessThanOrEqual(maxConcurrency);
       expect(workspaces.filter((dir) => fs.existsSync(dir))).toEqual([]);
       expect(fs.readdirSync(fixture)).toEqual(['README.md']);
       expect(

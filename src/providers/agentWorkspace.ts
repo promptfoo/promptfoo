@@ -69,6 +69,13 @@ const REPOSITORY_ENV_VARS = [
 const liveWorkspaces = new Map<string, string>();
 let exitCleanupRegistered = false;
 
+/** Clear Git repository selectors from a per-call subprocess environment. */
+export function clearRepositoryEnv(env: NodeJS.ProcessEnv): void {
+  for (const name of REPOSITORY_ENV_VARS) {
+    delete env[name];
+  }
+}
+
 /** Parse `copy_working_dir`: `true` picks git or copy automatically. */
 export function getCopyWorkingDirMode(value: unknown): AgentWorkspaceMode | undefined {
   if (value === undefined || value === false) {
@@ -83,7 +90,7 @@ export function getCopyWorkingDirMode(value: unknown): AgentWorkspaceMode | unde
   throw new Error("copy_working_dir must be true, false, 'git', or 'copy'");
 }
 
-/** Whether `dir` is a workspace that this process created and has not removed. */
+/** Whether `dir` is registered. Throws if a registered workspace was deleted or replaced. */
 export function isAgentWorkspace(dir: string): boolean {
   const resolved = path.resolve(dir);
   if (!liveWorkspaces.has(resolved)) {
@@ -91,10 +98,13 @@ export function isAgentWorkspace(dir: string): boolean {
   }
   try {
     // The agent can replace the workspace or its parent with a link after its call.
-    return lstatSync(resolved).isDirectory() && realpathSync(resolved) === resolved;
+    if (lstatSync(resolved).isDirectory() && realpathSync(resolved) === resolved) {
+      return true;
+    }
   } catch {
-    return false;
+    // A missing managed workspace must not make graders fall back to another directory.
   }
+  throw new Error(`copy_working_dir workspace is no longer available or was replaced: ${resolved}`);
 }
 
 /**
@@ -107,11 +117,12 @@ export function assertIsolatedWorkingDir(config: {
   copy_working_dir?: unknown;
   working_dir?: unknown;
 }): boolean {
-  if (!getCopyWorkingDirMode(config.copy_working_dir)) {
-    return false;
-  }
+  const mode = getCopyWorkingDirMode(config.copy_working_dir);
   if (typeof config.working_dir === 'string' && isAgentWorkspace(config.working_dir)) {
     return true;
+  }
+  if (!mode) {
+    return false;
   }
   throw new Error(
     'copy_working_dir runs each eval step in a fresh copy of working_dir, which promptfoo eval ' +
@@ -125,9 +136,7 @@ async function git(
   { cwd, env }: { cwd?: string; env?: Record<string, string> } = {},
 ): Promise<string> {
   const baseEnv = { ...process.env };
-  for (const name of REPOSITORY_ENV_VARS) {
-    delete baseEnv[name];
-  }
+  clearRepositoryEnv(baseEnv);
   const { stdout } = await execFileAsync('git', cwd ? ['-C', cwd, ...args] : args, {
     env: { ...baseEnv, ...env },
     maxBuffer: 64 * 1024 * 1024,
@@ -158,7 +167,13 @@ async function getCloneableRepository(
     }
     // --no-optional-locks: a plain status refreshes, and so rewrites, the source's index.
     const status = await git(
-      ['--no-optional-locks', 'status', '--porcelain', ...(allowIgnored ? [] : ['--ignored'])],
+      [
+        '--no-optional-locks',
+        'status',
+        '--porcelain',
+        '--untracked-files=all',
+        ...(allowIgnored ? [] : ['--ignored']),
+      ],
       { cwd: source },
     );
     if (status.trim()) {
@@ -186,6 +201,11 @@ function isInside(root: string, target: string): boolean {
 async function assertCopyable(entry: string, root: string): Promise<boolean> {
   const stat = await fs.lstat(entry);
   if (stat.isSymbolicLink()) {
+    if (path.basename(entry) === '.git') {
+      throw new Error(
+        `copy_working_dir cannot copy ${entry}: symbolic .git metadata can share another repository`,
+      );
+    }
     const target = await fs.readlink(entry);
     if (
       path.isAbsolute(target) ||
@@ -342,9 +362,28 @@ export async function createAgentWorkspace(
   try {
     if (repo) {
       await git(['clone', '--quiet', '--shared', '--no-checkout', realSource, dir]);
-      await git(['checkout', '--quiet', '--detach', repo.head], { cwd: dir });
+      await git(
+        [
+          '-c',
+          'core.autocrlf=false',
+          '-c',
+          'core.eol=lf',
+          'checkout',
+          '--quiet',
+          '--detach',
+          repo.head,
+        ],
+        { cwd: dir },
+      );
       // Without a remote, a push from the agent cannot reach the source repository.
       await git(['remote', 'remove', 'origin'], { cwd: dir });
+      // Check links after checkout: ignored targets may exist only in the source repository.
+      const trackedFiles = await git(['ls-files', '--stage', '-z'], { cwd: dir });
+      for (const entry of trackedFiles.split('\0')) {
+        if (entry.startsWith('120000 ')) {
+          await assertCopyable(path.join(dir, entry.slice(entry.indexOf('\t') + 1)), dir);
+        }
+      }
     } else {
       await fs.cp(realSource, dir, {
         recursive: true,

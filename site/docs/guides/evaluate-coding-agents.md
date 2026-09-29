@@ -343,7 +343,7 @@ Workspaces have these limits:
 
 - Responses are never cached, because a cached response would come without the agent's changes.
 - Only eval steps get a workspace. When anything else calls the provider, such as a multi-turn red team strategy, the call fails instead of running in `working_dir` itself.
-- Repositories with submodules aren't supported yet. Copies reject unresolved links, links that point outside `working_dir`, and Git metadata that points outside the copy (such as a linked worktree's `.git` file or an absolute `core.worktree`). Commit the changes so the directory can be cloned instead.
+- Repositories with submodules aren't supported yet. Workspaces reject unresolved links and links that point outside the workspace. Copies also reject Git metadata that points outside the copy (such as a linked worktree's `.git` file or an absolute `core.worktree`). Commit the changes so the directory can be cloned instead.
 - A workspace keeps calls from affecting each other, but it isn't a sandbox. An agent with shell access can still reach the rest of the file system, so run untrusted agents in a container.
 
 ## Evaluation techniques

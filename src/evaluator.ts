@@ -4006,8 +4006,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           break;
         }
 
-        // Finish audio grading before collecting another inline clip.
-        if (rows.some((row) => row.response?.audio && deferredGradingPromises.has(row))) {
+        // Release clips and workspaces before collecting another target response.
+        if (
+          rows.some(
+            (row) =>
+              (row.response?.audio || row.response?.metadata?.workingDir) &&
+              deferredGradingPromises.has(row),
+          )
+        ) {
           await flushGroupedRows();
         }
       }
@@ -5028,6 +5034,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return interruptedEval;
     }
 
+    // Hooks may replace the test object. Keep resumed rows, which have no pending eval step.
+    for (const { testIdx, test } of runEvalOptions) {
+      comparisonTestCasesByTestIdx.set(testIdx, test);
+    }
     await this.processComparisonAssertions({
       ciProgressReporter,
       isWebUI,

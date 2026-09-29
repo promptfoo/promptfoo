@@ -27,7 +27,7 @@ import {
 } from '../../util/fetch/errors';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
-import { assertIsolatedWorkingDir } from '../agentWorkspace';
+import { assertIsolatedWorkingDir, clearRepositoryEnv } from '../agentWorkspace';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 import {
@@ -2091,7 +2091,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // but runtime variable rendering must not recurse into provider methods.
     delete mergedConfig.provider;
     const config = renderVarsInObject(mergedConfig, context?.vars) as OpenAICodexSDKConfig;
-    assertIsolatedWorkingDir(config);
+    const inIsolatedWorkspace = assertIsolatedWorkingDir(config);
 
     const requestedModel =
       typeof config.model === 'string' && config.model ? config.model : undefined;
@@ -2100,7 +2100,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // withGenAISpan handles both exceptions and { error: ... } responses
     return withGenAISpan(
       this.buildCodexSpanContext(prompt, context, requestedModel),
-      () => this.callApiInternal(prompt, context, callOptions, config),
+      () => this.callApiInternal(prompt, context, callOptions, config, inIsolatedWorkspace),
       (response) => this.extractCodexSpanResult(response, requestedModel),
     );
   }
@@ -2214,6 +2214,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     callOptions: CallApiOptionsParams | undefined,
     rawConfig: OpenAICodexSDKConfig,
+    inIsolatedWorkspace: boolean,
   ): Promise<ProviderResponse> {
     let config: OpenAICodexSDKConfig;
     try {
@@ -2248,6 +2249,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       currentTraceparent,
       apiKey,
     );
+    if (inIsolatedWorkspace) {
+      clearRepositoryEnv(env);
+    }
     const skillRootPrefixes = this.getSkillRootPrefixes(env, resolvedConfig.working_dir);
     const promptInput = this.parsePromptInput(prompt);
 

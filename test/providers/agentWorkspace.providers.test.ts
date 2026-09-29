@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,18 +10,28 @@ import { type AgentWorkspace, createAgentWorkspace } from '../../src/providers/a
 import { ClaudeCodeSDKProvider } from '../../src/providers/claude-agent-sdk';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 import { OpenCodeSDKProvider } from '../../src/providers/opencode-sdk';
+import { mockProcessEnv } from '../util/utils';
 
 import type { CallApiContextParams } from '../../src/types/index';
 
 const mocks = vi.hoisted(() => ({
   query: vi.fn(),
+  codex: vi.fn(),
   startThread: vi.fn(),
+  createOpencode: vi.fn(),
+  createOpencodeClient: vi.fn(),
+  closeServer: vi.fn(),
 }));
 
 vi.mock('../../src/esm', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/esm')>()),
   importModule: vi.fn(),
   resolvePackageEntryPoint: vi.fn((name: string) => name),
+}));
+
+vi.mock('@opencode-ai/sdk/v2', () => ({
+  createOpencode: mocks.createOpencode,
+  createOpencodeClient: mocks.createOpencodeClient,
 }));
 
 // A Claude Agent SDK query that immediately reports success.
@@ -60,10 +71,12 @@ describe('copy_working_dir in agentic providers', () => {
   let source: string;
   let workspace: AgentWorkspace;
   let cacheWasEnabled: boolean;
+  let restoreEnv: (() => void) | undefined;
 
   beforeEach(async () => {
     vi.resetAllMocks();
     source = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-workspace-provider-'));
+    execFileSync('git', ['init', '--quiet', source]);
     fs.writeFileSync(path.join(source, 'file.txt'), 'content\n');
     workspace = await createAgentWorkspace(source, 'copy');
     cacheWasEnabled = isCacheEnabled();
@@ -71,6 +84,9 @@ describe('copy_working_dir in agentic providers', () => {
   });
 
   afterEach(async () => {
+    restoreEnv?.();
+    restoreEnv = undefined;
+    vi.restoreAllMocks();
     await workspace.remove();
     fs.rmSync(source, { recursive: true, force: true });
     await clearCache();
@@ -78,6 +94,16 @@ describe('copy_working_dir in agentic providers', () => {
       disableCache();
     }
   });
+
+  const repositoryEnv = () => ({
+    GIT_DIR: path.join(source, '.git'),
+    GIT_WORK_TREE: source,
+    GIT_INDEX_FILE: path.join(source, '.git', 'index'),
+    AGENT_WORKSPACE_TEST_VALUE: 'preserved',
+  });
+
+  const gitRoot = (cwd: string, env: NodeJS.ProcessEnv) =>
+    execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, env, encoding: 'utf8' }).trim();
 
   describe('Claude Agent SDK', () => {
     beforeEach(() => {
@@ -107,6 +133,46 @@ describe('copy_working_dir in agentic providers', () => {
       expect(mocks.query).toHaveBeenCalledTimes(2);
       expect(mocks.query.mock.calls[0][0].options.cwd).toBe(workspace.dir);
     });
+
+    it.each(['process', 'config', 'grader'])(
+      'scrubs %s Git selectors for isolated calls',
+      async (location) => {
+        const overrides = repositoryEnv();
+        if (location !== 'config') {
+          restoreEnv = mockProcessEnv(overrides);
+        }
+        const provider = new ClaudeCodeSDKProvider({
+          config: {
+            working_dir: source,
+            copy_working_dir: location === 'grader' ? undefined : true,
+            ...(location === 'config' ? { env: overrides } : {}),
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Inspect the repository', workspaceContext(workspace.dir));
+
+        const { cwd, env } = mocks.query.mock.calls[0][0].options;
+        expect(gitRoot(cwd, env)).toBe(workspace.dir);
+        expect(env.AGENT_WORKSPACE_TEST_VALUE).toBe('preserved');
+        if (location !== 'config') {
+          expect(process.env.GIT_DIR).toBe(overrides.GIT_DIR);
+        }
+      },
+    );
+
+    it('preserves Git selectors for ordinary calls', async () => {
+      const overrides = repositoryEnv();
+      restoreEnv = mockProcessEnv(overrides);
+      const provider = new ClaudeCodeSDKProvider({
+        config: { working_dir: source },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      await provider.callApi('Inspect the repository');
+
+      expect(mocks.query.mock.calls[0][0].options.env).toMatchObject(overrides);
+    });
   });
 
   describe('Codex SDK', () => {
@@ -116,11 +182,10 @@ describe('copy_working_dir in agentic providers', () => {
         run: vi.fn().mockResolvedValue({ finalResponse: 'edited', items: [], usage: null }),
       };
       mocks.startThread.mockReturnValue(thread);
-      vi.mocked(importModule).mockResolvedValue({
-        Codex: vi.fn(function () {
-          return { startThread: mocks.startThread };
-        }),
+      mocks.codex.mockImplementation(function () {
+        return { startThread: mocks.startThread };
       });
+      vi.mocked(importModule).mockResolvedValue({ Codex: mocks.codex });
     });
 
     const createProvider = () =>
@@ -145,9 +210,68 @@ describe('copy_working_dir in agentic providers', () => {
         expect.objectContaining({ workingDirectory: workspace.dir }),
       );
     });
+
+    it.each(['process', 'config', 'grader'])(
+      'scrubs %s Git selectors for isolated calls',
+      async (location) => {
+        const overrides = repositoryEnv();
+        if (location !== 'config') {
+          restoreEnv = mockProcessEnv(overrides);
+        }
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            working_dir: source,
+            copy_working_dir: location === 'grader' ? undefined : true,
+            inherit_process_env: true,
+            ...(location === 'config' ? { cli_env: overrides } : {}),
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Inspect the repository', workspaceContext(workspace.dir));
+
+        const { env } = mocks.codex.mock.calls[0][0];
+        const { workingDirectory } = mocks.startThread.mock.calls[0][0];
+        expect(gitRoot(workingDirectory, env)).toBe(workspace.dir);
+        expect(env.AGENT_WORKSPACE_TEST_VALUE).toBe('preserved');
+        if (location !== 'config') {
+          expect(process.env.GIT_DIR).toBe(overrides.GIT_DIR);
+        }
+      },
+    );
+
+    it('preserves Git selectors for ordinary calls', async () => {
+      const overrides = repositoryEnv();
+      restoreEnv = mockProcessEnv(overrides);
+      const provider = new OpenAICodexSDKProvider({
+        config: { working_dir: source, inherit_process_env: true },
+        env: { OPENAI_API_KEY: 'test-api-key' },
+      });
+
+      await provider.callApi('Inspect the repository');
+
+      expect(mocks.codex.mock.calls[0][0].env).toMatchObject(overrides);
+    });
   });
 
   describe('OpenCode SDK', () => {
+    beforeEach(() => {
+      const client = {
+        session: {
+          create: vi.fn().mockResolvedValue({ data: { id: 'session' } }),
+          prompt: vi
+            .fn()
+            .mockResolvedValue({ data: { parts: [{ type: 'text', text: 'edited' }] } }),
+          delete: vi.fn().mockResolvedValue({}),
+        },
+      };
+      mocks.createOpencode.mockResolvedValue({
+        client,
+        server: { url: 'http://localhost:1234', close: mocks.closeServer },
+      });
+      mocks.createOpencodeClient.mockReturnValue(client);
+    });
+
     it('refuses a call that would run in working_dir itself', async () => {
       const provider = new OpenCodeSDKProvider({
         config: { working_dir: source, copy_working_dir: true },
@@ -155,6 +279,80 @@ describe('copy_working_dir in agentic providers', () => {
 
       await expect(provider.callApi('Edit the file')).rejects.toThrow(NOT_AN_EVAL_STEP);
       expect(importModule).not.toHaveBeenCalled();
+    });
+
+    it('rejects a missing isolated working_dir before allocating a temporary directory', async () => {
+      const allocate = vi.spyOn(fs, 'mkdtempSync');
+      const provider = new OpenCodeSDKProvider({ config: { copy_working_dir: true } });
+
+      await expect(provider.callApi('Edit the file')).rejects.toThrow(NOT_AN_EVAL_STEP);
+
+      expect(allocate).not.toHaveBeenCalled();
+      expect(mocks.createOpencode).not.toHaveBeenCalled();
+    });
+
+    it('rejects inherited Git selectors before starting an isolated server', async () => {
+      const overrides = repositoryEnv();
+      restoreEnv = mockProcessEnv(overrides);
+      const allocate = vi.spyOn(fs, 'mkdtempSync');
+      const provider = new OpenCodeSDKProvider({
+        config: { working_dir: source, copy_working_dir: true },
+      });
+
+      await expect(
+        provider.callApi('Edit the file', workspaceContext(workspace.dir)),
+      ).rejects.toThrow('OpenCode SDK does not support replacing that environment');
+
+      expect(allocate).not.toHaveBeenCalled();
+      expect(mocks.createOpencode).not.toHaveBeenCalled();
+      expect(process.env.GIT_DIR).toBe(overrides.GIT_DIR);
+    });
+
+    it('preserves ordinary calls but rejects reusing a server started with Git selectors', async () => {
+      const overrides = repositoryEnv();
+      restoreEnv = mockProcessEnv(overrides);
+      const provider = new OpenCodeSDKProvider({ config: { working_dir: source } });
+
+      const response = await provider.callApi('Inspect the repository');
+      expect(response.output).toBe('edited');
+      expect(mocks.createOpencode.mock.calls[0][0].env).toMatchObject(overrides);
+      restoreEnv();
+
+      await expect(
+        provider.callApi('Edit the file', workspaceContext(workspace.dir)),
+      ).rejects.toThrow('OpenCode SDK does not support replacing that environment');
+      expect(mocks.createOpencode).toHaveBeenCalledTimes(1);
+      await provider.cleanup();
+    });
+
+    it('allows an isolated call when the local server has no Git selectors', async () => {
+      const provider = new OpenCodeSDKProvider({
+        config: { working_dir: source, copy_working_dir: true },
+      });
+
+      const response = await provider.callApi('Edit the file', workspaceContext(workspace.dir));
+
+      expect(response.output).toBe('edited');
+      expect(mocks.createOpencode).toHaveBeenCalledTimes(1);
+      await provider.cleanup();
+    });
+
+    it('does not apply the local-server restriction to an external OpenCode server', async () => {
+      restoreEnv = mockProcessEnv(repositoryEnv());
+      const provider = new OpenCodeSDKProvider({
+        config: {
+          baseUrl: 'http://localhost:1234',
+          working_dir: source,
+          copy_working_dir: true,
+        },
+      });
+
+      const response = await provider.callApi('Edit the file', workspaceContext(workspace.dir));
+
+      expect(response.output).toBe('edited');
+      expect(mocks.createOpencode).not.toHaveBeenCalled();
+      expect(mocks.createOpencodeClient).toHaveBeenCalledWith({ baseUrl: 'http://localhost:1234' });
+      await provider.cleanup();
     });
   });
 });

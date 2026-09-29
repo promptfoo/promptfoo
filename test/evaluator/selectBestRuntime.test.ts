@@ -6,6 +6,7 @@ import { expect, it, vi } from 'vitest';
 import { runCompareAssertion } from '../../src/assertions';
 import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
 import { sanitizeResultForJsonlArtifact } from '../../src/models/evalResult';
 import { toPrompt } from './helpers';
@@ -49,6 +50,29 @@ function makeSuite() {
 }
 
 describeEvaluator('select-best runtime grading configuration', () => {
+  it('grades with the replacement test returned by beforeEach', async () => {
+    const { grader, suite } = makeSuite();
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName !== 'beforeEach' || !('test' in context)) {
+        return context;
+      }
+      return {
+        ...context,
+        test: {
+          ...context.test,
+          assert: [{ type: 'select-best', value: 'Use the updated criteria', provider: grader }],
+        },
+      };
+    });
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+
+    await evaluate(suite, record, { maxConcurrency: 1 });
+
+    expect(grader.callApi).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(grader.callApi).mock.calls[0][0]).toContain('Use the updated criteria');
+    expect(vi.mocked(grader.callApi).mock.calls[0][0]).not.toContain('choose the best');
+  });
+
   it('uses the original grader key without exposing it in returned grading results', async () => {
     const { grader, seenKeys, suite } = makeSuite();
     const [result] = await runCompareAssertion(
