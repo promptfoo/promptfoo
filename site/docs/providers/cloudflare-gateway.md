@@ -111,7 +111,7 @@ The `cloudflare-gateway` adapter supports these provider-specific chat routes:
 | Grok (xAI)   | `grok`          | `XAI_API_KEY`                |
 
 :::note
-`cloudflare-gateway:` routes for Workers AI, Google AI Studio, Cohere, Hugging Face, and Replicate are rejected with an error, because their native endpoints do not accept OpenAI Chat Completions requests. Use Cloudflare's [OpenAI-compatible REST API](https://developers.cloudflare.com/ai-gateway/usage/rest-api/) for models it supports, as shown below for Workers AI. Other native endpoints require a [custom provider](/docs/providers/custom-api).
+`cloudflare-gateway:` rejects Workers AI, Google AI Studio, Cohere, Hugging Face, and Replicate because this adapter does not implement their native request formats. Use Cloudflare's [OpenAI-compatible REST API](https://developers.cloudflare.com/ai-gateway/usage/rest-api/) for models it supports, as shown below for Workers AI. Other native endpoints require a [custom provider](/docs/providers/custom-api).
 
 AWS Bedrock request signing is not implemented by the `cloudflare-gateway` adapter.
 :::
