@@ -42,6 +42,71 @@ function createMockSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
 }
 
 describe('Streaming API', () => {
+  it('preserves per-choice annotation deltas for shared citation processing', async () => {
+    const annotations = ['first', 'second'].map((title) => ({
+      type: 'url_citation',
+      url_citation: {
+        start_index: 0,
+        end_index: 4,
+        url: `https://example.com/${title}`,
+        title,
+      },
+    }));
+    const alternative = { type: 'fixture_annotation', detail: 'second choice' };
+    const frames = [
+      {
+        choices: [
+          { index: 0, delta: { content: 'Hello', annotations: [annotations[0]] } },
+          { index: 1, delta: { content: 'Another answer', annotations: [alternative] } },
+        ],
+      },
+      {
+        choices: [
+          { index: 0, delta: { annotations: [annotations[1]] }, finish_reason: 'stop' },
+          { index: 1, delta: {}, finish_reason: 'stop' },
+        ],
+      },
+    ];
+    mockFetchWithRetries.mockResolvedValue(
+      new Response(
+        frames.map((frame) => `data: ${JSON.stringify(frame)}\n\n`).join('') + 'data: [DONE]\n\n',
+      ),
+    );
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+      config: { stream: true, passthrough: { n: 2 } },
+    });
+
+    const result = await provider.callApi('A benign greeting');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Hello');
+    expect(result.metadata?.annotations).toEqual(annotations);
+    expect(result.metadata?.citations).toEqual([
+      { url: 'https://example.com/first', content: 'first: Hello' },
+      { url: 'https://example.com/second', content: 'second: Hello' },
+    ]);
+    expect(result.metadata?.choices).toMatchObject([
+      { message: { annotations } },
+      { message: { annotations: [alternative] } },
+    ]);
+  });
+
+  it.each(['invalid', {}])('rejects non-array annotation deltas: %j', async (annotations) => {
+    mockFetchWithRetries.mockResolvedValue(
+      new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: 'Hello', annotations }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`,
+      ),
+    );
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+      config: { stream: true },
+    });
+
+    const result = await provider.callApi('A benign greeting');
+
+    expect(result.error).toContain('malformed SSE');
+    expect(result.output).toBeUndefined();
+  });
+
   it.each(['choice', 'outer', 'named', 'named-wrapped'])(
     'surfaces a %s streaming error without invoking completed tools',
     async (location) => {

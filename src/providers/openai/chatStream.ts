@@ -74,6 +74,7 @@ type OpenAiStreamingChoice = {
   reasoning: string;
   reasoningContent: string;
   logProbs: number[];
+  annotations: unknown[];
   finishReason: string | null;
   error?: unknown;
   functionCall: OpenAiStreamingFunctionCall | null;
@@ -178,6 +179,7 @@ function getOpenAiStreamingChoice(
       reasoning: '',
       reasoningContent: '',
       logProbs: [],
+      annotations: [],
       finishReason: null,
       functionCall: null,
       toolCalls: new Map(),
@@ -196,6 +198,7 @@ function appendStreamingChoice(
       refusal?: string;
       reasoning?: string;
       reasoning_content?: string;
+      annotations?: unknown[];
       function_call?: { name?: string; arguments?: string };
       tool_calls?: Array<{
         index: number;
@@ -232,6 +235,14 @@ function appendStreamingChoice(
     streamingChoice.reasoningContent,
     choice.delta?.reasoning_content,
   );
+  if (choice.delta?.annotations != null) {
+    if (!Array.isArray(choice.delta.annotations)) {
+      throw new Error('Invalid streaming annotations');
+    }
+    for (const annotation of choice.delta.annotations) {
+      streamingChoice.annotations.push(annotation);
+    }
+  }
   for (const logProb of choice.logprobs?.content ?? []) {
     if (typeof logProb.logprob !== 'number' || !Number.isFinite(logProb.logprob)) {
       throw new Error('Invalid streaming log probability');
@@ -429,6 +440,7 @@ export async function readOpenAiChatStream(
           message: {
             role: 'assistant',
             content: choice.content,
+            ...(choice.annotations.length && { annotations: choice.annotations }),
             ...(choice.refusal && { refusal: choice.refusal }),
             ...(choice.reasoning && { reasoning: choice.reasoning }),
             ...(choice.reasoningContent && { reasoning_content: choice.reasoningContent }),
