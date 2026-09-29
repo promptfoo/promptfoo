@@ -224,38 +224,48 @@ describe('Streaming API', () => {
     await expect(readOpenAiChatStream(new Response(body), vi.fn())).rejects.toThrow('1 MiB limit');
   });
 
-  it.each(['tool', 'legacy'])('preserves repeated %s function identifiers', async (kind) => {
-    const functionDeltas = [
-      { name: 'weather', arguments: '{' },
-      { name: 'weather', arguments: '}' },
-    ];
-    const chunks: unknown[] = functionDeltas.map((fn) => ({
-      choices: [
-        {
-          index: 0,
-          delta:
-            kind === 'tool'
-              ? { tool_calls: [{ index: 0, id: 'fixture-call', function: fn }] }
+  it.each(['tool', 'legacy', 'tool-empty', 'legacy-empty'])(
+    'preserves established %s function identifiers',
+    async (kind) => {
+      const functionDeltas = [
+        { name: 'weather', arguments: '{' },
+        { name: kind.endsWith('empty') ? '' : 'weather', arguments: '}' },
+      ];
+      const chunks: unknown[] = functionDeltas.map((fn, index) => ({
+        choices: [
+          {
+            index: 0,
+            delta: kind.startsWith('tool')
+              ? {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: index && kind.endsWith('empty') ? '' : 'fixture-call',
+                      function: fn,
+                    },
+                  ],
+                }
               : { function_call: fn },
-        },
-      ],
-    }));
-    chunks.push({
-      choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
-    });
-    const body =
-      chunks.map((chunk) => 'data: ' + JSON.stringify(chunk) + '\n\n').join('') +
-      'data: [DONE]\n\n';
-    mockFetchWithRetries.mockResolvedValue(new Response(body));
-    const callback = vi.fn().mockResolvedValue('Clear skies');
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-      config: { stream: true, functionToolCallbacks: { weather: callback } },
-    });
-    const result = await provider.callApi('Weather?');
-    expect(result.error).toBeUndefined();
-    expect(callback).toHaveBeenCalledExactlyOnceWith('{}');
-    expect(result.output).toBe('Clear skies');
-  });
+          },
+        ],
+      }));
+      chunks.push({
+        choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
+      });
+      const body =
+        chunks.map((chunk) => 'data: ' + JSON.stringify(chunk) + '\n\n').join('') +
+        'data: [DONE]\n\n';
+      mockFetchWithRetries.mockResolvedValue(new Response(body));
+      const callback = vi.fn().mockResolvedValue('Clear skies');
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true, functionToolCallbacks: { weather: callback } },
+      });
+      const result = await provider.callApi('Weather?');
+      expect(result.error).toBeUndefined();
+      expect(callback).toHaveBeenCalledExactlyOnceWith('{}');
+      expect(result.output).toBe('Clear skies');
+    },
+  );
   it('preserves explicitly empty text and aborts the request after DONE', async () => {
     mockFetchWithRetries.mockResolvedValue(
       new Response(
