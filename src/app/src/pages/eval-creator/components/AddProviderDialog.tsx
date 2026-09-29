@@ -97,13 +97,6 @@ export default function AddProviderDialog({
     }
   };
 
-  const getDisabledTooltip = () => {
-    if (error) {
-      return error;
-    }
-    return undefined;
-  };
-
   return (
     <>
       {/* Ensure MUI Menu components appear above Dialog */}
@@ -141,11 +134,7 @@ export default function AddProviderDialog({
               <div className="w-full">
                 <ProviderTypeSelector
                   provider={provider as RedteamProviderOptions | undefined}
-                  setProvider={
-                    handleProviderTypeSelect as (
-                      provider: RedteamProviderOptions | undefined,
-                    ) => void
-                  }
+                  setProvider={handleProviderTypeSelect}
                   providerType={providerType}
                 />
               </div>
@@ -177,9 +166,9 @@ export default function AddProviderDialog({
                     </Button>
                   </div>
                 </TooltipTrigger>
-                {getDisabledTooltip() && (
+                {error && (
                   <TooltipContent>
-                    <p>{getDisabledTooltip()}</p>
+                    <p>{error}</p>
                   </TooltipContent>
                 )}
               </Tooltip>
