@@ -667,18 +667,14 @@ async function handleRateLimitedResponse(
 ): Promise<void> {
   const safeUrl = urlForLog(url);
 
-  // Classify a 429 up front: `HttpRateLimitError` derives `kind` from the body
-  // code / type and the Retry-After downgrade, so the fail-fast decision below
-  // sees the same classification callers do.
+  // Classify the 429 body and Retry-After before deciding whether to retry.
   let rateLimitError: HttpRateLimitError | undefined;
   if (response.status === 429) {
     const { body, code, type } = await peekRateLimitBody(response);
     rateLimitError = buildHttpRateLimitError(response, body, code, type);
   }
 
-  // Hard quota failures (e.g. insufficient_quota) won't resolve on retry. Fail
-  // fast with a structured error so the caller can stop instead of amplifying
-  // load against an exhausted account.
+  // Quota errors won't recover by retrying this request.
   if (rateLimitError?.kind === 'quota') {
     logger.debug(
       `Quota exhausted on URL ${safeUrl}: HTTP ${response.status} (code: ${rateLimitError.code}), failing fast.`,
