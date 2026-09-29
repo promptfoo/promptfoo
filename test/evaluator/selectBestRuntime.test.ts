@@ -896,23 +896,23 @@ describeEvaluator('select-best runtime grading configuration', () => {
     try {
       await evaluate(suite, record, { maxConcurrency: 1 });
       expect(record.getStats()).toMatchObject({ successes: 0, failures: 0, errors: 2 });
-      expect(recordEvent.mock.calls.findLast(([event]) => event === 'eval_ran')?.[1]).toMatchObject(
-        {
-          numPasses: 0,
-          numFails: 0,
-          numErrors: 2,
-        },
-      );
+      expect(
+        recordEvent.mock.calls.filter(([event]) => event === 'eval_ran').at(-1)?.[1],
+      ).toMatchObject({
+        numPasses: 0,
+        numFails: 0,
+        numErrors: 2,
+      });
       cliState.resume = true;
       await evaluate(suite, record, { maxConcurrency: 1 });
-      expect(recordEvent.mock.calls.findLast(([event]) => event === 'eval_ran')?.[1]).toMatchObject(
-        {
-          numTests: 0,
-          numPasses: 0,
-          numFails: 0,
-          numErrors: 0,
-        },
-      );
+      expect(
+        recordEvent.mock.calls.filter(([event]) => event === 'eval_ran').at(-1)?.[1],
+      ).toMatchObject({
+        numTests: 0,
+        numPasses: 0,
+        numFails: 0,
+        numErrors: 0,
+      });
     } finally {
       recordEvent.mockRestore();
     }
