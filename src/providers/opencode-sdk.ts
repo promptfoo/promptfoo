@@ -16,6 +16,7 @@ import {
   initializeAgenticCache,
   resolveAgenticWorkingDir,
 } from './agentic-utils';
+import { assertIsolatedWorkingDir, clearRepositoryEnv } from './agentWorkspace';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -166,7 +167,7 @@ export interface OpenCodeAgentConfig {
   description: string;
   /** Agent mode: 'primary' for main assistants, 'subagent' for specialized tasks, 'all' for both */
   mode?: 'primary' | 'subagent' | 'all';
-  /** Full OpenCode provider/model-id for this agent (e.g., 'anthropic/claude-sonnet-4-6') */
+  /** Full OpenCode provider/model-id for this agent (e.g., 'anthropic/claude-sonnet-5') */
   model?: string;
   /** Temperature for response randomness (0.0-1.0) */
   temperature?: number;
@@ -263,7 +264,7 @@ export interface OpenCodeSDKConfig {
   provider_id?: string;
 
   /**
-   * Model ID within provider_id (e.g., 'claude-sonnet-4-6', 'gpt-4o').
+   * Model ID within provider_id (e.g., 'claude-sonnet-5', 'gpt-5.6').
    * Set provider_id separately; custom_agent.model uses the full provider/model-id instead.
    */
   model?: string;
@@ -297,6 +298,9 @@ export interface OpenCodeSDKConfig {
    * If not specified, uses a temporary directory
    */
   working_dir?: string;
+
+  /** Run each eval call in a fresh copy of `working_dir`, created by promptfoo eval. */
+  copy_working_dir?: boolean | 'git' | 'copy';
 
   /**
    * Workspace identifier for OpenCode v2 workspace-aware APIs
@@ -467,6 +471,7 @@ interface OpenCodeSessionHandle {
 
 interface OpenCodePreparedCall {
   config: OpenCodeSDKConfig;
+  inIsolatedWorkspace: boolean;
   isTempDir: boolean;
   workingDir?: string;
 }
@@ -587,6 +592,12 @@ function resolveEsmPackage(
   }
 
   return path.join(packageDir, esmEntry);
+}
+
+function hasRepositoryEnv(env: NodeJS.ProcessEnv): boolean {
+  const filtered = { ...env };
+  clearRepositoryEnv(filtered);
+  return Object.keys(env).some((key) => !(key in filtered));
 }
 
 function unwrapOpenCodeResult<T>(result: OpenCodeSdkResult<T> | undefined): T | undefined {
@@ -855,6 +866,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private sessionQueues = new Map<string, Promise<void>>();
   private readonly credentialCacheScope = crypto.randomUUID();
   private streamingWarningEmitted = false;
+  private serverHasRepositoryEnv = false;
 
   constructor(
     options: {
@@ -934,6 +946,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
       this.server = undefined;
     }
     this.client = undefined;
+    this.serverHasRepositoryEnv = false;
   }
 
   /**
@@ -1096,6 +1109,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
       logger.debug(`Added ${opencodeBinPath} to PATH for OpenCode CLI`);
     }
 
+    if (assertIsolatedWorkingDir(config)) {
+      clearRepositoryEnv(serverEnv);
+    }
     return serverEnv;
   }
 
@@ -1243,6 +1259,20 @@ export class OpenCodeSDKProvider implements ApiProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+    const inIsolatedWorkspace = assertIsolatedWorkingDir(config);
+    // The SDK starts its server with process.env and ignores its env option.
+    if (
+      inIsolatedWorkspace &&
+      !config.baseUrl &&
+      (this.serverHasRepositoryEnv || hasRepositoryEnv(process.env))
+    ) {
+      throw new Error(
+        'copy_working_dir cannot isolate OpenCode while its server inherits Git repository ' +
+          'selectors such as GIT_DIR, GIT_WORK_TREE, or GIT_INDEX_FILE. The OpenCode SDK does ' +
+          'not support replacing that environment. Unset repository-selecting Git variables ' +
+          'before starting the provider.',
+      );
+    }
 
     if (config.apiKey !== this.config.apiKey) {
       throw new Error(
@@ -1288,6 +1318,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
       return {
         config,
+        inIsolatedWorkspace,
         isTempDir: false,
         workingDir,
       };
@@ -1295,6 +1326,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
     return {
       config,
+      inIsolatedWorkspace,
       isTempDir: true,
       workingDir: fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-opencode-sdk-')),
     };
@@ -1347,6 +1379,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
         serverOptions.config = serverConfig;
       }
 
+      this.serverHasRepositoryEnv = hasRepositoryEnv(process.env);
       const opencode = await createOpencode(serverOptions);
       this.client = opencode.client;
       this.server = opencode.server;
@@ -1358,6 +1391,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
     } finally {
       if (this.clientInitialization === initialization) {
         this.clientInitialization = undefined;
+      }
+      if (!this.server) {
+        this.serverHasRepositoryEnv = false;
       }
     }
   }
@@ -1831,7 +1867,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const { config, isTempDir, workingDir } = this.prepareCall(context);
+    const { config, inIsolatedWorkspace, isTempDir, workingDir } = this.prepareCall(context);
     let ephemeralSession: OpenCodeSessionHandle | undefined;
     let abortListener: (() => void) | undefined;
 
@@ -1853,7 +1889,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
       const sensitiveMcpConfig = openCodeMcpContainsCacheSensitiveData(mcpConfig);
       const sensitiveBaseUrl = openCodeBaseUrlContainsCacheSensitiveData(config.baseUrl);
       const cacheResult =
-        statefulSession || hasPermissionRules || sensitiveMcpConfig || sensitiveBaseUrl
+        inIsolatedWorkspace ||
+        statefulSession ||
+        hasPermissionRules ||
+        sensitiveMcpConfig ||
+        sensitiveBaseUrl
           ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
           : await initializeAgenticCache(
               {
