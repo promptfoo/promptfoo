@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { AssertionsResult } from '../../assertions/assertionsResult';
-import { renderMetricName, runAssertions } from '../../assertions/index';
+import { runAssertion } from '../../assertions/index';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
@@ -9,7 +8,6 @@ import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
-import { ResultFailureReason } from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import {
   ComparisonEvalNotFoundError,
@@ -20,7 +18,6 @@ import {
   mergeComparisonTables,
 } from '../../util/eval/evalTableUtils';
 import invariant from '../../util/invariant';
-import { recalculatePromptMetrics } from '../../util/recalculatePromptMetrics';
 import {
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
@@ -33,7 +30,6 @@ import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 import type {
-  AtomicTestCase,
   EvalTableDTO,
   EvaluateSummaryV2,
   EvaluateTable,
@@ -45,107 +41,6 @@ import type {
 } from '../../types/index';
 
 export const evalRouter = Router();
-
-const activeEvalMutationsByEval = new Set<string>();
-
-function reserveEvalMutation(evalId: string): boolean {
-  if (activeEvalMutationsByEval.has(evalId)) {
-    return false;
-  }
-  activeEvalMutationsByEval.add(evalId);
-  return true;
-}
-
-function getTopLevelComponentResults(componentResults: GradingResult[]): GradingResult[] {
-  const topLevelResults: GradingResult[] = [];
-
-  // AssertionsResult flattens each parent result immediately before its children.
-  // Keep parents for aggregation and skip their display-only child copies.
-  for (let index = 0; index < componentResults.length; index++) {
-    const result = componentResults[index];
-    topLevelResults.push(result);
-    index += result.componentResults?.length ?? 0;
-  }
-
-  return topLevelResults;
-}
-
-function getAggregateResultOptions(
-  result: GradingResult,
-  testCase: AtomicTestCase,
-): { metric?: string; weight?: number } | undefined {
-  if (result.assertion) {
-    return {
-      metric: renderMetricName(result.assertion.metric, testCase.vars || {}),
-      weight: result.assertion.weight,
-    };
-  }
-
-  const assertionSet = result.metadata?.assertionSet;
-  if (
-    typeof assertionSet !== 'object' ||
-    assertionSet === null ||
-    assertionSet.type !== 'assert-set'
-  ) {
-    return undefined;
-  }
-
-  return {
-    metric:
-      typeof assertionSet.metric === 'string'
-        ? renderMetricName(assertionSet.metric, testCase.vars || {})
-        : undefined,
-    weight: typeof assertionSet.weight === 'number' ? assertionSet.weight : undefined,
-  };
-}
-
-async function recomputeAggregateGradingResult(
-  componentResults: GradingResult[],
-  testCase: AtomicTestCase,
-): Promise<GradingResult> {
-  const assertionResults = new AssertionsResult({ threshold: testCase.threshold });
-  const topLevelResults = getTopLevelComponentResults(componentResults);
-  const manualOverrideResult = getManualOverrideResult(topLevelResults);
-
-  topLevelResults.forEach((result, index) => {
-    if (result.assertion?.type === HUMAN_ASSERTION_TYPE) {
-      return;
-    }
-
-    const options = getAggregateResultOptions(result, testCase);
-    if (!options) {
-      return;
-    }
-
-    assertionResults.addResult({
-      index,
-      result,
-      ...options,
-    });
-  });
-
-  const aggregated = await assertionResults.testResult();
-  if (!manualOverrideResult) {
-    return aggregated;
-  }
-
-  return {
-    ...aggregated,
-    pass: manualOverrideResult.pass,
-    score: manualOverrideResult.score,
-    reason: manualOverrideResult.reason || aggregated.reason,
-  };
-}
-
-function getManualOverrideResult(componentResults: GradingResult[]): GradingResult | undefined {
-  for (let index = componentResults.length - 1; index >= 0; index--) {
-    const result = componentResults[index];
-    if (result.assertion?.type === HUMAN_ASSERTION_TYPE) {
-      return result;
-    }
-  }
-  return undefined;
-}
 
 function sendEvalTableResponse(res: Response, evalId: string, responsePayload: EvalTableDTO): void {
   let parsedPayload: EvalTableDTO;
@@ -804,109 +699,34 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
   }
 });
 
-// The local server uses the same eval access policy as the adjacent rating route.
 evalRouter.post(
-  '/:evalId/results/:id/assertions',
+  '/:evalId/results/:id/check',
   async (req: Request, res: Response): Promise<void> => {
-    const params = EvalSchemas.AddResultAssertion.Params.safeParse(req.params);
-    const body = EvalSchemas.AddResultAssertion.Request.safeParse(req.body);
+    const params = EvalSchemas.CheckOutput.Params.safeParse(req.params);
+    const body = EvalSchemas.CheckOutput.Request.safeParse(req.body);
     if (!params.success || !body.success) {
       replyValidationError(res, params.success ? body.error! : params.error);
       return;
     }
-    const { evalId, id } = params.data;
-    if (!reserveEvalMutation(evalId)) {
-      res.status(409).json({ error: 'An update is already running for this evaluation' });
-      return;
-    }
     try {
-      const evalRecord = await Eval.findById(evalId);
-      const result = await EvalResult.findById(id);
-      if (!evalRecord || !result || result.evalId !== evalId) {
-        res.status(404).json({ error: 'Evaluation or result not found' });
+      const result = await EvalResult.findById(params.data.id);
+      if (!result || result.evalId !== params.data.evalId) {
+        res.status(404).json({ error: 'Evaluation result not found' });
         return;
       }
-      if (result.failureReason === ResultFailureReason.ERROR || result.response?.output == null) {
-        res
-          .status(400)
-          .json({ error: 'Assertions require a saved output without a provider error' });
+      if (result.response?.output == null || result.response.error) {
+        res.status(400).json({ error: 'This result has no saved output to check' });
         return;
       }
-      if (result.testCase.assertScoringFunction) {
-        res.status(400).json({
-          error: 'Results with custom scoring must be evaluated from their original configuration',
-        });
-        return;
-      }
-      const existingAssertions = result.testCase.assert ?? [];
-      const existingComponents = result.gradingResult?.componentResults ?? [];
-      const missingComponents =
-        existingComponents.length === 0 &&
-        (existingAssertions.length > 0 ||
-          !result.success ||
-          result.score !== 1 ||
-          result.gradingResult?.assertion);
-      const unknownComponents = getTopLevelComponentResults(existingComponents).some(
-        (component) =>
-          component.assertion?.type !== HUMAN_ASSERTION_TYPE &&
-          !getAggregateResultOptions(component, result.testCase),
-      );
-      if (missingComponents || unknownComponents) {
-        res.status(400).json({
-          error:
-            'This result has no saved assertion details. Re-run its original evaluation before adding assertions',
-        });
-        return;
-      }
-      const { assertion } = body.data;
-      const duplicate = existingAssertions.some(
-        (existing) =>
-          existing.type === assertion.type &&
-          ('value' in existing ? existing.value : undefined) ===
-            ('value' in assertion ? assertion.value : undefined) &&
-          Object.keys(existing).every((key) => key === 'type' || key === 'value'),
-      );
-      if (!duplicate) {
-        const grading = await runAssertions({
-          prompt: typeof result.prompt === 'string' ? result.prompt : result.prompt.raw,
-          providerResponse: result.response!,
-          test: { ...result.testCase, assert: [assertion] },
-          latencyMs: result.latencyMs,
-        });
-        const newComponents = grading.componentResults ?? [];
-        invariant(newComponents.length > 0, 'Assertion returned no grading result');
-        const components = [...existingComponents, ...newComponents];
-        const aggregated = await recomputeAggregateGradingResult(components, result.testCase);
-        result.gradingResult = {
-          ...result.gradingResult,
-          ...aggregated,
-          componentResults: components,
-          comment: result.gradingResult?.comment,
-          tokensUsed: result.gradingResult?.tokensUsed,
-        };
-        result.testCase = { ...result.testCase, assert: [...existingAssertions, assertion] };
-        result.namedScores = { ...result.namedScores, ...aggregated.namedScores };
-        result.success = aggregated.pass;
-        result.score = aggregated.score;
-        result.error = aggregated.pass ? null : aggregated.reason;
-        result.failureReason = aggregated.pass
-          ? ResultFailureReason.NONE
-          : ResultFailureReason.ASSERT;
-        await result.save();
-      }
-      // Also repair metrics if a previous attempt saved the row before its metric update failed.
-      await recalculatePromptMetrics(evalRecord);
-      res.json(
-        EvalSchemas.AddResultAssertion.Response.parse({
-          added: !duplicate,
-          pass: result.success,
-          score: result.score,
-        }),
-      );
+      // Check only the literal assertion supplied here; saved scoring and provider settings stay out.
+      const { pass, score, reason } = await runAssertion({
+        assertion: body.data.assertion,
+        test: {},
+        providerResponse: { output: result.response.output },
+      });
+      res.json(EvalSchemas.CheckOutput.Response.parse({ pass, score, reason }));
     } catch (error) {
-      sendError(res, 500, 'Failed to add assertion', error);
-    } finally {
-      activeEvalMutationsByEval.delete(evalId);
+      sendError(res, 500, 'Failed to check saved output', error);
     }
   },
 );
@@ -926,13 +746,8 @@ evalRouter.post(
       return;
     }
 
-    const { evalId, id } = paramsResult.data;
-    if (!reserveEvalMutation(evalId)) {
-      res.status(409).json({ error: 'An update is already running for this evaluation' });
-      return;
-    }
-
     try {
+      const { evalId, id } = paramsResult.data;
       // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with GradingResult
       const gradingResult = bodyResult.data as unknown as GradingResult;
       const result = await EvalResult.findById(id);
@@ -1009,8 +824,6 @@ evalRouter.post(
       res.json(EvalSchemas.SubmitRating.Response.parse(result));
     } catch (error) {
       sendError(res, 500, 'Failed to submit rating', error);
-    } finally {
-      activeEvalMutationsByEval.delete(evalId);
     }
   },
 );

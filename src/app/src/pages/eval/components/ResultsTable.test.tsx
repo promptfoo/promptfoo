@@ -172,36 +172,6 @@ describe('ResultsTable Metrics Display', () => {
     }));
   });
 
-  it('refreshes the current selection after an assertion is added', async () => {
-    const initial = useTableStore();
-    const fetchEvalData = vi.fn();
-    let tableRefreshToken = 0;
-    vi.mocked(useTableStore).mockImplementation(() => ({
-      ...initial,
-      fetchEvalData,
-      tableRefreshToken,
-    }));
-    const props = {
-      ...defaultProps,
-      debouncedSearchText: 'kept search',
-      filterMode: 'failures' as const,
-    };
-    const { rerender } = renderWithProviders(<ResultsTable {...props} />);
-    tableRefreshToken = 1;
-    rerender(<ResultsTable {...props} zoom={1.1} />);
-    await waitFor(() =>
-      expect(fetchEvalData).toHaveBeenCalledWith(
-        '123',
-        expect.objectContaining({
-          pageIndex: 0,
-          filterMode: 'failures',
-          searchText: 'kept search',
-          skipSettingEvalId: true,
-        }),
-      ),
-    );
-  });
-
   it('displays total cost with correct formatting', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(screen.getByText('Total Cost:')).toBeInTheDocument();

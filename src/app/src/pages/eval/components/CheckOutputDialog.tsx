@@ -19,9 +19,9 @@ import {
 } from '@app/components/ui/select';
 import { Textarea } from '@app/components/ui/textarea';
 import { callApi } from '@app/utils/api';
-import type { AddResultAssertionRequest } from '@promptfoo/types/api/eval';
+import type { CheckOutputRequest, CheckOutputResponse } from '@promptfoo/types/api/eval';
 
-type AssertionType = AddResultAssertionRequest['assertion']['type'];
+type AssertionType = CheckOutputRequest['assertion']['type'];
 const ASSERTIONS: { type: AssertionType; label: string }[] = [
   { type: 'contains', label: 'Contains text' },
   { type: 'icontains', label: 'Contains text (ignore case)' },
@@ -33,30 +33,30 @@ const ASSERTIONS: { type: AssertionType; label: string }[] = [
   { type: 'not-is-json', label: 'Is not valid JSON' },
 ];
 
-export default function AddAssertionsDialog({
+export default function CheckOutputDialog({
   evalId,
   resultId,
   onClose,
-  onApplied,
 }: {
   evalId: string;
   resultId: string;
   onClose: () => void;
-  onApplied: () => void | Promise<void>;
 }) {
   const [type, setType] = useState<AssertionType>('contains');
   const [value, setValue] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
+  const [isChecking, setIsChecking] = useState(false);
   const [error, setError] = useState('');
+  const [result, setResult] = useState<CheckOutputResponse | null>(null);
   const needsValue = type !== 'is-json' && type !== 'not-is-json';
 
-  async function save() {
-    setIsSaving(true);
+  async function checkOutput() {
+    setIsChecking(true);
     setError('');
+    setResult(null);
     try {
       const assertion = type === 'is-json' || type === 'not-is-json' ? { type } : { type, value };
       const response = await callApi(
-        `/eval/${encodeURIComponent(evalId)}/results/${encodeURIComponent(resultId)}/assertions`,
+        `/eval/${encodeURIComponent(evalId)}/results/${encodeURIComponent(resultId)}/check`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -65,14 +65,15 @@ export default function AddAssertionsDialog({
       );
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(typeof data.error === 'string' ? data.error : 'Failed to add assertion');
+        throw new Error(
+          typeof data.error === 'string' ? data.error : 'Failed to check saved output',
+        );
       }
-      await onApplied();
-      onClose();
+      setResult(data);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Failed to add assertion');
+      setError(cause instanceof Error ? cause.message : 'Failed to check saved output');
     } finally {
-      setIsSaving(false);
+      setIsChecking(false);
     }
   }
 
@@ -80,27 +81,30 @@ export default function AddAssertionsDialog({
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open && !isSaving) {
+        if (!open && !isChecking) {
           onClose();
         }
       }}
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add assertion</DialogTitle>
+          <DialogTitle>Check saved output</DialogTitle>
           <DialogDescription>
-            Check this saved output without calling the model again. Existing assertions and human
-            ratings are preserved.
+            Preview a check on this response without another model call. The preview does not change
+            saved assertions, scores, or ratings.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          <Label htmlFor="posthoc-assertion-type">Check</Label>
+          <Label htmlFor="saved-output-check-type">Check</Label>
           <Select
             value={type}
-            onValueChange={(next) => setType(next as AssertionType)}
-            disabled={isSaving}
+            onValueChange={(next) => {
+              setType(next as AssertionType);
+              setResult(null);
+            }}
+            disabled={isChecking}
           >
-            <SelectTrigger id="posthoc-assertion-type">
+            <SelectTrigger id="saved-output-check-type">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -114,13 +118,16 @@ export default function AddAssertionsDialog({
         </div>
         {needsValue && (
           <div className="space-y-2">
-            <Label htmlFor="posthoc-assertion-value">Text</Label>
+            <Label htmlFor="saved-output-check-value">Text</Label>
             <Textarea
-              id="posthoc-assertion-value"
+              id="saved-output-check-value"
               value={value}
-              onChange={(event) => setValue(event.target.value)}
+              onChange={(event) => {
+                setValue(event.target.value);
+                setResult(null);
+              }}
               maxLength={10000}
-              disabled={isSaving}
+              disabled={isChecking}
             />
           </div>
         )}
@@ -129,15 +136,23 @@ export default function AddAssertionsDialog({
             {error}
           </p>
         )}
+        {result && (
+          <div role="status" className="space-y-1 rounded border p-3 text-sm">
+            <p>
+              {result.pass ? 'Pass' : 'Fail'} · Score: {result.score}
+            </p>
+            <p>{result.reason}</p>
+          </div>
+        )}
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isSaving}>
-            Cancel
+          <Button variant="outline" onClick={onClose} disabled={isChecking}>
+            Close preview
           </Button>
           <Button
-            onClick={() => void save()}
-            disabled={isSaving || (needsValue && type !== 'equals' && value.length === 0)}
+            onClick={() => void checkOutput()}
+            disabled={isChecking || (needsValue && type !== 'equals' && value.length === 0)}
           >
-            {isSaving ? 'Adding…' : 'Add assertion'}
+            {isChecking ? 'Checking…' : 'Check output'}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -611,19 +611,18 @@ export function createServerOpenApiRegistry() {
 
   register({
     method: 'post',
-    path: '/api/eval/{evalId}/results/{id}/assertions',
-    operationId: 'addResultAssertion',
+    path: '/api/eval/{evalId}/results/{id}/check',
+    operationId: 'checkSavedOutput',
     tags: ['Eval'],
-    summary: 'Add a deterministic assertion to one saved output',
+    summary: 'Preview one deterministic check on a saved output',
     request: {
-      params: params('SubmitRatingParams', EvalSchemas.AddResultAssertion.Params),
-      body: jsonBody('AddResultAssertionRequest', EvalSchemas.AddResultAssertion.Request),
+      params: params('SubmitRatingParams', EvalSchemas.CheckOutput.Params),
+      body: jsonBody('CheckOutputRequest', EvalSchemas.CheckOutput.Request),
     },
     responses: {
-      200: jsonResponse('AddResultAssertionResponse', EvalSchemas.AddResultAssertion.Response),
+      200: jsonResponse('CheckOutputResponse', EvalSchemas.CheckOutput.Response),
       400: validationError(),
       404: notFound('Evaluation or result not found'),
-      409: errorResponse('Evaluation update already in progress'),
       500: serverError(),
     },
   });
@@ -642,7 +641,6 @@ export function createServerOpenApiRegistry() {
       200: jsonResponse('SubmitRatingResponse', EvalSchemas.SubmitRating.Response),
       400: validationError(),
       404: notFound('Result or evaluation not found'),
-      409: errorResponse('Evaluation update already in progress'),
       500: serverError(),
     },
   });

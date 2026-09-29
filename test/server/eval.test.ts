@@ -1,8 +1,10 @@
 import type { Server } from 'node:http';
 
+import { eq } from 'drizzle-orm';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { runAssertions } from '../../src/assertions/index';
+import { getDb } from '../../src/database';
+import { evalResultsTable, evalsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
@@ -110,223 +112,115 @@ describe('eval routes', () => {
     return payload;
   }
 
-  describe('POST /:evalId/results/:id/assertions', () => {
+  describe('POST /:evalId/results/:id/check', () => {
     async function fixture() {
-      const evalRecord = await EvalFactory.create();
-      testEvalIds.add(evalRecord.id);
-      const [result, other] = await EvalResult.findManyByEvalId(evalRecord.id);
+      const evaluation = await EvalFactory.create();
+      testEvalIds.add(evaluation.id);
+      const [result] = await EvalResult.findManyByEvalId(evaluation.id);
+      return { evaluation, result, url: `/api/eval/${evaluation.id}/results/${result.id}/check` };
+    }
+
+    async function snapshot(evalId: string) {
+      const db = await getDb();
       return {
-        evalRecord,
-        result,
-        other,
-        url: `/api/eval/${evalRecord.id}/results/${result.id}/assertions`,
+        eval: await db.select().from(evalsTable).where(eq(evalsTable.id, evalId)),
+        results: await db
+          .select()
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.evalId, evalId)),
       };
     }
 
-    it('grades one saved output, preserves other rows, and skips duplicate assertions', async () => {
-      const { evalRecord, result, other, url } = await fixture();
-      const beforeOther = other.toEvaluateResult();
-      const assertion = { type: 'contains', value: 'missing text' };
-      const res = await api.post(url).send({ assertion });
-      expect(res.status).toBe(200);
-      expect(res.body).toMatchObject({ added: true, pass: false, score: 0.5 });
-      const saved = await EvalResult.findById(result.id);
-      expect(saved?.testCase.assert).toHaveLength(2);
-      expect(saved?.gradingResult?.componentResults).toHaveLength(2);
-      expect(saved?.response).toEqual(result.response);
-      expect(saved?.gradingResult?.tokensUsed).toEqual(result.gradingResult?.tokensUsed);
-      expect(saved?.error).toBe(saved?.gradingResult?.reason);
-      expect((await EvalResult.findById(other.id))?.toEvaluateResult()).toEqual(beforeOther);
-      const metrics = (await Eval.findById(evalRecord.id))?.prompts[0].metrics;
-      expect(metrics).toMatchObject({
-        testPassCount: 0,
-        testFailCount: 2,
-        assertPassCount: 1,
-        assertFailCount: 2,
-      });
-      const repeated = await api.post(url).send({ assertion });
-      expect(repeated.body).toEqual({ added: false, pass: false, score: 0.5 });
-      expect((await EvalResult.findById(result.id))?.gradingResult?.componentResults).toHaveLength(
-        2,
-      );
-    });
-
-    it.each([false, true])(
-      'preserves weights, thresholds, and named metrics (nested: %s)',
-      async (nested) => {
-        const { result, url } = await fixture();
-        const existing = {
-          type: 'contains' as const,
-          value: 'denver',
-          weight: 3,
-          metric: 'quality',
-        };
-        result.testCase = {
-          ...result.testCase,
-          threshold: 0.7,
-          assert: nested
-            ? [{ type: 'assert-set', weight: 3, metric: 'quality', assert: [existing] }]
-            : [existing],
-        };
-        result.gradingResult = await runAssertions({
-          test: result.testCase,
-          prompt: result.prompt.raw,
-          providerResponse: result.response!,
-        });
-        await result.save();
-        const res = await api.post(url).send({ assertion: { type: 'contains', value: 'absent' } });
-        expect(res.status).toBe(200);
-        expect(res.body).toEqual({ added: true, pass: true, score: 0.75 });
-        const saved = await EvalResult.findById(result.id);
-        expect(saved?.namedScores.quality).toBe(1);
-        expect(saved?.error).toBeNull();
-        expect(saved?.gradingResult?.componentResults).toHaveLength(nested ? 3 : 2);
+    it.each([true, false])(
+      'previews a check without changing saved rows or metrics (pass: %s)',
+      async (pass) => {
+        const { evaluation, result, url } = await fixture();
+        const before = await snapshot(evaluation.id);
+        const value = pass ? String(result.response!.output) : 'Absent fixture text';
+        const response = await api.post(url).send({ assertion: { type: 'contains', value } });
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ pass, score: Number(pass), reason: expect.any(String) });
+        expect(await snapshot(evaluation.id)).toEqual(before);
       },
     );
 
-    it('keeps a manual override and its comment after a failing check', async () => {
-      const { result, url } = await fixture();
-      result.gradingResult = createManualRatingPayload(result, true);
-      result.gradingResult!.comment = 'Reviewed by a person';
-      await result.save();
-      const res = await api.post(url).send({ assertion: { type: 'contains', value: 'absent' } });
-      expect(res.body).toMatchObject({ added: true, pass: true, score: 1 });
-      const saved = await EvalResult.findById(result.id);
-      expect(saved?.gradingResult?.comment).toBe('Reviewed by a person');
-      expect(
-        saved?.gradingResult?.componentResults?.find((item) => item.assertion?.type === 'human'),
-      ).toMatchObject({ pass: true, score: 1 });
+    it('keeps failed previews usable with short-circuit mode enabled', async () => {
+      const { evaluation, url } = await fixture();
+      const before = await snapshot(evaluation.id);
+      vi.stubEnv('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES', 'true');
+      try {
+        const response = await api
+          .post(url)
+          .send({ assertion: { type: 'contains', value: 'Absent fixture text' } });
+        expect(response.status).toBe(200);
+        expect(response.body).toMatchObject({ pass: false, score: 0 });
+        expect(await snapshot(evaluation.id)).toEqual(before);
+      } finally {
+        vi.unstubAllEnvs();
+      }
     });
 
-    it.each([0, false, ''])('accepts the saved primitive output %j', async (output) => {
-      const { result, url } = await fixture();
-      result.response = { output };
+    it('ignores saved scoring settings and leaves manual and comparison grades untouched', async () => {
+      const { evaluation, result, url } = await fixture();
+      result.testCase.assertScoringFunction = 'file://unused-fixture-scoring.js';
+      result.score = 0.75;
+      result.success = false;
+      result.gradingResult = {
+        pass: false,
+        score: 0.75,
+        reason: 'Saved comparison',
+        componentResults: [
+          { pass: true, score: 1, reason: 'Human review', assertion: { type: 'human' } },
+          {
+            pass: false,
+            score: 0,
+            reason: 'Comparison',
+            assertion: { type: 'select-best', value: 'Fixture' },
+          },
+        ],
+      };
       await result.save();
-      const res = await api
+      const before = await snapshot(evaluation.id);
+      const response = await api
         .post(url)
-        .send({ assertion: { type: 'equals', value: String(output) } });
-      expect(res.status).toBe(200);
-      expect(res.body.pass).toBe(true);
-    });
-
-    it('does not duplicate a value-less assertion', async () => {
-      const { result, url } = await fixture();
-      result.testCase.assert = [{ type: 'is-json' }];
-      await result.save();
-      const res = await api.post(url).send({ assertion: { type: 'is-json' } });
-      expect(res.body.added).toBe(false);
-      expect((await EvalResult.findById(result.id))?.testCase.assert).toEqual([
-        { type: 'is-json' },
-      ]);
+        .send({ assertion: { type: 'contains', value: String(result.response!.output) } });
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({ pass: true, score: 1 });
+      expect(await snapshot(evaluation.id)).toEqual(before);
     });
 
     it.each([
+      { type: 'llm-rubric', value: 'Fixture criteria' },
+      { type: 'javascript', value: 'true' },
       { type: 'contains', value: 'file://fixture.txt' },
       { type: 'contains', value: 'package:fixture:check' },
-      { type: 'contains', value: '{{name}}' },
-      { type: 'contains', value: '{% include "fixture" %}' },
-      { type: 'contains', value: '' },
-      { type: 'llm-rubric', value: 'criteria' },
-      { type: 'javascript', value: 'true' },
-      { type: 'select-best', value: 'criteria' },
-      { type: 'assert-set', assert: [{ type: 'is-json' }] },
-      { type: 'contains', value: 'text', config: { apiKey: 'synthetic-secret' } },
-      { type: 'contains', value: ['text'] },
-    ])('rejects unsupported assertion configuration %j', async (assertion) => {
-      const { result, url } = await fixture();
-      const res = await api.post(url).send({ assertion });
-      expect(res.status).toBe(400);
-      expect((await EvalResult.findById(result.id))?.testCase.assert).toEqual(
-        result.testCase.assert,
-      );
+      { type: 'contains', value: '{{fixture}}' },
+      { type: 'contains', value: 'fixture', provider: 'echo' },
+    ])('rejects unsupported options without changing the evaluation', async (assertion) => {
+      const { evaluation, url } = await fixture();
+      const before = await snapshot(evaluation.id);
+      expect((await api.post(url).send({ assertion })).status).toBe(400);
+      expect(await snapshot(evaluation.id)).toEqual(before);
     });
 
-    it.each(['custom scoring', 'missing details', 'provider error'])(
-      'rejects %s without changing saved grading',
-      async (unsupported) => {
-        const { result, url } = await fixture();
-        if (unsupported === 'custom scoring') {
-          result.testCase.assertScoringFunction = 'file://scorer.js';
-        }
-        if (unsupported === 'missing details') {
-          delete result.gradingResult!.componentResults;
-        }
-        if (unsupported === 'provider error') {
-          result.failureReason = 2;
-        }
+    it.each([{ output: null }, { error: 'Fixture provider unavailable' }])(
+      'rejects a result without usable output',
+      async (providerResponse) => {
+        const { evaluation, result, url } = await fixture();
+        result.response = providerResponse;
         await result.save();
-        const res = await api.post(url).send({ assertion: { type: 'is-json' } });
-        expect(res.status).toBe(400);
-        expect((await EvalResult.findById(result.id))?.score).toBe(result.score);
+        const before = await snapshot(evaluation.id);
+        expect((await api.post(url).send({ assertion: { type: 'is-json' } })).status).toBe(400);
+        expect(await snapshot(evaluation.id)).toEqual(before);
       },
     );
 
-    it('rejects nonempty legacy components whose scoring cannot be reconstructed', async () => {
-      const { result, url } = await fixture();
-      result.success = false;
-      result.score = 0;
-      result.gradingResult = {
-        pass: false,
-        score: 0,
-        reason: 'Legacy failure',
-        componentResults: [{ pass: false, score: 0, reason: 'Unknown check' }],
-      };
-      await result.save();
-      const res = await api.post(url).send({ assertion: { type: 'contains', value: 'denver' } });
-      expect(res.status).toBe(400);
-      expect((await EvalResult.findById(result.id))?.success).toBe(false);
-    });
-
-    it('rejects a result belonging to another evaluation', async () => {
+    it('requires the result to belong to the requested evaluation', async () => {
       const { result } = await fixture();
-      const otherEval = await EvalFactory.create();
-      testEvalIds.add(otherEval.id);
-      const res = await api
-        .post(`/api/eval/${otherEval.id}/results/${result.id}/assertions`)
+      const response = await api
+        .post(`/api/eval/other-eval/results/${result.id}/check`)
         .send({ assertion: { type: 'is-json' } });
-      expect(res.status).toBe(404);
-    });
-
-    it('repairs metrics after a partially persisted attempt', async () => {
-      const { evalRecord, result, url } = await fixture();
-      vi.spyOn(Eval.prototype, 'addPrompts').mockRejectedValueOnce(
-        new Error('temporary database failure'),
-      );
-      const body = { assertion: { type: 'contains', value: 'absent' } };
-      expect((await api.post(url).send(body)).status).toBe(500);
-      expect((await EvalResult.findById(result.id))?.testCase.assert).toHaveLength(2);
-      const retry = await api.post(url).send(body);
-      expect(retry.status).toBe(200);
-      expect(retry.body.added).toBe(false);
-      expect((await Eval.findById(evalRecord.id))?.prompts[0].metrics?.assertFailCount).toBe(2);
-    });
-
-    it('reserves mutations before loading the row and releases the reservation on failure', async () => {
-      const { evalRecord, result, url } = await fixture();
-      let release!: () => void;
-      let entered!: () => void;
-      const started = new Promise<void>((resolve) => {
-        entered = resolve;
-      });
-      vi.spyOn(EvalResult, 'findById').mockImplementationOnce(async () => {
-        entered();
-        await new Promise<void>((resolve) => {
-          release = resolve;
-        });
-        throw new Error('temporary database failure');
-      });
-      const pending = api
-        .post(url)
-        .send({ assertion: { type: 'is-json' } })
-        .then((res) => res);
-      await started;
-      const rating = await api
-        .post(`/api/eval/${evalRecord.id}/results/${result.id}/rating`)
-        .send(createManualRatingPayload(result, true));
-      expect(rating.status).toBe(409);
-      release();
-      expect((await pending).status).toBe(500);
-      expect((await api.post(url).send({ assertion: { type: 'is-json' } })).status).toBe(200);
+      expect(response.status).toBe(404);
     });
   });
 

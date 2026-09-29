@@ -1671,7 +1671,6 @@ function ResultsTable({
     version,
     filteredResultsCount,
     fetchEvalData,
-    tableRefreshToken,
     isFetching,
     filters,
   } = useTableStore();
@@ -2019,7 +2018,6 @@ function ResultsTable({
     });
   }, [
     // evalId is NOT in the dependency array
-    tableRefreshToken,
     pagination.pageIndex,
     pagination.pageSize,
     filterMode,

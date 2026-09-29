@@ -304,8 +304,6 @@ interface TableState {
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
   isStreaming: boolean;
-  tableRefreshToken: number;
-  refreshTable: () => void;
   setIsStreaming: (isStreaming: boolean) => void;
 
   shouldHighlightSearchText: boolean;
@@ -629,8 +627,6 @@ export const useTableStore = create<TableState>()(
 
     isFetching: false,
     isStreaming: false,
-    tableRefreshToken: 0,
-    refreshTable: () => set((state) => ({ tableRefreshToken: state.tableRefreshToken + 1 })),
     setIsStreaming: (isStreaming: boolean) => set(() => ({ isStreaming })),
 
     shouldHighlightSearchText: false,

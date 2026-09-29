@@ -288,7 +288,7 @@ export type SubmitRatingParams = z.infer<typeof SubmitRatingParamsSchema>;
 export type SubmitRatingRequest = z.infer<typeof SubmitRatingRequestSchema>;
 export type SubmitRatingResponse = z.infer<typeof SubmitRatingResponseSchema>;
 
-// POST /api/eval/:evalId/results/:id/assertions
+// POST /api/eval/:evalId/results/:id/check
 
 const LiteralAssertionValueSchema = z
   .string()
@@ -299,7 +299,7 @@ const LiteralAssertionValueSchema = z
     'Use literal text; files, packages, and templates are not supported',
   );
 
-export const AddResultAssertionRequestSchema = z
+export const CheckOutputRequestSchema = z
   .object({
     assertion: z.discriminatedUnion('type', [
       z
@@ -317,14 +317,14 @@ export const AddResultAssertionRequestSchema = z
   })
   .strict();
 
-export const AddResultAssertionResponseSchema = z.object({
-  added: z.boolean(),
+export const CheckOutputResponseSchema = z.object({
   pass: z.boolean(),
   score: z.number(),
+  reason: z.string(),
 });
 
-export type AddResultAssertionRequest = z.infer<typeof AddResultAssertionRequestSchema>;
-export type AddResultAssertionResponse = z.infer<typeof AddResultAssertionResponseSchema>;
+export type CheckOutputRequest = z.infer<typeof CheckOutputRequestSchema>;
+export type CheckOutputResponse = z.infer<typeof CheckOutputResponseSchema>;
 
 // POST /api/eval (save eval to database)
 
@@ -373,10 +373,10 @@ export type BulkDeleteEvalsRequest = z.infer<typeof BulkDeleteEvalsRequestSchema
 
 /** Grouped schemas for server-side validation. */
 export const EvalSchemas = {
-  AddResultAssertion: {
+  CheckOutput: {
     Params: SubmitRatingParamsSchema,
-    Request: AddResultAssertionRequestSchema,
-    Response: AddResultAssertionResponseSchema,
+    Request: CheckOutputRequestSchema,
+    Response: CheckOutputResponseSchema,
   },
   CreateJob: {
     Request: CreateJobRequestSchema,
