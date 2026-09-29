@@ -13,28 +13,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { TestSuite } from '../../../types/index';
 import type { InternalEvaluateOptions } from '../../../types/internal';
 
-/**
- * Run an eval from a promptfoo config with optional test case filtering
- *
- * Use this tool to:
- * - Test specific test cases from a promptfoo configuration
- * - Debug individual test scenarios without running full evals
- * - Validate changes to prompts, providers, or assertions quickly
- * - Run targeted evals during development and testing
- *
- * Features:
- * - Load any promptfoo configuration file
- * - Select specific test cases by index or range
- * - Filter by specific prompts and/or providers
- * - Run full eval pipeline with all assertions and scoring
- * - Return detailed results with metrics and grading information
- *
- * Perfect for:
- * - Debugging failing test cases
- * - Testing prompt variations quickly
- * - Validating assertion configurations
- * - Development iteration and experimentation
- */
+/** Run a config through the evaluation pipeline with optional test, prompt, and provider filters. */
 export function registerRunEvaluationTool(server: McpServer) {
   server.tool(
     'run_evaluation',
@@ -83,7 +62,7 @@ export function registerRunEvaluationTool(server: McpServer) {
         .describe(
           dedent`
             Filter to specific providers by ID.
-            Examples: "openai:gpt-4", ["openai:gpt-4", "anthropic:claude-sonnet-4-6"]
+            Examples: "openai:gpt-5.6", ["openai:gpt-5.6", "anthropic:claude-sonnet-5"]
           `,
         ),
       maxConcurrency: z
@@ -97,7 +76,9 @@ export function registerRunEvaluationTool(server: McpServer) {
         .min(1000)
         .max(300000)
         .optional()
-        .describe('Timeout per eval in milliseconds (1s-5min, default: 30s)'),
+        .describe(
+          'Timeout per eval in milliseconds (1s-5min); defaults to the config value or 30s',
+        ),
       repeat: z
         .number()
         .min(1)
@@ -138,7 +119,6 @@ export function registerRunEvaluationTool(server: McpServer) {
           resultOffset = 0,
         } = args;
 
-        // Load default config
         let defaultConfig;
         let defaultConfigPath;
         try {
@@ -306,16 +286,13 @@ export function registerRunEvaluationTool(server: McpServer) {
         );
         const endTime = Date.now();
 
-        // Get summary data
         const summary = await evalResult.toEvaluateSummary();
 
-        // Format results using shared formatter with pagination
         const { results: formattedResults, pagination } = formatEvaluationResults(summary, {
           resultLimit,
           resultOffset,
         });
 
-        // Prepare detailed response
         const evalData = {
           eval: {
             id: evalResult.id,

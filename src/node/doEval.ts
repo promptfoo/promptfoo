@@ -1005,7 +1005,6 @@ async function doEvalWithEnv(
       process.on('SIGINT', sigintHandler);
     }
 
-    // Run the evaluation!!!!!!
     let ret;
     try {
       ret = await withCacheEnabled(cache === false ? false : undefined, () =>
