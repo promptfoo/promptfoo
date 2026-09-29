@@ -144,10 +144,8 @@ export default function RedTeamSetupPage() {
   const [configName, setConfigName] = useState('');
   const toast = useToast();
 
-  // Add new state:
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  // Add new state for tracking the config date
   const [configDate, setConfigDate] = useState<string | null>(null);
 
   const lastSavedConfig = useRef<string>('');
@@ -412,7 +410,6 @@ export default function RedTeamSetupPage() {
     event.target.value = '';
   };
 
-  // Replace the existing effect with this one
   useEffect(() => {
     if (!configName) {
       setHasUnsavedChanges(false);
@@ -424,7 +421,6 @@ export default function RedTeamSetupPage() {
     setHasUnsavedChanges(hasChanges);
   }, [config, configName]);
 
-  // Update handleResetConfig
   const handleResetConfig = () => {
     resetConfig();
     setConfigName('');
@@ -486,15 +482,12 @@ export default function RedTeamSetupPage() {
 
   return (
     <div className="fixed flex w-full bg-white dark:bg-zinc-900">
-      {/* Content wrapper */}
       <div className="flex min-w-0 grow flex-col transition-[margin] duration-200 md:flex-row">
-        {/* Outer sidebar container */}
         <div
           data-testid="redteam-setup-sidebar"
           className="hidden h-full flex-col border-r border-border md:flex"
           style={{ width: SIDEBAR_WIDTH, minWidth: SIDEBAR_WIDTH }}
         >
-          {/* Inner sidebar (sticky) */}
           <div
             className="sticky flex flex-col"
             style={{
@@ -502,7 +495,6 @@ export default function RedTeamSetupPage() {
               height: `calc(100vh - ${NAVBAR_HEIGHT}px - var(--update-banner-height, 0px))`,
             }}
           >
-            {/* Status section */}
             <div
               className="border-b border-r border-border bg-card p-4"
               style={{ width: SIDEBAR_WIDTH, minWidth: SIDEBAR_WIDTH }}
@@ -532,7 +524,6 @@ export default function RedTeamSetupPage() {
               )}
             </div>
 
-            {/* Tabs container */}
             <div className="grow overflow-y-auto">
               <Tabs
                 value={String(value)}
@@ -562,7 +553,6 @@ export default function RedTeamSetupPage() {
               </Tabs>
             </div>
 
-            {/* Sidebar buttons */}
             <div className="flex flex-col gap-1 border-t border-border bg-card p-3">
               <Button
                 variant="ghost"
@@ -595,7 +585,6 @@ export default function RedTeamSetupPage() {
           </div>
         </div>
 
-        {/* Tab content */}
         <div className="relative flex min-w-0 grow flex-col transition-[margin] duration-200">
           <div
             data-testid="redteam-setup-mobile-actions"
@@ -705,7 +694,6 @@ export default function RedTeamSetupPage() {
 
       {setupModalOpen ? <Setup open={setupModalOpen} onClose={closeSetupModal} /> : null}
 
-      {/* Save Dialog */}
       <Dialog open={saveDialogOpen} onOpenChange={(open) => !open && setSaveDialogOpen(false)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -746,14 +734,12 @@ export default function RedTeamSetupPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Load Dialog */}
       <Dialog open={loadDialogOpen} onOpenChange={(open) => !open && setLoadDialogOpen(false)}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Load or Import Configuration</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {/* Import YAML Section */}
             <div>
               <p className="text-sm font-medium">Import YAML File</p>
               <p className="mb-2 text-sm text-muted-foreground">
@@ -805,7 +791,6 @@ export default function RedTeamSetupPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Reset Dialog */}
       <Dialog open={resetDialogOpen} onOpenChange={(open) => !open && setResetDialogOpen(false)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
