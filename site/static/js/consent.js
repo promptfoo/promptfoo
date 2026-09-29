@@ -209,8 +209,9 @@
     return consent;
   }
 
-  function applyConsent(analytics, marketing) {
-    var revokeManual = !marketing;
+  function applyConsent(analytics, marketing, revokeManual) {
+    revokeManual =
+      !!revokeManual || !!(window.__pf_consent && window.__pf_consent.marketing && !marketing);
     var consent = saveConsent(analytics, marketing, undefined, revokeManual);
     if (
       (!consent.analytics && window.__pf_analytics_loaded) ||
@@ -395,7 +396,7 @@
 
     document.getElementById('cc-decline').addEventListener('click', function () {
       dismissBanner();
-      applyConsent(0, 0);
+      applyConsent(0, 0, true);
     });
 
     document.getElementById('cc-manage').addEventListener('click', function () {
@@ -534,7 +535,7 @@
 
     document.getElementById('cc-reject-all').addEventListener('click', function () {
       closePrefs(true);
-      applyConsent(0, 0);
+      applyConsent(0, 0, true);
     });
 
     document.getElementById('cc-accept-all').addEventListener('click', function () {

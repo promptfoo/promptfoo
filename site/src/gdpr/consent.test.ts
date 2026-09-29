@@ -1148,6 +1148,28 @@ describe('consent.js', () => {
       expect((window as any).__pf_marketing_loaded).toBe(false);
     });
 
+    it.each([false, true])(
+      'preserves manual activation when saving marketing off and analytics=%s',
+      (analytics) => {
+        setCookie('pf_country', 'DE');
+        setCookie('pf_consent', 'v1.i.0.0');
+        runConsent();
+        (window as any).__pf_third_party_loaded = true;
+        (window as any).__pf_manage_cookies();
+        (document.getElementById('cc-analytics') as HTMLInputElement).checked = analytics;
+        const listener = vi.fn();
+        window.addEventListener('pf_consent_change', listener);
+        document.getElementById('cc-save')!.click();
+        expect(window.location.reload).not.toHaveBeenCalled();
+        expect((listener.mock.calls[0][0] as CustomEvent).detail.revokeManual).toBe(false);
+        expect((window as any).__pf_consent).toEqual({
+          analytics: analytics ? 1 : 0,
+          marketing: 0,
+        });
+        window.removeEventListener('pf_consent_change', listener);
+      },
+    );
+
     it('keeps a manually activated embed when Accept All is restricted by GPC', () => {
       setCookie('pf_country', 'DE');
       Object.defineProperty(navigator, 'globalPrivacyControl', { value: true, configurable: true });
