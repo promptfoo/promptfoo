@@ -45,7 +45,6 @@ export async function executeProviderFunctionCallback({
   callbacks,
   cache,
   logPrefix,
-  signal,
 }: {
   functionName: string;
   args: string;
@@ -55,9 +54,7 @@ export async function executeProviderFunctionCallback({
   cache: Record<string, Function>;
   /** This provider's log prefix, e.g. `[Bedrock Converse]`. */
   logPrefix?: string;
-  signal?: AbortSignal;
 }): Promise<string> {
-  signal?.throwIfAborted();
   const prefix = logPrefix ? `${logPrefix} ` : '';
   try {
     logger.debug(`${prefix}Executing function '${functionName}' with args: ${args}`);
@@ -70,7 +67,6 @@ export async function executeProviderFunctionCallback({
           ? callbacks[functionName]
           : undefined,
       cache,
-      signal,
       loadFile: (reference) => loadProviderCallbackFromFileUrl(reference, logPrefix),
       transformOutput: (result) => {
         if (result === undefined || result === null) {
@@ -100,10 +96,7 @@ export async function executeProviderFunctionCallback({
   }
 }
 
-/**
- * Handles function callback execution for AI providers.
- * Provides a unified way to execute function callbacks across different provider formats.
- */
+/** Adapts configured callbacks and MCP tools to provider function-call formats. */
 export class FunctionCallbackHandler {
   private loadedCallbacks: Record<string, FunctionCallback> = {};
   private mcpToolNames: Set<string> | null = null;
@@ -121,9 +114,7 @@ export class FunctionCallbackHandler {
     call: FunctionCall | ToolCall | any,
     callbacks?: FunctionCallbackConfig,
     context?: any,
-    options?: { abortSignal?: AbortSignal },
   ): Promise<FunctionCallResult> {
-    options?.abortSignal?.throwIfAborted();
     // Extract function information from various formats
     const functionInfo = this.extractFunctionInfo(call);
 
@@ -136,11 +127,7 @@ export class FunctionCallbackHandler {
       }
 
       if (this.mcpToolNames.has(functionInfo.name)) {
-        return await this.executeMcpTool(
-          functionInfo.name,
-          functionInfo.arguments,
-          options?.abortSignal,
-        );
+        return await this.executeMcpTool(functionInfo.name, functionInfo.arguments);
       }
     }
 
@@ -169,14 +156,12 @@ export class FunctionCallbackHandler {
           : typeof call?.id === 'string'
             ? call.id
             : undefined,
-        options?.abortSignal,
       );
       return {
         output: result,
         isError: false,
       };
     } catch (error) {
-      options?.abortSignal?.throwIfAborted();
       // Surface security-class failures at `warn` so a rejected path-traversal
       // attempt isn't indistinguishable from "no callback registered". The
       // generic loader/runtime errors stay at debug to avoid log noise from
@@ -213,7 +198,7 @@ export class FunctionCallbackHandler {
     calls: any,
     callbacks?: FunctionCallbackConfig,
     context?: any,
-    options?: { returnRawOnError?: boolean; abortSignal?: AbortSignal },
+    _options?: { returnRawOnError?: boolean },
   ): Promise<any> {
     if (!calls) {
       return calls;
@@ -222,23 +207,14 @@ export class FunctionCallbackHandler {
     const isArray = Array.isArray(calls);
     const callsArray = isArray ? calls : [calls];
 
-    const settled = await Promise.allSettled(
-      callsArray.map((call) => this.processCall(call, callbacks, context, options)),
+    const results = await Promise.all(
+      callsArray.map((call) => this.processCall(call, callbacks, context)),
     );
-    const results = settled.map((result, index) =>
-      result.status === 'fulfilled'
-        ? result.value
-        : { output: JSON.stringify(callsArray[index]), isError: true },
-    );
-    const rejected = settled.find((result) => result.status === 'rejected');
 
     // If any callback succeeded, return processed results
     const hasSuccess = results.some(
       (r, index) => !r.isError && r.output !== JSON.stringify(callsArray[index]),
     );
-    if (rejected && !hasSuccess) {
-      throw rejected.reason;
-    }
 
     if (hasSuccess) {
       const outputs = results.map((r) => r.output);
@@ -295,7 +271,6 @@ export class FunctionCallbackHandler {
     callbacks: FunctionCallbackConfig,
     context?: any,
     callId?: string,
-    signal?: AbortSignal,
   ): Promise<string> {
     const execution = await executeCallback({
       name: functionName,
@@ -303,7 +278,6 @@ export class FunctionCallbackHandler {
       callId,
       reference: callbacks[functionName],
       cache: this.loadedCallbacks,
-      signal,
       context,
       passContext: true,
       transformOutput: (output) =>
@@ -338,11 +312,7 @@ export class FunctionCallbackHandler {
   /**
    * Executes an MCP tool
    */
-  private async executeMcpTool(
-    toolName: string,
-    args: unknown,
-    signal?: AbortSignal,
-  ): Promise<FunctionCallResult> {
+  private async executeMcpTool(toolName: string, args: unknown): Promise<FunctionCallResult> {
     try {
       if (!this.mcpClient) {
         throw new Error('MCP client not available');
@@ -351,8 +321,7 @@ export class FunctionCallbackHandler {
       // Parse arguments: support stringified JSON, object, or empty
       const parsedArgs =
         args == null || args === '' ? {} : typeof args === 'string' ? JSON.parse(args) : args;
-      signal?.throwIfAborted();
-      const result = await this.mcpClient.callTool(toolName, parsedArgs, signal);
+      const result = await this.mcpClient.callTool(toolName, parsedArgs);
 
       if (isMcpErrorResult(result)) {
         return {
@@ -364,7 +333,6 @@ export class FunctionCallbackHandler {
       const content = normalizeMcpToolContent(result?.content);
       return { output: `MCP Tool Result (${toolName}): ${content}`, isError: false };
     } catch (error) {
-      signal?.throwIfAborted();
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.debug(`MCP tool execution failed for ${toolName}: ${errorMessage}`);
       return {

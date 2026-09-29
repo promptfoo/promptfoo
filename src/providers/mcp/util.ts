@@ -1,7 +1,10 @@
+import { getProcessEnv } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
+import { sanitizeObject } from '../../util/sanitizer';
+import { normalizeRenderedOAuthScopes } from './auth';
 
 import type { VarValue } from '../../types/shared';
 import type {
@@ -13,6 +16,46 @@ import type {
 } from './types';
 
 export type { OAuthTokenResult };
+
+export function sanitizeMcpToolData<T>(value: T): T {
+  return sanitizeObject(value, { context: 'MCP tool data', sanitizeUrls: true });
+}
+
+export function normalizeMcpToolContent(
+  content: unknown,
+  onUnknownContent?: (part: object) => void,
+): string {
+  if (content == null) {
+    return '';
+  }
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') {
+          return part;
+        }
+        if (part && typeof part === 'object') {
+          if ('text' in part && (part as { text?: unknown }).text != null) {
+            return String((part as { text: unknown }).text);
+          }
+          if ('json' in part) {
+            return JSON.stringify((part as { json: unknown }).json);
+          }
+          if ('data' in part) {
+            return JSON.stringify((part as { data: unknown }).data);
+          }
+          onUnknownContent?.(part);
+          return JSON.stringify(part);
+        }
+        return String(part);
+      })
+      .join('\n');
+  }
+  return JSON.stringify(content);
+}
 
 export function isMcpToolNameFilter(tools: unknown): tools is string | string[] {
   const isPlainToolName = (tool: unknown): tool is string =>
@@ -54,7 +97,7 @@ export function renderAuthVars(
   }
 
   // Use process.env as default vars if none provided
-  const renderVars = vars || (process.env as Record<string, string>);
+  const renderVars = vars || (getProcessEnv() as Record<string, string>);
 
   return {
     ...server,
@@ -79,7 +122,7 @@ function getOAuthCacheKey(
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
   tokenUrl: string,
 ): string {
-  return `${tokenUrl}:${auth.grantType}:${'clientId' in auth ? auth.clientId : ''}:${'username' in auth ? auth.username : ''}:${auth.scopes?.join(' ') ?? ''}`;
+  return `${tokenUrl}:${auth.grantType}:${'clientId' in auth ? auth.clientId : ''}:${'username' in auth ? auth.username : ''}:${normalizeRenderedOAuthScopes(auth.scopes)?.join(' ') ?? ''}`;
 }
 
 // Cache for discovered token endpoints
@@ -99,11 +142,7 @@ function isValidTokenEndpoint(tokenEndpoint: string): boolean {
  * Follows RFC 8414 OAuth 2.0 Authorization Server Metadata.
  * Only requires token_endpoint from the response (unlike SDK which requires authorization_endpoint).
  */
-export async function discoverTokenEndpoint(
-  serverUrl: string,
-  signal?: AbortSignal,
-): Promise<string> {
-  signal?.throwIfAborted();
+export async function discoverTokenEndpoint(serverUrl: string): Promise<string> {
   // Check cache first
   const cached = tokenEndpointCache.get(serverUrl);
   if (cached) {
@@ -132,10 +171,7 @@ export async function discoverTokenEndpoint(
   for (const discoveryUrl of discoveryUrls) {
     try {
       logger.debug(`[MCP Auth] Trying OAuth discovery at ${discoveryUrl}`);
-      const response = await (signal
-        ? fetchWithProxy(discoveryUrl, { signal })
-        : fetchWithProxy(discoveryUrl));
-      signal?.throwIfAborted();
+      const response = await fetchWithProxy(discoveryUrl);
 
       if (!response.ok) {
         logger.debug(`[MCP Auth] Discovery failed at ${discoveryUrl}: ${response.status}`);
@@ -143,7 +179,6 @@ export async function discoverTokenEndpoint(
       }
 
       const metadata = (await response.json()) as { token_endpoint?: string };
-      signal?.throwIfAborted();
       if (metadata.token_endpoint && isValidTokenEndpoint(metadata.token_endpoint)) {
         logger.debug(`[MCP Auth] Discovered token endpoint: ${metadata.token_endpoint}`);
         tokenEndpointCache.set(serverUrl, metadata.token_endpoint);
@@ -152,7 +187,6 @@ export async function discoverTokenEndpoint(
 
       logger.debug(`[MCP Auth] No valid token_endpoint in metadata from ${discoveryUrl}`);
     } catch (error) {
-      signal?.throwIfAborted();
       logger.debug(`[MCP Auth] Error fetching ${discoveryUrl}: ${error}`);
     }
   }
@@ -171,18 +205,15 @@ export async function discoverTokenEndpoint(
 export async function getOAuthTokenWithExpiry(
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
   serverUrl?: string,
-  signal?: AbortSignal,
 ): Promise<OAuthTokenResult> {
-  signal?.throwIfAborted();
   // Use configured tokenUrl or discover it
   let tokenUrl = auth.tokenUrl;
   if (!tokenUrl) {
     if (!serverUrl) {
       throw new Error('Either tokenUrl or serverUrl is required for OAuth token fetching');
     }
-    tokenUrl = await discoverTokenEndpoint(serverUrl, signal);
+    tokenUrl = await discoverTokenEndpoint(serverUrl);
   }
-  signal?.throwIfAborted();
 
   const cacheKey = getOAuthCacheKey(auth, tokenUrl);
   const cached = oauthTokenCache.get(cacheKey);
@@ -194,19 +225,15 @@ export async function getOAuthTokenWithExpiry(
   }
 
   // Use shared OAuth token fetch logic
-  const result = await fetchOAuthToken(
-    {
-      tokenUrl,
-      grantType: auth.grantType,
-      clientId: auth.clientId,
-      clientSecret: auth.clientSecret,
-      username: 'username' in auth ? auth.username : undefined,
-      password: 'password' in auth ? auth.password : undefined,
-      scopes: auth.scopes,
-    },
-    signal,
-  );
-  signal?.throwIfAborted();
+  const result = await fetchOAuthToken({
+    tokenUrl,
+    grantType: auth.grantType,
+    clientId: auth.clientId,
+    clientSecret: auth.clientSecret,
+    username: 'username' in auth ? auth.username : undefined,
+    password: 'password' in auth ? auth.password : undefined,
+    scopes: normalizeRenderedOAuthScopes(auth.scopes),
+  });
 
   // Cache the token
   oauthTokenCache.set(cacheKey, {
@@ -329,43 +356,4 @@ export function applyQueryParams(url: string, params: Record<string, string>): s
  */
 export function requiresAsyncAuth(server: MCPServerConfig): boolean {
   return server.auth?.type === 'oauth';
-}
-
-export function normalizeMcpToolContent(content: unknown): string {
-  const stringify = (value: unknown) => {
-    try {
-      return JSON.stringify(value) ?? String(value);
-    } catch {
-      return String(value);
-    }
-  };
-  if (content == null) {
-    return '';
-  }
-  if (typeof content === 'string') {
-    return content;
-  }
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === 'string') {
-          return part;
-        }
-        if (part && typeof part === 'object') {
-          if ('text' in part && (part as { text?: unknown }).text != null) {
-            return String((part as { text: unknown }).text);
-          }
-          if ('json' in part) {
-            return stringify((part as { json: unknown }).json);
-          }
-          if ('data' in part) {
-            return stringify((part as { data: unknown }).data);
-          }
-          return stringify(part);
-        }
-        return String(part);
-      })
-      .join('\n');
-  }
-  return stringify(content);
 }

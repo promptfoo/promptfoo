@@ -4,11 +4,18 @@ import { hasFunctionToolCallValidator } from '../../src/contracts/providers';
 import { getAndCheckProvider } from '../../src/matchers/providers';
 import { AwsBedrockEmbeddingProvider } from '../../src/providers/bedrock';
 import { CohereEmbeddingProvider } from '../../src/providers/cohere';
+import {
+  HuggingfaceTextClassificationProvider,
+  HuggingfaceTokenExtractionProvider,
+} from '../../src/providers/huggingface';
 import { createLiteLLMProvider, LiteLLMProvider } from '../../src/providers/litellm';
+import { MistralEmbeddingProvider } from '../../src/providers/mistral';
+import { OllamaEmbeddingProvider } from '../../src/providers/ollama';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { ReplicateModerationProvider } from '../../src/providers/replicate';
 import { VoyageEmbeddingProvider } from '../../src/providers/voyage';
 import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
 import {
@@ -17,6 +24,7 @@ import {
   type ProviderIdentity,
   type ProviderOperations,
 } from '../../src/types/providers';
+import { ProviderSchema } from '../../src/validators/providers';
 
 import type { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 
@@ -139,6 +147,71 @@ it('honors a prototype exclusion of a built-in inherited capability', async () =
   await expect(getAndCheckProvider('embedding', provider, null, 'similarity')).rejects.toThrow(
     'not a valid embedding provider',
   );
+});
+
+it.each(['wrapper', 'schema'] as const)(
+  'preserves prototype capability exclusions through a %s',
+  (kind) => {
+    class ExcludedEmbedding extends OpenAiEmbeddingProvider {}
+    Object.defineProperty(ExcludedEmbedding.prototype, 'promptfooCapabilities', {
+      get: () => [],
+    });
+    const original = new ExcludedEmbedding('fixture');
+    const registry = { execute: vi.fn() } as unknown as RateLimitRegistry;
+    const provider =
+      kind === 'wrapper'
+        ? wrapProviderWithRateLimiting(original, registry)
+        : ProviderSchema.parse(original);
+
+    expect(hasProviderCapability(original, 'callEmbeddingApi')).toBe(false);
+    expect(hasProviderCapability(provider, 'callEmbeddingApi')).toBe(false);
+  },
+);
+
+it.each([
+  ['Mistral embedding', () => new MistralEmbeddingProvider(), 'callEmbeddingApi'],
+  ['Ollama embedding', () => new OllamaEmbeddingProvider('fixture'), 'callEmbeddingApi'],
+  [
+    'Hugging Face classification',
+    () => new HuggingfaceTextClassificationProvider('fixture'),
+    'callClassificationApi',
+  ],
+  [
+    'Hugging Face token classification',
+    () => new HuggingfaceTokenExtractionProvider('fixture'),
+    'callClassificationApi',
+  ],
+  ['Replicate moderation', () => new ReplicateModerationProvider('fixture'), 'callModerationApi'],
+] as const)('rejects %s as a text grader', async (_name, create, capability) => {
+  const provider = create();
+  expect(hasProviderCapability(provider, capability)).toBe(true);
+  expect(hasProviderCapability(provider, 'callApi')).toBe(false);
+  await expect(getAndCheckProvider('text', provider, null, 'rubric')).rejects.toThrow(
+    'not a valid text provider',
+  );
+});
+
+it('retains prototype cleanup and validation hooks through rate limiting', async () => {
+  const cleanup = vi
+    .spyOn(OpenAiChatCompletionProvider.prototype, 'cleanup')
+    .mockResolvedValue(undefined);
+  const validate = vi
+    .spyOn(OpenAiChatCompletionProvider.prototype, 'validateFunctionToolCall')
+    .mockImplementation(() => undefined);
+  const provider = new OpenAiChatCompletionProvider('fixture');
+  const wrapped = wrapProviderWithRateLimiting(provider, {
+    execute: vi.fn(),
+  } as unknown as RateLimitRegistry);
+
+  expect(hasFunctionToolCallValidator(wrapped)).toBe(true);
+  if (hasFunctionToolCallValidator(wrapped)) {
+    wrapped.validateFunctionToolCall('{}');
+  }
+  await wrapped.cleanup?.();
+  expect(validate).toHaveBeenCalledWith('{}');
+  expect(cleanup).toHaveBeenCalledOnce();
+  expect(validate.mock.contexts[0]).toBe(provider);
+  expect(cleanup.mock.contexts[0]).toBe(provider);
 });
 
 it('recognizes an override on the same prototype as its capability declaration', async () => {
@@ -338,7 +411,7 @@ it('preserves prototype lifecycle and validation hooks on LiteLLM subclasses', a
   });
   const provider = new CustomLiteLLMProvider('fixture', {});
   provider.validateFunctionToolCall!('{}');
-  await providerRegistry.withScope([provider], async () => undefined);
+  await provider.cleanup?.();
   expect(validateFunctionToolCall).toHaveBeenCalledWith('{}');
   expect(cleanup).toHaveBeenCalledOnce();
 });
@@ -392,7 +465,7 @@ it('forwards cleanup and function validation with the delegate as receiver', asy
   const provider = new LiteLLMProvider('fixture', { id: 'custom' });
   expect(hasFunctionToolCallValidator(provider)).toBe(true);
   provider.validateFunctionToolCall!('{}', { value: 'fixture' });
-  await providerRegistry.withScope([provider], async () => undefined);
+  await provider.cleanup?.();
   expect(validate).toHaveBeenCalledWith('{}', { value: 'fixture' });
   expect(cleanup).toHaveBeenCalledOnce();
   expect(validate.mock.contexts[0]).toBe(cleanup.mock.contexts[0]);
@@ -425,7 +498,7 @@ it('does not invoke subclass hook getters on the prototype during LiteLLM constr
   expect(provider.calls).toEqual(['validateFunctionToolCall', 'cleanup']);
 });
 
-it('retains MCP tools and cleanup ownership when a LiteLLM wrapper is reused', async () => {
+it('forwards MCP cleanup from the LiteLLM wrapper to its delegate', async () => {
   mcp.initialize.mockReset().mockResolvedValue(undefined);
   mcp.cleanup.mockReset().mockResolvedValue(undefined);
   vi.spyOn(OpenAiChatCompletionProvider.prototype, 'getApiKey').mockReturnValue(undefined);
@@ -434,13 +507,10 @@ it('retains MCP tools and cleanup ownership when a LiteLLM wrapper is reused', a
   const provider = new LiteLLMProvider('fixture', {
     config: { apiKeyRequired: true, apiKeyEnvar: 'UNSET_FIXTURE_KEY', mcp: { enabled: true } },
   });
-  for (let run = 0; run < 2; run++) {
-    await expect(
-      providerRegistry.withScope([provider], () => provider.callApi('hello')),
-    ).rejects.toThrow('API key');
-  }
-  expect(mcp.initialize).toHaveBeenCalledTimes(2);
-  expect(mcp.cleanup).toHaveBeenCalledTimes(2);
+  await expect(provider.callApi('hello')).rejects.toThrow('API key');
+  await provider.cleanup?.();
+  expect(mcp.initialize).toHaveBeenCalledOnce();
+  expect(mcp.cleanup).toHaveBeenCalledOnce();
 });
 
 it.each([{ streaming: true }, ['vision'], []])(

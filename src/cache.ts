@@ -1,6 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import crypto from 'node:crypto';
-import { setTimeout as sleepWithSignal } from 'node:timers/promises';
 import fs from 'fs';
 import path from 'path';
 
@@ -20,12 +19,14 @@ import {
   getCloudTaskTeamId,
   getRequestUrlString,
   PROMPTFOO_TEAM_ID_HEADER,
+  preserveCloudAuthRedirects,
 } from './util/fetch/monkeyPatchFetch';
 import { isSecretField, looksLikeSecret, sanitizeUrlForLogging } from './util/sanitizer';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
 
 import type { CacheOptions } from './types/cache';
+import type { FetchOptions } from './util/fetch/types';
 
 let cacheInstance: Cache | undefined;
 const namespacedCacheInstances = new Map<string, Cache>();
@@ -596,8 +597,7 @@ function getAbortSignalId(signal: AbortSignal) {
 }
 
 function getInflightFetchCacheKey(cacheKey: string, url: RequestInfo, options: RequestInit) {
-  const signal =
-    options.signal === undefined && url instanceof Request ? url.signal : options.signal;
+  const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
   return signal ? `${cacheKey}:signal:${getAbortSignalId(signal)}` : cacheKey;
 }
 
@@ -686,13 +686,11 @@ function deserializeFetchResponse<T>(
 
 async function fetchAndReadBody(
   url: RequestInfo,
-  options: RequestInit,
+  options: FetchOptions,
   timeout: number,
   maxRetries: number | undefined,
   isIdempotent: boolean,
 ): Promise<{ respText: string; resp: Response; fetchLatencyMs: number }> {
-  const signal =
-    options.signal === undefined && url instanceof Request ? url.signal : options.signal;
   const maxBodyRetries = isIdempotent ? 2 : 0;
   for (let bodyAttempt = 0; bodyAttempt <= maxBodyRetries; bodyAttempt++) {
     const fetchStart = Date.now();
@@ -712,11 +710,7 @@ async function fetchAndReadBody(
           backoffMs,
           error: (err as Error)?.message?.slice(0, 200),
         });
-        if (signal) {
-          await sleepWithSignal(backoffMs, undefined, { signal });
-        } else {
-          await sleep(backoffMs);
-        }
+        await sleep(backoffMs);
         continue;
       }
       // Preserve cancellation: an aborted body read rejects with an AbortError, and
@@ -846,33 +840,13 @@ async function prepareFetchResponse(
  */
 export async function fetchWithCache<T = unknown>(
   url: RequestInfo,
-  options: RequestInit = {},
+  options: FetchOptions = {},
   timeout: number = getRequestTimeoutMs(),
   format: 'json' | 'text' = 'json',
   bustOrOptions: boolean | CacheOptions | undefined = false,
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
-  const signal =
-    options.signal === undefined && url instanceof Request ? url.signal : options.signal;
-  signal?.throwIfAborted();
-  const awaitCache = <V>(work: Promise<V>): Promise<V> => {
-    if (!signal) {
-      return work;
-    }
-    const operation = Promise.resolve(work);
-    return new Promise<V>((resolve, reject) => {
-      const onAbort = () => {
-        signal.removeEventListener('abort', onAbort);
-        reject(signal.reason);
-      };
-      if (signal.aborted) {
-        reject(signal.reason);
-      } else {
-        signal.addEventListener('abort', onAbort, { once: true });
-      }
-      operation.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
-    });
-  };
+  const fetchOptions = preserveCloudAuthRedirects(url, options);
   const cacheOptions: CacheOptions =
     typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
   const { bust = false, repeatIndex, cacheKey: providedCacheKey } = cacheOptions;
@@ -880,22 +854,33 @@ export async function fetchWithCache<T = unknown>(
   // Only retry body-read for idempotent methods to avoid double-submitting
   // POST/PATCH requests (the server already processed the request once
   // headers arrived; only the response body stream failed).
-  const method = (options.method ?? (url instanceof Request ? url.method : 'GET')).toUpperCase();
+  const method = (
+    fetchOptions.method ?? (url instanceof Request ? url.method : 'GET')
+  ).toUpperCase();
   const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
 
   const cacheEnabled = getEffectiveCacheEnabled();
+  if (cacheEnabled && !bust && fetchOptions.getAuthHeaders && !providedCacheKey) {
+    throw new Error(
+      'Request-time authentication requires cache bypass or an explicit principal-scoped cache key.',
+    );
+  }
   const repeatSuffix = shouldApplyRepeatCacheSuffix(repeatIndex) ? `:repeat${repeatIndex}` : '';
+  // Caller-provided keys must not reuse responses accepted without Cloud redirect protection.
+  const providedKeyPrefix = fetchOptions.restrictCloudAuthRedirects
+    ? 'fetch:cloud-auth:v3'
+    : 'fetch:v3';
   const cacheKey =
     cacheEnabled && !bust
       ? providedCacheKey
-        ? getScopedCacheKey(`fetch:v3:${providedCacheKey}${repeatSuffix}`)
-        : getFetchCacheKey(url, options, method, format, repeatIndex)
+        ? getScopedCacheKey(`${providedKeyPrefix}:${providedCacheKey}${repeatSuffix}`)
+        : getFetchCacheKey(url, fetchOptions, method, format, repeatIndex)
       : null;
 
   if (!cacheEnabled || bust || cacheKey == null) {
     const { respText, resp, fetchLatencyMs } = await fetchAndReadBody(
       url,
-      options,
+      fetchOptions,
       timeout,
       maxRetries,
       isIdempotent,
@@ -923,8 +908,7 @@ export async function fetchWithCache<T = unknown>(
 
   const cache = getCacheInstance();
 
-  const cachedResponse = await awaitCache(cache.get<SerializedFetchResponse>(cacheKey));
-  signal?.throwIfAborted();
+  const cachedResponse = await cache.get<SerializedFetchResponse>(cacheKey);
   if (cachedResponse != null) {
     logger.debug(
       `Returning cached response for ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${cachedResponse}`,
@@ -932,30 +916,21 @@ export async function fetchWithCache<T = unknown>(
     return deserializeFetchResponse<T>(cachedResponse, true, cache, cacheKey);
   }
 
-  const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, options);
+  const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, fetchOptions);
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
-  let responsePrepared = false;
   const coalesced = inflightResponse !== undefined;
   if (!inflightResponse) {
     inflightResponse = (async () => {
       const preparedResponse = await prepareFetchResponse(
         url,
-        options,
+        fetchOptions,
         timeout,
         maxRetries,
         isIdempotent,
         format,
       );
-      responsePrepared = true;
       if (preparedResponse.cacheable) {
-        try {
-          signal?.throwIfAborted();
-          await awaitCache(cache.set(cacheKey, preparedResponse.response));
-        } catch (error) {
-          if (!signal?.aborted) {
-            throw error;
-          }
-        }
+        await cache.set(cacheKey, preparedResponse.response);
       }
       return preparedResponse.response;
     })().finally(() => {
@@ -964,18 +939,7 @@ export async function fetchWithCache<T = unknown>(
     inflightFetchResponses.set(inflightCacheKey, inflightResponse);
   }
 
-  let response: SerializedFetchResponse;
-  try {
-    response = await awaitCache(inflightResponse);
-  } catch (error) {
-    if (coalesced || !signal?.aborted || !responsePrepared) {
-      throw error;
-    }
-    response = await inflightResponse;
-  }
-  if (coalesced) {
-    signal?.throwIfAborted();
-  }
+  const response = await inflightResponse;
   const result = deserializeFetchResponse<T>(response, false, cache, cacheKey);
   return coalesced ? { ...result, coalesced: true } : result;
 }

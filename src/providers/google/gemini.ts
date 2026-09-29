@@ -19,19 +19,17 @@ import type { CallApiContextParams, ProviderResponse, TokenUsage } from '../../t
 import type { CompletionOptions, Tool } from './types';
 import type { GeminiApiResponse, GeminiResponseData } from './util';
 
-type GeminiFacade = 'ai-studio' | 'unified' | 'vertex';
+type GeminiFacade = 'ai-studio' | 'vertex';
 
-/** Shared Gemini wire preparation. Facade differences remain explicit compatibility policy. */
+/** Build Gemini requests while preserving each provider's wire format. */
 export async function prepareGeminiRequest(
   modelName: string,
   providerConfig: CompletionOptions,
   prompt: string,
   context: CallApiContextParams | undefined,
   facade: GeminiFacade,
-  vertexMode: boolean,
   getTools: (options: { skipExecutableToolFiles: boolean }) => Promise<Tool[]>,
 ) {
-  // Merge configs from the provider and the prompt
   const config = mergeGoogleCompletionOptions(
     providerConfig,
     context?.prompt?.config as Partial<CompletionOptions> | undefined,
@@ -45,7 +43,6 @@ export async function prepareGeminiRequest(
   );
 
   const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
-  // Get all tools (MCP + config tools) using base class method
   const allTools = await getTools({
     skipExecutableToolFiles: toolsDisabled,
   });
@@ -58,6 +55,7 @@ export async function prepareGeminiRequest(
     tool_config: _passthroughToolConfigSnakeCase,
     ...passthrough
   } = config.passthrough || {};
+  const vertexMode = facade === 'vertex';
   const serviceTier = normalizeGoogleServiceTier(
     passthroughServiceTier ?? camelCasePassthroughServiceTier ?? config.service_tier,
     vertexMode,
@@ -149,17 +147,15 @@ type GeminiContent =
 export function parseGeminiContent(
   data: GeminiApiResponse | GeminiApiResponse[number],
   facade: GeminiFacade,
-  cached = false,
   safetyAsOutput = false,
 ): GeminiContent {
   const chunks = (Array.isArray(data) ? data : [data]) as GeminiResponseData[];
   const lastData = chunks[chunks.length - 1];
   const respond = (response: ProviderResponse): GeminiContent => ({ kind: 'response', response });
   if (!lastData) {
-    if (facade === 'vertex') {
-      throw new Error('No response data found');
-    }
-    return respond({ error: `No response data found in response: ${JSON.stringify(data)}` });
+    return respond({
+      error: `${facade === 'vertex' ? 'No output found' : 'No response data found'} in response: ${JSON.stringify(data)}`,
+    });
   }
   if (facade !== 'ai-studio') {
     const first = Array.isArray(data) ? data[0] : data;
@@ -180,7 +176,8 @@ export function parseGeminiContent(
       continue;
     }
     const current = getCandidate(datum);
-    const failure = getCandidateFailure(datum, current, data, { facade, cached, safetyAsOutput });
+    const failure =
+      facade === 'vertex' ? getCandidateFailure(datum, current, data, safetyAsOutput) : undefined;
     if (failure) {
       return respond(failure);
     }
@@ -195,16 +192,10 @@ export function parseGeminiContent(
     if (facade === 'vertex' && !current.content?.parts) {
       return respond({ error: `No output found in response: ${JSON.stringify(data)}` });
     }
-    if (facade === 'ai-studio' || current.content?.parts) {
-      candidate = current;
-      output = mergeParts(output, formatCandidateContents(current));
-    }
+    candidate = current;
+    output = mergeParts(output, formatCandidateContents(current));
   }
   if (output === undefined || output === '' || candidate === undefined) {
-    if (facade === 'vertex' && chunks.every((chunk) => !chunk.candidates?.length)) {
-      // Keep Vertex's facade catch responsible for the historical no-candidate error.
-      getCandidate(chunks[0]);
-    }
     const error = `No output found in response: ${JSON.stringify(data)}`;
     if (facade === 'ai-studio') {
       throw new Error(error);
@@ -222,7 +213,7 @@ function getBlockedTokenUsage(datum: GeminiResponseData): TokenUsage {
   };
 }
 
-/** Keep historical Vertex unknown-usage accounting explicit during the facade migration. */
+/** Preserve each provider's token accounting, including missing counts. */
 export function getGeminiTokenUsage(
   usage: GeminiResponseData['usageMetadata'],
   cached: boolean,
@@ -240,14 +231,7 @@ export function getGeminiTokenUsage(
         };
   if (cached) {
     return {
-      ...(facade === 'ai-studio' && {
-        prompt:
-          usage?.promptTokenCount === undefined
-            ? undefined
-            : usage.promptTokenCount + (usage.toolUsePromptTokenCount ?? 0),
-        completion: usage?.candidatesTokenCount,
-      }),
-      cached: usage?.totalTokenCount ?? usage?.cachedContentTokenCount,
+      cached: usage?.totalTokenCount,
       total: usage?.totalTokenCount,
       numRequests: 1,
       ...reasoning,
@@ -292,15 +276,8 @@ function getCandidateFailure(
   datum: GeminiResponseData,
   current: ReturnType<typeof getCandidate>,
   data: GeminiApiResponse | GeminiApiResponse[number],
-  {
-    facade,
-    cached,
-    safetyAsOutput,
-  }: { facade: GeminiFacade; cached: boolean; safetyAsOutput: boolean },
+  safetyAsOutput: boolean,
 ): ProviderResponse | undefined {
-  if (facade === 'ai-studio') {
-    return undefined;
-  }
   const safetyReasons = [
     'SAFETY',
     'PROHIBITED_CONTENT',
@@ -317,11 +294,9 @@ function getCandidateFailure(
       flaggedOutput: true,
       reason: message,
     };
-    const metadata =
-      facade === 'unified'
-        ? { tokenUsage: getBlockedTokenUsage(datum), guardrails, raw: data, cached }
-        : { guardrails, ...(safetyAsOutput && { tokenUsage: getBlockedTokenUsage(datum) }) };
-    return safetyAsOutput ? { output: message, ...metadata } : { error: message, ...metadata };
+    return safetyAsOutput
+      ? { output: message, tokenUsage: getBlockedTokenUsage(datum), guardrails }
+      : { error: message, guardrails };
   }
   if (
     current.finishReason &&
@@ -350,8 +325,8 @@ function applyResponseSchema(
       renderVarsInObject(config.responseSchema, context?.vars),
     );
 
-    // AI Studio historically passes loaded schemas through; the other facades
-    // accept JSON strings and render variables inside loaded schema files.
+    // Vertex parses JSON strings and renders variables inside loaded schemas.
+    // AI Studio passes loaded schemas through.
     if (facade !== 'ai-studio') {
       if (typeof schema === 'string') {
         try {

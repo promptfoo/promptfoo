@@ -1,10 +1,5 @@
 import { fetchWithCache } from '../../cache';
-import {
-  type CallApiContextParams,
-  type CallApiOptionsParams,
-  inheritProviderCapabilities,
-  type ProviderEmbeddingResponse,
-} from '../../types/providers';
+import { inheritProviderCapabilities, type ProviderEmbeddingResponse } from '../../types/providers';
 import invariant from '../../util/invariant';
 import { getRequestTimeoutMs } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
@@ -16,13 +11,8 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
     AzureEmbeddingProvider.declaredProviderCapabilities,
   );
 
-  async callEmbeddingApi(
-    text: string,
-    _context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ): Promise<ProviderEmbeddingResponse> {
-    options?.abortSignal?.throwIfAborted();
-    await this.ensureInitialized(options?.abortSignal);
+  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+    await this.ensureInitialized();
     invariant(this.authHeaders, 'auth headers are not initialized');
     if (!this.getApiBaseUrl()) {
       throw new Error('Azure API host must be set.');
@@ -42,7 +32,6 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
         }`,
         {
           method: 'POST',
-          signal: options?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             ...this.authHeaders,

@@ -115,8 +115,7 @@ export interface CallApiContextParams {
 export interface CallApiOptionsParams {
   includeLogProbs?: boolean;
   /**
-   * Request-scoped cancellation, forwarded to supported transports, retries, and polling.
-   * Legacy/custom providers may ignore this optional option; it does not cancel an accepted remote job.
+   * Signal that can be used to abort the request
    */
   abortSignal?: AbortSignal;
 }
@@ -250,18 +249,17 @@ export function hasProviderCapability<K extends ProviderCapability>(
   if (!Array.isArray(capabilities)) {
     return false;
   }
-  if (capabilities.includes(capability)) {
-    return true;
-  }
-
   const delegate = (provider as Record<symbol, unknown>)[
     Symbol.for('promptfoo.capabilityDelegate')
   ];
-  return (
+  if (
     Object.prototype.hasOwnProperty.call(capabilities, inheritedProviderCapabilities) &&
-    delegate !== provider &&
-    hasProviderCapability(delegate, capability)
-  );
+    delegate !== undefined &&
+    delegate !== provider
+  ) {
+    return hasProviderCapability(delegate, capability);
+  }
+  return capabilities.includes(capability);
 }
 
 // Keep the legacy text-provider shape and permissive default config at the public
@@ -273,6 +271,15 @@ export interface ApiProvider<TConfig = any> extends MinimalApiProvider, Provider
   callSimilarityApi?: ProviderOperations['callSimilarityApi'];
   callModerationApi?: ProviderOperations['callModerationApi'];
   delay?: number;
+  /** True when callApi applies delay itself and the evaluator should not wait again. */
+  handlesOwnDelay?: boolean;
+  /**
+   * True when callApi owns retries for its operations, including requests that
+   * must not be replayed. Scheduling still applies, but the scheduler must not
+   * retry the whole call after its transport or SDK has finished. Subclasses
+   * replacing that behavior can override this with false to use scheduler retries.
+   */
+  handlesOwnRetries?: boolean;
   getSessionId?: () => string;
   /** Native audio input content format accepted by this provider and its configured model. */
   getAudioInputFormat?: () => 'openai' | 'google' | undefined;
@@ -309,7 +316,7 @@ export type CallApiFunction = {
   label?: string;
 };
 
-export function isApiProvider(provider: unknown): provider is ApiProvider {
+export function isApiProvider(provider: any): provider is ApiProvider {
   return (
     typeof provider === 'object' &&
     provider != null &&
