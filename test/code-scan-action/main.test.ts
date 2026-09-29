@@ -549,14 +549,16 @@ describe('code-scan-action main', () => {
         ([, callArgs]) => callArgs?.[0] === 'fetch',
       );
       expect(fetchCall?.[0]).toBe(
-        process.platform === 'win32' ? 'C:\\Program Files\\Git\\cmd\\git.exe' : '/usr/bin/git',
+        process.platform === 'win32' ? '"C:\\Program Files\\Git\\cmd\\git.exe"' : '"/usr/bin/git"',
       );
       expect(fetchCall?.[2]?.env).toMatchObject({
-        GIT_CONFIG_COUNT: '2',
+        GIT_CONFIG_COUNT: '3',
         GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
-        GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${Buffer.from('x-access-token:fake-token').toString('base64')}`,
-        GIT_CONFIG_KEY_1: 'core.hooksPath',
-        GIT_CONFIG_VALUE_1: '/dev/null',
+        GIT_CONFIG_VALUE_0: '',
+        GIT_CONFIG_KEY_1: 'http.https://github.com/.extraheader',
+        GIT_CONFIG_VALUE_1: `AUTHORIZATION: basic ${Buffer.from('x-access-token:fake-token').toString('base64')}`,
+        GIT_CONFIG_KEY_2: 'core.hooksPath',
+        GIT_CONFIG_VALUE_2: '/dev/null',
       });
     });
 

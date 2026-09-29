@@ -61,7 +61,7 @@ The action sets `sarif-path` only for a complete scan. If changed files were ski
     sarif-output-path: promptfoo-code-scan.sarif
 
 - name: Upload SARIF to GitHub Code Scanning
-  if: ${{ steps.promptfoo-code-scan.outputs.sarif-path != '' }}
+  if: ${{ !cancelled() && steps.promptfoo-code-scan.outputs.sarif-path != '' }}
   uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4.36.3
   with:
     sarif_file: ${{ steps.promptfoo-code-scan.outputs.sarif-path }}
