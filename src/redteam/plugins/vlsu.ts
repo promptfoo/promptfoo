@@ -235,8 +235,7 @@ function normalizeGrade(grade: string): VLSUGrade {
 }
 
 /**
- * DatasetManager to handle VLSU dataset caching and filtering
- * Fetches CSV from GitHub and images from web URLs
+ * Caches VLSU CSV records and filters them before fetching images.
  */
 export class VLSUDatasetManager {
   private static instance: VLSUDatasetManager | null = null;
@@ -257,7 +256,7 @@ export class VLSUDatasetManager {
   }
 
   /**
-   * Clear all caches
+   * Clear the CSV cache.
    */
   static clearCache(): void {
     if (VLSUDatasetManager.instance) {
