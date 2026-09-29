@@ -123,6 +123,15 @@ describe('resolveInternalModule', () => {
       ).toBe('src/internal/bar/index.d.mts');
     });
 
+    it('resolves aliases within a repository-root layer', () => {
+      write('lib/foo.d.ts');
+      expect(
+        resolveInternalModule(repoRoot, 'src/index.ts', '@internal/foo', { '@internal': 'lib' }, [
+          '.',
+        ]),
+      ).toBe('lib/foo.d.ts');
+    });
+
     it.each([
       ['.js', '.d.ts'],
       ['.jsx', '.d.ts'],

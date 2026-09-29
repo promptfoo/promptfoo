@@ -271,6 +271,9 @@ function getArchitectureRoots(config: LayerConfig): string[] {
 function isWithinRoot(relativePath: string, root: string): boolean {
   const normalizedPath = normalizePath(relativePath);
   const normalizedRoot = normalizePath(root);
+  if (normalizedRoot === '.') {
+    return normalizedPath !== '..' && !normalizedPath.startsWith('../');
+  }
   return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}/`);
 }
 

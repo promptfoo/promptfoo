@@ -105,10 +105,23 @@ function takeJSDocType(source: string): string {
     return source;
   }
   let depth = 0;
+  let quote: string | undefined;
+  let escaped = false;
   for (let index = start; index < source.length; index++) {
-    if (source[index] === '{') {
+    const character = source[index];
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === '\\') {
+        escaped = true;
+      } else if (character === quote) {
+        quote = undefined;
+      }
+    } else if (character === "'" || character === '"') {
+      quote = character;
+    } else if (character === '{') {
       depth++;
-    } else if (source[index] === '}' && --depth === 0) {
+    } else if (character === '}' && --depth === 0) {
       return source.slice(0, index + 1);
     }
   }
@@ -180,6 +193,9 @@ function getShadowRanges(
     if (record.type === 'RestElement') {
       return bindsName(record.argument);
     }
+    if (record.type === 'TSParameterProperty') {
+      return bindsName(record.parameter);
+    }
     if (record.type === 'Property') {
       return bindsName(record.value);
     }
@@ -236,7 +252,7 @@ function getShadowRanges(
     },
     ClassExpression(node) {
       if (node.id?.name === name) {
-        ranges.push([node.body.start, node.body.end]);
+        ranges.push([node.start, node.end]);
       }
     },
     CatchClause(node) {
@@ -339,7 +355,7 @@ function scopeFor(file: string, manifest: string, configuredRoots: string[]): Sc
   const workspaceRoot = manifest === 'package.json' ? '' : path.posix.dirname(manifest);
   const configuredSource = configuredRoots.some(
     (root) =>
-      (file === root || file.startsWith(`${root}/`)) &&
+      (root === '.' || file === root || file.startsWith(`${root}/`)) &&
       // A broad layer containing a workspace also includes its build configuration.
       root !== workspaceRoot &&
       !workspaceRoot.startsWith(`${root}/`),
@@ -441,12 +457,13 @@ function leadingTypeReferences(comments: Comment[], firstStatement: number, file
       continue;
     }
     const directive = comment.value.match(
-      /^\/\s*<reference\s+((?:[\w-]+\s*=\s*(?:"[^"]*"|'[^']*')\s*)+)\/>/,
+      /^\/\s*<(reference|amd-dependency)\s+((?:[\w-]+\s*=\s*(?:"[^"]*"|'[^']*')\s*)+)\/>/,
     );
+    const attributeName = directive?.[1] === 'amd-dependency' ? 'path' : 'types';
     const typeAttribute =
       directive &&
-      [...directive[1].matchAll(/([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)].find(
-        (attribute) => attribute[1] === 'types',
+      [...directive[2].matchAll(/([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)].find(
+        (attribute) => attribute[1] === attributeName,
       );
     const specifier = typeAttribute?.[2] ?? typeAttribute?.[3];
     if (!specifier) {
@@ -456,7 +473,10 @@ function leadingTypeReferences(comments: Comment[], firstStatement: number, file
     if (!name) {
       continue;
     }
-    const typesPackage = `@types/${name.startsWith('@') ? name.slice(1).replace('/', '__') : name}`;
+    const typesPackage =
+      attributeName === 'path'
+        ? name
+        : `@types/${name.startsWith('@') ? name.slice(1).replace('/', '__') : name}`;
     const typesSpecifier = typesPackage + specifier.slice(name.length);
     const hasInstalledTypes = (createRequire(file).resolve.paths(typesSpecifier) ?? []).some(
       (directory) => {
@@ -480,45 +500,82 @@ function leadingTypeReferences(comments: Comment[], firstStatement: number, file
   return references;
 }
 
-/** Report source evidence and declaration ownership; neither proves installed dependency reach. */
-export function reportDependencyOwnership(
-  repoRoot: string,
-  config: LayerConfig = readLayerConfig(repoRoot),
+function addJSDocReferences(
+  comment: Comment,
+  add: (node: Pick<Node, 'start'>, specifier: string, kind: 'type') => void,
 ) {
-  const ledgerPath = path.join(repoRoot, 'architecture/dependency-ownership.json');
-  const ledger: Ledger = fs.existsSync(ledgerPath)
-    ? ledgerSchema.parse(JSON.parse(fs.readFileSync(ledgerPath, 'utf8')))
-    : { manifestOwners: {}, aliases: {}, annotations: [] };
-  const manifests = discoverManifests(repoRoot);
-  const packages = new Map(
-    manifests.map((manifest) => [manifest, readPackage(repoRoot, manifest)]),
+  if (comment.type !== 'Block' || !comment.value.startsWith('*')) {
+    return;
+  }
+  // Keep offsets intact while removing JSDoc line prefixes.
+  const body = comment.value.replace(
+    /(^|[\r\n\u2028\u2029])([ \t]*\*[ \t]?)/g,
+    (_, newline: string, prefix: string) => newline + ' '.repeat(prefix.length),
   );
-  const sourceConfig = {
-    ...config,
-    layers: config.layers.map((layer) => ({
-      ...layer,
-      roots: layer.roots.map((root) =>
-        path.posix.normalize(normalizePath(root)).replace(/\/+$/, ''),
-      ),
-    })),
-  };
-  const configuredRoots = sourceConfig.layers.flatMap((layer) => layer.roots);
-  const { files, declarationFiles } = discoverFiles(
-    repoRoot,
-    manifests,
-    configuredRoots,
-    (config.ignoredRoots ?? []).map((root) =>
-      path.posix.normalize(normalizePath(root)).replace(/\/+$/, ''),
-    ),
-  );
+  for (const tag of body.matchAll(
+    /(?:^|[\r\n\u2028\u2029])[ \t]*@import\b(?:(?![\r\n\u2028\u2029][ \t]*@)[\s\S])*?\s+from\s*(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g,
+  )) {
+    const start = tag.index + tag[0].indexOf('@');
+    const parsed = parseSync('jsdoc.ts', body.slice(start + 1, tag.index + tag[0].length));
+    const declaration = parsed.program.body[0];
+    if (
+      parsed.errors.length === 0 &&
+      parsed.program.body.length === 1 &&
+      declaration?.type === 'ImportDeclaration'
+    ) {
+      add({ start: comment.start + 2 + start }, declaration.source.value, 'type');
+    }
+  }
+  for (const tag of body.matchAll(
+    /(?:^|[\r\n\u2028\u2029])[ \t]*@(type|param|arg(?:ument)?|returns?|typedef|property|prop|this|extends|augments|implements|satisfies|throws|exception|enum|template)\b\s*/g,
+  )) {
+    let start = tag.index + tag[0].length;
+    if (['param', 'arg', 'argument', 'property', 'prop'].includes(tag[1])) {
+      start += consumeJSDocName(body, start);
+    }
+    if (body[start] === '{') {
+      start++;
+    } else if (!['type', 'this', 'enum'].includes(tag[1])) {
+      continue;
+    }
+    const prefix = 'type Dependency = ';
+    const source = prefix + body.slice(start).split(/[\r\n\u2028\u2029][ \t]*@/, 1)[0];
+    let type = parseSync('jsdoc.ts', source);
+    // Let the type parser locate the closing brace or trailing JSDoc description.
+    const end = type.errors[0]?.labels[0]?.start;
+    if (end !== undefined) {
+      type = parseSync('jsdoc.ts', source.slice(0, end));
+    }
+    const declaration = type.program.body[0];
+    if (type.errors.length === 0 && declaration?.type === 'TSTypeAliasDeclaration') {
+      new Visitor({
+        TSImportType(node) {
+          add(
+            { start: comment.start + 2 + start + node.start - prefix.length },
+            node.source.value,
+            'type',
+          );
+        },
+      }).visit({ ...type.program, body: [declaration] });
+    } else {
+      // JSDoc accepts Closure forms that are not TypeScript syntax. Their import()
+      // specifiers are still literal, so retain them when Oxc rejects the wrapper.
+      const fallbackStart = body[start - 1] === '{' ? start - 1 : start;
+      const fallback = body.slice(fallbackStart);
+      for (const match of takeJSDocType(fallback).matchAll(/import\(\s*(['"])([^'"]+)\1\s*\)/g)) {
+        add(
+          {
+            start: comment.start + 2 + fallbackStart + (match.index ?? 0),
+          },
+          match[2],
+          'type',
+        );
+      }
+    }
+  }
+}
 
-  const usages = new Map<string, Reference[]>();
-  const computedImports: Array<{
-    file: string;
-    line: number;
-    expression: string;
-    fileAnnotations: string[];
-  }> = [];
+function validateAnnotations(repoRoot: string, ledger: Ledger, packages: Map<string, PackageJson>) {
   const annotationErrors: string[] = [];
   for (const manifest of new Set([
     ...Object.keys(ledger.manifestOwners),
@@ -560,6 +617,50 @@ export function reportDependencyOwnership(
       });
     }
   }
+
+  return { annotationErrors, validAnnotations };
+}
+
+/** Report source evidence and declaration ownership; neither proves installed dependency reach. */
+export function reportDependencyOwnership(
+  repoRoot: string,
+  config: LayerConfig = readLayerConfig(repoRoot),
+) {
+  const ledgerPath = path.join(repoRoot, 'architecture/dependency-ownership.json');
+  const ledger: Ledger = fs.existsSync(ledgerPath)
+    ? ledgerSchema.parse(JSON.parse(fs.readFileSync(ledgerPath, 'utf8')))
+    : { manifestOwners: {}, aliases: {}, annotations: [] };
+  const manifests = discoverManifests(repoRoot);
+  const packages = new Map(
+    manifests.map((manifest) => [manifest, readPackage(repoRoot, manifest)]),
+  );
+  const sourceConfig = {
+    ...config,
+    layers: config.layers.map((layer) => ({
+      ...layer,
+      roots: layer.roots.map((root) =>
+        path.posix.normalize(normalizePath(root)).replace(/\/+$/, ''),
+      ),
+    })),
+  };
+  const configuredRoots = sourceConfig.layers.flatMap((layer) => layer.roots);
+  const { files, declarationFiles } = discoverFiles(
+    repoRoot,
+    manifests,
+    configuredRoots,
+    (config.ignoredRoots ?? []).map((root) =>
+      path.posix.normalize(normalizePath(root)).replace(/\/+$/, ''),
+    ),
+  );
+
+  const usages = new Map<string, Reference[]>();
+  const computedImports: Array<{
+    file: string;
+    line: number;
+    expression: string;
+    fileAnnotations: string[];
+  }> = [];
+  const { annotationErrors, validAnnotations } = validateAnnotations(repoRoot, ledger, packages);
 
   function record(manifest: string, dependency: string, reference: Reference) {
     const key = `${manifest}:${dependency}`;
@@ -653,77 +754,9 @@ export function reportDependencyOwnership(
     )) {
       add(reference, reference.specifier, 'type', reference.dependency);
     }
-    for (const comment of /\.(?:jsx?|mjs|cjs)$/.test(file) ? result.comments : []) {
-      if (comment.type !== 'Block' || !comment.value.startsWith('*')) {
-        continue;
-      }
-      // Keep offsets intact while removing JSDoc line prefixes.
-      const body = comment.value.replace(
-        /(^|[\r\n\u2028\u2029])([ \t]*\*[ \t]?)/g,
-        (_, newline: string, prefix: string) => newline + ' '.repeat(prefix.length),
-      );
-      for (const tag of body.matchAll(
-        /(?:^|[\r\n\u2028\u2029])[ \t]*@import\b(?:(?![\r\n\u2028\u2029][ \t]*@)[\s\S])*?\s+from\s*(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g,
-      )) {
-        const start = tag.index + tag[0].indexOf('@');
-        const parsed = parseSync('jsdoc.ts', body.slice(start + 1, tag.index + tag[0].length));
-        const declaration = parsed.program.body[0];
-        if (
-          parsed.errors.length === 0 &&
-          parsed.program.body.length === 1 &&
-          declaration?.type === 'ImportDeclaration'
-        ) {
-          add({ start: comment.start + 2 + start }, declaration.source.value, 'type');
-        }
-      }
-      for (const tag of body.matchAll(
-        /(?:^|[\r\n\u2028\u2029])[ \t]*@(type|param|arg(?:ument)?|returns?|typedef|property|prop|this|extends|augments|implements|satisfies|throws|exception|enum|template)\b\s*/g,
-      )) {
-        let start = tag.index + tag[0].length;
-        if (['param', 'arg', 'argument', 'property', 'prop'].includes(tag[1])) {
-          start += consumeJSDocName(body, start);
-        }
-        if (body[start] === '{') {
-          start++;
-        } else if (tag[1] !== 'type') {
-          continue;
-        }
-        const prefix = 'type Dependency = ';
-        const source = prefix + body.slice(start).split(/[\r\n\u2028\u2029][ \t]*@/, 1)[0];
-        let type = parseSync('jsdoc.ts', source);
-        // Let the type parser locate the closing brace or trailing JSDoc description.
-        const end = type.errors[0]?.labels[0]?.start;
-        if (end !== undefined) {
-          type = parseSync('jsdoc.ts', source.slice(0, end));
-        }
-        const declaration = type.program.body[0];
-        if (type.errors.length === 0 && declaration?.type === 'TSTypeAliasDeclaration') {
-          new Visitor({
-            TSImportType(node) {
-              add(
-                { start: comment.start + 2 + start + node.start - prefix.length },
-                node.source.value,
-                'type',
-              );
-            },
-          }).visit({ ...type.program, body: [declaration] });
-        } else {
-          // JSDoc accepts Closure forms that are not TypeScript syntax. Their import()
-          // specifiers are still literal, so retain them when Oxc rejects the wrapper.
-          const fallbackStart = body[start - 1] === '{' ? start - 1 : start;
-          const fallback = body.slice(fallbackStart);
-          for (const match of takeJSDocType(fallback).matchAll(
-            /import\(\s*(['"])([^'"]+)\1\s*\)/g,
-          )) {
-            add(
-              {
-                start: comment.start + 2 + fallbackStart + (match.index ?? 0),
-              },
-              match[2],
-              'type',
-            );
-          }
-        }
+    if (/\.(?:jsx?|mjs|cjs)$/.test(file)) {
+      for (const comment of result.comments) {
+        addJSDocReferences(comment, add);
       }
     }
     const externalModule =
@@ -801,14 +834,14 @@ export function reportDependencyOwnership(
         ) {
           load(node, node.arguments[0], 'value');
         } else if (
-          node.callee.type === 'MemberExpression' &&
           !isModuleShadowed(node.start) &&
+          node.callee.type === 'MemberExpression' &&
           node.callee.object.type === 'Identifier' &&
           node.callee.object.name === 'module' &&
-          ((!node.callee.computed &&
-            node.callee.property.type === 'Identifier' &&
-            node.callee.property.name === 'require') ||
-            (node.callee.computed && staticSpecifier(node.callee.property) === 'require'))
+          ((node.callee.computed && staticSpecifier(node.callee.property) === 'require') ||
+            (!node.callee.computed &&
+              node.callee.property.type === 'Identifier' &&
+              node.callee.property.name === 'require'))
         ) {
           load(node, node.arguments[0], 'value');
         } else if (

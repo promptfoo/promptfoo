@@ -1,6 +1,6 @@
 # Dependency ownership
 
-Run from the repository root:
+Run the report from the repository root:
 
 ```sh
 npm run deps:ownership
@@ -8,94 +8,100 @@ npm run --silent deps:ownership -- --json > dependency-ownership.json
 npm run deps:ownership -- --json --check
 ```
 
-The Markdown table groups root regular, optional, and peer dependencies by the
-source layers that import them. It includes the dependency kind and source file
-count. `unreferenced` means no direct source import was found; check installation,
-build, and public declaration requirements before removing a package.
+The Markdown table groups root runtime dependencies by source layer and counts
+files with direct imports. `unreferenced` means no direct source import was found;
+check for build tools, installed assets, and computed imports before removing a
+package. Colocated tests and ambient declarations do not count as runtime source.
 
-## Manifest owners and references
+## Manifest ownership
 
-`architecture/dependency-ownership.json` assigns an owner to each manifest:
+`architecture/dependency-ownership.json` assigns each manifest a component role:
 `root/runtime`, `contracts/portable-contracts`, `app/browser`, `site/docs-build`,
-or `code-scan/action`. These component names identify who reviews declarations,
-including dependencies shared with other components. Add an owner for each new
-workspace.
+or `code-scan/action`. The role
+identifies which component owns its dependency declarations. Add an owner when
+introducing a workspace.
 
-The JSON report contains:
+The JSON report has `schemaVersion: 1` and these fields:
 
-- `rows`: the root summary shown in Markdown. Consumers of the former JSON array
-  must now read `.rows`.
-- `manifestOwners`: assignments, including manifests with no dependencies.
-- `declarations`: regular, optional, development, and peer declarations, with
-  their owner, source references, scopes, and reviewed annotations.
-- `undeclaredUsages`: imports absent from their own manifest, with file and line
-  references and declarations found elsewhere. Root hoisting does not satisfy a
-  workspace declaration.
-- `runtimeDeclarationGaps`: root source imports with no regular, optional, or peer
-  declaration. Explicit type imports and references covered by a build annotation
-  are excluded. Build annotations apply only to their named evidence files.
-- `computedImports`: nonliteral imports and loader calls. `fileAnnotations` links
-  reviewed dependencies in the same file without attributing every call to them.
-- `annotationErrors` and `unassignedManifests`: stale annotations and missing owners.
-- `coverage`: scanned manifests, source file count, and generated declarations.
+- `rows`: the root summary shown in Markdown. Previous JSON output was this array
+  alone; consumers should now read `.rows`.
+- `manifestOwners`: assignments from the ledger, including empty manifests.
+- `declarations`: regular, optional, development, and peer dependencies from every
+  audited manifest, with owners, reference scopes, and annotations.
+- `undeclaredUsages`: imports missing from their own manifest, with file/line
+  references and declarations elsewhere. A hoisted root dependency does not
+  satisfy a workspace declaration, even if that workspace currently builds.
+- `runtimeDeclarationGaps`: root source imports missing a regular, optional, or
+  peer declaration. Explicit type imports and files with reviewed build
+  annotations are excluded. This check does not apply to app/site bundles.
+- `computedImports`: nonliteral import, require, and resolution calls.
+  `fileAnnotations` lists reviewed computed-loader dependencies for the file;
+  it does not attribute every computed call to those packages.
+- `annotationErrors` and `unassignedManifests`: invalid annotations and missing owners.
+- `coverage`: manifests, source file count, and generated declarations scanned.
 
-References distinguish source, build, test/story, and declaration files. Kinds
-include explicit type imports, leading triple-slash references, module
-augmentations, JavaScript JSDoc tags and `@import`, value imports, dynamic imports,
-resolution calls, and annotations. Type imports may refer to installed `@types`
-packages; the scanner uses the referencing file's default Node lookup paths.
-It does not interpret custom compiler resolution or determine which value imports
-TypeScript erases.
+Reference scopes distinguish source, build, colocated tests/stories, and
+declarations. Reference kinds distinguish type, value, dynamic, and resolution
+imports from manual annotations. A value-capable TypeScript import can still be
+erased during compilation.
 
-## Coverage and limits
+`--check` fails on undeclared imports, root runtime declaration gaps, or unassigned
+manifests. Invalid annotations fail in either mode. Computed user-module loads do
+not fail strict checking. Strict checking is available locally; it is not a
+required CI gate.
 
-The scanner reads root npm workspaces, including npm's glob exclusion rules, and
-the standalone `code-scan-action` package. It scans each package's `src/`,
-`scripts/`, `.storybook/`, and root JavaScript/TypeScript configuration files,
-plus configured architecture roots. Executable components and shared data under
-`site/docs/` and `site/blog/` are included. Source declarations are included;
-colocated tests and declarations do not count as runtime source.
+## What is scanned
 
-Installed packages, generated bundles, mocks, build/cache output, and configured
-ignored roots are excluded. Workspace discovery excludes only `node_modules` and
-explicit workspace exclusions, so workspaces named `build` or `dist` remain valid.
-Files beneath an unaudited nested manifest do not count as root references.
+The scanner reads root workspaces, including npm glob exclusions and re-inclusions,
+and the standalone `code-scan-action` package. For each package it scans `src/`,
+`scripts/`, `.storybook/`, and JavaScript/TypeScript files in the package root.
+It also scans configured architecture roots, including individual files, and
+JavaScript/TypeScript under `site/docs/` and `site/blog/`.
 
-The scanner does not parse Markdown/MDX, CSS, shell commands, tsconfig files,
-JSX runtime pragmas, package `imports` maps, tests outside source roots, or custom
-loaders. It does not follow named `createRequire` results, which may resolve
-against a different package. Review these dependencies separately.
+Supported references include static imports, literal loader calls, type imports,
+leading triple-slash type and AMD directives, module augmentations in external
+modules, and JavaScript JSDoc type tags and `@import` declarations. Type directives
+retain their written specifiers. Node types and installed DefinitelyTyped entries
+are attributed to their `@types` package using the referencing file's default
+Node lookup paths; custom compiler resolution settings are not interpreted.
 
-Architecture aliases that resolve to source or assets, and documented virtual
-site aliases, do not count as package imports. A shared alias prefix alone does
-not hide an external package. Declared workspace names take precedence over broad
-source aliases and still require manifest declarations.
+Installed dependencies, mocks, generated runtime bundles, build/cache output, and
+configured ignored roots are excluded. Workspace discovery itself excludes only
+`node_modules` and explicit workspace exclusions, so a workspace can live under
+`build` or `dist`. Files with a nested manifest outside the audited list are
+excluded rather than assigned to the root package.
+
+The scanner does not read tests outside those source roots, Markdown/MDX, CSS,
+package-script shell commands, tsconfig files, JSX runtime pragmas, package
+`imports` maps, or custom loader functions. Named `createRequire` results also
+need separate review because they can resolve against a different package.
 
 If `dist/` exists, generated declarations are scanned and listed in `coverage`.
-Build first when checking public declarations: the report cannot detect stale
-output or determine which declarations are reachable from public exports.
-An empty generated-declarations list means no build evidence was available.
+Run a fresh build before auditing them. The report cannot detect stale output or
+determine which declarations are reachable through public exports. An empty list
+means no generated declaration files were available.
 
-The report does not prove installation size, native binary availability, or
-transitive compatibility. Validate dependency changes with a packed consumer and
-the affected CLI/API workflow. Root overrides do not propagate to consumers;
-optional peers still need compatible versions. An `--omit=optional` installation
-also removes libSQL platform binaries, so successful imports alone do not prove
-that local evaluation works.
+Imports that resolve through architecture source/asset aliases or documented
+virtual site aliases are excluded. Declared workspace package names take
+precedence over broad aliases: an `@promptfoo` alias must not hide a dependency on
+a future `@promptfoo/contracts` package.
 
-## Annotations and strict checks
+## Annotations and installation checks
 
-Annotations record computed loaders, native assets, peers, compatibility pins,
-build tooling, and public declaration requirements. Each names a declared
-dependency, a reason, and existing evidence paths. Paths point reviewers to
-supporting code; they do not prove the explanation remains current.
+Annotations explain computed loaders, installed assets, peers, compatibility
+pins, build tools, and public declaration requirements. Each needs a manifest
+declaration, disposition, reason, and existing evidence paths. Stale declarations
+or missing paths fail the report and exclude the annotation from its output.
+Review the explanation itself; a valid file path does not prove it remains true.
 
-Computed-loader evidence must belong to its manifest. These entries produce
-references with `kind: "annotation"` and `line: 0`, separate from the root table's
-literal import count. Other annotations retain the reason without inventing a
-source reference.
+Computed-loader files must belong to the annotation's manifest. They add
+references with `kind: "annotation"` and `line: 0`, without changing the root
+summary's direct source count. Other annotations record installation or build
+requirements without creating synthetic imports.
 
-Invalid annotations fail both ordinary and strict report modes and are excluded
-from reference metadata. `--check` also fails on undeclared imports, root runtime
-declaration gaps, and unassigned manifests. Computed user-module loads do not fail
-strict checking. This check is available locally; it is not a required CI gate.
+The report does not check installed dependency trees, native binaries, or
+transitive requirements. Validate dependency changes with a packed consumer
+installation and the relevant CLI/API workflow. Root overrides do not propagate
+to consumers, and successful ESM/CJS imports do not prove an evaluation works.
+For example, a plain `--omit=optional` installation also removes libSQL's platform
+binary. Retain required native assets when testing smaller installation profiles.
