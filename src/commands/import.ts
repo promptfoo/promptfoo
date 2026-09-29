@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs/promises';
 
-import { BLOB_MAX_SIZE, recordBlobReference, storeBlob } from '../blobs';
+import { BLOB_MAX_SIZE, isSafeInlineBlobMimeType, recordBlobReference, storeBlob } from '../blobs';
 import { BLOB_HASH_REGEX, collectBlobHashes } from '../blobs/blobRefs';
 import { getDb } from '../database/index';
 import { evalsTable } from '../database/tables';
@@ -12,8 +12,8 @@ import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/eva
 import EvalResult, { stripTraceLinkageFromMetadata } from '../models/evalResult';
 import telemetry from '../telemetry';
 import { getTraceStore } from '../tracing/store';
-import { DefaultProviderSelectionInfoSchema } from '../types/providers';
 import { sha256 } from '../util/createHash';
+import { sanitizeTracingConfigForPersistence } from '../util/sanitizer';
 import type { Command } from 'commander';
 
 import type {
@@ -96,35 +96,9 @@ function extractDurations(evalData: any) {
   };
 }
 
-function extractDefaultProviderInfo(evalData: any) {
-  const rawDefaultProviderInfo = evalData.results?.defaultProviderInfo;
-  if (rawDefaultProviderInfo === undefined) {
-    return undefined;
-  }
-
-  const parsed = DefaultProviderSelectionInfoSchema.safeParse(rawDefaultProviderInfo);
-  if (!parsed.success) {
-    logger.warn('Imported eval has invalid results.defaultProviderInfo; omitting it.');
-    return undefined;
-  }
-
-  return parsed.data;
-}
-
 const MAX_EXPORTED_BLOB_BASE64_LENGTH = Math.ceil(BLOB_MAX_SIZE / 3) * 4 + 4;
 // Portable exports are untrusted input; imported blobs must not become active same-origin content.
 const IMPORTED_BLOB_MIME_TYPE_FALLBACK = 'application/octet-stream';
-const SAFE_IMPORTED_BLOB_MIME_TYPES = new Set([
-  'image/avif',
-  'image/gif',
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'video/mp4',
-  'video/ogg',
-  'video/webm',
-]);
-const SAFE_IMPORTED_AUDIO_MIME_TYPE_REGEX = /^audio\/[a-z0-9_+-]+$/i;
 
 function isImportableV3Results(results: unknown): results is EvaluateSummaryV3 {
   const candidate = results as Partial<EvaluateSummaryV3>;
@@ -167,10 +141,7 @@ function isImportableBlobAsset(asset: unknown): asset is ExportedBlobAsset {
 
 function sanitizeImportedBlobMimeType(mimeType: string): string {
   const normalizedMimeType = mimeType.trim().toLowerCase();
-  if (
-    SAFE_IMPORTED_BLOB_MIME_TYPES.has(normalizedMimeType) ||
-    SAFE_IMPORTED_AUDIO_MIME_TYPE_REGEX.test(normalizedMimeType)
-  ) {
+  if (isSafeInlineBlobMimeType(normalizedMimeType)) {
     return normalizedMimeType;
   }
 
@@ -424,7 +395,6 @@ async function createImportedV3Eval(
     vars: extractVars(evalData),
     runtimeOptions: evalData.runtimeOptions,
     ...extractDurations(evalData),
-    defaultProviderInfo: extractDefaultProviderInfo(evalData),
   });
   const importedTraceIds = await importTraces(traces, evalRecord.id, context.newId);
   const importedResults = remapImportedResultTraceLinkage(
@@ -451,7 +421,7 @@ async function createImportedV2Eval(evalData: any, context: ImportedEvalContext)
       author: context.importAuthor,
       description: evalData.description || evalData.config?.description,
       results: evalData.results,
-      config: evalData.config,
+      config: sanitizeTracingConfigForPersistence(evalData.config),
       isRedteam: evalData.config?.redteam !== undefined,
     })
     .run();

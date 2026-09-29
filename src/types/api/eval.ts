@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
-import { DefaultProviderSelectionInfoSchema } from '../providers';
 import { EmailSchema, MessageResponseSchema } from './common';
 
 /** Eval ID parameter schema. */
@@ -130,7 +129,6 @@ export const EvalTableResponseSchema = z
     version: z.number(),
     id: z.string(),
     stats: z.unknown(),
-    defaultProviderInfo: DefaultProviderSelectionInfoSchema.optional(),
   })
   .passthrough();
 
@@ -144,12 +142,14 @@ export type EvalTableResponse = z.infer<typeof EvalTableResponseSchema>;
  * Based on EvaluateTestSuiteWithEvaluateOptions type.
  * Note: prompts must be an array for this endpoint (evaluate() expects array).
  */
-export const CreateJobRequestSchema = TestSuiteConfigSchema.extend({
-  // Override prompts to require array - evaluate() calls .map() on prompts
-  prompts: z.array(z.union([z.string(), z.record(z.string(), z.unknown())])),
-  evaluateOptions: EvaluateOptionsSchema.optional(),
-  sourceEvalId: z.string().min(1).optional(),
-}).passthrough();
+export const CreateJobRequestSchema = TestSuiteConfigSchema.omit({ basePath: true })
+  .extend({
+    // Override prompts to require array - evaluate() calls .map() on prompts
+    prompts: z.array(z.union([z.string(), z.record(z.string(), z.unknown())])),
+    evaluateOptions: EvaluateOptionsSchema.optional(),
+    sourceEvalId: z.string().min(1).optional(),
+  })
+  .passthrough();
 
 export const CreateJobResponseSchema = z.object({
   id: z.string().uuid(),

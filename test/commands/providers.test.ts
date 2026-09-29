@@ -2,29 +2,30 @@ import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { providersCommand } from '../../src/commands/providers';
 import logger from '../../src/logger';
-import { getDefaultProviderSelectionInfo } from '../../src/providers/defaults';
+import { getDefaultProviders } from '../../src/providers/defaults';
 
-vi.mock('../../src/logger', () => ({
-  default: {
-    info: vi.fn(),
-    error: vi.fn(),
-  },
-}));
-
-vi.mock('../../src/providers/defaults', () => ({
-  getDefaultProviderSelectionInfo: vi.fn(),
-}));
+vi.mock('../../src/logger', () => ({ default: { info: vi.fn(), error: vi.fn() } }));
+vi.mock('../../src/providers/defaults', () => ({ getDefaultProviders: vi.fn() }));
 
 describe('providers command', () => {
-  let program: Command;
-  const defaultConfig = { env: { ANTHROPIC_API_KEY: 'configured-key' } };
   const originalExitCode = process.exitCode;
+  const callApi = vi.fn();
+  const provider = { id: () => 'test:model', callApi, config: { apiKey: 'private-key' } };
+  let program: Command;
 
   beforeEach(() => {
     vi.resetAllMocks();
     process.exitCode = undefined;
     program = new Command();
-    providersCommand(program, defaultConfig);
+    providersCommand(program, { env: { ANTHROPIC_API_KEY: 'configured-key' } });
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    });
   });
 
   afterEach(() => {
@@ -32,78 +33,53 @@ describe('providers command', () => {
     vi.resetAllMocks();
   });
 
-  it('prints detected credentials, skipped providers, and assignments', async () => {
-    vi.mocked(getDefaultProviderSelectionInfo).mockResolvedValue({
-      selectedProvider: 'Azure OpenAI',
-      reason: 'AZURE_API_KEY found',
-      detectedCredentials: ['AZURE_API_KEY'],
-      skippedProviders: [{ name: 'Anthropic', reason: 'Azure has higher priority' }],
-      providerSlots: {
-        grading: { id: 'azureopenai:chat:grading', model: 'gpt-4.1' },
-        gradingJson: { id: 'azureopenai:chat:grading-json' },
-      },
+  it('shows the resolved slots without printing config or making model calls', async () => {
+    await program.parseAsync(['node', 'test', 'providers']);
+
+    expect(getDefaultProviders).toHaveBeenCalledExactlyOnceWith({
+      ANTHROPIC_API_KEY: 'configured-key',
     });
-
-    await program.parseAsync(['node', 'test', 'providers', '--env-file', '.env.local']);
-
-    expect(getDefaultProviderSelectionInfo).toHaveBeenCalledWith(defaultConfig.env);
-    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Default Provider Selection'));
-    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('AZURE_API_KEY'));
-    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Skipped Providers:'));
-    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Anthropic'));
-    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('grading'));
-    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('gpt-4.1'));
-    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('grading-json'));
+    const output = vi.mocked(logger.info).mock.calls.flat().join('\n');
+    for (const slot of [
+      'embedding',
+      'gradingJson',
+      'grading',
+      'moderation',
+      'suggestions',
+      'synthesize',
+    ]) {
+      expect(output).toContain(`${slot}Provider: test:model`);
+    }
+    expect(output).toContain('Eval-specific provider overrides are not included.');
+    expect(output).not.toContain('private-key');
+    expect(output).not.toContain('configured-key');
+    expect(callApi).not.toHaveBeenCalled();
+    expect(process.exitCode).toBeUndefined();
   });
 
-  it('omits optional sections when there is nothing to report', async () => {
-    vi.mocked(getDefaultProviderSelectionInfo).mockResolvedValue({
-      selectedProvider: 'GitHub Models',
-      reason: 'GITHUB_TOKEN found',
-      detectedCredentials: [],
-      skippedProviders: [],
-      providerSlots: {},
+  it('includes optional assignments and omits absent slots', async () => {
+    const defaults = await getDefaultProviders();
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      ...defaults,
+      llmRubricProvider: { ...provider, id: () => 'test:rubric' },
+      webSearchProvider: undefined,
     });
 
     await program.parseAsync(['node', 'test', 'providers']);
 
-    expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('Skipped Providers:'));
-    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Provider Assignments:'));
-    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Override:'));
+    expect(logger.info).toHaveBeenCalledWith('  llmRubricProvider: test:rubric');
+    expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('webSearchProvider'));
+    expect(callApi).not.toHaveBeenCalled();
   });
 
-  it('accepts repeated environment-file options', async () => {
-    vi.mocked(getDefaultProviderSelectionInfo).mockResolvedValue({
-      selectedProvider: 'Anthropic',
-      reason: 'ANTHROPIC_API_KEY found',
-      detectedCredentials: ['ANTHROPIC_API_KEY'],
-      skippedProviders: [],
-      providerSlots: {},
-    });
-
-    await program.parseAsync([
-      'node',
-      'test',
-      'providers',
-      '--env-file',
-      '.env.one',
-      '--env-file',
-      '.env.two,.env.three',
-    ]);
-
-    expect(logger.error).not.toHaveBeenCalled();
-    expect(getDefaultProviderSelectionInfo).toHaveBeenCalledWith(defaultConfig.env);
-  });
-
-  it('sets a non-zero exit code when provider selection fails', async () => {
-    const error = new Error('no providers');
-    vi.mocked(getDefaultProviderSelectionInfo).mockRejectedValue(error);
+  it('reports resolution errors and exits unsuccessfully', async () => {
+    const error = new Error('Unavailable provider defaults');
+    vi.mocked(getDefaultProviders).mockRejectedValue(error);
 
     await program.parseAsync(['node', 'test', 'providers']);
 
-    expect(logger.error).toHaveBeenCalledWith('Failed to determine default provider selection', {
-      error,
-    });
+    expect(logger.error).toHaveBeenCalledWith('Failed to determine default providers', { error });
     expect(process.exitCode).toBe(1);
+    expect(logger.info).not.toHaveBeenCalled();
   });
 });

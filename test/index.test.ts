@@ -6,24 +6,11 @@ import { evaluate } from '../src/index';
 import logger from '../src/logger';
 import Eval from '../src/models/eval';
 import { readProviderPromptMap } from '../src/prompts/index';
-import { getDefaultProviderSelectionInfo } from '../src/providers/defaults';
 import * as providers from '../src/providers/index';
 import { doRedteamRun } from '../src/redteam/shared';
 import * as fileUtils from '../src/util/file';
 import { warnOnDegradedJsonlRecovery, writeMultipleOutputs, writeOutput } from '../src/util/index';
 import { createMockProvider } from './factories/provider';
-
-import type { DefaultProviderSelectionInfo } from '../src/types/providers';
-
-const defaultProviderInfo: DefaultProviderSelectionInfo = {
-  selectedProvider: 'Anthropic',
-  reason: 'ANTHROPIC_API_KEY found, OPENAI_API_KEY not set',
-  detectedCredentials: ['ANTHROPIC_API_KEY'],
-  skippedProviders: [],
-  providerSlots: {
-    grading: { id: 'anthropic:messages:claude-sonnet-4' },
-  },
-};
 
 vi.mock('../src/cache');
 vi.mock('../src/database', () => ({
@@ -100,15 +87,6 @@ vi.mock('../src/providers', async () => {
     loadApiProviders: vi.fn(),
   };
 });
-vi.mock('../src/providers/defaults', async () => {
-  const originalModule = await vi.importActual<typeof import('../src/providers/defaults')>(
-    '../src/providers/defaults',
-  );
-  return {
-    ...originalModule,
-    getDefaultProviderSelectionInfo: vi.fn(),
-  };
-});
 vi.mock('../src/telemetry');
 vi.mock('../src/util');
 vi.mock('../src/util/file');
@@ -156,7 +134,6 @@ describe('index.ts exports', () => {
     'CompletedPromptSchema',
     'CompletionTokenDetailsSchema',
     'ConversationMessageSchema',
-    'DefaultProviderSelectionInfoSchema',
     'DerivedMetricSchema',
     'DocumentMediaInjectionPlacementSchema',
     'DocumentMediaInjectionPlacementValues',
@@ -262,7 +239,6 @@ describe('evaluate function', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(cache.withCacheEnabled).mockImplementation((_enabled, fn) => fn());
-    vi.mocked(getDefaultProviderSelectionInfo).mockResolvedValue(defaultProviderInfo);
     vi.mocked(warnOnDegradedJsonlRecovery).mockImplementation(() => {});
 
     // Set up spies for provider functions
@@ -506,45 +482,6 @@ describe('evaluate function', () => {
       expect.anything(),
       expect.anything(),
       expect.objectContaining({ author: null }),
-    );
-
-    createEvalSpy.mockRestore();
-  });
-
-  it('should capture automatic default-provider selection when persisting results', async () => {
-    const createEvalSpy = vi.spyOn(Eval, 'create');
-
-    await evaluate({
-      prompts: ['test'],
-      providers: [],
-      writeLatestResults: true,
-    });
-
-    expect(getDefaultProviderSelectionInfo).toHaveBeenCalledOnce();
-    expect(createEvalSpy).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.anything(),
-      expect.objectContaining({ defaultProviderInfo }),
-    );
-
-    createEvalSpy.mockRestore();
-  });
-
-  it('should not capture automatic selection when a default grading provider is configured', async () => {
-    const createEvalSpy = vi.spyOn(Eval, 'create');
-
-    await evaluate({
-      prompts: ['test'],
-      providers: [],
-      defaultTest: { options: { provider: 'openai:chat:gpt-4.1' } },
-      writeLatestResults: true,
-    });
-
-    expect(getDefaultProviderSelectionInfo).not.toHaveBeenCalled();
-    expect(createEvalSpy).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.anything(),
-      expect.objectContaining({ defaultProviderInfo: undefined }),
     );
 
     createEvalSpy.mockRestore();
@@ -1166,7 +1103,7 @@ describe('evaluate function', () => {
         );
       });
 
-      it('preserves suite env for deferred grading provider map entries', async () => {
+      it('keeps deferred grading provider map entries in the suite environment', async () => {
         const mockTargetProvider = createMockProvider({ id: 'echo' });
 
         loadApiProvidersSpy.mockResolvedValueOnce([mockTargetProvider]);
@@ -1208,12 +1145,8 @@ describe('evaluate function', () => {
                   text: {
                     id: 'litellm:inline-judge',
                     config: { apiKey: '{{ env.GRADER_API_KEY }}' },
-                    env: { GRADER_API_KEY: 'suite-key' },
                   },
-                  embedding: {
-                    id: 'unsupported-provider:unused-embedding',
-                    env: { GRADER_API_KEY: 'suite-key' },
-                  },
+                  embedding: 'unsupported-provider:unused-embedding',
                 },
               }),
             }),
@@ -1221,6 +1154,22 @@ describe('evaluate function', () => {
           expect.anything(),
           expect.anything(),
         );
+      });
+
+      it('preserves suite env for nested test providers', async () => {
+        loadApiProvidersSpy.mockResolvedValueOnce([createMockProvider({ id: 'echo' })]);
+
+        await evaluate({
+          env: { OPENAI_API_KEY: 'suite-key' },
+          prompts: ['Test prompt'],
+          providers: ['echo'],
+          tests: [{ provider: 'openai:chat:test-model', vars: { input: 'hello' } }],
+        });
+
+        expect(loadApiProviderSpy).toHaveBeenCalledWith('openai:chat:test-model', {
+          basePath: process.cwd(),
+          env: { OPENAI_API_KEY: 'suite-key' },
+        });
       });
 
       it('should fall back to loadApiProvider for model-graded assertions when provider not in main array', async () => {

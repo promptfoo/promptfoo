@@ -1,14 +1,14 @@
+import * as path from 'path';
+
 import * as cache from './cache';
 import cliState from './cliState';
 import { evaluate as doEvaluate } from './evaluator';
 import { getAuthor } from './globalConfig/accounts';
 import logger from './logger';
-import { hasExplicitDefaultGradingProvider } from './matchers/providers';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
 import { sanitizeProvider } from './models/evalResult';
 import { processPrompts, readProviderPromptMap } from './prompts/index';
-import { getDefaultProviderSelectionInfo } from './providers/defaults';
 import { loadApiProviders, resolveProvider } from './providers/index';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
@@ -33,7 +33,7 @@ import type {
   UnifiedConfig,
 } from './types/index';
 import type { InternalEvaluateOptions } from './types/internal';
-import type { ApiProvider, DefaultProviderSelectionInfo } from './types/providers';
+import type { ApiProvider } from './types/providers';
 
 /**
  * Shallow-clone a test case so the caller can swap in resolved ApiProvider
@@ -182,6 +182,7 @@ function createSerializableUnifiedConfig(
   const droppedRef = { value: false };
   const config = {
     ...testSuite,
+    basePath: cliState.basePath,
     providers: toSerializableProviderRef(testSuite.providers),
     defaultTest: toSerializableTestCase(testSuite.defaultTest, droppedRef),
     tests: Array.isArray(testSuite.tests)
@@ -214,7 +215,7 @@ async function resolveGradingProvider(
   // A typed map can carry alternatives for assertion types that never run.
   // Reuse configured provider instances, but leave all other entries for
   // getGradingProvider() to instantiate only when its type is selected.
-  return resolveConfiguredProviderReference(provider, providerMap, context.env);
+  return resolveConfiguredProviderReference(provider, providerMap);
 }
 
 async function createRuntimeTestSuite(
@@ -232,9 +233,12 @@ async function createRuntimeTestSuite(
     defaultTest: defaultTest as TestSuite['defaultTest'],
     scenarios: testSuiteConfig.scenarios as Scenario[],
     providers: loadedProviders,
-    tests: await readTests(testSuiteConfig.tests),
-    nunjucksFilters: await readFilters(testSuiteConfig.nunjucksFilters || {}),
-    prompts: await processPrompts(testSuiteConfig.prompts),
+    tests: await readTests(testSuiteConfig.tests, testSuiteConfig.basePath, testSuiteConfig.env),
+    nunjucksFilters: await readFilters(
+      testSuiteConfig.nunjucksFilters || {},
+      testSuiteConfig.basePath,
+    ),
+    prompts: await processPrompts(testSuiteConfig.prompts, testSuiteConfig.basePath),
   };
 }
 
@@ -320,6 +324,15 @@ export async function evaluateWithSource(
   testSuite: EvaluateTestSuite,
   options: InternalEvaluateOptions = {},
 ) {
+  const { prompts: _prompts, providers: _providers, ...config } = testSuite;
+  return cliState.withConfig(config, () =>
+    cliState.withBasePath(path.resolve(testSuite.basePath ?? ''), () =>
+      cliState.withEnv(testSuite.env ?? {}, () => evaluateWithEnv(testSuite, options)),
+    ),
+  );
+}
+
+async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEvaluateOptions) {
   const { author: suiteAuthor, ...testSuiteConfig } = testSuite;
 
   if (testSuiteConfig.writeLatestResults) {
@@ -342,23 +355,9 @@ export async function evaluateWithSource(
     constructedTestSuite.prompts,
   );
   const author = getAuthor(suiteAuthor);
-  let defaultProviderInfo: DefaultProviderSelectionInfo | undefined;
-  if (
-    (testSuiteConfig.writeLatestResults || Boolean(testSuiteConfig.outputPath)) &&
-    !hasExplicitDefaultGradingProvider(constructedTestSuite.defaultTest)
-  ) {
-    try {
-      defaultProviderInfo = await getDefaultProviderSelectionInfo(testSuiteConfig.env);
-    } catch (error) {
-      logger.debug('[evaluate] Failed to capture default provider info', { error });
-    }
-  }
   const evalRecord = testSuiteConfig.writeLatestResults
-    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, {
-        author,
-        defaultProviderInfo,
-      })
-    : new Eval(unifiedConfig, { author, defaultProviderInfo });
+    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, { author })
+    : new Eval(unifiedConfig, { author });
 
   const ret = await cache.withCacheEnabled(options.cache === false ? false : undefined, () =>
     doEvaluate(

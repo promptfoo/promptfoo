@@ -12,7 +12,6 @@ import {
   promptsTable,
   tagsTable,
 } from '../database/tables';
-import { getEnvBool } from '../envars';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
@@ -22,6 +21,7 @@ import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import { getTraceStore } from '../tracing/store';
 import {
   type CompletedPrompt,
+  type EvalRuntimeOptions,
   type EvalSummary,
   type EvaluateResult,
   type EvaluateStats,
@@ -34,19 +34,23 @@ import {
   type ResultsFile,
   type UnifiedConfig,
 } from '../types/index';
-import {
-  type DefaultProviderSelectionInfo,
-  DefaultProviderSelectionInfoSchema,
-} from '../types/providers';
 import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
-import { sanitizeRuntimeOptions } from '../util/sanitizer';
+import {
+  sanitizeConfigForOutput,
+  sanitizeRuntimeOptions,
+  sanitizeTracingConfigForPersistence,
+} from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  accumulateGenerationTokenUsage,
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+} from '../util/tokenUsageUtils';
 import {
   invalidateEvaluationCache,
   notifyEvaluationChanged,
@@ -59,8 +63,11 @@ import {
 } from './evalPerformance';
 import EvalResult, {
   getResultIndexKey,
+  getStripFlags,
   PROMPTFOO_METADATA_KEY,
   persistTraceMetadata,
+  projectPrompt,
+  projectTracesForOutput,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
 
@@ -149,7 +156,10 @@ export function combineFilterConditions(
     if (idx === 0) {
       return cond;
     }
-    return logicOperator === 'OR' ? sql`${acc} OR ${cond}` : sql`${acc} AND ${cond}`;
+    // Filters arrive as unvalidated JSON from the query string, and the UI sends
+    // lowercase 'or'/'and'. Anything that isn't a recognized OR falls back to AND.
+    const isOr = typeof logicOperator === 'string' && logicOperator.toUpperCase() === 'OR';
+    return isOr ? sql`${acc} OR ${cond}` : sql`${acc} AND ${cond}`;
   }, filterConditions[0].condition);
 }
 
@@ -318,8 +328,7 @@ export default class Eval {
   persisted: boolean;
   vars: string[];
   _resultsLoaded: boolean = false;
-  runtimeOptions?: Partial<import('../types').EvaluateOptions>;
-  defaultProviderInfo?: DefaultProviderSelectionInfo;
+  runtimeOptions?: EvalRuntimeOptions;
   _shared: boolean = false;
   resultPersistenceFailed: boolean = false;
   private failedResults = new Map<string, EvaluateResult>();
@@ -392,9 +401,6 @@ export default class Eval {
     const rawDurationMs = validateDuration(resultsObj?.['durationMs']);
     const generationDurationMs = validateDuration(resultsObj?.['generationDurationMs']);
     const evaluationDurationMs = validateDuration(resultsObj?.['evaluationDurationMs']);
-    const storedDefaultProviderInfo = DefaultProviderSelectionInfoSchema.safeParse(
-      resultsObj?.['defaultProviderInfo'],
-    );
     // Recompute total if only split fields exist (defensive against partial writes)
     const durationMs =
       rawDurationMs ??
@@ -412,9 +418,6 @@ export default class Eval {
       persisted: true,
       vars: eval_.vars || [],
       runtimeOptions: eval_.runtimeOptions ?? undefined,
-      defaultProviderInfo: storedDefaultProviderInfo.success
-        ? storedDefaultProviderInfo.data
-        : undefined,
       durationMs,
       generationDurationMs,
       evaluationDurationMs,
@@ -471,12 +474,11 @@ export default class Eval {
       // Be wary, this is EvalResult[] and not EvaluateResult[]
       results?: EvalResult[];
       vars?: string[];
-      runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      runtimeOptions?: EvalRuntimeOptions;
       completedPrompts?: CompletedPrompt[];
       durationMs?: number;
       generationDurationMs?: number;
       evaluationDurationMs?: number;
-      defaultProviderInfo?: DefaultProviderSelectionInfo;
     },
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
@@ -497,9 +499,6 @@ export default class Eval {
       ...(opts?.evaluationDurationMs !== undefined && {
         evaluationDurationMs: opts.evaluationDurationMs,
       }),
-      ...(opts?.defaultProviderInfo !== undefined && {
-        defaultProviderInfo: opts.defaultProviderInfo,
-      }),
     };
 
     await db.transaction(async (tx) => {
@@ -510,7 +509,7 @@ export default class Eval {
           createdAt: createdAt.getTime(),
           author,
           description: config.description,
-          config,
+          config: sanitizeTracingConfigForPersistence(config),
           results: durationResults,
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
@@ -618,7 +617,6 @@ export default class Eval {
       durationMs: opts?.durationMs,
       generationDurationMs: opts?.generationDurationMs,
       evaluationDurationMs: opts?.evaluationDurationMs,
-      defaultProviderInfo: opts?.defaultProviderInfo,
     });
   }
 
@@ -633,11 +631,10 @@ export default class Eval {
       datasetId?: string;
       persisted?: boolean;
       vars?: string[];
-      runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      runtimeOptions?: EvalRuntimeOptions;
       durationMs?: number;
       generationDurationMs?: number;
       evaluationDurationMs?: number;
-      defaultProviderInfo?: DefaultProviderSelectionInfo;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -655,13 +652,12 @@ export default class Eval {
     this.durationMs = opts?.durationMs;
     this.generationDurationMs = opts?.generationDurationMs;
     this.evaluationDurationMs = opts?.evaluationDurationMs;
-    this.defaultProviderInfo = opts?.defaultProviderInfo;
   }
 
   version() {
     /**
      * Version 3 is the denormalized version of where the table and results are stored on the eval object.
-     * Version 4 is the normalized version where the results are stored in another databse table and the table for vizualization is generated by the app.
+     * Version 4 is the normalized version where the results are stored in another database table and the table for visualization is generated by the app.
      */
     return this.oldResults && 'table' in this.oldResults ? 3 : 4;
   }
@@ -679,7 +675,7 @@ export default class Eval {
   async save() {
     const db = await getDb();
     const updateObj: Record<string, unknown> = {
-      config: this.config,
+      config: sanitizeTracingConfigForPersistence(this.config),
       isRedteam: this.config.redteam !== undefined,
       prompts: this.prompts,
       description: this.config.description,
@@ -695,8 +691,7 @@ export default class Eval {
     } else if (
       this.durationMs !== undefined ||
       this.generationDurationMs !== undefined ||
-      this.evaluationDurationMs !== undefined ||
-      this.defaultProviderInfo !== undefined
+      this.evaluationDurationMs !== undefined
     ) {
       // For V4 evals, atomically merge duration fields into the results column
       // using json_set so concurrent save() calls don't clobber each other's keys.
@@ -710,9 +705,6 @@ export default class Eval {
       }
       if (this.evaluationDurationMs !== undefined) {
         expr = sql`json_set(${expr}, '$.evaluationDurationMs', ${this.evaluationDurationMs})`;
-      }
-      if (this.defaultProviderInfo !== undefined) {
-        expr = sql`json_set(${expr}, '$.defaultProviderInfo', json(${JSON.stringify(this.defaultProviderInfo)}))`;
       }
       updateObj.results = expr;
     }
@@ -745,10 +737,6 @@ export default class Eval {
     }
     this.generationDurationMs = durationMs;
     this.durationMs = durationMs + (this.evaluationDurationMs ?? 0);
-  }
-
-  setDefaultProviderInfo(defaultProviderInfo?: DefaultProviderSelectionInfo) {
-    this.defaultProviderInfo = defaultProviderInfo;
   }
 
   getPrompts() {
@@ -1398,7 +1386,9 @@ export default class Eval {
   }
 
   async loadResults() {
-    this.results = await EvalResult.findManyByEvalId(this.id);
+    if (this.persisted) {
+      this.results = await EvalResult.findManyByEvalId(this.id);
+    }
     this._resultsLoaded = true;
   }
 
@@ -1436,6 +1426,11 @@ export default class Eval {
       accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
     }
 
+    accumulateGenerationTokenUsage(
+      stats.tokenUsage,
+      this.config.metadata?.generationAccounting?.tokenUsage,
+    );
+
     return stats;
   }
 
@@ -1448,7 +1443,6 @@ export default class Eval {
         results: this.oldResults.results,
         table: this.oldResults.table,
         stats: this.oldResults.stats,
-        ...(this.defaultProviderInfo && { defaultProviderInfo: this.defaultProviderInfo }),
       };
     }
     if (this.results.length === 0) {
@@ -1456,22 +1450,16 @@ export default class Eval {
     }
 
     const stats = await this.getStats();
-    const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
+    const stripFlags = getStripFlags(this.config.env);
 
-    const prompts = shouldStripPromptText
-      ? this.prompts.map((p) => ({
-          ...p,
-          raw: '[prompt stripped]',
-        }))
-      : this.prompts;
+    const prompts = this.prompts.map((p) => projectPrompt(p, stripFlags.shouldStripPromptText));
 
     return {
       version: 3,
       timestamp: new Date(this.createdAt).toISOString(),
       prompts,
-      results: this.results.map((r) => r.toEvaluateResult()),
+      results: this.results.map((r) => r.toEvaluateResult(stripFlags)),
       stats,
-      ...(this.defaultProviderInfo && { defaultProviderInfo: this.defaultProviderInfo }),
     };
   }
 
@@ -1522,17 +1510,20 @@ export default class Eval {
 
   async toResultsFile(): Promise<ResultsFile> {
     const traces = await this.getTraces();
+    const stripFlags = getStripFlags(this.config.env);
 
     const results: ResultsFile = {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
       results: await this.toEvaluateSummary(),
-      config: this.config,
+      config: sanitizeConfigForOutput(this.config, stripFlags),
       author: this.author || null,
-      prompts: this.getPrompts(),
+      prompts: this.getPrompts().map((prompt) =>
+        projectPrompt(prompt, stripFlags.shouldStripPromptText),
+      ),
       ...(this.vars.length > 0 && { vars: [...this.vars] }),
       datasetId: this.datasetId || null,
-      ...(traces.length > 0 && { traces }),
+      ...(traces.length > 0 && { traces: projectTracesForOutput(traces, stripFlags) }),
     };
 
     return results;
@@ -1573,7 +1564,7 @@ export default class Eval {
     });
 
     // Deep clone to prevent mutation issues
-    const newConfig = structuredClone(this.config);
+    const newConfig = structuredClone(sanitizeTracingConfigForPersistence(this.config));
     newConfig.description = copyDescription;
 
     const newPrompts = structuredClone(this.prompts);
@@ -1593,10 +1584,8 @@ export default class Eval {
           createdAt: Date.now(),
           author,
           description: copyDescription,
-          config: newConfig,
-          results: this.defaultProviderInfo
-            ? { defaultProviderInfo: this.defaultProviderInfo }
-            : {},
+          config: sanitizeTracingConfigForPersistence(newConfig),
+          results: {},
           prompts: newPrompts,
           vars: newVars,
           runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),

@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import type winston from 'winston';
 
 import type { MinimalApiProvider } from '../contracts/prompts';
@@ -37,6 +36,13 @@ export type ProviderConfig =
   | ProviderOptions
   | ProviderOptionsMap;
 export type ProvidersConfig = ProviderId | ProviderFunction | ApiProvider | ProviderConfig[];
+
+export interface RemoteGenerationContext {
+  /** Provider IDs used for filtering, retry, and target identity. */
+  providerTargetIds: string[];
+  /** Cloud target database ID sent to Promptfoo Cloud task handlers. */
+  cloudTargetId?: string;
+}
 
 export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
 
@@ -120,7 +126,18 @@ export interface ApiProvider extends MinimalApiProvider {
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   config?: any;
   delay?: number;
+  /** True when callApi applies delay itself and the evaluator should not wait again. */
+  handlesOwnDelay?: boolean;
+  /**
+   * True when callApi owns retries for its operations, including requests that
+   * must not be replayed. Scheduling still applies, but the scheduler must not
+   * retry the whole call after its transport or SDK has finished. Subclasses
+   * replacing that behavior can override this with false to use scheduler retries.
+   */
+  handlesOwnRetries?: boolean;
   getSessionId?: () => string;
+  /** Native audio input content format accepted by this provider and its configured model. */
+  getAudioInputFormat?: () => 'openai' | 'google' | undefined;
   inputs?: Inputs;
   label?: ProviderLabel;
   transform?: string | TransformFunction;
@@ -146,7 +163,12 @@ export interface ApiClassificationProvider extends ApiProvider {
 }
 
 export interface ApiModerationProvider extends ApiProvider {
-  callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
+  callModerationApi: (
+    prompt: string,
+    response: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderModerationResponse>;
 }
 
 export type FilePath = string;
@@ -206,82 +228,4 @@ export interface DefaultProviders {
   suggestionsProvider: ApiProvider;
   synthesizeProvider: ApiProvider;
   webSearchProvider?: ApiProvider;
-}
-
-/**
- * Information about a provider that was skipped during default provider selection
- */
-export interface SkippedProviderInfo {
-  /** The name of the provider (e.g., "OpenAI", "Anthropic") */
-  name: string;
-  /** The reason an available provider was skipped (e.g., "OpenAI has higher priority") */
-  reason: string;
-}
-
-/**
- * Information about a selected default provider slot
- */
-export interface DefaultProviderSlotInfo {
-  /** The provider ID (e.g., "anthropic:messages:claude-sonnet-4-20250514") */
-  id: string;
-  /** The model name if applicable */
-  model?: string;
-}
-
-/**
- * Information about how default providers were selected.
- * This provides visibility into the auto-detection logic.
- */
-export interface DefaultProviderSelectionInfo {
-  /** The name of the selected provider (e.g., "OpenAI", "Anthropic", "GitHub Models") */
-  selectedProvider: string;
-  /** Human-readable reason for the selection (e.g., "ANTHROPIC_API_KEY found, OPENAI_API_KEY not set") */
-  reason: string;
-  /** List of available credential sources detected for automatic provider selection */
-  detectedCredentials: string[];
-  /** List of providers that were skipped and why */
-  skippedProviders: SkippedProviderInfo[];
-  /** Information about which provider is assigned to each slot */
-  providerSlots: {
-    grading?: DefaultProviderSlotInfo;
-    gradingJson?: DefaultProviderSlotInfo;
-    embedding?: DefaultProviderSlotInfo;
-    moderation?: DefaultProviderSlotInfo;
-    suggestions?: DefaultProviderSlotInfo;
-    synthesize?: DefaultProviderSlotInfo;
-    llmRubric?: DefaultProviderSlotInfo;
-    webSearch?: DefaultProviderSlotInfo;
-  };
-}
-
-export const DefaultProviderSelectionInfoSchema = z.object({
-  selectedProvider: z.string(),
-  reason: z.string(),
-  detectedCredentials: z.array(z.string()),
-  skippedProviders: z.array(
-    z.object({
-      name: z.string(),
-      reason: z.string(),
-    }),
-  ),
-  providerSlots: z.object({
-    grading: z.object({ id: z.string(), model: z.string().optional() }).optional(),
-    gradingJson: z.object({ id: z.string(), model: z.string().optional() }).optional(),
-    embedding: z.object({ id: z.string(), model: z.string().optional() }).optional(),
-    moderation: z.object({ id: z.string(), model: z.string().optional() }).optional(),
-    suggestions: z.object({ id: z.string(), model: z.string().optional() }).optional(),
-    synthesize: z.object({ id: z.string(), model: z.string().optional() }).optional(),
-    llmRubric: z.object({ id: z.string(), model: z.string().optional() }).optional(),
-    webSearch: z.object({ id: z.string(), model: z.string().optional() }).optional(),
-  }),
-});
-
-/**
- * Default providers bundled with selection metadata
- */
-export interface DefaultProvidersWithInfo {
-  /** The default provider instances */
-  providers: DefaultProviders;
-  /** Information about how providers were selected */
-  selectionInfo: DefaultProviderSelectionInfo;
 }
