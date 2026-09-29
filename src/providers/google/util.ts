@@ -1857,10 +1857,15 @@ export function validateFunctionCall(
   }
 
   const loadedFunctions = maybeLoadStructuredConfigFromExternalFileWithVars(functions, vars);
-  const interpolatedFunctions = loadFile(
-    Array.isArray(loadedFunctions) ? loadedFunctions.flat(Infinity) : loadedFunctions,
-    undefined,
-  ) as Tool[];
+  const parsedFunctions = parseStringObject(loadedFunctions) ?? [];
+  if (!Array.isArray(parsedFunctions)) {
+    throw new Error('Google tools must be an array of tool objects');
+  }
+  const flattenedFunctions = parsedFunctions.flat(Infinity);
+  if (flattenedFunctions.some((tool) => !tool || typeof tool !== 'object')) {
+    throw new Error('Google tools must be an array of tool objects');
+  }
+  const interpolatedFunctions = normalizeTools(flattenedFunctions);
 
   for (const functionCall of functionCalls) {
     // Parse function call and validate it against schema

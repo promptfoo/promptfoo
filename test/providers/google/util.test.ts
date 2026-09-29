@@ -317,6 +317,30 @@ describe('util', () => {
       ).not.toThrow();
     });
 
+    it.each(['file://literal.json', '{{ literal }}', null, false])(
+      'rejects non-object substituted tools without loading them: %s',
+      (entry) => {
+        expect(() =>
+          validateFunctionCall([{ functionCall: { name: 'example', args: {} } }], '{{ tools }}', {
+            tools: [entry],
+          } as Record<string, any>),
+        ).toThrow('Google tools must be an array of tool objects');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      },
+    );
+
+    it('validates JSON tool text without a second rendering pass', () => {
+      const tools = [{ functionDeclarations: [{ name: '{{ literal }}' }] }];
+      expect(() =>
+        validateFunctionCall(
+          [{ functionCall: { name: '{{ literal }}', args: {} } }],
+          '{{ tools }}',
+          { tools: JSON.stringify(tools), literal: 'replacement' },
+        ),
+      ).not.toThrow();
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
+
     it('should validate Vertex/AIS format function call', () => {
       const output = [
         {
