@@ -5,8 +5,8 @@ prompts:
   - file://prompt.yaml
 
 providers:
-  - id: anthropic:messages:claude-sonnet-4-6
-    label: Claude Sonnet 4.6
+  - id: anthropic:messages:claude-sonnet-5
+    label: Claude Sonnet 5
   - id: openai:chat:gpt-5.4
     label: GPT-5.4
 
@@ -15,7 +15,7 @@ defaultTest:
     - type: cost
       threshold: 0.0025
     - type: latency
-      threshold: 2000
+      threshold: 5000
     - type: javascript
       value: 'output.length <= 100 ? 1 : output.length > 1000 ? 0 : 1 - (output.length - 100) / 900'
 

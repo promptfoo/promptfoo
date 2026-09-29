@@ -198,7 +198,10 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
       }
     }
     try {
-      await fsPromises.unlink(metadataPath);
+      // Only remove legacy sidecars, preserving unrelated directories at this path.
+      if (!(await fsPromises.lstat(metadataPath)).isDirectory()) {
+        await fsPromises.unlink(metadataPath);
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw error;
@@ -256,6 +259,9 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
         throw error;
       }
       for (const entry of entries) {
+        if (entry.name.endsWith('.meta.json')) {
+          continue;
+        }
         const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           // Blob writers reserve hash-prefixed directories for unpublished staging files.
