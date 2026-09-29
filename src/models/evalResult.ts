@@ -1113,6 +1113,7 @@ export default class EvalResult {
     const { traceId: _traceId, evaluationId: _evaluationId, pluginId: _pluginId, ...rest } = this;
     const persistedValues = {
       ...rest,
+      error: this.error ?? null,
       gradingResult: sanitizeGradingResultForDb(this.gradingResult),
       metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
     };

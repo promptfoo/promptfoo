@@ -373,6 +373,77 @@ describe('agent workspaces', () => {
       },
     );
 
+    it.each([
+      ['ident', '-ident'],
+      ['text eol=crlf', 'text eol=lf'],
+    ])('copies files when repository attributes override %s', async (tracked, override) => {
+      const source = path.join(root, 'repo');
+      makeRepository(source, { '.gitattributes': `*.txt ${tracked}\n`, 'fixture.txt': '$Id$\n' });
+      write(path.join(source, '.git/info/attributes'), `*.txt ${override}\n`);
+      expect(git(source, 'status', '--porcelain')).toBe('');
+
+      const workspace = await create(source);
+
+      expect(workspace.strategy).toBe('copy');
+      expect(fs.readFileSync(path.join(workspace.dir, 'fixture.txt'), 'utf8')).toBe('$Id$\n');
+      const clone = await create(source, 'git');
+      expect(clone.strategy).toBe('git');
+      expect(fs.readFileSync(path.join(clone.dir, 'fixture.txt'), 'utf8')).not.toBe('$Id$\n');
+    });
+
+    it.each([false, true])(
+      'copies files when core.attributesFile overrides global attributes (empty: %s)',
+      async (empty) => {
+        const source = path.join(root, 'repo');
+        makeRepository(source, { 'fixture.txt': '$Id$\n' });
+        const configFile = path.join(root, 'global.gitconfig');
+        const globalAttributes = path.join(root, 'global.attributes');
+        const localAttributes = path.join(root, 'local.attributes');
+        write(configFile, '');
+        write(globalAttributes, '*.txt text eol=crlf\n');
+        write(localAttributes, '*.txt text eol=lf\n');
+        git(source, 'config', '--file', configFile, 'core.attributesFile', globalAttributes);
+        git(source, 'config', 'core.attributesFile', empty ? '' : localAttributes);
+        const restoreEnv = mockProcessEnv({ GIT_CONFIG_GLOBAL: configFile });
+        try {
+          expect(git(source, 'status', '--porcelain')).toBe('');
+
+          const workspace = await create(source);
+
+          expect(workspace.strategy).toBe('copy');
+          expect(fs.readFileSync(path.join(workspace.dir, 'fixture.txt'), 'utf8')).toBe('$Id$\n');
+          const clone = await create(source, 'git');
+          expect(clone.strategy).toBe('git');
+          expect(fs.readFileSync(path.join(clone.dir, 'fixture.txt'), 'utf8')).toBe('$Id$\r\n');
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
+    it('still clones when source and workspace share default global attributes', async () => {
+      const source = path.join(root, 'repo');
+      const configFile = path.join(root, 'global.gitconfig');
+      const configHome = path.join(root, 'config');
+      write(configFile, '');
+      write(path.join(configHome, 'git/attributes'), '*.txt text eol=lf\n');
+      const restoreEnv = mockProcessEnv({
+        GIT_CONFIG_GLOBAL: configFile,
+        XDG_CONFIG_HOME: configHome,
+      });
+      try {
+        makeRepository(source, { 'fixture.txt': '$Id$\n' });
+
+        const workspace = await create(source);
+
+        expect(workspace.strategy).toBe('git');
+        expect(fs.readFileSync(path.join(workspace.dir, 'fixture.txt'), 'utf8')).toBe('$Id$\n');
+        expect((await workspace.metadata()).workspaceDiff).toBe('');
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('still clones files with explicitly unset checkout transformations', async () => {
       const source = path.join(root, 'repo');
       makeRepository(source, {

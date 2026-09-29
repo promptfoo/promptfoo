@@ -8,12 +8,13 @@ import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
-import { sanitizeResultForJsonlArtifact } from '../../src/models/evalResult';
+import EvalResult, { sanitizeResultForJsonlArtifact } from '../../src/models/evalResult';
 import { EchoProvider } from '../../src/providers/echo';
+import { ResultFailureReason } from '../../src/types/index';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
-import type { ApiProvider, Assertion, TestSuite } from '../../src/types/index';
+import type { ApiProvider, Assertion, EnvOverrides, TestSuite } from '../../src/types/index';
 
 const secret = 'select-best-grader-secret';
 
@@ -486,6 +487,158 @@ describeEvaluator('select-best runtime grading configuration', () => {
     expect(hookGrader.callApi).toHaveBeenCalledTimes(2);
     expect(grader.callApi).not.toHaveBeenCalled();
   });
+
+  it('recovers a grader exception without retaining a failed comparison verdict', async () => {
+    const { grader, suite, target } = makeSuite();
+    vi.mocked(grader.callApi).mockRejectedValueOnce(new Error('temporary grader failure'));
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, record, { maxConcurrency: 1 });
+
+    const failed = await record.fetchResultsByTestIdx(0);
+    expect(failed).toHaveLength(2);
+    for (const row of failed) {
+      expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(row.error).toContain('temporary grader failure');
+      expect(row.gradingResult?.pass).toBe(true);
+      expect(row.gradingResult?.componentResults).toEqual([]);
+    }
+    expect(record.getStats()).toMatchObject({ successes: 0, failures: 0, errors: 2 });
+    expect(await EvalResult.getCompletedIndexPairs(record.id, { excludeErrors: true })).toEqual(
+      new Set(),
+    );
+
+    cliState.resume = true;
+    await evaluate(suite, record, { maxConcurrency: 1 });
+
+    const recovered = await record.fetchResultsByTestIdx(0);
+    expect(recovered.filter((row) => row.success)).toHaveLength(1);
+    expect(recovered.find((row) => row.success)?.error).toBeFalsy();
+    expect(recovered.every((row) => row.metadata?.__promptfoo?.comparisonError === undefined)).toBe(
+      true,
+    );
+    expect(recovered.every((row) => row.failureReason !== ResultFailureReason.ERROR)).toBe(true);
+    expect(record.getStats()).toMatchObject({ successes: 1, failures: 1, errors: 0 });
+    expect(target.callApi).toHaveBeenCalledTimes(2);
+    expect(grader.callApi).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['target unavailable', 'Error grading select-best: target unavailable'])(
+    'preserves the target error %s when the comparison recovers',
+    async (targetMessage) => {
+      const { grader, suite, target } = makeSuite();
+      suite.tests![0].options = { rubricPrompt: '{{ outputs | dump }}' };
+      vi.mocked(target.callApi).mockImplementation(async (prompt) =>
+        prompt === 'first'
+          ? {
+              error: targetMessage,
+              metadata: {
+                __promptfoo: {
+                  comparisonError: {
+                    success: true,
+                    score: 1,
+                    failureReason: ResultFailureReason.NONE,
+                  },
+                  retained: true,
+                },
+              },
+            }
+          : { output: prompt },
+      );
+      vi.mocked(grader.callApi)
+        .mockImplementation(async (prompt) => ({
+          output: String(JSON.parse(prompt).indexOf('second')),
+        }))
+        .mockRejectedValueOnce(new Error('temporary grader failure'));
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      cliState.resume = true;
+      await evaluate(suite, record, { maxConcurrency: 1 });
+
+      const results = await record.fetchResultsByTestIdx(0);
+      const targetError = results.find((row) => row.promptIdx === 0)!;
+      expect(targetError.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(targetError.error).toContain(targetMessage);
+      expect(targetError.metadata?.__promptfoo).toEqual({ retained: true });
+      expect(targetError.success).toBe(false);
+      expect(results.find((row) => row.promptIdx === 1)?.success).toBe(true);
+      expect(record.getStats()).toMatchObject({ successes: 1, failures: 0, errors: 1 });
+    },
+  );
+
+  it.each(['removed', 'changed'])(
+    'ignores an overridden default grader that was %s',
+    async (change) => {
+      const { grader, suite } = makeSuite();
+      suite.tests![0].options = {
+        provider: {
+          id: 'echo',
+          config: { apiKey: secret, apiBaseUrl: 'https://original.example' },
+        },
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      suite.tests![0].options =
+        change === 'removed'
+          ? {}
+          : {
+              provider: {
+                id: 'echo',
+                config: { apiKey: secret, apiBaseUrl: 'https://changed.example' },
+              },
+            };
+      cliState.resume = true;
+      await evaluate(suite, record, { maxConcurrency: 1 });
+
+      expect(grader.callApi).toHaveBeenCalledTimes(2);
+      expect(
+        (await record.fetchResultsByTestIdx(0)).every(
+          (row) => !row.error?.includes('Cannot resume'),
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it.each(['OPENAI_BASE_URL', 'OPENAI_ORGANIZATION'] as const)(
+    'checks runtime %s before restoring a live grader',
+    async (key) => {
+      const { grader, suite } = makeSuite();
+      const runtimeGrader = grader as ApiProvider & { env: EnvOverrides };
+      const original = {
+        OPENAI_BASE_URL: 'https://original.example/v1',
+        OPENAI_ORGANIZATION: 'original-org',
+        OPENAI_API_KEY: secret,
+      };
+      runtimeGrader.env = { ...original };
+      suite.tests![0].options = { rubricPrompt: '{{ outputs | dump }}' };
+      vi.mocked(suite.providers[0].callApi).mockImplementation(async (prompt) => ({
+        output: prompt,
+      }));
+      vi.mocked(grader.callApi).mockImplementation(async (prompt) => ({
+        output: String(JSON.parse(prompt).indexOf('first')),
+      }));
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      const savedProvider = (await record.fetchResultsByTestIdx(0))[0].testCase
+        .assert![0] as Assertion;
+      expect(savedProvider.provider).toMatchObject({
+        env: { ...original, OPENAI_API_KEY: '[REDACTED]' },
+      });
+      expect(JSON.stringify(savedProvider)).not.toContain(secret);
+      runtimeGrader.env = { ...original, [key]: 'changed', OPENAI_API_KEY: 'rotated-key' };
+      cliState.resume = true;
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      expect(grader.callApi).toHaveBeenCalledTimes(1);
+      expect(record.getStats()).toMatchObject({ successes: 0, failures: 0, errors: 2 });
+
+      runtimeGrader.env = { ...original, OPENAI_API_KEY: 'rotated-key' };
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      expect(grader.callApi).toHaveBeenCalledTimes(2);
+      expect(record.getStats()).toMatchObject({ successes: 1, failures: 1, errors: 0 });
+      const recovered = await record.fetchResultsByTestIdx(0);
+      expect(recovered.find((row) => row.promptIdx === 0)?.success).toBe(true);
+      expect(recovered.find((row) => row.promptIdx === 0)?.error).toBeFalsy();
+    },
+  );
 
   it('uses the original grader key without exposing it in returned grading results', async () => {
     const { grader, seenKeys, suite } = makeSuite();

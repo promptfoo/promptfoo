@@ -180,7 +180,7 @@ async function getCloneableRepository(
   signal?: AbortSignal,
 ): Promise<RepositoryState | undefined> {
   try {
-    const [topLevel, objectsDir, objectFormat, head] = (
+    const [topLevel, objectsDir, infoAttributes, objectFormat, head] = (
       await git(
         [
           'rev-parse',
@@ -188,6 +188,8 @@ async function getCloneableRepository(
           '--path-format=absolute',
           '--git-path',
           'objects',
+          '--git-path',
+          'info/attributes',
           '--show-object-format',
           'HEAD',
         ],
@@ -206,6 +208,16 @@ async function getCloneableRepository(
       throw new UnsupportedGitSubmoduleError(
         `copy_working_dir does not support git submodules yet: ${source}`,
       );
+    }
+    if (!allowIgnored) {
+      // Cloning loses repository attribute overrides; diffing also ignores configured global ones.
+      const configKeys = await git(['config', '--name-only', '--list'], { cwd: source, signal });
+      if (
+        configKeys.split('\n').includes('core.attributesfile') ||
+        (await fs.lstat(infoAttributes).catch(() => undefined))
+      ) {
+        return undefined;
+      }
     }
     const trackedPaths = trackedEntries
       .map((entry) => entry.slice(entry.indexOf('\t') + 1))

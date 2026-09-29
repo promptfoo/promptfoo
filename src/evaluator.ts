@@ -23,6 +23,7 @@ import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
 import {
   getResultIndexKey,
+  PROMPTFOO_METADATA_KEY,
   sanitizeProvider,
   sanitizeResultForJsonlArtifact,
 } from './models/evalResult';
@@ -68,6 +69,7 @@ import {
   type AssertionType,
   type AtomicTestCase,
   type CompletedPrompt,
+  type EnvOverrides,
   type EvaluateResult,
   type EvaluateStats,
   type GradingConfig,
@@ -2973,6 +2975,40 @@ function markComparisonRows(
   }
 }
 
+type ComparisonErrorState = Pick<
+  EvaluationStoreResult,
+  'success' | 'score' | 'failureReason' | 'error'
+>;
+
+function getComparisonError(result: EvaluationStoreResult): ComparisonErrorState | undefined {
+  const state = result.metadata?.[PROMPTFOO_METADATA_KEY]?.comparisonError;
+  return typeof state?.success === 'boolean' &&
+    typeof state.score === 'number' &&
+    (state.failureReason === ResultFailureReason.NONE ||
+      state.failureReason === ResultFailureReason.ASSERT)
+    ? state
+    : undefined;
+}
+
+function setComparisonError(result: EvaluationStoreResult, state?: ComparisonErrorState) {
+  const internal = result.metadata?.[PROMPTFOO_METADATA_KEY];
+  if (!state && !internal?.comparisonError) {
+    return;
+  }
+  const fields =
+    internal && typeof internal === 'object' && !Array.isArray(internal) ? { ...internal } : {};
+  if (state) {
+    fields.comparisonError = state;
+  } else {
+    delete fields.comparisonError;
+  }
+  result.metadata = { ...result.metadata, [PROMPTFOO_METADATA_KEY]: fields };
+  if (Object.keys(fields).length === 0) {
+    delete result.metadata[PROMPTFOO_METADATA_KEY];
+  }
+}
+
+const COMPARISON_ERROR_PREFIX = 'Error grading select-best';
 const COMPARISON_RESUME_ERROR =
   'Cannot resume select-best with this grader configuration. Supply a grader configuration matching the saved result, or rerun the evaluation.';
 
@@ -3018,7 +3054,7 @@ function comparisonProviderId(provider: GradingConfig['provider']): string | und
 }
 
 function comparisonProviderSettings(provider: GradingConfig['provider']) {
-  const options = isApiProvider(provider) ? sanitizeProvider(provider) : provider;
+  const options = persistComparisonProvider(provider);
   // Compare every nonsecret option, including endpoint/account settings and env overrides.
   // Strip functions and undefined fields exactly as persistence does.
   return JSON.parse(
@@ -3093,7 +3129,13 @@ function snapshotComparisonProvider(
 
 function persistComparisonProvider(provider: GradingConfig['provider']): GradingConfig['provider'] {
   if (isApiProvider(provider)) {
-    return sanitizeProvider(provider);
+    const env = (provider as ApiProvider & { env?: EnvOverrides }).env;
+    return {
+      ...sanitizeProvider(provider),
+      ...(env && {
+        env: sanitizeObject(env, { sanitizeUrls: true, maxDepth: Number.POSITIVE_INFINITY }),
+      }),
+    };
   }
   if (isProviderTypeMap(provider)) {
     return { ...provider, text: persistComparisonProvider(provider.text) };
@@ -3102,12 +3144,9 @@ function persistComparisonProvider(provider: GradingConfig['provider']): Grading
 }
 
 function getComparisonProviders(test: AtomicTestCase, currentResult = false) {
+  const assertion = test.assert?.find((a): a is Assertion => a.type === 'select-best');
   return {
-    provider: snapshotComparisonProvider(test.options?.provider),
-    assertionProvider: snapshotComparisonProvider(
-      test.assert?.find((assertion): assertion is Assertion => assertion.type === 'select-best')
-        ?.provider,
-    ),
+    provider: snapshotComparisonProvider(assertion?.provider || test.options?.provider),
     currentResult,
   };
 }
@@ -3608,8 +3647,43 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         metrics.testPassCount -= 1;
         metrics.testFailCount += 1;
       }
-      this.stats.successes -= 1;
-      this.stats.failures += 1;
+      if (this.comparisonProviders.get(getResultIndexKey(result))?.currentResult !== false) {
+        this.stats.successes -= 1;
+        this.stats.failures += 1;
+      }
+    }
+  }
+
+  private updateComparisonResultCounts(
+    result: TResult,
+    previous: Pick<TResult, 'success' | 'score' | 'failureReason'>,
+    metrics: CompletedPrompt['metrics'] | undefined,
+  ) {
+    const outcome = (row: typeof previous) =>
+      row.success
+        ? 'successes'
+        : row.failureReason === ResultFailureReason.ERROR
+          ? 'errors'
+          : 'failures';
+    const before = outcome(previous);
+    const after = outcome(result);
+    if (before !== after) {
+      if (this.comparisonProviders.get(getResultIndexKey(result))?.currentResult) {
+        this.stats[before]--;
+        this.stats[after]++;
+      }
+      if (metrics) {
+        const counts = {
+          successes: 'testPassCount',
+          failures: 'testFailCount',
+          errors: 'testErrorCount',
+        } as const;
+        metrics[counts[before]]--;
+        metrics[counts[after]]++;
+      }
+    }
+    if (metrics) {
+      metrics.score += result.score - previous.score;
     }
   }
 
@@ -3639,6 +3713,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   private async persistEvalRow(row: EvaluateResult): Promise<void> {
+    setComparisonError(row);
     if (row.testCase.assert?.some((assertion) => assertion.type === 'select-best')) {
       // Capture grader references before a later hook can replace shared nested test fields.
       this.comparisonProviders.set(
@@ -4508,18 +4583,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         ...savedTest,
         options: {
           ...savedTest.options,
-          provider: restoreComparisonProvider(
-            savedTest.options?.provider,
-            providers?.provider,
-            providers?.currentResult ?? false,
-          ),
+          provider: undefined,
         },
       };
       const compareAssertion = {
         ...assertion,
         provider: restoreComparisonProvider(
-          assertion.provider,
-          providers?.assertionProvider,
+          assertion.provider || savedTest.options?.provider,
+          providers?.provider,
           providers?.currentResult ?? false,
         ),
       };
@@ -4550,19 +4621,34 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         throw error;
       }
       const graderId = comparisonProviderId(assertion.provider ?? savedTest.options?.provider);
-      const reason = `Error grading select-best${graderId ? ` (${graderId})` : ''}: ${error instanceof Error ? error.message : String(error)}`;
-      gradingResults = resultsToCompare.map((result) => {
-        result.error = reason;
-        return {
-          pass: false,
-          score: 0,
-          reason,
-          assertion: { type: assertion.type, value: assertion.value },
+      const reason = `${COMPARISON_ERROR_PREFIX}${graderId ? ` (${graderId})` : ''}: ${error instanceof Error ? error.message : String(error)}`;
+      gradingResults = [];
+      for (const result of resultsToCompare) {
+        if (result.failureReason === ResultFailureReason.ERROR && !getComparisonError(result)) {
+          continue;
+        }
+        const previous = {
+          success: result.success,
+          score: result.score,
+          failureReason: result.failureReason,
         };
-      });
+        // Keep the existing assertion verdict and outcome for a successful retry.
+        if (!getComparisonError(result)) {
+          setComparisonError(result, { ...previous, error: result.error });
+        }
+        result.error = reason;
+        result.failureReason = ResultFailureReason.ERROR;
+        result.success = false;
+        result.score = 0;
+        this.updateComparisonResultCounts(result, previous, prompts[result.promptIdx]?.metrics);
+        this.trackFinalJsonlResult(result);
+        if (this.store.persisted && !this.store.hasResultPersistenceFailure(result)) {
+          await this.store.saveResult(result);
+        }
+      }
     }
 
-    for (let index = 0; index < resultsToCompare.length; index++) {
+    for (let index = 0; index < gradingResults.length; index++) {
       await this.applySelectBestGradingResult({
         gradingResult: gradingResults[index],
         metrics: prompts[resultsToCompare[index].promptIdx]?.metrics,
@@ -4715,8 +4801,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
   // Shared tail for the comparison graders: record the pass/score transition, capture the
   // canonical row for JSONL finalization, and persist (unless this row already failed to
-  // persist, in which case re-saving would just re-throw). `wasSuccess`/`wasScore` must be
-  // captured by the caller before its merge mutates `result`.
+  // persist, in which case re-saving would just re-throw). Capture the previous outcome
+  // before merging so retries can update error counts in both directions.
   private async finalizeComparisonGrading({
     gradingResult,
     metrics,
@@ -4780,6 +4866,23 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     metrics: CompletedPrompt['metrics'] | undefined;
     result: TResult;
   }) {
+    if (result.failureReason === ResultFailureReason.ERROR) {
+      const saved = getComparisonError(result);
+      if (!saved) {
+        return;
+      }
+      const previous = {
+        success: result.success,
+        score: result.score,
+        failureReason: result.failureReason,
+      };
+      result.success = saved.success;
+      result.score = saved.score;
+      result.failureReason = saved.failureReason;
+      result.error = saved.error;
+      setComparisonError(result);
+      this.updateComparisonResultCounts(result, previous, metrics);
+    }
     const wasSuccess = result.success;
     const wasScore = result.score;
     mergeSelectBestGradingResult(result, gradingResult, this.stats.tokenUsage);
@@ -5091,8 +5194,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       tests,
     });
     markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
-    for (const step of runEvalOptions) {
-      this.comparisonProviders.set(getResultIndexKey(step), getComparisonProviders(step.test));
+    if (cliState.resume && this.store.persisted) {
+      for (const step of runEvalOptions) {
+        if (rowsWithSelectBestAssertion.has(step.testIdx)) {
+          this.comparisonProviders.set(getResultIndexKey(step), getComparisonProviders(step.test));
+        }
+      }
     }
     const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
     await filterCompletedResumeSteps(runEvalOptions, this.store);
