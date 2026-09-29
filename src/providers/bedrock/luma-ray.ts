@@ -313,6 +313,7 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
    */
   private async downloadAndStoreVideo(
     s3Uri: string,
+    context?: CallApiContextParams,
   ): Promise<{ blobRef?: BlobRef; error?: string }> {
     try {
       // Parse S3 URI
@@ -354,8 +355,11 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
 
       // Store to blob storage
       const { ref } = await storeBlob(buffer, 'video/mp4', {
+        evalId: context?.evaluationId,
         kind: 'video',
         location: 'response.video',
+        promptIdx: context?.promptIdx,
+        testIdx: context?.testIdx,
       });
 
       logger.debug('[Luma Ray] Stored video to blob storage', { uri: ref.uri, hash: ref.hash });
@@ -475,7 +479,10 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
     const outputUrl = `${outputS3Uri}/output.mp4`;
 
     if (config.downloadFromS3 !== false) {
-      const { blobRef: ref, error: downloadError } = await this.downloadAndStoreVideo(outputS3Uri);
+      const { blobRef: ref, error: downloadError } = await this.downloadAndStoreVideo(
+        outputS3Uri,
+        context,
+      );
       if (downloadError) {
         logger.warn(`[Luma Ray] Failed to download video: ${downloadError}. Using S3 URL.`);
       } else {

@@ -4,11 +4,6 @@ import { PageContainer, PageHeader } from '@app/components/layout';
 import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@app/components/ui/collapsible';
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -19,10 +14,10 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
+import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import yaml from 'js-yaml';
-import { Check, ChevronDown, Upload } from 'lucide-react';
+import { loadYaml } from '@promptfoo/util/yamlLoad';
+import { Check, Upload } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import ConfigureEnvButton from './ConfigureEnvButton';
 import { InfoBox } from './InfoBox';
@@ -30,19 +25,12 @@ import PromptsSection from './PromptsSection';
 import { ProvidersListSection } from './ProvidersListSection';
 import { RunOptionsSection } from './RunOptionsSection';
 import { StepSection } from './StepSection';
-import {
-  extractVariablesFromPrompts,
-  getSetupReadiness,
-  normalizePrompts,
-  normalizeProviders,
-} from './setupReadiness';
+import { countTests, normalizePrompts, normalizeProviders } from './setupReadiness';
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
-import { INVALID_FULL_CONFIG_YAML_MESSAGE, isFullYamlConfig } from './yamlConfigValidation';
-import type { UnifiedConfig } from '@promptfoo/types';
+import { validateYamlConfigDraft } from './yamlConfigValidation';
 
-import type { SetupStepId } from './setupReadiness';
-
+type SetupStepId = 1 | 2 | 3 | 4;
 type EditorTab = 'ui' | 'yaml';
 
 interface SetupStep {
@@ -52,6 +40,20 @@ interface SetupStep {
   isComplete: boolean;
   count?: number;
   required: boolean;
+}
+
+function extractVarsFromPrompts(prompts: string[]): string[] {
+  const varRegex = /{{\s*(\w+)\s*}}/g;
+  const varsSet = new Set<string>();
+
+  prompts.forEach((prompt) => {
+    let match;
+    while ((match = varRegex.exec(prompt)) !== null) {
+      varsSet.add(match[1]);
+    }
+  });
+
+  return Array.from(varsSet);
 }
 
 function ErrorFallback({
@@ -81,25 +83,20 @@ const EvaluateTestSuiteCreator = () => {
   const [hasCustomConfig, setHasCustomConfig] = useState(false);
   const [activeStep, setActiveStep] = useState<SetupStepId>(1);
   const [editorTab, setEditorTab] = useState<EditorTab>('ui');
-  const [yamlHasUnsavedChanges, setYamlHasUnsavedChanges] = useState(false);
+  const [yamlDirty, setYamlDirty] = useState(false);
   const [discardYamlDialogOpen, setDiscardYamlDialogOpen] = useState(false);
-  const [providerHelpOpen, setProviderHelpOpen] = useState(false);
-  const [pendingYamlImport, setPendingYamlImport] = useState<{
-    config: Partial<UnifiedConfig>;
-    fileName: string;
-  } | null>(null);
+  const uiTabRef = React.useRef<HTMLButtonElement>(null);
+  const yamlTabRef = React.useRef<HTMLButtonElement>(null);
   const [resetKey, setResetKey] = useState(0);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const { config, setConfig, updateConfig, reset } = useStore();
+  const { config, updateConfig, reset } = useStore();
   const { providers = [], prompts = [] } = config;
 
   const normalizedProviders = React.useMemo(() => normalizeProviders(providers), [providers]);
 
   useEffect(() => {
-    if (!useStore.persist.hasHydrated()) {
-      useStore.persist.rehydrate();
-    }
+    useStore.persist.rehydrate();
   }, []);
 
   // Fetch config status to determine if ConfigureEnvButton should be shown
@@ -136,23 +133,14 @@ const EvaluateTestSuiteCreator = () => {
   const normalizedPrompts = React.useMemo(() => normalizePrompts(prompts), [prompts]);
 
   const varsList = React.useMemo(
-    () => extractVariablesFromPrompts(normalizedPrompts),
+    () => extractVarsFromPrompts(normalizedPrompts),
     [normalizedPrompts],
   );
 
-  const readiness = React.useMemo(() => getSetupReadiness(config), [config]);
-  const { isReadyToRun, testCount } = readiness;
-  const testCasesComplete = testCount > 0 && !readiness.issues.some((issue) => issue.stepId === 3);
-  const configDiffersFromDefault = React.useMemo(
-    () => JSON.stringify(config) !== JSON.stringify(DEFAULT_CONFIG),
-    [config],
-  );
-  const hasResettableSetup = yamlHasUnsavedChanges || configDiffersFromDefault;
-  const runOptionsConfigured = Boolean(
-    config.description?.trim() ||
-      config.evaluateOptions?.delay ||
-      config.evaluateOptions?.maxConcurrency,
-  );
+  const testCount = React.useMemo(() => countTests(config.tests), [config.tests]);
+
+  const isReadyToRun =
+    normalizedProviders.length > 0 && normalizedPrompts.length > 0 && testCount > 0;
 
   const setupSteps: SetupStep[] = [
     {
@@ -174,8 +162,8 @@ const EvaluateTestSuiteCreator = () => {
     {
       id: 3,
       label: 'Test Cases',
-      title: testCount > 0 ? 'Review Test Cases' : 'Add Test Cases',
-      isComplete: testCasesComplete,
+      title: 'Add Test Cases',
+      isComplete: testCount > 0,
       count: testCount,
       required: true,
     },
@@ -183,7 +171,7 @@ const EvaluateTestSuiteCreator = () => {
       id: 4,
       label: 'Run Options',
       title: 'Run Options',
-      isComplete: runOptionsConfigured,
+      isComplete: Boolean(config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency),
       required: false,
     },
   ];
@@ -192,45 +180,12 @@ const EvaluateTestSuiteCreator = () => {
   const completedRequiredStepCount = requiredSteps.filter((step) => step.isComplete).length;
   const nextRecommendedStep =
     requiredSteps.find((step) => !step.isComplete) ?? setupSteps[setupSteps.length - 1];
-  const nextSetupIssue = readiness.issues.find((issue) => issue.stepId === nextRecommendedStep.id);
   const shouldShowSummaryAction = activeStep !== nextRecommendedStep.id;
-  const activeSetupStep =
-    setupSteps.find((step) => step.id === activeStep) ?? setupSteps[setupSteps.length - 1];
 
   const handleReset = () => {
     reset();
-    setYamlHasUnsavedChanges(false);
     setResetKey((k) => k + 1);
     setResetDialogOpen(false);
-  };
-
-  const handleEditorTabChange = (value: string) => {
-    const nextTab = value as EditorTab;
-    if (editorTab === 'yaml' && nextTab === 'ui' && yamlHasUnsavedChanges) {
-      setDiscardYamlDialogOpen(true);
-      return;
-    }
-
-    setEditorTab(nextTab);
-  };
-
-  const handleDiscardYamlAndSwitch = () => {
-    setDiscardYamlDialogOpen(false);
-    setYamlHasUnsavedChanges(false);
-    setResetKey((key) => key + 1);
-    setEditorTab('ui');
-  };
-
-  // Uploads use replace semantics, in contrast to in-editor YAML saves which
-  // merge. The confirmation dialog is what makes this safe: it tells the user
-  // the entire setup is wiped, while a save in the YAML editor implicitly
-  // preserves fields the editor doesn't surface (redteam, sharing, …).
-  const applyImportedYaml = (importedConfig: Partial<UnifiedConfig>) => {
-    setConfig(importedConfig);
-    setYamlHasUnsavedChanges(false);
-    setPendingYamlImport(null);
-    setResetKey((key) => key + 1);
-    showToast('Configuration replaced from YAML', 'success');
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -246,17 +201,13 @@ const EvaluateTestSuiteCreator = () => {
           );
         } else {
           try {
-            const parsedConfig = yaml.load(content) as Record<string, unknown>;
-            if (isFullYamlConfig(parsedConfig)) {
-              const importedConfig = parsedConfig;
-
-              if (hasResettableSetup) {
-                setPendingYamlImport({ config: importedConfig, fileName: file.name });
-              } else {
-                applyImportedYaml(importedConfig);
-              }
+            const validation = validateYamlConfigDraft(loadYaml(content));
+            if (validation.success) {
+              updateConfig(validation.config);
+              setResetKey((k) => k + 1);
+              showToast('Configuration loaded successfully', 'success');
             } else {
-              showToast(INVALID_FULL_CONFIG_YAML_MESSAGE, 'error');
+              showToast(validation.error, 'error');
             }
           } catch (err) {
             showToast(
@@ -267,7 +218,7 @@ const EvaluateTestSuiteCreator = () => {
         }
       };
       reader.onerror = () => {
-        showToast('Unable to read this file. Please try again or choose another file.', 'error');
+        showToast('Failed to read file', 'error');
       };
       reader.readAsText(file);
     }
@@ -277,7 +228,17 @@ const EvaluateTestSuiteCreator = () => {
 
   return (
     <PageContainer>
-      <Tabs value={editorTab} onValueChange={handleEditorTabChange} className="w-full">
+      <Tabs
+        value={editorTab}
+        onValueChange={(value) => {
+          if (editorTab === 'yaml' && value === 'ui' && yamlDirty) {
+            setDiscardYamlDialogOpen(true);
+          } else {
+            setEditorTab(value as EditorTab);
+          }
+        }}
+        className="w-full"
+      >
         {/* Header */}
         <PageHeader>
           <div className="container max-w-7xl mx-auto px-4 py-6 lg:py-10">
@@ -303,11 +264,7 @@ const EvaluateTestSuiteCreator = () => {
                   className="hidden"
                   aria-label="Upload YAML configuration"
                 />
-                <Button
-                  variant="outline"
-                  onClick={() => setResetDialogOpen(true)}
-                  disabled={!hasResettableSetup}
-                >
+                <Button variant="outline" onClick={() => setResetDialogOpen(true)}>
                   Reset
                 </Button>
               </div>
@@ -316,10 +273,10 @@ const EvaluateTestSuiteCreator = () => {
             {/* Tabs Toggle */}
             <div className="mt-4 lg:mt-6">
               <TabsList aria-label="Editor mode">
-                <TabsTrigger value="ui" className="dark:text-foreground/80">
+                <TabsTrigger ref={uiTabRef} value="ui" className="dark:text-foreground/80">
                   UI Editor
                 </TabsTrigger>
-                <TabsTrigger value="yaml" className="dark:text-foreground/80">
+                <TabsTrigger ref={yamlTabRef} value="yaml" className="dark:text-foreground/80">
                   YAML Editor
                 </TabsTrigger>
               </TabsList>
@@ -330,53 +287,20 @@ const EvaluateTestSuiteCreator = () => {
         {/* Main Content */}
         <TabsContent value="ui">
           <div className="container max-w-7xl mx-auto px-4 py-4 lg:py-8">
-            <Card className="mb-4 border-primary/15 bg-primary/5 shadow-sm lg:mb-6">
-              <CardContent className="space-y-4 p-4 lg:p-5">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-primary">How evaluations work</p>
-                  <h2 className="text-lg font-semibold">Compare responses against clear checks</h2>
-                  <p className="text-sm text-muted-foreground">
-                    By default, Promptfoo sends each prompt with each test case to every provider.
-                    YAML routing can narrow those requests; assertions decide whether each response
-                    passes.
-                  </p>
-                </div>
-                <ol className="grid gap-3 sm:grid-cols-3">
-                  {[
-                    ['1. Providers', 'Models or systems that respond'],
-                    ['2. Prompts', 'Instructions you want to compare'],
-                    ['3. Test cases', 'Inputs and expected behavior'],
-                  ].map(([title, explanation]) => (
-                    <li key={title} className="rounded-md border border-border bg-background p-3">
-                      <p className="text-sm font-medium">{title}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{explanation}</p>
-                    </li>
-                  ))}
-                </ol>
-              </CardContent>
-            </Card>
-
             <Card className="mb-4 shadow-sm lg:mb-6">
               <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between lg:p-5">
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-muted-foreground">Evaluation setup</p>
-                  <div
-                    role="status"
-                    aria-label="Setup progress"
-                    aria-live="polite"
-                    aria-atomic="true"
-                  >
-                    <h2 className="text-xl font-semibold">
-                      {isReadyToRun
-                        ? 'Ready to run'
-                        : `${completedRequiredStepCount} of ${requiredSteps.length} required steps complete`}
-                    </h2>
-                    <p className="text-sm text-muted-foreground">
-                      {isReadyToRun
-                        ? 'Providers, prompts, and test cases are ready. Review run options or start the evaluation.'
-                        : nextSetupIssue?.message || `Next up: ${nextRecommendedStep.title}.`}
-                    </p>
-                  </div>
+                  <h2 className="text-xl font-semibold">
+                    {isReadyToRun
+                      ? 'Ready to run'
+                      : `${completedRequiredStepCount} of ${requiredSteps.length} required steps complete`}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {isReadyToRun
+                      ? 'Providers, prompts, and test cases are ready. Review run options or start the evaluation.'
+                      : `Next up: ${nextRecommendedStep.title}.`}
+                  </p>
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -431,16 +355,6 @@ const EvaluateTestSuiteCreator = () => {
                 </div>
               </CardContent>
             </Card>
-
-            <p
-              role="status"
-              aria-label="Current setup step"
-              aria-live="polite"
-              aria-atomic="true"
-              className="sr-only"
-            >
-              Viewing step {activeSetupStep.id}: {activeSetupStep.title}.
-            </p>
 
             <div className="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)] xl:gap-8">
               {/* Left Sidebar - Step Navigation */}
@@ -528,55 +442,38 @@ const EvaluateTestSuiteCreator = () => {
                     count={normalizedProviders.length}
                     guidance={
                       normalizedProviders.length === 0 ? (
-                        <Collapsible open={providerHelpOpen} onOpenChange={setProviderHelpOpen}>
-                          <InfoBox variant="help">
-                            <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 text-left font-medium">
-                              <span>What are providers? Learn what you can evaluate.</span>
-                              <ChevronDown
-                                aria-hidden="true"
-                                className={cn(
-                                  'size-4 shrink-0 transition-transform',
-                                  providerHelpOpen && 'rotate-180',
-                                )}
-                              />
-                            </CollapsibleTrigger>
-                            <CollapsibleContent className="mt-3 border-t border-current/20 pt-3">
-                              <p>Providers are the systems you want to test. This can be:</p>
-                              <ul className="mt-2 space-y-1 list-disc list-inside ml-2">
-                                <li>
-                                  <strong>AI Models</strong> - OpenAI GPT, Anthropic Claude, Google
-                                  Gemini, etc.
-                                </li>
-                                <li>
-                                  <strong>HTTP/WebSocket APIs</strong> - Your own API endpoints or
-                                  third-party services
-                                </li>
-                                <li>
-                                  <strong>Python Scripts</strong> - Custom Python code or agent
-                                  frameworks (LangChain, CrewAI, etc.)
-                                </li>
-                                <li>
-                                  <strong>JavaScript/Local Providers</strong> - Custom
-                                  implementations
-                                </li>
-                              </ul>
-                              <p className="mt-2">
-                                <strong>Getting started:</strong> Select at least one provider
-                                below. You can compare multiple providers side-by-side.
-                              </p>
-                            </CollapsibleContent>
-                          </InfoBox>
-                        </Collapsible>
+                        <InfoBox variant="help">
+                          <strong>What are providers?</strong>
+                          <p className="mt-1">
+                            Providers are the systems you want to test. This can be:
+                          </p>
+                          <ul className="mt-2 space-y-1 list-disc list-inside ml-2">
+                            <li>
+                              <strong>AI Models</strong> - OpenAI GPT, Anthropic Claude, Google
+                              Gemini, etc.
+                            </li>
+                            <li>
+                              <strong>HTTP/WebSocket APIs</strong> - Your own API endpoints or
+                              third-party services
+                            </li>
+                            <li>
+                              <strong>Python Scripts</strong> - Custom Python code or agent
+                              frameworks (LangChain, CrewAI, etc.)
+                            </li>
+                            <li>
+                              <strong>JavaScript/Local Providers</strong> - Custom implementations
+                            </li>
+                          </ul>
+                          <p className="mt-2">
+                            <strong>Getting started:</strong> Select at least one provider below.
+                            You can compare multiple providers side-by-side.
+                          </p>
+                        </InfoBox>
                       ) : (
                         <InfoBox variant="subtle">
                           <strong>Pro tip:</strong> Testing multiple providers helps you find the
                           best option for your use case. Compare different models, API versions, or
                           custom implementations to optimize for quality, cost, and latency.
-                          <p className="mt-2">
-                            By default, each additional provider adds prompt and test case requests.
-                            YAML routing can narrow those requests; more combinations can increase
-                            usage costs.
-                          </p>
                         </InfoBox>
                       )
                     }
@@ -640,7 +537,8 @@ const EvaluateTestSuiteCreator = () => {
                             </span>
                           ))}
                           <p className="mt-2">
-                            Provide these values in test cases routed to prompts that use them.
+                            These variables will need values in your test cases below. Each test
+                            case should provide data for all variables.
                           </p>
                         </InfoBox>
                       ) : (
@@ -671,7 +569,7 @@ const EvaluateTestSuiteCreator = () => {
                     stepNumber={3}
                     title="Add Test Cases"
                     description="Define test scenarios with input data and expected outcomes. Each case tests your prompts with different inputs."
-                    isComplete={testCasesComplete}
+                    isComplete={testCount > 0}
                     isRequired
                     count={testCount}
                     guidance={
@@ -712,8 +610,8 @@ const EvaluateTestSuiteCreator = () => {
                         </InfoBox>
                       ) : varsList.length > 0 ? (
                         <InfoBox variant="info">
-                          <strong>Prompt variables:</strong> Provide values in test cases routed to
-                          prompts that use{' '}
+                          <strong>Required variables:</strong> Each test case must provide values
+                          for{' '}
                           {varsList.map((v, i) => (
                             <span key={v}>
                               <code className="rounded border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-xs text-foreground">
@@ -756,13 +654,15 @@ const EvaluateTestSuiteCreator = () => {
                     stepNumber={4}
                     title="Run Options"
                     description="Configure how your evaluation will run (optional but recommended for rate limiting)."
-                    isComplete={runOptionsConfigured}
+                    isComplete={
+                      !!(config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency)
+                    }
                   >
                     <RunOptionsSection
                       description={config.description}
                       delay={config.evaluateOptions?.delay}
                       maxConcurrency={config.evaluateOptions?.maxConcurrency}
-                      readiness={readiness}
+                      isReadyToRun={isReadyToRun}
                       onChange={(options) => {
                         const { description: newDesc, ...evalOptions } = options;
                         updateConfig({
@@ -784,20 +684,51 @@ const EvaluateTestSuiteCreator = () => {
         {/* YAML Editor Tab */}
         <TabsContent value="yaml">
           <div className="container max-w-7xl mx-auto px-4 py-8">
-            <YamlEditor key={resetKey} onDirtyChange={setYamlHasUnsavedChanges} />
+            <YamlEditor key={resetKey} onDirtyChange={setYamlDirty} />
           </div>
         </TabsContent>
       </Tabs>
 
+      <Dialog open={discardYamlDialogOpen} onOpenChange={setDiscardYamlDialogOpen}>
+        <DialogContent
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            (editorTab === 'yaml' ? yamlTabRef : uiTabRef).current?.focus();
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Discard unsaved YAML changes?</DialogTitle>
+            <DialogDescription>
+              Switching to the form editor will discard your unsaved YAML changes. Stay in the YAML
+              editor to save them first.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDiscardYamlDialogOpen(false)}>
+              Keep editing
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setYamlDirty(false);
+                setDiscardYamlDialogOpen(false);
+                setEditorTab('ui');
+              }}
+            >
+              Discard and switch
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Reset Confirmation Dialog */}
       <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
-        <DialogContent hideDescription={false}>
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Reset evaluation setup?</DialogTitle>
             <DialogDescription>
               This clears providers, prompts, test cases, and run options. This action cannot be
               undone.
-              {yamlHasUnsavedChanges && ' Your unsaved YAML edits will also be discarded.'}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -806,60 +737,6 @@ const EvaluateTestSuiteCreator = () => {
             </Button>
             <Button variant="destructive" onClick={handleReset}>
               Reset
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={discardYamlDialogOpen} onOpenChange={setDiscardYamlDialogOpen}>
-        <DialogContent hideDescription={false}>
-          <DialogHeader>
-            <DialogTitle>Discard unsaved YAML changes?</DialogTitle>
-            <DialogDescription>
-              Your YAML edits have not been saved. Stay in the YAML editor to save them, or discard
-              them before returning to the UI editor.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDiscardYamlDialogOpen(false)}>
-              Stay in YAML
-            </Button>
-            <Button variant="destructive" onClick={handleDiscardYamlAndSwitch}>
-              Discard and switch
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={pendingYamlImport !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setPendingYamlImport(null);
-          }
-        }}
-      >
-        <DialogContent hideDescription={false}>
-          <DialogHeader>
-            <DialogTitle>Replace current setup with YAML?</DialogTitle>
-            <DialogDescription>
-              Importing{' '}
-              <code className="rounded bg-muted px-1 py-0.5">{pendingYamlImport?.fileName}</code>{' '}
-              replaces the entire setup — including providers, prompts, test cases, run options,
-              entered API key values, and any other configuration not present in the imported file.
-              This action cannot be undone.
-              {yamlHasUnsavedChanges && ' Your unsaved YAML edits will also be discarded.'}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPendingYamlImport(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => pendingYamlImport && applyImportedYaml(pendingYamlImport.config)}
-            >
-              Replace setup
             </Button>
           </DialogFooter>
         </DialogContent>

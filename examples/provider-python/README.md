@@ -28,7 +28,46 @@ You can set this in a `.env` file or directly in your environment.
 
 ## Requirements
 
-- Python with the OpenAI package installed (`pip install openai`)
+- Python 3.10 or later
+- The example dependencies installed in a virtual environment:
+
+On macOS or Linux:
+
+```bash
+python -m venv venv
+source venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+On Windows PowerShell:
+
+```powershell
+python -m venv venv
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
+$env:PROMPTFOO_PYTHON = (Resolve-Path .\venv\Scripts\python.exe).Path
+```
+
+Use `npx.cmd` for the Promptfoo commands on Windows PowerShell.
+
+The AnyIO minimum includes fixes for TLS hostname validation and process-pool
+stderr handling. OpenAI 3 uses HTTPX2, whose dependencies already require the
+fixed h11 parser and idna versions and use the system certificate trust store.
+OpenAI manages those transitive dependencies.
+
+Run the dependency regression check after installation. On macOS/Linux:
+
+```bash
+python -m unittest discover -s . -p '*_test.py'
+```
+
+On Windows PowerShell:
+
+```powershell
+.\venv\Scripts\python.exe -m unittest discover -s . -p '*_test.py'
+```
+
+CI runs these checks on Python 3.10 and 3.14, covering both an upgrade from older
+transport packages and a fresh installation.
 
 ## Files
 
@@ -91,7 +130,7 @@ providers:
 Run the example with:
 
 ```bash
-npx promptfoo@latest evaluate -c examples/provider-python/promptfooconfig.yaml
+npx promptfoo@latest eval
 ```
 
 ## Learn More

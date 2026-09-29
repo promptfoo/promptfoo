@@ -2,8 +2,7 @@ import React from 'react';
 
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
-import { Label } from '@app/components/ui/label';
-import Prism from '@app/lib/prism';
+import { highlightJS } from '@app/lib/codeHighlight';
 import { callApi } from '@app/utils/api';
 import dedent from 'dedent';
 import { Play } from 'lucide-react';
@@ -15,24 +14,14 @@ interface RequestTransformTabProps {
   selectedTarget: HttpProviderOptions;
   updateCustomTarget: (field: string, value: unknown) => void;
   defaultRequestTransform?: string;
+  isTargetConfigInvalid?: () => boolean;
 }
-
-const highlightJS = (code: string): string => {
-  try {
-    const grammar = Prism?.languages?.javascript;
-    if (!grammar) {
-      return code;
-    }
-    return Prism.highlight(code, grammar, 'javascript');
-  } catch {
-    return code;
-  }
-};
 
 const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
   selectedTarget,
   updateCustomTarget,
   defaultRequestTransform,
+  isTargetConfigInvalid,
 }) => {
   // Test dialog states
   const [testOpen, setTestOpen] = React.useState(false);
@@ -40,18 +29,23 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
 
   // Editable transform code in modal
   const [editableTransform, setEditableTransform] = React.useState('');
+  const requestTransform =
+    (selectedTarget.config?.transformRequest as string | undefined) ??
+    defaultRequestTransform ??
+    '';
 
   // Initialize editable code when opening modal
   React.useEffect(() => {
     if (testOpen) {
-      setEditableTransform(
-        (selectedTarget.config?.transformRequest as string) || defaultRequestTransform || '',
-      );
+      setEditableTransform(requestTransform);
     }
-  }, [testOpen, selectedTarget.config?.transformRequest, defaultRequestTransform]);
+  }, [testOpen, requestTransform]);
 
   // Test handler function
   const handleTest = async (transformCode: string, testInput: string) => {
+    if (isTargetConfigInvalid?.()) {
+      return { success: false, error: 'Invalid target configuration' };
+    }
     const response = await callApi('/providers/test-request-transform', {
       method: 'POST',
       headers: {
@@ -106,16 +100,10 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
         </a>{' '}
         for more information.
       </p>
-      <Label htmlFor="http-request-transform" className="mb-2 block font-medium">
-        Request Transform Function
-      </Label>
       <div className="relative">
         <div className="rounded-md border border-border bg-white dark:bg-zinc-900">
           <Editor
-            textareaId="http-request-transform"
-            value={
-              (selectedTarget.config?.transformRequest as string) || defaultRequestTransform || ''
-            }
+            value={requestTransform}
             onValueChange={(code) => updateCustomTarget('transformRequest', code)}
             highlight={highlightJS}
             padding={10}
@@ -136,6 +124,7 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
           variant="outline"
           size="sm"
           onClick={() => setTestOpen(true)}
+          disabled={isTargetConfigInvalid?.()}
           className="absolute right-2 top-2 z-10"
         >
           <Play className="mr-1 size-4" />

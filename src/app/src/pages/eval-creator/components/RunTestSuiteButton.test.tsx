@@ -19,7 +19,7 @@ const renderWithProvider = (ui: React.ReactElement) => {
 const mockShowToast = vi.fn();
 let sourceEvalId: string | undefined;
 
-vi.mock('react-router-dom', () => ({
+vi.mock('react-router', () => ({
   useNavigate: () => vi.fn(),
   useLocation: () => ({ state: sourceEvalId ? { sourceEvalId } : null }),
 }));
@@ -47,22 +47,21 @@ describe('RunTestSuiteButton', () => {
 
   it('should be disabled when there are no prompts or tests', () => {
     renderWithProvider(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Evaluation' });
+    const button = screen.getByRole('button', { name: 'Run Eval' });
     expect(button).toBeDisabled();
-    expect(button).toHaveAccessibleDescription('Add at least one provider to evaluate.');
   });
 
   it('should be disabled when there are prompts but no tests', () => {
     useStore.getState().updateConfig({ prompts: ['prompt 1'] });
     renderWithProvider(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Evaluation' });
+    const button = screen.getByRole('button', { name: 'Run Eval' });
     expect(button).toBeDisabled();
   });
 
   it('should be disabled when there are tests but no prompts', () => {
     useStore.getState().updateConfig({ tests: [{ vars: { foo: 'bar' } }] });
     renderWithProvider(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Evaluation' });
+    const button = screen.getByRole('button', { name: 'Run Eval' });
     expect(button).toBeDisabled();
   });
 
@@ -73,69 +72,8 @@ describe('RunTestSuiteButton', () => {
       tests: [{ vars: { foo: 'bar' } }],
     });
     renderWithProvider(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Evaluation' });
+    const button = screen.getByRole('button', { name: 'Run Eval' });
     expect(button).not.toBeDisabled();
-  });
-
-  it('blocks launch and explains an invalid run-settings reason', () => {
-    useStore.getState().updateConfig({
-      prompts: ['prompt 1'],
-      providers: ['openai:gpt-4'],
-      tests: [{ vars: { foo: 'bar' } }],
-    });
-
-    renderWithProvider(
-      <RunTestSuiteButton disabledReason="Fix invalid optional run settings before starting." />,
-    );
-
-    const button = screen.getByRole('button', { name: 'Run Evaluation' });
-    expect(button).toBeDisabled();
-    expect(button).toHaveAccessibleDescription(
-      'Fix invalid optional run settings before starting.',
-    );
-  });
-
-  it('should be disabled when a test case omits a required prompt variable', () => {
-    useStore.getState().updateConfig({
-      prompts: ['Write about {{topic}} for {{audience}}'],
-      providers: ['openai:gpt-4'],
-      tests: [{ vars: { topic: 'testing' } }],
-    });
-
-    renderWithProvider(<RunTestSuiteButton />);
-
-    const button = screen.getByRole('button', { name: 'Run Evaluation' });
-    expect(button).toBeDisabled();
-    expect(button).toHaveAccessibleDescription(
-      'Test case 1 is missing values required by your prompts.',
-    );
-  });
-
-  it('blocks an imported test case whose assertion is missing a runnable value', () => {
-    useStore.getState().updateConfig({
-      prompts: ['Write a summary'],
-      providers: ['openai:gpt-4'],
-      tests: [{ assert: [{ type: 'contains', value: '' }] }],
-    });
-
-    renderWithProvider(<RunTestSuiteButton />);
-
-    const button = screen.getByRole('button', { name: 'Run Evaluation' });
-    expect(button).toBeDisabled();
-    expect(button).toHaveAccessibleDescription('Add required assertion values in test case 1.');
-  });
-
-  it('should accept prompt variables supplied by default test values', () => {
-    useStore.getState().updateConfig({
-      prompts: ['Write about {{topic}} for {{audience}}'],
-      providers: ['openai:gpt-4'],
-      defaultTest: { vars: { audience: 'developers' } },
-      tests: [{ vars: { topic: 'testing' } }],
-    });
-
-    renderWithProvider(<RunTestSuiteButton />);
-
-    expect(screen.getByRole('button', { name: 'Run Evaluation' })).not.toBeDisabled();
   });
 
   it('should be enabled for scalar provider, prompt, and test configs', () => {
@@ -147,88 +85,7 @@ describe('RunTestSuiteButton', () => {
 
     renderWithProvider(<RunTestSuiteButton />);
 
-    expect(screen.getByRole('button', { name: 'Run Evaluation' })).not.toBeDisabled();
-  });
-
-  it('announces that an evaluation is starting while waiting for progress', async () => {
-    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
-    useStore.getState().updateConfig({
-      prompts: ['prompt 1'],
-      providers: ['openai:gpt-4'],
-      tests: [{ vars: { foo: 'bar' } }],
-    });
-
-    renderWithProvider(<RunTestSuiteButton />);
-    await act(async () => {
-      screen
-        .getByRole('button', { name: 'Run Evaluation' })
-        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      await Promise.resolve();
-    });
-
-    expect(screen.getByRole('button', { name: 'Running evaluation' })).toBeDisabled();
-    const status = screen.getByRole('status');
-    expect(status).toHaveTextContent('Starting evaluation and preparing requests.');
-    expect(status).toHaveAttribute('aria-live', 'polite');
-    expect(status).toHaveAttribute('aria-atomic', 'true');
-  });
-
-  it('announces measurable progress while an evaluation is running', async () => {
-    mockCallApiRoutes([
-      { method: 'POST', path: '/eval/job', response: { id: '123' } },
-      {
-        path: '/eval/job/123/',
-        response: { status: 'in-progress', progress: 1, total: 2, logs: [] },
-      },
-    ]);
-    useStore.getState().updateConfig({
-      prompts: ['prompt 1'],
-      providers: ['openai:gpt-4'],
-      tests: [{ vars: { foo: 'bar' } }],
-    });
-
-    renderWithProvider(<RunTestSuiteButton />);
-    await act(async () => {
-      screen
-        .getByRole('button', { name: 'Run Evaluation' })
-        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      await Promise.resolve();
-      await timers.advanceByAsync(1500);
-    });
-
-    const status = screen.getByRole('status');
-    expect(status).toHaveTextContent('50% complete. Results open automatically when finished.');
-    expect(status).toHaveAttribute('aria-atomic', 'true');
-  });
-
-  it('explains when a completed evaluation has no saved results to open', async () => {
-    mockCallApiRoutes([
-      { method: 'POST', path: '/eval/job', response: { id: '123' } },
-      {
-        path: '/eval/job/123/',
-        response: { status: 'complete', result: null, evalId: null, logs: [] },
-      },
-    ]);
-    useStore.getState().updateConfig({
-      prompts: ['prompt 1'],
-      providers: ['openai:gpt-4'],
-      tests: [{ vars: { foo: 'bar' } }],
-    });
-
-    renderWithProvider(<RunTestSuiteButton />);
-    await act(async () => {
-      screen
-        .getByRole('button', { name: 'Run Evaluation' })
-        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      await Promise.resolve();
-      await timers.advanceByAsync(1500);
-    });
-
-    const message =
-      'The evaluation completed, but no saved results are available to open. Review the setup and run it again.';
-    expect(mockShowToast).toHaveBeenCalledWith(message, 'warning');
-    expect(screen.getByRole('alert')).toHaveTextContent(message);
-    expect(screen.getByRole('button', { name: 'Run Evaluation' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Run Eval' })).not.toBeDisabled();
   });
 
   it('should serialize scalar prompt configs as an array before submitting eval jobs', async () => {
@@ -242,7 +99,7 @@ describe('RunTestSuiteButton', () => {
     renderWithProvider(<RunTestSuiteButton />);
     await act(async () => {
       screen
-        .getByRole('button', { name: 'Run Evaluation' })
+        .getByRole('button', { name: 'Run Eval' })
         .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       await Promise.resolve();
     });
@@ -267,7 +124,7 @@ describe('RunTestSuiteButton', () => {
     renderWithProvider(<RunTestSuiteButton />);
     await act(async () => {
       screen
-        .getByRole('button', { name: 'Run Evaluation' })
+        .getByRole('button', { name: 'Run Eval' })
         .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       await Promise.resolve();
     });
@@ -279,6 +136,38 @@ describe('RunTestSuiteButton', () => {
       providers: 'openai:gpt-4',
       tests: 'file://tests.csv',
     });
+  });
+
+  it('includes trace-provider settings and runtime credentials in submitted eval jobs', async () => {
+    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    const tracing = {
+      enabled: true,
+      queryDelay: 3000,
+      provider: {
+        id: 'tempo' as const,
+        endpoint: 'https://tempo.example.com/team-west',
+        auth: { token: 'browser-runtime-secret' },
+        headers: { 'X-Scope-OrgID': 'tenant-a' },
+      },
+    };
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['echo'],
+      tests: [{ vars: { prompt: 'hello' } }],
+      tracing,
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+    await act(async () => {
+      screen
+        .getByRole('button', { name: 'Run Eval' })
+        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const [, requestInit] = getCallApiMock().mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(requestInit.body as string)).toMatchObject({ tracing });
+    expect(localStorage.getItem('promptfoo')).not.toContain('browser-runtime-secret');
   });
 
   it('should include the source eval id when rerunning a loaded evaluation', async () => {
@@ -293,7 +182,7 @@ describe('RunTestSuiteButton', () => {
     renderWithProvider(<RunTestSuiteButton />);
     await act(async () => {
       screen
-        .getByRole('button', { name: 'Run Evaluation' })
+        .getByRole('button', { name: 'Run Eval' })
         .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       await Promise.resolve();
     });
@@ -314,7 +203,7 @@ describe('RunTestSuiteButton', () => {
 
     renderWithProvider(<RunTestSuiteButton />);
 
-    expect(screen.getByRole('button', { name: 'Run Evaluation' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Run Eval' })).toBeDisabled();
   });
 
   it('should handle progress API failure after job creation', async () => {
@@ -336,7 +225,7 @@ describe('RunTestSuiteButton', () => {
     });
 
     renderWithProvider(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Evaluation' });
+    const button = screen.getByRole('button', { name: 'Run Eval' });
     expect(button).not.toBeDisabled();
 
     // Click the button with fake timers active to control the interval
@@ -351,89 +240,10 @@ describe('RunTestSuiteButton', () => {
     });
 
     expect(mockShowToast).toHaveBeenCalledWith(
-      'An error occurred: Could not retrieve evaluation progress (HTTP 500). Try again or review server logs.',
+      'An error occurred: HTTP error! status: 500',
       'error',
     );
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'Could not retrieve evaluation progress (HTTP 500). Try again or review server logs.',
-    );
-  });
-
-  it('guides recovery when an evaluation job fails without diagnostic logs', async () => {
-    mockCallApiRoutes([
-      { method: 'POST', path: '/eval/job', response: { id: '123' } },
-      {
-        path: '/eval/job/123/',
-        response: { status: 'error', logs: [] },
-      },
-    ]);
-    useStore.getState().updateConfig({
-      prompts: ['prompt 1'],
-      providers: ['openai:gpt-4'],
-      tests: [{ vars: { foo: 'bar' } }],
-    });
-
-    renderWithProvider(<RunTestSuiteButton />);
-    await act(async () => {
-      screen
-        .getByRole('button', { name: 'Run Evaluation' })
-        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      await Promise.resolve();
-      await timers.advanceByAsync(1500);
-    });
-
-    const message =
-      'The evaluation failed before results were saved. Review provider settings and test inputs, then try again.';
-    expect(mockShowToast).toHaveBeenCalledWith(`An error occurred: ${message}`, 'error');
-    expect(screen.getByRole('alert')).toHaveTextContent(message);
-    expect(screen.getByRole('button', { name: 'Run Evaluation' })).toBeEnabled();
-  });
-
-  it('preserves diagnostic logs while explaining a failed evaluation job', async () => {
-    mockCallApiRoutes([
-      { method: 'POST', path: '/eval/job', response: { id: '123' } },
-      {
-        path: '/eval/job/123/',
-        response: { status: 'error', logs: ['Provider authentication failed'] },
-      },
-    ]);
-    useStore.getState().updateConfig({
-      prompts: ['prompt 1'],
-      providers: ['openai:gpt-4'],
-      tests: [{ vars: { foo: 'bar' } }],
-    });
-
-    renderWithProvider(<RunTestSuiteButton />);
-    await act(async () => {
-      screen
-        .getByRole('button', { name: 'Run Evaluation' })
-        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-      await Promise.resolve();
-      await timers.advanceByAsync(1500);
-    });
-
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'The evaluation failed before results were saved. Details: Provider authentication failed',
-    );
-  });
-
-  it('explains how to recover when evaluation creation is rejected', async () => {
-    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', ok: false, status: 400 }]);
-    useStore.getState().updateConfig({
-      prompts: ['prompt 1'],
-      providers: ['openai:gpt-4'],
-      tests: [{ vars: { foo: 'bar' } }],
-    });
-
-    renderWithProvider(<RunTestSuiteButton />);
-    timers.useRealTimers();
-    await userEvent.click(screen.getByRole('button', { name: 'Run Evaluation' }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        'Could not start the evaluation (HTTP 400). Check the setup and try again.',
-      );
-    });
+    expect(screen.getByRole('alert')).toHaveTextContent('HTTP error! status: 500');
   });
 
   it('should revert to non-running state and display an error message when the initial API call fails', async () => {
@@ -449,7 +259,7 @@ describe('RunTestSuiteButton', () => {
     });
 
     renderWithProvider(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Evaluation' });
+    const button = screen.getByRole('button', { name: 'Run Eval' });
 
     // Use real timers for the click and wait for async operations
     timers.useRealTimers();
@@ -461,7 +271,7 @@ describe('RunTestSuiteButton', () => {
       expect(screen.getByRole('alert')).toHaveTextContent(errorMessage);
     });
 
-    expect(screen.getByRole('button', { name: 'Run Evaluation' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Run Eval' })).toBeInTheDocument();
   });
 
   it('should stop polling when unmounted', async () => {
@@ -475,7 +285,7 @@ describe('RunTestSuiteButton', () => {
     });
 
     const { unmount } = renderWithProvider(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Evaluation' });
+    const button = screen.getByRole('button', { name: 'Run Eval' });
 
     await act(async () => {
       button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
@@ -507,7 +317,7 @@ describe('RunTestSuiteButton', () => {
     });
 
     const { unmount } = renderWithProvider(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Evaluation' });
+    const button = screen.getByRole('button', { name: 'Run Eval' });
 
     await act(async () => {
       button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));

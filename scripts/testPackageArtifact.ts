@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import { createServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { brotliCompressSync, gzipSync } from 'node:zlib';
 
+import { API } from 'typescript/unstable/sync';
 import { shouldCopyDrizzlePath } from './postbuild';
 
 type PackFile = {
@@ -17,6 +20,19 @@ type PackResult = {
   filename: string;
   name: string;
   version: string;
+};
+
+type ArtifactEvalOutput = {
+  results?: {
+    results?: Array<{
+      error?: string;
+      response?: {
+        error?: string;
+        output?: unknown;
+      };
+      success?: boolean;
+    }>;
+  };
 };
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -99,6 +115,47 @@ function run(
     }
     throw error;
   }
+}
+
+async function runAsync(
+  command: string,
+  args: string[],
+  cwd: string,
+  envOverrides: NodeJS.ProcessEnv = {},
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      command,
+      args,
+      {
+        cwd,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          npm_config_audit: 'false',
+          npm_config_fund: 'false',
+          ...envOverrides,
+        },
+        maxBuffer: 128 * 1024 * 1024,
+        timeout: 60_000,
+      },
+      (error, stdout, stderr) => {
+        if (!error) {
+          resolve(stdout);
+          return;
+        }
+
+        const details = [error.message];
+        if (stdout.length > 0) {
+          details.push(`stdout:\n${stdout}`);
+        }
+        if (stderr.length > 0 && !error.message.includes(stderr)) {
+          details.push(`stderr:\n${stderr}`);
+        }
+        reject(new Error(details.join('\n'), { cause: error }));
+      },
+    );
+  });
 }
 
 function runNpm(args: string[], cwd: string, envOverrides: NodeJS.ProcessEnv = {}): string {
@@ -254,18 +311,137 @@ function runInstalledBinVersion(consumerDir: string, configDir: string, binName:
   return run(binPath, ['--version'], consumerDir, envOverrides);
 }
 
+function assertProviderTypeDocumentation(installedPackageDir: string): void {
+  const api = new API();
+  try {
+    for (const declaration of ['contracts.d.ts', 'contracts.d.cts']) {
+      const declarationPath = path.join(installedPackageDir, 'dist', 'src', declaration);
+      const snapshot = api.updateSnapshot({ openFiles: [declarationPath] });
+      const project = snapshot.getDefaultProjectForFile(declarationPath);
+      assert(project, `Missing declaration project: ${declaration}`);
+      const checker = project.checker;
+      const source = project.program.getSourceFile(declarationPath);
+      assert(source, `Missing declaration source: ${declaration}`);
+      const moduleSymbol = checker.getSymbolAtLocation(source);
+      assert(moduleSymbol, `Missing declaration module: ${declaration}`);
+      const exports = checker.getExportsOfModule(moduleSymbol);
+
+      for (const name of [
+        'McpConfigInput',
+        'McpConfig',
+        'McpConfigParsed',
+        'HttpProviderConfigInput',
+      ]) {
+        const symbol = exports.find((entry) => entry.name === name);
+        assert(symbol, `Missing ${name} in ${declaration}`);
+        const configType = checker.getDeclaredTypeOfSymbol(symbol);
+        const properties =
+          name === 'HttpProviderConfigInput'
+            ? ['tools', 'tool_choice', 'transformToolsFormat', 'session']
+            : ['timeout', 'resetTimeoutOnProgress', 'maxTotalTimeout', 'pingOnConnect'];
+        for (const property of properties) {
+          const member = checker.getPropertyOfType(configType, property);
+          assert(member, `Missing ${name}.${property} in ${declaration}`);
+          const documentation = checker.getDocumentationCommentOfSymbol(member);
+          assert(
+            documentation.length > 0,
+            `Missing JSDoc for ${name}.${property} in ${declaration}`,
+          );
+          if (property === 'timeout') {
+            assert.match(documentation, /60000 \(60 seconds\)/);
+            assert.match(documentation, /MCP_REQUEST_TIMEOUT_MS/);
+          }
+        }
+        const responseParser = checker.getPropertyOfType(configType, 'responseParser');
+        assert(responseParser, `Missing ${name}.responseParser in ${declaration}`);
+        const deprecated = checker.getJsDocTagsOfSymbol(responseParser);
+        assert(
+          deprecated?.some(
+            (tag) => tag.name === 'deprecated' && tag.text?.includes('transformResponse'),
+          ),
+          `Missing responseParser deprecation in ${name} in ${declaration}`,
+        );
+      }
+      snapshot.dispose();
+    }
+  } finally {
+    api.close();
+  }
+}
+
 function writeConsumerScripts(consumerDir: string): void {
+  const authAssertions = [
+    "const httpInput = { method: 'GET', auth: { type: 'api_key', value: '{{ KEY }}', placement: 'header', keyName: 'X-Key' }, tls: {} };",
+    "if ('rejectUnauthorized' in HttpProviderConfigInputSchema.parse(httpInput).tls) {",
+    "  throw new Error('HTTP authoring schema inserted runtime defaults');",
+    '}',
+    "for (const invalid of [{method: 'POST'}, {body: {}, signatureAuth: {type: 'pem'}}, {method: 'GET', typo: true}]) {",
+    '  if (HttpProviderConfigInputSchema.safeParse(invalid).success) {',
+    "    throw new Error('HTTP authoring schema accepted invalid input');",
+    '  }',
+    '}',
+    "if (HttpAuthInputSchema.safeParse({ type: 'api_key', value: 'key' }).success) {",
+    "  throw new Error('HTTP auth lost its placement/name requirements');",
+    '}',
+    "if (HttpProviderConfigInputJsonSchema.$schema !== 'http://json-schema.org/draft-07/schema#') {",
+    "  throw new Error('Missing HTTP config JSON Schema export');",
+    '}',
+    "const extensionConfig = { server: { command: 'node', extension: true }, extension: true };",
+    'if (McpConfigInputSchema.safeParse(extensionConfig).success) {',
+    "  throw new Error('MCP authoring config accepted extension fields');",
+    '}',
+    'const compatibleConfig = McpConfigSchema.parse(extensionConfig);',
+    'if (compatibleConfig.extension !== true || compatibleConfig.server.extension !== true) {',
+    "  throw new Error('MCP runtime config lost extension fields');",
+    '}',
+    "if (McpAuthInputSchema.safeParse({ type: 'bearer', token: 'key', typo: true }).success) {",
+    "  throw new Error('MCP authoring auth accepted an unknown field');",
+    '}',
+    "const mcpInput = { servers: [{ url: 'https://mcp.example.test', auth: { type: 'api_key', api_key: 'key' } }] };",
+    "if ('enabled' in McpConfigInputSchema.parse(mcpInput)) {",
+    "  throw new Error('MCP config input parsing inserted defaults');",
+    '}',
+    'if (McpConfigSchema.parse(mcpInput).enabled !== true) {',
+    "  throw new Error('MCP config runtime default is missing');",
+    '}',
+    "if (McpConfigInputSchema.safeParse({ server: { url: 'https://mcp.example.test', auth: { type: 'api_key' } } }).success) {",
+    "  throw new Error('MCP config accepted invalid nested auth');",
+    '}',
+    "if (McpConfigInputJsonSchema.$schema !== 'http://json-schema.org/draft-07/schema#') {",
+    "  throw new Error('Missing MCP config JSON Schema export');",
+    '}',
+    "const authInput = { type: 'oauth', clientId: 'client', clientSecret: 'secret' };",
+    "if ('grantType' in McpAuthInputSchema.parse(authInput)) {",
+    "  throw new Error('MCP auth input parsing inserted a runtime default');",
+    '}',
+    "if (McpAuthSchema.parse(authInput)?.grantType !== 'client_credentials') {",
+    "  throw new Error('MCP runtime auth parsing lost its default');",
+    '}',
+    "if (McpAuthInputSchema.safeParse({ type: 'api_key' }).success) {",
+    "  throw new Error('MCP API-key auth accepted missing credentials');",
+    '}',
+    "if (McpAuthInputJsonSchema.$schema !== 'http://json-schema.org/draft-07/schema#') {",
+    "  throw new Error('Missing MCP auth JSON Schema export');",
+    '}',
+  ];
   fs.writeFileSync(
     path.join(consumerDir, 'import-package.mjs'),
     [
       "import { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } from 'promptfoo';",
-      "import { InputsSchema, PromptSchema } from 'promptfoo/contracts';",
+      "import { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } from 'promptfoo/contracts';",
+      "import { McpAuthInputJsonSchema, McpAuthInputSchema, McpAuthSchema } from 'promptfoo/contracts';",
+      "import { McpConfigInputJsonSchema, McpConfigInputSchema, McpConfigSchema } from 'promptfoo/contracts';",
+      "import { HttpAuthInputSchema, HttpProviderConfigInputSchema, HttpProviderConfigInputJsonSchema } from 'promptfoo/contracts';",
       '',
-      'for (const value of [AssertionSchema, AtomicTestCaseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
+      'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
       "  if (!value || typeof value.safeParse !== 'function') {",
       "    throw new Error('Missing expected ESM schema export');",
       '  }',
       '}',
+      'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
+      "  throw new Error('Missing expected ESM provider capability export');",
+      '}',
+      ...authAssertions,
       '',
     ].join('\n'),
   );
@@ -273,27 +449,56 @@ function writeConsumerScripts(consumerDir: string): void {
     path.join(consumerDir, 'require-package.cjs'),
     [
       "const { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } = require('promptfoo');",
-      "const { InputsSchema, PromptSchema } = require('promptfoo/contracts');",
+      "const { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } = require('promptfoo/contracts');",
+      "const { McpAuthInputJsonSchema, McpAuthInputSchema, McpAuthSchema } = require('promptfoo/contracts');",
+      "const { McpConfigInputJsonSchema, McpConfigInputSchema, McpConfigSchema } = require('promptfoo/contracts');",
+      "const { HttpAuthInputSchema, HttpProviderConfigInputSchema, HttpProviderConfigInputJsonSchema } = require('promptfoo/contracts');",
       '',
-      'for (const value of [AssertionSchema, AtomicTestCaseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
+      'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
       "  if (!value || typeof value.safeParse !== 'function') {",
       "    throw new Error('Missing expected CJS schema export');",
       '  }',
       '}',
+      'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
+      "  throw new Error('Missing expected CJS provider capability export');",
+      '}',
+      ...authAssertions,
       '',
     ].join('\n'),
   );
   fs.writeFileSync(
     path.join(consumerDir, 'import-contracts.ts'),
     [
-      "import { PromptSchema, isTransformFunction } from 'promptfoo/contracts';",
-      "import type { Prompt, TransformFunction } from 'promptfoo/contracts';",
+      "import { GetUserResponseSchema, PromptSchema, hasFunctionToolCallValidator, isTransformFunction } from 'promptfoo/contracts';",
+      "import type { BlobRef, FunctionToolCallValidator, GetUserResponse, Prompt, ProviderResponse, TransformFunction } from 'promptfoo/contracts';",
+      "import { McpAuthInputSchema, McpAuthSchema } from 'promptfoo/contracts';",
+      "import type { McpAuthInput, McpAuthParsed } from 'promptfoo/contracts';",
+      "import { McpConfigSchema, type McpConfigInput, type McpConfigParsed } from 'promptfoo/contracts';",
+      "import { HttpProviderConfigInputSchema, type HttpProviderConfigInput } from 'promptfoo/contracts';",
       '',
       "const prompt: Prompt = { label: 'Greeting', raw: 'Hello, world!' };",
       'const transform: TransformFunction<string, string> = (output) => output;',
+      "const user: GetUserResponse = { email: 'user@example.com' };",
+      'const validator: FunctionToolCallValidator = { validateFunctionToolCall() {} };',
+      "const blobRef: BlobRef = { hash: 'abc123', mimeType: 'image/png', provider: 'filesystem', sizeBytes: 3, uri: 'promptfoo://blob/abc123' };",
+      "const response: ProviderResponse = { images: [{ blobRef }], output: 'ok' };",
+      "const authInput: McpAuthInput = { type: 'oauth', clientId: 'client', clientSecret: 'secret', scopes: 'read write' };",
+      'const auth: McpAuthParsed = McpAuthSchema.parse(McpAuthInputSchema.parse(authInput));',
+      "const mcpInput: McpConfigInput = { servers: [{ url: 'https://mcp.example.test', auth: authInput }] };",
+      'const mcp: McpConfigParsed = McpConfigSchema.parse(mcpInput);',
+      'const enabled: boolean = mcp.enabled;',
+      'void enabled;',
+      "const httpInput: HttpProviderConfigInput = { body: { prompt: '{{ prompt }}' }, auth: { type: 'bearer', token: 'key' } };",
+      'HttpProviderConfigInputSchema.parse(httpInput);',
+      "if (auth?.type === 'oauth') {",
+      "  const grant: 'client_credentials' | 'password' = auth.grantType;",
+      '  void grant;',
+      '}',
       '',
+      'GetUserResponseSchema.parse(user);',
       'PromptSchema.parse(prompt);',
-      'if (!isTransformFunction(transform)) {',
+      'void response;',
+      'if (!isTransformFunction(transform) || !hasFunctionToolCallValidator(validator)) {',
       "  throw new Error('Missing expected TypeScript contracts export');",
       '}',
       '',
@@ -312,25 +517,33 @@ function writeConsumerScripts(consumerDir: string): void {
     }),
   );
   fs.writeFileSync(
-    path.join(consumerDir, 'tsconfig.legacy.json'),
-    JSON.stringify({
-      compilerOptions: {
-        ignoreDeprecations: '6.0',
-        module: 'CommonJS',
-        moduleResolution: 'node',
-        noEmit: true,
-        strict: true,
-      },
-      include: ['import-contracts.ts'],
-    }),
-  );
-  fs.writeFileSync(
     path.join(consumerDir, 'require-contracts.cts'),
     [
       "import contracts = require('promptfoo/contracts');",
       '',
       "const prompt: contracts.Prompt = { label: 'Greeting', raw: 'Hello, world!' };",
+      "const user: contracts.GetUserResponse = { email: 'user@example.com' };",
+      'const validator: contracts.FunctionToolCallValidator = { validateFunctionToolCall() {} };',
+      "const blobRef: contracts.BlobRef = { hash: 'abc123', mimeType: 'image/png', provider: 'filesystem', sizeBytes: 3, uri: 'promptfoo://blob/abc123' };",
+      "const response: contracts.ProviderResponse = { images: [{ blobRef }], output: 'ok' };",
+      "const authInput: contracts.McpAuthInput = { type: 'oauth', clientId: 'client', clientSecret: 'secret', scopes: 'read write' };",
+      'const auth: contracts.McpAuthParsed = contracts.McpAuthSchema.parse(contracts.McpAuthInputSchema.parse(authInput));',
+      "const mcpInput: contracts.McpConfigInput = { servers: [{ url: 'https://mcp.example.test', auth: authInput }] };",
+      'const mcp: contracts.McpConfigParsed = contracts.McpConfigSchema.parse(mcpInput);',
+      'const enabled: boolean = mcp.enabled;',
+      'void enabled;',
+      "const httpInput: contracts.HttpProviderConfigInput = { body: { prompt: '{{ prompt }}' }, auth: { type: 'bearer', token: 'key' } };",
+      'contracts.HttpProviderConfigInputSchema.parse(httpInput);',
+      "if (auth?.type === 'oauth') {",
+      "  const grant: 'client_credentials' | 'password' = auth.grantType;",
+      '  void grant;',
+      '}',
+      'contracts.GetUserResponseSchema.parse(user);',
       'contracts.PromptSchema.parse(prompt);',
+      'void response;',
+      'if (!contracts.hasFunctionToolCallValidator(validator)) {',
+      "  throw new Error('Missing expected CommonJS TypeScript contracts export');",
+      '}',
       '',
     ].join('\n'),
   );
@@ -348,7 +561,143 @@ function writeConsumerScripts(consumerDir: string): void {
   );
 }
 
-function main(): void {
+async function runInstalledCompressionEval(consumerDir: string, configDir: string): Promise<void> {
+  const expectedOutput = 'compressed response';
+  const requestedPaths: string[] = [];
+  const server = createServer((request, response) => {
+    const requestPath = request.url;
+    if (requestPath !== '/gzip' && requestPath !== '/br') {
+      response.writeHead(404).end();
+      return;
+    }
+
+    const encoding = requestPath === '/gzip' ? 'gzip' : 'br';
+    requestedPaths.push(requestPath);
+    const rawBody = Buffer.from(JSON.stringify({ output: expectedOutput }));
+    const body = encoding === 'gzip' ? gzipSync(rawBody) : brotliCompressSync(rawBody);
+    response.writeHead(200, {
+      'content-encoding': encoding,
+      'content-length': String(body.length),
+      'content-type': 'application/json',
+    });
+    response.end(body);
+  });
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => {
+        server.off('error', reject);
+        resolve();
+      });
+    });
+
+    const address = server.address();
+    assert(address && typeof address !== 'string', 'Failed to bind compressed response server');
+
+    const configPath = path.join(consumerDir, 'promptfooconfig.json');
+    const outputPath = path.join(consumerDir, 'compression-results.json');
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify(
+        {
+          prompts: ['compression artifact test'],
+          providers: ['gzip', 'br'].map((encoding) => ({
+            id: `${baseUrl}/${encoding}`,
+            config: {
+              maxRetries: 0,
+              method: 'GET',
+              transformResponse: 'json.output',
+            },
+          })),
+          tests: [
+            {
+              assert: [{ type: 'equals', value: expectedOutput }],
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+    );
+
+    const entrypointPath = path.join(
+      consumerDir,
+      'node_modules',
+      'promptfoo',
+      'dist',
+      'src',
+      'entrypoint.js',
+    );
+    assert(
+      fs.existsSync(entrypointPath),
+      `Missing installed promptfoo entrypoint: ${entrypointPath}`,
+    );
+
+    await runAsync(
+      process.execPath,
+      [
+        entrypointPath,
+        'eval',
+        '--config',
+        configPath,
+        '--output',
+        outputPath,
+        '--no-cache',
+        '--no-write',
+        '--no-table',
+        '--no-progress-bar',
+        '--max-concurrency',
+        '1',
+      ],
+      consumerDir,
+      {
+        ALL_PROXY: '',
+        HTTP_PROXY: '',
+        HTTPS_PROXY: '',
+        NO_PROXY: '127.0.0.1,localhost',
+        PROMPTFOO_CONFIG_DIR: configDir,
+        PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+        PROMPTFOO_DISABLE_TELEMETRY: '1',
+        PROMPTFOO_DISABLE_UPDATE: 'true',
+        all_proxy: '',
+        http_proxy: '',
+        https_proxy: '',
+        no_proxy: '127.0.0.1,localhost',
+      },
+    );
+
+    assert(fs.existsSync(outputPath), `Installed promptfoo did not write results: ${outputPath}`);
+    const evalOutput = JSON.parse(fs.readFileSync(outputPath, 'utf8')) as ArtifactEvalOutput;
+    const results = evalOutput.results?.results;
+    assert(Array.isArray(results), 'Installed promptfoo output is missing evaluation results');
+    assert.equal(results.length, 2, 'Expected one result for each compressed provider');
+    for (const result of results) {
+      assert.equal(result.success, true, `Compressed provider failed: ${JSON.stringify(result)}`);
+      assert.equal(
+        result.error,
+        undefined,
+        `Compressed provider errored: ${JSON.stringify(result)}`,
+      );
+      assert.equal(
+        result.response?.error,
+        undefined,
+        `Compressed provider response errored: ${JSON.stringify(result)}`,
+      );
+      assert.equal(result.response?.output, expectedOutput);
+    }
+    assert.deepEqual(requestedPaths.sort(), ['/br', '/gzip']);
+  } finally {
+    if (server.listening) {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  }
+}
+
+async function main(): Promise<void> {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-'));
   const artifactsDir = path.join(tempDir, 'artifacts');
   const configDir = path.join(tempDir, 'config');
@@ -415,12 +764,13 @@ function main(): void {
     };
     assert.equal(installedPackageJson.version, packResult.version);
     assertExportsResolve(installedPackageDir, installedPackageJson);
+    assertProviderTypeDocumentation(installedPackageDir);
 
     writeConsumerScripts(consumerDir);
     run(process.execPath, ['import-package.mjs'], consumerDir);
     run(process.execPath, ['require-package.cjs'], consumerDir);
     const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
-    for (const tsconfig of ['tsconfig.json', 'tsconfig.legacy.json', 'tsconfig.node16-cjs.json']) {
+    for (const tsconfig of ['tsconfig.json', 'tsconfig.node16-cjs.json']) {
       run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
     }
     assertInstalledWebApp(installedPackageDir);
@@ -431,6 +781,7 @@ function main(): void {
         packResult.version,
       );
     }
+    await runInstalledCompressionEval(consumerDir, configDir);
 
     console.log(`Verified installed package artifact: ${packResult.filename}`);
   } finally {
@@ -438,4 +789,7 @@ function main(): void {
   }
 }
 
-main();
+main().catch((error: unknown) => {
+  console.error(error);
+  process.exitCode = 1;
+});

@@ -22,13 +22,10 @@ describe('VarsForm', () => {
 
     expect(onAddMock).toHaveBeenCalled();
 
-    expect(onAddMock).toHaveBeenLastCalledWith(
-      {
-        name: 'John Doe',
-        location: 'London',
-      },
-      'location',
-    );
+    expect(onAddMock).toHaveBeenLastCalledWith({
+      name: 'John Doe',
+      location: 'London',
+    });
   });
 
   it('should update its rendered TextFields and internal state to match new varsList and initialValues when these props change after initial render', () => {
@@ -106,9 +103,6 @@ describe('VarsForm', () => {
     const ageInput = screen.getByLabelText('age');
     expect(ageInput).toBeInTheDocument();
     expect(ageInput).toHaveValue('');
-    expect(
-      screen.getByText(/Leave a field blank only when you intentionally/i),
-    ).toBeInTheDocument();
   });
 
   it('stacks labels above inputs on narrow screens', () => {

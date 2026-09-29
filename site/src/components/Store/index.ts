@@ -17,8 +17,6 @@ export {
   isInStock,
   stripHtml,
   useCart,
-  useCollections,
-  useProduct,
   useProducts,
 } from './useFourthwall';
 
@@ -28,10 +26,8 @@ export type {
   FourthwallCart,
   FourthwallCartItem,
   FourthwallCartVariant,
-  FourthwallCollection,
   FourthwallImage,
   FourthwallMoney,
   FourthwallProduct,
   FourthwallVariant,
-  PaginatedResponse,
 } from './types';

@@ -4,28 +4,21 @@ import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert'
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
 import { CopyButton } from '@app/components/ui/copy-button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@app/components/ui/dialog';
 import { CancelIcon, DownloadIcon, SaveIcon, TerminalIcon } from '@app/components/ui/icons';
 import { useToast } from '@app/hooks/useToast';
 import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
-import yaml from 'js-yaml';
-import { INVALID_FULL_CONFIG_YAML_MESSAGE, isFullYamlConfig } from './yamlConfigValidation';
+import { loadYaml } from '@promptfoo/util/yamlLoad';
+import * as yaml from 'js-yaml';
+import { validateYamlConfigDraft } from './yamlConfigValidation';
 import 'prismjs/themes/prism.css';
 
 interface YamlEditorProps {
   initialConfig?: unknown;
   readOnly?: boolean;
   initialYaml?: string;
-  onDirtyChange?: (hasUnsavedChanges: boolean) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 // Schema comment that should always be at the top of the YAML file
@@ -33,22 +26,6 @@ const YAML_SCHEMA_COMMENT =
   '# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json';
 const YAML_DOWNLOAD_FILE_NAME = 'promptfooconfig.yaml';
 const EVAL_CLI_COMMAND = `promptfoo eval -c ${YAML_DOWNLOAD_FILE_NAME}`;
-
-// Fields surfaced by useStore.getTestSuite(); when the user removes one from the
-// YAML these get explicitly cleared on save, so the editor behaves WYSIWYG for
-// the fields it actually shows.
-const EDITOR_VISIBLE_FIELDS = [
-  'description',
-  'env',
-  'extensions',
-  'prompts',
-  'providers',
-  'scenarios',
-  'tests',
-  'evaluateOptions',
-  'defaultTest',
-  'derivedMetrics',
-] as const;
 
 // Ensure the schema comment is at the top of YAML content
 const ensureSchemaComment = (yamlContent: string): string => {
@@ -72,8 +49,7 @@ const YamlEditorComponent = ({
   const [code, setCode] = React.useState('');
   const [originalCode, setOriginalCode] = React.useState('');
   const [parseError, setParseError] = React.useState<string | null>(null);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false);
-  const [discardDialogOpen, setDiscardDialogOpen] = React.useState(false);
+  const hasUnsavedChanges = code !== originalCode;
   const textareaId = React.useId();
   const editorContainerRef = React.useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
@@ -84,26 +60,17 @@ const YamlEditorComponent = ({
     try {
       // Remove the schema comment for parsing if it exists
       const contentForParsing = yamlContent.replace(YAML_SCHEMA_COMMENT, '').trim();
-      const parsedConfig = yaml.load(contentForParsing) as Record<string, unknown>;
+      const validation = validateYamlConfigDraft(loadYaml(contentForParsing));
 
-      if (isFullYamlConfig(parsedConfig)) {
-        // Editor-visible fields (everything getTestSuite() surfaces) follow what the
-        // user wrote: missing from the YAML means deleted. Everything else (redteam,
-        // sharing, outputPath, …) is preserved because the YAML never surfaced it.
-        const next: Record<string, unknown> = { ...parsedConfig };
-        for (const key of EDITOR_VISIBLE_FIELDS) {
-          if (!(key in parsedConfig)) {
-            next[key] = undefined;
-          }
-        }
-        updateConfig(next);
+      if (validation.success) {
+        updateConfig(validation.config);
 
         setParseError(null);
         showToast('Configuration saved successfully', 'success');
         return true;
       } else {
-        setParseError(INVALID_FULL_CONFIG_YAML_MESSAGE);
-        showToast(INVALID_FULL_CONFIG_YAML_MESSAGE, 'error');
+        setParseError(validation.error);
+        showToast(validation.error, 'error');
         return false;
       }
     } catch (err) {
@@ -119,15 +86,12 @@ const YamlEditorComponent = ({
     const success = parseAndUpdateStore(code);
     if (success) {
       setOriginalCode(code);
-      setHasUnsavedChanges(false);
     }
   };
 
-  const handleConfirmDiscard = () => {
+  const handleCancel = () => {
     setCode(originalCode);
-    setHasUnsavedChanges(false);
     setParseError(null);
-    setDiscardDialogOpen(false);
     showToast('Changes discarded', 'info');
   };
 
@@ -178,10 +142,8 @@ const YamlEditorComponent = ({
 
   // Track unsaved changes
   React.useEffect(() => {
-    const isDirty = code !== originalCode;
-    setHasUnsavedChanges(isDirty);
-    onDirtyChange?.(isDirty);
-  }, [code, onDirtyChange, originalCode]);
+    onDirtyChange?.(hasUnsavedChanges);
+  }, [hasUnsavedChanges, onDirtyChange]);
 
   React.useEffect(() => {
     // react-simple-code-editor does not expose arbitrary textarea props directly.
@@ -210,7 +172,7 @@ const YamlEditorComponent = ({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setDiscardDialogOpen(true)}
+              onClick={handleCancel}
               disabled={!hasUnsavedChanges}
             >
               <CancelIcon className="size-4 mr-2" />
@@ -222,12 +184,7 @@ const YamlEditorComponent = ({
             </Button>
           </div>
           {hasUnsavedChanges && (
-            <span
-              role="status"
-              aria-live="polite"
-              aria-atomic="true"
-              className="text-sm text-amber-600 dark:text-amber-400 font-medium"
-            >
+            <span className="text-sm text-amber-600 dark:text-amber-400 font-medium">
               ● Unsaved changes
             </span>
           )}
@@ -235,7 +192,7 @@ const YamlEditorComponent = ({
       )}
 
       {!readOnly && (
-        <Alert variant="info" role="note" className="items-start">
+        <Alert variant="info" className="items-start">
           <TerminalIcon className="size-4 mt-0.5" />
           <AlertContent className="space-y-2">
             <p className="font-medium text-sm">Run in CLI</p>
@@ -252,10 +209,6 @@ const YamlEditorComponent = ({
                 aria-label="Copy CLI command"
               />
             </div>
-            <p className="text-xs text-muted-foreground">
-              The downloaded or copied YAML includes any credentials shown in this editor. Remove
-              secret values before sharing the file.
-            </p>
           </AlertContent>
         </Alert>
       )}
@@ -321,25 +274,6 @@ const YamlEditorComponent = ({
           <CopyButton value={code} aria-label="Copy YAML configuration" />
         </div>
       </div>
-
-      <Dialog open={discardDialogOpen} onOpenChange={setDiscardDialogOpen}>
-        <DialogContent hideDescription={false}>
-          <DialogHeader>
-            <DialogTitle>Discard unsaved YAML changes?</DialogTitle>
-            <DialogDescription>
-              Your edits since the last save will be lost. This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDiscardDialogOpen(false)}>
-              Continue editing
-            </Button>
-            <Button variant="destructive" onClick={handleConfirmDiscard}>
-              Discard changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
