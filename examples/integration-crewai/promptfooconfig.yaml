@@ -8,7 +8,7 @@ providers:
   - id: 'file://./agent.py'
     label: 'CrewAI Recruitment Agent'
     config:
-      model: 'openai:gpt-4.1'
+      model: 'openai/gpt-4.1'
 
 # It's a good practice to have a defaultTest that applies to all test cases.
 defaultTest:

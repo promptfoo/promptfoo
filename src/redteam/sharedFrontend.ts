@@ -43,11 +43,9 @@ export function getUnifiedConfig(
   delete target.config.sessionSource;
   delete target.config.stateful;
 
-  // Strip UI-only TLS fields that are used for tracking input state in the
-  // setup UI but should never appear in exported YAML configs.
+  // Keep certificate data while removing the setup form's input state.
   if (target.config.tls) {
     const tls = { ...target.config.tls };
-    // Legacy field from pre-restructure configs that removed the master toggle
     delete tls.enabled;
     delete tls.certInputType;
     delete tls.keyInputType;
@@ -58,9 +56,8 @@ export function getUnifiedConfig(
     delete tls.jksExtractConfigured;
     delete tls.certificateType;
 
-    // Remove tls object entirely if empty or only has default rejectUnauthorized
     const keys = Object.keys(tls).filter((k) => tls[k] !== undefined);
-    if (keys.length === 0 || (keys.length === 1 && tls.rejectUnauthorized === true)) {
+    if (keys.length === 0) {
       delete target.config.tls;
     } else {
       target.config.tls = tls;
@@ -106,7 +103,7 @@ export function getUnifiedConfig(
       }),
       strategies: config.strategies.map((strategy) => {
         if (typeof strategy === 'string') {
-          if (MULTI_TURN_STRATEGIES.includes(strategy as any) && config.target.config.stateful) {
+          if (MULTI_TURN_STRATEGIES.includes(strategy as any) && config.target.config?.stateful) {
             return { id: strategy, config: { stateful: true } };
           }
           return { id: strategy };
@@ -114,7 +111,7 @@ export function getUnifiedConfig(
 
         // Determine if this is a stateful multi-turn strategy
         const isStatefulMultiTurn =
-          MULTI_TURN_STRATEGIES.includes(strategy.id as any) && config.target.config.stateful;
+          MULTI_TURN_STRATEGIES.includes(strategy.id as any) && config.target.config?.stateful;
 
         // Check if we have any custom configuration
         const hasCustomConfig = strategy.config && Object.keys(strategy.config).length > 0;

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
@@ -108,8 +108,13 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
   const pfxInputType =
     tls?.pfxInputType ?? (tls?.pfxPath ? 'path' : tls?.pfx ? 'base64' : undefined);
 
-  // Determine if sections should auto-open based on existing config.
-  // Only use actual data fields — not UI-only fields like caInputType.
+  useEffect(() => {
+    // Export the same verification setting that the form displays.
+    if (tls?.rejectUnauthorized === undefined) {
+      updateCustomTarget('tls', { ...tls, rejectUnauthorized: true });
+    }
+  }, [tls, updateCustomTarget]);
+
   const hasCA = !!(tls?.ca || tls?.caPath);
   const hasClientCert = !!certificateType;
   const hasAdvanced = !!(
@@ -120,21 +125,13 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
     tls?.secureProtocol
   );
 
-  // Track the target identity so we can re-sync section open/closed state
-  // when the user switches between targets (without fighting manual toggles).
-  const targetKey = useMemo(
-    () => selectedTarget.id ?? selectedTarget.label ?? '',
-    [selectedTarget.id, selectedTarget.label],
-  );
+  const targetKey = selectedTarget.id ?? selectedTarget.label ?? '';
   const prevTargetKey = useRef(targetKey);
 
   const [caOpen, setCaOpen] = useState(hasCA);
   const [clientCertOpen, setClientCertOpen] = useState(hasClientCert);
   const [advancedOpen, setAdvancedOpen] = useState(hasAdvanced);
 
-  // Re-sync section state when switching targets, and auto-open sections when
-  // real TLS data is applied to the current target without overriding manual
-  // toggles during ordinary edits.
   useEffect(() => {
     if (prevTargetKey.current !== targetKey) {
       prevTargetKey.current = targetKey;
@@ -158,8 +155,8 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
   return (
     <>
       <p className="mb-6">
-        Configure TLS certificates for secure HTTPS connections, including custom CA certificates,
-        and client certificates for mutual TLS using PEM, JKS, or PFX bundles. See{' '}
+        Set a custom CA certificate or a client certificate for mutual TLS. PEM, JKS and PFX formats
+        are supported. See{' '}
         <a
           href="https://www.promptfoo.dev/docs/providers/http/#tlshttps-configuration"
           target="_blank"
@@ -171,7 +168,6 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
         for more information.
       </p>
 
-      {/* Server Certificate Verification — always visible */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <Switch
@@ -187,7 +183,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
           <Label htmlFor="reject-unauthorized">Verify server certificate</Label>
         </div>
         <p className="text-sm text-muted-foreground">
-          Disable this to allow connections to servers with self-signed or untrusted certificates
+          For a private CA, keep verification enabled and add its certificate below.
         </p>
         {tls?.rejectUnauthorized === false && (
           <Alert variant="warning">
@@ -203,7 +199,6 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
       </div>
 
       <div className="mt-6 space-y-4">
-        {/* Custom CA Certificate */}
         <SetupSection
           title="Custom CA Certificate"
           description="Provide a custom CA certificate to verify the server's certificate"
@@ -318,7 +313,6 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
           </div>
         </SetupSection>
 
-        {/* Client Certificate — mTLS */}
         <SetupSection
           title="Client Certificate — mTLS"
           description="Configure client certificates for mutual TLS authentication"
@@ -326,7 +320,6 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
           onExpandedChange={setClientCertOpen}
         >
           <div className="mt-2 space-y-4">
-            {/* Certificate Type Selection */}
             <div className="space-y-2">
               <Label>Certificate Type</Label>
               <Select
@@ -348,13 +341,9 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                 type for mutual TLS
               </p>
             </div>
-
-            {/* PEM Certificate Configuration */}
             {certificateType === 'pem' && (
               <div className="space-y-4">
                 <h3 className="font-medium">PEM Certificate Configuration</h3>
-
-                {/* Client Certificate */}
                 <div className="rounded-lg border border-border p-4 space-y-4">
                   <h4 className="font-medium">Client Certificate</h4>
                   <div className="flex gap-2">
@@ -464,8 +453,6 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     />
                   )}
                 </div>
-
-                {/* Private Key */}
                 <div className="rounded-lg border border-border p-4 space-y-4">
                   <h4 className="font-medium">Private Key</h4>
                   <div className="flex gap-2">
@@ -581,8 +568,6 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     />
                   )}
                 </div>
-
-                {/* Private Key Password (Optional) */}
                 <div className="rounded-lg border border-border p-4 space-y-4">
                   <h4 className="font-medium">Private Key Password (Optional)</h4>
                   <SensitiveTextField
@@ -600,8 +585,6 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                 </div>
               </div>
             )}
-
-            {/* JKS Certificate Configuration */}
             {certificateType === 'jks' && (
               <div className="space-y-4">
                 <h3 className="font-medium">JKS (Java KeyStore) Certificate</h3>
@@ -810,8 +793,6 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                 </div>
               </div>
             )}
-
-            {/* PFX Certificate Configuration */}
             {certificateType === 'pfx' && (
               <div className="space-y-4">
                 <h3 className="font-medium">PFX/PKCS#12 Certificate Bundle</h3>
@@ -945,8 +926,6 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
             )}
           </div>
         </SetupSection>
-
-        {/* Advanced TLS Options */}
         <SetupSection
           title="Advanced TLS Options"
           isExpanded={advancedOpen}

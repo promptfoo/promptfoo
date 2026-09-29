@@ -301,6 +301,22 @@ describe('getUnifiedConfig', () => {
     expect(result.redteam.strategies).toEqual([{ id: 'goat' }]);
   });
 
+  it('should handle multi-turn strategies when an imported target has a null config', () => {
+    const configWithNullTarget: SavedRedteamConfig = {
+      ...baseConfig,
+      strategies: ['goat', { id: 'jailbreak:hydra' }],
+      target: {
+        ...baseConfig.target,
+        config: null as unknown as SavedRedteamConfig['target']['config'],
+      },
+    };
+
+    const result = getUnifiedConfig(configWithNullTarget);
+
+    expect(result.targets).toEqual([expect.objectContaining({ config: {} })]);
+    expect(result.redteam.strategies).toEqual([{ id: 'goat' }, { id: 'jailbreak:hydra' }]);
+  });
+
   it('should include frameworks when provided', () => {
     const configWithFrameworks: SavedRedteamConfig = {
       ...baseConfig,
@@ -446,7 +462,7 @@ describe('getUnifiedConfig', () => {
       expect(getFirstTargetConfig(result).tls).toBeUndefined();
     });
 
-    it('should remove tls object when only rejectUnauthorized: true remains', () => {
+    it('preserves explicit certificate verification without other TLS fields', () => {
       const configWithTls: SavedRedteamConfig = {
         ...baseConfig,
         target: {
@@ -464,7 +480,7 @@ describe('getUnifiedConfig', () => {
 
       const result = getUnifiedConfig(configWithTls);
 
-      expect(getFirstTargetConfig(result).tls).toBeUndefined();
+      expect(getFirstTargetConfig(result).tls).toEqual({ rejectUnauthorized: true });
     });
 
     it('should keep tls object when rejectUnauthorized is false', () => {

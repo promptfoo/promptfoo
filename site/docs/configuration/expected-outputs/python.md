@@ -97,6 +97,9 @@ class AssertionValueFunctionContext(TypedDict):
 
     # OpenTelemetry trace data (when tracing is enabled)
     trace: Optional[TraceData]
+
+    # Optional shortcut to providerResponse.metadata
+    metadata: Optional[Dict[str, Any]]
 ```
 
 For example, if the test case has a var `example`, access it in Python like this:
@@ -139,7 +142,7 @@ It expects that either a `bool` (pass/fail), `float` (score), or `GradingResult`
 Here's an example `assert.py`:
 
 ```py
-from typing import Dict, TypedDict, Union
+from typing import Any, Dict, TypedDict, Union
 
 # Default function name
 def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
@@ -161,7 +164,7 @@ def custom_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
 This is an example of an assertion that uses data from a configuration defined in the assertion's YML file:
 
 ```py
-from typing import Dict, Union
+from typing import Any, Dict, Union
 
 def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
     return len(output) <= context.get('config', {}).get('outputLengthLimit', 0)
@@ -174,6 +177,8 @@ You can also return nested metrics and assertions via a `GradingResult` object:
     'pass': True,
     'score': 0.75,
     'reason': 'Looks good to me',
+    'named_scores': {'quality': 0.75},
+    'named_score_weights': {'quality': 3},
     'componentResults': [{
         'pass': 'bananas' in output.lower(),
         'score': 0.5,
@@ -186,11 +191,16 @@ You can also return nested metrics and assertions via a `GradingResult` object:
 }
 ```
 
+The `quality` metric contributes `0.75 × 3 = 2.25` to its weighted total, with weight `3`, so it displays as 75%.
+
 ### GradingResult types
 
 Here's a Python type definition you can use for the [`GradingResult`](/docs/configuration/reference/#gradingresult) object:
 
 ```py
+from dataclasses import asdict, dataclass
+from typing import Dict, List, Optional
+
 @dataclass
 class GradingResult:
     pass_: bool  # 'pass' is a reserved keyword in Python
@@ -198,13 +208,17 @@ class GradingResult:
     reason: str
     component_results: Optional[List['GradingResult']] = None
     named_scores: Optional[Dict[str, float]] = None  # Appear as metrics in the UI
+    named_score_weights: Optional[Dict[str, float]] = None  # Total weight per named score
 ```
+
+Convert dataclass instances to dictionaries with `asdict(result)` before returning them from an assertion.
 
 :::tip Snake case support
 Python snake_case fields are automatically mapped to camelCase:
 
 - `pass_` → `pass` (or just use `"pass"` as a dictionary key)
 - `named_scores` → `namedScores`
+- `named_score_weights` → `namedScoreWeights`
 - `component_results` → `componentResults`
 - `tokens_used` → `tokensUsed`
   :::

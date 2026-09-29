@@ -71,6 +71,7 @@ describe('TlsHttpsConfigTab', () => {
 
       const verifySwitch = screen.getByRole('switch', { name: /Verify server certificate/i });
       expect(verifySwitch).toBeChecked();
+      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('tls', { rejectUnauthorized: true });
     });
 
     it('should set rejectUnauthorized: false when verification is toggled off', async () => {

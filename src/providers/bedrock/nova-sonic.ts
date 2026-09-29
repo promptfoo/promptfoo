@@ -1,14 +1,10 @@
 import { Buffer } from 'node:buffer';
+import { Readable } from 'node:stream';
 
-import { firstValueFrom, Subject } from 'rxjs';
-import { take } from 'rxjs/operators';
 import logger from '../../logger';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { AwsBedrockGenericProvider } from './base';
-import type {
-  BedrockRuntimeClient,
-  InvokeModelWithBidirectionalStreamInput,
-} from '@aws-sdk/client-bedrock-runtime';
+import type { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import type { BedrockAmazonNovaSonicGenerationOptions } from '.';
 
 import type {
@@ -74,9 +70,7 @@ export function categorizeError(error: unknown): NovaSonicError {
 
 // Configuration types
 interface SessionState {
-  queue: any[];
-  queueSignal: Subject<void>;
-  closeSignal: Subject<void>;
+  input: Readable;
   responseHandlers: Map<string, (data: any) => void>;
   isActive: boolean;
   audioContentId: string;
@@ -116,11 +110,22 @@ const DEFAULT_CONFIG = {
 export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiProvider {
   private sessions = new Map<string, SessionState>();
   private bedrockClient?: BedrockRuntimeClient;
+  private readonly inferenceConfiguration: typeof DEFAULT_CONFIG.inference;
   config: BedrockAmazonNovaSonicGenerationOptions;
 
   constructor(modelName: string = 'amazon.nova-sonic-v1:0', options: ProviderOptions = {}) {
     super(modelName, options);
     this.config = options.config;
+    const inference: BedrockAmazonNovaSonicGenerationOptions['interfaceConfig'] =
+      this.config?.inferenceConfiguration ??
+      this.config?.inferenceConfig ??
+      this.config?.interfaceConfig;
+    this.inferenceConfiguration = {
+      maxTokens:
+        inference?.maxTokens ?? inference?.max_new_tokens ?? DEFAULT_CONFIG.inference.maxTokens,
+      temperature: inference?.temperature ?? DEFAULT_CONFIG.inference.temperature,
+      topP: inference?.topP ?? inference?.top_p ?? DEFAULT_CONFIG.inference.topP,
+    };
   }
 
   private async getBedrockClient(): Promise<BedrockRuntimeClient> {
@@ -162,9 +167,11 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     }
 
     const session: SessionState = {
-      queue: [],
-      queueSignal: new Subject<void>(),
-      closeSignal: new Subject<void>(),
+      input: new Readable({
+        objectMode: true,
+        // Events arrive from sendEvent rather than an underlying pull source.
+        read() {},
+      }),
       responseHandlers: new Map(),
       isActive: true,
       audioContentId: crypto.randomUUID(),
@@ -180,20 +187,22 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       logger.debug('sendEvent: ' + Object.keys(event.event)[0]);
     }
     const session = this.sessions.get(sessionId);
-    if (!session?.isActive) {
+    if (!session?.isActive || session.input.destroyed) {
       logger.error(`Session ${sessionId} is not active`);
       return;
     }
 
-    session.queue.push(event);
-    session.queueSignal.next();
+    session.input.push({
+      chunk: { bytes: new TextEncoder().encode(JSON.stringify(event)) },
+    });
   }
 
   async endSession(sessionId: string) {
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw new Error(`Session ${sessionId} not found`);
-    } else if (!session.isActive) {
+    } else if (!session.isActive || session.input.destroyed) {
+      session.isActive = false;
       logger.debug(`Session ${sessionId} is not active`);
       return;
     }
@@ -219,6 +228,8 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     });
 
     session.isActive = false;
+    // EOF follows the queued terminators, even if the transport is still reading.
+    session.input.push(null);
 
     logger.debug('Session closed');
   }
@@ -266,7 +277,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
   }
 
   async sendSystemPrompt(sessionId: string, prompt: string) {
-    return this.sendTextMessage(sessionId, 'SYSTEM', prompt);
+    return await this.sendTextMessage(sessionId, 'SYSTEM', prompt);
   }
 
   async sendChatTextHistory(sessionId: string, role: 'USER' | 'ASSISTANT', prompt: string) {
@@ -310,8 +321,11 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     session.responseHandlers.set('toolUse', async (data) => {
       logger.debug('toolUse');
       functionCallOccurred = true;
-      // const result = await this.handleToolUse(data.toolName, data);
-      const result = 'Tool result';
+      const result = {
+        error: 'Tool use is not supported by the Nova Sonic provider.',
+        toolName: data.toolName,
+        toolUseId: data.toolUseId,
+      };
       const toolResultId = crypto.randomUUID();
 
       await this.sendEvent(sessionId, {
@@ -363,7 +377,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       const request = bedrockClient.send(
         new InvokeModelWithBidirectionalStreamCommand({
           modelId: this.modelName,
-          body: this.createAsyncIterable(sessionId),
+          body: session.input,
         }),
       );
 
@@ -372,7 +386,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       await this.sendEvent(sessionId, {
         event: {
           sessionStart: {
-            inferenceConfiguration: this.config?.interfaceConfig || DEFAULT_CONFIG.inference,
+            inferenceConfiguration: this.inferenceConfiguration,
           },
         },
       });
@@ -505,7 +519,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
         output: assistantTranscript || '[No response received from API]',
         ...audioOutput,
         // TODO: Add proper token usage tracking
-        tokenUsage: createEmptyTokenUsage(),
+        tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 },
         cached: false,
         metadata: {
           ...audioOutput,
@@ -528,50 +542,6 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       await this.endSession(sessionId);
       this.sessions.delete(sessionId);
     }
-  }
-
-  private createAsyncIterable(
-    sessionId: string,
-  ): AsyncIterable<InvokeModelWithBidirectionalStreamInput> {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      throw new Error(`Session ${sessionId} not found`);
-    }
-
-    return {
-      [Symbol.asyncIterator]: () => ({
-        async next() {
-          if (!session.isActive) {
-            return { done: true, value: undefined };
-          }
-
-          if (session.queue.length === 0) {
-            try {
-              await Promise.race([
-                firstValueFrom(session.queueSignal.pipe(take(1))),
-                firstValueFrom(session.closeSignal.pipe(take(1))),
-              ]);
-            } catch {
-              return { done: true, value: undefined };
-            }
-          }
-
-          const nextEvent = session.queue.shift();
-          if (nextEvent) {
-            return {
-              value: {
-                chunk: {
-                  bytes: new TextEncoder().encode(JSON.stringify(nextEvent)),
-                },
-              },
-              done: false,
-            };
-          } else {
-            return { done: true, value: undefined };
-          }
-        },
-      }),
-    };
   }
 
   private convertRawToWav(
