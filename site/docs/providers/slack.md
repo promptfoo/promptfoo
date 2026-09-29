@@ -530,7 +530,7 @@ providers:
     config:
       temperature: 0.7
 
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-5
 
   - id: slack:C0123456789
     config:
