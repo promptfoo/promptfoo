@@ -260,7 +260,11 @@ export class ProviderRateLimitState extends EventEmitter {
         this.handleRateLimit(retryAfterMs);
       }
       if (attempt < retryPolicy.maxRetries) {
-        retryResults.push(result);
+        // Only transient-availability retries feed the terminal merge; a
+        // rate-limited retry must surface the last raw result as-is.
+        if (isRetryableResult) {
+          retryResults.push(result);
+        }
         await this.waitForRetry(
           attempt + 1,
           retryPolicy,
@@ -311,10 +315,17 @@ export class ProviderRateLimitState extends EventEmitter {
     retryResults: readonly T[],
     isRetryableResult: boolean,
   ): T {
-    if (options.finalizeResult || isRetryableResult) {
+    if (isRetryableResult) {
       const finalizedResult = options.finalizeResult?.(result, retryResults) ?? result;
       this.failedRequests++;
       return finalizedResult;
+    }
+    // A caller that set onRateLimitExhausted opted into the throw-and-convert
+    // contract (the registry emits request:failed and converts); a bare
+    // finalizeResult keeps the older structured-return behavior.
+    if (!options.onRateLimitExhausted && options.finalizeResult) {
+      this.failedRequests++;
+      return options.finalizeResult(result, retryResults);
     }
     throw new RateLimitExhaustedError(
       `Rate limit exceeded for ${this.rateLimitKey} after ${attempt + 1} attempts`,

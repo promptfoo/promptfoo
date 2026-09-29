@@ -26,11 +26,6 @@ import {
   isOpenRouterEndpoint,
 } from '../openrouterBilling';
 import {
-  calculateOpenRouterResponseCost,
-  getOpenRouterBillingMetadata,
-  isOpenRouterEndpoint,
-} from '../openrouterBilling';
-import {
   getRequestTimeoutMs,
   parseChatPrompt,
   transformToolChoice,

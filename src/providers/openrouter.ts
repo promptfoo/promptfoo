@@ -28,6 +28,8 @@ import type {
   ProviderResponse,
 } from '../types/providers';
 import type { OpenAiChatCompletionCostData } from './openai/chat';
+import type { OpenAiCompletionOptions } from './openai/types';
+
 /**
  * Classify a choice-level error code arriving in a 200 envelope. The
  * gateway-level classifiers only see the transport status; a 429 or 5xx
@@ -35,8 +37,22 @@ import type { OpenAiChatCompletionCostData } from './openai/chat';
  * failure and the scheduler would not retry it.
  */
 function getChoiceErrorKind(
-  code: unknown,
-): { rateLimitKind: 'rate_limit' } | { retryableErrorKind: 'transient_availability' } | undefined {
+  error: unknown,
+): { rateLimitKind?: 'rate_limit'; retryableErrorKind?: 'transient_availability' } | undefined {
+  const record =
+    error && typeof error === 'object' ? (error as Record<string, unknown>) : undefined;
+  const metadata =
+    record?.metadata && typeof record.metadata === 'object'
+      ? (record.metadata as Record<string, unknown>)
+      : undefined;
+  const errorType = typeof metadata?.error_type === 'string' ? metadata.error_type : undefined;
+  if (errorType && errorType !== 'rate_limit_exceeded') {
+    // A documented provider-side failure that is not a rate limit (e.g.
+    // provider_unavailable): not a rate limit even when the code says 429,
+    // but retryable as a transient upstream hiccup.
+    return { retryableErrorKind: 'transient_availability' };
+  }
+  const code = record?.code;
   const status =
     typeof code === 'number'
       ? code
@@ -229,6 +245,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
               : getOpenAiPartialOutput(
                   policy.partialOutput,
                   config.response_format?.type === 'json_schema',
+                ),
           ...(data.usage ? { tokenUsage: getTokenUsageWithRequestCount(data, cached) } : {}),
           cached,
           cost: this.calculateResponseCost(data, config),
@@ -250,6 +267,10 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       if (choiceError) {
         await deleteFromCache?.();
         const rateLimitKind = getOpenAiGatewayRateLimitKind(data);
+        // The gateway classifier (provider_code/error_type aware) wins over
+        // the bare-code fallback: a billing-coded 429 must stay 'quota', not
+        // be flattened to 'rate_limit'.
+        const choiceKind = getChoiceErrorKind(choiceError.error);
         return {
           error: `API error: ${choiceError.error.message}`,
           ...(data.usage ? { tokenUsage: getTokenUsageWithRequestCount(data, cached) } : {}),
@@ -259,8 +280,14 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
           finishReason: 'error',
           metadata: {
             ...getOpenRouterBillingMetadata(data),
-            ...(rateLimitKind ? { rateLimitKind } : {}),
-            ...getChoiceErrorKind(choiceError.error.code),
+            ...(rateLimitKind
+              ? { rateLimitKind }
+              : choiceKind?.rateLimitKind
+                ? { rateLimitKind: choiceKind.rateLimitKind }
+                : {}),
+            ...(choiceKind?.retryableErrorKind
+              ? { retryableErrorKind: choiceKind.retryableErrorKind }
+              : {}),
             http: { status, statusText, headers: responseHeaders ?? {} },
           },
         };
@@ -295,14 +322,13 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     // Guard against a 200 response with an empty or missing `choices` array
     // (soft moderation block, upstream hiccup, or n>1 edge cases). Without this,
     // `data.choices[0]` is undefined and `.message` throws an opaque TypeError.
-    // The error string stays bounded: the raw payload can be large and is
-    // provider-controlled.
+    // Mirrors the sibling OpenAI-compatible providers (mistral.ts, ai21.ts).
     if (!Array.isArray(data?.choices) || !data.choices[0]?.message) {
       // A malformed 200 must not be cached and replayed as if it were the
       // provider's answer.
       await deleteFromCache?.();
       return {
-        error: 'Malformed response data: expected choices[0].message',
+        error: `Malformed response data: ${JSON.stringify(data)}`,
         tokenUsage: getTokenUsageWithRequestCount(data, cached),
         cached,
         // error paths can reach here with a null body; no data, no cost
@@ -312,6 +338,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     }
 
     // Process the response with special handling for Gemini
+    const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
     if (finishReason === 'error') {
       // A failed generation carries partial output that must not be graded;
       // the choice-level error object above can be absent on this path.
@@ -334,7 +361,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       // provider's answer.
       await deleteFromCache?.();
       return {
-        error: 'Malformed response data: expected choices[0].message',
+        error: `Malformed response data: ${JSON.stringify(data)}`,
         tokenUsage: getTokenUsageWithRequestCount(data, cached),
         cached,
         cost: this.calculateResponseCost(data, config),
