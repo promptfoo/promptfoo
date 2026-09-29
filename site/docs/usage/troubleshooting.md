@@ -72,7 +72,9 @@ export PROMPTFOO_STRIP_METADATA=true
 
 You can use any combination of these variables to optimize memory usage while preserving the data you need.
 
-These flags remove specific fields, rather than every occurrence of their values in other text. For example, stripping test variables preserves rendered prompt, response, and grading text. Use the corresponding flags to omit those fields: metadata stripping removes grading metadata, while grading-result stripping also removes grading reasons.
+These flags apply to file exports, including evals that were not saved to the database and imported legacy results. They remove documented fields and transcript copies; they do not remove every occurrence of a value in free-form text. For example, stripping test variables preserves rendered prompt, response, and grading text. Metadata stripping removes grading metadata; grading-result stripping also removes grading reasons.
+
+Export sanitization limits credential-bearing config, prompt, and variable fields to 64 nested object levels. Deeper content is replaced with `[...]`; fields that cannot be sanitized are omitted or replaced with a redaction marker. The original in-memory values remain available to hooks.
 
 ### Increase Node.js memory limit
 
