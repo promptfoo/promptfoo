@@ -437,6 +437,11 @@ async function runAssertionInternal({
   let output = originalOutput;
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
+  const isolatedJavascript = assertion.executionMode === 'worker';
+  invariant(
+    !isolatedJavascript || getAssertionBaseType(assertion) === 'javascript',
+    'Worker execution is supported only by JavaScript assertions',
+  );
 
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
@@ -479,7 +484,10 @@ async function runAssertionInternal({
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
-  if (typeof renderedValue === 'string') {
+  if (
+    typeof renderedValue === 'string' &&
+    !(isolatedJavascript && (renderedValue.startsWith('file://') || isPackagePath(renderedValue)))
+  ) {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
       const fileRef = renderedValue.slice('file://'.length);

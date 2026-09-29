@@ -55,7 +55,10 @@ export default defineConfig([
   // Server (ESM only) - stable path for workflows
   {
     ...sharedBuildOptions,
-    entry: { 'server/index': 'src/server/index.ts' },
+    entry: {
+      'server/index': 'src/server/index.ts',
+      'assertions/javascriptWorkerEntry': 'src/assertions/javascriptWorkerEntry.ts',
+    },
     format: ['esm'],
     shims: true,
     fixedExtension: false, // Use .js extension for ESM since package.json has type: module

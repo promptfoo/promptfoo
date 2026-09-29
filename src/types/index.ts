@@ -754,6 +754,9 @@ export const AssertionSchema = z.object({
   // Type of assertion
   type: AssertionTypeSchema,
 
+  // Worker execution is opt-in and supported only by JavaScript assertions.
+  executionMode: z.enum(['in-process', 'worker']).optional(),
+
   // The expected value, if applicable
   value: z.custom<AssertionValue>().optional(),
 

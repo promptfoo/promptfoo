@@ -1,7 +1,7 @@
 ---
 sidebar_position: 50
 sidebar_label: Javascript
-description: Validate LLM outputs with JavaScript expressions, async checks, and custom scoring
+description: Validate LLM outputs with JavaScript expressions, file and package assertions, custom scores, and worker execution that follows evaluation cancellation.
 ---
 
 # Javascript assertions
@@ -47,11 +47,24 @@ assert:
       };
 ```
 
-## Timeouts
+## Worker execution
 
-`evaluateOptions.timeoutMs` limits how long an evaluation waits for a test. Set it to `0` to disable the timeout, including one set by `PROMPTFOO_EVAL_TIMEOUT_MS`.
+JavaScript assertions run on the evaluation thread by default. Synchronous work blocks that thread, so an event-loop timeout cannot interrupt it. For string, `file://`, or `package:` assertions, opt into a worker:
 
-JavaScript assertions run on the evaluation thread. Synchronous work prevents the timeout timer from firing until that work returns.
+```yaml
+assert:
+  - type: javascript
+    executionMode: worker
+    value: output === context.vars.expected
+```
+
+Set `evaluateOptions.timeoutMs` to give the evaluation a deadline. The worker uses the evaluator's cancellation signal and stops when it is cancelled. With no deadline, worker mode does not add a timeout. The default `executionMode: in-process` preserves existing behavior.
+
+Worker input, context, callback arguments, and results must contain plain objects, arrays, or primitive values. Function closures, class instances, accessors, and non-enumerable or symbol properties produce an error. Data is copied; changes made by an assertion do not update the caller's objects. File and package assertions use the existing module loaders and active configuration directory.
+
+In a worker, `context.provider` exposes `id()`, `label`, `config`, and `callApi()`. Calls go to the existing provider in the evaluation process. Up to eight calls can be pending at once, and the evaluator's cancellation signal is passed to them. Callback options support `includeLogProbs`; callers cannot supply another `AbortSignal`. Other provider methods are unavailable. Provider code must cooperate with cancellation.
+
+Worker execution is not a security sandbox. Assertions retain Node.js capabilities, including filesystem and network access. Transforms, provider callbacks, and custom scoring functions still run in the evaluation process. Function-valued assertions are supported only in the default in-process mode.
 
 ## Handling objects
 

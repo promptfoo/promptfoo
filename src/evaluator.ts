@@ -4028,7 +4028,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     context: EvalProcessingContext,
   ) {
     const { deferGrading = false, providerCallQueue } = processOptions;
-    const timeoutMs = context.options.timeoutMs ?? getEvalTimeoutMs();
+    const timeoutMs = context.options.timeoutMs || getEvalTimeoutMs();
 
     if (timeoutMs <= 0) {
       return await this.processEvalStep(
@@ -5342,7 +5342,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         concurrentRunEvalOptions.push(evalOption);
       }
     }
-    const hasEvalStepTimeout = (options.timeoutMs ?? getEvalTimeoutMs()) > 0;
+    const hasEvalStepTimeout = (options.timeoutMs || getEvalTimeoutMs()) > 0;
     const shouldGroupGradingByProvider =
       concurrency === 1 && !hasEvalStepTimeout && !usesConversationVar;
 

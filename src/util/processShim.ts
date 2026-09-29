@@ -83,7 +83,7 @@ let cachedNodeProcessShim: typeof process | null = null;
  * const fn = new Function('data', 'process', `return data.toUpperCase()`);
  * fn(data, getProcessShim());
  */
-export function getProcessShim(): typeof process {
+export function getProcessShim(requireModule?: NodeRequire): typeof process {
   if (isBrowserEnvironment()) {
     return createBrowserProcessShim();
   }
@@ -94,7 +94,7 @@ export function getProcessShim(): typeof process {
       // Dynamic require of node:module - this is NOT a top-level import so bundlers
       // won't try to resolve it. It only executes at runtime in Node.js.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const nodeModule = require('node:module') as typeof import('node:module');
+      const nodeModule = (requireModule ?? require)('node:module') as typeof import('node:module');
       const esmRequire = nodeModule.createRequire(import.meta.url);
 
       cachedNodeProcessShim = new Proxy(process, {

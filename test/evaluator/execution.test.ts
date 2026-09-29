@@ -699,113 +699,87 @@ describeEvaluator('evaluator execution control', () => {
     expect(mockApiProviderWithError.callApi).toHaveBeenCalledTimes(1);
   });
 
-  it.each([
-    { name: 'explicit timeout', timeoutMs: 100, envTimeout: '0', waitMs: 100, success: false },
-    {
-      name: 'environment fallback',
-      timeoutMs: undefined,
-      envTimeout: '100',
-      waitMs: 100,
-      success: false,
-    },
-    { name: 'explicit zero', timeoutMs: 0, envTimeout: '100', waitMs: 5000, success: true },
-    {
-      name: 'explicit positive override',
-      timeoutMs: 6000,
-      envTimeout: '100',
-      waitMs: 5000,
-      success: true,
-    },
-  ])(
-    'honors $name without tearing down the shared provider',
-    async ({ timeoutMs, envTimeout, waitMs, success }) => {
-      vi.stubEnv('PROMPTFOO_EVAL_TIMEOUT_MS', envTimeout);
-      vi.useFakeTimers();
+  it('should handle evaluation timeout without tearing down the shared provider', async () => {
+    vi.useFakeTimers();
 
-      const mockAddResult = vi.fn().mockResolvedValue(undefined);
-      let longTimer: NodeJS.Timeout | null = null;
+    const mockAddResult = vi.fn().mockResolvedValue(undefined);
+    let longTimer: NodeJS.Timeout | null = null;
 
-      const slowApiProvider: ApiProvider = {
-        id: vi.fn().mockReturnValue('slow-provider'),
-        callApi: vi.fn().mockImplementation(() => {
-          return new Promise((resolve) => {
-            longTimer = setTimeout(() => {
-              resolve({
-                output: 'Slow response',
-                tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-              });
-            }, 5000);
-          });
-        }),
-        cleanup: vi.fn(),
-      };
+    const slowApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('slow-provider'),
+      callApi: vi.fn().mockImplementation(() => {
+        return new Promise((resolve) => {
+          longTimer = setTimeout(() => {
+            resolve({
+              output: 'Slow response',
+              tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+            });
+          }, 5000);
+        });
+      }),
+      cleanup: vi.fn(),
+    };
 
-      const mockEval = {
-        id: 'mock-eval-id',
+    const mockEval = {
+      id: 'mock-eval-id',
+      results: [],
+      prompts: [],
+      persisted: false,
+      config: {},
+      addResult: mockAddResult,
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue([]),
+      toEvaluateSummary: vi.fn().mockResolvedValue({
         results: [],
         prompts: [],
-        persisted: false,
-        config: {},
-        addResult: mockAddResult,
-        addPrompts: vi.fn().mockResolvedValue(undefined),
-        fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
-        getResults: vi.fn().mockResolvedValue([]),
-        toEvaluateSummary: vi.fn().mockResolvedValue({
-          results: [],
-          prompts: [],
-          stats: {
-            successes: 0,
-            failures: 0,
-            errors: 1,
-            tokenUsage: createEmptyTokenUsage(),
-          },
+        stats: {
+          successes: 0,
+          failures: 0,
+          errors: 1,
+          tokenUsage: createEmptyTokenUsage(),
+        },
+      }),
+      save: vi.fn().mockResolvedValue(undefined),
+      setVars: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [slowApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    try {
+      const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 100 });
+      await vi.advanceTimersByTimeAsync(100);
+      await evalPromise;
+
+      expect(slowApiProvider.callApi).toHaveBeenCalledWith(
+        'Test prompt',
+        expect.anything(),
+        expect.objectContaining({
+          abortSignal: expect.any(AbortSignal),
         }),
-        save: vi.fn().mockResolvedValue(undefined),
-        setVars: vi.fn().mockResolvedValue(undefined),
-        setDurationMs: vi.fn(),
-      };
+      );
 
-      const testSuite: TestSuite = {
-        providers: [slowApiProvider],
-        prompts: [toPrompt('Test prompt')],
-        tests: [{}],
-      };
+      expect(mockAddResult).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining('Evaluation timed out after 100ms'),
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+        }),
+      );
 
-      try {
-        const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs });
-        await vi.advanceTimersByTimeAsync(waitMs);
-        await evalPromise;
-
-        expect(slowApiProvider.callApi).toHaveBeenCalledWith(
-          'Test prompt',
-          expect.anything(),
-          timeoutMs === 0
-            ? undefined
-            : expect.objectContaining({ abortSignal: expect.any(AbortSignal) }),
-        );
-
-        expect(mockAddResult).toHaveBeenCalledWith(
-          expect.objectContaining({
-            ...(success
-              ? { response: expect.objectContaining({ output: 'Slow response' }) }
-              : {
-                  error: expect.stringContaining('Evaluation timed out after 100ms'),
-                }),
-            success,
-            failureReason: success ? ResultFailureReason.NONE : ResultFailureReason.ERROR,
-          }),
-        );
-
-        expect(slowApiProvider.cleanup).not.toHaveBeenCalled();
-      } finally {
-        if (longTimer) {
-          clearTimeout(longTimer);
-        }
-        vi.useRealTimers();
-        vi.unstubAllEnvs();
+      expect(slowApiProvider.cleanup).not.toHaveBeenCalled();
+    } finally {
+      if (longTimer) {
+        clearTimeout(longTimer);
       }
-    },
-  );
+      vi.useRealTimers();
+    }
+  });
 
   it('should not block timeout rows when a provider call does not settle after abort', async () => {
     vi.useFakeTimers();

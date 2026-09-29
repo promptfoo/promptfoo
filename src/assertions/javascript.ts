@@ -1,6 +1,7 @@
 import { type GradingResult, isGradingResult } from '../types/index';
 import invariant from '../util/invariant';
 import { getProcessShim } from '../util/processShim';
+import { runJavascriptInWorker } from './javascriptWorker';
 import { normalizeScriptAssertionResult } from './scriptResultNormalization';
 
 import type { AssertionParams } from '../types/index';
@@ -194,6 +195,22 @@ export const handleJavascript = async ({
   inverse,
 }: AssertionParams): Promise<GradingResult> => {
   try {
+    if (assertion.executionMode === 'worker') {
+      invariant(
+        typeof renderedValue === 'string',
+        'Worker JavaScript assertions require an inline string, file:// reference, or package reference; function closures are unsupported.',
+      );
+      const code = renderedValue.trimEnd();
+      const result = await validateResult(
+        await runJavascriptInWorker({
+          value: code,
+          functionBody: code.includes('\n') ? code : buildFunctionBody(code),
+          output,
+          context: assertionValueContext,
+        }),
+      );
+      return normalizeJavascriptAssertionResult(assertion, result, inverse, renderedValue);
+    }
     if (typeof assertion.value === 'function') {
       const result = await validateResult(assertion.value(outputString, assertionValueContext));
       return normalizeJavascriptAssertionResult(assertion, result, inverse);
