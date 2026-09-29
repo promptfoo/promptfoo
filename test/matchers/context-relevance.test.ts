@@ -394,6 +394,123 @@ This policy excludes all staff going on any outgoing structured programs, short 
       expect(result.metadata?.extractedSentences).toEqual(['The answer is 42.']);
     });
 
+    const contextSentences = [
+      'Python is a high-level, general-purpose programming language known for readability.',
+      'It has a large standard library.',
+      'It was created by Guido van Rossum and released in 1991.',
+      'Python is widely used in data science, web development, and automation.',
+    ];
+
+    describe.each([
+      { format: 'prose', context: contextSentences.join(' ') },
+      { format: 'multiline', context: contextSentences.join('\n') },
+      { format: 'array', context: contextSentences },
+    ])('$format context', ({ context }) => {
+      it.each([
+        [
+          'a grader header line',
+          'candidate sentences:\nIt was created by Guido van Rossum and released in 1991.',
+          ['It was created by Guido van Rossum and released in 1991.'],
+          0.25,
+          false,
+        ],
+        [
+          'a reformatted repeat of the same sentence',
+          '1. It was created by Guido van Rossum and released in 1991.\n- it was created by Guido van  Rossum and released in 1991.',
+          ['1. It was created by Guido van Rossum and released in 1991.'],
+          0.25,
+          false,
+        ],
+        [
+          'unrelated commentary between valid quotes',
+          'It was created by Guido van Rossum and released in 1991.\nThis passage answers your question.\nIt has a large standard library.',
+          [
+            'It was created by Guido van Rossum and released in 1991.',
+            'It has a large standard library.',
+          ],
+          0.5,
+          true,
+        ],
+      ])(
+        'should not count %s as a relevant sentence',
+        async (_label, output, extracted, score, pass) => {
+          // Regression (#10245): only distinct quotes count toward the numerator.
+          vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+            output,
+            tokenUsage: { total: 10, prompt: 5, completion: 5 },
+          });
+
+          const result = await matchesContextRelevance('Who created Python?', context, 0.5);
+
+          expect(result.score).toBe(score);
+          expect(result.pass).toBe(pass);
+          expect(result.metadata?.totalContextUnits).toBe(4);
+          expect(result.metadata?.relevantSentenceCount).toBe(extracted.length);
+          expect(result.metadata?.extractedSentences).toEqual(extracted);
+          expect(result.metadata?.graderError).not.toBe(true);
+        },
+      );
+    });
+
+    describe.each([
+      { label: 'decimal values', sentences: ['1.2 is the value.', '2.2 is the value.'] },
+      { label: 'signed values', sentences: ['-5 is the value.', '5 is the value.'] },
+    ])('distinct $label', ({ sentences }) => {
+      it.each([
+        { format: 'prose', separator: ' ' },
+        { format: 'multiline', separator: '\n' },
+        { format: 'array', separator: null },
+      ])('should preserve both quotes in $format context', async ({ separator }) => {
+        const context = separator === null ? sentences : sentences.join(separator);
+        vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+          output: sentences.join('\n'),
+        });
+
+        const result = await matchesContextRelevance('What are the values?', context, 0.75);
+
+        expect(result.score).toBe(1);
+        expect(result.pass).toBe(true);
+        expect(result.metadata?.relevantSentenceCount).toBe(2);
+        expect(result.metadata?.extractedSentences).toEqual(sentences);
+        expect(result.metadata?.graderError).not.toBe(true);
+      });
+    });
+
+    describe.each(['array', 'multiline'])('selected sentences in %s context', (format) => {
+      const chunks = ['Fact A.', 'Fact B. Irrelevant detail. Fact C.'];
+      const context = format === 'array' ? chunks : chunks.join('\n');
+
+      it.each([
+        {
+          label: 'counts nonadjacent source sentences as one selected unit',
+          selection: 'Fact B. Fact C.',
+          extracted: ['Fact A.', 'Fact B. Fact C.'],
+          score: 1,
+          pass: true,
+        },
+        {
+          label: 'rejects a selected unit containing an invented sentence',
+          selection: 'Fact B. Invented detail.',
+          extracted: ['Fact A.'],
+          score: 0.5,
+          pass: false,
+        },
+      ])('$label', async ({ selection, extracted, score, pass }) => {
+        vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+          output: `Fact A.\n${selection}`,
+        });
+
+        const result = await matchesContextRelevance('What are the facts?', context, 0.75);
+
+        expect(result.score).toBe(score);
+        expect(result.pass).toBe(pass);
+        expect(result.metadata?.totalContextUnits).toBe(2);
+        expect(result.metadata?.relevantSentenceCount).toBe(extracted.length);
+        expect(result.metadata?.extractedSentences).toEqual(extracted);
+        expect(result.metadata?.graderError).not.toBe(true);
+      });
+    });
+
     it('should handle empty context', async () => {
       const query = 'What is the answer?';
       const context = '';
