@@ -35,12 +35,9 @@ afterEach(() => {
 describe('exact artifact release', () => {
   it('builds and validates before an OIDC-only publisher, retaining release controls', () => {
     expect(workflow.concurrency['cancel-in-progress']).toBe(false);
-    for (const [buildName, publishName] of [
-      ['build-npm', 'publish-npm'],
-      ['build-npm-backfill', 'publish-npm-backfill'],
-    ]) {
+    const publisher = workflow.jobs['publish-npm'];
+    for (const buildName of ['build-npm', 'build-npm-backfill']) {
       const build = workflow.jobs[buildName];
-      const publisher = workflow.jobs[publishName];
       expect(build.permissions['id-token']).toBeUndefined();
       expect(
         build.steps.find((s) => s.uses?.startsWith('actions/checkout@'))?.with?.[
@@ -57,6 +54,9 @@ describe('exact artifact release', () => {
       expect(buildIndex).toBeGreaterThan(-1);
       expect(validateIndex).toBeGreaterThan(buildIndex);
       expect(uploadIndex).toBeGreaterThan(validateIndex);
+      expect(build.steps[uploadIndex].with?.name).toBe(
+        publisher.steps.find((s) => s.uses?.startsWith('actions/download-artifact@'))?.with?.name,
+      );
       expect(build.steps[buildIndex].env?.PROMPTFOO_POSTHOG_KEY).toBeDefined();
       expect(publisher.permissions['id-token']).toBe('write');
       expect([publisher.needs].flat()).toContain(buildName);
@@ -129,39 +129,37 @@ describe('exact artifact release', () => {
     expect(validate).toContain('PROMPTFOO_CONFIG_DIR="$consumer_dir/config"');
   });
 
-  for (const jobName of ['publish-npm', 'publish-npm-backfill']) {
-    it(`${jobName} rejects wrong identity, version, and publish configuration before publishing`, () => {
-      const run = workflow.jobs[jobName].steps.find(
-        (s) => s.name === 'Publish verified npm package',
-      )!.run!;
-      const script = run.match(/<<'NODE'\n([\s\S]*?)\nNODE\n/)?.[1];
-      expect(script).toBeDefined();
-      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'release-artifact-'));
-      directories.push(root);
-      const manifestPath = path.join(root, 'package.json');
-      for (const [manifest, valid] of [
-        [{ name: 'promptfoo', version: '1.2.3' }, true],
-        [{ name: 'other', version: '1.2.3' }, false],
-        [{ name: 'promptfoo', version: '9.9.9' }, false],
-        [
-          {
-            name: 'promptfoo',
-            version: '1.2.3',
-            publishConfig: { registry: 'https://example.invalid' },
-          },
-          false,
-        ],
-      ] as const) {
-        fs.writeFileSync(manifestPath, JSON.stringify(manifest));
-        const result = spawnSync(process.execPath, ['-', manifestPath, '1.2.3'], {
-          input: script,
-          encoding: 'utf8',
-        });
-        expect(result.status === 0).toBe(valid);
-        if (!valid) {
-          expect(result.stderr).toContain('Downloaded artifact has unexpected publish metadata');
-        }
+  it('rejects wrong identity, version, and publish configuration before publishing', () => {
+    const run = workflow.jobs['publish-npm'].steps.find(
+      (s) => s.name === 'Publish verified npm package',
+    )!.run!;
+    const script = run.match(/<<'NODE'\n([\s\S]*?)\nNODE\n/)?.[1];
+    expect(script).toBeDefined();
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'release-artifact-'));
+    directories.push(root);
+    const manifestPath = path.join(root, 'package.json');
+    for (const [manifest, valid] of [
+      [{ name: 'promptfoo', version: '1.2.3' }, true],
+      [{ name: 'other', version: '1.2.3' }, false],
+      [{ name: 'promptfoo', version: '9.9.9' }, false],
+      [
+        {
+          name: 'promptfoo',
+          version: '1.2.3',
+          publishConfig: { registry: 'https://example.invalid' },
+        },
+        false,
+      ],
+    ] as const) {
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+      const result = spawnSync(process.execPath, ['-', manifestPath, '1.2.3'], {
+        input: script,
+        encoding: 'utf8',
+      });
+      expect(result.status === 0).toBe(valid);
+      if (!valid) {
+        expect(result.stderr).toContain('Downloaded artifact has unexpected publish metadata');
       }
-    });
-  }
+    }
+  });
 });
