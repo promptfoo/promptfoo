@@ -142,7 +142,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [ruby](/docs/configuration/expected-outputs/ruby)                                                                  | provided Ruby function validates the output                        |
 | [webhook](/docs/configuration/expected-outputs/deterministic/#webhook)                                             | webhook returns a boolean `pass` and an optional score from 0 to 1 |
 | [rouge-n](/docs/configuration/expected-outputs/deterministic/#rouge-n)                                             | Rouge-N score is above a given threshold (default 0.75)            |
-| [bleu](/docs/configuration/expected-outputs/deterministic/#bleu)                                                   | BLEU score is above a given threshold (default 0.5)                |
+| [bleu](/docs/configuration/expected-outputs/deterministic/#bleu)                                                   | BLEU >= threshold (default 0.5); blank references are ignored      |
 | [gleu](/docs/configuration/expected-outputs/deterministic/#gleu)                                                   | GLEU >= threshold (default 0.5); empty output scores 0             |
 | [levenshtein](/docs/configuration/expected-outputs/deterministic/#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
 | [latency](/docs/configuration/expected-outputs/deterministic/#latency)                                             | Latency is below a threshold (milliseconds)                        |
@@ -166,6 +166,8 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
+
+When a `not-javascript`, `not-python`, or `not-ruby` assertion returns a full grading result, a negated failure keeps its custom `reason`, falling back to a generic message if it is empty. A negated pass reports `Assertion passed`; the script's score is preserved in either case.
 
 The `search-rubric` and `not-search-rubric` assertions require a rubric value that renders to a string.
 

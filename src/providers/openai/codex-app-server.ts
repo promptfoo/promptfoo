@@ -33,6 +33,7 @@ import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { VERSION } from '../../version';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
+import { clearRepositoryEnv, isAgentWorkspace } from '../agentWorkspace';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 import {
@@ -1674,6 +1675,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       }
     } else {
       delete sortedEnv.TRACEPARENT;
+    }
+
+    if (config.working_dir && isAgentWorkspace(config.working_dir)) {
+      clearRepositoryEnv(sortedEnv);
     }
 
     return sortedEnv;
