@@ -86,8 +86,6 @@ describe('CloudStatusIndicator', () => {
     expect(screen.getByRole('dialog')).toHaveAccessibleDescription(
       'Connect to share evaluation results with your team.',
     );
-    expect(screen.getByText('Share evaluation results with your team')).toBeInTheDocument();
-    expect(screen.getByText('View dashboards and reports')).toBeInTheDocument();
     expect(screen.getByText('promptfoo auth login')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'promptfoo.app' })).toHaveAttribute(
       'href',
@@ -104,7 +102,9 @@ describe('CloudStatusIndicator', () => {
     mount();
     await openDialog();
     expect(screen.getByRole('dialog')).toHaveAccessibleName('Configure Promptfoo Enterprise');
-    expect(screen.getByText('Share evaluation results with your organization')).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toHaveAccessibleDescription(
+      'Connect to share evaluation results with your organization.',
+    );
     expect(screen.getByRole('link', { name: 'enterprise.example' })).toHaveAttribute(
       'href',
       'https://enterprise.example',

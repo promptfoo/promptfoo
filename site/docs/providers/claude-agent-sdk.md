@@ -131,7 +131,9 @@ prompts:
   - 'Refactor the authentication module to use async/await'
 ```
 
-> **Note:** when using `acceptEdits` and tools that allow side effects like writing to files, you'll need to consider how you will reset the files after each test run. See the [Managing Side Effects](#managing-side-effects) section for more information.
+> **Note:** when using `acceptEdits` and tools that allow side effects like writing to files, each call changes `working_dir` for the calls after it. Set `copy_working_dir: true` to run each eval step in a fresh copy of `working_dir` instead (see [isolated workspaces][isolated-workspaces]), or see [Managing Side Effects](#managing-side-effects) for other options.
+
+[isolated-workspaces]: /docs/guides/evaluate-coding-agents#isolated-workspaces
 
 ## Supported Parameters
 
@@ -140,6 +142,7 @@ prompts:
 | `apiKey`                             | string           | Anthropic API key                                                                                            | Environment variable     |
 | `apiKeyRequired`                     | boolean          | Require Promptfoo to find an Anthropic API key before calling the SDK. Set to `false` for local SDK auth.    | `true`                   |
 | `working_dir`                        | string           | Directory for file operations                                                                                | Temporary directory      |
+| `copy_working_dir`                   | boolean/string   | Run each eval step in a fresh copy of `working_dir` ([isolated workspaces][isolated-workspaces])             | false                    |
 | `model`                              | string           | Primary model to use (passed to Claude Agent SDK)                                                            | Claude Agent SDK default |
 | `fallback_model`                     | string           | Fallback model if primary fails. Accepts a comma-separated list, tried in order.                             | Claude Agent SDK default |
 | `max_turns`                          | number           | Maximum conversation turns                                                                                   | Claude Agent SDK default |
@@ -1241,7 +1244,7 @@ The receiver's `/v1/logs` endpoint accepts JSON only. The provider automatically
 
 ## Caching Behavior
 
-This provider automatically caches responses, and will read from the cache if the prompt, configuration, and files in the working directory (if `working_dir` is set) are the same as a previous run.
+This provider automatically caches responses, and will read from the cache if the prompt, configuration, and files in the working directory (if `working_dir` is set) are the same as a previous run. Calls that use `copy_working_dir` are never cached.
 
 When MCP servers are configured, caching is disabled by default because MCP tools typically interact with external state (APIs, file systems, databases), making cached responses unreliable. To opt back into caching for deterministic MCP tools (e.g., code search, static knowledge bases), set `cache_mcp: true`:
 
@@ -1289,6 +1292,7 @@ When using Claude Agent SDK with configurations that allow side effects, like wr
 
 This increases complexity, so first consider if you can achieve your goal with a read-only configuration. If you do need to test with side effects, here are some strategies that can help:
 
+- **Isolated workspaces**: Set `copy_working_dir: true` to run each eval step in a fresh copy of `working_dir` (see [isolated workspaces][isolated-workspaces])
 - **Serial execution**: Set `evaluateOptions.maxConcurrency: 1` in your config or use `--max-concurrency 1` CLI flag
 - **Hooks**: Use promptfoo [extension hooks](/docs/configuration/reference/#extension-hooks) to reset the environment after each test run
 - **Wrapper scripts**: Handle setup/cleanup outside of promptfoo

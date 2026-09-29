@@ -14,17 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import useCloudConfig, { type CloudConfigData } from '@app/hooks/useCloudConfig';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
-import {
-  AlertCircle,
-  Cloud,
-  CloudCog,
-  CloudOff,
-  ExternalLink,
-  LayoutDashboard,
-  Loader2,
-  RefreshCw,
-  Share2,
-} from 'lucide-react';
+import { AlertCircle, Cloud, CloudOff, ExternalLink, Loader2, RefreshCw } from 'lucide-react';
 
 type Status = 'loading' | 'error' | 'unavailable-url' | 'configured' | 'unconfigured';
 
@@ -169,27 +159,13 @@ export default function CloudStatusIndicator() {
           }}
         >
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CloudCog className="size-5 text-primary" />
-              Configure {state.serviceName}
-            </DialogTitle>
+            <DialogTitle>Configure {state.serviceName}</DialogTitle>
             <DialogDescription>
               Connect to share evaluation results with your {state.teamName}.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="space-y-3 rounded-md border border-border p-3">
-              <div className="flex items-center gap-2 text-sm">
-                <Share2 className="size-4 text-primary" />
-                <span>Share evaluation results with your {state.teamName}</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <LayoutDashboard className="size-4 text-primary" />
-                <span>View dashboards and reports</span>
-              </div>
-            </div>
-
             <Alert variant="info">
               <AlertCircle className="size-4" />
               <AlertContent>
