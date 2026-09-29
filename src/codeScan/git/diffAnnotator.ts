@@ -10,7 +10,7 @@
 
 import { parseHunkHeader } from '../util/diffHunkParser';
 
-import type { LineRange } from '../util/diffLineRanges';
+import type { LineRange } from '../../types/codeScan';
 
 export interface AnnotationResult {
   annotatedDiff: string;
@@ -103,17 +103,4 @@ export function annotateDiffWithLineRanges(patch: string): AnnotationResult {
     annotatedDiff: result.join('\n'),
     lineRanges,
   };
-}
-
-/**
- * Annotate a single file unified diff patch with absolute line numbers.
- *
- * This is a convenience wrapper around annotateDiffWithLineRanges that
- * returns only the annotated diff string.
- *
- * @param patch - Raw unified diff patch string from git diff
- * @returns Annotated patch with line numbers prepended to new file lines
- */
-export function annotateSingleFileDiffWithLineNumbers(patch: string): string {
-  return annotateDiffWithLineRanges(patch).annotatedDiff;
 }

@@ -15,10 +15,14 @@ import { getRequestTimeoutMs } from '../shared';
 import {
   calculateXAICost,
   GROK_4_MODELS,
-  GROK_45_MODELS,
   getXAICostInUsd,
+  getXAIRequestModel,
+  getXAIRequestOption,
   hasXAICostOverrides,
+  resolveGrok47ReasoningEffort,
+  validateXAIReasoningEffort,
   type XAICostConfig,
+  XAIRequestConfigError,
 } from './chat';
 
 import type { EnvOverrides } from '../../types/env';
@@ -161,7 +165,7 @@ export interface XAIResponsesConfig extends XAICostConfig {
   store?: boolean;
   /** Additional response data to include, such as encrypted reasoning content */
   include?: string[];
-  /** Reasoning configuration for Grok 4.5, Grok 4.3, or multi-agent models */
+  /** Reasoning configuration for Grok 4.7, Grok 4.6, Grok 4.5, Grok 4.3, or multi-agent models */
   reasoning?: {
     effort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
   };
@@ -179,6 +183,17 @@ export interface XAIResponsesConfig extends XAICostConfig {
   passthrough?: Record<string, any>;
 }
 
+function resolveGrok47Reasoning(reasoning: unknown, vars?: Record<string, unknown>): unknown {
+  if (typeof reasoning !== 'object' || Array.isArray(reasoning)) {
+    throw new XAIRequestConfigError('xAI Grok 4.7 reasoning must be an object');
+  }
+  if (!Object.prototype.hasOwnProperty.call(reasoning, 'effort')) {
+    return reasoning;
+  }
+  const config = reasoning as Record<string, unknown>;
+  return { ...config, effort: resolveGrok47ReasoningEffort(config.effort, vars) };
+}
+
 /**
  * xAI Responses API Provider
  *
@@ -187,6 +202,7 @@ export interface XAIResponsesConfig extends XAICostConfig {
  * and interact with MCP servers.
  *
  * Usage:
+ *   xai:responses:grok-4.7
  *   xai:responses:grok-4.5
  *   xai:responses:grok-4.3
  *   xai:responses:grok-4.20-0309-reasoning
@@ -216,7 +232,7 @@ export class XAIResponsesProvider implements ApiProvider {
         return (
           reportedCost ??
           calculateXAICost(
-            modelName,
+            getXAIRequestModel(modelName, config),
             config || {},
             usage?.input_tokens ?? usage?.prompt_tokens,
             usage?.output_tokens ?? usage?.completion_tokens,
@@ -224,6 +240,7 @@ export class XAIResponsesProvider implements ApiProvider {
               usage?.completion_tokens_details?.reasoning_tokens,
             usage?.input_tokens_details?.cached_tokens ??
               usage?.prompt_tokens_details?.cached_tokens,
+            { apiUrl: this.getApiUrl() },
           )
         );
       },
@@ -279,6 +296,8 @@ export class XAIResponsesProvider implements ApiProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+    const model = getXAIRequestModel(this.modelName, config);
+    const usesGrok47 = model === 'grok-4.7';
 
     // Parse input - can be string or array of messages. Chat-format content parts are
     // translated to their Responses equivalents so multimodal prompts authored for the chat
@@ -338,28 +357,30 @@ export class XAIResponsesProvider implements ApiProvider {
       ...(config.passthrough || {}),
     };
 
-    if (body.reasoning !== undefined) {
+    if (usesGrok47) {
+      const reasoning = getXAIRequestOption(
+        'reasoning',
+        context?.test?.options,
+        context?.prompt?.config,
+        this.config,
+      );
+      if (reasoning == null) {
+        delete body.reasoning;
+      } else {
+        body.reasoning = resolveGrok47Reasoning(reasoning, context?.vars);
+      }
+    } else if (body.reasoning !== undefined) {
       body.reasoning = renderVarsInObject(body.reasoning, context?.vars);
     }
 
     // Filter unsupported parameters for Grok 4-family models
-    if (GROK_4_MODELS.includes(this.modelName)) {
+    if (GROK_4_MODELS.includes(model)) {
       delete body.presence_penalty;
       delete body.frequency_penalty;
       delete body.stop;
     }
 
-    const reasoningEffort = body.reasoning?.effort;
-    if (
-      GROK_45_MODELS.has(this.modelName) &&
-      reasoningEffort !== undefined &&
-      !['low', 'medium', 'high'].includes(reasoningEffort)
-    ) {
-      throw new Error(
-        `xAI model ${this.modelName} does not support reasoning.effort ${JSON.stringify(reasoningEffort)}. ` +
-          'Use "low", "medium", or "high", or omit reasoning.effort to use the default "high".',
-      );
-    }
+    validateXAIReasoningEffort(model, body.reasoning?.effort, 'reasoning.effort');
 
     return {
       body,
@@ -384,7 +405,18 @@ export class XAIResponsesProvider implements ApiProvider {
       };
     }
 
-    const { body, config } = await this.getRequestBody(prompt, context, callApiOptions);
+    const request = await this.getRequestBody(prompt, context, callApiOptions).catch(
+      (error: unknown) => {
+        if (error instanceof XAIRequestConfigError) {
+          return { error: `xAI request error: ${error.message}` };
+        }
+        throw error;
+      },
+    );
+    if ('error' in request) {
+      return request;
+    }
+    const { body, config } = request;
 
     logger.debug(`[xAI Responses] Calling ${this.getApiUrl()}/responses`, {
       model: this.modelName,
@@ -461,20 +493,7 @@ export class XAIResponsesProvider implements ApiProvider {
       }
 
       if (status < 200 || status >= 300) {
-        const errorMessage = `xAI API error: ${status} ${statusText}\n${
-          typeof data === 'string' ? data : JSON.stringify(data)
-        }`;
-
-        // Check for specific error types
-        if (data?.error?.code === 'invalid_prompt') {
-          return {
-            output: errorMessage,
-            tokenUsage: this.getTokenUsage(data, cached),
-            isRefusal: true,
-          };
-        }
-
-        return { error: errorMessage };
+        return this.handleUnsuccessfulResponse(data, status, statusText, cached);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -505,6 +524,25 @@ export class XAIResponsesProvider implements ApiProvider {
       result.cost = 0;
     }
     return result;
+  }
+
+  private handleUnsuccessfulResponse(
+    data: any,
+    status: number,
+    statusText: string,
+    cached: boolean,
+  ): ProviderResponse {
+    const errorMessage = `xAI API error: ${status} ${statusText}\n${
+      typeof data === 'string' ? data : JSON.stringify(data)
+    }`;
+    if (data?.error?.code === 'invalid_prompt') {
+      return {
+        output: errorMessage,
+        tokenUsage: this.getTokenUsage(data, cached),
+        isRefusal: true,
+      };
+    }
+    return { error: errorMessage };
   }
 
   private getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
