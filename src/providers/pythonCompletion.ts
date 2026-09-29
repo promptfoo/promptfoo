@@ -234,7 +234,6 @@ export class PythonProvider implements ApiProvider {
         `PythonProvider parsed cached result type: ${typeof parsedResult}, keys: ${Object.keys(parsedResult).join(',')}`,
       );
 
-      // IMPORTANT: Set cached flag to true so evaluator recognizes this as cached
       return applyCachedCallApiMetadata(apiType, parsedResult, 'Python');
     } else {
       const sanitizedContext = sanitizeScriptContext('PythonProvider', context);
