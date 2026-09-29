@@ -23,11 +23,9 @@ vi.mock('../../src/tracing/genaiTracer', async (importOriginal) => ({
 vi.mock('child_process', async (importOriginal) => ({
   ...(await importOriginal<typeof import('child_process')>()),
   spawn: vi.fn(),
-  execFile: vi.fn(),
 }));
 
-const { execFile, spawn } = await import('child_process');
-const mockExecFile = vi.mocked(execFile);
+const { spawn } = await import('child_process');
 const mockSpawn = vi.mocked(spawn);
 
 class FakeChildProcess extends EventEmitter {
@@ -128,15 +126,26 @@ function spawnedOptions(callIndex = 0): Record<string, any> {
   return mockSpawn.mock.calls[callIndex][2] as Record<string, any>;
 }
 
+const fixturePiPath = path.resolve('/fixture/pi');
+
+function createProvider(options: ConstructorParameters<typeof PiProvider>[0] = {}) {
+  return new PiProvider({
+    ...options,
+    config: { pi_path: fixturePiPath, ...options.config },
+  });
+}
+
 describe('PiProvider', () => {
   let previousBasePath: string | undefined;
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     previousBasePath = cliState.basePath;
     cliState.basePath = '/test/basePath';
   });
   afterEach(() => {
     cliState.basePath = previousBasePath;
+    vi.restoreAllMocks();
   });
 
   describe('id and construction', () => {
@@ -156,7 +165,7 @@ describe('PiProvider', () => {
   describe('CLI arguments', () => {
     it('runs in RPC mode with discovery and tools disabled', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       const result = await provider.callApi('test prompt');
 
@@ -178,7 +187,7 @@ describe('PiProvider', () => {
 
     it('passes model, provider, and thinking flags', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({
+      const provider = createProvider({
         config: {
           model: 'anthropic/claude-sonnet-4-5',
           provider_id: 'anthropic',
@@ -201,7 +210,7 @@ describe('PiProvider', () => {
       const workingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-test-'));
       try {
         mockPiRun(defaultEvents());
-        const provider = new PiProvider({ config: { working_dir: workingDir } });
+        const provider = createProvider({ config: { working_dir: workingDir } });
 
         await provider.callApi('test prompt');
 
@@ -217,7 +226,7 @@ describe('PiProvider', () => {
 
     it('respects an explicit tool allowlist', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({
+      const provider = createProvider({
         config: { tools: ['read', 'bash'], exclude_tools: ['write'] },
       });
 
@@ -230,7 +239,7 @@ describe('PiProvider', () => {
 
     it('treats an empty tool allowlist as no tools', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({ config: { tools: [] } });
+      const provider = createProvider({ config: { tools: [] } });
 
       await provider.callApi('test prompt');
 
@@ -239,7 +248,7 @@ describe('PiProvider', () => {
 
     it('gives no_tools precedence over a tool allowlist', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({ config: { no_tools: true, tools: ['bash'] } });
+      const provider = createProvider({ config: { no_tools: true, tools: ['bash'] } });
 
       await provider.callApi('test prompt');
 
@@ -250,7 +259,7 @@ describe('PiProvider', () => {
 
     it('passes system prompt flags', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({
+      const provider = createProvider({
         config: { system_prompt: 'You are terse.', append_system_prompt: 'Answer in French.' },
       });
 
@@ -263,7 +272,7 @@ describe('PiProvider', () => {
 
     it('omits hermetic flags when loading is enabled', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({
+      const provider = createProvider({
         config: {
           load_extensions: true,
           load_skills: true,
@@ -288,7 +297,7 @@ describe('PiProvider', () => {
 
     it('appends extra_args verbatim', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({ config: { extra_args: ['--approve'] } });
+      const provider = createProvider({ config: { extra_args: ['--approve'] } });
 
       await provider.callApi('test prompt');
 
@@ -299,7 +308,7 @@ describe('PiProvider', () => {
       const workingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-test-'));
       try {
         mockPiRun(defaultEvents());
-        const provider = new PiProvider({ config: { working_dir: workingDir } });
+        const provider = createProvider({ config: { working_dir: workingDir } });
 
         await provider.callApi('test prompt');
 
@@ -311,7 +320,7 @@ describe('PiProvider', () => {
 
     it('keeps --no-approve for context-file loading (context files do not need trust)', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({ config: { load_context_files: true } });
+      const provider = createProvider({ config: { load_context_files: true } });
 
       await provider.callApi('test prompt');
 
@@ -322,7 +331,7 @@ describe('PiProvider', () => {
 
     it('passes --approve only when trust_project_files is set', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({ config: { trust_project_files: true } });
+      const provider = createProvider({ config: { trust_project_files: true } });
 
       await provider.callApi('test prompt');
 
@@ -333,7 +342,7 @@ describe('PiProvider', () => {
 
     it('allows prompt-level model selection', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({ config: { model: 'openai/gpt-4o-mini' } });
+      const provider = createProvider({ config: { model: 'openai/gpt-4o-mini' } });
 
       await provider.callApi('test prompt', {
         prompt: {
@@ -350,7 +359,7 @@ describe('PiProvider', () => {
 
     it('keeps executable, tools, discovery and limits provider-owned', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({ config: { pi_path: '/trusted/pi', no_tools: true } });
+      const provider = createProvider({ config: { pi_path: '/trusted/pi', no_tools: true } });
       await provider.callApi('hello', {
         prompt: {
           raw: 'hello',
@@ -394,7 +403,7 @@ describe('PiProvider', () => {
 
     it('keeps environment settings provider-owned', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({
+      const provider = createProvider({
         config: { env: { KEEP_ME: 'base', OVERRIDE_ME: 'base' } },
       });
 
@@ -418,7 +427,7 @@ describe('PiProvider', () => {
       'preserves the RPC prompt %j',
       async (prompt) => {
         const child = mockPiRun(defaultEvents());
-        const provider = new PiProvider();
+        const provider = createProvider();
 
         await provider.callApi(prompt);
 
@@ -434,7 +443,7 @@ describe('PiProvider', () => {
     const child = mockPiRun([
       { type: 'response', command: 'prompt', success: false, error: 'No model configured' },
     ]);
-    const result = await new PiProvider().callApi('hello');
+    const result = await createProvider().callApi('hello');
     expect(result.error).toBe('No model configured');
     expect(child.stdin.end).toHaveBeenCalledTimes(1);
   });
@@ -443,7 +452,7 @@ describe('PiProvider', () => {
     const child = mockPiRun([
       { type: 'response', command: 'prompt', success: true, data: { disposition: 'handled' } },
     ]);
-    const result = await new PiProvider().callApi('/fixture');
+    const result = await createProvider().callApi('/fixture');
     expect(child.stdin.end).toHaveBeenCalledTimes(1);
     expect(result.error).toContain('before completing the run');
   });
@@ -451,7 +460,7 @@ describe('PiProvider', () => {
   it('keeps input open until a complete final event arrives', async () => {
     const child = new FakeChildProcess();
     mockSpawn.mockReturnValueOnce(child as never);
-    const pending = new PiProvider().callApi('hello');
+    const pending = createProvider().callApi('hello');
     await vi.waitFor(() => expect(child.stdin.write).toHaveBeenCalled());
     expect(child.stdin.end).not.toHaveBeenCalled();
     child.stdout.emit('data', JSON.stringify({ type: 'agent_end', willRetry: true }) + '\n');
@@ -477,7 +486,7 @@ describe('PiProvider', () => {
       vi.stubEnv('PI_CODING_AGENT_DIR', '/host/settings');
       try {
         mockPiRun(defaultEvents());
-        const provider = new PiProvider({
+        const provider = createProvider({
           config: { basePath: '/loaded/config', env: { HTTPS_PROXY: 'provider-fixture' } },
         });
         await cliState.withEnvFileOverrides(
@@ -502,7 +511,9 @@ describe('PiProvider', () => {
         const { loadApiProvider } = await import('../../src/providers');
         const provider = await loadApiProvider('pi', {
           basePath: root,
-          options: { config: { working_dir: './project', agent_dir: './settings' } },
+          options: {
+            config: { pi_path: fixturePiPath, working_dir: './project', agent_dir: './settings' },
+          },
         });
         mockPiRun(defaultEvents());
         await cliState.withBasePath('/different/caller', () => provider.callApi('hello'));
@@ -515,7 +526,7 @@ describe('PiProvider', () => {
 
     it('sets PI_CODING_AGENT_DIR from agent_dir', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({ config: { agent_dir: '/tmp/pi-agent-dir' } });
+      const provider = createProvider({ config: { agent_dir: '/tmp/pi-agent-dir' } });
 
       await provider.callApi('test prompt');
 
@@ -524,7 +535,7 @@ describe('PiProvider', () => {
 
     it('resolves a relative PI_CODING_AGENT_DIR from env to an absolute child env value', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({ config: { env: { PI_CODING_AGENT_DIR: './rel-agent' } } });
+      const provider = createProvider({ config: { env: { PI_CODING_AGENT_DIR: './rel-agent' } } });
 
       await provider.callApi('test prompt');
 
@@ -541,7 +552,7 @@ describe('PiProvider', () => {
       cliState.basePath = 'rel/config/dir';
       try {
         mockPiRun(defaultEvents());
-        const provider = new PiProvider({ config: { agent_dir: './agent' } });
+        const provider = createProvider({ config: { agent_dir: './agent' } });
 
         await provider.callApi('test prompt');
 
@@ -555,7 +566,7 @@ describe('PiProvider', () => {
 
     it('injects apiKey via the provider env var instead of argv', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({
+      const provider = createProvider({
         config: { provider_id: 'anthropic', apiKey: 'test-anthropic-key' },
       });
 
@@ -567,7 +578,7 @@ describe('PiProvider', () => {
 
     it('derives the apiKey env var from a provider/model pattern', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({
+      const provider = createProvider({
         config: { model: 'openai/gpt-4o-mini', apiKey: 'test-openai-key' },
       });
 
@@ -579,7 +590,7 @@ describe('PiProvider', () => {
 
     it('injects apiKey via api_key_env for unrecognized providers', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({
+      const provider = createProvider({
         config: {
           provider_id: 'my-custom-proxy',
           apiKey: 'custom-key',
@@ -594,7 +605,7 @@ describe('PiProvider', () => {
     });
 
     it('rejects apiKey for unrecognized providers without api_key_env', async () => {
-      const provider = new PiProvider({
+      const provider = createProvider({
         config: { provider_id: 'my-custom-proxy', apiKey: 'custom-key' },
       });
 
@@ -604,7 +615,7 @@ describe('PiProvider', () => {
 
     it('never puts the apiKey on the command line', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({
+      const provider = createProvider({
         config: { provider_id: 'anthropic', apiKey: 'test-secret-key' },
       });
 
@@ -615,7 +626,7 @@ describe('PiProvider', () => {
 
     it('merges provider env overrides and config env', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({
+      const provider = createProvider({
         config: { env: { CUSTOM_VAR: 'custom-value' } },
         env: { OPENAI_API_KEY: 'override-key' } as never,
       });
@@ -638,7 +649,7 @@ describe('PiProvider', () => {
       ['azure-openai-responses', 'AZURE_OPENAI_API_KEY'],
     ])('maps apiKey to the standard env var for %s', async (providerId, envVar) => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({ config: { provider_id: providerId, apiKey: 'k' } });
+      const provider = createProvider({ config: { provider_id: providerId, apiKey: 'k' } });
 
       await provider.callApi('test prompt');
 
@@ -650,7 +661,7 @@ describe('PiProvider', () => {
   describe('response parsing', () => {
     it('returns the final assistant message text with usage and cost', async () => {
       mockPiRun(defaultEvents('final answer'));
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       const result = await provider.callApi('test prompt');
 
@@ -679,7 +690,7 @@ describe('PiProvider', () => {
           willRetry: false,
         },
       ]);
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       const result = await provider.callApi('test prompt');
 
@@ -702,7 +713,7 @@ describe('PiProvider', () => {
       const usage = buildUsage(100, 10, 0.001, 5, 7);
       delete (usage as Partial<typeof usage>).totalTokens;
       mockPiRun([{ type: 'agent_end', messages: [assistantMessage('done', { usage })] }]);
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       const result = await provider.callApi('test prompt');
 
@@ -725,7 +736,7 @@ describe('PiProvider', () => {
       ['toolUse', 'tool_calls'],
     ])('preserves the %s finish reason', async (stopReason, expected) => {
       mockPiRun([{ type: 'agent_end', messages: [assistantMessage('hello', { stopReason })] }]);
-      expect((await new PiProvider().callApi('hello')).finishReason).toBe(expected);
+      expect((await createProvider().callApi('hello')).finishReason).toBe(expected);
     });
 
     it('reports the concrete response model when Pi routes to another model', async () => {
@@ -735,7 +746,7 @@ describe('PiProvider', () => {
           messages: [{ ...assistantMessage('hello'), responseModel: 'resolved-model' }],
         },
       ]);
-      expect((await new PiProvider().callApi('hello')).metadata?.model).toBe('resolved-model');
+      expect((await createProvider().callApi('hello')).metadata?.model).toBe('resolved-model');
     });
 
     it('captures tool calls in metadata', async () => {
@@ -763,7 +774,7 @@ describe('PiProvider', () => {
         },
         { type: 'agent_end', messages: [message], willRetry: false },
       ]);
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       const result = await provider.callApi('test prompt');
 
@@ -778,7 +789,7 @@ describe('PiProvider', () => {
         { type: 'message_end', message: assistantMessage('partial result') },
         { type: 'turn_end' },
       ]);
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       const result = await provider.callApi('test prompt');
 
@@ -805,7 +816,7 @@ describe('PiProvider', () => {
         });
         return child as never;
       });
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       const result = await provider.callApi('test prompt');
 
@@ -819,7 +830,7 @@ describe('PiProvider', () => {
         errorMessage: 'OpenAI API error (401): Incorrect API key',
       });
       mockPiRun([{ type: 'agent_end', messages: [message], willRetry: false }]);
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       const result = await provider.callApi('test prompt');
 
@@ -829,7 +840,7 @@ describe('PiProvider', () => {
 
     it('errors when no assistant message is produced', async () => {
       mockPiRun([{ type: 'agent_start' }], { stderr: 'something broke' });
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       const result = await provider.callApi('test prompt');
 
@@ -839,7 +850,7 @@ describe('PiProvider', () => {
 
     it('errors with stderr when pi exits nonzero without events', async () => {
       mockPiRun([], { exitCode: 1, stderr: 'Unknown flag: --bogus' });
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       const result = await provider.callApi('test prompt');
 
@@ -852,7 +863,7 @@ describe('PiProvider', () => {
       // must not be reported (or cached) as a successful response.
       mockPiRun(defaultEvents('truncated mid-run'), { exitCode: 1, stderr: 'pi crashed' });
       mockPiRun(defaultEvents('recovered'));
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       const first = await provider.callApi('crash me');
       const second = await provider.callApi('crash me');
@@ -865,7 +876,7 @@ describe('PiProvider', () => {
 
     it('decodes stdout as a stream so multi-byte UTF-8 spanning chunks survives', async () => {
       const child = mockPiRun(defaultEvents());
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       await provider.callApi('test prompt');
 
@@ -876,7 +887,7 @@ describe('PiProvider', () => {
     it('reports stopReason aborted as an error', async () => {
       const message = assistantMessage('', { stopReason: 'aborted' });
       mockPiRun([{ type: 'agent_end', messages: [message], willRetry: false }]);
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       const result = await provider.callApi('test prompt');
 
@@ -891,7 +902,7 @@ describe('PiProvider', () => {
         errorMessage: 'OpenAI API error (500): server error',
       });
       mockPiRun([{ type: 'agent_end', messages: [message], willRetry: false }]);
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       const result = await provider.callApi('test prompt');
 
@@ -921,7 +932,7 @@ describe('PiProvider', () => {
         { type: 'agent_end', messages: [{ role: 'user', content: [] }, failed], willRetry: true },
         { type: 'agent_end', messages: [{ role: 'user', content: [] }, ok], willRetry: false },
       ]);
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       const result = await provider.callApi('test prompt');
 
@@ -939,7 +950,7 @@ describe('PiProvider', () => {
         { type: 'message_end', message },
         { type: 'agent_end', messages: [{ role: 'user', content: [] }], willRetry: false },
       ]);
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       const result = await provider.callApi('test prompt');
 
@@ -955,7 +966,7 @@ describe('PiProvider', () => {
         },
         { type: 'agent_end', messages: [] },
       ]);
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       const result = await provider.callApi('test prompt');
 
@@ -972,21 +983,25 @@ describe('PiProvider', () => {
   });
 
   describe('binary resolution', () => {
-    it('returns install guidance when pi is not found', async () => {
+    it('returns install guidance without spawning when the package is absent', async () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+      const result = await new PiProvider().callApi('test prompt');
+      expect(result.error).toContain('@earendil-works/pi-coding-agent');
+      expect(result.error).toContain('npm install');
+      expect(mockSpawn).not.toHaveBeenCalled();
+    });
+
+    it('returns install guidance when an explicit executable is absent', async () => {
       const child = new FakeChildProcess();
       mockSpawn.mockImplementationOnce(() => {
         setImmediate(() => {
-          const error: NodeJS.ErrnoException = new Error('spawn pi ENOENT');
+          const error: NodeJS.ErrnoException = new Error('fixture executable absent');
           error.code = 'ENOENT';
           child.emit('error', error);
         });
         return child as never;
       });
-      const provider = new PiProvider();
-
-      const result = await provider.callApi('test prompt');
-
-      expect(result.error).toContain('@earendil-works/pi-coding-agent');
+      const result = await createProvider().callApi('test prompt');
       expect(result.error).toContain('npm install');
     });
 
@@ -997,33 +1012,29 @@ describe('PiProvider', () => {
       expect(mockSpawn).not.toHaveBeenCalled();
     });
 
-    it('does not discover executables from the configuration base path', async () => {
-      const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-config-resolution-'));
-      const previousBasePath = cliState.basePath;
-      const cwd = vi.spyOn(process, 'cwd').mockReturnValue(path.join(fixture, 'project'));
-      try {
-        const packageDir = path.join(
-          fixture,
-          'config',
-          'node_modules',
-          '@earendil-works',
-          'pi-coding-agent',
+    it('does not search the configuration or working directory for executables', async () => {
+      const projectDir = path.resolve('/trusted/project');
+      vi.spyOn(process, 'cwd').mockReturnValue(projectDir);
+      const existsSync = fs.existsSync;
+      const exists = vi
+        .spyOn(fs, 'existsSync')
+        .mockImplementation((filename) =>
+          path.basename(String(filename)) === 'package.json' ? false : existsSync(filename),
         );
-        fs.mkdirSync(packageDir, { recursive: true });
-        fs.writeFileSync(
-          path.join(packageDir, 'package.json'),
-          JSON.stringify({ bin: { pi: 'fixture.mjs' } }),
-        );
-        fs.writeFileSync(path.join(packageDir, 'fixture.mjs'), 'export {};');
-        cliState.basePath = path.join(fixture, 'config');
-        mockPiRun(defaultEvents());
-        await new PiProvider().callApi('hello');
-        expect(mockSpawn.mock.calls[0][0]).toBe('pi');
-      } finally {
-        cwd.mockRestore();
-        cliState.basePath = previousBasePath;
-        fs.rmSync(fixture, { recursive: true, force: true });
-      }
+      const result = await new PiProvider({
+        config: { basePath: '/config-fixture', working_dir: os.tmpdir() },
+      }).callApi('hello');
+      expect(result.error).toContain('npm install');
+      expect(mockSpawn).not.toHaveBeenCalled();
+      expect(
+        exists.mock.calls
+          .map(([filename]) => String(filename))
+          .filter((filename) => path.basename(filename) === 'package.json'),
+      ).toEqual([
+        path.join(projectDir, 'node_modules/@earendil-works/pi-coding-agent/package.json'),
+        path.resolve('/trusted/node_modules/@earendil-works/pi-coding-agent/package.json'),
+        path.resolve('/node_modules/@earendil-works/pi-coding-agent/package.json'),
+      ]);
     });
 
     it('uses pi_path when configured', async () => {
@@ -1069,7 +1080,7 @@ describe('PiProvider', () => {
 
   describe('working_dir validation', () => {
     it('rejects unsupported automatic workspace copying', async () => {
-      const provider = new PiProvider({
+      const provider = createProvider({
         config: {
           working_dir: os.tmpdir(),
           ...({ copy_working_dir: true } as Record<string, unknown>),
@@ -1080,7 +1091,7 @@ describe('PiProvider', () => {
     });
 
     it('rejects a missing working directory', async () => {
-      const provider = new PiProvider({ config: { working_dir: '/does/not/exist-pi-test' } });
+      const provider = createProvider({ config: { working_dir: '/does/not/exist-pi-test' } });
 
       await expect(provider.callApi('test prompt')).rejects.toThrow(/does not exist/);
       expect(mockSpawn).not.toHaveBeenCalled();
@@ -1101,7 +1112,7 @@ describe('PiProvider', () => {
           return true;
         });
         mockSpawn.mockReturnValueOnce(child as never);
-        const provider = new PiProvider();
+        const provider = createProvider();
         const pending = provider.callApi('hello');
         await vi.advanceTimersByTimeAsync(0);
         expect(registered).toHaveBeenCalledWith(provider);
@@ -1136,7 +1147,7 @@ describe('PiProvider', () => {
       try {
         const child = mockPiRun(defaultEvents('done'));
         (child as { pid?: number }).pid = 4242;
-        const pending = new PiProvider().callApi('hello');
+        const pending = createProvider().callApi('hello');
         await vi.advanceTimersByTimeAsync(0);
         expect((await pending).output).toBe('done');
         expect(killSpy).toHaveBeenCalledWith(-4242, 'SIGKILL');
@@ -1163,7 +1174,7 @@ describe('PiProvider', () => {
           return true;
         });
         mockSpawn.mockImplementationOnce(() => child as never);
-        const provider = new PiProvider({ config: { timeout: 20 } });
+        const provider = createProvider({ config: { timeout: 20 } });
 
         const promise = provider.callApi('test prompt');
         await vi.advanceTimersByTimeAsync(20);
@@ -1193,7 +1204,7 @@ describe('PiProvider', () => {
           return true;
         });
         mockSpawn.mockImplementationOnce(() => child as never);
-        const provider = new PiProvider({ config: { timeout: 20 } });
+        const provider = createProvider({ config: { timeout: 20 } });
 
         const promise = provider.callApi('test prompt');
         await vi.advanceTimersByTimeAsync(20); // timeout -> SIGTERM -> pi exits
@@ -1232,7 +1243,7 @@ describe('PiProvider', () => {
           });
           return child as never;
         });
-        const provider = new PiProvider();
+        const provider = createProvider();
 
         const promise = provider.callApi('test prompt');
         await vi.advanceTimersByTimeAsync(1_000);
@@ -1267,7 +1278,7 @@ describe('PiProvider', () => {
           });
           return child as never;
         });
-        const provider = new PiProvider();
+        const provider = createProvider();
 
         const promise = provider.callApi('test prompt');
         await vi.advanceTimersByTimeAsync(1_000);
@@ -1288,7 +1299,7 @@ describe('PiProvider', () => {
     it('short-circuits when the abort signal is already aborted', async () => {
       const controller = new AbortController();
       controller.abort();
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       const result = await provider.callApi('test prompt', undefined, {
         abortSignal: controller.signal,
@@ -1300,7 +1311,7 @@ describe('PiProvider', () => {
 
     it('honors cancellation after a previous successful call', async () => {
       mockPiRun(defaultEvents('previous answer'));
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       await provider.callApi('abort me');
 
@@ -1327,7 +1338,7 @@ describe('PiProvider', () => {
         setImmediate(() => controller.abort());
         return child as never;
       });
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       const result = await provider.callApi('test prompt', undefined, {
         abortSignal: controller.signal,
@@ -1337,65 +1348,11 @@ describe('PiProvider', () => {
       expect(child.kill).toHaveBeenCalledWith('SIGTERM');
     });
 
-    it('waits for Windows process-tree cleanup before returning an aborted call', async () => {
-      const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
-      vi.stubEnv('SystemRoot', 'C:\\Windows');
-      try {
-        const controller = new AbortController();
-        const child = new FakeChildProcess();
-        (child as { pid?: number }).pid = 4242;
-        mockSpawn.mockReturnValueOnce(child as never);
-        let completeCleanup!: (error: Error | null) => void;
-        mockExecFile.mockImplementation((_file: any, _args: any, _options: any, callback: any) => {
-          completeCleanup = callback;
-          return {} as never;
-        });
-        let returned = false;
-        const pending = new PiProvider()
-          .callApi('hello', undefined, { abortSignal: controller.signal })
-          .then((result) => {
-            returned = true;
-            return result;
-          });
-        await vi.waitFor(() => expect(child.stdin.write).toHaveBeenCalled());
-        controller.abort();
-        await vi.waitFor(() => expect(mockExecFile).toHaveBeenCalled());
-        expect(mockExecFile.mock.calls[0].slice(0, 3)).toEqual([
-          'C:\\Windows\\System32\\taskkill.exe',
-          ['/PID', '4242', '/T', '/F'],
-          { windowsHide: true, timeout: 5000 },
-        ]);
-        child.emit('close', null, 'SIGTERM');
-        await Promise.resolve();
-        expect(returned).toBe(false);
-        completeCleanup(null);
-        expect((await pending).error).toBe('Pi call aborted');
-        expect(child.kill).not.toHaveBeenCalled();
-      } finally {
-        platform.mockRestore();
-        vi.unstubAllEnvs();
-      }
-    });
-
-    it('reports Windows tree-cleanup failures and still signals the direct child', async () => {
-      const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
-      vi.stubEnv('SystemRoot', 'C:\\Windows');
-      try {
-        const child = new FakeChildProcess();
-        (child as { pid?: number }).pid = 4242;
-        mockSpawn.mockReturnValueOnce(child as never);
-        mockExecFile.mockImplementation((_file: any, _args: any, _options: any, callback: any) => {
-          callback(new Error('cleanup fixture failed'));
-          return {} as never;
-        });
-        const pending = new PiProvider({ config: { timeout: 20 } }).callApi('hello');
-        const result = await pending;
-        expect(result.error).toContain('cleanup fixture failed');
-        expect(child.kill).toHaveBeenCalled();
-      } finally {
-        platform.mockRestore();
-        vi.unstubAllEnvs();
-      }
+    it('rejects Windows before starting a process', async () => {
+      vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+      const result = await createProvider().callApi('hello');
+      expect(result.error).toContain('supports Linux and macOS only');
+      expect(mockSpawn).not.toHaveBeenCalled();
     });
 
     it('reports the terminating signal when pi exits with a null code', async () => {
@@ -1408,7 +1365,7 @@ describe('PiProvider', () => {
         });
         return child as never;
       });
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       const result = await provider.callApi('test prompt');
 
@@ -1418,11 +1375,11 @@ describe('PiProvider', () => {
 
     it('spawns pi in its own process group on POSIX', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       await provider.callApi('test prompt');
 
-      expect(spawnedOptions().detached).toBe(process.platform !== 'win32');
+      expect(spawnedOptions().detached).toBe(true);
     });
 
     it('signals the child and its POSIX process group when killing', async () => {
@@ -1441,7 +1398,7 @@ describe('PiProvider', () => {
           setImmediate(() => controller.abort());
           return child as never;
         });
-        const provider = new PiProvider();
+        const provider = createProvider();
 
         const pending = provider.callApi('test prompt', undefined, {
           abortSignal: controller.signal,
@@ -1474,7 +1431,7 @@ describe('PiProvider', () => {
         });
         return child as never;
       });
-      const provider = new PiProvider({ config: { max_output_bytes: 100 } });
+      const provider = createProvider({ config: { max_output_bytes: 100 } });
 
       const result = await provider.callApi('test prompt');
 
@@ -1487,7 +1444,7 @@ describe('PiProvider', () => {
   it('runs identical calls again so changing runtime inputs cannot reuse stale output', async () => {
     mockPiRun(defaultEvents('first'));
     mockPiRun(defaultEvents('second'));
-    const provider = new PiProvider();
+    const provider = createProvider();
 
     expect((await provider.callApi('same prompt')).output).toBe('first');
     const second = await provider.callApi('same prompt');
@@ -1509,7 +1466,7 @@ describe('PiProvider', () => {
 
     it('wraps the run in a GenAI span with the resolved system, model, and traceparent', async () => {
       mockPiRun(defaultEvents('traced answer'));
-      const provider = new PiProvider({ config: { model: 'openai/gpt-4o-mini' } });
+      const provider = createProvider({ config: { model: 'openai/gpt-4o-mini' } });
       const traceparent = '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
 
       const result = await provider.callApi('test prompt', {
@@ -1533,7 +1490,7 @@ describe('PiProvider', () => {
     it('traces each repeated call', async () => {
       mockPiRun(defaultEvents('once'));
       mockPiRun(defaultEvents('twice'));
-      const provider = new PiProvider();
+      const provider = createProvider();
 
       await provider.callApi('same prompt');
       await provider.callApi('same prompt');
@@ -1544,7 +1501,7 @@ describe('PiProvider', () => {
 
     it('uses the pi system label for a bare default-model run', async () => {
       mockPiRun(defaultEvents());
-      await new PiProvider().callApi('test prompt');
+      await createProvider().callApi('test prompt');
       expect(spanSpy.mock.calls[0][0]).toMatchObject({ system: 'pi', model: 'default' });
     });
   });
@@ -1554,6 +1511,15 @@ describe('PiProvider', () => {
       expect(
         redactArgsForLog(['--mode', 'json', '--api-key', 'sk-secret', '--thinking', 'high']),
       ).toEqual(['--mode', 'json', '--api-key', '[redacted]', '--thinking', 'high']);
+    });
+
+    it('redacts hyphen-prefixed credential values', () => {
+      expect(redactArgsForLog(['--api-key', '-private-fixture', '--model', 'fixture'])).toEqual([
+        '--api-key',
+        '[redacted]',
+        '--model',
+        'fixture',
+      ]);
     });
 
     it('redacts the value in --flag=value form', () => {

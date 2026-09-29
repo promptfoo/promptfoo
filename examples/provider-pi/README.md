@@ -18,17 +18,13 @@ npx promptfoo@latest init --example provider-pi/model-comparison
 
 ### 1. Install the pi CLI
 
-```bash
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent
-```
-
-Or with the install script:
+The provider supports Linux and macOS. Install Pi 0.99.1 or later in the project where you run promptfoo:
 
 ```bash
-curl -fsSL https://pi.dev/install.sh | sh
+npm install --ignore-scripts @earendil-works/pi-coding-agent
 ```
 
-Use Pi 0.99.1 or later.
+For an installation elsewhere, set `pi_path` to its absolute executable or CLI script path. Automatic discovery searches the current directory and its parents, without using `PATH`. Windows is not supported.
 
 ### 2. Configure credentials
 

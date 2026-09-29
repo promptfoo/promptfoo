@@ -1,4 +1,4 @@
-import { execFile, spawn } from 'child_process';
+import { spawn } from 'child_process';
 import fs from 'fs';
 import fsPromises from 'fs/promises';
 import os from 'os';
@@ -62,7 +62,7 @@ export function redactArgsForLog(args: string[]): string[] {
         out.push(`${flag}=[redacted]`);
       } else {
         out.push(arg);
-        if (i + 1 < args.length && !args[i + 1].startsWith('-')) {
+        if (i + 1 < args.length) {
           out.push('[redacted]');
           i++;
         }
@@ -229,7 +229,7 @@ export interface PiProviderConfig {
    */
   agent_dir?: string;
 
-  /** Absolute path to the pi executable. Overrides package/PATH resolution. */
+  /** Absolute path to the pi executable or CLI script. Overrides package discovery. */
   pi_path?: string;
 
   /** Extra environment variables for the pi process */
@@ -399,12 +399,10 @@ export function findPiCliScript(baseDirs: Array<string | undefined>): string | u
 function piInstallGuidance(): string {
   return dedent`The pi coding agent CLI (0.99.1 or later) is required but was not found.
 
-    Install it with one of:
-      npm install -g ${PI_PACKAGE_NAME}
+    Install it in the project where you run promptfoo:
       npm install ${PI_PACKAGE_NAME}
-      curl -fsSL https://pi.dev/install.sh | sh
 
-    Or set pi_path in the provider config to the pi executable.
+    Or set pi_path to an absolute path to an installed Pi executable or CLI script.
 
     For more information, see: https://www.promptfoo.dev/docs/providers/pi/`;
 }
@@ -442,7 +440,7 @@ export class PiProvider implements ApiProvider {
 
   /**
    * Resolve the command used to launch pi.
-   * Priority: config.pi_path > project-local npm package > `pi` on PATH.
+   * Use an explicit absolute path or a project-local npm package.
    */
   private resolvePiCommand(config: PiProviderConfig): { command: string; argsPrefix: string[] } {
     if (config.pi_path) {
@@ -466,7 +464,7 @@ export class PiProvider implements ApiProvider {
       return { command: process.execPath, argsPrefix: [this.cachedCliScript] };
     }
 
-    return { command: 'pi', argsPrefix: [] };
+    throw new Error(piInstallGuidance());
   }
 
   /**
@@ -701,9 +699,8 @@ export class PiProvider implements ApiProvider {
         cwd: options.cwd,
         env: options.env,
         stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: true,
-        // Keep descendants in a group for POSIX cancellation.
-        detached: process.platform !== 'win32',
+        // Keep descendants in a group for cancellation and cleanup.
+        detached: true,
       });
 
       let stdout = '';
@@ -716,50 +713,17 @@ export class PiProvider implements ApiProvider {
       let aborted = false;
       let settled = false;
       let exitSignal: NodeJS.Signals | null = null;
-      let treeCleanup: Promise<void> | undefined;
       let killHandle: ReturnType<typeof setTimeout> | undefined;
       let exitHandle: ReturnType<typeof setTimeout> | undefined;
       let stopping = false;
 
       const signalGroup = (signal: NodeJS.Signals) => {
-        if (process.platform === 'win32' && typeof child.pid === 'number') {
-          treeCleanup ??= Promise.resolve().then(
-            () =>
-              new Promise<void>((resolveCleanup, rejectCleanup) => {
-                const windowsDir = process.env.SystemRoot;
-                if (!windowsDir || !path.win32.isAbsolute(windowsDir)) {
-                  rejectCleanup(
-                    new Error('Cannot locate the Windows system directory for Pi cleanup'),
-                  );
-                  return;
-                }
-                execFile(
-                  path.win32.join(windowsDir, 'System32', 'taskkill.exe'),
-                  ['/PID', String(child.pid), '/T', '/F'],
-                  { windowsHide: true, timeout: KILL_GRACE_MS },
-                  (error) => (error ? rejectCleanup(error) : resolveCleanup()),
-                );
-              }),
-          );
-          // Keep the rejection handled until the child closes or the fallback settles.
-          void treeCleanup.catch((error) => {
-            try {
-              child.kill();
-            } catch (killError) {
-              logger.debug('[Pi] Failed to signal process after cleanup error', {
-                error: killError,
-              });
-            }
-            finish(() => reject(new Error(`Failed to stop Pi process tree: ${error.message}`)));
-          });
-          return;
-        }
         try {
           child.kill(signal);
         } catch (err) {
           logger.debug(`[Pi] Failed to send ${signal}: ${err}`);
         }
-        if (process.platform !== 'win32' && typeof child.pid === 'number') {
+        if (typeof child.pid === 'number') {
           try {
             process.kill(-child.pid, signal);
           } catch (err) {
@@ -774,9 +738,7 @@ export class PiProvider implements ApiProvider {
           return;
         }
         stopping = true;
-        if (process.platform !== 'win32' || typeof child.pid !== 'number') {
-          killHandle = setTimeout(() => signalGroup('SIGKILL'), KILL_GRACE_MS);
-        }
+        killHandle = setTimeout(() => signalGroup('SIGKILL'), KILL_GRACE_MS);
         signalGroup('SIGTERM');
       };
 
@@ -801,11 +763,11 @@ export class PiProvider implements ApiProvider {
         clearTimeout(killHandle);
         clearTimeout(exitHandle);
         // Closed pipes do not prove that background descendants have stopped.
-        if (process.platform !== 'win32' && (stopping || typeof child.pid === 'number')) {
+        if (stopping || typeof child.pid === 'number') {
           signalGroup('SIGKILL');
         }
         options.abortSignal?.removeEventListener('abort', abortListener);
-        void (treeCleanup ?? Promise.resolve()).then(fn, reject);
+        fn();
       };
 
       // setEncoding makes Node buffer partial multi-byte UTF-8 sequences across
@@ -1083,6 +1045,12 @@ export class PiProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    if (process.platform !== 'linux' && process.platform !== 'darwin') {
+      return {
+        error: 'The Pi provider supports Linux and macOS only; this platform is unsupported.',
+      };
+    }
+
     if (callOptions?.abortSignal?.aborted) {
       return { error: 'Pi call aborted before it started' };
     }

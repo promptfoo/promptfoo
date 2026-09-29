@@ -19,29 +19,17 @@ The model segment follows Pi's model pattern syntax, including an optional think
 
 ## Installation
 
-Install the pi CLI with one of:
+The Pi provider supports Linux and macOS. Windows is not supported.
 
-```bash
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent
-```
-
-```bash
-curl -fsSL https://pi.dev/install.sh | sh
-```
-
-Or install it into the project where you run promptfoo. Automatic discovery searches that directory and its parents:
+Install Pi into the project where you run promptfoo. Automatic discovery searches that directory and its parents:
 
 ```bash
 npm install --ignore-scripts @earendil-works/pi-coding-agent
 ```
 
-Use a current Pi release that supports RPC mode and the resource controls listed below.
+For an existing installation elsewhere, set `pi_path` to the absolute path of its executable or CLI script. Promptfoo does not search `PATH` or the configured working directory.
 
-:::note
-
-On Windows, use the project-local install (or set `pi_path` to the package's CLI script (listed in its `package.json` `bin.pi` field)): promptfoo runs the package script with Node directly, while a globally installed `pi.cmd` shim on PATH cannot be spawned without a shell.
-
-:::
+Use Pi 0.99.1 or later, which supports the RPC completion event required by this provider.
 
 ## Setup
 
@@ -53,8 +41,6 @@ export OPENAI_API_KEY=your_api_key_here
 ```
 
 Subscription-backed providers configured through Pi's login flow also work because the provider uses your Pi config directory (`~/.pi/agent`) by default.
-
-Use Pi 0.99.1 or later, which reports completed RPC runs with `agent_settled`.
 
 ## Quick Start
 
