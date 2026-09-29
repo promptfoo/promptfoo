@@ -208,6 +208,20 @@ describe('OpenAICodexAppServerProvider', () => {
     });
   });
 
+  it.each([false, true])('honors inherit_process_env=%s for file defaults', (inheritProcessEnv) => {
+    const provider = new OpenAICodexAppServerProvider({ config: {} });
+    cliState.withEnvFileOverrides({ PATH: 'file-path', PROMPTFOO_REVIEW_ENV_PROBE: 'file' }, () => {
+      const env = (provider as any).prepareEnvironment({ inherit_process_env: inheritProcessEnv });
+      expect(env.PATH).toBe('file-path');
+      expect(env.PROMPTFOO_REVIEW_ENV_PROBE).toBe(inheritProcessEnv ? 'file' : undefined);
+      const explicit = (provider as any).prepareEnvironment({
+        inherit_process_env: inheritProcessEnv,
+        cli_env: { PROMPTFOO_REVIEW_ENV_PROBE: 'explicit' },
+      });
+      expect(explicit.PROMPTFOO_REVIEW_ENV_PROBE).toBe('explicit');
+    });
+  });
+
   it('routes native app-server spans to the receiver configured for the active eval', async () => {
     const provider = new OpenAICodexAppServerProvider({
       config: { deep_tracing: true },
@@ -612,6 +626,7 @@ describe('OpenAICodexAppServerProvider', () => {
             inputTokens: 13,
             outputTokens: 5,
             cachedInputTokens: 2,
+            cacheWriteInputTokens: 3,
             reasoningOutputTokens: 1,
           },
         },
@@ -633,6 +648,7 @@ describe('OpenAICodexAppServerProvider', () => {
       'gen_ai.usage.input_tokens': 13,
       'gen_ai.usage.output_tokens': 5,
       'gen_ai.usage.cache_read.input_tokens': 2,
+      'gen_ai.usage.cache_creation.input_tokens': 3,
       'gen_ai.usage.reasoning.output_tokens': 1,
     });
     expect(turnSpan?.ended).toBe(true);
@@ -1053,7 +1069,7 @@ describe('OpenAICodexAppServerProvider', () => {
 
       const result = await resultPromise;
       expect(result.output).toBe('On Bedrock');
-      expect(result.cost).toBeCloseTo(0.041525, 10);
+      expect(result.cost).toBeCloseTo(0.02882, 10);
 
       const spawnEnv = mocks.spawn.mock.calls[0][2].env as Record<string, string>;
       expect(spawnEnv.OPENAI_API_KEY).toBeUndefined();
@@ -4857,6 +4873,7 @@ describe('OpenAICodexAppServerProvider', () => {
 
     const provider = new OpenAICodexAppServerProvider({
       config: {
+        model: 'gpt-6-astra',
         thread_cleanup: 'none',
       },
     });
@@ -4941,6 +4958,7 @@ describe('OpenAICodexAppServerProvider', () => {
             cachedInputTokens: 25,
             outputTokens: 50,
             reasoningOutputTokens: 12,
+            cacheWriteInputTokens: 10,
           },
           total: {
             inputTokens: 200,
@@ -4979,7 +4997,7 @@ describe('OpenAICodexAppServerProvider', () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: 'command_execution',
-          aggregated_output: 'PROMPTFOO_SYNTHETIC_SECRET=synthetic-value',
+          aggregated_output: 'PROMPTFOO_SYNTHETIC_SECRET=%5BREDACTED%5D',
           exit_code: 0,
         }),
         expect.objectContaining({
@@ -5003,9 +5021,12 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(raw.usage).toEqual({
       input_tokens: 100,
       cached_input_tokens: 25,
+      cache_write_input_tokens: 10,
       output_tokens: 50,
       reasoning_output_tokens: 12,
     });
+    expect(result.tokenUsage?.completionDetails?.cacheCreationInputTokens).toBe(10);
+    expect(result.cost).toBeCloseTo(0.0033, 10);
   });
 
   it('counts notifications without retaining raw notification payloads by default', async () => {

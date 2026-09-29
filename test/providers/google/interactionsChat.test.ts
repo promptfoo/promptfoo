@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
+import { AIStudioChatProvider } from '../../../src/providers/google/ai.studio';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import {
   GoogleInteractionsChatProvider,
@@ -54,6 +55,7 @@ describe('GoogleInteractionsChatProvider', () => {
     // Endpoint/auth resolution reads the ambient environment; pin it so a
     // developer's gcloud or Gemini setup cannot redirect these assertions.
     vi.stubEnv('GOOGLE_API_HOST', '');
+    vi.stubEnv('PALM_API_HOST', '');
     vi.stubEnv('GOOGLE_API_BASE_URL', '');
     vi.stubEnv('VERTEX_REGION', '');
     vi.stubEnv('GOOGLE_CLOUD_LOCATION', '');
@@ -128,22 +130,26 @@ describe('GoogleInteractionsChatProvider', () => {
       });
     });
 
-    it('keys the cache on a credential hash rather than the raw API key', async () => {
+    it('isolates cache identities without persisting credential fingerprints', async () => {
       mockFetchWithCache.mockResolvedValue(interaction() as any);
+      const first = make();
+      await first.callApi('Hello');
+      await first.callApi('Hello');
+      first.config.apiKey = 'other-test-key';
+      await first.callApi('Hello');
       await make().callApi('Hello');
-
-      const init = mockFetchWithCache.mock.calls[0][1] as any;
-      // Responses are cacheable like every other Google provider, but the key is
-      // discriminated by a hash so the credential is never a durable fingerprint.
-      expect(init._authHash).toMatch(/^[0-9a-f]{16}$/);
-      expect(JSON.stringify(init._authHash)).not.toContain('test-key');
-      expect(mockFetchWithCache.mock.calls[0][4]).toBe(false);
+      const keys = mockFetchWithCache.mock.calls.map((call) => (call[4] as any).cacheKey);
+      expect(keys[0]).toBe(keys[1]);
+      expect(new Set([keys[0], keys[2], keys[3]]).size).toBe(3);
+      expect(keys.join()).not.toContain('test-key');
+      expect(mockFetchWithCache.mock.calls[0][1]).not.toHaveProperty('_authHash');
+      expect(mockFetchWithCache.mock.calls[0][4]).toMatchObject({ bust: false });
     });
 
     it('busts the cache when the caller asks for fresh results', async () => {
       mockFetchWithCache.mockResolvedValue(interaction() as any);
       await make().callApi('Hello', { bustCache: true } as any);
-      expect(mockFetchWithCache.mock.calls[0][4]).toBe(true);
+      expect(mockFetchWithCache.mock.calls[0][4]).toMatchObject({ bust: true });
     });
 
     it('applies a configured timeoutMs to the initial request, not just polling', async () => {
@@ -409,12 +415,165 @@ describe('GoogleInteractionsChatProvider', () => {
       });
     });
 
-    it('drops safetySettings, which the Gemini Interactions API rejects', async () => {
-      mockFetchWithCache.mockResolvedValue(interaction() as any);
-      await make({
+    it('rejects unsupported explicit settings instead of dropping them', async () => {
+      const result = await make({
         safetySettings: [{ category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' }],
       }).callApi('Hello');
-      expect(bodyOf(mockFetchWithCache.mock.calls[0]).safety_settings).toBeUndefined();
+      expect(result.error).toContain('Use interactions: false');
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('compatibility regressions', () => {
+    it.each([
+      { safetySettings: [{ category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' }] },
+      { generationConfig: { thinkingConfig: { thinkingBudget: 128 } } },
+      { interactions: false },
+    ])('routes unsupported prompt options through generateContent: %j', async (promptConfig) => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'Legacy answer' }] } }],
+          usageMetadata: {},
+        },
+        cached: false,
+      } as any);
+      const provider = new GoogleInteractionsChatProvider('gemini-2.5-flash', {
+        id: 'google:gemini-2.5-flash',
+        config: { apiKey: 'test-key', vertexai: false },
+        fallbackToGenerateContent: true,
+      });
+      const result = await provider.callApi('Hello', {
+        prompt: { raw: 'Hello', label: 'hello', config: promptConfig },
+      } as any);
+      expect(result.output).toBe('Legacy answer');
+      expect(String(mockFetchWithCache.mock.calls[0][0])).toContain(':generateContent');
+      if ('safetySettings' in promptConfig) {
+        expect(bodyOf(mockFetchWithCache.mock.calls[0]).safetySettings).toEqual(
+          promptConfig.safetySettings,
+        );
+      }
+    });
+
+    it('cleans up the fallback when its request throws', async () => {
+      const failure = new Error('fixture request failed');
+      const call = vi
+        .spyOn(AIStudioChatProvider.prototype, 'callApi')
+        .mockRejectedValueOnce(failure);
+      const cleanup = vi.spyOn(AIStudioChatProvider.prototype, 'cleanup');
+      const provider = new GoogleInteractionsChatProvider('gemini-2.5-flash', {
+        config: { apiKey: 'test-key', vertexai: false },
+        fallbackToGenerateContent: true,
+      });
+      try {
+        await expect(
+          provider.callApi('Hello', { prompt: { config: { interactions: false } } } as any),
+        ).rejects.toBe(failure);
+        expect(cleanup).toHaveBeenCalledOnce();
+      } finally {
+        call.mockRestore();
+        cleanup.mockRestore();
+      }
+    });
+
+    it('preserves schema data while normalizing schema keywords', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      const data = { type: 'STRING', properties: { type: 'OBJECT' } };
+      await make({
+        responseSchema: {
+          type: 'OBJECT',
+          properties: {
+            type: { type: 'STRING', const: 'OBJECT' },
+            payload: { type: 'OBJECT', default: data, examples: [data], enum: [data] },
+          },
+          $defs: { nested: { type: ['STRING', 'NULL'] } },
+        },
+      }).callApi('Hello');
+      expect(bodyOf(mockFetchWithCache.mock.calls[0]).response_format).toEqual({
+        type: 'object',
+        properties: {
+          type: { type: 'string', const: 'OBJECT' },
+          payload: { type: 'object', default: data, examples: [data], enum: [data] },
+        },
+        $defs: { nested: { type: ['string', 'null'] } },
+      });
+    });
+
+    it('normalizes both passthrough generation spellings with snake-case precedence', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      await make({
+        passthrough: {
+          generationConfig: { maxOutputTokens: 15, temperature: 0.1 },
+          generation_config: { temperature: 0.8 },
+        },
+      }).callApi('Hello');
+      const body = bodyOf(mockFetchWithCache.mock.calls[0]);
+      expect(body.generation_config).toMatchObject({ max_output_tokens: 15, temperature: 0.8 });
+      expect(body).not.toHaveProperty('generationConfig');
+    });
+
+    it('prices the model selected through passthrough', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      const overridden = await make({ passthrough: { model: 'gemini-2.5-pro' } }).callApi('Hello');
+      const direct = await new GoogleInteractionsChatProvider('gemini-2.5-pro', {
+        config: { apiKey: 'test-key', vertexai: false },
+      }).callApi('Hello');
+      expect(overridden.cost).toBeGreaterThan(0);
+      expect(overridden.cost).toBe(direct.cost);
+      expect(bodyOf(mockFetchWithCache.mock.calls[0]).model).toBe('gemini-2.5-pro');
+    });
+
+    it('rejects unsupported camel-case passthrough generation settings', async () => {
+      const response = await make({
+        passthrough: { generationConfig: { thinkingConfig: { thinkingBudget: 128 } } },
+      }).callApi('Hello');
+      expect(response.error).toContain('thinkingBudget');
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('honors PALM_API_HOST in provider-scoped environment overrides', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      await new GoogleInteractionsChatProvider('gemini-2.5-flash', {
+        config: { apiKey: 'test-key', vertexai: false },
+        env: { PALM_API_HOST: 'http://127.0.0.1:12345' },
+      }).callApi('Hello');
+      expect(mockFetchWithCache.mock.calls[0][0]).toBe(
+        'http://127.0.0.1:12345/v1beta/interactions',
+      );
+    });
+
+    it.each([
+      null,
+      [],
+      'not an interaction',
+      { steps: {} },
+      { steps: [null] },
+      { steps: [{ content: [null] }] },
+    ])('returns an error for a malformed response: %j', async (data) => {
+      mockFetchWithCache.mockResolvedValue({ data, cached: false, status: 200 } as any);
+      await expect(make().callApi('Hello')).resolves.toMatchObject({
+        error: expect.stringContaining('invalid response'),
+      });
+    });
+
+    it('returns an error for a malformed polling response', async () => {
+      mockFetchWithCache
+        .mockResolvedValueOnce(interaction({ status: 'in_progress' }) as any)
+        .mockResolvedValueOnce({ data: null, cached: false, status: 200 } as any);
+      await expect(make().callApi('Hello')).resolves.toMatchObject({
+        error: expect.stringContaining('polling returned an invalid response'),
+      });
+    });
+
+    it('keeps native tool declarations and withholds native functions when disabled', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      const tools = [
+        { type: 'function', name: 'echo', parameters: { type: 'object' } },
+        { type: 'google_search' },
+      ];
+      await make({ tools }).callApi('Hello');
+      expect(bodyOf(mockFetchWithCache.mock.calls[0]).tools).toEqual(tools);
+      await make({ tools, tool_choice: 'none' }).callApi('Hello');
+      expect(bodyOf(mockFetchWithCache.mock.calls[1]).tools).toEqual([{ type: 'google_search' }]);
     });
   });
 
@@ -627,7 +786,7 @@ describe('GoogleInteractionsChatProvider', () => {
         ...toolConfig,
         functionToolCallbacks: {
           get_weather: () => {
-            throw new Error('upstream down');
+            throw new Error('fixture credential: test-private-value');
           },
         },
       }).callApi('Weather?');
@@ -635,11 +794,11 @@ describe('GoogleInteractionsChatProvider', () => {
       expect(bodyOf(mockFetchWithCache.mock.calls[1]).input).toContainEqual(
         expect.objectContaining({
           type: 'function_result',
-          result: [{ type: 'text', text: 'Error: upstream down' }],
+          result: [{ type: 'text', text: 'Tool execution failed' }],
         }),
       );
       expect(result.metadata?.toolCalls).toEqual([
-        expect.objectContaining({ name: 'get_weather', error: 'upstream down' }),
+        expect.objectContaining({ name: 'get_weather', error: 'Tool execution failed' }),
       ]);
     });
 
@@ -1193,6 +1352,25 @@ describe('shouldUseInteractions', () => {
       { generationConfig: { presencePenalty: 0.5 } },
     ],
     ['a legacy PaLM model', 'chat-bison-001', {}],
+    ['a legacy code chat model', 'codechat-bison-001', {}],
+    ['a legacy Gemma model', 'gemma-2-27b-it', {}],
+    ['a legacy code Gemma model', 'codegemma-7b-it', {}],
+    ['a TTS preview model', 'gemini-3.1-flash-tts-preview', {}],
+    [
+      'a named function',
+      'gemini-3.6-flash',
+      { tool_choice: { type: 'function', function: { name: 'echo' } } },
+    ],
+    [
+      'configured search retrieval',
+      'gemini-3.6-flash',
+      { tools: [{ googleSearchRetrieval: { dynamicRetrievalConfig: { mode: 'MODE_DYNAMIC' } } }] },
+    ],
+    [
+      'a function response schema',
+      'gemini-3.6-flash',
+      { tools: [{ functionDeclarations: [{ name: 'echo', response: { type: 'STRING' } }] }] },
+    ],
     ['a script-like id', 'custom-model.ts', {}],
   ])('falls back to generateContent for %s', (_label, model, config) => {
     expect(shouldUseInteractions(model, config as any)).toBe(false);

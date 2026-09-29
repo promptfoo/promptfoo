@@ -10,9 +10,17 @@ export const googleProviderFactories: ProviderFactory[] = [
     create: async (providerPath, providerOptions) => {
       const splits = providerPath.split(':');
       const firstPart = splits[1];
+      if (firstPart === 'live') {
+        const modelName = splits.slice(2).join(':');
+        if (!modelName) {
+          throw new Error('Missing model name. Use vertex:live:<model>.');
+        }
+        const { VertexLiveProvider } = await import('../google/vertexLive');
+        return new VertexLiveProvider(modelName, providerOptions);
+      }
       const modelName =
         firstPart === 'chat' ? splits.slice(2).join(':') : splits.slice(1).join(':');
-      if (modelName === 'gemini-omni-flash-preview') {
+      if (['gemini-omni-flash-preview', 'gemini-omni-1.1-flash-preview'].includes(modelName)) {
         const { GoogleInteractionsProvider } = await import('../google/interactions');
         return new GoogleInteractionsProvider(modelName, {
           ...providerOptions,
@@ -22,12 +30,14 @@ export const googleProviderFactories: ProviderFactory[] = [
       }
       if (firstPart === 'interactions') {
         const interactionsModel = splits.slice(2).join(':');
-        if (interactionsModel === 'gemini-omni-flash-preview') {
+        if (
+          ['gemini-omni-flash-preview', 'gemini-omni-1.1-flash-preview'].includes(interactionsModel)
+        ) {
           const { GoogleInteractionsProvider } = await import('../google/interactions');
           return new GoogleInteractionsProvider(interactionsModel, {
             ...providerOptions,
             id: providerPath,
-            config: { ...providerOptions.config, vertexai: true },
+            config: { ...providerOptions.config, vertexai: true, interactions: true },
           });
         }
         if (!interactionsModel) {
@@ -39,7 +49,7 @@ export const googleProviderFactories: ProviderFactory[] = [
         return new GoogleInteractionsChatProvider(interactionsModel, {
           ...providerOptions,
           id: providerPath,
-          config: { ...providerOptions.config, vertexai: true },
+          config: { ...providerOptions.config, vertexai: true, interactions: true },
         });
       }
       if (firstPart === 'video') {
@@ -84,7 +94,7 @@ export const googleProviderFactories: ProviderFactory[] = [
         const modelName = splits.slice(2).join(':');
 
         if (serviceType === 'interactions') {
-          if (modelName === 'gemini-omni-flash-preview') {
+          if (['gemini-omni-flash-preview', 'gemini-omni-1.1-flash'].includes(modelName)) {
             // Omni returns video; the chat provider would collect only text and
             // drop the result. Keep the explicit prefix on the video provider.
             const { GoogleInteractionsProvider } = await import('../google/interactions');
@@ -102,7 +112,7 @@ export const googleProviderFactories: ProviderFactory[] = [
           return new GoogleInteractionsChatProvider(modelName, {
             ...providerOptions,
             id: providerPath,
-            config: { ...providerOptions.config, vertexai: false },
+            config: { ...providerOptions.config, vertexai: false, interactions: true },
           });
         }
         if (serviceType === 'live') {
@@ -134,9 +144,12 @@ export const googleProviderFactories: ProviderFactory[] = [
       // Default to regular Google API
       const modelName = splits[1];
 
-      if (modelName === 'gemini-omni-flash-preview') {
+      if (modelName === 'gemini-omni-flash-preview' || modelName === 'gemini-omni-1.1-flash') {
         const { GoogleInteractionsProvider } = await import('../google/interactions');
-        return new GoogleInteractionsProvider(modelName, providerOptions);
+        return new GoogleInteractionsProvider(modelName, {
+          ...providerOptions,
+          config: { ...providerOptions.config, vertexai: false },
+        });
       }
 
       // Check if this is a Gemini native image generation model. Dispatch is on
@@ -147,12 +160,7 @@ export const googleProviderFactories: ProviderFactory[] = [
         return new GeminiImageProvider(modelName, providerOptions);
       }
 
-      // The Interactions API is Google's primary interface and the default here.
-      // `shouldUseInteractions` falls back to legacy generateContent for the
-      // capabilities Interactions does not serve, and honors an explicit
-      // `interactions: false` opt-out.
-      // The legacy `palm:` prefix keeps the legacy transport; only `google:` opts
-      // into the new default.
+      // Keep PaLM and unsupported configurations on their existing transport.
       const { shouldUseInteractions } = await import('../google/interactionsShared');
       if (
         !providerPath.startsWith('palm:') &&
@@ -161,6 +169,7 @@ export const googleProviderFactories: ProviderFactory[] = [
         const { GoogleInteractionsChatProvider } = await import('../google/interactionsChat');
         return new GoogleInteractionsChatProvider(modelName, {
           ...providerOptions,
+          fallbackToGenerateContent: true,
           id: providerPath,
           config: { ...providerOptions.config, vertexai: false },
         });

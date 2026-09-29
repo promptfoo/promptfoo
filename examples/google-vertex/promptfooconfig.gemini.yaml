@@ -47,6 +47,16 @@ providers:
                     enum: ['restaurant', 'hotel', 'attraction']
                 required: ['query']
 
+  - id: vertex:gemini-3.8-flash
+    config:
+      region: global
+      generationConfig:
+        maxOutputTokens: 2048
+        thinkingConfig:
+          thinkingLevel: MEDIUM
+      toolConfig: *geminiToolConfig
+      tools: *geminiTools
+
   - id: vertex:gemini-3.7-flash
     config:
       region: global

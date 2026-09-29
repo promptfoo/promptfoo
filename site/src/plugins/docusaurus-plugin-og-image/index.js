@@ -1353,6 +1353,63 @@ async function generateTelecomTemplate() {
   });
 }
 
+const SPECIAL_PAGES = [
+  {
+    label: 'Pricing',
+    route: '/pricing/',
+    filename: 'pricing-og.png',
+    templateFactory: generatePricingTemplate,
+  },
+  {
+    label: 'About',
+    route: '/about/',
+    filename: 'about-og.png',
+    templateFactory: generateAboutTemplate,
+  },
+  {
+    label: 'Contact',
+    route: '/contact/',
+    filename: 'contact-og.png',
+    templateFactory: generateContactTemplate,
+  },
+  {
+    label: 'Press',
+    route: '/press/',
+    filename: 'press-og.png',
+    templateFactory: generatePressTemplate,
+  },
+  {
+    label: 'Store',
+    route: '/store/',
+    filename: 'store-og.png',
+    templateFactory: generateStoreTemplate,
+  },
+  {
+    label: 'Events',
+    route: '/events/',
+    filename: 'events-og.png',
+    templateFactory: generateEventsTemplate,
+  },
+  {
+    label: 'Finance solutions',
+    route: '/solutions/finance/',
+    filename: 'solutions-finance-og.png',
+    templateFactory: generateFinanceTemplate,
+  },
+  {
+    label: 'Insurance solutions',
+    route: '/solutions/insurance/',
+    filename: 'solutions-insurance-og.png',
+    templateFactory: generateInsuranceTemplate,
+  },
+  {
+    label: 'Telecom solutions',
+    route: '/solutions/telecom/',
+    filename: 'solutions-telecom-og.png',
+    templateFactory: generateTelecomTemplate,
+  },
+];
+
 // Generate Satori JSX template for OG image
 async function generateSatoriTemplate(metadata = {}) {
   const {
@@ -1603,11 +1660,11 @@ async function generateOgImage(metadata, outputPath) {
   }
 }
 
-// Generate Pricing OG image using custom template
-async function generatePricingOgImage(outputPath) {
+// Generate a special-page OG image using its custom template
+async function generateSpecialPageOgImage(specialPage, outputPath) {
   try {
     const fonts = await getSatoriFonts();
-    const template = await generatePricingTemplate();
+    const template = await specialPage.templateFactory();
 
     // Generate SVG using Satori
     const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
@@ -1631,271 +1688,7 @@ async function generatePricingOgImage(outputPath) {
 
     return true;
   } catch (error) {
-    console.error('❌ Failed to generate Pricing OG image:', error.message);
-    return false;
-  }
-}
-
-// Generate About OG image using custom template
-async function generateAboutOgImage(outputPath) {
-  try {
-    const fonts = await getSatoriFonts();
-    const template = await generateAboutTemplate();
-
-    // Generate SVG using Satori
-    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
-
-    // Convert SVG to PNG using Sharp
-    const sharp = getSharp();
-    const pngBuffer = await sharp(Buffer.from(svg))
-      .ensureAlpha()
-      .png({
-        quality: 100,
-        compressionLevel: 6,
-        palette: false,
-      })
-      .toBuffer();
-
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
-
-    // Write PNG file
-    await fs.writeFile(outputPath, pngBuffer);
-
-    return true;
-  } catch (error) {
-    console.error('❌ Failed to generate About OG image:', error.message);
-    return false;
-  }
-}
-
-// Generate Contact OG image using custom template
-async function generateContactOgImage(outputPath) {
-  try {
-    const fonts = await getSatoriFonts();
-    const template = await generateContactTemplate();
-
-    // Generate SVG using Satori
-    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
-
-    // Convert SVG to PNG using Sharp
-    const sharp = getSharp();
-    const pngBuffer = await sharp(Buffer.from(svg))
-      .ensureAlpha()
-      .png({
-        quality: 100,
-        compressionLevel: 6,
-        palette: false,
-      })
-      .toBuffer();
-
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
-
-    // Write PNG file
-    await fs.writeFile(outputPath, pngBuffer);
-
-    return true;
-  } catch (error) {
-    console.error('❌ Failed to generate Contact OG image:', error.message);
-    return false;
-  }
-}
-
-// Generate Press OG image using custom template
-async function generatePressOgImage(outputPath) {
-  try {
-    const fonts = await getSatoriFonts();
-    const template = await generatePressTemplate();
-
-    // Generate SVG using Satori
-    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
-
-    // Convert SVG to PNG using Sharp
-    const sharp = getSharp();
-    const pngBuffer = await sharp(Buffer.from(svg))
-      .ensureAlpha()
-      .png({
-        quality: 100,
-        compressionLevel: 6,
-        palette: false,
-      })
-      .toBuffer();
-
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
-
-    // Write PNG file
-    await fs.writeFile(outputPath, pngBuffer);
-
-    return true;
-  } catch (error) {
-    console.error('❌ Failed to generate Press OG image:', error.message);
-    return false;
-  }
-}
-
-// Generate Store OG image using custom template
-async function generateStoreOgImage(outputPath) {
-  try {
-    const fonts = await getSatoriFonts();
-    const template = await generateStoreTemplate();
-
-    // Generate SVG using Satori
-    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
-
-    // Convert SVG to PNG using Sharp
-    const sharp = getSharp();
-    const pngBuffer = await sharp(Buffer.from(svg))
-      .ensureAlpha()
-      .png({
-        quality: 100,
-        compressionLevel: 6,
-        palette: false,
-      })
-      .toBuffer();
-
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
-
-    // Write PNG file
-    await fs.writeFile(outputPath, pngBuffer);
-
-    return true;
-  } catch (error) {
-    console.error('❌ Failed to generate Store OG image:', error.message);
-    return false;
-  }
-}
-
-// Generate Events OG image using custom template
-async function generateEventsOgImage(outputPath) {
-  try {
-    const fonts = await getSatoriFonts();
-    const template = await generateEventsTemplate();
-
-    // Generate SVG using Satori
-    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
-
-    // Convert SVG to PNG using Sharp
-    const sharp = getSharp();
-    const pngBuffer = await sharp(Buffer.from(svg))
-      .ensureAlpha()
-      .png({
-        quality: 100,
-        compressionLevel: 6,
-        palette: false,
-      })
-      .toBuffer();
-
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
-
-    // Write PNG file
-    await fs.writeFile(outputPath, pngBuffer);
-
-    return true;
-  } catch (error) {
-    console.error('❌ Failed to generate Events OG image:', error.message);
-    return false;
-  }
-}
-
-// Generate Finance solutions OG image using custom template
-async function generateFinanceOgImage(outputPath) {
-  try {
-    const fonts = await getSatoriFonts();
-    const template = await generateFinanceTemplate();
-
-    // Generate SVG using Satori
-    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
-
-    // Convert SVG to PNG using Sharp
-    const sharp = getSharp();
-    const pngBuffer = await sharp(Buffer.from(svg))
-      .ensureAlpha()
-      .png({
-        quality: 100,
-        compressionLevel: 6,
-        palette: false,
-      })
-      .toBuffer();
-
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
-
-    // Write PNG file
-    await fs.writeFile(outputPath, pngBuffer);
-
-    return true;
-  } catch (error) {
-    console.error('❌ Failed to generate Finance OG image:', error.message);
-    return false;
-  }
-}
-
-// Generate Insurance solutions OG image using custom template
-async function generateInsuranceOgImage(outputPath) {
-  try {
-    const fonts = await getSatoriFonts();
-    const template = await generateInsuranceTemplate();
-
-    // Generate SVG using Satori
-    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
-
-    // Convert SVG to PNG using Sharp
-    const sharp = getSharp();
-    const pngBuffer = await sharp(Buffer.from(svg))
-      .ensureAlpha()
-      .png({
-        quality: 100,
-        compressionLevel: 6,
-        palette: false,
-      })
-      .toBuffer();
-
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
-
-    // Write PNG file
-    await fs.writeFile(outputPath, pngBuffer);
-
-    return true;
-  } catch (error) {
-    console.error('❌ Failed to generate Insurance OG image:', error.message);
-    return false;
-  }
-}
-
-// Generate Telecom solutions OG image using custom template
-async function generateTelecomOgImage(outputPath) {
-  try {
-    const fonts = await getSatoriFonts();
-    const template = await generateTelecomTemplate();
-
-    // Generate SVG using Satori
-    const svg = await satori(template, { width: WIDTH, height: HEIGHT, fonts });
-
-    // Convert SVG to PNG using Sharp
-    const sharp = getSharp();
-    const pngBuffer = await sharp(Buffer.from(svg))
-      .ensureAlpha()
-      .png({
-        quality: 100,
-        compressionLevel: 6,
-        palette: false,
-      })
-      .toBuffer();
-
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
-
-    // Write PNG file
-    await fs.writeFile(outputPath, pngBuffer);
-
-    return true;
-  } catch (error) {
-    console.error('❌ Failed to generate Telecom OG image:', error.message);
+    console.error(`❌ Failed to generate ${specialPage.label} OG image:`, error.message);
     return false;
   }
 }
@@ -2292,130 +2085,24 @@ module.exports = function (context, options) {
         );
       }
 
-      // Generate pricing page OG image
-      console.log('🎨 Generating Pricing page OG image...');
-      const pricingImagePath = path.join(outDir, 'img', 'og', 'pricing-og.png');
-      const pricingSuccess = await generatePricingOgImage(pricingImagePath);
-      if (pricingSuccess) {
-        generatedImages.set('/pricing/', '/img/og/pricing-og.png');
-        successCount++;
-        console.log('  ✅ Pricing OG image generated');
-      } else {
-        failureCount++;
-      }
+      for (const specialPage of SPECIAL_PAGES) {
+        console.log(`🎨 Generating ${specialPage.label} OG image...`);
+        const imagePath = path.join(outDir, 'img', 'og', specialPage.filename);
+        const success = await generateSpecialPageOgImage(specialPage, imagePath);
 
-      // Generate about page OG image
-      console.log('🎨 Generating About page OG image...');
-      const aboutImagePath = path.join(outDir, 'img', 'og', 'about-og.png');
-      const aboutSuccess = await generateAboutOgImage(aboutImagePath);
-      if (aboutSuccess) {
-        generatedImages.set('/about/', '/img/og/about-og.png');
-        successCount++;
-        console.log('  ✅ About OG image generated');
-      } else {
-        failureCount++;
-      }
-
-      // Generate contact page OG image
-      console.log('🎨 Generating Contact page OG image...');
-      const contactImagePath = path.join(outDir, 'img', 'og', 'contact-og.png');
-      const contactSuccess = await generateContactOgImage(contactImagePath);
-      if (contactSuccess) {
-        generatedImages.set('/contact/', '/img/og/contact-og.png');
-        successCount++;
-        console.log('  ✅ Contact OG image generated');
-      } else {
-        failureCount++;
-      }
-
-      // Generate press page OG image
-      console.log('🎨 Generating Press page OG image...');
-      const pressImagePath = path.join(outDir, 'img', 'og', 'press-og.png');
-      const pressSuccess = await generatePressOgImage(pressImagePath);
-      if (pressSuccess) {
-        generatedImages.set('/press/', '/img/og/press-og.png');
-        successCount++;
-        console.log('  ✅ Press OG image generated');
-      } else {
-        failureCount++;
-      }
-
-      // Generate store page OG image
-      console.log('🎨 Generating Store page OG image...');
-      const storeImagePath = path.join(outDir, 'img', 'og', 'store-og.png');
-      const storeSuccess = await generateStoreOgImage(storeImagePath);
-      if (storeSuccess) {
-        generatedImages.set('/store/', '/img/og/store-og.png');
-        successCount++;
-        console.log('  ✅ Store OG image generated');
-      } else {
-        failureCount++;
-      }
-
-      // Generate events page OG image
-      console.log('🎨 Generating Events page OG image...');
-      const eventsImagePath = path.join(outDir, 'img', 'og', 'events-og.png');
-      const eventsSuccess = await generateEventsOgImage(eventsImagePath);
-      if (eventsSuccess) {
-        generatedImages.set('/events/', '/img/og/events-og.png');
-        successCount++;
-        console.log('  ✅ Events OG image generated');
-      } else {
-        failureCount++;
-      }
-
-      // Generate solutions page OG images
-      console.log('🎨 Generating Solutions page OG images...');
-
-      // Finance solutions page
-      const financeImagePath = path.join(outDir, 'img', 'og', 'solutions-finance-og.png');
-      const financeSuccess = await generateFinanceOgImage(financeImagePath);
-      if (financeSuccess) {
-        generatedImages.set('/solutions/finance/', '/img/og/solutions-finance-og.png');
-        successCount++;
-        console.log('  ✅ Finance solutions OG image generated');
-      } else {
-        failureCount++;
-      }
-
-      // Insurance solutions page
-      const insuranceImagePath = path.join(outDir, 'img', 'og', 'solutions-insurance-og.png');
-      const insuranceSuccess = await generateInsuranceOgImage(insuranceImagePath);
-      if (insuranceSuccess) {
-        generatedImages.set('/solutions/insurance/', '/img/og/solutions-insurance-og.png');
-        successCount++;
-        console.log('  ✅ Insurance solutions OG image generated');
-      } else {
-        failureCount++;
-      }
-
-      // Telecom solutions page
-      const telecomImagePath = path.join(outDir, 'img', 'og', 'solutions-telecom-og.png');
-      const telecomSuccess = await generateTelecomOgImage(telecomImagePath);
-      if (telecomSuccess) {
-        generatedImages.set('/solutions/telecom/', '/img/og/solutions-telecom-og.png');
-        successCount++;
-        console.log('  ✅ Telecom solutions OG image generated');
-      } else {
-        failureCount++;
+        if (success) {
+          generatedImages.set(specialPage.route, `/img/og/${specialPage.filename}`);
+          successCount++;
+          console.log(`  ✅ ${specialPage.label} OG image generated`);
+        } else {
+          failureCount++;
+        }
       }
 
       // Inject meta tags for special pages (pricing, about, contact, press, store, events, solutions)
       console.log('🔄 Injecting OG image meta tags for special pages...');
-      const specialPages = [
-        '/pricing/',
-        '/about/',
-        '/contact/',
-        '/press/',
-        '/store/',
-        '/events/',
-        '/solutions/finance/',
-        '/solutions/insurance/',
-        '/solutions/telecom/',
-      ];
-
       const defaultThumbnailUrl = 'https://www.promptfoo.dev/img/thumbnail.png';
-      for (const routePath of specialPages) {
+      for (const { route: routePath } of SPECIAL_PAGES) {
         const imageUrl = generatedImages.get(routePath);
         if (imageUrl) {
           const htmlPath = path.join(outDir, routePath.slice(1), 'index.html');

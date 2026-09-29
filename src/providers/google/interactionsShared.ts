@@ -1,18 +1,4 @@
-/**
- * Shared transport helpers for the Gemini Interactions API.
- *
- * The Interactions API (GA June 2026) replaces `generateContent` as Google's
- * primary interface: an `Interaction` resource holds the chronological sequence
- * of thoughts, tool calls, and outputs as `steps`, and can optionally be
- * persisted server-side so follow-up turns reference it by id instead of
- * resending history.
- *
- * Both the video-generation provider (`interactions.ts`, Gemini Omni) and the
- * chat/text provider (`interactionsChat.ts`) speak the same wire protocol, so
- * endpoint resolution, authentication, and usage accounting live here.
- *
- * @see https://ai.google.dev/gemini-api/docs/interactions-overview
- */
+/** Endpoint, authentication, and response helpers shared by Interactions providers. */
 
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
@@ -91,7 +77,11 @@ export function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOver
     return `${config.apiBaseUrl.replace(/\/$/, '')}/v1beta/interactions`;
   }
 
-  const apiHost = env?.GOOGLE_API_HOST || getEnvString('GOOGLE_API_HOST');
+  const apiHost =
+    env?.GOOGLE_API_HOST ||
+    env?.PALM_API_HOST ||
+    getEnvString('GOOGLE_API_HOST') ||
+    getEnvString('PALM_API_HOST');
   if (apiHost) {
     return endpointFromHost(apiHost);
   }
@@ -102,11 +92,7 @@ export function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOver
   return 'https://generativelanguage.googleapis.com/v1beta/interactions';
 }
 
-/**
- * Vertex serves Interactions only from these locations, and all three live on
- * the global `aiplatform.googleapis.com` host - there is no `us-aiplatform`
- * or `eu-aiplatform` regional host (both 404). Verified against the live API.
- */
+/** These multi-region locations share the global API host. */
 const VERTEX_INTERACTIONS_GLOBAL_HOST_LOCATIONS = new Set(['global', 'us', 'eu']);
 
 /** Resolve the Vertex AI Interactions endpoint for a project/region. */
@@ -240,10 +226,7 @@ export function getInteractionModalityTokenCount(
  * to an earlier turn and must not be replayed as this turn's output.
  */
 export function getModelOutputContent(data: InteractionResponse): InteractionContent[] {
-  const steps = data.steps || [];
-  const latestUserInput = steps.map((step) => step.type).lastIndexOf('user_input');
-  return steps
-    .slice(latestUserInput + 1)
+  return getLatestTurnSteps(data)
     .filter((step) => step.type === 'model_output')
     .flatMap((step) => step.content || []);
 }
@@ -255,14 +238,7 @@ export function getLatestTurnSteps(data: InteractionResponse): InteractionStep[]
   return steps.slice(latestUserInput + 1);
 }
 
-/**
- * Generation options the Interactions API accepts, verified against the live
- * endpoint. Anything else - `response_mime_type`, `candidate_count`,
- * `presence_penalty`, `frequency_penalty`, `logprobs`, `media_resolution`,
- * `audio_timestamp`, response modalities - is rejected with
- * `Unknown parameter`, so an allow-list keeps the default from turning a
- * working generateContent config into a 400.
- */
+/** Gemini generation options this adapter maps onto its pinned Interactions revision. */
 const INTERACTIONS_GENERATION_KEYS = new Set([
   'temperature',
   'topP',
@@ -279,14 +255,11 @@ const INTERACTIONS_GENERATION_KEYS = new Set([
   'response_schema',
 ]);
 
-/**
- * A function-calling mode the Interactions API cannot express.
- *
- * `NONE` is honored by withholding declarations and `AUTO` is the default, but
- * this endpoint has no `tool_choice` field, so a mode that *requires* a call has
- * no equivalent.
- */
-export function getUnexpressibleToolMode(config: GoogleProviderConfig): string | undefined {
+/** Required or named function policies need the generateContent mapping. */
+function getUnexpressibleToolMode(config: GoogleProviderConfig): string | undefined {
+  if (typeof config.tool_choice === 'object' && config.tool_choice !== null) {
+    return 'named function';
+  }
   const mode =
     config.toolConfig?.functionCallingConfig?.mode ??
     config.tool_config?.function_calling_config?.mode ??
@@ -297,14 +270,8 @@ export function getUnexpressibleToolMode(config: GoogleProviderConfig): string |
     : undefined;
 }
 
-/**
- * Config that would break if a request were routed through Interactions.
- *
- * Each entry is a capability `generateContent` has and Interactions does not,
- * verified against the live API. They gate the default only: an explicit
- * `interactions: true` still forces the Interactions transport.
- */
-function getInteractionsCapabilityGap(
+/** Configurations that need generateContent to preserve their meaning. */
+export function getInteractionsCapabilityGap(
   modelName: string,
   config: GoogleProviderConfig,
 ): string | undefined {
@@ -312,26 +279,48 @@ function getInteractionsCapabilityGap(
     // A script-like id is a pseudo model name, not something Interactions serves.
     return 'script-like provider ids are not Interactions models';
   }
-  if (/^(chat|text|code)-bison|^embedding-gecko/.test(modelName)) {
+  if (/^(chat|text|code|codechat)-bison|^embedding-gecko/.test(modelName)) {
     // Legacy PaLM models predate Interactions entirely.
     return 'legacy PaLM models are not served on the Interactions API';
   }
-  if (/-tts$/.test(modelName)) {
-    // TTS models reject a text response_format, and an audio response_format
-    // silently returns text instead of audio.
+  if (/-tts(?:-|$)/.test(modelName)) {
+    // This adapter only returns text and function-call outputs.
     return 'text-to-speech models are not served on the Interactions API';
   }
+  if (/^(?:gemma-[123](?:-|$)|codegemma|paligemma)/.test(modelName)) {
+    return 'this legacy Gemma model is not served on the Interactions API';
+  }
   if (config.safetySettings) {
-    // The Gemini API rejects `safety_settings` on this endpoint outright.
-    return 'safetySettings is not supported by the Interactions API';
+    // Keep the existing safety-settings mapping.
+    return 'safetySettings is not mapped by this Interactions adapter';
   }
   const toolMode = getUnexpressibleToolMode(config);
   if (toolMode) {
-    return `functionCallingConfig.mode ${toolMode} cannot be enforced on the Interactions API`;
+    return `functionCallingConfig.mode ${toolMode} requires the generateContent mapping`;
   }
   if (config.generationConfig?.thinkingConfig?.thinkingBudget !== undefined) {
     // Interactions takes `thinking_level`, not a token budget.
-    return 'generationConfig.thinkingConfig.thinkingBudget is not supported by the Interactions API';
+    return 'generationConfig.thinkingConfig.thinkingBudget is not mapped by this Interactions adapter';
+  }
+  const tools = Array.isArray(config.tools) ? config.tools : [];
+  for (const tool of tools) {
+    const raw = tool as Record<string, any>;
+    const retrieval = raw.googleSearchRetrieval ?? raw.google_search_retrieval;
+    if (retrieval && Object.keys(retrieval).length > 0) {
+      return 'configured search retrieval is not mapped by this Interactions adapter';
+    }
+    const declarations = raw.functionDeclarations ?? raw.function_declarations;
+    if (
+      Array.isArray(declarations) &&
+      declarations.some(
+        (declaration) =>
+          declaration.response ||
+          declaration.responseJsonSchema ||
+          declaration.response_json_schema,
+      )
+    ) {
+      return 'function response schemas are not mapped by this Interactions adapter';
+    }
   }
   const hasSchema = Boolean(
     config.responseSchema ??
@@ -347,22 +336,12 @@ function getInteractionsCapabilityGap(
     if (hasSchema && (key === 'responseMimeType' || key === 'response_mime_type')) {
       continue;
     }
-    return `generationConfig.${key} is not supported by the Interactions API`;
+    return `generationConfig.${key} is not mapped by this Interactions adapter`;
   }
   return undefined;
 }
 
-/**
- * Decide whether a Gemini chat request should use the Interactions API.
- *
- * Interactions is Google's primary interface and the default here, but it is
- * not a superset of `generateContent`: Vertex serves a much narrower model set
- * with forced retention and no working server-side history, and a few AI Studio
- * capabilities have no Interactions equivalent. Those cases fall back so that
- * making Interactions the default cannot silently change behavior.
- *
- * `config.interactions` always wins, in both directions.
- */
+/** Select the default transport; an explicit flag overrides automatic fallback. */
 export function shouldUseInteractions(
   modelName: string,
   config: GoogleProviderConfig,
@@ -372,8 +351,7 @@ export function shouldUseInteractions(
     return config.interactions;
   }
   if (options.vertex) {
-    // Verified live: fewer models, `store: false` rejected, and
-    // previous_interaction_id returns 200 while ignoring the stored history.
+    // Preserve the existing Vertex default.
     return false;
   }
   const gap = getInteractionsCapabilityGap(modelName, config);
