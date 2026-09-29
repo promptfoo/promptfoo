@@ -743,10 +743,15 @@ describe('tokenUsageUtils', () => {
       });
 
       expect(target.assertions).toMatchObject({ total: 0, cached: 0, numRequests: 1 });
+      expect(target.incurredTokenUsage?.assertions ?? target.assertions).toMatchObject({
+        total: 0,
+        numRequests: 1,
+      });
     });
 
     it('preserves explicitly fresh grading when avoided cached tokens exceed fresh usage', () => {
       const target = createEmptyTokenUsage();
+      target.incurredTokenUsage = createEmptyTokenUsage();
 
       accumulateGradingResponseTokenUsage(target, {
         cached: false,
@@ -758,6 +763,12 @@ describe('tokenUsageUtils', () => {
         prompt: 30,
         completion: 20,
         cached: 97,
+        numRequests: 1,
+      });
+      expect(target.incurredTokenUsage.assertions).toMatchObject({
+        total: 50,
+        prompt: 30,
+        completion: 20,
         numRequests: 1,
       });
     });
