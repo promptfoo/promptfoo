@@ -53,10 +53,12 @@ They still publish the same archive that passed that compatibility check.
 
 ## Runtime assets and platforms
 
-Default consumers migrate an isolated database from the first packaged migration,
-retain a nonempty legacy result/table/config byte-for-byte, export it through the
-installed CLI, and persist a new passing and failing evaluation. A second process
-reopens the database and verifies migration idempotency and stored results.
+Default consumers upgrade a database from the first packaged migration. Checks
+cover historical data and CLI exports, new passing and failing results, and
+migration idempotency after reopening.
+
+Fixtures run in supervised child processes. Temporary state is removed after the
+children exit and retained if process-tree termination fails.
 
 Select interpreter checks explicitly; missing interpreters fail the selected gate:
 
@@ -82,7 +84,5 @@ The macOS/Windows jobs use `scripts/preparePackageArtifactTest.mjs` to copy only
 the acceptance scripts/fixtures into a temporary tool package. Its two tools
 and their complete dependency graph are copied from the repository lockfile,
 including integrity hashes and optional native packages, then installed with `npm ci`.
-The installed Promptfoo consumer
-resolves dependencies independently. No repository dependency install or build is
-required on those platforms. Incremental TypeScript compiler state is excluded
-from the published archive.
+The Promptfoo consumer resolves dependencies independently. These jobs need no
+repository dependency install or build.

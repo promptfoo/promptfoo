@@ -288,6 +288,10 @@ ${nativeSource}`,
       path.resolve(__dirname, '../fixtures/package-artifact/migrations.mjs'),
       fixture,
     );
+    fs.copyFileSync(
+      path.resolve(__dirname, '../fixtures/package-artifact/isolated.mjs'),
+      path.join(root, 'isolated.mjs'),
+    );
     return { root, temporary, nativeDir, fixture };
   }
 
@@ -305,6 +309,24 @@ ${nativeSource}`,
         return false;
       }
       throw error;
+    }
+  }
+
+  function killRecordedProcesses(files: string[]) {
+    for (const file of files) {
+      if (!fs.existsSync(file)) {
+        continue;
+      }
+      const pid = Number(fs.readFileSync(file, 'utf8'));
+      if (Number.isInteger(pid) && pid > 0 && pid !== process.pid && processIsRunning(pid)) {
+        try {
+          process.kill(pid, 'SIGKILL');
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
+            throw error;
+          }
+        }
+      }
     }
   }
 
@@ -368,22 +390,7 @@ setInterval(() => {}, 1000);`;
         expect(fs.readdirSync(temporary)).toEqual([]);
       } finally {
         fs.closeSync(descriptor);
-        // Clean only PIDs recorded by these owned fixtures, even if the supervisor regresses.
-        for (const file of pidFiles) {
-          if (!fs.existsSync(file)) {
-            continue;
-          }
-          const pid = Number(fs.readFileSync(file, 'utf8'));
-          if (Number.isInteger(pid) && pid > 0 && pid !== process.pid && processIsRunning(pid)) {
-            try {
-              process.kill(pid, 'SIGKILL');
-            } catch (error) {
-              if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
-                throw error;
-              }
-            }
-          }
-        }
+        killRecordedProcesses(pidFiles);
       }
     },
   );
@@ -433,7 +440,7 @@ childProcess.ChildProcess.prototype.kill = function (signal) {
       expect(result.status).not.toBe(0);
       const diagnostic = fs.readFileSync(output, 'utf8');
       expect(diagnostic).toContain('injected-synchronous-child-kill-error');
-      expect(diagnostic).toContain('Could not confirm termination of migration process tree');
+      expect(diagnostic).toContain('Could not confirm termination of fixture process tree');
       expect(diagnostic).toContain('Retained migration state after termination failure');
       const pid = Number(fs.readFileSync(pidFile, 'utf8'));
       expect(Number.isInteger(pid) && pid > 0 && pid !== process.pid && pid !== result.pid).toBe(
@@ -445,22 +452,11 @@ childProcess.ChildProcess.prototype.kill = function (signal) {
       });
       const retained = fs.readdirSync(temporary);
       expect(retained).toHaveLength(1);
-      expect(retained[0]).toMatch(/^promptfoo-artifact-migrations-/);
+      expect(retained[0]).toMatch(/^promptfoo-artifact-migration-/);
       expect(fs.statSync(path.join(temporary, retained[0])).isDirectory()).toBe(true);
     } finally {
       fs.closeSync(descriptor);
-      if (fs.existsSync(pidFile)) {
-        const pid = Number(fs.readFileSync(pidFile, 'utf8'));
-        if (Number.isInteger(pid) && pid > 0 && pid !== process.pid && processIsRunning(pid)) {
-          try {
-            process.kill(pid, 'SIGKILL');
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
-              throw error;
-            }
-          }
-        }
-      }
+      killRecordedProcesses([pidFile]);
     }
   });
 });

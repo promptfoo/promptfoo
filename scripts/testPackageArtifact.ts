@@ -937,12 +937,11 @@ async function main(): Promise<void> {
         'The tested tarball changed during validation',
       );
     }
-    console.log(
-      `Verified installed package artifact (${values.profile}): ${path.basename(tarballPath)}`,
-    );
   } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    console.log('Removing installed consumer...');
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
   }
+  console.log(`Verified installed package artifact (${values.profile})`);
 }
 
 main().catch((error: unknown) => {
