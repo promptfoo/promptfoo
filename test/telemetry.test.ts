@@ -15,6 +15,22 @@ import { TELEMETRY_EVENTS, Telemetry, TelemetryEventSchema } from '../src/teleme
 import { fetchWithProxy, fetchWithTimeout } from '../src/util/fetch/index';
 import { mockProcessEnv } from './util/utils';
 
+const { loadPostHog } = vi.hoisted(() => ({ loadPostHog: vi.fn() }));
+
+vi.mock('node:module', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:module')>();
+  return {
+    ...actual,
+    createRequire: (url: string | URL) => {
+      const require = actual.createRequire(url);
+      return Object.assign(
+        (id: string) => (id === 'posthog-node' ? loadPostHog() : require(id)),
+        require,
+      );
+    },
+  };
+});
+
 vi.mock('../src/util/fetch/index', () => ({
   fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
   fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
@@ -126,6 +142,7 @@ describe('Telemetry', () => {
   let sendEventSpy: MockInstance;
 
   beforeEach(() => {
+    loadPostHog.mockReset();
     originalEnv = { ...process.env };
     setupTelemetryEnv(originalEnv);
 
@@ -159,6 +176,24 @@ describe('Telemetry', () => {
     const telemetry = new Telemetry();
     telemetry.record('eval_ran', { foo: 'bar' });
     expect(sendEventSpy).not.toHaveBeenCalledWith('eval_ran', expect.anything());
+    expect(loadPostHog).not.toHaveBeenCalled();
+  });
+
+  it('does not load the SDK for testing or deferred initialization', async () => {
+    mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0', IS_TESTING: 'true' });
+    const telemetry = new Telemetry(false);
+    expect(loadPostHog).not.toHaveBeenCalled();
+    telemetry.record('eval_ran', {});
+    await telemetry.shutdown();
+    expect(loadPostHog).not.toHaveBeenCalled();
+  });
+
+  it('does not load an unused SDK during shutdown when telemetry is enabled', async () => {
+    mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0', IS_TESTING: undefined });
+    resetModulesAndMockFetch();
+    const { Telemetry } = await import('../src/telemetry');
+    await new Telemetry(false).shutdown();
+    expect(loadPostHog).not.toHaveBeenCalled();
   });
 
   it('should defer identity until explicit initialization when requested', () => {
@@ -349,9 +384,7 @@ describe('Telemetry', () => {
 
       resetModulesAndMockFetch();
 
-      vi.doMock('posthog-node', () => ({
-        PostHog: mockPostHog,
-      }));
+      loadPostHog.mockReturnValue({ PostHog: mockPostHog });
 
       const telemetryModule = await import('../src/telemetry');
       const telemetry = new telemetryModule.Telemetry();
@@ -376,9 +409,7 @@ describe('Telemetry', () => {
 
       resetModulesAndMockFetch();
 
-      vi.doMock('posthog-node', () => ({
-        PostHog: mockPostHog,
-      }));
+      loadPostHog.mockReturnValue({ PostHog: mockPostHog });
 
       const telemetryModule = await import('../src/telemetry');
       const telemetry = new telemetryModule.Telemetry();
@@ -414,9 +445,7 @@ describe('Telemetry', () => {
       resetModulesAndMockFetch();
       vi.clearAllMocks();
 
-      vi.doMock('posthog-node', () => ({
-        PostHog: mockPostHog,
-      }));
+      loadPostHog.mockReturnValue({ PostHog: mockPostHog });
 
       vi.doMock('../src/constants', async () => {
         const actual = await vi.importActual('../src/constants');

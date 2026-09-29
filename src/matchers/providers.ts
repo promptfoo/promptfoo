@@ -1,7 +1,6 @@
 import cliState from '../cliState';
 import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
-import { providerRegistry } from '../providers/providerRegistry';
 import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
 import {
@@ -9,7 +8,6 @@ import {
   getProviderCallTracingContext,
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
-import { hasProviderCapability } from '../types/providers';
 import invariant from '../util/invariant';
 
 import type {
@@ -53,7 +51,7 @@ export function getGradingProviderCallOptions(): CallApiOptionsParams | undefine
 export function callGradingProvider<T extends ProviderResponse>(
   provider: ApiProvider,
   label: string,
-  invoke: (context: CallApiContextParams | undefined, options?: CallApiOptionsParams) => Promise<T>,
+  invoke: (context: CallApiContextParams | undefined) => Promise<T>,
   options: {
     callContext?: CallApiContextParams;
     operationName?: 'embeddings';
@@ -62,27 +60,20 @@ export function callGradingProvider<T extends ProviderResponse>(
   const { callContext, operationName } = options;
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
-  const callOptions = executionContext?.abortSignal
-    ? { abortSignal: executionContext.abortSignal }
-    : undefined;
-  const invokeWithOptions = (context: CallApiContextParams | undefined): Promise<T> => {
-    callOptions?.abortSignal?.throwIfAborted();
-    return invoke(context, callOptions);
-  };
   const callProvider = (): Promise<T> =>
     tracingContext
       ? (tracingContext.withProviderSpan(
           { provider, callContext, operationName, role: 'grader', promptLabel: label },
-          invokeWithOptions,
+          invoke,
         ) as Promise<T>)
-      : invokeWithOptions(callContext);
+      : invoke(callContext);
 
   const executeCall = () => {
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
       return executionContext.rateLimitRegistry.execute(
         provider,
         callProvider,
-        createProviderRateLimitOptions(callOptions?.abortSignal),
+        createProviderRateLimitOptions(),
       );
     }
 
@@ -90,11 +81,7 @@ export function callGradingProvider<T extends ProviderResponse>(
   };
 
   if (executionContext?.providerCallQueue) {
-    return executionContext.providerCallQueue.enqueue(
-      provider.id(),
-      executeCall,
-      callOptions?.abortSignal,
-    );
+    return executionContext.providerCallQueue.enqueue(provider.id(), executeCall);
   }
 
   return executeCall();
@@ -107,12 +94,14 @@ export function callProviderWithContext(
   label: string,
   vars: Record<string, VarValue>,
   context?: CallApiContextParams,
+  promptConfig?: Record<string, unknown>,
 ): Promise<ProviderResponse> {
   const callApiContext = {
     ...context,
     prompt: {
       raw: prompt,
       label,
+      ...(promptConfig && { config: promptConfig }),
     },
     vars,
   };
@@ -243,7 +232,6 @@ export async function getGradingProvider(
       finalProvider = defaultProvider;
     }
   }
-  await providerRegistry.adopt(finalProvider);
   return finalProvider;
 }
 
@@ -260,33 +248,38 @@ export async function getAndCheckProvider(
         checkName,
         type,
       });
-      return getAndCheckProvider(type, defaultProvider, null, checkName);
+      return defaultProvider;
+    } else {
+      throw new Error(`No provider of type ${type} found for '${checkName}'`);
     }
-    throw new Error(`No provider of type ${type} found for '${checkName}'`);
   }
 
-  let isValidProviderType = hasProviderCapability(matchedProvider, 'callApi');
+  let isValidProviderType = true;
   if (type === 'embedding') {
     isValidProviderType =
-      hasProviderCapability(matchedProvider, 'callEmbeddingApi') ||
-      hasProviderCapability(matchedProvider, 'callSimilarityApi');
+      'callEmbeddingApi' in matchedProvider || 'callSimilarityApi' in matchedProvider;
   } else if (type === 'classification') {
-    isValidProviderType = hasProviderCapability(matchedProvider, 'callClassificationApi');
+    isValidProviderType = 'callClassificationApi' in matchedProvider;
   } else if (type === 'moderation') {
-    isValidProviderType = hasProviderCapability(matchedProvider, 'callModerationApi');
+    isValidProviderType = 'callModerationApi' in matchedProvider;
   }
 
   if (!isValidProviderType) {
     // If the user explicitly configured a provider that doesn't match the
     // required type, throw rather than silently falling back to a different
     // provider, which could produce results from an unintended model.
-    if (!provider && defaultProvider && defaultProvider !== matchedProvider) {
+    if (provider) {
+      throw new Error(
+        `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}'`,
+      );
+    }
+    if (defaultProvider) {
       logger.warn('[Grading] Falling back to default provider after type check failed', {
         checkName,
         providerId: matchedProvider.id(),
         type,
       });
-      return getAndCheckProvider(type, defaultProvider, null, checkName);
+      return defaultProvider;
     }
     throw new Error(
       `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}'`,

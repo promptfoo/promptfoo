@@ -258,6 +258,9 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
       ...(context?.prompt?.config as Partial<LumaRayVideoOptions>),
     };
 
+    const duration = config.duration || DEFAULT_DURATION;
+    const resolution = config.resolution || DEFAULT_RESOLUTION;
+    const aspectRatio = config.aspectRatio || DEFAULT_ASPECT_RATIO;
     const startTime = Date.now();
 
     // Build model input
@@ -269,9 +272,9 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
 
     // Start async job
     logger.info('[Luma Ray] Starting video generation job...', {
-      duration: config.duration || DEFAULT_DURATION,
-      resolution: config.resolution || DEFAULT_RESOLUTION,
-      aspectRatio: config.aspectRatio || DEFAULT_ASPECT_RATIO,
+      duration,
+      resolution,
+      aspectRatio,
       s3OutputUri,
     });
 
@@ -332,9 +335,6 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
       }
 
       const latencyMs = Date.now() - startTime;
-      const duration = config.duration || DEFAULT_DURATION;
-      const resolution = config.resolution || DEFAULT_RESOLUTION;
-      const aspectRatio = config.aspectRatio || DEFAULT_ASPECT_RATIO;
       const durationSeconds = this.getDurationSeconds(duration);
       const dimensions = this.getVideoDimensions(aspectRatio, resolution);
 

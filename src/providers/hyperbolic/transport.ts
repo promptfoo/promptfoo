@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import { getRequestTimeoutMs, shouldBustProviderCache } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 
 import type { CallApiContextParams } from '../../types/providers';
 
@@ -8,7 +8,7 @@ type JsonResult<T> =
   | { ok: true; data: T; cached: boolean; latencyMs?: number }
   | { ok: false; error: string };
 
-/** Shared transport policy; each media provider owns model validation, output and pricing. */
+// Model validation, media parsing, and pricing remain in the provider classes.
 export async function requestHyperbolicJson<T>(
   url: string,
   apiKey: string,
@@ -28,7 +28,7 @@ export async function requestHyperbolicJson<T>(
       },
       getRequestTimeoutMs(),
       'json',
-      shouldBustProviderCache(context),
+      context?.bustCache ?? context?.debug ?? false,
     );
     signal?.throwIfAborted();
     if (status < 200 || status >= 300) {

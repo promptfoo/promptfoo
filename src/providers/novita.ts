@@ -1,13 +1,11 @@
 import { getEnvString } from '../envars';
-import { resolveProviderCreatorInput } from './creator';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
-import type { ApiProvider } from '../types/index';
-import type { ProviderCreatorOptions } from './creator';
+import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 const NOVITA_API_BASE_URL = 'https://api.novita.ai/openai/v1';
@@ -146,9 +144,8 @@ export class NovitaEmbeddingProvider extends OpenAiEmbeddingProvider {
 
 export function createNovitaProvider(
   providerPath: string,
-  options: ProviderCreatorOptions = {},
+  options: { config?: ProviderOptions; id?: string; env?: EnvOverrides } = {},
 ): ApiProvider {
-  const providerOptions = resolveProviderCreatorInput(options);
   const splits = providerPath.split(':');
   const type = splits[1];
   const isTypedProvider = NOVITA_SUBTYPES.has(type);
@@ -174,8 +171,9 @@ export function createNovitaProvider(
   }
 
   const novitaOptions: NovitaProviderOptions = {
-    ...providerOptions,
-    config: (providerOptions.config ?? {}) as OpenAiCompletionOptions,
+    id: options.id ?? options.config?.id,
+    env: options.env ?? options.config?.env,
+    config: (options.config?.config ?? {}) as OpenAiCompletionOptions,
   };
 
   if (type === 'chat') {

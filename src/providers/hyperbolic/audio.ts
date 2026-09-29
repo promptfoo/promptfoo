@@ -98,7 +98,7 @@ export class HyperbolicAudioProvider implements ApiProvider {
 
     const endpoint = '/audio/generation';
 
-    const body: Record<string, any> = {
+    const body: Record<string, unknown> = {
       text: prompt,
     };
 

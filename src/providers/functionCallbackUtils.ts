@@ -4,8 +4,8 @@ import {
   loadCallbackFromFileUrl,
   wrapError,
 } from '../util/functions/loadFunction';
-import { executeCallback } from './functionCallbackExecutor';
 import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from './mcp/util';
+import { withGenAIToolSpan } from './tracing';
 
 import type {
   FunctionCall,
@@ -35,8 +35,18 @@ export async function loadProviderCallbackFromFileUrl(
 }
 
 /**
- * Run a direct provider callback with strict file exports and string output.
- * Google retains raw values; FunctionCallbackHandler allows fallback file exports.
+ * Load, cache, and invoke one `functionToolCallbacks` entry, returning the string a
+ * tool-result message expects.
+ *
+ * Shared by the two providers that implement function-tool callbacks directly on the
+ * provider class — Bedrock Converse and OpenAI Chat — whose copies were identical apart
+ * from log prefixes. Keeping one implementation is what stops them drifting: the
+ * path-traversal guard is a worked example of a fix that reached one copy of this logic
+ * and not the others.
+ *
+ * The remaining providers with a `loadedFunctionCallbacks` cache (Azure Foundry, Google
+ * base and live) have genuinely different loading and caching behaviour — Azure preloads,
+ * Google Live gates on a shared-cache flag — so they deliberately keep their own.
  */
 export async function executeProviderFunctionCallback({
   functionName,
@@ -45,7 +55,6 @@ export async function executeProviderFunctionCallback({
   callbacks,
   cache,
   logPrefix,
-  signal,
 }: {
   functionName: string;
   args: string;
@@ -55,42 +64,46 @@ export async function executeProviderFunctionCallback({
   cache: Record<string, Function>;
   /** This provider's log prefix, e.g. `[Bedrock Converse]`. */
   logPrefix?: string;
-  signal?: AbortSignal;
 }): Promise<string> {
-  signal?.throwIfAborted();
   const prefix = logPrefix ? `${logPrefix} ` : '';
   try {
-    logger.debug(`${prefix}Executing function '${functionName}' with args: ${args}`);
-    const execution = await executeCallback({
-      name: functionName,
-      args,
-      callId,
-      reference:
-        callbacks && Object.prototype.hasOwnProperty.call(callbacks, functionName)
-          ? callbacks[functionName]
-          : undefined,
-      cache,
-      signal,
-      loadFile: (reference) => loadProviderCallbackFromFileUrl(reference, logPrefix),
-      transformOutput: (result) => {
-        if (result === undefined || result === null) {
-          return '';
-        }
-        if (typeof result === 'object') {
-          try {
-            return JSON.stringify(result);
-          } catch (error) {
-            logger.warn(`Error stringifying result from function '${functionName}': ${error}`);
-            return String(result);
-          }
-        }
-        return String(result);
-      },
-    });
-    if (execution.isError) {
-      throw execution.error;
+    let callback = cache[functionName];
+
+    if (!callback) {
+      const callbackRef = callbacks?.[functionName];
+
+      if (callbackRef && typeof callbackRef === 'string') {
+        callback = callbackRef.startsWith('file://')
+          ? await loadProviderCallbackFromFileUrl(callbackRef, logPrefix)
+          : new Function('return ' + callbackRef)();
+        cache[functionName] = callback;
+      } else if (typeof callbackRef === 'function') {
+        callback = callbackRef;
+        cache[functionName] = callback;
+      }
     }
-    return execution.output as string;
+
+    if (!callback) {
+      throw new Error(`No callback found for function '${functionName}'`);
+    }
+
+    logger.debug(`${prefix}Executing function '${functionName}' with args: ${args}`);
+    const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
+      callback(args),
+    );
+
+    if (result === undefined || result === null) {
+      return '';
+    }
+    if (typeof result === 'object') {
+      try {
+        return JSON.stringify(result);
+      } catch (error) {
+        logger.warn(`Error stringifying result from function '${functionName}': ${error}`);
+        return String(result);
+      }
+    }
+    return String(result);
   } catch (error: any) {
     logger.error(
       `${prefix}Error executing function '${functionName}': ${error.message || String(error)}`,
@@ -121,9 +134,7 @@ export class FunctionCallbackHandler {
     call: FunctionCall | ToolCall | any,
     callbacks?: FunctionCallbackConfig,
     context?: any,
-    options?: { abortSignal?: AbortSignal },
   ): Promise<FunctionCallResult> {
-    options?.abortSignal?.throwIfAborted();
     // Extract function information from various formats
     const functionInfo = this.extractFunctionInfo(call);
 
@@ -136,20 +147,11 @@ export class FunctionCallbackHandler {
       }
 
       if (this.mcpToolNames.has(functionInfo.name)) {
-        return await this.executeMcpTool(
-          functionInfo.name,
-          functionInfo.arguments,
-          options?.abortSignal,
-        );
+        return await this.executeMcpTool(functionInfo.name, functionInfo.arguments);
       }
     }
 
-    if (
-      !functionInfo ||
-      !callbacks ||
-      !Object.prototype.hasOwnProperty.call(callbacks, functionInfo.name) ||
-      !callbacks[functionInfo.name]
-    ) {
+    if (!functionInfo || !callbacks || !callbacks[functionInfo.name]) {
       // No callback available - return stringified original
       return {
         output: typeof call === 'string' ? call : JSON.stringify(call),
@@ -169,14 +171,12 @@ export class FunctionCallbackHandler {
           : typeof call?.id === 'string'
             ? call.id
             : undefined,
-        options?.abortSignal,
       );
       return {
         output: result,
         isError: false,
       };
     } catch (error) {
-      options?.abortSignal?.throwIfAborted();
       // Surface security-class failures at `warn` so a rejected path-traversal
       // attempt isn't indistinguishable from "no callback registered". The
       // generic loader/runtime errors stay at debug to avoid log noise from
@@ -213,7 +213,7 @@ export class FunctionCallbackHandler {
     calls: any,
     callbacks?: FunctionCallbackConfig,
     context?: any,
-    options?: { returnRawOnError?: boolean; abortSignal?: AbortSignal },
+    _options?: { returnRawOnError?: boolean },
   ): Promise<any> {
     if (!calls) {
       return calls;
@@ -222,23 +222,14 @@ export class FunctionCallbackHandler {
     const isArray = Array.isArray(calls);
     const callsArray = isArray ? calls : [calls];
 
-    const settled = await Promise.allSettled(
-      callsArray.map((call) => this.processCall(call, callbacks, context, options)),
+    const results = await Promise.all(
+      callsArray.map((call) => this.processCall(call, callbacks, context)),
     );
-    const results = settled.map((result, index) =>
-      result.status === 'fulfilled'
-        ? result.value
-        : { output: JSON.stringify(callsArray[index]), isError: true },
-    );
-    const rejected = settled.find((result) => result.status === 'rejected');
 
     // If any callback succeeded, return processed results
     const hasSuccess = results.some(
       (r, index) => !r.isError && r.output !== JSON.stringify(callsArray[index]),
     );
-    if (rejected && !hasSuccess) {
-      throw rejected.reason;
-    }
 
     if (hasSuccess) {
       const outputs = results.map((r) => r.output);
@@ -295,25 +286,35 @@ export class FunctionCallbackHandler {
     callbacks: FunctionCallbackConfig,
     context?: any,
     callId?: string,
-    signal?: AbortSignal,
   ): Promise<string> {
-    const execution = await executeCallback({
-      name: functionName,
-      args,
-      callId,
-      reference: callbacks[functionName],
-      cache: this.loadedCallbacks,
-      signal,
-      context,
-      passContext: true,
-      transformOutput: (output) =>
-        typeof output === 'string' ? output : (JSON.stringify(output) ?? ''),
-      loadFile: (reference) => this.loadExternalFunction(reference),
+    return await withGenAIToolSpan({ name: functionName, arguments: args, callId }, async () => {
+      // Get or load the callback
+      let callback = this.loadedCallbacks[functionName];
+
+      if (!callback) {
+        const callbackConfig = callbacks[functionName];
+
+        if (typeof callbackConfig === 'string') {
+          // String callback - either file reference or inline code
+          if (callbackConfig.startsWith('file://')) {
+            callback = await this.loadExternalFunction(callbackConfig);
+          } else {
+            // Inline function string
+            callback = new Function('return ' + callbackConfig)() as FunctionCallback;
+          }
+        } else if (typeof callbackConfig === 'function') {
+          callback = callbackConfig;
+        } else {
+          throw new Error(`Invalid callback configuration for ${functionName}`);
+        }
+
+        // Cache for future use
+        this.loadedCallbacks[functionName] = callback;
+      }
+
+      const result = await callback(args, context);
+      return typeof result === 'string' ? result : JSON.stringify(result);
     });
-    if (execution.isError) {
-      throw execution.error;
-    }
-    return execution.output as string;
   }
 
   /**
@@ -338,11 +339,7 @@ export class FunctionCallbackHandler {
   /**
    * Executes an MCP tool
    */
-  private async executeMcpTool(
-    toolName: string,
-    args: unknown,
-    signal?: AbortSignal,
-  ): Promise<FunctionCallResult> {
+  private async executeMcpTool(toolName: string, args: unknown): Promise<FunctionCallResult> {
     try {
       if (!this.mcpClient) {
         throw new Error('MCP client not available');
@@ -351,8 +348,7 @@ export class FunctionCallbackHandler {
       // Parse arguments: support stringified JSON, object, or empty
       const parsedArgs =
         args == null || args === '' ? {} : typeof args === 'string' ? JSON.parse(args) : args;
-      signal?.throwIfAborted();
-      const result = await this.mcpClient.callTool(toolName, parsedArgs, signal);
+      const result = await this.mcpClient.callTool(toolName, parsedArgs);
 
       if (isMcpErrorResult(result)) {
         return {
@@ -364,7 +360,6 @@ export class FunctionCallbackHandler {
       const content = normalizeMcpToolContent(result?.content);
       return { output: `MCP Tool Result (${toolName}): ${content}`, isError: false };
     } catch (error) {
-      signal?.throwIfAborted();
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.debug(`MCP tool execution failed for ${toolName}: ${errorMessage}`);
       return {

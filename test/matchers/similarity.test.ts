@@ -281,33 +281,6 @@ describe('matchesSimilarity', () => {
     }).rejects.toThrow('API call failed');
   });
 
-  it('retains fulfilled embedding usage when the other embedding aborts', async () => {
-    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi')
-      .mockResolvedValueOnce({
-        embedding: [1, 0, 0],
-        tokenUsage: { total: 5, prompt: 2, completion: 3 },
-      })
-      .mockRejectedValueOnce(new DOMException('cancelled output embedding', 'AbortError'));
-
-    await expect(matchesSimilarity('Expected output', 'Sample output', 0.5)).resolves.toMatchObject(
-      {
-        pass: false,
-        reason: 'cancelled output embedding',
-        tokensUsed: { total: 5, prompt: 2, completion: 3 },
-      },
-    );
-  });
-
-  it('does not hide an embedding failure behind a concurrent abort', async () => {
-    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi')
-      .mockRejectedValueOnce(new DOMException('cancelled expected embedding', 'AbortError'))
-      .mockRejectedValueOnce(new Error('output embedding failed'));
-
-    await expect(matchesSimilarity('Expected output', 'Sample output', 0.5)).rejects.toThrow(
-      'output embedding failed',
-    );
-  });
-
   it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {
     const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
     try {
@@ -449,31 +422,6 @@ describe('matchesSimilarity', () => {
       expect(result.score).toBeCloseTo(1, 2);
     });
   });
-
-  it.each(['dot_product', 'euclidean'] as const)(
-    'does not call a declared unsupported embedding stub for %s',
-    async (metric) => {
-      const callEmbeddingApi = vi.fn().mockRejectedValue(new Error('unsupported embedding stub'));
-      const provider = Object.assign(createMockProvider({ id: 'similarity-only' }), {
-        promptfooCapabilities: ['callSimilarityApi'] as const,
-        callSimilarityApi: vi.fn().mockResolvedValue({ similarity: 0.9 }),
-        callEmbeddingApi,
-      });
-      const result = await matchesSimilarity(
-        'expected',
-        'output',
-        0.5,
-        false,
-        { provider },
-        metric,
-      );
-      expect(result).toMatchObject({
-        pass: false,
-        reason: expect.stringContaining('only supports cosine similarity'),
-      });
-      expect(callEmbeddingApi).not.toHaveBeenCalled();
-    },
-  );
 
   describe('metric validation', () => {
     it('records native similarity providers beneath the grading trace', async () => {

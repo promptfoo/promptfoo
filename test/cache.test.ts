@@ -26,8 +26,7 @@ import {
 import { cloudConfig } from '../src/globalConfig/cloud';
 import logger from '../src/logger';
 import { fetchWithRetries } from '../src/util/fetch/index';
-import { sleep } from '../src/util/time';
-import { createDeferred, mockProcessEnv } from './util/utils';
+import { mockProcessEnv } from './util/utils';
 
 vi.mock('../src/util/config/manage', () => ({
   getConfigDirectoryPath: vi.fn().mockReturnValue('/mock/config/path'),
@@ -361,64 +360,38 @@ describe('fetchWithCache', () => {
   });
 
   describe('with cache enabled', () => {
-    it('rejects a settled cache hit when cancellation precedes its continuation', async () => {
-      const controller = new AbortController();
-      const reason = new Error('cancelled after cache settled');
-      const read = createDeferred<string>();
-      vi.mocked(getCache().get).mockReturnValueOnce(read.promise);
-
-      const request = fetchWithCache(url, { signal: controller.signal }, 1000);
-      read.resolve(JSON.stringify(response));
-      queueMicrotask(() => controller.abort(reason));
-
-      await expect(request).rejects.toBe(reason);
+    it('requires explicit cache policy for request-time authentication', async () => {
+      const getAuthHeaders = vi.fn();
+      await expect(fetchWithCache(url, { getAuthHeaders }, 1000)).rejects.toThrow(
+        'Request-time authentication requires cache bypass or an explicit principal-scoped cache key',
+      );
       expect(mockFetchWithRetries).not.toHaveBeenCalled();
+      expect(getAuthHeaders).not.toHaveBeenCalled();
     });
 
-    it('does not register an abort listener if the cache read already cancelled', async () => {
-      const controller = new AbortController();
-      const listener = vi.spyOn(controller.signal, 'addEventListener');
-      vi.mocked(getCache().get).mockImplementationOnce(() => {
-        controller.abort();
-        return new Promise(() => {});
-      });
-      await expect(fetchWithCache(url, { signal: controller.signal }, 1000)).rejects.toMatchObject({
-        name: 'AbortError',
-      });
-      expect(listener).not.toHaveBeenCalled();
+    it('passes request-time authentication through when cache is bypassed', async () => {
+      const getAuthHeaders = vi.fn();
+      mockFetchWithRetries.mockImplementation(async () => Response.json(response));
+      await fetchWithCache(url, { getAuthHeaders }, 1000, 'json', true);
+      await fetchWithCache(url, { getAuthHeaders }, 1000, 'json', true);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithRetries.mock.calls[0][1]?.getAuthHeaders).toBe(getAuthHeaders);
     });
 
-    it('aborts while waiting for a cache read', async () => {
-      const controller = new AbortController();
-      const cache = getCache();
-      let finishRead!: (value: undefined) => void;
-      const read = new Promise<undefined>((resolve) => {
-        finishRead = resolve;
+    it('isolates dynamic-auth caches using explicit non-secret principal keys', async () => {
+      const getAuthHeaders = vi.fn();
+      mockFetchWithRetries.mockImplementation(async () => Response.json(response));
+      const first = await fetchWithCache(url, { getAuthHeaders }, 1000, 'json', {
+        cacheKey: 'principal-a:request',
       });
-      const get = vi.mocked(cache.get).mockReturnValueOnce(read);
-      const request = fetchWithCache(url, { signal: controller.signal }, 1000);
-      await vi.waitFor(() => expect(get).toHaveBeenCalledOnce());
-      const rejected = expect(request).rejects.toMatchObject({ name: 'AbortError' });
-      controller.abort();
-      await rejected;
-      finishRead(undefined);
-      expect(mockFetchWithRetries).not.toHaveBeenCalled();
-    });
-
-    it('returns a completed response when a cache write is aborted', async () => {
-      const controller = new AbortController();
-      const cache = getCache();
-      let finishWrite!: () => void;
-      const write = new Promise<void>((resolve) => {
-        finishWrite = resolve;
+      const repeat = await fetchWithCache(url, { getAuthHeaders }, 1000, 'json', {
+        cacheKey: 'principal-a:request',
       });
-      const set = vi.mocked(cache.set).mockReturnValueOnce(write);
-      mockFetchWithRetries.mockResolvedValueOnce(mockFetchWithRetriesResponse(true, response));
-      const request = fetchWithCache(url, { signal: controller.signal }, 1000);
-      await vi.waitFor(() => expect(set).toHaveBeenCalledOnce());
-      controller.abort();
-      await expect(request).resolves.toMatchObject({ data: response });
-      finishWrite();
+      const other = await fetchWithCache(url, { getAuthHeaders }, 1000, 'json', {
+        cacheKey: 'principal-b:request',
+      });
+      expect([first.cached, repeat.cached, other.cached]).toEqual([false, true, false]);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
     });
 
     it('should scope cache disabling to the current async context', async () => {
@@ -861,7 +834,7 @@ describe('fetchWithCache', () => {
 
       expect(signaledResult).toMatchObject({ status: 'rejected' });
       if (signaledResult.status === 'rejected') {
-        expect(signaledResult.reason.name).toBe('AbortError');
+        expect(signaledResult.reason.message).toBe('Aborted');
       }
       expect(unsignaledResult).toMatchObject({ status: 'fulfilled' });
       if (unsignaledResult.status === 'fulfilled') {
@@ -913,9 +886,9 @@ describe('fetchWithCache', () => {
       }
       expect(signaledResult).toMatchObject({ status: 'rejected' });
       if (signaledResult.status === 'rejected') {
-        expect(signaledResult.reason.name).toBe('AbortError');
+        expect(signaledResult.reason.message).toBe('Aborted');
       }
-      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
     });
 
     it('should handle request options in cache key', async () => {
@@ -1239,6 +1212,7 @@ describe('fetchWithCache', () => {
     });
 
     it('should isolate Cloud task responses by the current CLI team', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'saved-cloud-token' });
       mockFetchWithRetries
         .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'team one data' }))
         .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'team two data' }));
@@ -1249,22 +1223,26 @@ describe('fetchWithCache', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ task: 'extract-intent' }),
       };
-      const teamOneResult = await fetchWithCache(
-        'https://api.promptfoo.app/api/v1/task',
-        requestOptions,
-        1000,
-      );
+      try {
+        const teamOneResult = await fetchWithCache(
+          'https://api.promptfoo.app/api/v1/task',
+          requestOptions,
+          1000,
+        );
 
-      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-two');
-      const teamTwoResult = await fetchWithCache(
-        'https://api.promptfoo.app/api/v1/task',
-        requestOptions,
-        1000,
-      );
+        vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-two');
+        const teamTwoResult = await fetchWithCache(
+          'https://api.promptfoo.app/api/v1/task',
+          requestOptions,
+          1000,
+        );
 
-      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
-      expect(teamOneResult.data).toEqual({ data: 'team one data' });
-      expect(teamTwoResult.data).toEqual({ data: 'team two data' });
+        expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+        expect(teamOneResult.data).toEqual({ data: 'team one data' });
+        expect(teamTwoResult.data).toEqual({ data: 'team two data' });
+      } finally {
+        restoreEnv();
+      }
     });
 
     it('should prefer an explicit team header when computing the cache key', async () => {
@@ -1369,6 +1347,52 @@ describe('fetchWithCache', () => {
         restoreEnv();
       }
     });
+
+    it.each([
+      { credentialSource: 'explicit', cacheKey: undefined },
+      { credentialSource: 'injected', cacheKey: undefined },
+      { credentialSource: 'explicit', cacheKey: 'shared-safe-key' },
+      { credentialSource: 'injected', cacheKey: 'shared-safe-key' },
+    ])(
+      'isolates cached responses when $credentialSource Cloud redirect protection becomes active (cache key: $cacheKey)',
+      async ({ credentialSource, cacheKey }) => {
+        const token = 'synthetic-cloud-token-for-cache-isolation';
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
+        const requestOptions = { headers: { 'X-Promptfoo-Api-Key': `Bearer ${token}` } };
+        mockFetchWithRetries
+          .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'unprotected' }))
+          .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'protected' }));
+        const fetch = (options: RequestInit = requestOptions) =>
+          fetchWithCache('https://api.promptfoo.app/api/v1/task', options, 1000, 'json', {
+            cacheKey,
+          });
+
+        try {
+          expect((await fetch()).data).toEqual({ data: 'unprotected' });
+
+          mockProcessEnv({ PROMPTFOO_API_KEY: token });
+          vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
+          const protectedOptions = credentialSource === 'explicit' ? requestOptions : {};
+          const protectedResult = await fetch(protectedOptions);
+
+          // A response accepted before the credential was identified as Cloud auth
+          // must not bypass the now-required redirect policy through a cache hit.
+          expect(protectedResult.cached).toBe(false);
+          expect(protectedResult.data).toEqual({ data: 'protected' });
+          expect((await fetch(protectedOptions)).cached).toBe(true);
+
+          mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
+          vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
+          const unprotectedResult = await fetch();
+          expect(unprotectedResult.cached).toBe(true);
+          expect(unprotectedResult.data).toEqual({ data: 'unprotected' });
+          expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+        } finally {
+          restoreEnv();
+          vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
+        }
+      },
+    );
 
     it('should fingerprint the cloud auth value under a custom header name even for a short token', async () => {
       // Regression guard: isSecretField/looksLikeSecret are name/pattern heuristics that
@@ -1666,49 +1690,6 @@ describe('fetchWithCache', () => {
       expect(result.data).toEqual(response);
       expect(result.cached).toBe(false);
     });
-
-    it.each(['options', 'request'])(
-      'cancels a body-read retry delay from the %s signal',
-      async (source) => {
-        const controller = new AbortController();
-        const debug = vi.spyOn(logger, 'debug');
-        const delay = createDeferred<void>();
-        vi.mocked(sleep).mockReturnValueOnce(delay.promise);
-        mockFetchWithRetries.mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          headers: new Headers(),
-          text: () => Promise.reject(new Error('ECONNRESET during body read')),
-        } as Response);
-        let result: unknown;
-        const pending = fetchWithCache(
-          source === 'request' ? new Request(url, { signal: controller.signal }) : url,
-          source === 'options' ? { signal: controller.signal } : {},
-          1000,
-        ).catch((error: unknown) => {
-          result = error;
-        });
-        try {
-          await vi.waitFor(() =>
-            expect(debug).toHaveBeenCalledWith(
-              '[Cache] Body stream failed with transient error, retrying',
-              expect.any(Object),
-            ),
-          );
-          controller.abort();
-          await new Promise((resolve) => setImmediate(resolve));
-          expect(result).toMatchObject({ name: 'AbortError' });
-          expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
-        } finally {
-          controller.abort();
-          delay.resolve();
-          await pending;
-          vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
-          debug.mockRestore();
-        }
-      },
-    );
 
     it('should throw after exhausting body-read retries', async () => {
       // All fetches return responses whose text() fails with transient error

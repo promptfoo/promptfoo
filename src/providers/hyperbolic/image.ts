@@ -174,7 +174,7 @@ export class HyperbolicImageProvider implements ApiProvider {
     const endpoint = '/image/generation';
     const responseFormat = config.response_format || 'url';
 
-    const body: Record<string, any> = {
+    const body: Record<string, unknown> = {
       model_name: modelName,
       prompt,
       height: config.height || 1024,

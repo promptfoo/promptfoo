@@ -1,5 +1,6 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { isGpt6Model } from './openai/gpt6';
 
 import type {
   ApiEmbeddingProvider,
@@ -211,7 +212,7 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
   }
 
   /**
-   * Override isReasoningModel to correctly detect GPT-5 and other reasoning models
+   * Override isReasoningModel to correctly detect OpenAI reasoning models
    * despite TrueFoundry's provider-account/model-name format
    */
   protected isReasoningModel(): boolean {
@@ -221,7 +222,8 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
       actualModelName.startsWith('o1') ||
       actualModelName.startsWith('o3') ||
       actualModelName.startsWith('o4') ||
-      actualModelName.startsWith('gpt-5')
+      actualModelName.startsWith('gpt-5') ||
+      isGpt6Model(actualModelName)
     );
   }
 
@@ -326,17 +328,36 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
     });
   }
 
-  override getOpenAiRequestHeaders(
-    customHeaders: Record<string, string> | undefined = this.config.headers,
-  ): Record<string, string> {
+  /**
+   * Override callEmbeddingApi to add TrueFoundry-specific headers
+   */
+  async callEmbeddingApi(text: string): Promise<ProviderResponse> {
     const tfConfig = this.config as TrueFoundryCompletionOptions;
-    return {
-      ...super.getOpenAiRequestHeaders(customHeaders),
-      ...(tfConfig.metadata && { 'X-TFY-METADATA': JSON.stringify(tfConfig.metadata) }),
-      ...(tfConfig.loggingConfig && {
-        'X-TFY-LOGGING-CONFIG': JSON.stringify(tfConfig.loggingConfig),
-      }),
+
+    // Add TrueFoundry-specific headers
+    const headers: Record<string, string> = {
+      ...(this.config.headers || {}),
     };
+
+    if (tfConfig.metadata) {
+      headers['X-TFY-METADATA'] = JSON.stringify(tfConfig.metadata);
+    }
+
+    if (tfConfig.loggingConfig) {
+      headers['X-TFY-LOGGING-CONFIG'] = JSON.stringify(tfConfig.loggingConfig);
+    }
+
+    // Temporarily set headers in config
+    const originalHeaders = this.config.headers;
+    this.config.headers = headers;
+
+    try {
+      // Call parent implementation
+      return await super.callEmbeddingApi(text);
+    } finally {
+      // Restore original headers
+      this.config.headers = originalHeaders;
+    }
   }
 
   id(): string {

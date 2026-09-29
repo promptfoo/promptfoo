@@ -22,10 +22,10 @@ import {
 } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
-import { executeCallback } from '../functionCallbackExecutor';
-import { McpClientSession } from '../mcp/session';
+import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
-import { awaitProviderOperation, getRequestTimeoutMs, transformTools } from '../shared';
+import { getRequestTimeoutMs, transformTools } from '../shared';
+import { withGenAIToolSpan } from '../tracing';
 import { GoogleAuthManager } from './auth';
 import {
   normalizeTools,
@@ -35,50 +35,7 @@ import {
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderResponse,
-} from '../../types/index';
-
-class GoogleFunctionCallbackError extends Error {
-  constructor(
-    message: string,
-    readonly partialOutput?: ProviderResponse['output'],
-  ) {
-    super(message);
-  }
-}
-
-export function getCallbackErrorOutput(
-  error: unknown,
-  output: ProviderResponse['output'],
-  aborted?: boolean,
-): ProviderResponse['output'] {
-  return error instanceof GoogleFunctionCallbackError && error.partialOutput !== undefined
-    ? error.partialOutput
-    : aborted
-      ? output
-      : undefined;
-}
-
-function joinCallbackResults(results: unknown[]): string {
-  return results
-    .map((result) => {
-      if (typeof result === 'string') {
-        return result;
-      }
-      try {
-        return JSON.stringify(result) ?? String(result);
-      } catch {
-        return String(result);
-      }
-    })
-    .join('\n');
-}
-
-import type { MCPClient } from '../mcp/client';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type {
   CompletionOptions,
   GoogleProviderConfig,
@@ -374,12 +331,15 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 
   /** MCP client for tool integration */
   protected mcpClient: MCPClient | null = null;
-  private mcpSession?: McpClientSession;
-  /** Preserves the eager MCP startup contract for subclasses and callers. */
+
+  /** Promise that resolves when MCP initialization is complete */
   protected initializationPromise: Promise<void> | null = null;
 
   /** Cache of loaded function callbacks */
   protected loadedFunctionCallbacks: Record<string, Function> = {};
+
+  /** References used to populate the callback cache, for prompt-level overrides. */
+  protected loadedFunctionCallbackRefs: Record<string, string | Function | undefined> = {};
 
   /** Custom provider ID function */
   protected customId?: () => string;
@@ -414,9 +374,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       this.customId = () => id;
     }
 
+    // Initialize MCP if configured
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
-      void this.initializationPromise.catch(() => undefined);
     }
   }
 
@@ -465,11 +425,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    * Make an API call with the given prompt.
    * Must be implemented by subclasses.
    */
-  abstract callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse>;
+  abstract callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse>;
 
   /**
    * Get the API key for this provider.
@@ -521,12 +477,12 @@ export abstract class GoogleGenericProvider implements ApiProvider {
   /**
    * Initialize the MCP client for tool integration.
    */
-  protected async initializeMCP(signal?: AbortSignal): Promise<void> {
-    if (!this.config.mcp?.enabled) {
+  protected async initializeMCP(): Promise<void> {
+    if (!this.config.mcp) {
       return;
     }
-    this.mcpSession ??= new McpClientSession(this.config.mcp, this);
-    this.mcpClient = await this.mcpSession.initialize(signal);
+    this.mcpClient = new MCPClient(this.config.mcp);
+    await this.mcpClient.initialize();
   }
 
   /**
@@ -537,9 +493,8 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    */
   protected async getAllTools(
     context?: CallApiContextParams,
-    options: { skipExecutableToolFiles?: boolean; abortSignal?: AbortSignal } = {},
+    options: { skipExecutableToolFiles?: boolean } = {},
   ): Promise<Tool[]> {
-    await this.initializeMCP(options.abortSignal);
     // Get MCP tools if client is available
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
 
@@ -551,10 +506,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       ? stripExecutableToolFileReferences(configTools, context?.vars)
       : configTools;
     const loadedTools = requestTools
-      ? await awaitProviderOperation(
-          maybeLoadToolsFromExternalFile(requestTools, context?.vars),
-          options.abortSignal,
-        )
+      ? await maybeLoadToolsFromExternalFile(requestTools, context?.vars)
       : [];
 
     // Transform tools to Google format if needed
@@ -601,46 +553,72 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     args: string,
     config: CompletionOptions,
     callId?: string,
-    signal?: AbortSignal,
   ): Promise<any> {
-    signal?.throwIfAborted();
     try {
       const callbacks = config.functionToolCallbacks;
       const callbackRef =
         callbacks && Object.prototype.hasOwnProperty.call(callbacks, functionName)
           ? callbacks[functionName]
           : undefined;
-      const execution = await executeCallback({
-        name: functionName,
-        args,
-        callId,
-        reference: callbackRef,
-        cache: this.loadedFunctionCallbacks,
-        signal,
-        loadFile: (reference) => this.loadExternalFunction(reference),
-        loadInline: (expression) => {
-          logger.warn(
-            `[GoogleProvider] Inline function string for '${functionName}' is deprecated. ` +
-              `Use 'file://path/to/module.js:functionName' for better security.`,
-          );
-          try {
-            const callback = new Function('return ' + expression)();
-            if (typeof callback !== 'function') {
-              throw new Error('Expression did not return a function');
-            }
-            return callback;
-          } catch (err) {
-            throw new Error(
-              `Failed to parse inline function for '${functionName}': ${err}. ` +
-                `Consider using 'file://' prefix to reference an external file.`,
-            );
-          }
-        },
-      });
-      if (execution.isError) {
-        throw execution.error;
+      let callback: Function | undefined = Object.prototype.hasOwnProperty.call(
+        this.loadedFunctionCallbacks,
+        functionName,
+      )
+        ? this.loadedFunctionCallbacks[functionName]
+        : undefined;
+
+      if (this.loadedFunctionCallbackRefs[functionName] !== callbackRef) {
+        callback = undefined;
       }
-      return execution.output;
+
+      // If not loaded yet, try to load it now
+      if (!callback) {
+        if (callbackRef && typeof callbackRef === 'string') {
+          const callbackStr: string = callbackRef;
+          if (callbackStr.startsWith('file://')) {
+            callback = await this.loadExternalFunction(callbackStr);
+          } else {
+            // Inline function string (backward compatibility with existing behavior)
+            // This uses Function constructor which has security implications
+            logger.warn(
+              `[GoogleProvider] Inline function string for '${functionName}' is deprecated. ` +
+                `Use 'file://path/to/module.js:functionName' for better security.`,
+            );
+            try {
+              // eslint-disable-next-line no-new-func
+              callback = new Function('return ' + callbackStr)();
+              if (typeof callback !== 'function') {
+                throw new Error(`Expression did not return a function`);
+              }
+            } catch (err) {
+              throw new Error(
+                `Failed to parse inline function for '${functionName}': ${err}. ` +
+                  `Consider using 'file://' prefix to reference an external file.`,
+              );
+            }
+          }
+
+          // Cache for future use
+          this.loadedFunctionCallbacks[functionName] = callback;
+          this.loadedFunctionCallbackRefs[functionName] = callbackRef;
+        } else if (typeof callbackRef === 'function') {
+          callback = callbackRef;
+          this.loadedFunctionCallbacks[functionName] = callback;
+          this.loadedFunctionCallbackRefs[functionName] = callbackRef;
+        }
+      }
+
+      if (!callback) {
+        throw new Error(`No callback found for function '${functionName}'`);
+      }
+
+      // Execute the callback
+      logger.debug(`Executing function '${functionName}' with args: ${args}`);
+      const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
+        callback(args),
+      );
+
+      return result;
     } catch (error: any) {
       logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
       throw error;
@@ -656,7 +634,6 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     output: ProviderResponse['output'],
     config: CompletionOptions,
     toolsDisabled: boolean,
-    signal?: AbortSignal,
   ): Promise<ProviderResponse['output']> {
     if (toolsDisabled) {
       return output;
@@ -714,21 +691,29 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     const results = [];
     for (const { functionName, args, callId } of preparedCalls) {
       try {
-        results.push(
-          await this.executeFunctionCallback(functionName, args, config, callId, signal),
-        );
+        results.push(await this.executeFunctionCallback(functionName, args, config, callId));
       } catch (error) {
-        throw new GoogleFunctionCallbackError(
+        throw new Error(
           `Function callback '${functionName}' failed after ${results.length} completed callback(s). ` +
             `Check for side effects before retrying: ${String(error)}`,
-          results.length ? joinCallbackResults(results) : undefined,
         );
       }
     }
     if (results.length === 1) {
       return results[0] ?? '';
     }
-    return joinCallbackResults(results);
+    return results
+      .map((result) => {
+        if (typeof result === 'string') {
+          return result;
+        }
+        try {
+          return JSON.stringify(result) ?? String(result);
+        } catch {
+          return String(result);
+        }
+      })
+      .join('\n');
   }
 
   /**
@@ -736,10 +721,12 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    * Should be called when the provider is no longer needed.
    */
   async cleanup(): Promise<void> {
-    try {
-      await this.mcpSession?.cleanup();
-    } finally {
-      this.mcpClient = this.mcpSession?.client ?? null;
+    if (this.mcpClient) {
+      if (this.initializationPromise != null) {
+        await this.initializationPromise;
+      }
+      await this.mcpClient.cleanup();
+      this.mcpClient = null;
     }
   }
 

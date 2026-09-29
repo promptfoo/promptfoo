@@ -25,6 +25,7 @@ import { AzureRealtimeProvider } from './azure/realtime';
 import { AzureResponsesProvider } from './azure/responses';
 import { AzureVideoProvider } from './azure/video';
 import { BrowserProvider } from './browser';
+import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
@@ -38,6 +39,7 @@ import {
   ElevenLabsSTTProvider,
   ElevenLabsTTSProvider,
 } from './elevenlabs';
+import { createEnvoyProvider } from './envoy';
 import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
 import { GolangProvider } from './golangCompletion';
@@ -68,6 +70,8 @@ import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistr
 import { MlflowGatewayChatCompletionProvider } from './mlflow-gateway';
 import { createMoonshotProvider } from './moonshot';
 import { createN8nProvider } from './n8n';
+import { createNovitaProvider } from './novita';
+import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
 import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
@@ -96,8 +100,10 @@ import { RubyProvider } from './rubyCompletion';
 import { createScriptBasedProviderFactory } from './scriptBasedProvider';
 import { ScriptCompletionProvider } from './scriptCompletion';
 import { SequenceProvider } from './sequence';
+import { modelNameFromProviderPath } from './shared';
 import { SimulatedUser } from './simulatedUser';
 import { createSnowflakeProvider } from './snowflake';
+import { createTogetherAiProvider } from './togetherai';
 import { TransformersEmbeddingProvider, TransformersTextGenerationProvider } from './transformers';
 import { createTrueFoundryProvider } from './truefoundry';
 import { createVercelProvider } from './vercel';
@@ -114,6 +120,30 @@ import { createXAIVoiceProvider } from './xai/voice';
 import type { LoadApiProviderContext } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
 import type { ProviderFactory, ProviderFamily } from './registryTypes';
+
+/** Merge low-to-high priority scopes without letting a lower-priority key alias win. */
+export function mergeProviderEnv(
+  providerPath: string,
+  ...layers: (NonNullable<ProviderOptions['env']> | undefined)[]
+): NonNullable<ProviderOptions['env']> | undefined {
+  const isCodexSDK = /^openai:(?:codex-sdk|codex)(?::|$)/.test(providerPath);
+  let merged: NonNullable<ProviderOptions['env']> | undefined;
+  for (const layer of layers) {
+    if (!layer) {
+      continue;
+    }
+    merged ??= {};
+    if (isCodexSDK && (layer.OPENAI_API_KEY || layer.CODEX_API_KEY)) {
+      delete merged.OPENAI_API_KEY;
+      delete merged.CODEX_API_KEY;
+    }
+    Object.assign(
+      merged,
+      Object.fromEntries(Object.entries(layer).filter(([, value]) => value !== undefined)),
+    );
+  }
+  return merged;
+}
 
 function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | undefined {
   const configuredModel = providerOptions.config?.model;
@@ -171,7 +201,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
+      const modelName = modelNameFromProviderPath(providerPath, 1);
       return new AI21ChatCompletionProvider(modelName, providerOptions);
     },
   },
@@ -210,7 +240,7 @@ export const providerMap: ProviderFactory[] = [
       // Model selection uses OpenCode configuration or explicit provider_id/model options.
       return new OpenCodeSDKProvider({
         ...providerOptions,
-        id: providerPath,
+        id: providerOptions.id ?? providerPath,
         config: providerOptions.config,
         env: context.env,
       });
@@ -271,7 +301,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
-      const modelName = splits[2];
+      const modelName = modelNameFromProviderPath(providerPath, 2);
 
       if (modelType === 'messages') {
         return new AnthropicMessagesProvider(modelName, providerOptions);
@@ -280,7 +310,10 @@ export const providerMap: ProviderFactory[] = [
         return new AnthropicCompletionProvider(modelName, providerOptions);
       }
       if (AnthropicCompletionProvider.ANTHROPIC_COMPLETION_MODELS.includes(modelType)) {
-        return new AnthropicCompletionProvider(modelType, providerOptions);
+        return new AnthropicCompletionProvider(
+          modelNameFromProviderPath(providerPath, 1),
+          providerOptions,
+        );
       }
 
       // The second part is a model name: route it to the Messages API. Catalogued ids
@@ -290,7 +323,10 @@ export const providerMap: ProviderFactory[] = [
       // not_found_error if the id is not real.
       const modelIds = ANTHROPIC_MODELS.map((model) => model.id);
       if (modelIds.includes(modelType) || looksLikeClaudeModelId(modelType)) {
-        return new AnthropicMessagesProvider(modelType, providerOptions);
+        return new AnthropicMessagesProvider(
+          modelNameFromProviderPath(providerPath, 1),
+          providerOptions,
+        );
       }
 
       throw new Error(
@@ -324,7 +360,7 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
-      const deploymentName = splits[2];
+      const deploymentName = modelNameFromProviderPath(providerPath, 2);
 
       // Azure model types that have no sensible default deployment must name one in
       // the provider path (`azure:<type>:<name>`). Without this, the registry would
@@ -393,6 +429,11 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'responses') {
         return new AzureResponsesProvider(deploymentName || 'gpt-4.1-2025-04-14', providerOptions);
       }
+      if (modelType === 'live') {
+        throw new Error(
+          'GPT-Live is available through openai:live:<model name>, not the Azure provider.',
+        );
+      }
       if (modelType === 'realtime') {
         requirePathSegment('realtime', 'a deployment name', 'deployment');
         if (NON_CONVERSATIONAL_REALTIME_MODELS.has(deploymentName)) {
@@ -418,6 +459,32 @@ export const providerMap: ProviderFactory[] = [
       throw new Error(
         'IBM BAM provider has been deprecated. The service was sunset in March 2025. Please use the WatsonX provider instead. See https://promptfoo.dev/docs/providers/watsonx for migration instructions.',
       );
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('cerebras:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createCerebrasProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('novita:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createNovitaProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
   {
@@ -590,23 +657,42 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('envoy:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createEnvoyProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('f5:'),
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      let endpoint = splits.slice(1).join(':');
-      if (endpoint.startsWith('/')) {
-        endpoint = endpoint.slice(1);
+      const endpoint = providerPath.slice('f5:'.length).replace(/^\/+/, '');
+      const configuredBaseUrl =
+        providerOptions.config?.apiBaseUrl ??
+        providerOptions.env?.F5_API_BASE_URL ??
+        getEnvString('F5_API_BASE_URL');
+      if (!configuredBaseUrl) {
+        throw new Error(
+          'F5 provider requires a gateway URL. Set `apiBaseUrl` in the provider config or the F5_API_BASE_URL environment variable.',
+        );
       }
+      const baseUrl = configuredBaseUrl.replace(/\/+$/, '');
       return new OpenAiChatCompletionProvider(endpoint, {
         ...providerOptions,
         config: {
           ...providerOptions.config,
-          apiBaseUrl: providerOptions.config?.apiBaseUrl + '/' + endpoint,
-          apiKeyEnvar: 'F5_API_KEY',
+          apiBaseUrl: `${baseUrl}/${endpoint}`,
+          apiKeyEnvar: providerOptions.config?.apiKeyEnvar ?? 'F5_API_KEY',
         },
       });
     },
@@ -694,7 +780,7 @@ export const providerMap: ProviderFactory[] = [
 
       if (!model) {
         throw new Error(
-          'Helicone provider requires a model in format helicone:<provider/model> (e.g., helicone:openai/gpt-4o, helicone:anthropic/claude-3-5-sonnet)',
+          'Helicone provider requires a model in format helicone:<provider/model> (e.g., helicone:openai/gpt-4o, helicone:anthropic/claude-sonnet-5)',
         );
       }
 
@@ -732,6 +818,20 @@ export const providerMap: ProviderFactory[] = [
       // Handle regular hyperbolic:<model> format for chat
       const { createHyperbolicProvider } = await import('./hyperbolic/chat');
       return createHyperbolicProvider(providerPath, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('litellm:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createLiteLLMProvider } = await import('./litellm');
+      return createLiteLLMProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
   {
@@ -811,6 +911,15 @@ export const providerMap: ProviderFactory[] = [
       return createMoonshotProvider(providerPath, {
         ...providerOptions,
         env: providerOptions.env ?? context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('nscale:'),
+    create: async (providerPath: string, providerOptions: ProviderOptions) => {
+      return createNscaleProvider(providerPath, {
+        config: providerOptions,
+        env: providerOptions.env,
       });
     },
   },
@@ -895,6 +1004,14 @@ export const providerMap: ProviderFactory[] = [
       const modelName = splits.slice(2).join(':');
       const configuredModel = getConfiguredOpenAiModel(providerOptions);
 
+      if (modelType === 'agents-api') {
+        const { OpenAiAgentsApiProvider } = await import('./openai/agents-api');
+        return new OpenAiAgentsApiProvider(modelName, {
+          ...providerOptions,
+          env: { ...context.env, ...providerOptions.env },
+        });
+      }
+
       // Codex app-server providers (openai:codex-app-server or openai:codex-desktop)
       if (modelType === 'codex-app-server' || modelType === 'codex-desktop') {
         const { OpenAICodexAppServerProvider } = await import('./openai/codex-app-server');
@@ -930,12 +1047,25 @@ export const providerMap: ProviderFactory[] = [
                 model: codexModel,
               }
             : providerOptions.config,
-          env: context.env,
+          env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
         });
       }
       const requestedApiModel = modelName || configuredModel || modelType;
-      if (!['agents', 'chatkit', 'assistant'].includes(modelType)) {
-        const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
+      const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
+      if (
+        [modelType, requestedApiModel, passthrough?.model].some(
+          (model) =>
+            typeof model === 'string' &&
+            (model === 'gpt-live-transcribe' || model.startsWith('gpt-live-transcribe-')),
+        )
+      ) {
+        throw new Error(
+          'gpt-live-transcribe requires a dedicated Realtime transcription session, which this provider does not support.',
+        );
+      }
+      const isLiveProvider =
+        modelType === 'live' || /^gpt-live-1(?:-\d{4}-\d{2}-\d{2})?$/.test(modelType);
+      if (!isLiveProvider && !['agents', 'chatkit', 'assistant'].includes(modelType)) {
         const apiHost =
           providerOptions.config?.apiHost ||
           providerOptions.env?.OPENAI_API_HOST ||
@@ -954,7 +1084,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(
-          modelName || configuredModel || 'gpt-5.6-terra',
+          modelName || configuredModel || 'gpt-6-sol',
           providerOptions,
         );
       }
@@ -984,7 +1114,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'responses') {
         return new OpenAiResponsesProvider(
-          modelName || configuredModel || 'gpt-5.6-terra',
+          modelName || configuredModel || 'gpt-6-sol',
           providerOptions,
         );
       }
@@ -998,6 +1128,14 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'tts' || modelType === 'speech') {
         return new OpenAiTtsProvider(
           modelName || configuredModel || 'gpt-4o-mini-tts',
+          providerOptions,
+        );
+      }
+      // Conversational GPT-Live snapshots use the Live endpoint.
+      if (isLiveProvider) {
+        const { OpenAiLiveProvider } = await import('./openai/live');
+        return new OpenAiLiveProvider(
+          modelType === 'live' ? modelName || configuredModel || 'gpt-live-1' : modelType,
           providerOptions,
         );
       }
@@ -1047,7 +1185,7 @@ export const providerMap: ProviderFactory[] = [
       }
       // Assume user did not provide model type, and it's a chat model
       logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:tts:<model name>, openai:transcription:<model name>, openai:realtime:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:tts:<model name>, openai:transcription:<model name>, openai:realtime:<model name>, openai:live:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
       );
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },
@@ -1175,6 +1313,19 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('togetherai:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createTogetherAiProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('truefoundry:'),
     create: async (
       providerPath: string,
@@ -1255,7 +1406,10 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      return new VoyageEmbeddingProvider(providerPath.split(':')[1], providerOptions);
+      return new VoyageEmbeddingProvider(
+        modelNameFromProviderPath(providerPath, 1),
+        providerOptions,
+      );
     },
   },
   {
@@ -1424,7 +1578,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
+      const modelName = providerPath.slice('llama:'.length);
       return new LlamaProvider(modelName, providerOptions);
     },
   },
@@ -1436,7 +1590,10 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
-      let config = providerOptions.config || { enabled: true };
+      let config = {
+        ...providerOptions.config,
+        enabled: providerOptions.config?.enabled ?? true,
+      };
 
       // Handle mcp:<server_name> format for server-specific configs
       if (splits.length > 1) {
@@ -1481,7 +1638,7 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[2];
+      const modelName = modelNameFromProviderPath(providerPath, 2);
       return new PromptfooModelProvider(modelName, {
         ...providerOptions,
         model: modelName,
@@ -1680,10 +1837,6 @@ function isGoogleProviderPath(providerPath: string): boolean {
 }
 
 const providerFamilies: ProviderFamily[] = [
-  {
-    canHandle: (value) => /^(cerebras|envoy|litellm|novita|nscale|togetherai):/.test(value),
-    factories: async () => (await import('./families/compatible')).compatibleProviderFactories,
-  },
   {
     canHandle: isAwsProviderPath,
     factories: async () => {

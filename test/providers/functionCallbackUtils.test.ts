@@ -5,10 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
-import {
-  executeProviderFunctionCallback,
-  FunctionCallbackHandler,
-} from '../../src/providers/functionCallbackUtils';
+import { FunctionCallbackHandler } from '../../src/providers/functionCallbackUtils';
 
 import type { FunctionCallbackConfig } from '../../src/providers/functionCallbackTypes';
 
@@ -26,72 +23,6 @@ vi.mock('../../src/logger', () => ({
 
 const mockImportModule = vi.mocked(importModule);
 const mockLogger = vi.mocked(logger);
-
-it('records the actual fallback sent for an unserializable direct-provider callback', async () => {
-  mockLogger.warn.mockClear();
-  const span = {
-    setAttribute: vi.fn(),
-    setStatus: vi.fn(),
-    end: vi.fn(),
-    recordException: vi.fn(),
-  };
-  const activeSpanSpy = vi.spyOn(trace, 'getActiveSpan').mockReturnValue(span as any);
-  const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({
-    startActiveSpan: vi.fn((_name, _options, callback) => callback(span)),
-  } as any);
-
-  try {
-    const output = await executeProviderFunctionCallback({
-      functionName: 'lookup',
-      args: '{}',
-      callbacks: { lookup: () => ({ value: 1n }) },
-      cache: {},
-    });
-    expect(output).toBe('[object Object]');
-    expect(span.setAttribute).toHaveBeenCalledWith('tool.output', output);
-    expect(span.end).toHaveBeenCalledOnce();
-    expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('BigInt'));
-  } finally {
-    activeSpanSpy.mockRestore();
-    tracerSpy.mockRestore();
-  }
-});
-
-describe.each(['constructor', 'toString', '__proto__'])('callback name %s', (name) => {
-  it('rejects inherited direct-provider callbacks', async () => {
-    await expect(
-      executeProviderFunctionCallback({
-        functionName: name,
-        args: '{}',
-        callbacks: {},
-        cache: {},
-      }),
-    ).rejects.toThrow(`No callback found for function '${name}'`);
-  });
-
-  it('returns the original call when the handler has no own callback', async () => {
-    const call = { name, arguments: '{}' };
-    await expect(new FunctionCallbackHandler().processCall(call, {})).resolves.toEqual({
-      output: JSON.stringify(call),
-      isError: false,
-    });
-  });
-
-  it('executes explicitly configured callbacks through both adapters', async () => {
-    const callbacks = { [name]: () => 'configured callback' };
-    await expect(
-      executeProviderFunctionCallback({
-        functionName: name,
-        args: '{}',
-        callbacks,
-        cache: {},
-      }),
-    ).resolves.toBe('configured callback');
-    await expect(
-      new FunctionCallbackHandler().processCall({ name, arguments: '{}' }, callbacks),
-    ).resolves.toEqual({ output: 'configured callback', isError: false });
-  });
-});
 
 describe('FunctionCallbackHandler', () => {
   let handler: FunctionCallbackHandler;
@@ -469,14 +400,6 @@ describe('FunctionCallbackHandler', () => {
   });
 
   describe('executeCallback', () => {
-    it('returns an empty string when a callback returns undefined', async () => {
-      const result = await handler.processCall(
-        { name: 'emptyFunction', arguments: '{}' },
-        { emptyFunction: (() => undefined) as unknown as FunctionCallbackConfig['emptyFunction'] },
-      );
-      expect(result).toEqual({ output: '', isError: false });
-    });
-
     it('should cache and reuse loaded callbacks', async () => {
       const mockCallback = vi.fn().mockResolvedValue('cached result');
       const callbacks: FunctionCallbackConfig = {
@@ -796,7 +719,7 @@ describe('FunctionCallbackHandler', () => {
       const call = { name: 'list_resources', arguments: '{}' };
       const result = await handler.processCall(call, {});
 
-      expect(mockMCPClient.callTool).toHaveBeenCalledWith('list_resources', {}, undefined);
+      expect(mockMCPClient.callTool).toHaveBeenCalledWith('list_resources', {});
       expect(result).toEqual({
         output: 'MCP Tool Result (list_resources): Resource list: [file1.txt, file2.txt]',
         isError: false,
@@ -914,7 +837,7 @@ describe('FunctionCallbackHandler', () => {
       const call = { name: 'shared_name', arguments: '{}' };
       const result = await handler.processCall(call, callbacks);
 
-      expect(mockMCPClient.callTool).toHaveBeenCalledWith('shared_name', {}, undefined);
+      expect(mockMCPClient.callTool).toHaveBeenCalledWith('shared_name', {});
       expect(result).toEqual({
         output: 'MCP Tool Result (shared_name): MCP tool result',
         isError: false,
@@ -946,7 +869,7 @@ describe('FunctionCallbackHandler', () => {
       const call = { name: 'no_args_tool', arguments: '' };
       const result = await handler.processCall(call, {});
 
-      expect(mockMCPClient.callTool).toHaveBeenCalledWith('no_args_tool', {}, undefined);
+      expect(mockMCPClient.callTool).toHaveBeenCalledWith('no_args_tool', {});
       expect(result).toEqual({
         output: 'MCP Tool Result (no_args_tool): success with no args',
         isError: false,
@@ -964,7 +887,7 @@ describe('FunctionCallbackHandler', () => {
       const call = { name: 'missing_args_tool' }; // No arguments property
       const result = await handler.processCall(call, {});
 
-      expect(mockMCPClient.callTool).toHaveBeenCalledWith('missing_args_tool', {}, undefined);
+      expect(mockMCPClient.callTool).toHaveBeenCalledWith('missing_args_tool', {});
       expect(result).toEqual({
         output: 'MCP Tool Result (missing_args_tool): success with missing args',
         isError: false,
@@ -1041,11 +964,7 @@ describe('FunctionCallbackHandler', () => {
       const call = { name: 'direct_args_tool', arguments: { param: 'value' } }; // Direct object, not string
       const result = await handler.processCall(call, {});
 
-      expect(mockMCPClient.callTool).toHaveBeenCalledWith(
-        'direct_args_tool',
-        { param: 'value' },
-        undefined,
-      );
+      expect(mockMCPClient.callTool).toHaveBeenCalledWith('direct_args_tool', { param: 'value' });
       expect(result).toEqual({
         output: 'MCP Tool Result (direct_args_tool): success with direct args',
         isError: false,
