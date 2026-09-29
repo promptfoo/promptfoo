@@ -109,7 +109,7 @@ export class PythonWorker {
       });
 
       const startupError = (err: Error) => {
-        finishStartup();
+        // Keep the watchdog armed until the child closes or startup is cancelled.
         reject(err);
       };
       workerProcess.on('error', startupError);
@@ -119,6 +119,7 @@ export class PythonWorker {
         if (this.process !== workerProcess) {
           return;
         }
+        finishStartup();
         // This child has actually closed. Cleanup must not await another close,
         // and late events from it must not affect a replacement child.
         this.process = null;

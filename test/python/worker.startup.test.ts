@@ -349,6 +349,34 @@ describe('Python worker startup cancellation', () => {
     }
   });
 
+  it('keeps the startup watchdog armed when a failed replacement has not closed', async () => {
+    const replacement = makeShell();
+    replacement.send.mockImplementation(() => {});
+    createShell.mockReturnValueOnce(shell).mockReturnValue(replacement);
+    const worker = new PythonWorker('fixture.py', 'call_api');
+    const initialized = worker.initialize();
+    await Promise.resolve();
+    shell.emit('message', 'READY');
+    await initialized;
+    shell.emit('close');
+    await vi.advanceTimersByTimeAsync(0);
+    replacement.emit('pythonError', new Error('replacement import failed'));
+
+    try {
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(replacement.send).toHaveBeenCalledExactlyOnceWith('SHUTDOWN');
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(replacement.childProcess.kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
+      expect(worker.isReady()).toBe(false);
+      for (const stream of ['stdin', 'stdout', 'stderr'] as const) {
+        expect(replacement.childProcess[stream].destroy).toHaveBeenCalledOnce();
+      }
+    } finally {
+      replacement.childProcess.emit('close', null, 'SIGKILL');
+      await worker.shutdown();
+    }
+  });
+
   it('reports an import failure without restarting a worker that never became ready', async () => {
     const worker = new PythonWorker('fixture.py', 'call_api');
     let outcome = 'pending';
