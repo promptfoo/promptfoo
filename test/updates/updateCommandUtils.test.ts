@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -12,10 +12,12 @@ vi.mock('node:child_process', () => ({ spawn: vi.fn() }));
 
 let directory: string;
 let restoreEnvironment: (() => void) | undefined;
-let child: EventEmitter & { unref: ReturnType<typeof vi.fn> };
+let originalExitCode: typeof process.exitCode;
+let child: EventEmitter & { kill: ReturnType<typeof vi.fn> };
 beforeEach(() => {
   directory = mkdtempSync(path.join(os.tmpdir(), 'promptfoo-update-test-'));
-  child = Object.assign(new EventEmitter(), { unref: vi.fn() });
+  originalExitCode = process.exitCode;
+  child = Object.assign(new EventEmitter(), { kill: vi.fn().mockReturnValue(true) });
   vi.mocked(spawn)
     .mockReset()
     .mockReturnValue(child as any);
@@ -23,90 +25,104 @@ beforeEach(() => {
 afterEach(() => {
   restoreEnvironment?.();
   restoreEnvironment = undefined;
-  vi.useRealTimers();
+  process.exitCode = originalExitCode;
   vi.restoreAllMocks();
   rmSync(directory, { recursive: true, force: true });
 });
 
 describe('update execution context', () => {
-  it('uses a private directory under the launch temp root and preserves explicit npm configuration', () => {
-    writeFileSync(path.join(directory, '.npmrc'), 'progress=false');
-    restoreEnvironment = mockProcessEnv({
-      TMPDIR: '/later-project-setting',
-      NODE_OPTIONS: '--trace-warnings',
-    });
-    const context = createUpdateContext(
-      {
-        TMPDIR: directory,
-        PATH: '/usr/bin:.:/workspace/bin:/unused/../workspace/bin:/workspace/node_modules/.bin:/opt/node/bin',
-        HOME: '/home/fixture',
-        npm_config_userconfig: 'user.npmrc',
-        npm_config_prefix: '/opt/prefix',
-        npm_config_registry: 'https://registry.fixture.invalid',
-        NPM_CONFIG_IGNORE_SCRIPTS: 'true',
-        NODE_AUTH_TOKEN: 'fixture-only',
-        NODE_OPTIONS: '--trace-warnings',
-        FIXTURE_API_KEY: 'unused',
-      },
-      '/workspace',
-    );
-    try {
-      expect(path.dirname(context.cwd)).toBe(directory);
-      expect(context.cwd).not.toBe(directory);
-      expect(statSync(context.cwd).mode & 0o777).toBe(0o700);
-      expect(readdirSync(context.cwd)).toEqual([]);
-      expect(context.env).toEqual({
-        TMPDIR: directory,
-        PATH: '/usr/bin:/opt/node/bin',
-        HOME: '/home/fixture',
-        npm_config_userconfig: '/workspace/user.npmrc',
-        npm_config_prefix: '/opt/prefix',
-        npm_config_registry: 'https://registry.fixture.invalid',
-        NPM_CONFIG_IGNORE_SCRIPTS: 'true',
-        NODE_AUTH_TOKEN: 'fixture-only',
-      });
-    } finally {
-      context.cleanup();
-    }
-    expect(existsSync(context.cwd)).toBe(false);
+  it('preserves launch auth, installer settings, and npm path semantics', () => {
+    restoreEnvironment = mockProcessEnv({ CODEARTIFACT_AUTH_TOKEN: 'later-project-value' });
+    const source = {
+      PATH: path.dirname(process.execPath),
+      HOME: '/home/fixture',
+      npm_config_userconfig: '~/.config/npm/npmrc',
+      npm_config_globalconfig: 'global.npmrc',
+      NPM_CONFIG_CAFILE: 'certs/registry.pem',
+      npm_config_registry: 'https://registry.fixture.invalid',
+      NPM_CONFIG_IGNORE_SCRIPTS: 'true',
+      CODEARTIFACT_AUTH_TOKEN: 'fixture-launch-value',
+      PLAYWRIGHT_BROWSERS_PATH: 'browsers',
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 'true',
+    };
+    const context = createUpdateContext(source, directory);
+    expect(context.cwd).toBe(directory);
+    expect(context.env).toEqual({ ...source, PATH: realpathSync(source.PATH) });
+    expect(context.env).not.toBe(source);
   });
 
-  it('preserves the active Node runtime bin when launched from its home directory', () => {
+  it('filters project directories even when PATH uses a symlink outside the project', () => {
+    const project = path.join(directory, 'project');
+    const projectBin = path.join(project, 'bin');
+    const alias = path.join(directory, 'alias');
+    mkdirSync(projectBin, { recursive: true });
+    symlinkSync(projectBin, alias);
     const runtimeBin = path.dirname(process.execPath);
     const context = createUpdateContext(
-      { TMPDIR: directory, PATH: runtimeBin },
-      path.dirname(runtimeBin),
+      { PATH: `.:${projectBin}:${alias}:${runtimeBin}` },
+      project,
     );
-    try {
-      expect(context.env.PATH).toBe(runtimeBin);
-    } finally {
-      context.cleanup();
-    }
+    expect(context.env.PATH).toBe(realpathSync(runtimeBin));
   });
 
-  it('does not use an empty search path after filtering local entries', () => {
-    const context = createUpdateContext(
-      { TMPDIR: directory, PATH: '.:/workspace/bin' },
-      '/workspace',
+  it('preserves a symlink to the active runtime when invoked from its home directory', () => {
+    const runtimeBin = realpathSync(path.dirname(process.execPath));
+    const alias = path.join(directory, 'runtime');
+    symlinkSync(runtimeBin, alias);
+    expect(createUpdateContext({ PATH: alias }, path.dirname(runtimeBin)).env.PATH).toBe(
+      runtimeBin,
     );
-    try {
-      expect(context.env.PATH).toBe('/usr/bin:/bin');
-    } finally {
-      context.cleanup();
-    }
+  });
+
+  it('fails closed when no launch PATH entries are eligible', () => {
+    expect(() => createUpdateContext({ PATH: `.:${directory}` }, directory)).toThrow(
+      'No trusted npm',
+    );
   });
 });
 
 describe('npm update lifecycle', () => {
-  it('pins the requested version and cleans up after successful completion', async () => {
-    const result = runNpmUpdate('1.2.3', { TMPDIR: directory }, '/workspace');
-    const [command, args, options] = vi.mocked(spawn).mock.calls[0];
-    expect(command).toBe('npm');
-    expect(args).toEqual(['install', '--global', 'promptfoo@1.2.3']);
-    expect(options).toMatchObject({ shell: false, detached: false, stdio: 'inherit' });
+  it('pins the requested version and keeps the launch cwd', async () => {
+    const result = runNpmUpdate('1.2.3', {}, directory);
+    expect(spawn).toHaveBeenCalledWith(
+      'npm',
+      ['install', '--global', 'promptfoo@1.2.3'],
+      expect.objectContaining({
+        cwd: directory,
+        shell: false,
+        detached: false,
+        stdio: 'inherit',
+      }),
+    );
     child.emit('close', 0, null);
     await expect(result).resolves.toBeUndefined();
-    expect(readdirSync(directory)).toEqual([]);
+  });
+
+  it.each([
+    ['SIGINT', 130],
+    ['SIGTERM', 143],
+  ] as const)('forwards %s and waits for the child before cleanup', async (signal, exitCode) => {
+    const existing = process.listeners(signal);
+    const result = runNpmUpdate('latest', {}, directory);
+    const added = process.listeners(signal).find((listener) => !existing.includes(listener));
+    expect(added).toBeDefined();
+    added!(signal);
+    expect(child.kill).toHaveBeenCalledWith(signal);
+    expect(process.exitCode).toBe(exitCode);
+    expect(process.listeners(signal)).toContain(added);
+    const rejection = expect(result).rejects.toThrow(`Update stopped by ${signal}`);
+    child.emit('close', null, signal);
+    await rejection;
+    expect(process.listeners(signal)).toEqual(existing);
+  });
+
+  it('does not report success if the child exits cleanly after interruption', async () => {
+    const existing = process.listeners('SIGINT');
+    const result = runNpmUpdate('latest', {}, directory);
+    process.listeners('SIGINT').find((listener) => !existing.includes(listener))!('SIGINT');
+    const rejection = expect(result).rejects.toThrow('Update stopped by SIGINT');
+    child.emit('close', 0, null);
+    await rejection;
   });
 
   it.each([
@@ -114,37 +130,33 @@ describe('npm update lifecycle', () => {
     [null, 'SIGTERM'],
     [null, null],
   ])('rejects unsuccessful close (%s, %s)', async (code, signal) => {
-    const result = runNpmUpdate('latest', { TMPDIR: directory }, '/workspace');
+    const result = runNpmUpdate('latest', {}, directory);
     const rejection = expect(result).rejects.toThrow('Update');
     child.emit('close', code, signal);
     await rejection;
-    expect(readdirSync(directory)).toEqual([]);
   });
 
-  it('settles once when an error is followed by close', async () => {
-    const result = runNpmUpdate('latest', { TMPDIR: directory }, '/workspace');
+  it('removes signal listeners when a spawn error is followed by close', async () => {
+    const listeners = process.listeners('SIGTERM');
+    const result = runNpmUpdate('latest', {}, directory);
     const rejection = expect(result).rejects.toThrow('spawn failed');
     child.emit('error', new Error('spawn failed'));
     child.emit('close', -2, null);
     await rejection;
-    expect(readdirSync(directory)).toEqual([]);
+    expect(process.listeners('SIGTERM')).toEqual(listeners);
   });
 
-  it('cleans up if spawn throws synchronously', async () => {
+  it('adds no signal handlers if spawn throws synchronously', async () => {
+    const listeners = process.listeners('SIGTERM');
     vi.mocked(spawn).mockImplementation(() => {
       throw new Error('spawn failed');
     });
-    await expect(runNpmUpdate('latest', { TMPDIR: directory }, '/workspace')).rejects.toThrow(
-      'spawn failed',
-    );
-    expect(readdirSync(directory)).toEqual([]);
+    await expect(runNpmUpdate('latest', {}, directory)).rejects.toThrow('spawn failed');
+    expect(process.listeners('SIGTERM')).toEqual(listeners);
   });
 
   it('rejects an invalid version before creating a process', async () => {
-    await expect(
-      runNpmUpdate('invalid-version', { TMPDIR: directory }, '/workspace'),
-    ).rejects.toThrow('Invalid');
+    await expect(runNpmUpdate('invalid-version', {}, directory)).rejects.toThrow('Invalid');
     expect(spawn).not.toHaveBeenCalled();
-    expect(readdirSync(directory)).toEqual([]);
   });
 });

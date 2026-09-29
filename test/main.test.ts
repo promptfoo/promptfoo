@@ -145,9 +145,11 @@ describe('shouldSkipDefaultConfigLoading', () => {
     );
   });
 
-  it('keeps default config discovery for other commands and post-separator arguments', () => {
+  it('keeps default config discovery for other commands', () => {
     expect(shouldSkipDefaultConfigLoading(['eval', '--help'])).toBe(false);
-    expect(shouldSkipDefaultConfigLoading(['--', 'code-scans', 'run'])).toBe(false);
+    expect(shouldSkipDefaultConfigLoading(['--', 'code-scans', 'run'])).toBe(true);
+    expect(shouldSkipDefaultConfigLoading(['--', 'update', '--check'])).toBe(true);
+    expect(isUpdateCommandRequested(['--', 'update', '--check'])).toBe(true);
   });
 });
 

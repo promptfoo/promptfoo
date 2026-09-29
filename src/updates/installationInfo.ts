@@ -59,23 +59,19 @@ export function getInstallationInfo(
       return manual('For a source checkout, pull the latest changes and rebuild Promptfoo.');
     }
     const context = createUpdateContext(sourceEnvironment, projectRoot);
-    try {
-      const globalRoot = execFileSync('npm', ['root', '--global'], {
-        cwd: context.cwd,
-        env: context.env,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-        timeout: 1000,
-      }).trim();
-      if (!path.isAbsolute(globalRoot)) {
-        return manual(MANUAL_UPDATE);
-      }
-      const packageRoot = realpathSync(path.join(globalRoot, 'promptfoo'));
-      if (cliPath.startsWith(`${packageRoot}/`)) {
-        return { canUpdate: true, message: 'Global npm installation confirmed.' };
-      }
-    } finally {
-      context.cleanup();
+    const globalRoot = execFileSync('npm', ['root', '--global'], {
+      cwd: context.cwd,
+      env: context.env,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 1000,
+    }).trim();
+    if (!path.isAbsolute(globalRoot)) {
+      return manual(MANUAL_UPDATE);
+    }
+    const packageRoot = realpathSync(path.join(globalRoot, 'promptfoo'));
+    if (cliPath.startsWith(`${packageRoot}/`)) {
+      return { canUpdate: true, message: 'Global npm installation confirmed.' };
     }
   } catch {
     // Leave unverified installations to their package manager.

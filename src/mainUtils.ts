@@ -105,7 +105,7 @@ function getRequestedCommand(argv: string[]): string | undefined {
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
     if (arg === '--') {
-      return undefined;
+      return argv[index + 1];
     }
     if (arg === '--env-file' || arg === '--env-path') {
       index++;

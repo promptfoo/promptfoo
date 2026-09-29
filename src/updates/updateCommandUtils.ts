@@ -1,81 +1,38 @@
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { realpathSync } from 'node:fs';
 import path from 'node:path';
 
 import semver from 'semver';
 
-const UPDATE_ENV_KEYS = [
-  'PATH',
-  'NPM_TOKEN',
-  'NODE_AUTH_TOKEN',
-  'HOME',
-  'TMPDIR',
-  'TMP',
-  'TEMP',
-  'HTTP_PROXY',
-  'HTTPS_PROXY',
-  'NO_PROXY',
-  'http_proxy',
-  'https_proxy',
-  'no_proxy',
-  'NODE_EXTRA_CA_CERTS',
-  'SSL_CERT_FILE',
-  'SSL_CERT_DIR',
-  'NPM_CONFIG_PREFIX',
-  'npm_config_prefix',
-  'NPM_CONFIG_USERCONFIG',
-  'npm_config_userconfig',
-  'NPM_CONFIG_GLOBALCONFIG',
-  'npm_config_globalconfig',
-] as const;
-
-/** Use launch settings and a private cwd; npm global mode ignores project .npmrc files. */
+/** npm global mode ignores project .npmrc; retain launch cwd and settings for user config. */
 export function createUpdateContext(sourceEnvironment: NodeJS.ProcessEnv, projectRoot: string) {
-  const env: NodeJS.ProcessEnv = {};
-  for (const key of UPDATE_ENV_KEYS) {
-    const value = sourceEnvironment[key];
-    if (value !== undefined) {
-      env[key] = value;
+  const root = realpathSync(projectRoot);
+  const runtimeBin = realpathSync(path.dirname(process.execPath));
+  const entries = (sourceEnvironment.PATH ?? '/usr/bin:/bin').split(path.delimiter);
+  const trustedPaths = entries.flatMap((entry) => {
+    if (!path.isAbsolute(entry) || entry.includes('/node_modules/.bin')) {
+      return [];
     }
-  }
-  for (const [key, value] of Object.entries(sourceEnvironment)) {
-    if (/^npm_config_/i.test(key) && value !== undefined) {
-      env[key] = value;
+    try {
+      const canonical = realpathSync(entry);
+      if (canonical.includes('/node_modules/.bin')) {
+        return [];
+      }
+      const insideProject =
+        canonical === root ||
+        canonical.startsWith(root.endsWith(path.sep) ? root : `${root}${path.sep}`);
+      return canonical === runtimeBin || !insideProject ? [canonical] : [];
+    } catch {
+      return [];
     }
+  });
+  if (!trustedPaths.length) {
+    throw new Error('No trusted npm executable directory found in the launch PATH.');
   }
-  const runtimeBin = path.dirname(process.execPath);
-  env.PATH =
-    (env.PATH ?? '/usr/bin:/bin')
-      .split(path.delimiter)
-      .filter((entry) => path.isAbsolute(entry))
-      .map((entry) => path.normalize(entry))
-      .filter(
-        (entry) =>
-          !entry.includes('/node_modules/.bin') &&
-          (entry === runtimeBin || (entry !== projectRoot && !entry.startsWith(`${projectRoot}/`))),
-      )
-      .join(path.delimiter) || '/usr/bin:/bin';
-  for (const key of [
-    'HOME',
-    'NODE_EXTRA_CA_CERTS',
-    'SSL_CERT_FILE',
-    'SSL_CERT_DIR',
-    'NPM_CONFIG_PREFIX',
-    'npm_config_prefix',
-    'NPM_CONFIG_USERCONFIG',
-    'npm_config_userconfig',
-    'NPM_CONFIG_GLOBALCONFIG',
-    'npm_config_globalconfig',
-  ] as const) {
-    if (env[key]) {
-      env[key] = path.resolve(projectRoot, env[key]);
-    }
-  }
-  const configuredTemp =
-    sourceEnvironment.TMPDIR || sourceEnvironment.TMP || sourceEnvironment.TEMP;
-  const tempRoot = configuredTemp && path.isAbsolute(configuredTemp) ? configuredTemp : '/tmp';
-  const cwd = mkdtempSync(path.join(tempRoot, 'promptfoo-update-'));
-  return { cwd, env, cleanup: () => rmSync(cwd, { recursive: true, force: true }) };
+  return {
+    cwd: projectRoot,
+    env: { ...sourceEnvironment, PATH: [...new Set(trustedPaths)].join(path.delimiter) },
+  };
 }
 
 export async function runNpmUpdate(
@@ -87,24 +44,37 @@ export async function runNpmUpdate(
     throw new Error('Invalid update version');
   }
   const context = createUpdateContext(sourceEnvironment, projectRoot);
+  const child = spawn('npm', ['install', '--global', `promptfoo@${version}`], {
+    ...context,
+    stdio: 'inherit',
+    shell: false,
+    detached: false,
+  });
+  let terminationSignal: NodeJS.Signals | undefined;
+  const forwardInterrupt = () => {
+    terminationSignal = 'SIGINT';
+    process.exitCode = 130;
+    child.kill('SIGINT');
+  };
+  const forwardTermination = () => {
+    terminationSignal = 'SIGTERM';
+    process.exitCode = 143;
+    child.kill('SIGTERM');
+  };
+  process.once('SIGINT', forwardInterrupt);
+  process.once('SIGTERM', forwardTermination);
   try {
     await new Promise<void>((resolve, reject) => {
-      const child = spawn('npm', ['install', '--global', `promptfoo@${version}`], {
-        cwd: context.cwd,
-        env: context.env,
-        stdio: 'inherit',
-        shell: false,
-        detached: false,
-      });
       child.once('error', reject);
       child.once('close', (code, signal) => {
-        if (code === 0) {
+        const stoppedBy = terminationSignal ?? signal;
+        if (code === 0 && !stoppedBy) {
           resolve();
         } else {
           reject(
             new Error(
-              signal
-                ? `Update stopped by ${signal}`
+              stoppedBy
+                ? `Update stopped by ${stoppedBy}`
                 : `Update exited with code ${code ?? 'unknown'}`,
             ),
           );
@@ -112,6 +82,7 @@ export async function runNpmUpdate(
       });
     });
   } finally {
-    context.cleanup();
+    process.removeListener('SIGINT', forwardInterrupt);
+    process.removeListener('SIGTERM', forwardTermination);
   }
 }

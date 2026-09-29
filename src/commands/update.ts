@@ -61,7 +61,7 @@ export function updateCommand(
         logger.info('Promptfoo updated. The next command will use the new version.');
       } catch (error) {
         logger.error(`Update failed: ${error instanceof Error ? error.message : String(error)}`);
-        process.exitCode = 1;
+        process.exitCode ||= 1;
       }
     });
 }
