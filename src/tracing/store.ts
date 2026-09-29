@@ -148,14 +148,12 @@ function computeDepth(
   return currentDepth;
 }
 
-/** A span as accepted on write paths: OTLP-ingested spans plus imported spans that may carry a
- * nested OTel `status` (string or numeric code) instead of a flat statusCode. */
+// Imported spans may use nested OTel status instead of the flat storage fields.
 type WritableSpan = SpanData & {
   status?: { code?: number | 'unset' | 'ok' | 'error'; message?: string };
 };
 
-/** Resolve a span's status into the flat statusCode/statusMessage columns, mapping the canonical
- * OTel string codes (unset=0, ok=1, error=2). A pre-set flat statusCode always wins. */
+// Explicit flat status fields take precedence over imported nested status.
 function normalizeSpanStatus(span: WritableSpan): {
   statusCode?: number;
   statusMessage?: string;

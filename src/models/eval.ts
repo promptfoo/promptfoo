@@ -13,7 +13,6 @@ import {
   promptsTable,
   tagsTable,
 } from '../database/tables';
-import { getEnvBool } from '../envars';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
@@ -42,7 +41,11 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
-import { sanitizeRuntimeOptions, sanitizeTracingConfigForPersistence } from '../util/sanitizer';
+import {
+  sanitizeConfigForOutput,
+  sanitizeRuntimeOptions,
+  sanitizeTracingConfigForPersistence,
+} from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGenerationTokenUsage,
@@ -61,8 +64,11 @@ import {
 } from './evalPerformance';
 import EvalResult, {
   getResultIndexKey,
+  getStripFlags,
   PROMPTFOO_METADATA_KEY,
   persistTraceMetadata,
+  projectPrompt,
+  projectTracesForOutput,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
 
@@ -1445,20 +1451,15 @@ export default class Eval {
     }
 
     const stats = await this.getStats();
-    const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
+    const stripFlags = getStripFlags(this.config.env);
 
-    const prompts = shouldStripPromptText
-      ? this.prompts.map((p) => ({
-          ...p,
-          raw: '[prompt stripped]',
-        }))
-      : this.prompts;
+    const prompts = this.prompts.map((p) => projectPrompt(p, stripFlags.shouldStripPromptText));
 
     return {
       version: 3,
       timestamp: new Date(this.createdAt).toISOString(),
       prompts,
-      results: this.results.map((r) => r.toEvaluateResult()),
+      results: this.results.map((r) => r.toEvaluateResult(stripFlags)),
       stats,
     };
   }
@@ -1467,8 +1468,7 @@ export default class Eval {
     // The trace store normalizes each span's status into statusCode/statusMessage on write.
     const imported = await getTraceStore().importTraces(this.id, traces);
     if (imported) {
-      // Notify watchers (e.g. an open `promptfoo view`) so late-arriving shared traces — posted
-      // after the result chunks during a share — are refetched instead of staying missing until reload.
+      // Shared traces arrive after results; refresh any open viewers.
       notifyEvaluationChanged(this.id);
     }
     return imported;
@@ -1521,17 +1521,20 @@ export default class Eval {
 
   async toResultsFile(): Promise<ResultsFile> {
     const traces = await this.getTraces();
+    const stripFlags = getStripFlags(this.config.env);
 
     const results: ResultsFile = {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
       results: await this.toEvaluateSummary(),
-      config: sanitizeTracingConfigForPersistence(this.config),
+      config: sanitizeConfigForOutput(this.config, stripFlags),
       author: this.author || null,
-      prompts: this.getPrompts(),
+      prompts: this.getPrompts().map((prompt) =>
+        projectPrompt(prompt, stripFlags.shouldStripPromptText),
+      ),
       ...(this.vars.length > 0 && { vars: [...this.vars] }),
       datasetId: this.datasetId || null,
-      ...(traces.length > 0 && { traces }),
+      ...(traces.length > 0 && { traces: projectTracesForOutput(traces, stripFlags) }),
     };
 
     return results;

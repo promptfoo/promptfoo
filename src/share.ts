@@ -16,7 +16,13 @@ import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
-import { persistTraceMetadata } from './models/evalResult';
+import {
+  getStripFlags,
+  persistTraceMetadata,
+  projectPrompt,
+  projectTracesForOutput,
+  sanitizeResultForJsonlArtifact,
+} from './models/evalResult';
 import { sanitizeTraceAttributes } from './tracing/sanitizeAttributes';
 import {
   MAX_SPANS_PER_APPEND_REQUEST,
@@ -30,11 +36,12 @@ import {
 } from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
-import { redactAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './util/sanitizer';
+import { sanitizeConfigForOutput } from './util/sanitizer';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
 import type ModelAudit from './models/modelAudit';
+import type { Prompt, TestCase } from './types';
 
 interface ShareDomainResult {
   domain: string;
@@ -162,22 +169,135 @@ function getEffectiveShareTeamId(eval_: Eval): string | undefined {
   return cloudConfig.getCurrentTeamId(currentOrgId);
 }
 
+function stripFilePaths<T>(value: T): T {
+  if (typeof value === 'string') {
+    return value.replace(/^file:\/\/.*[/\\]([^/\\]+)$/, 'file://$1') as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map(stripFilePaths) as T;
+  }
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, stripFilePaths(item)]),
+    ) as T;
+  }
+  return value;
+}
+
+function stripProviderPaths<T>(provider: T): T {
+  if (typeof provider === 'string') {
+    return stripFilePaths(provider);
+  }
+  if (!provider || typeof provider !== 'object') {
+    return provider;
+  }
+  if (Array.isArray(provider)) {
+    return provider.map(stripProviderPaths) as T;
+  }
+  const projected = { ...provider } as Record<string, unknown>;
+  if ('id' in projected || 'config' in projected) {
+    if ('id' in projected) {
+      projected.id = stripProviderPaths(projected.id);
+    }
+    if (projected.config && typeof projected.config === 'object') {
+      const { basePath: _basePath, ...config } = projected.config as Record<string, unknown>;
+      projected.config = stripFilePaths(config);
+    }
+  } else {
+    return Object.fromEntries(
+      Object.entries(projected).map(([key, value]) => [
+        stripProviderPaths(key),
+        stripProviderPaths(value),
+      ]),
+    ) as T;
+  }
+  return projected as T;
+}
+
+function stripPromptPaths<T extends Partial<Prompt>>(prompt: T): T {
+  const projected = { ...prompt };
+  if (projected.id) {
+    projected.id = stripFilePaths(projected.id);
+  }
+  if (projected.config?.provider) {
+    projected.config = {
+      ...projected.config,
+      provider: stripProviderPaths(projected.config.provider),
+    };
+  }
+  return projected;
+}
+
+// Mutate only the sanitized share copy; local replay paths stay intact.
+function stripTestPaths(test: TestCase): void {
+  if (test.vars) {
+    test.vars = stripFilePaths(test.vars);
+  }
+  if (test.provider) {
+    test.provider = stripProviderPaths(test.provider);
+  }
+  if (test.options?.provider) {
+    test.options.provider = stripProviderPaths(test.options.provider);
+  }
+  for (const assertion of test.assert ?? []) {
+    if (assertion.type === 'assert-set') {
+      stripTestPaths({ assert: assertion.assert });
+    } else if (assertion.provider) {
+      assertion.provider = stripProviderPaths(assertion.provider);
+    }
+  }
+}
+
 // This sends the eval record to the remote server
 async function sendEvalRecord(
   evalRecord: Eval,
   url: string,
   headers: Record<string, string>,
   traces: Awaited<ReturnType<Eval['getTraces']>>,
+  stripFlags: ReturnType<typeof getStripFlags>,
 ): Promise<string> {
-  const redactedConfig = redactAzureBlobSasTokens(
-    sanitizeTracingConfigForPersistence(evalRecord.config),
+  const { basePath: _basePath, ...redactedConfig } = sanitizeConfigForOutput(
+    evalRecord.config,
+    stripFlags,
   );
+  redactedConfig.providers = stripProviderPaths(redactedConfig.providers);
+  if (typeof redactedConfig.prompts === 'string') {
+    redactedConfig.prompts = stripFilePaths(redactedConfig.prompts);
+  } else if (Array.isArray(redactedConfig.prompts)) {
+    redactedConfig.prompts = redactedConfig.prompts.map((prompt) =>
+      typeof prompt === 'string' ? stripFilePaths(prompt) : stripPromptPaths(prompt),
+    );
+  } else if (redactedConfig.prompts) {
+    // Array form keeps distinct prompt-map entries when filenames match.
+    redactedConfig.prompts = Object.entries(redactedConfig.prompts).map(([raw, label]) => ({
+      raw: stripFilePaths(raw),
+      label,
+    }));
+  }
+  const tests = [
+    ...(Array.isArray(redactedConfig.tests) ? redactedConfig.tests : []),
+    redactedConfig.defaultTest,
+    ...(redactedConfig.scenarios ?? []).flatMap((scenario) =>
+      typeof scenario === 'object'
+        ? [...(scenario.config ?? []), ...(Array.isArray(scenario.tests) ? scenario.tests : [])]
+        : [],
+    ),
+  ];
+  for (const test of tests) {
+    if (test && typeof test === 'object' && !('path' in test)) {
+      stripTestPaths(test);
+    }
+  }
 
   // Preserve the verified runtime team on server-issued unified configs. For
   // other configs, use the current CLI team to avoid falling back to default.
+  const { oldResults: _oldResults, ...evalFields } = evalRecord;
   let evalData: Record<string, unknown> = {
-    ...evalRecord,
+    ...evalFields,
     config: redactedConfig,
+    prompts: evalRecord.prompts.map((prompt) =>
+      stripPromptPaths(projectPrompt(prompt, stripFlags.shouldStripPromptText)),
+    ),
     results: [],
     traces,
   };
@@ -414,43 +534,29 @@ async function sendChunkWithRetry<T>(
         `Splitting into ${firstHalf.length} + ${secondHalf.length} and retrying...`,
     );
 
-    const sendHalf = (half: T[]) =>
-      sendChunkWithRetry(
-        half,
-        sendChunk,
-        itemName,
-        config,
-        onProgress,
-        depth + 1,
-        effectiveMaxDepth,
-      );
-    if (!config.continueAfterSplitFailure) {
-      return (await sendHalf(firstHalf)) + (await sendHalf(secondHalf));
-    }
-
     let sentCount = 0;
     let splitError: unknown;
-    try {
-      sentCount += await sendHalf(firstHalf);
-    } catch (error) {
-      if (
-        error instanceof ShareEvalNotFoundError ||
-        error instanceof UnsupportedShareEndpointError
-      ) {
-        throw error;
+    for (const half of [firstHalf, secondHalf]) {
+      try {
+        sentCount += await sendChunkWithRetry(
+          half,
+          sendChunk,
+          itemName,
+          config,
+          onProgress,
+          depth + 1,
+          effectiveMaxDepth,
+        );
+      } catch (error) {
+        if (
+          !config.continueAfterSplitFailure ||
+          error instanceof ShareEvalNotFoundError ||
+          error instanceof UnsupportedShareEndpointError
+        ) {
+          throw error;
+        }
+        splitError ??= error;
       }
-      splitError = error;
-    }
-    try {
-      sentCount += await sendHalf(secondHalf);
-    } catch (error) {
-      if (
-        error instanceof ShareEvalNotFoundError ||
-        error instanceof UnsupportedShareEndpointError
-      ) {
-        throw error;
-      }
-      splitError ??= error;
     }
     if (splitError) {
       throw splitError;
@@ -636,21 +742,32 @@ async function prepareChunkForShare(
   inlineCache: ReturnType<typeof createBlobInlineCache> | null,
   remoteBlobUploadCache: ReturnType<typeof createRemoteBlobUploadCache> | null,
   traceIds: TraceIdMap | null,
+  stripFlags: ReturnType<typeof getStripFlags>,
 ): Promise<EvalResult[]> {
-  const remappedChunk = remapResultTraceLinkage(chunk, traceIds, localEvalId, remoteEvalId);
+  const sharedResults = chunk.map((row) => {
+    const result = sanitizeResultForJsonlArtifact(row, stripFlags);
+    result.provider = stripProviderPaths(result.provider);
+    if (result.testCase) {
+      stripTestPaths(result.testCase);
+    }
+    if (result.prompt) {
+      result.prompt = stripPromptPaths(result.prompt);
+    }
+    return result;
+  });
+  const remappedChunk = remapResultTraceLinkage(sharedResults, traceIds, localEvalId, remoteEvalId);
   const chunkToSend = inlineCache
     ? await inlineBlobRefsForShare(remappedChunk, inlineCache, localEvalId)
     : remappedChunk;
 
   if (remoteBlobUploadCache) {
     for (const [index, result] of remappedChunk.entries()) {
-      const context = {
+      recordResultBlobRefsForShare(chunkToSend[index], remoteBlobUploadCache, {
         localEvalId,
         remoteEvalId,
         promptIdx: result.promptIdx,
         testIdx: result.testIdx,
-      };
-      recordResultBlobRefsForShare(chunkToSend[index], remoteBlobUploadCache, context);
+      });
     }
   }
 
@@ -841,6 +958,7 @@ interface ResultChunkShareOptions {
   inlineCache: BlobInlineCache | null;
   remoteBlobUploadCache: RemoteBlobUploadCache | null;
   traceIds: TraceIdMap | null;
+  stripFlags: ReturnType<typeof getStripFlags>;
   sendResultChunk: (chunk: EvalResult[]) => Promise<ChunkSendResult>;
   chunkConfig: AdaptiveChunkConfig;
   onProgress: (sentCount: number) => void;
@@ -856,6 +974,7 @@ async function sendResultChunksForShare(
     inlineCache,
     remoteBlobUploadCache,
     traceIds,
+    stripFlags,
     sendResultChunk,
     chunkConfig,
     onProgress,
@@ -879,6 +998,7 @@ async function sendResultChunksForShare(
       inlineCache,
       remoteBlobUploadCache,
       traceIds,
+      stripFlags,
     );
     await sendChunkWithRetry(chunkToSend, sendResultChunk, 'result', chunkConfig, (sentChunk) =>
       onProgress(sentChunk.length),
@@ -906,6 +1026,7 @@ async function sendChunkedResults(
 ): Promise<string | null> {
   const isVerbose = isDebugEnabled();
   const { silent = false } = options;
+  const stripFlags = getStripFlags(evalRecord.config.env);
   logger.debug(`Starting chunked results upload to ${url}`);
 
   await checkCloudPermissions(evalRecord.config);
@@ -914,6 +1035,7 @@ async function sendChunkedResults(
   const { inlineCache, remoteBlobUploadCache } = createShareBlobCaches();
 
   let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
+  sampleResults = sampleResults.map((row) => sanitizeResultForJsonlArtifact(row, stripFlags));
   if (sampleResults.length === 0) {
     logger.debug(`No results found`);
     return null;
@@ -973,11 +1095,17 @@ async function sendChunkedResults(
           url: new URL('../blobs', `${url}/`).toString(),
           authHeaders: headers,
         };
-    const traces = await evalRecord.getTraces();
+    const traces = projectTracesForOutput(await evalRecord.getTraces(), stripFlags);
     const traceIds: TraceIdMap | null = isCloudEnabled ? null : new Map();
 
     // Send initial data and get eval ID
-    evalId = await sendEvalRecord(evalRecord, url, headers, isCloudEnabled ? traces : []);
+    evalId = await sendEvalRecord(
+      evalRecord,
+      url,
+      headers,
+      isCloudEnabled ? traces : [],
+      stripFlags,
+    );
     logger.debug(`Initial eval data sent successfully - ${evalId}`);
     const remoteEvalId = evalId;
     const sendResultChunk = (chunk: EvalResult[]) =>
@@ -1004,6 +1132,7 @@ async function sendChunkedResults(
       // blob URI, the out-of-band transfer reuses these stronger result-row coordinates.
       remoteBlobUploadCache,
       traceIds,
+      stripFlags,
       sendResultChunk,
       chunkConfig,
       onProgress,

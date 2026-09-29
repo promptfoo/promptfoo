@@ -50,7 +50,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import { ArrowLeft, ArrowRight, ExternalLink, X } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router';
 import CustomMetrics from './CustomMetrics';
 import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
@@ -68,7 +68,7 @@ import type {
   ColumnSizingState,
   Row,
   VisibilityState,
-} from '@tanstack/table-core';
+} from '@tanstack/react-table';
 
 import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
@@ -1144,7 +1144,6 @@ function PromptColumnHeader({
   numGoodAsserts,
   testCounts,
   passingTestCounts,
-  metricTotals,
   config,
   filterMode,
   headPromptCount,
@@ -1164,7 +1163,6 @@ function PromptColumnHeader({
   numGoodAsserts: number[];
   testCounts: PromptSummaryMetric[];
   passingTestCounts: PromptSummaryMetric[];
-  metricTotals: Record<string, number>;
   config: ReturnType<typeof useTableStore.getState>['config'];
   filterMode: EvalResultsFilterMode;
   headPromptCount: number;
@@ -1226,8 +1224,7 @@ function PromptColumnHeader({
           <div className="collapse-hidden">
             <CustomMetrics
               lookup={metrics.namedScores}
-              counts={getNamedMetricTotals(metrics)}
-              metricTotals={metricTotals}
+              metricTotals={getNamedMetricTotals(metrics)}
               onShowMore={() => setCustomMetricsDialogOpen(true)}
             />
           </div>
@@ -2197,34 +2194,6 @@ function ResultsTable({
     [tableBody],
   );
 
-  const metricTotals = React.useMemo(() => {
-    // Use the backend's already-correct metric totals instead of recalculating
-    const firstProvider = table?.head?.prompts?.[0];
-    const backendTotals = getNamedMetricTotals(firstProvider?.metrics);
-
-    if (backendTotals) {
-      return backendTotals;
-    }
-
-    const totals: Record<string, number> = {};
-    table?.body.forEach((row) => {
-      row.test.assert?.forEach((assertion) => {
-        if (assertion.metric) {
-          totals[assertion.metric] = (totals[assertion.metric] || 0) + (assertion.weight ?? 1);
-        }
-        if ('assert' in assertion && Array.isArray(assertion.assert)) {
-          assertion.assert.forEach((subAssertion) => {
-            if ('metric' in subAssertion && subAssertion.metric) {
-              totals[subAssertion.metric] =
-                (totals[subAssertion.metric] || 0) + (subAssertion.weight ?? 1);
-            }
-          });
-        }
-      });
-    });
-    return totals;
-  }, [table?.head?.prompts, table?.body]);
-
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const promptColumns = React.useMemo(() => {
     return [
@@ -2247,7 +2216,6 @@ function ResultsTable({
                 numGoodAsserts={numGoodAsserts}
                 testCounts={testCounts}
                 passingTestCounts={passingTestCounts}
-                metricTotals={metricTotals}
                 config={config}
                 filterMode={filterMode}
                 headPromptCount={head.prompts.length}
@@ -2327,7 +2295,6 @@ function ResultsTable({
     head.prompts,
     isRedteam,
     maxTextLength,
-    metricTotals,
     numAsserts,
     numGoodAsserts,
     onFailureFilterToggle,

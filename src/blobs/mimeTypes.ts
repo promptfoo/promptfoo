@@ -1,8 +1,5 @@
-// Blob bytes can arrive from untrusted sources (portable eval exports during `import`, and
-// share uploads over the network via POST /api/blobs). Such blobs must never be storable as
-// active same-origin content (e.g. text/html, image/svg+xml), because the blob is later served
-// back from the server's own origin. We persist only a media allowlist and downgrade everything
-// else to application/octet-stream so it can never be reflected as an executable Content-Type.
+// Serve imported and shared blobs as passive media or opaque downloads.
+// Restrict MIME types because these bytes are served from the viewer's origin.
 
 export const BLOB_MIME_TYPE_FALLBACK = 'application/octet-stream';
 
@@ -36,10 +33,7 @@ export const SAFE_BLOB_MIME_TYPES = new Set([
 // Audio subtypes vary widely (mpeg, wav, ogg, webm, x-*); allow any well-formed audio/* subtype.
 export const SAFE_AUDIO_MIME_TYPE_REGEX = /^audio\/[a-z0-9_+-]+$/i;
 
-/**
- * Normalize a caller-supplied MIME type to a safe, storable value. Returns the lowercased MIME
- * when it is on the media allowlist, otherwise the inert application/octet-stream fallback.
- */
+/** Normalize allowed media types; use an opaque download for other formats. */
 export function sanitizeBlobMimeType(mimeType: string): string {
   const normalizedMimeType = mimeType.trim().toLowerCase();
   if (

@@ -12,7 +12,7 @@ vi.mock('../../../src/blobs', async (importOriginal) => {
     ...actual,
     // Keep route limit coverage cheap while the OpenAPI test pins the production maximum.
     BLOB_MAX_BASE64_SIZE: 64,
-    getBlobByHash: vi.fn(),
+    getBlobStorageProvider: vi.fn(),
     getBlobUrl: vi.fn(),
     storeBlob: vi.fn(),
   };
@@ -21,14 +21,14 @@ vi.mock('../../../src/database');
 vi.mock('../../../src/models/evalMutation');
 
 // Import after mocking
-import { getBlobByHash, getBlobUrl, storeBlob } from '../../../src/blobs';
+import { getBlobStorageProvider, getBlobUrl, type StoredBlob, storeBlob } from '../../../src/blobs';
 import { isBlobStorageEnabled } from '../../../src/blobs/extractor';
 import { getDb } from '../../../src/database';
 import { notifyEvaluationChanged } from '../../../src/models/evalMutation';
 
 const mockedIsBlobStorageEnabled = vi.mocked(isBlobStorageEnabled);
 const mockedGetBlobUrl = vi.mocked(getBlobUrl);
-const mockedGetBlobByHash = vi.mocked(getBlobByHash);
+const mockedGetBlobByHash = vi.fn<(hash: string) => Promise<StoredBlob>>();
 const mockedGetDb = vi.mocked(getDb);
 const mockedSignalEvaluationChanged = vi.mocked(notifyEvaluationChanged);
 
@@ -335,6 +335,7 @@ describe('Blobs Routes', () => {
 
     beforeEach(() => {
       vi.resetAllMocks();
+      vi.mocked(getBlobStorageProvider).mockReturnValue({ getByHash: mockedGetBlobByHash } as any);
     });
 
     afterEach(() => {
@@ -457,7 +458,25 @@ describe('Blobs Routes', () => {
       expect(response.status).toBe(302);
       expect(response.header.location).toBe(presignedUrl);
       expect(mockedGetBlobUrl).toHaveBeenCalledWith(validHash);
-      expect(mockedGetBlobByHash).not.toHaveBeenCalled();
+      expect(mockedGetBlobByHash).toHaveBeenCalledWith(validHash);
+    });
+
+    it('serves registered MIME locally when retained remote metadata differs', async () => {
+      setupDbWithAssetAndReference({
+        hash: validHash,
+        mimeType: 'image/png',
+        sizeBytes: 1024,
+        provider: 's3',
+      });
+      mockedGetBlobUrl.mockResolvedValue('https://storage.example/image');
+      mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/jpeg', 1024));
+
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
+
+      expect(response.status).toBe(200);
+      expect(response.header['content-type']).toBe('image/png');
+      expect(response.header['x-content-type-options']).toBe('nosniff');
+      expect(mockedGetBlobUrl).not.toHaveBeenCalled();
     });
 
     it('should serve blob data directly when no presigned URL', async () => {
@@ -577,7 +596,7 @@ describe('Blobs Routes', () => {
       ).toBe(true);
     });
 
-    it('should return 404 when getBlobByHash throws error', async () => {
+    it('should return 404 when storage lookup throws an error', async () => {
       setupDbWithAssetAndReference(
         { hash: validHash, mimeType: 'text/plain', sizeBytes: 512, provider: 'local' },
         { evalId: 'eval-error' },

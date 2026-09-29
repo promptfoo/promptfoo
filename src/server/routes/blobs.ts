@@ -3,10 +3,11 @@ import express from 'express';
 import {
   BLOB_MAX_BASE64_SIZE,
   BLOB_MAX_SIZE,
-  getBlobByHash,
+  getBlobStorageProvider,
   getBlobUrl,
   isBlobAllowedForShare,
   isSafeInlineBlobMimeType,
+  type StoredBlob,
   storeBlob,
 } from '../../blobs';
 import { isBlobStorageEnabled } from '../../blobs/extractor';
@@ -545,13 +546,23 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
   }
 
   const assetMimeType = sanitizeBlobMimeType(asset.mimeType);
-  let blob: Awaited<ReturnType<typeof getBlobByHash>> | undefined;
+  let blob: StoredBlob;
   try {
+    blob = await getBlobStorageProvider().getByHash(hash);
+  } catch (error) {
+    logger.error('[BlobRoute] Failed to load blob', { error, hash });
+    res.status(404).json({ error: 'Blob not found' });
+    return;
+  }
+
+  try {
+    // Retained storage metadata can differ from a later import's registered MIME.
     const presigned =
       asset.provider !== 'local' &&
       asset.provider !== 'filesystem' &&
       assetMimeType !== BLOB_MIME_TYPE_FALLBACK &&
-      assetMimeType === asset.mimeType.trim().toLowerCase()
+      assetMimeType === asset.mimeType.trim().toLowerCase() &&
+      blob.metadata.mimeType.toLowerCase() === assetMimeType
         ? await getBlobUrl(hash)
         : null;
     if (presigned) {
@@ -560,14 +571,6 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
     }
   } catch (error) {
     logger.debug('[BlobRoute] Failed to create blob redirect', { error, hash });
-  }
-
-  try {
-    blob ??= await getBlobByHash(hash);
-  } catch (error) {
-    logger.error('[BlobRoute] Failed to load blob', { error, hash });
-    res.status(404).json({ error: 'Blob not found' });
-    return;
   }
 
   const dataResult = BlobsSchemas.Get.BinaryResponse.safeParse(blob.data);
