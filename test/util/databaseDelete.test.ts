@@ -1,5 +1,6 @@
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
+import { updateSignalFileForDeletedEvals } from '../../src/database/signal';
 import { spansTable, tracesTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -7,13 +8,26 @@ import { TraceStore } from '../../src/tracing/store';
 import { deleteAllEvals, deleteEval, deleteEvals } from '../../src/util/database';
 import EvalFactory from '../factories/evalFactory';
 
+vi.mock('../../src/database/signal', async () => {
+  const actual = await vi.importActual('../../src/database/signal');
+  return {
+    ...actual,
+    updateSignalFile: vi.fn(),
+    updateSignalFileForDeletedEvals: vi.fn(),
+  };
+});
+
 describe('database eval deletion', () => {
   beforeAll(async () => {
     await runDbMigrations();
   });
 
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   beforeEach(async () => {
-    const db = getDb();
+    const db = await getDb();
     await db.run('DELETE FROM spans');
     await db.run('DELETE FROM traces');
     await db.run('DELETE FROM eval_results');
@@ -45,10 +59,11 @@ describe('database eval deletion', () => {
 
     await deleteEval(eval_.id);
 
-    const db = getDb();
+    const db = await getDb();
     expect(await Eval.findById(eval_.id)).toBeUndefined();
-    expect(db.select().from(tracesTable).all()).toHaveLength(0);
-    expect(db.select().from(spansTable).all()).toHaveLength(0);
+    expect(await db.select().from(tracesTable).all()).toHaveLength(0);
+    expect(await db.select().from(spansTable).all()).toHaveLength(0);
+    expect(updateSignalFileForDeletedEvals).toHaveBeenCalledWith([eval_.id]);
   });
 
   it('deletes only traces and spans for selected evals', async () => {
@@ -59,18 +74,27 @@ describe('database eval deletion', () => {
     await addTrace(eval2.id, 'trace-bulk-2');
     await addTrace(eval3.id, 'trace-retained');
 
-    deleteEvals([eval1.id, eval2.id]);
+    await deleteEvals([eval1.id, eval2.id]);
 
-    const db = getDb();
+    const db = await getDb();
     expect(await Eval.findById(eval1.id)).toBeUndefined();
     expect(await Eval.findById(eval2.id)).toBeUndefined();
     expect(await Eval.findById(eval3.id)).toBeDefined();
-    expect(db.select({ traceId: tracesTable.traceId }).from(tracesTable).all()).toEqual([
+    expect(await db.select({ traceId: tracesTable.traceId }).from(tracesTable).all()).toEqual([
       { traceId: 'trace-retained' },
     ]);
-    expect(db.select({ traceId: spansTable.traceId }).from(spansTable).all()).toEqual([
+    expect(await db.select({ traceId: spansTable.traceId }).from(spansTable).all()).toEqual([
       { traceId: 'trace-retained' },
     ]);
+    expect(updateSignalFileForDeletedEvals).toHaveBeenCalledWith([eval1.id, eval2.id]);
+  });
+
+  it('does not emit a delete signal when called with an empty id list', async () => {
+    // An empty deletedEvalIds list is indistinguishable from "all evals deleted" on the
+    // client, so deleting zero evals must be a no-op rather than a spurious clear.
+    await deleteEvals([]);
+
+    expect(updateSignalFileForDeletedEvals).not.toHaveBeenCalled();
   });
 
   it('deletes traces and spans when deleting all evals', async () => {
@@ -81,10 +105,11 @@ describe('database eval deletion', () => {
 
     await deleteAllEvals();
 
-    const db = getDb();
+    const db = await getDb();
     expect(await Eval.getMany()).toHaveLength(0);
-    expect(db.select().from(tracesTable).all()).toHaveLength(0);
-    expect(db.select().from(spansTable).all()).toHaveLength(0);
+    expect(await db.select().from(tracesTable).all()).toHaveLength(0);
+    expect(await db.select().from(spansTable).all()).toHaveLength(0);
+    expect(updateSignalFileForDeletedEvals).toHaveBeenCalledWith(undefined);
   });
 
   it('handles evals with no traces without error', async () => {
@@ -104,7 +129,7 @@ describe('database eval deletion', () => {
 
     await deleteEval(eval_.id);
 
-    const db = getDb();
-    expect(db.select().from(spansTable).all()).toHaveLength(0);
+    const db = await getDb();
+    expect(await db.select().from(spansTable).all()).toHaveLength(0);
   });
 });

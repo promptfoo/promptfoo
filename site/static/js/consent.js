@@ -12,7 +12,7 @@
  *
  * Old format (pf_consent=1 or 0) is migrated automatically.
  *
- * GPC (navigator.globalPrivacyControl) honored: marketing defaults OFF for US.
+ * GPC (navigator.globalPrivacyControl) disables marketing in every region.
  *
  * To open preferences, call window.__pf_manage_cookies() or navigate to #manage-cookies.
  */
@@ -20,7 +20,7 @@
   var COOKIE = 'pf_consent';
   var DAYS = 365;
 
-  // Countries requiring opt-in consent
+  // Countries with opt-in defaults
   // EU-27 + EEA (IS, LI, NO) + UK + Switzerland + Brazil + Canada
   var OPT_IN_COUNTRIES = [
     'AT',
@@ -62,7 +62,7 @@
   // Countries using opt-out model
   var OPT_OUT_COUNTRIES = ['US'];
 
-  // ── Helpers ──
+  // Helpers
 
   function escapeRegex(value) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -100,16 +100,11 @@
     var domains = ['.' + hostname];
 
     for (var i = 1; i < parts.length - 1; i++) {
-      // Skip the bare public-suffix candidate for multi-label hosts.
-      if (parts.length > 3 && i === parts.length - 2) {
-        continue;
-      }
+      // The browser rejects public-suffix domains; include every possible parent.
       domains.push('.' + parts.slice(i).join('.'));
     }
 
-    return domains.filter(function (domain, index) {
-      return domains.indexOf(domain) === index;
-    });
+    return domains;
   }
 
   function clearVendorCookies(patterns) {
@@ -136,13 +131,19 @@
     });
   }
 
-  // ── Region Detection ──
+  // Region Detection
 
   function getRegion() {
     var country = getCookie('pf_country');
-    // Unknown country falls back to opt-out so analytics/marketing still load
-    // when geolocation is unavailable (missing CF header, blocked cookies, non-CF environments).
-    if (!country) return 'opt_out';
+    // Missing or unrecognized country data must not enable tracking.
+    if (!country || !/^[A-Z]{2}$/.test(country) || country === 'ZZ') return 'opt_in';
+    try {
+      if (new Intl.DisplayNames(['en'], { type: 'region' }).of(country) === country) {
+        return 'opt_in';
+      }
+    } catch {
+      return 'opt_in';
+    }
     if (OPT_IN_COUNTRIES.includes(country)) return 'opt_in';
     if (OPT_OUT_COUNTRIES.includes(country)) return 'opt_out';
     return 'notice';
@@ -150,7 +151,7 @@
 
   var REGION_CODE = { opt_in: 'i', opt_out: 'o', notice: 'n' };
 
-  // ── Cookie Format ──
+  // Cookie Format
 
   function parseConsentFlag(value) {
     if (value === '1') return 1;
@@ -188,11 +189,36 @@
     return 'v1.' + r + '.' + (analytics ? 1 : 0) + '.' + (marketing ? 1 : 0);
   }
 
-  function saveConsent(analytics, marketing) {
-    setCookie(COOKIE, serializeConsent(analytics, marketing));
+  function publishConsent(consent) {
+    window.__pf_consent = consent;
+    window.dispatchEvent(new CustomEvent('pf_consent_change'));
   }
 
-  // ── Script Loading ──
+  function saveConsent(analytics, marketing) {
+    var consent = {
+      analytics: analytics ? 1 : 0,
+      marketing: marketing && !navigator.globalPrivacyControl ? 1 : 0,
+    };
+    setCookie(COOKIE, serializeConsent(consent.analytics, consent.marketing));
+    if (!consent.analytics) clearVendorCookies(ANALYTICS_COOKIE_PATTERNS);
+    if (!consent.marketing) clearVendorCookies(MARKETING_COOKIE_PATTERNS);
+    publishConsent(consent);
+    return consent;
+  }
+
+  function applyConsent(analytics, marketing) {
+    var consent = saveConsent(analytics, marketing);
+    if (
+      (!consent.analytics && window.__pf_analytics_loaded) ||
+      (!consent.marketing && (window.__pf_marketing_loaded || window.__pf_third_party_loaded))
+    ) {
+      window.location.reload();
+      return;
+    }
+    loadByConsent(consent);
+  }
+
+  // Script Loading
 
   function ensureGtagJs() {
     if (window.__pf_gtag_loaded) return;
@@ -213,7 +239,6 @@
     s.async = true;
     s.src = '/js/scripts-analytics.js';
     document.head.appendChild(s);
-    window.dispatchEvent(new CustomEvent('pf_consent_change'));
   }
 
   function loadMarketing() {
@@ -227,7 +252,6 @@
     s.async = true;
     s.src = '/js/scripts-marketing.js';
     document.head.appendChild(s);
-    window.dispatchEvent(new CustomEvent('pf_consent_change'));
   }
 
   function loadByConsent(consent) {
@@ -236,7 +260,7 @@
     if (consent.marketing) loadMarketing();
   }
 
-  // ── UI: Styles ──
+  // UI: Styles
 
   function injectStyles() {
     if (document.getElementById('cc-styles')) return;
@@ -278,7 +302,7 @@
       '.cc-always{font-size:12px;color:#777;font-style:italic}' +
       // Toggle switch
       '.cc-toggle{position:relative;width:44px;height:24px;flex-shrink:0}' +
-      '.cc-toggle input{opacity:0;width:0;height:0;position:absolute}' +
+      '.cc-toggle input{opacity:0;width:100%;height:100%;position:absolute;margin:0;z-index:1;cursor:pointer}' +
       '.cc-toggle-track{position:absolute;top:0;left:0;right:0;bottom:0;' +
       'background:#555;border-radius:12px;cursor:pointer;transition:background .2s}' +
       '.cc-toggle-track:after{content:"";position:absolute;width:18px;height:18px;' +
@@ -299,7 +323,7 @@
     document.head.appendChild(style);
   }
 
-  // ── UI: Banner ──
+  // UI: Banner
 
   function dismissBanner() {
     var el = document.getElementById('cc-banner');
@@ -309,9 +333,6 @@
   function showBanner() {
     if (document.getElementById('cc-banner')) return;
     injectStyles();
-
-    var analyticsWasLoaded = !!window.__pf_analytics_loaded;
-    var marketingWasLoaded = !!window.__pf_marketing_loaded;
 
     var banner = document.createElement('div');
     banner.id = 'cc-banner';
@@ -328,19 +349,13 @@
     document.body.appendChild(banner);
 
     document.getElementById('cc-accept').addEventListener('click', function () {
-      saveConsent(1, 1);
       dismissBanner();
-      loadAnalytics();
-      loadMarketing();
+      applyConsent(1, 1);
     });
 
     document.getElementById('cc-decline').addEventListener('click', function () {
-      saveConsent(0, 0);
       dismissBanner();
-      if (analyticsWasLoaded || marketingWasLoaded) {
-        clearVendorCookies();
-        window.location.reload();
-      }
+      applyConsent(0, 0);
     });
 
     document.getElementById('cc-manage').addEventListener('click', function () {
@@ -349,7 +364,7 @@
     });
   }
 
-  // ── UI: Preferences Panel ──
+  // UI: Preferences Panel
 
   function showPreferences() {
     if (document.getElementById('cc-overlay')) return;
@@ -387,9 +402,9 @@
       '</div>' +
       '<div class="cc-category">' +
       '<div class="cc-cat-row">' +
-      '<span class="cc-cat-name">Analytics</span>' +
+      '<span class="cc-cat-name" id="cc-analytics-label">Analytics</span>' +
       '<label class="cc-toggle">' +
-      '<input type="checkbox" id="cc-analytics" aria-describedby="cc-analytics-desc cc-analytics-tools"' +
+      '<input type="checkbox" id="cc-analytics" aria-labelledby="cc-analytics-label" aria-describedby="cc-analytics-desc cc-analytics-tools"' +
       (analyticsChecked ? ' checked' : '') +
       '>' +
       '<span class="cc-toggle-track"></span>' +
@@ -400,9 +415,9 @@
       '</div>' +
       '<div class="cc-category">' +
       '<div class="cc-cat-row">' +
-      '<span class="cc-cat-name">Marketing</span>' +
+      '<span class="cc-cat-name" id="cc-marketing-label">Marketing</span>' +
       '<label class="cc-toggle">' +
-      '<input type="checkbox" id="cc-marketing" aria-describedby="cc-marketing-desc cc-marketing-tools"' +
+      '<input type="checkbox" id="cc-marketing" aria-labelledby="cc-marketing-label" aria-describedby="cc-marketing-desc cc-marketing-tools"' +
       (marketingChecked ? ' checked' : '') +
       '>' +
       '<span class="cc-toggle-track"></span>' +
@@ -418,9 +433,6 @@
       '</div>' +
       '</div>';
     document.body.appendChild(overlay);
-
-    var analyticsWasLoaded = !!window.__pf_analytics_loaded;
-    var marketingWasLoaded = !!window.__pf_marketing_loaded;
 
     function onKeydown(e) {
       if (e.key === 'Escape') {
@@ -464,55 +476,32 @@
     // Move focus into the modal for keyboard/screen-reader users
     document.getElementById('cc-prefs-close').focus();
 
-    function applyConsent(a, m) {
-      saveConsent(a, m);
-      closePrefs();
-
-      // If a category was revoked that was already loaded, clean up and reload
-      var revokedPatterns = [];
-      var needReload = false;
-      if (!a && analyticsWasLoaded) {
-        needReload = true;
-        revokedPatterns = revokedPatterns.concat(ANALYTICS_COOKIE_PATTERNS);
-      }
-      if (!m && marketingWasLoaded) {
-        needReload = true;
-        revokedPatterns = revokedPatterns.concat(MARKETING_COOKIE_PATTERNS);
-      }
-      if (needReload) {
-        clearVendorCookies(revokedPatterns);
-        window.location.reload();
-        return;
-      }
-
-      // Load newly consented categories
-      if (a) loadAnalytics();
-      if (m) loadMarketing();
-    }
-
     document.getElementById('cc-save').addEventListener('click', function () {
       var a = document.getElementById('cc-analytics').checked ? 1 : 0;
       var m = document.getElementById('cc-marketing').checked ? 1 : 0;
+      closePrefs();
       applyConsent(a, m);
     });
 
     document.getElementById('cc-reject-all').addEventListener('click', function () {
+      closePrefs();
       applyConsent(0, 0);
     });
 
     document.getElementById('cc-accept-all').addEventListener('click', function () {
+      closePrefs();
       applyConsent(1, 1);
     });
   }
 
-  // ── Global API ──
+  // Global API
 
   window.__pf_manage_cookies = function () {
     dismissBanner();
     showPreferences();
   };
 
-  // ── Hash Handling ──
+  // Hash Handling
 
   function checkHash() {
     if (window.location.hash === '#manage-cookies') {
@@ -522,7 +511,7 @@
   }
   window.addEventListener('hashchange', checkHash);
 
-  // ── Migration ──
+  // Migration
 
   function migrateIfNeeded() {
     var raw = getCookie(COOKIE);
@@ -544,7 +533,7 @@
     return parsed;
   }
 
-  // ── Init ──
+  // Init
 
   function onReady(callback) {
     if (document.readyState === 'loading') {
@@ -569,13 +558,15 @@
     // The user must re-consent under opt-in rules.
     if (nextConsent && nextConsent.region !== 'i') {
       deleteCookie(COOKIE);
+      clearVendorCookies();
       nextConsent = null;
     }
     if (nextConsent) {
-      loadByConsent(nextConsent);
+      loadByConsent(saveConsent(nextConsent.analytics, nextConsent.marketing));
       onReady(checkHash);
       return;
     }
+    publishConsent(null);
     onReady(function () {
       if (window.location.hash === '#manage-cookies') {
         showPreferences();
@@ -584,35 +575,6 @@
         showBanner();
       }
     });
-  }
-
-  function handleOptOut(consent) {
-    var gpc = !!navigator.globalPrivacyControl;
-    var nextConsent = consent;
-    // Scripts load by default, GPC honored for marketing
-    if (!nextConsent) {
-      saveConsent(1, gpc ? 0 : 1);
-      nextConsent = parseConsent(getCookie(COOKIE));
-    }
-    // GPC must be honored continuously — override marketing on every page load
-    // and clear any marketing cookies that were previously set
-    if (gpc && nextConsent && nextConsent.marketing) {
-      nextConsent.marketing = 0;
-      saveConsent(nextConsent.analytics, 0);
-      clearVendorCookies(MARKETING_COOKIE_PATTERNS);
-    }
-    loadByConsent(nextConsent);
-    showPreferencesFromHash();
-  }
-
-  function handleNotice(consent) {
-    var nextConsent = consent;
-    if (!nextConsent) {
-      saveConsent(1, 1);
-      nextConsent = parseConsent(getCookie(COOKIE));
-    }
-    loadByConsent(nextConsent);
-    showPreferencesFromHash();
   }
 
   function init() {
@@ -625,12 +587,9 @@
       return;
     }
 
-    if (region === 'opt_out') {
-      handleOptOut(consent);
-      return;
-    }
-
-    handleNotice(consent);
+    var saved = saveConsent(consent ? consent.analytics : 1, consent ? consent.marketing : 1);
+    loadByConsent(saved);
+    showPreferencesFromHash();
   }
 
   init();

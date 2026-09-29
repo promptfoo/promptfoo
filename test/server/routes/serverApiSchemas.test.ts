@@ -7,6 +7,7 @@ import type { Server } from 'node:http';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
+import { promptCacheService } from '../../../src/server/services/promptCacheService';
 
 vi.mock('../../../src/globalConfig/cloud', () => ({
   cloudConfig: {
@@ -125,9 +126,13 @@ describe('inline server API DTO validation', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    // promptCacheService is a module-level singleton; clear its cache so a prompt list cached
+    // by one test cannot leak into another.
+    promptCacheService.invalidate();
   });
 
   afterEach(() => {
+    promptCacheService.invalidate();
     vi.resetAllMocks();
   });
 
@@ -189,6 +194,28 @@ describe('inline server API DTO validation', () => {
     expect(response.body).toEqual({ error: 'Result not found' });
   });
 
+  it('redacts Azure Blob SAS tokens from result and dataset response DTOs', async () => {
+    const sasUri = 'az://account/container/tests.yaml?sp=r&sig=azure-secret';
+    mockedReadResult.mockResolvedValue({
+      id: 'eval-1',
+      createdAt: new Date(),
+      result: { config: { tests: sasUri } },
+    } as never);
+    mockedGetTestCases.mockResolvedValue([{ testCases: sasUri }] as never);
+
+    const resultResponse = await api.get('/api/results/eval-1');
+    const datasetsResponse = await api.get('/api/datasets');
+
+    expect(resultResponse.status).toBe(200);
+    expect(resultResponse.body.data.config.tests).toBe(
+      'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D',
+    );
+    expect(datasetsResponse.status).toBe(200);
+    expect(datasetsResponse.body.data[0].testCases).toBe(
+      'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D',
+    );
+  });
+
   it('validates prompt hash params and returns prompt DTOs', async () => {
     const hash = 'a'.repeat(64);
     mockedGetPromptsForTestCasesHash.mockResolvedValue([{ raw: 'hello', label: 'hello' }] as never);
@@ -231,6 +258,22 @@ describe('inline server API DTO validation', () => {
     expect(prompts.body).toEqual({ data: [{ raw: 'p', label: 'p' }] });
     expect(datasets.status).toBe(200);
     expect(datasets.body).toEqual({ data: [{ vars: { q: 'hello' } }] });
+  });
+
+  it('refreshes the prompt list route after invalidating the singleton cache', async () => {
+    mockedGetPrompts
+      .mockResolvedValueOnce([{ raw: 'first', label: 'first' }] as never)
+      .mockResolvedValueOnce([{ raw: 'second', label: 'second' }] as never);
+
+    const first = await api.get('/api/prompts');
+    promptCacheService.invalidate();
+    const second = await api.get('/api/prompts');
+
+    expect(first.status).toBe(200);
+    expect(first.body).toEqual({ data: [{ raw: 'first', label: 'first' }] });
+    expect(second.status).toBe(200);
+    expect(second.body).toEqual({ data: [{ raw: 'second', label: 'second' }] });
+    expect(mockedGetPrompts).toHaveBeenCalledTimes(2);
   });
 
   it('validates share-domain query params', async () => {

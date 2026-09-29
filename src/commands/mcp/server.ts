@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+
+import { getRequestListener } from '@hono/node-server';
 import express from 'express';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
@@ -27,7 +30,9 @@ function createMcpSdkDependencyError(): Error {
   );
 }
 
-async function loadMcpServerSdk(): Promise<typeof import('@modelcontextprotocol/sdk/server/mcp.js')> {
+async function loadMcpServerSdk(): Promise<
+  typeof import('@modelcontextprotocol/sdk/server/mcp.js')
+> {
   try {
     return await import('@modelcontextprotocol/sdk/server/mcp.js');
   } catch (error) {
@@ -39,10 +44,10 @@ async function loadMcpServerSdk(): Promise<typeof import('@modelcontextprotocol/
 }
 
 async function loadMcpHttpTransport(): Promise<
-  typeof import('@modelcontextprotocol/sdk/server/streamableHttp.js')
+  typeof import('@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js')
 > {
   try {
-    return await import('@modelcontextprotocol/sdk/server/streamableHttp.js');
+    return await import('@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js');
   } catch (error) {
     if (isMissingPackageImportError(error, '@modelcontextprotocol/sdk')) {
       throw createMcpSdkDependencyError();
@@ -129,22 +134,30 @@ export async function startHttpMcpServer(port: number): Promise<void> {
 
   const mcpServer = await createMcpServer();
 
-  // Set up HTTP transport for MCP
-  const { StreamableHTTPServerTransport } = await loadMcpHttpTransport();
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => Math.random().toString(36).substring(2, 15),
+  // Keep Node request adaptation on our patched direct dependency rather than the SDK's
+  // nested adapter, which can otherwise remain vulnerable in downstream installs.
+  const { WebStandardStreamableHTTPServerTransport } = await loadMcpHttpTransport();
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: () => randomUUID(),
   });
+  const requestListener = getRequestListener(
+    (request, { incoming }) =>
+      transport.handleRequest(request, {
+        parsedBody: (incoming as express.Request).body,
+      }),
+    { overrideGlobalObjects: false },
+  );
 
   await mcpServer.connect(transport);
 
   // Handle MCP requests
   app.post('/mcp', async (req, res) => {
-    await transport.handleRequest(req, res, req.body);
+    await requestListener(req, res);
   });
 
   // Handle SSE
   app.get('/mcp/sse', async (req, res) => {
-    await transport.handleRequest(req, res);
+    await requestListener(req, res);
   });
 
   // Health check

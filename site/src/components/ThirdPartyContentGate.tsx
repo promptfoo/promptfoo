@@ -2,7 +2,10 @@ import React from 'react';
 
 import styles from './ThirdPartyContentGate.module.css';
 
-type PrivacyRegion = 'opt_in' | 'opt_out' | 'notice';
+type PrivacyWindow = Window & {
+  __pf_consent?: { marketing: number } | null;
+  __pf_third_party_loaded?: boolean;
+};
 
 interface ThirdPartyContentGateProps {
   children: React.ReactNode;
@@ -16,17 +19,9 @@ interface ThirdPartyContentGateProps {
   title: string;
 }
 
-function getPrivacyRegion(): PrivacyRegion | null {
-  const region = (window as any).__pf_privacy_region;
-  if (region === 'opt_in' || region === 'opt_out' || region === 'notice') {
-    return region;
-  }
-  return null;
-}
-
 function canAutoloadThirdPartyContent(): boolean {
-  const region = getPrivacyRegion();
-  return region === 'opt_out' || region === 'notice';
+  const consent = (window as PrivacyWindow).__pf_consent;
+  return consent?.marketing === 1;
 }
 
 function getClassName(className?: string): string {
@@ -67,22 +62,16 @@ function ClientThirdPartyContentGate({
   const [enabled, setEnabled] = React.useState(canAutoloadThirdPartyContent);
 
   React.useEffect(() => {
-    if (enabled) {
-      return;
-    }
-
-    const refreshEnabledState = () => {
-      if (canAutoloadThirdPartyContent()) {
-        setEnabled(true);
-      }
-    };
-
+    const refreshEnabledState = () => setEnabled(canAutoloadThirdPartyContent());
     refreshEnabledState();
     window.addEventListener('pf_consent_change', refreshEnabledState);
+    return () => window.removeEventListener('pf_consent_change', refreshEnabledState);
+  }, []);
 
-    return () => {
-      window.removeEventListener('pf_consent_change', refreshEnabledState);
-    };
+  React.useEffect(() => {
+    if (enabled) {
+      (window as PrivacyWindow).__pf_third_party_loaded = true;
+    }
   }, [enabled]);
 
   if (enabled) {

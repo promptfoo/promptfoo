@@ -1,13 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { getByRole } from '@testing-library/dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-/**
- * Tests for the multi-region cookie consent system (site/static/js/consent.js).
- * Covers cookie format, region detection, all consent flows, preferences panel,
- * GPC support, script loading, and migration from old format.
- */
 
 const CONSENT_JS = fs.readFileSync(path.resolve(__dirname, '../../static/js/consent.js'), 'utf-8');
 
@@ -41,6 +36,8 @@ function resetGlobals() {
   (window as any).__pf_gtag_initialized = false;
   (window as any).__pf_manage_cookies = undefined;
   (window as any).__pf_privacy_region = undefined;
+  (window as any).__pf_consent = undefined;
+  (window as any).__pf_third_party_loaded = false;
 }
 
 describe('consent.js', () => {
@@ -73,8 +70,6 @@ describe('consent.js', () => {
     vi.restoreAllMocks();
   });
 
-  // ── Cookie Format ──
-
   describe('cookie format', () => {
     it('saves consent in v1 format', () => {
       setCookie('pf_country', 'DE');
@@ -97,8 +92,6 @@ describe('consent.js', () => {
       expect(consent).toBe('v1.n.1.1');
     });
   });
-
-  // ── Migration ──
 
   describe('migration from old format', () => {
     it('migrates pf_consent=1 to v1 format with all on', () => {
@@ -153,8 +146,6 @@ describe('consent.js', () => {
     });
   });
 
-  // ── Region Detection ──
-
   describe('region detection', () => {
     it('EU countries map to opt_in (banner shown)', () => {
       setCookie('pf_country', 'DE');
@@ -176,10 +167,10 @@ describe('consent.js', () => {
       expect((window as any).__pf_analytics_loaded).toBe(true);
     });
 
-    it('missing country defaults to opt_out', () => {
+    it('missing country requires consent', () => {
       runConsent();
-      expect(document.getElementById('cc-banner')).toBeNull();
-      expect((window as any).__pf_analytics_loaded).toBe(true);
+      expect(document.getElementById('cc-banner')).not.toBeNull();
+      expect((window as any).__pf_analytics_loaded).toBe(false);
     });
 
     it('Brazil maps to opt_in', () => {
@@ -194,15 +185,18 @@ describe('consent.js', () => {
       expect(document.getElementById('cc-banner')).not.toBeNull();
     });
 
-    it('does not treat partial country-code matches as opt-in or opt-out', () => {
-      setCookie('pf_country', 'A');
-      runConsent();
-      expect(document.getElementById('cc-banner')).toBeNull();
-      expect(getCookie('pf_consent')).toBe('v1.n.1.1');
-    });
+    it.each(['A', 'AA', 'ZZ', 'XX', 'T1', 'invalid'])(
+      'requires consent for unknown country %s',
+      (country) => {
+        setCookie('pf_country', country);
+        runConsent();
+        expect(document.getElementById('cc-banner')).not.toBeNull();
+        expect(getCookie('pf_consent')).toBeNull();
+        expect((window as any).__pf_analytics_loaded).toBe(false);
+        expect((window as any).__pf_marketing_loaded).toBe(false);
+      },
+    );
   });
-
-  // ── Opt-in Flow ──
 
   describe('opt-in flow (EU/BR/CA)', () => {
     it('shows banner for first visit EU visitor', () => {
@@ -282,8 +276,6 @@ describe('consent.js', () => {
     });
   });
 
-  // ── Opt-out Flow ──
-
   describe('opt-out flow (US)', () => {
     it('no banner shown, scripts loaded immediately', () => {
       setCookie('pf_country', 'US');
@@ -316,8 +308,6 @@ describe('consent.js', () => {
     });
   });
 
-  // ── Notice Flow ──
-
   describe('notice flow (rest of world)', () => {
     it('scripts loaded immediately, no banner', () => {
       setCookie('pf_country', 'JP');
@@ -333,8 +323,6 @@ describe('consent.js', () => {
       expect(getCookie('pf_consent')).toBe('v1.n.1.1');
     });
   });
-
-  // ── Preferences Panel ──
 
   describe('preferences panel', () => {
     it('opens via __pf_manage_cookies global', () => {
@@ -530,8 +518,6 @@ describe('consent.js', () => {
     });
   });
 
-  // ── GPC ──
-
   describe('GPC (Global Privacy Control)', () => {
     it('marketing defaults OFF for US when GPC is set', () => {
       Object.defineProperty(navigator, 'globalPrivacyControl', {
@@ -572,8 +558,6 @@ describe('consent.js', () => {
       expect((window as any).__pf_analytics_loaded).toBe(true);
     });
   });
-
-  // ── Script Loading ──
 
   describe('script loading', () => {
     it('analytics scripts: injects gtag.js and scripts-analytics.js', () => {
@@ -627,8 +611,6 @@ describe('consent.js', () => {
     });
   });
 
-  // ── EU Country Coverage ──
-
   describe('opt-in country coverage', () => {
     const optInCountries = [
       'AT',
@@ -674,8 +656,6 @@ describe('consent.js', () => {
     });
   });
 
-  // ── Withdraw Consent ──
-
   describe('withdraw consent', () => {
     it('exposes __pf_manage_cookies global', () => {
       setCookie('pf_country', 'DE');
@@ -708,8 +688,6 @@ describe('consent.js', () => {
       expect(window.location.reload).not.toHaveBeenCalled();
     });
   });
-
-  // ── Finding 1: Cross-region consent reuse ──
 
   describe('cross-region consent reuse', () => {
     it('invalidates opt-out consent when visiting from opt-in region', () => {
@@ -776,8 +754,6 @@ describe('consent.js', () => {
       expect(getCookie('pf_consent')).toBe('v1.i.1.1');
     });
   });
-
-  // ── Finding 2: GPC continuous enforcement ──
 
   describe('GPC continuous enforcement', () => {
     it('overrides existing marketing consent when GPC is newly enabled', () => {
@@ -846,8 +822,6 @@ describe('consent.js', () => {
     });
   });
 
-  // ── Finding 5: Marketing-only gtag dependency ──
-
   describe('marketing-only gtag dependency', () => {
     it('loads gtag.js when only marketing is consented', () => {
       setCookie('pf_country', 'DE');
@@ -869,8 +843,6 @@ describe('consent.js', () => {
       expect(gtagScripts.length).toBe(1);
     });
   });
-
-  // ── Finding 6: Vendor cookie cleanup on withdrawal ──
 
   describe('vendor cookie cleanup on withdrawal', () => {
     it('clears _ga cookies when revoking consent via preferences', () => {
@@ -934,7 +906,10 @@ describe('consent.js', () => {
       expect(getCookie('_ga')).toBeNull();
     });
 
-    it('tries host and parent-domain deletions for subdomain deployments', () => {
+    it.each([
+      { hostname: 'docs.promptfoo.co.uk', parent: 'promptfoo.co.uk' },
+      { hostname: 'deep.docs.promptfoo.dev', parent: 'promptfoo.dev' },
+    ])('clears host and parent cookies on $hostname', ({ hostname, parent }) => {
       Object.defineProperty(window, 'location', {
         writable: true,
         value: {
@@ -943,7 +918,7 @@ describe('consent.js', () => {
           pathname: '/docs/',
           search: '',
           href: 'https://docs.promptfoo.co.uk/docs/',
-          hostname: 'docs.promptfoo.co.uk',
+          hostname,
           reload: vi.fn(),
         },
       });
@@ -970,18 +945,15 @@ describe('consent.js', () => {
 
         expect(cookieWrites).toEqual(
           expect.arrayContaining([
-            expect.stringContaining('domain=.docs.promptfoo.co.uk'),
-            expect.stringContaining('domain=.promptfoo.co.uk'),
+            expect.stringContaining(`domain=.${hostname}`),
+            expect.stringContaining(`domain=.${parent}`),
           ]),
         );
-        expect(cookieWrites.some((value) => value.includes('domain=.co.uk'))).toBe(false);
       } finally {
         delete (document as Document & { cookie?: string }).cookie;
       }
     });
   });
-
-  // ── Third-party marketing form gating ──
 
   describe('newsletter form loading', () => {
     it('uses the dedicated third-party gate instead of analytics or marketing consent hooks', () => {
@@ -1003,8 +975,6 @@ describe('consent.js', () => {
     });
   });
 
-  // ── consent.js is loaded synchronously ──
-
   describe('consent.js loading configuration', () => {
     it('docusaurus.config.ts loads consent.js synchronously (not async)', () => {
       const config = fs.readFileSync(
@@ -1017,16 +987,63 @@ describe('consent.js', () => {
     });
   });
 
-  // ── Unknown region fallback ──
-
-  describe('unknown region fallback', () => {
-    it('missing pf_country defaults to opt_out (no banner, scripts load)', () => {
-      // No pf_country cookie set
+  describe('consent state shared with embeds', () => {
+    it('publishes rejection even before any tracking script has loaded', () => {
+      setCookie('pf_country', 'DE');
       runConsent();
-      expect(document.getElementById('cc-banner')).toBeNull();
-      expect((window as any).__pf_analytics_loaded).toBe(true);
-      expect((window as any).__pf_marketing_loaded).toBe(true);
-      expect(getCookie('pf_consent')).toBe('v1.o.1.1');
+      const changed = vi.fn();
+      window.addEventListener('pf_consent_change', changed);
+      document.getElementById('cc-decline')!.click();
+      window.removeEventListener('pf_consent_change', changed);
+      expect(changed).toHaveBeenCalledTimes(1);
+      expect((window as any).__pf_consent).toEqual({ analytics: 0, marketing: 0 });
+    });
+
+    it('clears vendor identifiers when previously automatic consent is invalidated', () => {
+      setCookie('pf_country', 'DE');
+      setCookie('pf_consent', 'v1.o.1.1');
+      for (const name of ['_ga', '_gcl_au', 'ph_test']) setCookie(name, 'old');
+      runConsent();
+      document.getElementById('cc-decline')!.click();
+      for (const name of ['_ga', '_gcl_au', 'ph_test']) expect(getCookie(name)).toBeNull();
+      expect(window.location.reload).not.toHaveBeenCalled();
+    });
+
+    it.each(['JP', 'DE', 'US'])('honors GPC for existing and new choices in %s', (country) => {
+      setCookie('pf_country', country);
+      const region = country === 'JP' ? 'n' : country === 'DE' ? 'i' : 'o';
+      setCookie('pf_consent', `v1.${region}.1.1`);
+      Object.defineProperty(navigator, 'globalPrivacyControl', { value: true, configurable: true });
+      runConsent();
+      expect((window as any).__pf_marketing_loaded).toBe(false);
+      expect((window as any).__pf_consent).toEqual({ analytics: 1, marketing: 0 });
+      (window as any).__pf_manage_cookies();
+      document.getElementById('cc-accept-all')!.click();
+      expect(getCookie('pf_consent')).toBe(`v1.${region}.1.0`);
+      expect((window as any).__pf_marketing_loaded).toBe(false);
+    });
+
+    it('reloads when revoking a manually activated embed', () => {
+      setCookie('pf_country', 'DE');
+      runConsent();
+      (window as any).__pf_third_party_loaded = true;
+      document.getElementById('cc-decline')!.click();
+      expect(window.location.reload).toHaveBeenCalledOnce();
+      expect(getCookie('pf_consent')).toBe('v1.i.0.0');
+    });
+
+    it('names both category controls for assistive technology', () => {
+      setCookie('pf_country', 'DE');
+      runConsent();
+      (window as any).__pf_manage_cookies();
+      expect(getByRole(document.body, 'checkbox', { name: 'Analytics' })).toHaveAttribute(
+        'id',
+        'cc-analytics',
+      );
+      expect(getByRole(document.body, 'checkbox', { name: 'Marketing' })).toHaveAttribute(
+        'id',
+        'cc-marketing',
+      );
     });
   });
 });
