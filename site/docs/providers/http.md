@@ -1752,6 +1752,7 @@ Two measurement modes are supported:
 providers:
   - id: https://api.openai.com/v1/chat/completions
     config:
+      method: POST
       body:
         stream: true
       streamFormat: openai-chat # or: openai-responses, anthropic-messages
@@ -1808,6 +1809,7 @@ Each line starts with `data: ` followed by a JSON object. The parser extracts te
 providers:
   - id: https
     config:
+      method: POST
       url: 'https://api.example.com/v1/responses'
       body:
         model: 'custom-model'

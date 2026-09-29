@@ -436,7 +436,7 @@ function getAbortError(signal: AbortSignal): Error {
   return error;
 }
 
-async function sleepWithAbort(waitTime: number, signal?: AbortSignal | null): Promise<void> {
+export async function sleepWithAbort(waitTime: number, signal?: AbortSignal | null): Promise<void> {
   if (!signal) {
     await sleep(waitTime);
     return;

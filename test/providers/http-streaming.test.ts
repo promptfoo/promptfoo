@@ -126,6 +126,30 @@ describe('HttpProvider streaming integration', () => {
     expect(result.streamingMetrics?.timeToFirstToken).toBe(2000);
   });
 
+  it('preserves cancellation during a body-read retry delay', async () => {
+    vi.useFakeTimers();
+    const caller = new AbortController();
+    const fetch = vi.spyOn(fetchModule, 'fetchWithRetries').mockResolvedValue(
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.error(new Error('ECONNRESET'));
+          },
+        }),
+      ),
+    );
+    const provider = new HttpProvider('https://example.com/stream', {
+      config: { method: 'PUT', body: { stream: true } },
+    });
+    const result = provider.callApi('Hello', undefined, { abortSignal: caller.signal });
+    const rejection = expect(result).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.advanceTimersByTimeAsync(100);
+    caller.abort();
+    await rejection;
+    await vi.runAllTimersAsync();
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
   it('retries transient PUT body reads twice before returning the successful metrics', async () => {
     vi.useFakeTimers();
     const fetch = vi.spyOn(fetchModule, 'fetchWithRetries');

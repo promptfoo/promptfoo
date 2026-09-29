@@ -58,6 +58,7 @@ This example uses `stream: true` in the request body to enable TTFT measurement,
 providers:
   - id: https://api.openai.com/v1/chat/completions
     config:
+      method: POST
       body:
         model: gpt-5.4-mini
         reasoning_effort: none

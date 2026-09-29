@@ -1008,6 +1008,7 @@ Set `streamFormat` on the provider to enable content-token detection for the thr
 providers:
   - id: https://api.openai.com/v1/chat/completions
     config:
+      method: POST
       body:
         model: gpt-5.4-mini
         reasoning_effort: none

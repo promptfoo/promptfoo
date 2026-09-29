@@ -22,7 +22,7 @@ import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { isTransientConnectionError, responseBodyError } from '../util/fetch/errors';
-import { fetchWithRetries } from '../util/fetch/index';
+import { fetchWithRetries, sleepWithAbort } from '../util/fetch/index';
 import {
   estimateStreamingTokensPerSecond,
   processStreamingResponse,
@@ -49,7 +49,6 @@ import {
   sanitizeUrlEncodedString,
 } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
-import { sleep, sleepWithAbort } from '../util/time';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import {
   HttpMultipartConfigSchema,
@@ -1903,11 +1902,7 @@ export class HttpProvider implements ApiProvider {
           clearTimeout(bodyTimeout);
         }
         const backoffMs = 2 ** bodyAttempt * 1000;
-        if (fetchOptions.signal) {
-          await sleepWithAbort(backoffMs, fetchOptions.signal);
-        } else {
-          await sleep(backoffMs);
-        }
+        await sleepWithAbort(backoffMs, fetchOptions.signal);
       }
     }
 
