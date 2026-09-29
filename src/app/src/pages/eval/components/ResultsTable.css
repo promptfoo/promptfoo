@@ -519,7 +519,7 @@ table.results-table,
   animation-fill-mode: both;
 }
 
-/* Unsupported browsers reuse the same keyframes at the locally selected endpoint. */
+/* Reuse the expanded and collapsed keyframes when scroll timelines are unavailable. */
 .results-table-scroll-fallback {
   animation: collapseHeader 1s paused both;
 }
