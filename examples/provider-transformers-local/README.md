@@ -1,12 +1,10 @@
-# provider-transformers-local (Fully Local LLM Evaluation)
+# provider-transformers-local (Local LLM Evaluation)
 
-This example demonstrates a completely local LLM evaluation setup using Transformers.js - no API keys or external services required.
-
-## Prerequisites
-
-The Transformers.js runtime is opt-in. Install it alongside Promptfoo in the example directory:
+Generate responses and grade their similarity locally with Transformers.js. No API keys are required. The first run downloads the models; later runs use the cached files.
 
 ## Usage
+
+Install the optional Transformers.js runtime alongside Promptfoo in the example directory:
 
 ```bash
 npx promptfoo@latest init --example provider-transformers-local
@@ -17,10 +15,8 @@ npx promptfoo eval
 
 ## What This Example Shows
 
-- **Local text generation** with `onnx-community/Qwen3-0.6B-ONNX` (latest Qwen3 model with thinking capabilities)
+- **Local text generation** with `onnx-community/Qwen3-0.6B-ONNX`
 - **Local embeddings** with `Xenova/all-MiniLM-L6-v2` for similarity assertions
-- Fully offline evaluation after initial model download
-- No API keys needed
 
 ## Models Used
 
