@@ -1364,8 +1364,11 @@ async function applyRunEvalResponseOutcome({
   }
 
   if (response.output === null || response.output === undefined) {
-    applyEmptyResponseOutcome(ret, isRedteam && test.metadata?.isSafe !== true);
-    return;
+    if (!(isRedteam && test.metadata?.isSafe === true)) {
+      applyEmptyResponseOutcome(ret, isRedteam);
+      return;
+    }
+    response = { ...response, output: '' };
   }
 
   await gradeRunEvalResponse({

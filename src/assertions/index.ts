@@ -776,6 +776,7 @@ export async function runAssertions({
 
   const mainAssertResult = new AssertionsResult({
     threshold: test.threshold,
+    isSafeControl: test.metadata?.isSafe === true,
   });
   const subAssertResults: AssertionsResult[] = [];
   const asserts: {
@@ -787,6 +788,7 @@ export async function runAssertions({
       if (assertion.type === 'assert-set') {
         const subAssertResult = new AssertionsResult({
           threshold: assertion.threshold,
+          isSafeControl: test.metadata?.isSafe === true,
           parentAssertionSet: {
             assertionSet: assertion,
             index: i,

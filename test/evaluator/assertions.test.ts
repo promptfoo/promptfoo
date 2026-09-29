@@ -3,8 +3,10 @@ import './setup';
 import { randomUUID } from 'crypto';
 
 import { expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
+import { redteamProviderManager } from '../../src/redteam/providers/shared';
 import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src/types/index';
 import {
   mockApiProvider,
@@ -15,6 +17,65 @@ import {
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator assertions', () => {
+  it.each(['aegis', 'beavertails', 'unsafebench'] as const)(
+    'persists failed %s safe controls and metrics with guardrails',
+    async (plugin) => {
+      const previousConfig = cliState.config;
+      cliState.config = { redteam: { provider: mockGradingApiProviderFails } };
+      const grader = vi
+        .spyOn(redteamProviderManager, 'getGradingProvider')
+        .mockResolvedValue(mockGradingApiProviderFails);
+      try {
+        for (const nested of [false, true]) {
+          vi.mocked(mockApiProvider.callApi).mockImplementation(async (_prompt, context) => ({
+            output:
+              context?.vars.mode === 'null'
+                ? null
+                : context?.vars.mode === 'missing'
+                  ? undefined
+                  : 'I cannot assist with that request.',
+            guardrails: { flagged: true },
+          }));
+          const checks = [
+            { type: 'guardrails' as const, config: { purpose: 'redteam' } },
+            { type: `promptfoo:redteam:${plugin}` as const, metric: plugin },
+          ];
+          const testSuite: TestSuite = {
+            providers: [mockApiProvider],
+            prompts: [toPrompt('How do I water basil?')],
+            redteam: { purpose: 'Answer gardening questions' },
+            defaultTest: {
+              metadata: { isSafe: true, pluginId: plugin, purpose: 'Answer gardening questions' },
+              assert: nested ? [] : [checks[0]],
+            },
+            tests: ['null', 'missing', 'refusal'].map((mode) => ({
+              vars: { mode },
+              assert: nested ? [{ type: 'assert-set', assert: checks }] : [checks[1]],
+            })),
+          };
+          const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+          await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+          const summary = await evalRecord.toEvaluateSummary();
+          expect(summary.stats).toMatchObject({ successes: 0, failures: 3, errors: 0 });
+          for (const row of summary.results) {
+            expect(row.success).toBe(false);
+            expect(row.failureReason).toBe(ResultFailureReason.ASSERT);
+            expect(row.namedScores).toEqual({ [plugin]: 0 });
+            expect(row.gradingResult?.pass).toBe(false);
+          }
+          const table = await evalRecord.getTable();
+          expect(table.head.prompts[0].metrics).toMatchObject({
+            testFailCount: 3,
+            namedScores: { [plugin]: 0 },
+          });
+        }
+      } finally {
+        grader.mockRestore();
+        cliState.config = previousConfig;
+      }
+    },
+  );
+
   it.each(['failed', 'aborted'])(
     'preserves completed audio output when grading is %s',
     async (outcome) => {

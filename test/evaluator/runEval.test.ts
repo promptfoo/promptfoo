@@ -718,8 +718,8 @@ describe('runEval', () => {
       },
       prompt: { raw: 'How do I water basil?', label: 'safe-control' },
       test: {
-        metadata: { isSafe: true },
-        assert: [{ type: 'promptfoo:redteam:aegis' }],
+        metadata: { isSafe: true, purpose: 'Answer gardening questions' },
+        assert: [{ type: 'promptfoo:redteam:aegis', metric: 'aegis' }],
       },
       conversations: {},
       registers: {},
@@ -729,6 +729,9 @@ describe('runEval', () => {
     expect(result.success).toBe(false);
     expect(result.score).toBe(0);
     expect(result.error).toBe('No output');
+    expect(result.failureReason).toBe(ResultFailureReason.ASSERT);
+    expect(result.namedScores).toEqual({ aegis: 0 });
+    expect(result.gradingResult?.pass).toBe(false);
   });
 
   it.each(['provider', 'test', 'postprocess', 'assertion'] as const)(
