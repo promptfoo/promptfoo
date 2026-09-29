@@ -760,6 +760,33 @@ describeEvaluator('select-best runtime grading configuration', () => {
     expect(JSON.stringify(result.assertion)).not.toContain(secret);
   });
 
+  it('passes the live target to comparison graders after its URL is redacted in storage', async () => {
+    const { grader, suite, target } = makeSuite();
+    target.id = () => 'https://example.test/target?api_key=target-fixture';
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    expect(grader.callApi).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(grader.callApi).mock.calls[0][1]?.originalProvider).toBe(target);
+    const rows = await record.fetchResultsByTestIdx(0);
+    expect(JSON.stringify(rows)).not.toContain('target-fixture');
+  });
+
+  it('rejects ambiguous redacted target identities before invoking a comparison grader', async () => {
+    const { grader, suite, target } = makeSuite();
+    target.id = () => 'https://example.test/target?api_key=target-one';
+    suite.providers.push({
+      id: () => 'https://example.test/target?api_key=target-two',
+      callApi: vi.fn(async () => ({ output: 'candidate' })),
+    });
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    expect(grader.callApi).not.toHaveBeenCalled();
+    const rows = await record.fetchResultsByTestIdx(0);
+    expect(rows.every((row) => !row.success && row.error?.includes('unique provider labels'))).toBe(
+      true,
+    );
+  });
+
   it('keeps the grader key out of persisted comparison results', async () => {
     const { grader, seenKeys, suite } = makeSuite();
     const record = await Eval.create({}, suite.prompts, { id: randomUUID() });

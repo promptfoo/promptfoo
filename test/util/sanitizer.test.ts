@@ -539,14 +539,18 @@ describe('sanitizeObject', () => {
       );
     });
 
-    it('preserves repeated field names in separate objects in opaque JSON inputs', () => {
+    it('preserves values with repeated field names in separate JSON objects', () => {
       const input = '{ "left": { "id": 1 }, "right": { "id": 2 } }';
-      expect(sanitizeObject(input, { redactStringValues: false })).toBe(input);
+      expect(JSON.parse(sanitizeObject(input, { redactStringValues: false }))).toEqual(
+        JSON.parse(input),
+      );
     });
 
     it('preserves escaped JSON text and recognizes escaped credential keys', () => {
       const input = '{ "text": "Quoted \\"text\\" and a backslash \\\\", "id": 1 }';
-      expect(sanitizeObject(input, { redactStringValues: false })).toBe(input);
+      expect(JSON.parse(sanitizeObject(input, { redactStringValues: false }))).toEqual(
+        JSON.parse(input),
+      );
       const duplicate = '{ "config": { "api\\u004bey": "fixture" }, "config": {} }';
       expect(sanitizeObject(duplicate, { redactStringValues: false })).toBe('{"config":{}}');
     });
@@ -558,15 +562,37 @@ describe('sanitizeObject', () => {
 
     it('redacts named environment credentials in JSON inputs without redacting ordinary values', () => {
       const nested = JSON.stringify([
-        { config: { OPENAI_API_KEY: 'fixture-only', value: 'a'.repeat(64) } },
+        { env: { OPENAI_API_KEY: 'fixture-only', value: 'a'.repeat(64) } },
       ]);
       expect(JSON.parse(sanitizeObject(nested, { redactStringValues: false }))).toEqual([
-        { config: { OPENAI_API_KEY: '[REDACTED]', value: 'a'.repeat(64) } },
+        { env: { OPENAI_API_KEY: '[REDACTED]', value: 'a'.repeat(64) } },
       ]);
-      const input = JSON.stringify({ OPENAI_API_KEY: 'fixture-only', value: 'a'.repeat(64) });
-      expect(JSON.parse(sanitizeObject(input, { redactStringValues: false }))).toEqual({
-        OPENAI_API_KEY: '[REDACTED]',
+      const input = JSON.stringify({
+        env: { OPENAI_API_KEY: 'fixture-only' },
+        key: 'ordinary',
         value: 'a'.repeat(64),
+      });
+      expect(JSON.parse(sanitizeObject(input, { redactStringValues: false }))).toEqual({
+        env: { OPENAI_API_KEY: '[REDACTED]' },
+        key: 'ordinary',
+        value: 'a'.repeat(64),
+      });
+    });
+
+    it('removes discarded duplicate URL values from opaque JSON', () => {
+      const value =
+        '{"url":"https://example.test/?api_key=fixture-only","url":"https://example.test/"}';
+      expect(sanitizeObject(value, { redactStringValues: false })).toBe(
+        '{"url":"https://example.test/"}',
+      );
+    });
+
+    it('preserves ordinary JSON keys outside environment maps', () => {
+      expect(sanitizeObject('{"key":"value"}', { redactStringValues: false })).toBe(
+        '{"key":"value"}',
+      );
+      expect(JSON.parse(sanitizeObject({ env: '{"OPENAI_API_KEY":"fixture-only"}' }).env)).toEqual({
+        OPENAI_API_KEY: '[REDACTED]',
       });
     });
 

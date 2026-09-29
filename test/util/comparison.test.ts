@@ -10,6 +10,7 @@ import {
   resultIsForTestCase,
   varsMatch,
 } from '../../src/util/comparison';
+import { sanitizeProviderIdForLog } from '../../src/util/provider';
 import { createEvaluateResult } from '../factories/eval';
 
 import type { TestCase } from '../../src/types/index';
@@ -53,6 +54,21 @@ describe('resultIsForTestCase', () => {
 
   it('is true', async () => {
     expect(resultIsForTestCase(result, testCase)).toBe(true);
+  });
+
+  it('matches a saved redacted URL against the current provider', () => {
+    const id = 'https://example.test/eval?api_key=fixture-one';
+    const stored = createEvaluateResult({
+      provider: { id: sanitizeProviderIdForLog(id) },
+      vars: { key: 'value' },
+    });
+    expect(resultIsForTestCase(stored, { ...testCase, provider: id }, [id])).toBe(true);
+    expect(() =>
+      resultIsForTestCase(stored, { ...testCase, provider: id }, [
+        id,
+        id.replace('fixture-one', 'fixture-two'),
+      ]),
+    ).toThrow('unique provider labels');
   });
 
   it('is false if provider is different', async () => {

@@ -19,6 +19,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import Eval from '../../../src/models/eval';
 import { ResultFailureReason } from '../../../src/types/index';
 import { filterTests } from '../../../src/util/eval/filterTests';
+import { sanitizeProviderIdForLog } from '../../../src/util/provider';
 
 import type { TestSuite } from '../../../src/types/index';
 
@@ -31,6 +32,29 @@ vi.mock('../../../src/models/eval', () => ({
 describe('filterTests - vars mutation bug', () => {
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  it('retains current test overrides when the saved provider URL is redacted', async () => {
+    const id = 'https://example.test/eval?api_key=fixture-only';
+    const test = {
+      provider: { id, config: { method: 'POST' } },
+      vars: { input: 'hello' },
+      assert: [{ type: 'equals' as const, value: 'current' }],
+    };
+    const suite: TestSuite = { prompts: [], providers: [], tests: [test] };
+    vi.mocked(Eval.findById).mockResolvedValue({
+      toEvaluateSummary: async () => ({
+        results: [
+          {
+            success: false,
+            vars: test.vars,
+            provider: { id: sanitizeProviderIdForLog(id) },
+            testCase: { vars: test.vars, assert: [{ type: 'equals', value: 'old' }] },
+          },
+        ],
+      }),
+    } as any);
+    expect(await filterTests(suite, { failing: 'eval-fixture' })).toEqual([test]);
   });
 
   it('should match tests even when stored results have additional runtime vars', async () => {

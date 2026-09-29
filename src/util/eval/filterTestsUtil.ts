@@ -2,6 +2,7 @@ import logger from '../../logger';
 import Eval from '../../models/eval';
 import { deduplicateTestCases, extractRuntimeVars, filterRuntimeVars } from '../../util/comparison';
 import { readOutput, resultIsForTestCase } from '../../util/index';
+import { providerToIdentifier } from '../provider';
 
 import type { EvaluateResult, TestCase, TestSuite } from '../../types/index';
 
@@ -103,6 +104,11 @@ export async function filterTestsByResults(
   // When a match is found, we restore runtime variables (like _conversation, sessionId)
   // from the result into the test so they're available during re-evaluation.
   const matchedTests: Tests = [];
+  const providerIds = [...testSuite.providers, ...testSuite.tests.map((test) => test.provider)]
+    .map(providerToIdentifier)
+    .filter((id): id is string => id !== undefined);
+  const matchesResult = (result: EvaluateResult, test: TestCase) =>
+    resultIsForTestCase(result, test, providerIds);
 
   for (const test of testSuite.tests) {
     const testWithDefaults = mergeDefaultVars(test, testSuite.defaultTest);
@@ -112,15 +118,12 @@ export async function filterTestsByResults(
     // This prevents issues when a test matches multiple results and only some have runtime vars.
     let matchedResult = filteredResults.find(
       (result) =>
-        resultIsForTestCase(result, testWithDefaults) &&
-        extractRuntimeVars(result.vars) !== undefined,
+        matchesResult(result, testWithDefaults) && extractRuntimeVars(result.vars) !== undefined,
     );
 
     // Fallback: any matching result (even without runtime vars)
     if (!matchedResult) {
-      matchedResult = filteredResults.find((result) =>
-        resultIsForTestCase(result, testWithDefaults),
-      );
+      matchedResult = filteredResults.find((result) => matchesResult(result, testWithDefaults));
     }
 
     // Fallback: try matching without defaults (old results that don't have defaults merged)
@@ -134,11 +137,10 @@ export async function filterTestsByResults(
       if (hasDefaultVars) {
         // Again, prefer results with runtime vars first
         matchedResult = filteredResults.find(
-          (result) =>
-            resultIsForTestCase(result, test) && extractRuntimeVars(result.vars) !== undefined,
+          (result) => matchesResult(result, test) && extractRuntimeVars(result.vars) !== undefined,
         );
         if (!matchedResult) {
-          matchedResult = filteredResults.find((result) => resultIsForTestCase(result, test));
+          matchedResult = filteredResults.find((result) => matchesResult(result, test));
         }
       }
     }
@@ -183,7 +185,7 @@ export async function filterTestsByResults(
   );
   for (const result of filteredResults) {
     for (const testWithDefaults of matchedTestsWithDefaults) {
-      if (resultIsForTestCase(result, testWithDefaults)) {
+      if (matchesResult(result, testWithDefaults)) {
         matchedResultKeys.add(JSON.stringify(filterRuntimeVars(result.vars)));
         break;
       }

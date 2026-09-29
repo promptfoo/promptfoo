@@ -4,6 +4,9 @@ import { sanitizeUrl } from './sanitizer';
 
 import type { ApiProvider } from '../types/providers';
 
+export const AMBIGUOUS_PROVIDER_ID_MESSAGE =
+  'Saved provider identity is ambiguous after redaction. Assign unique provider labels before retrying or comparison grading.';
+
 export function providerToIdentifier(
   provider: TestCase['provider'] | { id?: string; label?: string } | undefined,
 ): string | undefined {

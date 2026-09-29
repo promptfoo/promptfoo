@@ -1009,7 +1009,23 @@ describe('importCommand', () => {
                 provider: { id: 'fixture-provider', config: { apiKey: 'fixture-legacy-provider' } },
               },
             ],
-            table: { head: { prompts: [], vars: ['topic'] }, body: [] },
+            table: {
+              head: {
+                prompts: [
+                  {
+                    raw: 'Hello',
+                    label: 'Greeting',
+                    provider: 'fixture-provider',
+                    metrics: {
+                      namedScores: { auth: 1, token: 0.5 },
+                      namedScoresCount: { auth: 1, token: 2 },
+                    },
+                  },
+                ],
+                vars: ['topic'],
+              },
+              body: [],
+            },
             stats: { successes: 1, failures: 0 },
           },
         }),
@@ -1040,7 +1056,19 @@ describe('importCommand', () => {
       expect(await importedEval!.toEvaluateSummary()).toMatchObject({
         version: 2,
         results: [{ success: true, vars: { topic: 'legacy' } }],
-        table: { head: { vars: ['topic'] } },
+        table: {
+          head: {
+            prompts: [
+              {
+                metrics: {
+                  namedScores: { auth: 1, token: 0.5 },
+                  namedScoresCount: { auth: 1, token: 2 },
+                },
+              },
+            ],
+            vars: ['topic'],
+          },
+        },
       });
     });
   });

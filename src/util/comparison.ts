@@ -1,7 +1,11 @@
 import deepEqual from 'fast-deep-equal';
 import logger from '../logger';
 import { type EvaluateResult, type TestCase } from '../types';
-import { providerToIdentifier } from './provider';
+import {
+  AMBIGUOUS_PROVIDER_ID_MESSAGE,
+  providerToIdentifier,
+  sanitizeProviderIdForLog,
+} from './provider';
 
 import type { Vars } from '../types/index';
 
@@ -109,7 +113,11 @@ export function deduplicateTestCases(tests: TestCase[]): TestCase[] {
   });
 }
 
-export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase): boolean {
+export function resultIsForTestCase(
+  result: EvaluateResult,
+  testCase: TestCase,
+  currentProviderIds?: readonly string[],
+): boolean {
   const testProviderId = testCase.provider ? providerToIdentifier(testCase.provider) : undefined;
   const resultProviderId = providerToIdentifier(result.provider);
 
@@ -118,8 +126,21 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
   // 2. If test has provider but result doesn't, still match (result provider info may be missing,
   //    e.g., agentic providers store target provider, or cloud results may not include provider)
   // 3. If both have providers, they must match
-  const providersMatch =
-    !testProviderId || !resultProviderId || testProviderId === resultProviderId;
+  let providersMatch = !testProviderId || !resultProviderId || testProviderId === resultProviderId;
+  if (!providersMatch && testProviderId && resultProviderId) {
+    const storedId = sanitizeProviderIdForLog(testProviderId);
+    if (storedId === resultProviderId) {
+      const candidates = new Set(
+        (currentProviderIds ?? [testProviderId]).filter(
+          (id) => sanitizeProviderIdForLog(id) === storedId,
+        ),
+      );
+      if (candidates.size > 1) {
+        throw new Error(AMBIGUOUS_PROVIDER_ID_MESSAGE);
+      }
+      providersMatch = true;
+    }
+  }
 
   // Filter out runtime variables like _conversation and sessionId when matching.
   // These are added by multi-turn providers during evaluation but shouldn't affect test matching.

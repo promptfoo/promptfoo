@@ -286,22 +286,34 @@ function sanitizeProviderReference(provider: unknown, active = new WeakSet<objec
     if ('env' in provider) {
       return sanitizeForDbWithSecrets(provider);
     }
+    const usedKeys = new Set<string>();
     return Object.fromEntries(
       Object.entries(descriptors)
         .filter(
           ([key, descriptor]) => key !== 'toJSON' && descriptor.enumerable && 'value' in descriptor,
         )
-        .map(([key, descriptor]) => [
-          key,
-          isSecretField(key) &&
-          !(
-            descriptor.value &&
-            typeof descriptor.value === 'object' &&
-            Object.hasOwn(descriptor.value, 'config')
-          )
-            ? REDACTED
-            : sanitizeForDbWithSecrets(sanitizeProviderReference(descriptor.value, active)),
-        ]),
+        .map(([key, descriptor]) => {
+          const redactedKey = sanitizeObject(key, {
+            sanitizeUrls: true,
+            redactStringValues: false,
+          });
+          let uniqueKey = redactedKey;
+          for (let suffix = 1; usedKeys.has(uniqueKey); suffix++) {
+            uniqueKey = `${redactedKey}#${suffix}`;
+          }
+          usedKeys.add(uniqueKey);
+          return [
+            uniqueKey,
+            isSecretField(key) &&
+            !(
+              descriptor.value &&
+              typeof descriptor.value === 'object' &&
+              Object.hasOwn(descriptor.value, 'config')
+            )
+              ? REDACTED
+              : sanitizeForDbWithSecrets(sanitizeProviderReference(descriptor.value, active)),
+          ];
+        }),
     );
   } finally {
     active.delete(provider);
@@ -975,8 +987,10 @@ export function sanitizeLegacyResults(results: EvaluateSummaryV2): EvaluateSumma
         if (!asRecord(prompt)) {
           return prompt;
         }
+        const { metrics, ...definition } = prompt;
         return {
-          ...sanitizePromptForDb(prompt),
+          ...sanitizePromptForDb(definition),
+          ...(metrics !== undefined && { metrics: sanitizeForDb(metrics) }),
           provider: sanitizeObject(prompt.provider, {
             sanitizeUrls: true,
             redactStringValues: false,

@@ -998,6 +998,7 @@ function sanitizeJsonString(
   maxDepth: number,
   sanitizeUrls = false,
   redactStringValues = true,
+  isEnvMap = false,
 ): string {
   const redactedAzureBlobUri = redactAzureBlobSasToken(str);
   if (redactedAzureBlobUri !== str) {
@@ -1029,45 +1030,15 @@ function sanitizeJsonString(
         depth,
         maxDepth,
         sanitizeUrls,
-        true,
+        isEnvMap,
         redactStringValues,
       );
-      const serialized = JSON.stringify(sanitized);
-      const parsedSerialized = JSON.stringify(parsed);
-      // JSON.parse keeps only final duplicate keys. Preserve benign formatting,
-      // but canonicalize credential-shaped documents so discarded values cannot
-      // survive in the raw text.
-      return !redactStringValues && serialized === parsedSerialized && !hasSecretJsonKey(str)
-        ? str
-        : serialized;
+      return JSON.stringify(sanitized);
     } catch {
       return REDACTED;
     }
   }
   return str;
-}
-
-function hasSecretJsonKey(value: string): boolean {
-  // The input has already parsed as JSON. Scan each string once, including values,
-  // so escaped quotes never become new candidate string starts.
-  for (let index = 0; index < value.length; index++) {
-    if (value[index] !== '"') {
-      continue;
-    }
-    const start = index++;
-    while (index < value.length && value[index] !== '"') {
-      index += value[index] === '\\' ? 2 : 1;
-    }
-    const end = ++index;
-    while (/\s/.test(value[index] ?? '') && index < value.length) {
-      index++;
-    }
-    if (value[index] === ':' && isSecretEnvVarName(JSON.parse(value.slice(start, end)))) {
-      return true;
-    }
-    index--;
-  }
-  return false;
 }
 
 // `key=value` where the key is a typical form-data identifier (allow brackets
@@ -1332,7 +1303,7 @@ function recursiveSanitize(
   if (typeof obj === 'string') {
     return sanitizeUrls && URL_REFERENCE.test(obj)
       ? sanitizeUrl(obj)
-      : sanitizeJsonString(obj, depth, maxDepth, sanitizeUrls, redactStringValues);
+      : sanitizeJsonString(obj, depth, maxDepth, sanitizeUrls, redactStringValues, isEnvMap);
   }
 
   // Handle primitives and null/undefined

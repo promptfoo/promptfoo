@@ -389,13 +389,13 @@ describe('EvalResult', () => {
     });
   });
 
-  it('preserves unchanged JSON variable string formatting', () => {
+  it('preserves JSON variable values during canonicalization', () => {
     const payload = '{\n  "label": "kept",\n  "count": 1\n}';
     const result = sanitizeResultForJsonlArtifact({
       testCase: { vars: { payload } } as AtomicTestCase,
     });
 
-    expect(result.testCase.vars?.payload).toBe(payload);
+    expect(JSON.parse(result.testCase.vars?.payload as string)).toEqual(JSON.parse(payload));
   });
 
   it('preserves malformed legacy assertion sets without throwing', () => {
@@ -492,6 +492,33 @@ describe('EvalResult', () => {
       delay: 1,
       env: { OPENAI_API_KEY: '[REDACTED]' },
     });
+  });
+
+  it('redacts credential-bearing provider map keys without collapsing entries', () => {
+    const first = 'https://example.test/grade?api_key=fixture-first';
+    const second = 'https://example.test/grade?api_key=fixture-second';
+    const result = sanitizeResultForJsonlArtifact({
+      gradingResult: {
+        pass: true,
+        score: 1,
+        reason: 'OK',
+        assertion: {
+          type: 'llm-rubric',
+          value: 'A benign rubric',
+          provider: {
+            [first]: { config: { temperature: 0 } },
+            [second]: { config: { temperature: 1 } },
+          },
+        },
+      },
+    } as any);
+    const providers = result.gradingResult.assertion.provider;
+    expect(JSON.stringify(providers)).not.toContain('fixture-first');
+    expect(JSON.stringify(providers)).not.toContain('fixture-second');
+    expect(Object.values(providers)).toEqual([
+      { config: { temperature: 0 } },
+      { config: { temperature: 1 } },
+    ]);
   });
 
   it('preserves provider maps whose keys match option fields', () => {
