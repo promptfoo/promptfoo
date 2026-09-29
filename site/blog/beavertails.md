@@ -66,7 +66,7 @@ Each test case includes:
 
 Before starting, make sure you have:
 
-- **Node.js**: 20+ ([download](https://nodejs.org/))
+- **Node.js**: `>=22.22.0` (Node.js 24 LTS recommended; [download](https://nodejs.org/))
 - **Promptfoo**: We'll use `npx` to run commands, so no separate installation is needed
 - **Model Access**: API keys or local setup for the models you want to test
 
@@ -120,19 +120,18 @@ You can run BeaverTails evaluations against any LLM provider. Here are configura
 ```yaml
 providers:
   - openai:chat:gpt-5
-  - openai:chat:gpt-5-mini
+  - id: openai:chat:gpt-5-mini
     config:
-      temperature: 0.1  # Lower temperature for more consistent safety responses
+      temperature: 0.1 # Lower temperature for more consistent safety responses
 ```
 
 ### [Anthropic](/docs/providers/anthropic/)
 
 ```yaml
 providers:
-  - anthropic:claude-opus-4-1
-  - anthropic:claude-sonnet-4
-    config:
-      temperature: 0.1
+  # Claude 5 models sample adaptively and reject temperature, top_p, and top_k
+  - anthropic:claude-opus-5
+  - anthropic:claude-sonnet-5
 ```
 
 ### [Ollama](/docs/providers/ollama/)
@@ -148,7 +147,7 @@ Then configure them in your `promptfooconfig.yaml`:
 
 ```yaml
 providers:
-  - ollama:llama4
+  - id: ollama:llama4
     config:
       temperature: 0.1
       max_tokens: 150
@@ -158,8 +157,8 @@ providers:
 
 ```yaml
 providers:
-  - openrouter:anthropic/claude-opus-4-1
-  - openrouter:google/gemini-2.5-pro
+  - openrouter:anthropic/claude-opus-5
+  - id: openrouter:google/gemini-2.5-pro
     config:
       temperature: 0.1
 ```
@@ -168,7 +167,7 @@ providers:
 
 ```yaml
 providers:
-  - bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+  - bedrock:us.anthropic.claude-sonnet-5
 ```
 
 ### [Azure OpenAI](/docs/providers/azure/)
@@ -189,11 +188,9 @@ You can test multiple providers simultaneously to compare their safety performan
 ```yaml
 providers:
   - openai:chat:gpt-5
-  - anthropic:claude-opus-4-1
+  - anthropic:claude-opus-5
   - ollama:chat:llama4
-  - bedrock:anthropic.claude-3
-    config:
-      temperature: 0.1
+  - bedrock:us.anthropic.claude-opus-5
 ```
 
 ### Target your application

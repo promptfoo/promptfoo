@@ -22,9 +22,21 @@ The provider keeps Fireworks credentials isolated from OpenAI's: it reads `FIREW
 ## Provider format
 
 - `fireworks:<model>` — chat completions, e.g. `fireworks:accounts/fireworks/models/gpt-oss-120b`
-- `fireworks:embedding:<model>` — embeddings, e.g. `fireworks:embedding:accounts/fireworks/models/qwen3-embedding-8b`
+- `fireworks:embedding:<model>` — embeddings, e.g. `fireworks:embedding:fireworks/qwen3-embedding-8b`
 
-Model identifiers use Fireworks's account-scoped path (`accounts/fireworks/models/<model>`). Browse the [serverless catalogue](https://fireworks.ai/models?deployment=serverless) for currently available ids — the serverless tier rotates, so a model that returns a 404 has likely been retired.
+Copy the exact identifier from the model's documentation. Chat models commonly use `accounts/fireworks/models/<model>`; embedding models can use a different namespace, and dedicated deployments use `accounts/<account>/deployments/<deployment>`. Check the [serverless catalogue](https://fireworks.ai/models?deployment=serverless) and your deployment configuration for availability.
+
+Current Chinese model releases use these Fireworks IDs (prefix each with `fireworks:`):
+
+| Model                                                                              | Model ID                                         |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------ |
+| [DeepSeek V4.1 Flash](https://fireworks.ai/models/deepseek-ai/deepseek-v4p1-flash) | `accounts/fireworks/models/deepseek-v4p1-flash`  |
+| [DeepSeek V4 Pro](https://fireworks.ai/models/deepseek-ai/deepseek-v4-pro-0813)    | `accounts/fireworks/models/deepseek-v4-pro-0813` |
+| [GLM-5.3](https://fireworks.ai/models/fireworks/glm-5p3)                           | `accounts/fireworks/models/glm-5p3`              |
+| [GLM-5.3 Flash](https://fireworks.ai/models/fireworks/glm-5p3-flash)               | `accounts/fireworks/models/glm-5p3-flash`        |
+| [Kimi K3](https://fireworks.ai/models/fireworks/kimi-k3)                           | `accounts/fireworks/models/kimi-k3`              |
+| [Qwen3.8 Max](https://fireworks.ai/models/fireworks/qwen3p8-max)                   | `accounts/fireworks/models/qwen3p8-max`          |
+| [MiniMax M3](https://fireworks.ai/models/fireworks/minimax-m3)                     | `accounts/fireworks/models/minimax-m3`           |
 
 ## Example Usage
 
@@ -56,8 +68,14 @@ defaultTest:
   options:
     provider:
       embedding:
-        id: fireworks:embedding:accounts/fireworks/models/qwen3-embedding-8b
+        id: fireworks:embedding:fireworks/qwen3-embedding-8b
 ```
+
+The [Fireworks embedding guide](https://docs.fireworks.ai/guides/querying-embeddings-models) uses `fireworks/qwen3-embedding-8b` for serverless requests. Keep existing model identifiers, dimensions, and preprocessing consistent with stored vectors; changing embedding models requires rebuilding the corresponding index and recalibrating similarity thresholds.
+
+Embedding request options go under `config.passthrough`. For resizable models such as Qwen3, set `config.passthrough.dimensions` only when you intentionally choose an output dimension. Qwen3 vectors are not unit-normalized; normalize them before treating a raw dot product as cosine similarity, or use a cosine-similarity function that handles normalization.
+
+Voyage embedding models require a dedicated deployment. Use `fireworks:embedding:accounts/<account>/deployments/<deployment>` with your deployment's identifiers, and set `config.passthrough.input_type` to `document` for corpus embeddings or `query` for search queries. Keep the model, dimensions, and role-specific preprocessing consistent across indexing and retrieval.
 
 ## Configuration
 

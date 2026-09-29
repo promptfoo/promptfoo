@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../../src/cache';
 import {
   calculateHyperbolicCost,
   createHyperbolicProvider,
@@ -7,6 +8,13 @@ import {
   HyperbolicProvider,
 } from '../../../src/providers/hyperbolic/chat';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+
+vi.mock('../../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/cache')>()),
+  fetchWithCache: vi.fn(),
+}));
+
+const mockFetchWithCache = vi.mocked(fetchWithCache);
 
 describe('HyperbolicProvider', () => {
   let provider: HyperbolicProvider;
@@ -17,9 +25,11 @@ describe('HyperbolicProvider', () => {
         apiKey: 'test-key',
       },
     },
+    env: { HYPERBOLIC_API_KEY: 'test-key' },
   };
 
   beforeEach(() => {
+    mockFetchWithCache.mockReset();
     provider = new HyperbolicProvider(modelName, options);
   });
 
@@ -45,60 +55,49 @@ describe('HyperbolicProvider', () => {
     });
   });
 
-  it('should process API response correctly for reasoning model', async () => {
-    const mockResponse = {
-      raw: {
+  it.each([
+    {
+      label: 'populated',
+      details: {
+        reasoning_tokens: 100,
+        accepted_prediction_tokens: 50,
+        rejected_prediction_tokens: 25,
+      },
+      expected: { reasoning: 100, acceptedPrediction: 50, rejectedPrediction: 25 },
+    },
+    {
+      label: 'zero-valued',
+      details: {
+        reasoning_tokens: 0,
+        accepted_prediction_tokens: 0,
+        rejected_prediction_tokens: 0,
+      },
+      expected: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+    },
+    { label: 'absent', details: undefined, expected: undefined },
+  ])('should normalize $label reasoning details from API usage', async ({ details, expected }) => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        choices: [{ message: { content: 'answer' }, finish_reason: 'stop' }],
         usage: {
-          completion_tokens_details: {
-            reasoning_tokens: 100,
-            accepted_prediction_tokens: 50,
-            rejected_prediction_tokens: 25,
-          },
+          total_tokens: 350,
+          prompt_tokens: 200,
+          completion_tokens: 150,
+          ...(details ? { completion_tokens_details: details } : {}),
         },
       },
-      tokenUsage: {
-        prompt: 200,
-        completion: 150,
-      },
-    };
-
-    vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockResponse);
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
 
     const result = await provider.callApi('test prompt');
 
-    expect(result.tokenUsage.completionDetails).toEqual({
-      reasoning: 100,
-      acceptedPrediction: 50,
-      rejectedPrediction: 25,
-    });
-  });
-
-  it('should handle raw response as string', async () => {
-    const mockResponse = {
-      raw: JSON.stringify({
-        usage: {
-          completion_tokens_details: {
-            reasoning_tokens: 100,
-            accepted_prediction_tokens: 50,
-            rejected_prediction_tokens: 25,
-          },
-        },
-      }),
-      tokenUsage: {
-        prompt: 200,
-        completion: 150,
-      },
-    };
-
-    vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockResponse);
-
-    const result = await provider.callApi('test prompt');
-
-    expect(result.tokenUsage.completionDetails).toEqual({
-      reasoning: 100,
-      acceptedPrediction: 50,
-      rejectedPrediction: 25,
-    });
+    expect(result.output).toBe('answer');
+    expect(result.tokenUsage?.completionDetails).toEqual(expected);
+    expect(result).not.toHaveProperty('raw');
+    expect(result.cost).toBe((0.5 / 1e6) * 200 + (2.18 / 1e6) * 150);
   });
 
   it('should handle error response', async () => {
@@ -109,24 +108,8 @@ describe('HyperbolicProvider', () => {
     expect(result.error).toBe('API error');
   });
 
-  it('should handle invalid JSON in raw response', async () => {
-    const mockResponse = {
-      raw: 'invalid json',
-      tokenUsage: {
-        prompt: 200,
-        completion: 150,
-      },
-    };
-
-    vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockResponse);
-
-    const result = await provider.callApi('test prompt');
-    expect(result.tokenUsage.completionDetails).toBeUndefined();
-  });
-
   it('should calculate cost for non-cached response', async () => {
     const mockResponse = {
-      raw: 'test response',
       tokenUsage: {
         prompt: 1000,
         completion: 500,

@@ -61,11 +61,11 @@ describe('bedrock mantle Chat Completions provider', () => {
   });
 
   describe('createBedrockMantleChatProvider', () => {
-    it('throws a helpful error when no Bedrock API key is configured', () => {
+    it('defers AWS credential resolution when no Bedrock API key is configured', () => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
-      expect(() => createBedrockMantleChatProvider('zai.glm-4.6', {})).toThrow(
-        /AWS_BEARER_TOKEN_BEDROCK/,
-      );
+      const provider = createBedrockMantleChatProvider('zai.glm-4.6', {});
+      expect(provider.requiresApiKey()).toBe(false);
+      expect(provider.getApiKey()).toBeUndefined();
     });
 
     it('targets the mantle /v1 endpoint for the configured region with config.apiKey', () => {
@@ -91,7 +91,7 @@ describe('bedrock mantle Chat Completions provider', () => {
       expect((provider.config as any).apiBaseUrl).toBe(
         'https://bedrock-mantle.us-east-1.api.aws/openai/v1',
       );
-      expect((provider.config as any).apiKey).toBe('env-bedrock-key');
+      expect(provider.getApiKey()).toBe('env-bedrock-key');
     });
 
     it('defaults Grok mantle chat to its launch region', () => {
@@ -128,7 +128,7 @@ describe('bedrock mantle Chat Completions provider', () => {
         createBedrockMantleChatProvider('zai.glm-4.6', {
           config: { apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' },
         }),
-      ).toThrow(/AWS_BEARER_TOKEN_BEDROCK/);
+      ).not.toThrow();
     });
 
     it('rejects frontier OpenAI models on the mantle chat route', () => {
@@ -150,6 +150,14 @@ describe('bedrock mantle Chat Completions provider', () => {
       // Base getApiUrl() would prefer OPENAI_API_HOST; the subclass must override that so the
       // Bedrock bearer token is never sent to the wrong host.
       expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-west-2.api.aws/v1');
+    });
+
+    it('identifies the actual Bedrock provider in telemetry', () => {
+      const provider = createBedrockMantleChatProvider('deepseek.v3.1', {
+        config: { apiKey: 'bedrock-key' },
+      });
+
+      expect((provider as any).getGenAISystem()).toBe('bedrock');
     });
 
     it('sends the real model id and posts to <base>/chat/completions', async () => {
@@ -194,7 +202,7 @@ describe('bedrock mantle Chat Completions provider', () => {
         'https://bedrock-mantle.us-west-2.api.aws/v1/chat/completions',
         expect.objectContaining({
           method: 'POST',
-          headers: expect.objectContaining({ Authorization: 'Bearer bedrock-key' }),
+          getAuthHeaders: expect.any(Function),
         }),
         expect.any(Number),
         'json',

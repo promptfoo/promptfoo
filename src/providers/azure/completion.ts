@@ -92,9 +92,7 @@ export class AzureCompletionProvider extends AzureGenericProvider {
         };
       }
 
-      // Optional-chain choices so an empty array or a degenerate 200 response
-      // with no `choices` takes the graceful no-output path instead of throwing,
-      // matching the chat path (#9867).
+      // Missing choices leave output undefined for the evaluator's no-output handling.
       const choice = data.choices?.[0];
       const finishReason = normalizeFinishReason(choice?.finish_reason);
 

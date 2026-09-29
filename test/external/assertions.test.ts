@@ -17,6 +17,22 @@ const createMockProvider = (output: string, reason?: string) =>
     },
   });
 
+// Grades every conversation window as relevant except the ones whose prompt contains
+// `marker`, so a test can pin the exact relevant/total ratio the handler scores.
+const createMarkerAwareProvider = (marker: string) =>
+  createFactoryProvider({
+    callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (prompt) => {
+      const isIrrelevant = (prompt as string).includes(marker);
+      return {
+        output: JSON.stringify({
+          verdict: isIrrelevant ? 'no' : 'yes',
+          ...(isIrrelevant && { reason: 'The response is unrelated to the question asked' }),
+        }),
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      };
+    }),
+  });
+
 // Mock getAndCheckProvider
 vi.mock('../../src/matchers/providers', async () => {
   const actual = await vi.importActual('../../src/matchers/providers');
@@ -273,5 +289,204 @@ describe('handleConversationRelevance', () => {
     const result = await handleConversationRelevance(params);
     expect(result.pass).toBe(true);
     expect(result.score).toBe(1);
+  });
+
+  // https://github.com/promptfoo/promptfoo/issues/10141
+  it('should use the DeepEval default threshold when threshold is omitted for Issue #10141', async () => {
+    const provider = createMockProvider('no');
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'conversation-relevance',
+      },
+      prompt: 'What is the weather like?',
+      outputString: 'The capital of France is Paris.',
+      test: {
+        vars: {},
+        options: { provider },
+      },
+    };
+
+    const result = await handleConversationRelevance(params);
+
+    expect(result.score).toBe(0);
+    expect(result.pass).toBe(false);
+  });
+
+  it('should preserve an explicit zero threshold', async () => {
+    const provider = createMockProvider('no');
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'conversation-relevance',
+        threshold: 0,
+      },
+      prompt: 'What is the weather like?',
+      outputString: 'The capital of France is Paris.',
+      test: {
+        vars: {},
+        options: { provider },
+      },
+    };
+
+    const result = await handleConversationRelevance(params);
+
+    expect(result.score).toBe(0);
+    expect(result.pass).toBe(true);
+  });
+
+  it('should honor an omitted threshold for a negated assertion', async () => {
+    const provider = createMockProvider('no');
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'not-conversation-relevance',
+      },
+      inverse: true,
+      prompt: 'What is the weather like?',
+      outputString: 'The capital of France is Paris.',
+      test: {
+        vars: {},
+        options: { provider },
+      },
+    };
+
+    const result = await handleConversationRelevance(params);
+
+    expect(result.score).toBe(1);
+    expect(result.pass).toBe(true);
+  });
+
+  it('should not pass a negated assertion when the conversation grader fails', async () => {
+    const provider = createFactoryProvider({ response: { error: 'grader unavailable' } });
+    const result = await handleConversationRelevance({
+      ...defaultParams,
+      assertion: { type: 'not-conversation-relevance' },
+      inverse: true,
+      prompt: 'What is the weather like?',
+      outputString: 'The capital of France is Paris.',
+      test: { vars: {}, options: { provider } },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('grader unavailable');
+    expect(result.metadata).toEqual({ graderError: true });
+  });
+
+  it('should not pass a negated assertion when the conversation grader returns an invalid verdict', async () => {
+    const provider = createMockProvider('maybe');
+    const result = await handleConversationRelevance({
+      ...defaultParams,
+      assertion: { type: 'not-conversation-relevance' },
+      inverse: true,
+      prompt: 'What is the weather like?',
+      outputString: 'The capital of France is Paris.',
+      test: { vars: {}, options: { provider } },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('invalid verdict');
+    expect(result.metadata).toEqual({ graderError: true });
+  });
+
+  it('should preserve prior conversation-grader usage when a later window fails', async () => {
+    const provider = createFactoryProvider({
+      callApi: vi
+        .fn<ApiProvider['callApi']>()
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ verdict: 'yes' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        })
+        .mockResolvedValueOnce({
+          error: 'grader unavailable',
+          tokenUsage: { total: 12, prompt: 7, completion: 5 },
+        }),
+    });
+
+    const result = await handleConversationRelevance({
+      ...defaultParams,
+      assertion: { type: 'not-conversation-relevance' },
+      inverse: true,
+      prompt: 'Second question',
+      outputString: 'Second answer',
+      test: {
+        vars: {
+          _conversation: [
+            { input: 'First question', output: 'First answer' },
+            { input: 'Second question', output: 'Second answer' },
+          ],
+        },
+        options: { provider },
+      },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.tokensUsed).toMatchObject({ total: 22, prompt: 12, completion: 10 });
+  });
+
+  // The next two tests bracket the omitted-threshold default so it cannot drift away
+  // from the documented 0.5 without a test failing.
+  it('should pass a score that lands exactly on the default threshold', async () => {
+    const conversation = [
+      { input: 'Hi', output: 'Hello! How can I help you?' },
+      { input: 'What is 2+2?', output: 'The capital of France is Paris.' }, // Irrelevant response
+    ];
+
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'conversation-relevance',
+      },
+      outputString: 'This should be ignored',
+      test: {
+        vars: {
+          _conversation: conversation,
+        },
+        options: {
+          provider: createMarkerAwareProvider('Paris'),
+        },
+      },
+    };
+
+    const result = await handleConversationRelevance(params);
+
+    // Windows are cumulative prefixes, so only the second one sees the irrelevant turn.
+    expect(result.score).toBe(0.5);
+    expect(result.pass).toBe(true);
+  });
+
+  it('should fail a score just below the default threshold', async () => {
+    const conversation = [
+      { input: 'Hi', output: 'Hello! How can I help you?' },
+      { input: 'What is the weather like?', output: 'The weather is sunny today.' },
+      { input: 'What is 2+2?', output: 'The capital of France is Paris.' }, // Irrelevant response
+      { input: 'Thanks!', output: "You're welcome! Enjoy the sunshine!" },
+      { input: 'Anything else?', output: 'Let me know if you need anything.' },
+    ];
+
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'conversation-relevance',
+      },
+      outputString: 'This should be ignored',
+      test: {
+        vars: {
+          _conversation: conversation,
+        },
+        options: {
+          provider: createMarkerAwareProvider('Paris'),
+        },
+      },
+    };
+
+    const result = await handleConversationRelevance(params);
+
+    // The last three cumulative windows all contain the irrelevant turn, so 2 of 5 pass.
+    expect(result.score).toBe(0.4);
+    expect(result.pass).toBe(false);
   });
 });
