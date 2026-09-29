@@ -828,25 +828,26 @@ function createAbortError(message: string): Error {
 }
 
 /**
- * `npm i -g @openai/codex` installs a `codex.cmd` shim on Windows, which `spawn` cannot run
- * without a shell: bare names only resolve `.com`/`.exe`, and `.cmd` paths throw EINVAL.
- * Run the shim's `@openai/codex` entrypoint with the current Node binary instead.
+ * Windows cannot spawn npm's `codex.cmd` shim directly.
+ * Run its JavaScript entrypoint with the current Node binary.
  */
 function resolveCodexLaunch(
   command: string,
   args: string[],
   env: Record<string, string>,
 ): { command: string; args: string[] } {
-  if (process.platform !== 'win32') {
+  const commandName = path.basename(command).toLowerCase();
+  if (process.platform !== 'win32' || !['codex', 'codex.cmd'].includes(commandName)) {
     return { command, args };
   }
-  // Search PATH like a shell, skipping relative entries that would resolve against the cwd.
+  const extensions = commandName === 'codex.cmd' ? [''] : ['.com', '.exe', '.cmd'];
+  // Skip relative PATH entries to avoid looking up an npm shim in the current directory.
   const resolved =
     path.basename(command) === command
       ? (env.PATH ?? env.Path ?? '')
           .split(path.delimiter)
           .filter((dir) => path.isAbsolute(dir))
-          .flatMap((dir) => ['.com', '.exe', '.cmd'].map((ext) => path.join(dir, command + ext)))
+          .flatMap((dir) => extensions.map((ext) => path.join(dir, command + ext)))
           .find((candidate) => fs.existsSync(candidate))
       : command;
   if (!resolved?.toLowerCase().endsWith('.cmd')) {

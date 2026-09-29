@@ -619,11 +619,39 @@ describe('OpenAICodexAppServerProvider', () => {
         'a codex.cmd codex_path_override',
         () => ({ codex_path_override: path.join(npmBinDir, 'codex.cmd') }),
       ],
+      [
+        'a bare codex.cmd codex_path_override',
+        () => ({ codex_path_override: 'codex.cmd', cli_env: { PATH: npmBinDir } }),
+      ],
     ])('runs the @openai/codex entrypoint with Node for %s', async (_label, getConfig) => {
       const [command, args] = await getSpawnCall(getConfig());
 
       expect(command).toBe(process.execPath);
       expect(args).toEqual([entrypoint, 'app-server', '--listen', 'stdio://']);
+    });
+
+    it.each([
+      ['a bare interpreter command', () => 'interpreter'],
+      ['an interpreter.cmd path', () => path.join(npmBinDir, 'interpreter.cmd')],
+    ])('preserves %s when Codex is installed alongside it', async (_label, getCommand) => {
+      fs.writeFileSync(path.join(npmBinDir, 'interpreter.cmd'), '');
+      const command = getCommand();
+
+      const [spawnCommand, args] = await getSpawnCall({
+        codex_path_override: command,
+        cli_env: { PATH: npmBinDir },
+      });
+
+      expect(spawnCommand).toBe(command);
+      expect(args).toEqual(['app-server', '--listen', 'stdio://']);
+    });
+
+    it('preserves the command when the npm entrypoint is missing', async () => {
+      fs.unlinkSync(entrypoint);
+
+      const [command] = await getSpawnCall({ cli_env: { PATH: npmBinDir } });
+
+      expect(command).toBe('codex');
     });
 
     it('spawns a native codex.exe that precedes the npm shim on PATH', async () => {
