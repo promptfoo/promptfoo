@@ -4,7 +4,7 @@ import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/ti
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
@@ -46,13 +46,14 @@ vi.mock('@app/hooks/useShiftKey', () => {
   };
 });
 
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApi: vi.fn(() => Promise.resolve({ ok: true })),
 }));
 
 const mockNavigate = vi.fn();
-vi.mock('react-router-dom', async () => ({
-  ...(await vi.importActual('react-router-dom')),
+vi.mock('react-router', async () => ({
+  ...(await vi.importActual('react-router')),
   useNavigate: () => mockNavigate,
 }));
 
@@ -179,8 +180,40 @@ describe('ResultsTable Metrics Display', () => {
 
   it('displays total tokens with correct formatting', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
-    expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
-    expect(screen.getByText('1,000')).toBeInTheDocument();
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent(
+      'Total Tokens: 1,000',
+    );
+    expect(screen.getByText('Provider Tokens:').parentElement).toHaveTextContent(
+      'Provider Tokens: 1,000',
+    );
+    expect(screen.queryByText('Target Tokens:')).not.toBeInTheDocument();
+  });
+
+  it('labels primary token usage as target tokens for redteam scans', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: { redteam: {} },
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('Target Tokens:').parentElement).toHaveTextContent(
+      'Target Tokens: 1,000',
+    );
+    expect(screen.queryByText('Provider Tokens:')).not.toBeInTheDocument();
   });
 
   it('displays average tokens with correct calculation', () => {
@@ -3174,9 +3207,11 @@ describe('ResultsTable Filtered Metrics Display', () => {
     expect(filteredCostElement).toHaveStyle('margin-left: 4px');
 
     expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
-    expect(screen.getByText('1,000')).toBeInTheDocument();
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent('1,000');
 
-    const filteredTokensElement = screen.getByText('(500 filtered)');
+    const totalTokensRow = screen.getByText('Total Tokens:').parentElement;
+    expect(totalTokensRow).not.toBeNull();
+    const filteredTokensElement = within(totalTokensRow as HTMLElement).getByText('(500 filtered)');
     expect(filteredTokensElement).toBeInTheDocument();
     expect(filteredTokensElement.style.fontSize).toBe('0.9em');
     expect(filteredTokensElement).toHaveStyle('color: #666');
@@ -3188,6 +3223,74 @@ describe('ResultsTable Filtered Metrics Display', () => {
     const filteredLatencyElement = screen.getByText('(200ms filtered)');
     expect(filteredLatencyElement).toBeInTheDocument();
     expect(filteredLatencyElement.style.fontSize).toBe('0.9em');
+  });
+
+  it('displays filtered totals separately for target, attacker, and grading tokens', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: { redteam: {} },
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: {
+        ...mockTable,
+        head: {
+          ...mockTable.head,
+          prompts: [
+            {
+              ...mockTable.head.prompts[0],
+              metrics: {
+                ...mockTable.head.prompts[0].metrics,
+                tokenUsage: {
+                  total: 1000,
+                  attacker: { total: 200 },
+                  assertions: { total: 100 },
+                },
+              },
+            },
+          ],
+        },
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 1,
+        options: { metric: [] },
+      },
+      filteredMetrics: [
+        {
+          cost: 0.61728,
+          namedScores: {},
+          testPassCount: 5,
+          testFailCount: 0,
+          tokenUsage: {
+            total: 500,
+            attacker: { total: 80 },
+            assertions: { total: 20 },
+          },
+          totalLatencyMs: 1000,
+        },
+      ],
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent(
+      'Total Tokens: 1,300(600 filtered)',
+    );
+    expect(screen.getByText('Target Tokens:').parentElement).toHaveTextContent(
+      'Target Tokens: 1,000(500 filtered)',
+    );
+    expect(screen.getByText('Attacker Tokens:').parentElement).toHaveTextContent(
+      'Attacker Tokens: 200(80 filtered)',
+    );
+    expect(screen.getByText('Grading Tokens:').parentElement).toHaveTextContent(
+      'Grading Tokens: 100(20 filtered)',
+    );
+    expect(screen.getByText('Avg Tokens:').parentElement).toHaveTextContent(
+      'Avg Tokens: 130(120 filtered)',
+    );
   });
 });
 
@@ -3266,7 +3369,7 @@ describe('ResultsTable - No Filters Applied', () => {
     expect(screen.getByText('$1.23')).toBeInTheDocument();
 
     expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
-    expect(screen.getByText('1,000')).toBeInTheDocument();
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent('1,000');
 
     expect(screen.getByText('Avg Latency:')).toBeInTheDocument();
     expect(screen.getByText('200ms')).toBeInTheDocument();
@@ -3407,6 +3510,207 @@ describe('ResultsTable Pass Rate Display', () => {
 
     renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(screen.getByText('0.00% passing')).toBeInTheDocument();
+  });
+});
+
+describe('ResultsTable Named Metric Totals', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  type ColumnMetrics = {
+    testPassCount: number;
+    testFailCount: number;
+    testErrorCount: number;
+    namedScores: Record<string, number>;
+    namedScoresCount?: Record<string, number>;
+    namedScoreWeights?: Record<string, number>;
+  };
+
+  // Provider errors do not contribute to the named metric's score or denominator.
+  const columnMetrics = (graded: number, total = 5): ColumnMetrics => ({
+    testPassCount: graded,
+    testFailCount: 0,
+    testErrorCount: total - graded,
+    namedScores: { 'has-hello': graded },
+    namedScoresCount: { 'has-hello': graded },
+  });
+
+  const mockTableStore = (
+    metricsPerColumn: ColumnMetrics[],
+    { pageSize = 5, assertionWeight = 1 } = {},
+  ) => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: Array.from({ length: pageSize }, (_, rowIndex) => ({
+          outputs: metricsPerColumn.map((metrics) => {
+            const pass = rowIndex < metrics.testPassCount;
+            return {
+              pass,
+              score: pass ? 1 : 0,
+              text: pass ? 'Hello' : 'Provider error',
+              error: pass ? undefined : 'Provider error',
+            };
+          }),
+          test: {
+            assert: [
+              { type: 'contains', value: 'Hello', metric: 'has-hello', weight: assertionWeight },
+            ],
+          },
+          testIdx: rowIndex,
+          vars: [],
+        })),
+        head: {
+          prompts: metricsPerColumn.map((metrics, idx) => ({
+            metrics,
+            provider: `provider-${idx + 1}`,
+          })),
+          vars: [],
+        },
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+  };
+
+  const metricValueTexts = () =>
+    screen.getAllByTestId('metric-value-has-hello').map((el) => el.textContent);
+
+  beforeEach(() => {
+    vi.mocked(useTableStore).mockReset();
+    vi.mocked(useResultsViewSettingsStore).mockReset();
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+    }));
+  });
+
+  afterEach(() => {
+    vi.mocked(useTableStore).mockReset();
+    vi.mocked(useResultsViewSettingsStore).mockReset();
+  });
+
+  it('uses each column’s own named metric count when the first column errored', () => {
+    mockTableStore([columnMetrics(4), columnMetrics(5), columnMetrics(5)]);
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(metricValueTexts()).toEqual([
+      '100.00% (4.00/4.00)',
+      '100.00% (5.00/5.00)',
+      '100.00% (5.00/5.00)',
+    ]);
+  });
+
+  it('uses each column’s own named metric count when a later column errored', () => {
+    mockTableStore([columnMetrics(5), columnMetrics(4)]);
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(metricValueTexts()).toEqual(['100.00% (5.00/5.00)', '100.00% (4.00/4.00)']);
+  });
+
+  it('uses each column’s own weights instead of assertion counts for weighted metrics', () => {
+    mockTableStore(
+      [
+        {
+          ...columnMetrics(4),
+          namedScores: { 'has-hello': 6 },
+          namedScoreWeights: { 'has-hello': 8 },
+        },
+        {
+          ...columnMetrics(5),
+          namedScores: { 'has-hello': 8 },
+          namedScoreWeights: { 'has-hello': 10 },
+        },
+      ],
+      { assertionWeight: 2 },
+    );
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(metricValueTexts()).toEqual(['75.00% (6.00/8.00)', '80.00% (8.00/10.00)']);
+  });
+
+  it.each([false, true])(
+    'keeps a legacy aggregate score raw across page sizes (legacy column first: %s)',
+    (legacyFirst) => {
+      const modern = columnMetrics(100, 100);
+      const legacy = { ...columnMetrics(100, 100), namedScoresCount: undefined };
+      const metrics = legacyFirst ? [legacy, modern] : [modern, legacy];
+      const expected = legacyFirst
+        ? ['100.00', '100.00% (100.00/100.00)']
+        : ['100.00% (100.00/100.00)', '100.00'];
+      mockTableStore(metrics, { pageSize: 50 });
+
+      const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      expect(metricValueTexts()).toEqual(expected);
+
+      for (const pageSize of [25, 100]) {
+        mockTableStore(metrics, { pageSize });
+        rerender(<ResultsTable {...defaultProps} />);
+
+        expect(metricValueTexts()).toEqual(expected);
+      }
+    },
+  );
+
+  it('shows raw scores when all columns lack aggregate denominators', () => {
+    mockTableStore(
+      [
+        { ...columnMetrics(100, 100), namedScoresCount: undefined },
+        {
+          ...columnMetrics(100, 100),
+          namedScores: { 'has-hello': 80 },
+          namedScoresCount: undefined,
+        },
+      ],
+      { pageSize: 50 },
+    );
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(metricValueTexts()).toEqual(['100.00', '80.00']);
+  });
+
+  it('uses a later column’s totals when the first column has no graded named metrics', () => {
+    mockTableStore([
+      {
+        ...columnMetrics(0),
+        namedScores: {},
+        namedScoresCount: {},
+        namedScoreWeights: {},
+      },
+      columnMetrics(5),
+    ]);
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(metricValueTexts()).toEqual(['100.00% (5.00/5.00)']);
   });
 });
 

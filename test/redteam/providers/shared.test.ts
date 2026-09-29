@@ -8,6 +8,7 @@ import {
 } from '../../../src/redteam/providers/constants';
 import {
   accumulateGraderResult,
+  accumulateUnblockingTokenUsage,
   BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP,
   buildGraderResultAssertion,
   callGradingProvider,
@@ -111,6 +112,56 @@ function setCliStateConfig(config: typeof cliState.config) {
 }
 
 describe('shared redteam provider utilities', () => {
+  describe('accumulateUnblockingTokenUsage', () => {
+    it('attributes nested blocking-analysis usage to one grading task', () => {
+      const tokenUsage = {};
+
+      accumulateUnblockingTokenUsage(tokenUsage, {
+        attempted: true,
+        tokenUsage: {
+          total: 0,
+          numRequests: 0,
+          assertions: {
+            total: 34,
+            prompt: 21,
+            completion: 13,
+            numRequests: 0,
+            completionDetails: { reasoning: 5 },
+          },
+        },
+      });
+
+      expect(tokenUsage).toMatchObject({
+        assertions: {
+          total: 34,
+          prompt: 21,
+          completion: 13,
+          numRequests: 1,
+          completionDetails: { reasoning: 5 },
+        },
+      });
+      expect(tokenUsage).not.toHaveProperty('attacker');
+      expect(tokenUsage).not.toHaveProperty('numRequests');
+    });
+
+    it('omits disabled unblocking tasks and keeps cached tasks out of incurred usage', () => {
+      const disabledUsage = {};
+      accumulateUnblockingTokenUsage(disabledUsage, { attempted: false });
+      expect(disabledUsage).toEqual({});
+
+      const cachedUsage = {};
+      accumulateUnblockingTokenUsage(cachedUsage, {
+        attempted: true,
+        cached: true,
+        tokenUsage: { total: 15, cached: 15, numRequests: 0 },
+      });
+      expect(cachedUsage).toMatchObject({
+        assertions: { total: 15, cached: 15, numRequests: 1 },
+        incurredTokenUsage: { assertions: { total: 0, numRequests: 0 } },
+      });
+    });
+  });
+
   afterEach(() => {
     resetRedteamProviderLoader();
     vi.resetAllMocks();
@@ -1695,6 +1746,26 @@ describe('shared redteam provider utilities', () => {
       });
     });
 
+    it.each([
+      { total: 35, prompt: 20, completion: 15, cached: 10 },
+      { prompt: 20, completion: 15, cached: 10 },
+      { total: 20, cached: 35 },
+      { total: 0, cached: 35 },
+    ])(
+      'counts all replayed tokens when cached only reports the prompt-cache portion: %j',
+      (tokensUsed) => {
+        expect(
+          accumulateGraderResult(undefined, {
+            pass: true,
+            score: 1,
+            reason: 'Cached verdict',
+            metadata: { cachedResponse: true },
+            tokensUsed: { ...tokensUsed, numRequests: 1 },
+          }).tokensUsed,
+        ).toEqual({ total: 0, prompt: 0, completion: 0, cached: 35, numRequests: 0 });
+      },
+    );
+
     it('preserves fresh grading usage before and after a cached middle turn', () => {
       const first = {
         pass: true,
@@ -1716,7 +1787,9 @@ describe('shared redteam provider utilities', () => {
         tokensUsed: { total: 20, prompt: 15, completion: 5, numRequests: 1 },
       };
 
-      const result = accumulateGraderResult(accumulateGraderResult(first, cached), last);
+      const cachedAfterFresh = accumulateGraderResult(first, cached);
+      expect(cachedAfterFresh.metadata?.cachedResponse).not.toBe(true);
+      const result = accumulateGraderResult(cachedAfterFresh, last);
 
       expect(result.tokensUsed).toMatchObject({
         total: 60,

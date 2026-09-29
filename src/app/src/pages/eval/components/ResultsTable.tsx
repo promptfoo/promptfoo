@@ -19,6 +19,11 @@ import { callApi } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
+import {
+  getIncurredTokenAccounting,
+  getPrimaryTokenUsageLabel,
+  getTokenUsageTotal,
+} from '@app/utils/tokenUsage';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
@@ -38,7 +43,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import { ArrowLeft, ArrowRight, ExternalLink, X } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router';
 import CustomMetrics from './CustomMetrics';
 import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
@@ -56,7 +61,7 @@ import type {
   ColumnSizingState,
   Row,
   VisibilityState,
-} from '@tanstack/table-core';
+} from '@tanstack/react-table';
 
 import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
@@ -701,31 +706,93 @@ function renderCostMetric({
 function renderTokenMetrics({
   metrics,
   filteredMetrics,
+  isRedteam,
   testCount,
 }: {
   metrics: PromptMetrics['total'];
   filteredMetrics: PromptMetrics['filtered'];
+  isRedteam: boolean;
   testCount?: PromptSummaryMetric;
 }): React.ReactNode {
-  if (!metrics?.tokenUsage?.total) {
+  const primaryTokens = getTokenUsageTotal(metrics?.tokenUsage);
+  const attackerTokens = getTokenUsageTotal(metrics?.tokenUsage?.attacker);
+  const gradingTokens = getTokenUsageTotal(metrics?.tokenUsage?.assertions);
+  const incurredAccounting = getIncurredTokenAccounting(metrics?.tokenUsage);
+
+  if (primaryTokens === 0 && attackerTokens === 0 && gradingTokens === 0) {
     return null;
   }
 
-  const totalTokens = metrics.tokenUsage.total;
-  const filteredTokens = filteredMetrics?.tokenUsage?.total;
+  const totalTokens = primaryTokens + attackerTokens + gradingTokens;
+  const filteredPrimaryTokens = filteredMetrics?.tokenUsage
+    ? getTokenUsageTotal(filteredMetrics.tokenUsage)
+    : undefined;
+  const filteredAttackerTokens = filteredMetrics?.tokenUsage
+    ? getTokenUsageTotal(filteredMetrics.tokenUsage.attacker)
+    : undefined;
+  const filteredGradingTokens = filteredMetrics?.tokenUsage
+    ? getTokenUsageTotal(filteredMetrics.tokenUsage.assertions)
+    : undefined;
+  const filteredTokens =
+    filteredPrimaryTokens === undefined
+      ? undefined
+      : filteredPrimaryTokens + (filteredAttackerTokens ?? 0) + (filteredGradingTokens ?? 0);
   const totalAverage = testCount?.total ? totalTokens / testCount.total : 0;
   const filteredAverage =
-    filteredTokens && testCount?.filtered ? filteredTokens / testCount.filtered : undefined;
+    filteredTokens !== undefined && testCount?.filtered
+      ? filteredTokens / testCount.filtered
+      : undefined;
 
   return (
     <>
       <div>
         <strong>Total Tokens:</strong> {formatMetricValue(totalTokens)}
-        {filteredTokens ? renderFilteredSuffix(formatMetricValue(filteredTokens)) : null}
+        {filteredTokens === undefined
+          ? null
+          : renderFilteredSuffix(formatMetricValue(filteredTokens))}
       </div>
       <div>
+        <strong>{getPrimaryTokenUsageLabel(isRedteam)} Tokens:</strong>{' '}
+        {formatMetricValue(primaryTokens)}
+        {filteredPrimaryTokens === undefined
+          ? null
+          : renderFilteredSuffix(formatMetricValue(filteredPrimaryTokens))}
+      </div>
+      {attackerTokens > 0 ? (
+        <div>
+          <strong>Attacker Tokens:</strong> {formatMetricValue(attackerTokens)}
+          {filteredAttackerTokens === undefined
+            ? null
+            : renderFilteredSuffix(formatMetricValue(filteredAttackerTokens))}
+        </div>
+      ) : null}
+      {gradingTokens > 0 ? (
+        <div>
+          <strong>Grading Tokens:</strong> {formatMetricValue(gradingTokens)}
+          {filteredGradingTokens === undefined
+            ? null
+            : renderFilteredSuffix(formatMetricValue(filteredGradingTokens))}
+        </div>
+      ) : null}
+      {incurredAccounting ? (
+        <>
+          <div>
+            <strong>Incurred Tokens:</strong> {formatMetricValue(incurredAccounting.incurredTokens)}
+          </div>
+          <div>
+            <strong>Cached Savings:</strong> {formatMetricValue(incurredAccounting.cachedSavings)}
+          </div>
+          <div>
+            <strong>Actual Target Requests:</strong>{' '}
+            {formatMetricValue(incurredAccounting.actualRequests)}
+          </div>
+        </>
+      ) : null}
+      <div>
         <strong>Avg Tokens:</strong> {formatMetricValue(totalAverage)}
-        {filteredAverage ? renderFilteredSuffix(formatMetricValue(filteredAverage)) : null}
+        {filteredAverage === undefined
+          ? null
+          : renderFilteredSuffix(formatMetricValue(filteredAverage))}
       </div>
     </>
   );
@@ -1034,6 +1101,7 @@ function renderPromptMetricDetails({
       {renderTokenMetrics({
         metrics,
         filteredMetrics,
+        isRedteam,
         testCount: testCounts[idx],
       })}
       {renderLatencyMetric({
@@ -1069,7 +1137,6 @@ function PromptColumnHeader({
   numGoodAsserts,
   testCounts,
   passingTestCounts,
-  metricTotals,
   config,
   filterMode,
   headPromptCount,
@@ -1089,7 +1156,6 @@ function PromptColumnHeader({
   numGoodAsserts: number[];
   testCounts: PromptSummaryMetric[];
   passingTestCounts: PromptSummaryMetric[];
-  metricTotals: Record<string, number>;
   config: ReturnType<typeof useTableStore.getState>['config'];
   filterMode: EvalResultsFilterMode;
   headPromptCount: number;
@@ -1151,8 +1217,7 @@ function PromptColumnHeader({
           <div className="collapse-hidden">
             <CustomMetrics
               lookup={metrics.namedScores}
-              counts={getNamedMetricTotals(metrics)}
-              metricTotals={metricTotals}
+              metricTotals={getNamedMetricTotals(metrics)}
               onShowMore={() => setCustomMetricsDialogOpen(true)}
             />
           </div>
@@ -2091,34 +2156,6 @@ function ResultsTable({
     [tableBody],
   );
 
-  const metricTotals = React.useMemo(() => {
-    // Use the backend's already-correct metric totals instead of recalculating
-    const firstProvider = table?.head?.prompts?.[0];
-    const backendTotals = getNamedMetricTotals(firstProvider?.metrics);
-
-    if (backendTotals) {
-      return backendTotals;
-    }
-
-    const totals: Record<string, number> = {};
-    table?.body.forEach((row) => {
-      row.test.assert?.forEach((assertion) => {
-        if (assertion.metric) {
-          totals[assertion.metric] = (totals[assertion.metric] || 0) + (assertion.weight ?? 1);
-        }
-        if ('assert' in assertion && Array.isArray(assertion.assert)) {
-          assertion.assert.forEach((subAssertion) => {
-            if ('metric' in subAssertion && subAssertion.metric) {
-              totals[subAssertion.metric] =
-                (totals[subAssertion.metric] || 0) + (subAssertion.weight ?? 1);
-            }
-          });
-        }
-      });
-    });
-    return totals;
-  }, [table?.head?.prompts, table?.body]);
-
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const promptColumns = React.useMemo(() => {
     return [
@@ -2141,7 +2178,6 @@ function ResultsTable({
                 numGoodAsserts={numGoodAsserts}
                 testCounts={testCounts}
                 passingTestCounts={passingTestCounts}
-                metricTotals={metricTotals}
                 config={config}
                 filterMode={filterMode}
                 headPromptCount={head.prompts.length}
@@ -2210,7 +2246,6 @@ function ResultsTable({
     head.prompts,
     isRedteam,
     maxTextLength,
-    metricTotals,
     numAsserts,
     numGoodAsserts,
     onFailureFilterToggle,

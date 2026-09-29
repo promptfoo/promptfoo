@@ -31,8 +31,16 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateGradingResponseTokenUsage,
+  accumulateTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../../util/transform';
+import {
+  getGradingAssertionHash,
+  getGradingInputHash,
+  withGradingUsage,
+} from '../grading/storedResult';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
@@ -43,6 +51,21 @@ import type { TransformContext, TransformFunction } from '../../types/transform'
 import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
+
+/** Count a blocking-analysis task as grading without treating it as a target or attacker call. */
+export function accumulateUnblockingTokenUsage(
+  totalTokenUsage: TokenUsage,
+  result: { attempted?: boolean; cached?: boolean; tokenUsage?: TokenUsage },
+): void {
+  if (!result.attempted && !result.tokenUsage) {
+    return;
+  }
+
+  accumulateGradingResponseTokenUsage(totalTokenUsage, {
+    cached: result.cached,
+    tokenUsage: result.tokenUsage?.assertions ?? result.tokenUsage,
+  });
+}
 
 /**
  * The subset of `loadApiProviders` inputs the redteam code actually supplies
@@ -648,7 +671,30 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
 export function accumulateGraderResult(
   previous: GradingResult | undefined,
   current: GradingResult,
+  input?: {
+    prompt: string;
+    output: string;
+    messages?: unknown;
+    pluginId?: string;
+    assertion?: AssertionOrSet;
+  },
 ): GradingResult {
+  if (input) {
+    current = {
+      ...current,
+      metadata: {
+        ...current.metadata,
+        redteamGradingAssertionHash: getGradingAssertionHash(input.assertion),
+        redteamGradingInputHash: getGradingInputHash(
+          input.prompt,
+          input.output,
+          input.messages,
+          input.pluginId,
+        ),
+      },
+    };
+  }
+
   const normalizeGradingTaskUsage = (result: GradingResult): TokenUsage | undefined => {
     if (!result.tokensUsed) {
       return undefined;
@@ -667,7 +713,7 @@ export function accumulateGraderResult(
         total: 0,
         prompt: 0,
         completion: 0,
-        cached: cachedTokens || reportedTotal,
+        cached: Math.max(cachedTokens, reportedTotal),
         numRequests: 0,
       };
     }
@@ -684,10 +730,7 @@ export function accumulateGraderResult(
       return current;
     }
 
-    return {
-      ...current,
-      tokensUsed,
-    };
+    return withGradingUsage(current, tokensUsed);
   }
 
   // The latest verdict can be cached even when the accumulated usage already
@@ -713,7 +756,37 @@ export function accumulateGraderResult(
     accumulateTokenUsage(tokensUsed, currentTokensUsed);
   }
 
-  return { ...current, tokensUsed };
+  return withGradingUsage(current, tokensUsed);
+}
+
+export interface FlaggedTurn {
+  graderResult: GradingResult;
+  output: string;
+  prompt: string | undefined;
+  messages: Message[];
+  guardrails?: ProviderResponse['guardrails'];
+  transformDisplayVars?: Record<string, string>;
+}
+
+/** Keep the verdict and its inputs together; grader errors do not identify vulnerabilities. */
+export function captureFlaggedTurn(
+  graderResult: GradingResult,
+  turn: Omit<FlaggedTurn, 'graderResult'>,
+): FlaggedTurn | undefined {
+  if (graderResult.pass || graderResult.metadata?.graderError === true) {
+    return undefined;
+  }
+  return { graderResult, ...turn, messages: [...turn.messages] };
+}
+
+/** Preserve the flagged verdict with grading usage from all turns. */
+export function resolveStoredGraderResult(
+  flaggedResult: GradingResult | undefined,
+  storedGraderResult: GradingResult | undefined,
+): GradingResult | undefined {
+  return flaggedResult
+    ? withGradingUsage(flaggedResult, storedGraderResult?.tokensUsed)
+    : storedGraderResult;
 }
 
 export interface Message {
@@ -969,7 +1042,7 @@ export async function tryUnblocking({
       vars: {},
     });
 
-    TokenUsageTracker.getInstance().trackUsage(unblockingProvider.id(), response.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(unblockingProvider.id(), response);
 
     if (response.error) {
       logger.error(`[Unblocking] Unblocking provider error: ${response.error}`);

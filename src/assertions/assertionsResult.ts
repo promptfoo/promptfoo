@@ -16,7 +16,7 @@ export const DEFAULT_TOKENS_USED = {
 };
 
 type AssertionTokenUsage = typeof DEFAULT_TOKENS_USED &
-  Pick<NonNullable<GradingResult['tokensUsed']>, 'completionDetails'>;
+  Pick<NonNullable<GradingResult['tokensUsed']>, 'completionDetails' | 'incurredTokenUsage'>;
 
 interface ParentAssertionSet {
   index: number;
@@ -57,14 +57,15 @@ function normalizeAssertionTokenUsage(result: GradingResult) {
   if (result.metadata?.cachedResponse === true) {
     const reportedTotal =
       tokensUsed.total ?? (tokensUsed.prompt ?? 0) + (tokensUsed.completion ?? 0);
-    const { completionDetails: _cachedCompletionDetails, ...cachedTokensUsed } = tokensUsed;
+    const logicalTotal = reportedTotal || (tokensUsed.cached ?? 0);
     return {
-      ...cachedTokensUsed,
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: Math.max(tokensUsed.cached ?? 0, reportedTotal),
-      numRequests: 0,
+      ...tokensUsed,
+      total: logicalTotal,
+      prompt: tokensUsed.prompt ?? 0,
+      completion: tokensUsed.completion ?? 0,
+      cached: Math.max(tokensUsed.cached ?? 0, logicalTotal),
+      numRequests: Math.max(tokensUsed.numRequests ?? 0, 1),
+      incurredTokenUsage: { ...DEFAULT_TOKENS_USED },
     };
   }
 
@@ -76,30 +77,52 @@ function normalizeAssertionTokenUsage(result: GradingResult) {
 }
 
 function accumulateNormalizedAssertionTokenUsage(
-  target: AssertionTokenUsage,
+  target: NonNullable<GradingResult['tokensUsed']>,
   update: NonNullable<GradingResult['tokensUsed']>,
 ): void {
+  const trackIncurredUsage = Boolean(target.incurredTokenUsage || update.incurredTokenUsage);
+  if (trackIncurredUsage && !target.incurredTokenUsage) {
+    target.incurredTokenUsage = cloneAssertionTokenUsage(target);
+  }
+
   for (const field of ['total', 'prompt', 'completion', 'cached', 'numRequests'] as const) {
-    target[field] += update[field] ?? 0;
+    target[field] = (target[field] ?? 0) + (update[field] ?? 0);
   }
 
-  if (!update.completionDetails) {
-    return;
+  if (update.completionDetails) {
+    const currentDetails = target.completionDetails;
+    const incomingDetails = update.completionDetails;
+    target.completionDetails = {
+      reasoning: (currentDetails?.reasoning ?? 0) + (incomingDetails.reasoning ?? 0),
+      acceptedPrediction:
+        (currentDetails?.acceptedPrediction ?? 0) + (incomingDetails.acceptedPrediction ?? 0),
+      rejectedPrediction:
+        (currentDetails?.rejectedPrediction ?? 0) + (incomingDetails.rejectedPrediction ?? 0),
+      cacheReadInputTokens:
+        (currentDetails?.cacheReadInputTokens ?? 0) + (incomingDetails.cacheReadInputTokens ?? 0),
+      cacheCreationInputTokens:
+        (currentDetails?.cacheCreationInputTokens ?? 0) +
+        (incomingDetails.cacheCreationInputTokens ?? 0),
+    };
   }
 
-  const currentDetails = target.completionDetails;
-  const incomingDetails = update.completionDetails;
-  target.completionDetails = {
-    reasoning: (currentDetails?.reasoning ?? 0) + (incomingDetails.reasoning ?? 0),
-    acceptedPrediction:
-      (currentDetails?.acceptedPrediction ?? 0) + (incomingDetails.acceptedPrediction ?? 0),
-    rejectedPrediction:
-      (currentDetails?.rejectedPrediction ?? 0) + (incomingDetails.rejectedPrediction ?? 0),
-    cacheReadInputTokens:
-      (currentDetails?.cacheReadInputTokens ?? 0) + (incomingDetails.cacheReadInputTokens ?? 0),
-    cacheCreationInputTokens:
-      (currentDetails?.cacheCreationInputTokens ?? 0) +
-      (incomingDetails.cacheCreationInputTokens ?? 0),
+  if (trackIncurredUsage && target.incurredTokenUsage) {
+    accumulateNormalizedAssertionTokenUsage(
+      target.incurredTokenUsage,
+      update.incurredTokenUsage ?? cloneAssertionTokenUsage(update),
+    );
+  }
+}
+
+function cloneAssertionTokenUsage(
+  tokenUsage: NonNullable<GradingResult['tokensUsed']>,
+): NonNullable<NonNullable<GradingResult['tokensUsed']>['incurredTokenUsage']> {
+  const { incurredTokenUsage: _incurredTokenUsage, ...assertionUsage } = tokenUsage;
+  return {
+    ...assertionUsage,
+    ...(assertionUsage.completionDetails && {
+      completionDetails: { ...assertionUsage.completionDetails },
+    }),
   };
 }
 
@@ -169,6 +192,9 @@ function mergeScoringTokenUsage(
     ...(baseTokensUsed?.completionDetails && {
       completionDetails: { ...baseTokensUsed.completionDetails },
     }),
+    ...(baseTokensUsed?.incurredTokenUsage && {
+      incurredTokenUsage: cloneAssertionTokenUsage(baseTokensUsed.incurredTokenUsage),
+    }),
   };
   const scorerUsedTokens =
     (scoringTokensUsed.total ?? 0) > 0 ||
@@ -183,6 +209,14 @@ function mergeScoringTokenUsage(
   });
 
   return mergedTokensUsed;
+}
+
+function normalizeWeightedScore(totalScore: number, totalWeight: number): number {
+  // An infinite denominator can hide overflow behind a finite quotient.
+  if (!Number.isFinite(totalScore) || !Number.isFinite(totalWeight)) {
+    return Number.NaN;
+  }
+  return totalWeight > 0 ? totalScore / totalWeight : 0;
 }
 
 export class AssertionsResult {
@@ -204,8 +238,8 @@ export class AssertionsResult {
   private totalWeight: number = 0;
   private failedReason: string | undefined;
   private componentResults: GradingResult[] = [];
-  private namedScores: Record<string, number> = {};
-  private namedScoreWeights: Record<string, number> = {};
+  private namedScores: Record<string, number> = Object.create(null);
+  private namedScoreWeights: Record<string, number> = Object.create(null);
   private result: GradingResult | null = null;
   private failedContentSafetyChecks: boolean = false;
 
@@ -247,19 +281,23 @@ export class AssertionsResult {
     }
 
     if (metric) {
-      this.namedScores[metric] = (this.namedScores[metric] || 0) + result.score * weight;
-      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] || 0) + weight;
+      this.namedScores[metric] = (this.namedScores[metric] ?? 0) + result.score * weight;
+      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] ?? 0) + weight;
     }
 
     if (result.namedScores) {
       Object.entries(result.namedScores).forEach(([metricName, score]) => {
         if (metricName !== metric) {
-          const incomingWeight = result.namedScoreWeights?.[metricName] ?? 1;
+          const incomingWeight =
+            result.namedScoreWeights &&
+            Object.prototype.hasOwnProperty.call(result.namedScoreWeights, metricName)
+              ? (result.namedScoreWeights[metricName] ?? 1)
+              : 1;
           const weightedIncomingWeight = incomingWeight * weight;
           this.namedScores[metricName] =
-            (this.namedScores[metricName] || 0) + score * weightedIncomingWeight;
+            (this.namedScores[metricName] ?? 0) + score * weightedIncomingWeight;
           this.namedScoreWeights[metricName] =
-            (this.namedScoreWeights[metricName] || 0) + weightedIncomingWeight;
+            (this.namedScoreWeights[metricName] ?? 0) + weightedIncomingWeight;
         }
       });
     }
@@ -285,10 +323,11 @@ export class AssertionsResult {
       return this.result;
     }
 
-    const score = this.totalWeight > 0 ? this.totalScore / this.totalWeight : 0;
+    const score = normalizeWeightedScore(this.totalScore, this.totalWeight);
 
-    let pass = !this.failedReason;
-    let reason = this.failedReason || 'All assertions passed';
+    // An empty explanation still records a failed assertion.
+    let pass = this.failedReason === undefined;
+    let reason = this.failedReason ?? 'All assertions passed';
 
     if (typeof this.threshold === 'number' && !Number.isNaN(this.threshold)) {
       // A numeric test threshold overrides the pass/fail status of individual assertions.
@@ -322,11 +361,12 @@ export class AssertionsResult {
       }
     });
 
-    const normalizedNamedScores: Record<string, number> = {};
-    for (const [key, value] of Object.entries(this.namedScores)) {
-      const totalWeight = this.namedScoreWeights[key] ?? 0;
-      normalizedNamedScores[key] = totalWeight > 0 ? value / totalWeight : 0;
-    }
+    const normalizedNamedScores: Record<string, number> = Object.fromEntries(
+      Object.entries(this.namedScores).map(([key, value]) => [
+        key,
+        normalizeWeightedScore(value, this.namedScoreWeights[key] ?? 0),
+      ]),
+    );
 
     const hasNamedScoreWeights = Object.keys(this.namedScoreWeights).length > 0;
     const cachedResponse =
@@ -338,7 +378,7 @@ export class AssertionsResult {
       score,
       reason,
       namedScores: normalizedNamedScores,
-      ...(hasNamedScoreWeights && { namedScoreWeights: this.namedScoreWeights }),
+      ...(hasNamedScoreWeights && { namedScoreWeights: { ...this.namedScoreWeights } }),
       tokensUsed: this.tokensUsed,
       componentResults: flattenedComponentResults,
       ...((this._parentAssertionSet || cachedResponse) && {
@@ -378,6 +418,44 @@ export class AssertionsResult {
         this.result.pass = false;
         this.result.score = 0;
         this.result.reason = `Scoring function error: ${(err as Error).message}`;
+      }
+    }
+
+    // Finite inputs can overflow when weighted or accumulated. Check the final
+    // output after custom scoring has had an opportunity to replace those values.
+    let metricEntries: Record<'namedScores' | 'namedScoreWeights', [string, number][]>;
+    try {
+      metricEntries = {
+        namedScores: Object.entries(this.result.namedScores ?? {}),
+        namedScoreWeights: Object.entries(this.result.namedScoreWeights ?? {}),
+      };
+    } catch {
+      this.result.pass = false;
+      this.result.score = 0;
+      this.result.reason = 'Assertion aggregation error: unable to read scores or weights';
+      this.result.namedScores = {};
+      this.result.namedScoreWeights = {};
+      return this.result;
+    }
+
+    const invalidMetrics = new Set<string>();
+    for (const field of ['namedScores', 'namedScoreWeights'] as const) {
+      for (const [metric, value] of metricEntries[field]) {
+        if (!Number.isFinite(value)) {
+          invalidMetrics.add(metric);
+        }
+      }
+    }
+    if (!Number.isFinite(this.result.score) || invalidMetrics.size > 0) {
+      this.result.pass = false;
+      this.result.score = 0;
+      this.result.reason = 'Assertion aggregation error: scores or weights must remain finite';
+      for (const field of ['namedScores', 'namedScoreWeights'] as const) {
+        if (this.result[field]) {
+          this.result[field] = Object.fromEntries(
+            metricEntries[field].filter(([metric]) => !invalidMetrics.has(metric)),
+          );
+        }
       }
     }
 

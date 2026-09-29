@@ -10,11 +10,13 @@ import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { postRemoteGenerationTask } from '../remoteGenerationTask';
 
 import type { TestCase } from '../../types/index';
+import type { StrategyRuntimeContext } from './types';
 
 async function generateLikertPrompts(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   let progressBar: SingleBar | undefined;
   try {
@@ -54,7 +56,10 @@ async function generateLikertPrompts(
         modifiedPrompts?: string[];
       }
 
-      const { data } = await postRemoteGenerationTask<LikertGenerationResponse>(payload);
+      const { data } = await postRemoteGenerationTask<LikertGenerationResponse>(
+        payload,
+        runtimeContext,
+      );
 
       logger.debug(
         `Got Likert jailbreak generation result for case ${Number(index) + 1}: ${JSON.stringify(
@@ -117,12 +122,13 @@ export async function addLikertTestCases(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, unknown>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   if (neverGenerateRemote()) {
     throw new Error(getRemoteGenerationExplicitlyDisabledError('Likert jailbreak strategy'));
   }
 
-  const likertTestCases = await generateLikertPrompts(testCases, injectVar, config);
+  const likertTestCases = await generateLikertPrompts(testCases, injectVar, config, runtimeContext);
   if (likertTestCases.length === 0) {
     logger.warn('No Likert jailbreak test cases were generated');
   }

@@ -124,6 +124,45 @@ describe('TokenUsageTracker', () => {
     });
   });
 
+  it('tracks a cached provider response without repeating its historical usage', () => {
+    tracker.trackResponseUsage('cached-provider', {
+      cached: true,
+      tokenUsage: {
+        total: 100,
+        prompt: 60,
+        completion: 40,
+        cached: 10,
+        numRequests: 1,
+      },
+    });
+
+    expect(tracker.getProviderUsage('cached-provider')).toMatchObject({
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: 100,
+      numRequests: 0,
+    });
+  });
+
+  it('combines fresh provider usage with cache-hit visibility without charging the replay', () => {
+    tracker.trackResponseUsage('mixed-provider', {
+      tokenUsage: { total: 25, prompt: 15, completion: 10, cached: 5, numRequests: 1 },
+    });
+    tracker.trackResponseUsage('mixed-provider', {
+      cached: true,
+      tokenUsage: { total: 40, prompt: 25, completion: 15, cached: 0, numRequests: 1 },
+    });
+
+    expect(tracker.getProviderUsage('mixed-provider')).toMatchObject({
+      total: 25,
+      prompt: 15,
+      completion: 10,
+      cached: 45,
+      numRequests: 1,
+    });
+  });
+
   it('should merge token usage for the same provider', () => {
     const usage1: TokenUsage = {
       total: 100,

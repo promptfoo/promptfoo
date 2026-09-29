@@ -9,6 +9,10 @@ import { renderLlmRubricPrompt } from '../../src/matchers/rubric';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 import * as remoteGrading from '../../src/remoteGrading';
+import {
+  accumulateAssertionTokenUsage,
+  createEmptyAssertions,
+} from '../../src/util/tokenUsageUtils';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 import { mockProcessEnv, TestGrader } from '../util/utils';
 
@@ -17,7 +21,6 @@ import type { Assertion, GradingConfig } from '../../src/types/index';
 vi.mock('../../src/esm', () => ({
   importModule: vi.fn(),
 }));
-vi.mock('../../src/cliState');
 vi.mock('../../src/remoteGrading', () => ({
   doRemoteGrading: vi.fn(),
 }));
@@ -122,6 +125,23 @@ describe('matchesLlmRubric', () => {
         },
       }),
     );
+  });
+
+  it('preserves component-only grading usage through matcher normalization and assertion aggregation', async () => {
+    vi.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ pass: true, reason: 'Test grading output' }),
+      tokenUsage: { prompt: 7, completion: 3 },
+    });
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    });
+    const assertionUsage = createEmptyAssertions();
+    accumulateAssertionTokenUsage(assertionUsage, result.tokensUsed);
+
+    expect(result.tokensUsed).toMatchObject({ total: 10, prompt: 7, completion: 3 });
+    expect(assertionUsage).toMatchObject({ total: 10, prompt: 7, completion: 3 });
   });
 
   it('should keep reserved output and rubric vars ahead of user vars', async () => {
