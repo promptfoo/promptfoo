@@ -2,7 +2,6 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import async from 'async';
-import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
 import { handleConversationRelevance } from '../external/assertions/deepeval';
@@ -21,13 +20,15 @@ import {
 import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
-import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
+import {
+  getProviderCallExecutionContext,
+  getProviderCallTracingContext,
+} from '../scheduler/providerCallExecutionContext';
 import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
 import { getTraceStore } from '../tracing/store';
 import {
   type ApiProvider,
   type Assertion,
-  type AssertionSet,
   type AssertionType,
   type AssertionValue,
   type AtomicTestCase,
@@ -41,6 +42,7 @@ import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
+import { loadYaml } from '../util/yamlLoad';
 import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
@@ -112,7 +114,7 @@ import type {
   ScoringFunction,
 } from '../types/index';
 
-const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
+const DEFAULT_ASSERTIONS_MAX_CONCURRENCY = 3;
 const DEFAULT_TRACE_FETCH_MAX_ATTEMPTS = 6;
 const DEFAULT_TRACE_FETCH_RETRY_DELAY_MS = 250;
 const DEFAULT_TRACE_FETCH_STABLE_POLLS = 2;
@@ -404,7 +406,7 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
  * @see runAssertions for batch assertion execution
  * @see evaluate for full evaluation pipeline
  */
-export async function runAssertion({
+async function runAssertionInternal({
   prompt,
   provider,
   assertion,
@@ -414,6 +416,7 @@ export async function runAssertion({
   providerResponse,
   traceId,
   traceData,
+  claimStoredGradingUsage,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -425,6 +428,7 @@ export async function runAssertion({
   assertIndex?: number;
   traceId?: string;
   traceData?: TraceData | null;
+  claimStoredGradingUsage?: () => boolean;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
@@ -605,7 +609,12 @@ export async function runAssertion({
 
   // Construct CallApiContextParams for model-graded assertions that need originalProvider
   // Generate traceparent for grader calls to link them to the main trace
-  const graderTraceparent = traceId ? generateTraceparent(traceId, generateSpanId()) : undefined;
+  const activeTraceparent = getProviderCallTracingContext()?.getActiveTraceparent();
+  const graderTraceparent = traceId
+    ? activeTraceparent?.split('-')[1] === traceId
+      ? activeTraceparent
+      : generateTraceparent(traceId, generateSpanId())
+    : undefined;
   const providerCallContext: CallApiContextParams | undefined = provider
     ? {
         originalProvider: provider,
@@ -641,7 +650,7 @@ export async function runAssertion({
 
   // Check for redteam assertions first
   if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
-    return handleRedteam(assertionParams);
+    return handleRedteam(assertionParams, claimStoredGradingUsage);
   }
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
@@ -671,6 +680,28 @@ export async function runAssertion({
   }
 
   throw new Error(`Unknown assertion type: ${assertion.type}`);
+}
+
+export async function runAssertion(
+  options: Parameters<typeof runAssertionInternal>[0],
+): Promise<GradingResult> {
+  if (!options.traceId) {
+    return runAssertionInternal(options);
+  }
+
+  const tracingContext = getProviderCallTracingContext();
+  if (!tracingContext) {
+    return runAssertionInternal(options);
+  }
+
+  return tracingContext.withGraderSpan(
+    {
+      graderId: options.assertion.type,
+      evalId: options.test.metadata?.evaluationId as string | undefined,
+      testIndex: tracingContext.testIndex,
+    },
+    () => runAssertionInternal(options),
+  );
 }
 
 /**
@@ -746,53 +777,39 @@ export async function runAssertions({
   const mainAssertResult = new AssertionsResult({
     threshold: test.threshold,
   });
+  const subAssertResults: AssertionsResult[] = [];
   const asserts: {
     assertion: Assertion;
     assertResult: AssertionsResult;
     index: number;
-  }[] = [];
-  const subAssertResults: {
-    assertResult: AssertionsResult;
-    parentAssertResult: AssertionsResult;
-    assertionSet: AssertionSet;
-    index: number;
-  }[] = [];
+  }[] = test.assert
+    .map((assertion, i) => {
+      if (assertion.type === 'assert-set') {
+        const subAssertResult = new AssertionsResult({
+          threshold: assertion.threshold,
+          parentAssertionSet: {
+            assertionSet: assertion,
+            index: i,
+          },
+        });
 
-  const enqueueAssertion = (
-    assertion: AssertionOrSet,
-    assertResult: AssertionsResult,
-    index: number,
-  ) => {
-    if (assertion.type !== 'assert-set') {
-      asserts.push({ assertion, assertResult, index });
-      return;
-    }
+        subAssertResults.push(subAssertResult);
 
-    const subAssertResult = new AssertionsResult({
-      threshold: assertion.threshold,
-      parentAssertionSet: {
-        assertionSet: assertion,
-        index,
-      },
-    });
+        return assertion.assert.map((subAssert, j) => {
+          return {
+            assertion: subAssert,
+            assertResult: subAssertResult,
+            index: j,
+          };
+        });
+      }
 
-    subAssertResults.push({
-      assertResult: subAssertResult,
-      parentAssertResult: assertResult,
-      assertionSet: assertion,
-      index,
-    });
+      return { assertion, assertResult: mainAssertResult, index: i };
+    })
+    .flat();
 
-    assertion.assert.forEach((subAssert, subIndex) => {
-      enqueueAssertion(subAssert, subAssertResult, subIndex);
-    });
-  };
-
-  test.assert.forEach((assertion, index) => {
-    enqueueAssertion(assertion, mainAssertResult, index);
-  });
-
-  const shouldPreloadTrace = !!traceId && hasTraceAwareAssertions(test.assert);
+  const shouldPreloadTrace =
+    !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
   let preloadedTraceData: TraceData | null | undefined;
   if (shouldPreloadTrace && traceId) {
     try {
@@ -805,11 +822,31 @@ export async function runAssertions({
 
   // Serialize when the grouping queue is active: concurrent dispatch can
   // reorder provider enqueues and split same-judge groups.
+  // Read at call time: --env-file and the config's `env:` block are applied after this module is imported.
+  // async rejects a limit below 1, which would fail every assertion.
   const concurrency = getProviderCallExecutionContext()?.providerCallQueue
     ? 1
-    : ASSERTIONS_MAX_CONCURRENCY;
+    : Math.max(
+        1,
+        getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', DEFAULT_ASSERTIONS_MAX_CONCURRENCY),
+      );
 
-  await async.forEachOfLimit(asserts, concurrency, async ({ assertion, assertResult, index }) => {
+  // All assertions (including assertion sets) share one historical strategy cost.
+  // Keep ownership local to this run so replaying a saved response starts fresh.
+  let storedGradingUsageClaimed = false;
+  const claimStoredGradingUsage = () => {
+    if (storedGradingUsageClaimed) {
+      return false;
+    }
+    storedGradingUsageClaimed = true;
+    return true;
+  };
+
+  const runAndRecordAssertion = async ({
+    assertion,
+    assertResult,
+    index,
+  }: (typeof asserts)[number]) => {
     if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
       // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
       return;
@@ -826,6 +863,7 @@ export async function runAssertions({
       assertIndex: index,
       traceId,
       traceData: preloadedTraceData,
+      claimStoredGradingUsage,
     });
 
     assertResult.addResult({
@@ -834,20 +872,38 @@ export async function runAssertions({
       metric: renderMetricName(assertion.metric, vars || test.vars || {}),
       weight: assertion.weight,
     });
-  });
+  };
 
-  for (const { assertResult, parentAssertResult, assertionSet, index } of subAssertResults
-    .slice()
-    .reverse()) {
-    const result = await assertResult.testResult();
+  const activeAssertions = new Set<Promise<void>>();
+  try {
+    await async.forEachOfLimit(asserts, concurrency, async (entry) => {
+      const pending = runAndRecordAssertion(entry);
+      activeAssertions.add(pending);
+      try {
+        await pending;
+      } finally {
+        activeAssertions.delete(pending);
+      }
+    });
+  } finally {
+    // async stops scheduling on the first error, but active graders still need their workspace.
+    await Promise.allSettled(activeAssertions);
+  }
 
-    parentAssertResult.addResult({
+  await async.forEach(subAssertResults, async (subAssertResult) => {
+    const result = await subAssertResult.testResult();
+    const {
+      index,
+      assertionSet: { metric, weight },
+    } = subAssertResult.parentAssertionSet!;
+
+    mainAssertResult.addResult({
       index,
       result,
-      metric: renderMetricName(assertionSet.metric, vars || test.vars || {}),
-      weight: assertionSet.weight,
+      metric: renderMetricName(metric, vars || test.vars || {}),
+      weight,
     });
-  }
+  });
 
   return mainAssertResult.testResult(assertScoringFunction);
 }
@@ -859,7 +915,9 @@ export async function runCompareAssertion(
   context?: CallApiContextParams,
 ): Promise<GradingResult[]> {
   invariant(typeof assertion.value === 'string', 'select-best must have a string value');
-  test = getFinalTest(test, assertion);
+  // The matcher needs options and vars, not the assertion list. A runtime assertion can
+  // contain a provider with a circular SDK client, which getFinalTest cannot deep-clone.
+  test = getFinalTest({ ...test, assert: undefined }, assertion);
   const comparisonResults = await matchesSelectBest(
     assertion.value,
     outputs,
@@ -867,15 +925,23 @@ export async function runCompareAssertion(
     test.vars,
     context,
   );
+  // The runtime assertion may contain a live grader and secrets. Results only need
+  // the comparison criteria and scoring labels, so keep provider config out of memory.
+  const safeAssertion: Assertion = {
+    type: assertion.type,
+    value: assertion.value,
+    metric: assertion.metric,
+    weight: assertion.weight,
+  };
   return comparisonResults.map((result) => ({
     ...result,
-    assertion,
+    assertion: safeAssertion,
   }));
 }
 
 export async function readAssertions(filePath: string): Promise<Assertion[]> {
   try {
-    const assertions = yaml.load(await fs.readFile(filePath, 'utf-8')) as Assertion[];
+    const assertions = loadYaml(await fs.readFile(filePath, 'utf-8')) as Assertion[];
     if (!Array.isArray(assertions) || assertions[0]?.type === undefined) {
       throw new Error('Assertions file must be an array of assertion objects');
     }

@@ -4,22 +4,29 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_COMMIT_BATCH_SIZE = 25;
-const MIN_RELEASE_PLEASE_MAJOR = 5;
+const MAX_RELEASE_HISTORY_SEARCH_COMMITS = 500;
+const MIN_RELEASE_HISTORY_HEADROOM = 100;
 const RELEASE_PLEASE_ACTION = 'googleapis/release-please-action';
 
 type ReleasePleaseConfig = {
   'commit-batch-size'?: unknown;
+  'commit-search-depth'?: unknown;
   'last-release-sha'?: unknown;
 };
 
 type WorkflowStep = { uses?: unknown };
 type ReleasePleaseWorkflow = {
   jobs?: { 'release-please'?: { steps?: WorkflowStep[] } };
+};
+type ReleaseDriftWorkflow = {
+  jobs?: {
+    'check-drift'?: { steps?: { name?: unknown; env?: Record<string, unknown> }[] };
+  };
 };
 
 function readRepoFile(relativePath: string) {
@@ -58,14 +65,33 @@ describe('release-please automation', () => {
     }
   });
 
-  it('caps commit-batch-size to a small value', () => {
+  it('batches release history requests without exceeding the supported batch size', () => {
     const batchSize = readReleasePleaseConfig()['commit-batch-size'];
     assert(typeof batchSize === 'number', 'commit-batch-size must be a number');
-    expect(batchSize).toBeGreaterThanOrEqual(1);
-    expect(batchSize).toBeLessThanOrEqual(MAX_COMMIT_BATCH_SIZE);
+    expect(batchSize).toBe(MAX_COMMIT_BATCH_SIZE);
   });
 
-  it('pins the release-please job action to a SHA on the v5+ family', () => {
+  it('pins the release history search depth', () => {
+    const searchDepth = readReleasePleaseConfig()['commit-search-depth'];
+    assert(typeof searchDepth === 'number', 'commit-search-depth must be a number');
+    expect(searchDepth).toBe(MAX_RELEASE_HISTORY_SEARCH_COMMITS);
+  });
+
+  it('keeps the drift guard below the release history search limit', () => {
+    const searchDepth = readReleasePleaseConfig()['commit-search-depth'];
+    assert(typeof searchDepth === 'number', 'commit-search-depth must be a number');
+    const workflow = yaml.load(
+      readRepoFile('.github/workflows/release-please-sha-drift.yml'),
+    ) as ReleaseDriftWorkflow;
+    const driftStep = workflow.jobs?.['check-drift']?.steps?.find(
+      (step) => step.name === 'Check last-release-sha drift',
+    );
+    assert(driftStep, 'release drift workflow must include the drift-check step');
+
+    expect(Number(driftStep.env?.MAX_DRIFT)).toBe(searchDepth - MIN_RELEASE_HISTORY_HEADROOM);
+  });
+
+  it('pins the release-please job action to an immutable commit that Renovate can track', () => {
     const workflowYaml = readRepoFile('.github/workflows/release-please.yml');
     const workflow = yaml.load(workflowYaml) as ReleasePleaseWorkflow;
 
@@ -80,18 +106,9 @@ describe('release-please automation', () => {
     );
 
     expect(releaseStep.uses).toMatch(new RegExp(`^${RELEASE_PLEASE_ACTION}@[0-9a-f]{40}$`));
-
-    // Major comes from the `# vN.x.x` comment Renovate maintains alongside the
-    // SHA pin — SHAs alone are opaque, so the comment is the only stable signal.
     const usesLine = workflowYaml
       .split('\n')
       .find((line) => line.includes(`uses: ${releaseStep.uses}`));
-    assert(usesLine, 'release-please-action `uses:` line missing in raw YAML');
-    const versionMatch = usesLine.match(/#\s*v(\d+)/);
-    assert(
-      versionMatch !== null,
-      'release-please-action `uses:` must carry a `# vN` version comment',
-    );
-    expect(Number.parseInt(versionMatch[1], 10)).toBeGreaterThanOrEqual(MIN_RELEASE_PLEASE_MAJOR);
+    expect(usesLine).toMatch(/#\s+v\d+(?:\.\d+){0,2}(?:[-+][\w.-]+)?\s*$/);
   });
 });

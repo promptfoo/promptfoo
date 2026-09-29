@@ -1,17 +1,8 @@
 import chalk from 'chalk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TERMINAL_MAX_WIDTH } from '../src/constants';
-import {
-  generateAssertionSummary,
-  generateAssertionTable,
-  generateTable,
-  wrapTable,
-} from '../src/table';
-import {
-  type EvaluateTable,
-  type EvaluateTableOutput,
-  ResultFailureReason,
-} from '../src/types/index';
+import { generateTable, wrapTable } from '../src/table';
+import { type EvaluateTable, type GradingResult, ResultFailureReason } from '../src/types/index';
 import {
   createCompletedPrompt,
   createEvaluateTable,
@@ -122,6 +113,105 @@ describe('table', () => {
       ]);
     });
 
+    it('shows a passing group and its failing child once using existing metadata', () => {
+      const children: GradingResult[] = [
+        {
+          pass: true,
+          score: 1,
+          reason: 'match',
+          assertion: { type: 'contains', metric: 'Greeting' },
+        },
+        {
+          pass: false,
+          score: 0,
+          reason: 'missing',
+          assertion: { type: 'contains', metric: 'Location' },
+        },
+      ];
+      const group: GradingResult = {
+        pass: true,
+        score: 0.5,
+        reason: 'threshold met',
+        metadata: {
+          assertionSet: {
+            type: 'assert-set',
+            metric: 'Response',
+            threshold: 0.5,
+            assertionCount: 2,
+          },
+        },
+        componentResults: children,
+      };
+      const table = {
+        ...mockEvaluateTable,
+        body: [
+          {
+            ...mockEvaluateTable.body[0],
+            outputs: [
+              createEvaluateTableOutput({
+                text: 'Hello',
+                gradingResult: {
+                  pass: true,
+                  score: 0.5,
+                  reason: 'passed',
+                  componentResults: [group, ...children.map((child) => ({ ...child }))],
+                },
+              }),
+            ],
+          },
+        ],
+      };
+      generateTable(table, 500);
+      const cell = mockTableInstances[0].push.mock.calls[0][0].at(-1);
+      expect(cell).toContain('[PASS] Response (score 0.50 >= 0.5)');
+      expect(cell).toContain('  [PASS] Greeting (score 1.00)');
+      expect(cell).toContain('  [FAIL] Location (score 0.00)');
+      expect(cell.split('Greeting')).toHaveLength(2);
+      expect(cell.split('Location')).toHaveLength(2);
+      expect(cell).toContain('Hello');
+    });
+
+    it.each([undefined, 0, 1])(
+      'shows group requirements for threshold %s within the existing cell bound',
+      (threshold) => {
+        const group: GradingResult = {
+          pass: threshold !== 1,
+          score: 0,
+          reason: 'fixture',
+          metadata: { assertionSet: { type: 'assert-set', threshold } },
+          componentResults: [],
+        };
+        const table = {
+          ...mockEvaluateTable,
+          body: [
+            {
+              ...mockEvaluateTable.body[0],
+              outputs: [
+                createEvaluateTableOutput({
+                  text: 'long response '.repeat(100),
+                  gradingResult: {
+                    pass: true,
+                    score: 0,
+                    reason: 'fixture',
+                    componentResults: [group],
+                  },
+                }),
+              ],
+            },
+          ],
+        };
+        generateTable(table, 100);
+        const cell = mockTableInstances[0].push.mock.calls[0][0]
+          .at(-1)
+          .replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
+        expect(cell).toContain(
+          threshold === undefined ? 'all assertions must pass' : threshold === 0 ? '>= 0' : '< 1',
+        );
+        expect(cell).toHaveLength(107);
+        expect(cell.endsWith('...')).toBe(true);
+      },
+    );
+
     it('should respect maxRows parameter', () => {
       generateTable(mockEvaluateTable, 250, 1);
 
@@ -150,160 +240,6 @@ describe('table', () => {
           head: [expect.stringMatching(/^a{7}\.{3}$/)],
         }),
       );
-    });
-
-    it('should preserve sparse output cells', () => {
-      const outputs = [] as EvaluateTableOutput[];
-      outputs[1] = createEvaluateTableOutput({ text: 'second output' });
-      const testTable: EvaluateTable = createEvaluateTable({
-        head: {
-          vars: [],
-          prompts: [createCompletedPrompt('first prompt'), createCompletedPrompt('second prompt')],
-        },
-        body: [
-          createEvaluateTableRow({
-            vars: [],
-            outputs,
-          }),
-        ],
-      });
-
-      generateTable(testTable);
-
-      expect(mockTableInstances[0].push).toHaveBeenCalledWith([
-        '',
-        chalk.green('[PASS] ') + 'second output',
-      ]);
-    });
-
-    it('should append assertion details when requested', () => {
-      const testTable = createEvaluateTable({
-        body: [
-          createEvaluateTableRow({
-            outputs: [
-              createEvaluateTableOutput({
-                pass: false,
-                score: 0,
-                text: 'failing test',
-                failureReason: ResultFailureReason.ASSERT,
-                gradingResult: {
-                  pass: false,
-                  score: 0,
-                  reason: 'failed',
-                  componentResults: [
-                    {
-                      pass: false,
-                      score: 0,
-                      reason: 'Missing text',
-                      assertion: { type: 'contains', metric: 'Correctness' },
-                    },
-                  ],
-                },
-              }),
-            ],
-          }),
-        ],
-      });
-
-      const result = generateTable(testTable, 250, 25, { showAssertions: true });
-
-      expect(result).toContain('Assertion Details');
-      expect(mockTableInstances).toHaveLength(2);
-    });
-  });
-
-  describe('generateAssertionSummary', () => {
-    it('should return empty string for output without component results', () => {
-      const output = createEvaluateTableOutput();
-
-      expect(generateAssertionSummary(output)).toBe('');
-    });
-
-    it('should generate summary for top-level assertions only', () => {
-      const output: EvaluateTableOutput = createEvaluateTableOutput({
-        pass: false,
-        score: 0.5,
-        gradingResult: {
-          pass: false,
-          score: 0.5,
-          reason: 'Some failed',
-          componentResults: [
-            {
-              pass: true,
-              score: 1,
-              reason: 'Passed',
-              assertion: { type: 'contains', metric: 'Correctness' },
-            },
-            {
-              pass: false,
-              score: 0.5,
-              reason: 'Failed',
-              assertion: { type: 'llm-rubric', metric: 'Tone' },
-            },
-            {
-              pass: false,
-              score: 0,
-              reason: 'Child failed',
-              assertion: { type: 'latency' },
-              metadata: { parentAssertSetIndex: 0 },
-            },
-          ],
-        },
-      });
-
-      const result = generateAssertionSummary(output);
-
-      expect(result).toContain('Correctness');
-      expect(result).toContain('Tone');
-      expect(result).not.toContain('latency');
-    });
-  });
-
-  describe('generateAssertionTable', () => {
-    it('should return empty string for output without component results', () => {
-      expect(generateAssertionTable(createEvaluateTableOutput())).toBe('');
-    });
-
-    it('should render nested assert-set rows recursively', () => {
-      const output = createEvaluateTableOutput({
-        gradingResult: {
-          pass: false,
-          score: 0.5,
-          reason: 'failed',
-          componentResults: [
-            {
-              pass: false,
-              score: 0.5,
-              reason: 'Outer failed',
-              assertion: { type: 'contains', metric: 'outer' },
-              metadata: { isAssertSet: true, childCount: 2, assertSetThreshold: 0.75 },
-            },
-            {
-              pass: false,
-              score: 0.5,
-              reason: 'Inner failed',
-              assertion: { type: 'contains', metric: 'inner' },
-              metadata: { isAssertSet: true, childCount: 1, parentAssertSetIndex: 0 },
-            },
-            {
-              pass: false,
-              score: 0,
-              reason: 'Leaf failed',
-              assertion: { type: 'contains', metric: 'leaf' },
-              metadata: { parentAssertSetIndex: 1 },
-            },
-          ],
-        },
-      });
-
-      expect(generateAssertionTable(output)).toBe('mocked table string');
-
-      const table = mockTableInstances[mockTableInstances.length - 1];
-      expect(table.push).toHaveBeenCalledTimes(3);
-      expect(table.push.mock.calls[0][0][0]).toContain('Required score: 75%');
-      expect(table.push.mock.calls[0][0][0]).not.toContain('Most must pass');
-      expect(table.push.mock.calls[1][0][0]).toContain('inner');
-      expect(table.push.mock.calls[2][0][0]).toContain('leaf');
     });
   });
 

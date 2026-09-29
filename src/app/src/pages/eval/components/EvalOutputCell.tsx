@@ -29,13 +29,14 @@ import {
   Star,
   ThumbsDown,
   ThumbsUp,
+  X,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import logger from '../../../../../logger';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { stringifyAssertionValue } from './EvaluationPanel';
-import FailReasonCarousel, { type FailReasonWithContext } from './FailReasonCarousel';
+import FailReasonCarousel from './FailReasonCarousel';
 import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
 import SetScoreDialog from './SetScoreDialog';
 import { useResultsViewSettingsStore, useTableStore } from './store';
@@ -106,7 +107,7 @@ export function isImageProvider(provider: string | undefined): boolean {
  * - 'openai:video:sora-2' (OpenAI Sora)
  * - 'openai:video:sora-2-pro' (OpenAI Sora Pro)
  * - 'google:video:veo-3.1-generate-preview' (Google Veo)
- * - 'google:video:veo-2-generate' (Google Veo 2)
+ * - 'google:video:veo-3.1-fast-generate-preview' (Google Veo Fast)
  * Used to skip truncation for video content.
  */
 export function isVideoProvider(provider: string | undefined): boolean {
@@ -231,48 +232,24 @@ function getPrimaryRenderedImageSrc(text: string, inlineImageSrc?: string): stri
 }
 
 function getFailAndPassReasons(output: EvaluateTableOutput): {
-  failReasons: FailReasonWithContext[];
+  failReasons: string[];
   passReasons: string[];
 } {
-  const failReasons: FailReasonWithContext[] = [];
-  const componentResults = output.gradingResult?.componentResults ?? [];
-  const parentLookup = new Map<number, { metric?: string; pass: boolean }>();
-
-  componentResults.forEach((result, index) => {
-    if (result?.metadata?.isAssertSet) {
-      parentLookup.set(index, {
-        metric:
-          result.assertion?.metric || result.metadata?.assertSetMetric || result.assertion?.type,
-        pass: result.pass,
-      });
-    }
-  });
-
-  componentResults.forEach((result) => {
-    if (!result || result.pass || !result.reason) {
-      return;
-    }
-
-    const parentIndex = result.metadata?.parentAssertSetIndex;
-    const parent = parentIndex === undefined ? undefined : parentLookup.get(parentIndex);
-    failReasons.push({
-      reason: result.reason,
-      metric:
-        result.assertion?.metric || result.metadata?.assertSetMetric || result.assertion?.type,
-      parentMetric: parent?.metric,
-      parentPassed: parent?.pass,
-    });
-  });
+  const failReasons =
+    output.gradingResult?.componentResults
+      ?.filter((result) => (result ? !result.pass : false))
+      .map((result) => result.reason)
+      .filter((reason) => reason) ?? [];
 
   const passReasons =
-    componentResults
-      .filter((result) => (result ? result.pass : false))
+    output.gradingResult?.componentResults
+      ?.filter((result) => (result ? result.pass : false))
       .map((result) => result.reason)
       .filter((reason) => reason) ?? [];
 
   if (output.error && output.failureReason === ResultFailureReason.ERROR) {
     return {
-      failReasons: [{ reason: output.error }, ...failReasons],
+      failReasons: [output.error, ...failReasons],
       passReasons,
     };
   }
@@ -960,7 +937,6 @@ function renderStatusBlock({
   showPassFail,
   statusClass,
   namedScores,
-  componentResults,
   passFailText,
   scoreString,
   providerOverride,
@@ -972,11 +948,10 @@ function renderStatusBlock({
   showPassFail: boolean;
   statusClass: string;
   namedScores: Record<string, number>;
-  componentResults?: GradingResult[];
   passFailText: React.ReactNode;
   scoreString: string;
   providerOverride: React.ReactNode;
-  failReasons: FailReasonWithContext[];
+  failReasons: string[];
   showMetricPills: boolean;
   showPassReasons: boolean;
   passReasons: string[];
@@ -994,9 +969,7 @@ function renderStatusBlock({
         </div>
         {providerOverride}
       </div>
-      {showMetricPills && (
-        <CustomMetrics lookup={namedScores} componentResults={componentResults} />
-      )}
+      {showMetricPills && <CustomMetrics lookup={namedScores} />}
       {failReasons.length > 0 && (
         <span className="fail-reason">
           <FailReasonCarousel failReasons={failReasons} />
@@ -1058,6 +1031,7 @@ function renderOutputActions({
   copied,
   linked,
   isHighlighted,
+  isRedteam,
   activeRating,
   openPrompt,
   output,
@@ -1085,6 +1059,7 @@ function renderOutputActions({
   copied: boolean;
   linked: boolean;
   isHighlighted: boolean;
+  isRedteam: boolean;
   activeRating: boolean | null;
   openPrompt: boolean;
   output: EvaluateTableOutput;
@@ -1108,6 +1083,9 @@ function renderOutputActions({
   handlePromptClose: () => void;
   setActionsHovered: (hovered: boolean) => void;
 }): React.ReactNode {
+  const passActionLabel = isRedteam ? 'Mark as safe' : 'Mark test passed';
+  const failActionLabel = isRedteam ? 'Mark as vulnerable' : 'Mark test failed';
+
   return (
     <div
       className="cell-actions"
@@ -1170,15 +1148,19 @@ function renderOutputActions({
             className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === true ? 'active text-emerald-600 dark:text-emerald-400' : ''}`}
             onClick={() => handleRating(true)}
             aria-pressed={activeRating === true}
-            aria-label="Mark test passed"
+            aria-label={passActionLabel}
           >
-            <ThumbsUp
-              className={`size-4 ${activeRating === true ? 'stroke-emerald-700 dark:stroke-emerald-300' : ''}`}
-              fill={activeRating === true ? 'currentColor' : 'none'}
-            />
+            {isRedteam ? (
+              <Check className="size-4" />
+            ) : (
+              <ThumbsUp
+                className={`size-4 ${activeRating === true ? 'stroke-emerald-700 dark:stroke-emerald-300' : ''}`}
+                fill={activeRating === true ? 'currentColor' : 'none'}
+              />
+            )}
           </button>
         </TooltipTrigger>
-        <TooltipContent>Mark test passed (score 1.0)</TooltipContent>
+        <TooltipContent>{passActionLabel} (score 1.0)</TooltipContent>
       </Tooltip>
       <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
@@ -1187,15 +1169,19 @@ function renderOutputActions({
             className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === false ? 'active text-red-600 dark:text-red-400' : ''}`}
             onClick={() => handleRating(false)}
             aria-pressed={activeRating === false}
-            aria-label="Mark test failed"
+            aria-label={failActionLabel}
           >
-            <ThumbsDown
-              className={`size-4 ${activeRating === false ? 'stroke-red-700 dark:stroke-red-300' : ''}`}
-              fill={activeRating === false ? 'currentColor' : 'none'}
-            />
+            {isRedteam ? (
+              <X className="size-4" />
+            ) : (
+              <ThumbsDown
+                className={`size-4 ${activeRating === false ? 'stroke-red-700 dark:stroke-red-300' : ''}`}
+                fill={activeRating === false ? 'currentColor' : 'none'}
+              />
+            )}
           </button>
         </TooltipTrigger>
-        <TooltipContent>Mark test failed (score 0.0)</TooltipContent>
+        <TooltipContent>{failActionLabel} (score 0.0)</TooltipContent>
       </Tooltip>
       <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
@@ -1273,6 +1259,7 @@ export interface EvalOutputCellProps {
   rowPositionIndex?: number;
   promptIndex: number;
   showStats: boolean;
+  isRedteam?: boolean;
   onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
   evaluationId?: string;
   testCaseId?: string;
@@ -1307,6 +1294,7 @@ function EvalOutputCell({
   showDiffs,
   searchText,
   showStats,
+  isRedteam = false,
   evaluationId,
   testCaseId,
 }: EvalOutputCellProps & {
@@ -1615,7 +1603,6 @@ function EvalOutputCell({
         showPassFail,
         statusClass,
         namedScores: output.namedScores ?? {},
-        componentResults: output.gradingResult?.componentResults,
         passFailText,
         scoreString,
         providerOverride,
@@ -1656,6 +1643,7 @@ function EvalOutputCell({
         copied,
         linked,
         isHighlighted: commentIsHighlighted,
+        isRedteam,
         activeRating,
         openPrompt,
         output,
