@@ -156,10 +156,10 @@ describe('report', () => {
 
   describe('generateReport', () => {
     it('should generate a report with plugins and strategies', () => {
-      const pluginResults = {
-        'pii:direct': { requested: 5, generated: 5 },
-        jailbreak: { requested: 10, generated: 8 },
-      };
+      const pluginResults = [
+        { id: 'pii:direct', requested: 5, generated: 5 },
+        { id: 'jailbreak', requested: 10, generated: 8 },
+      ];
       const strategyResults = {
         'jailbreak:meta': { requested: 10, generated: 10 },
       };
@@ -175,10 +175,10 @@ describe('report', () => {
     });
 
     it('should sort plugins by current policy display ids', () => {
-      const pluginResults = {
-        'policy [bbbbbbbbbbbb]: Two': { requested: 1, generated: 1 },
-        'policy [aaaaaaaaaaaa]: One': { requested: 1, generated: 1 },
-      };
+      const pluginResults = [
+        { id: 'policy [bbbbbbbbbbbb]: Two', requested: 1, generated: 1 },
+        { id: 'policy [aaaaaaaaaaaa]: One', requested: 1, generated: 1 },
+      ];
 
       const report = generateReport(pluginResults, {});
       const cleanReport = stripAnsi(report);
@@ -188,12 +188,34 @@ describe('report', () => {
       );
     });
 
+    it('retains each result when policy names and shortened identifiers collide', () => {
+      const labels = [
+        '123e4567-e89b-4123-8123-111111111111',
+        '123e4567-e89b-4123-8123-222222222222',
+      ].map((id) =>
+        getPluginDisplayId({
+          id: 'policy',
+          config: { policy: { id, name: 'House style', text: 'Use short sentences.' } },
+        }),
+      );
+      expect(labels[0]).toBe(labels[1]);
+      const rows = [
+        { id: labels[0], requested: 1, generated: 0 },
+        { id: labels[1], requested: 1, generated: 1 },
+      ];
+      const cleanReport = stripAnsi(generateReport(rows, {}));
+      expect(cleanReport.match(/policy \[123e4567e89b\]/g)).toHaveLength(2);
+      expect(cleanReport).toContain('Failed');
+      expect(cleanReport).toContain('Success');
+      expect(rows.map((row) => row.generated)).toEqual([0, 1]);
+    });
+
     it('should include status for each row', () => {
-      const pluginResults = {
-        success: { requested: 10, generated: 10 },
-        partial: { requested: 10, generated: 5 },
-        failed: { requested: 10, generated: 0 },
-      };
+      const pluginResults = [
+        { id: 'success', requested: 10, generated: 10 },
+        { id: 'partial', requested: 10, generated: 5 },
+        { id: 'failed', requested: 10, generated: 0 },
+      ];
 
       const report = generateReport(pluginResults, {});
       const cleanReport = stripAnsi(report);

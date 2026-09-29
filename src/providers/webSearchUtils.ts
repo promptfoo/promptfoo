@@ -70,10 +70,29 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
     return true;
   }
 
-  // Check for OpenAI responses API with web_search_preview tool
+  // Check for OpenAI Responses API with either supported web-search tool.
   if (
     isOpenAiResponsesProvider(provider, id) &&
-    hasTool(provider, (t) => t.type === 'web_search_preview')
+    hasTool(provider, (t) => t.type === 'web_search' || t.type === 'web_search_preview')
+  ) {
+    return true;
+  }
+
+  // Chat Completions search models always retrieve from the web before responding.
+  const isOpenAiChat =
+    !isOpenAiResponsesProvider(provider, id) &&
+    (id.startsWith('openai:chat:') ||
+      provider.constructor?.name === 'OpenAiChatCompletionProvider');
+  const passthroughModel = provider.config?.passthrough?.model;
+  const chatModelId =
+    typeof passthroughModel === 'string'
+      ? passthroughModel
+      : 'modelName' in provider && typeof provider.modelName === 'string'
+        ? provider.modelName
+        : id;
+  if (
+    isOpenAiChat &&
+    /(?:^|[/:])(?:gpt-5-search-api|gpt-4o(?:-mini)?-search-preview)(?:-|$)/.test(chatModelId)
   ) {
     return true;
   }
@@ -88,8 +107,11 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
     return true;
   }
 
-  // Check for Anthropic with web_search tool
-  if (id.includes('anthropic') && hasTool(provider, (t) => t.type === 'web_search_20250305')) {
+  // Check for Anthropic with any version of its dated `web_search_YYYYMMDD` server tool.
+  if (
+    id.includes('anthropic') &&
+    hasTool(provider, (t) => typeof t.type === 'string' && /^web_search_\d{8}$/.test(t.type))
+  ) {
     return true;
   }
 
@@ -107,18 +129,17 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
 export async function loadWebSearchProvider(
   preferAnthropic: boolean = false,
 ): Promise<ApiProvider | null> {
-  // Anthropic Claude 4.6 Opus with web search tool
   const loadAnthropicWebSearch = async () => {
     try {
-      return await loadApiProvider('anthropic:messages:claude-opus-4-6', {
+      return await loadApiProvider('anthropic:messages:claude-opus-5-5', {
         options: {
           config: {
             tools: [
               {
-                type: 'web_search_20250305',
+                type: 'web_search_20260209',
                 name: 'web_search',
                 max_uses: 5,
-              } as any,
+              },
             ],
           },
         },
@@ -129,10 +150,9 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // OpenAI GPT-5.5 snapshot with web search tool (via responses API)
   const loadOpenAIWebSearch = async () => {
     try {
-      return await loadApiProvider('openai:responses:gpt-5.5-2026-04-23', {
+      return await loadApiProvider('openai:responses:gpt-6-sol', {
         options: {
           config: { tools: [{ type: 'web_search_preview' }] },
         },
@@ -181,7 +201,7 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // xAI Grok 4.3 with Responses API web search
+  // xAI Grok 4.3 with Responses API web search (available to US and EU accounts)
   const loadXaiWebSearch = async () => {
     try {
       return await loadApiProvider('xai:responses:grok-4.3', {

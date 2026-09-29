@@ -7,6 +7,13 @@ description: Red team custom AI policies by adding organization-specific rules, 
 
 Custom policies let you test the rules that are specific to your product, legal requirements, brand, or operating model. Instead of choosing a predefined vulnerability category, you write the behavior the target must follow, and Promptfoo generates probes that try to make the target violate it.
 
+Review generated probes before running them, especially multi-step tool requests.
+Confirm that required object IDs, ordered actions, and result checks are retained.
+Semicolons within a generated `Prompt:` payload are preserved, including before
+newlines. On the same line, a semicolon followed by a new `Prompt:` marker separates
+test cases, including numbered or bold markers such as `**2. Prompt:**`.
+Leading numeric terms such as `2FA` and `2024` are preserved.
+
 Use custom policies for requirements such as:
 
 - "Do not disclose another customer's order, ticket, or profile data."
@@ -57,7 +64,7 @@ redteam:
           present.
 ```
 
-To run policies in batches, repeat the `policy` plugin. Each entry is generated and reported independently, and each can have its own `numTests` and severity.
+To run policies in batches, repeat the `policy` plugin. Each entry is generated and reported independently, and each can have its own `numTests` and severity. Report labels include a shortened policy ID and the policy name or text preview. Entries remain separate even when their labels match; languages other than `en` appear at the start of the label.
 
 ```yaml
 redteam:

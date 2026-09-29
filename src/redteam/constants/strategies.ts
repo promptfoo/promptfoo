@@ -13,7 +13,6 @@ export const FRAMEWORK_COMPLIANCE_IDS = [
 export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 
 export const DEFAULT_STRATEGIES = ['basic', 'jailbreak:meta', 'jailbreak:composite'] as const;
-export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 export const DEFAULT_STRATEGIES_SET: ReadonlySet<string> = new Set(DEFAULT_STRATEGIES);
 
 export const DEFAULT_MULTI_TURN_MAX_TURNS = 5;
@@ -22,6 +21,7 @@ export const MULTI_TURN_STRATEGIES = [
   'crescendo',
   'goat',
   'jailbreak:hydra',
+  'jailbreak:goblin',
   'custom',
   'mischievous-user',
 ] as const;
@@ -41,7 +41,6 @@ export const isCustomStrategy = (strategyId: string): boolean => {
 };
 
 export const MULTI_MODAL_STRATEGIES = ['audio', 'image', 'video'] as const;
-export type MultiModalStrategy = (typeof MULTI_MODAL_STRATEGIES)[number];
 export const MULTI_MODAL_STRATEGIES_SET: ReadonlySet<string> = new Set(MULTI_MODAL_STRATEGIES);
 
 export const AGENTIC_STRATEGIES = [
@@ -50,12 +49,12 @@ export const AGENTIC_STRATEGIES = [
   'indirect-web-pwn',
   'custom',
   'jailbreak',
+  'jailbreak:goblin',
   'jailbreak:hydra',
   'jailbreak:meta',
   'jailbreak:tree',
   'mischievous-user',
 ] as const;
-export type AgenticStrategy = (typeof AGENTIC_STRATEGIES)[number];
 export const AGENTIC_STRATEGIES_SET: ReadonlySet<string> = new Set(AGENTIC_STRATEGIES);
 
 export const DATASET_PLUGINS = [
@@ -70,7 +69,6 @@ export const DATASET_PLUGINS = [
   'vlguard',
   'xstest',
 ] as const;
-export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];
 
 export const ADDITIONAL_STRATEGIES = [
   'audio',
@@ -88,6 +86,7 @@ export const ADDITIONAL_STRATEGIES = [
   'homoglyph',
   'image',
   'indirect-web-pwn',
+  'jailbreak:goblin',
   'jailbreak:hydra',
   'jailbreak',
   'jailbreak:likert',
@@ -106,7 +105,6 @@ export const ADDITIONAL_STRATEGIES = [
   'rot13',
   'video',
 ] as const;
-export type AdditionalStrategy = (typeof ADDITIONAL_STRATEGIES)[number];
 
 export const STRATEGY_COLLECTIONS = ['other-encodings'] as const;
 export type StrategyCollection = (typeof STRATEGY_COLLECTIONS)[number];
@@ -133,6 +131,7 @@ export const CONFIGURABLE_STRATEGIES = [
   'indirect-web-pwn',
   'jailbreak',
   'jailbreak:composite',
+  'jailbreak:goblin',
   'jailbreak:hydra',
   'jailbreak:meta',
   'jailbreak:tree',
@@ -141,8 +140,6 @@ export const CONFIGURABLE_STRATEGIES = [
   'custom',
   'mischievous-user',
 ] as const;
-
-export type ConfigurableStrategy = (typeof CONFIGURABLE_STRATEGIES)[number];
 export const CONFIGURABLE_STRATEGIES_SET: ReadonlySet<string> = new Set(CONFIGURABLE_STRATEGIES);
 
 /**
@@ -207,12 +204,11 @@ export const STRATEGIES_REQUIRING_REMOTE = [
   'goat',
   'indirect-web-pwn',
   'jailbreak:composite',
+  'jailbreak:goblin',
   'jailbreak:hydra',
   'jailbreak:likert',
   'jailbreak:meta',
 ] as const;
-
-export type StrategyRequiringRemote = (typeof STRATEGIES_REQUIRING_REMOTE)[number];
 export const STRATEGIES_REQUIRING_REMOTE_SET: ReadonlySet<string> = new Set(
   STRATEGIES_REQUIRING_REMOTE,
 );
