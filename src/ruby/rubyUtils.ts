@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { promisify } from 'util';
 
-import { getEnvString } from '../envars';
+import { getEnvString, getProcessEnv } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
@@ -14,6 +14,44 @@ import {
 } from '../util/secureTempFiles';
 
 const execFileAsync = promisify(execFile);
+
+function logStderr(stderr: string): void {
+  for (const line of stderr.split(/\r?\n/)) {
+    const message = line.trim();
+    if (!message) {
+      continue;
+    }
+
+    const levelMatch = /^(DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\b[: ]?/i.exec(message);
+    if (levelMatch) {
+      switch (levelMatch[1].toUpperCase()) {
+        case 'DEBUG':
+          logger.debug(line);
+          continue;
+        case 'INFO':
+          logger.info(line);
+          continue;
+        case 'WARN':
+        case 'WARNING':
+          logger.warn(line);
+          continue;
+        default:
+          logger.error(line);
+          continue;
+      }
+    }
+
+    if (
+      /\b(error|exception|fatal|failed|failure)\b/i.test(message) ||
+      /(?:Error|Exception)\b/.test(message) ||
+      /^from\s.+:\d+/.test(message)
+    ) {
+      logger.error(line);
+    } else {
+      logger.warn(line);
+    }
+  }
+}
 
 /**
  * Global state for Ruby executable path caching.
@@ -303,20 +341,18 @@ export async function runRuby<T = unknown>(
     const outputPath = await writeSecureTempFile(tempDirectory, 'output.json', '');
     logger.debug('[Ruby] Running script', { scriptPath: absPath, method });
 
-    const { stdout, stderr } = await execFileAsync(rubyPath, [
-      wrapperPath,
-      absPath,
-      method,
-      tempJsonPath,
-      outputPath,
-    ]);
+    const { stdout, stderr } = await execFileAsync(
+      rubyPath,
+      [wrapperPath, absPath, method, tempJsonPath, outputPath],
+      { env: getProcessEnv() },
+    );
 
     if (stdout) {
       logger.debug(stdout.trim());
     }
 
     if (stderr) {
-      logger.error(stderr.trim());
+      logStderr(stderr);
     }
 
     const output = await fs.readFile(outputPath, 'utf-8');

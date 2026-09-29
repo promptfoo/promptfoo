@@ -79,6 +79,33 @@ describe('Eval Routes - Sharing behavior', () => {
     tests: [{ vars: { input: 'test' } }],
   };
 
+  it('does not let a job request change the server file-resolution directory', async () => {
+    await postJob({ ...minimalTestSuite, basePath: '/' }).expect(200);
+    expect(mockedEvaluateWithSource).toHaveBeenCalledOnce();
+    expect(mockedEvaluateWithSource.mock.calls[0][0]).not.toHaveProperty('basePath');
+  });
+
+  it.each([undefined, '/untrusted/request/path'])(
+    'restores the saved base path for rerun jobs (request path: %s)',
+    async (basePath) => {
+      mockedEvalFindById.mockResolvedValueOnce({ config: { basePath: '/saved/config' } } as Eval);
+      await postJob({ ...minimalTestSuite, sourceEvalId: 'saved-eval', basePath }).expect(200);
+      expect(mockedEvaluateWithSource.mock.calls[0][0]).toMatchObject({
+        basePath: '/saved/config',
+      });
+    },
+  );
+
+  it('does not accept a request path when the source eval is missing', async () => {
+    mockedEvalFindById.mockResolvedValueOnce(undefined);
+    await postJob({
+      ...minimalTestSuite,
+      sourceEvalId: 'missing-eval',
+      basePath: '/untrusted',
+    }).expect(200);
+    expect(mockedEvaluateWithSource.mock.calls[0][0]).not.toHaveProperty('basePath');
+  });
+
   it('should use testSuite.sharing when explicitly set to true', async () => {
     await postJob({ ...minimalTestSuite, sharing: true });
 
@@ -150,6 +177,37 @@ describe('Eval Routes - Sharing behavior', () => {
         evalId: 'eval-result-id',
         result: { results: [] },
       });
+    });
+  });
+
+  it('publishes progress updates while a job is running', async () => {
+    let resolveEvaluation: ((value: any) => void) | undefined;
+    mockedEvaluateWithSource.mockImplementationOnce(
+      (_testSuite, options) =>
+        new Promise((resolve) => {
+          options?.progressCallback?.(2, 5, 0, {} as never, {} as never);
+          resolveEvaluation = resolve;
+        }),
+    );
+
+    const createResponse = await postJob(minimalTestSuite);
+    const jobId = createResponse.body.id;
+
+    const inProgressResponse = await api.get(`/api/eval/job/${jobId}`);
+    expect(inProgressResponse.body).toMatchObject({
+      status: 'in-progress',
+      progress: 2,
+      total: 5,
+    });
+
+    resolveEvaluation!({
+      id: 'eval-result-id',
+      toEvaluateSummary: vi.fn().mockResolvedValue({ results: [] }),
+    });
+
+    await vi.waitFor(async () => {
+      const completedResponse = await api.get(`/api/eval/job/${jobId}`);
+      expect(completedResponse.body.status).toBe('complete');
     });
   });
 

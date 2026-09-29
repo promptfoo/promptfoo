@@ -11,8 +11,9 @@ import {
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import Prism from '@app/lib/prism';
+import { highlightJSON } from '@app/lib/codeHighlight';
 import { cn } from '@app/lib/utils';
+import deepEqual from 'fast-deep-equal';
 import {
   AlertCircle,
   AlignLeft,
@@ -33,6 +34,8 @@ interface CustomTargetConfigurationProps {
   setRawConfigJson: (value: string) => void;
   bodyError: string | React.ReactNode | null;
   providerType?: string;
+  onConfigErrorChange?: (error: string | null, expectedTarget?: ProviderOptions) => void;
+  preserveConfigErrorOnUnchangedConfig?: boolean;
 }
 
 interface ProviderConfig {
@@ -49,18 +52,6 @@ interface ProviderConfig {
   configExample: Record<string, unknown>;
   configDescription: string;
 }
-
-const highlightJSON = (code: string): string => {
-  try {
-    const grammar = Prism?.languages?.json;
-    if (!grammar) {
-      return code;
-    }
-    return Prism.highlight(code, grammar, 'json');
-  } catch {
-    return code;
-  }
-};
 
 const getProviderConfig = (providerType?: string): ProviderConfig => {
   switch (providerType) {
@@ -212,17 +203,17 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
         title: 'AWS Bedrock',
         icon: <Cloud className="size-5 text-primary" />,
         targetIdLabel: 'Model ID',
-        targetIdPlaceholder: 'bedrock:anthropic.claude-3-sonnet-20240229-v1:0',
+        targetIdPlaceholder: 'bedrock:global.anthropic.claude-sonnet-5',
         helpText: <>AWS Bedrock model identifier. Requires AWS credentials configured.</>,
         docUrl: 'https://www.promptfoo.dev/docs/providers/aws-bedrock/',
         examples: {
           title: 'Bedrock Model Examples',
           items: [
             {
-              code: 'bedrock:anthropic.claude-3-sonnet-20240229-v1:0',
-              description: 'Claude 3 Sonnet',
+              code: 'bedrock:global.anthropic.claude-sonnet-5',
+              description: 'Claude Sonnet 5',
             },
-            { code: 'bedrock:amazon.titan-text-express-v1', description: 'Amazon Titan' },
+            { code: 'bedrock:amazon.nova-lite-v1:0', description: 'Amazon Nova Lite' },
             { code: 'bedrock:meta.llama3-70b-instruct-v1:0', description: 'Llama 3' },
           ],
         },
@@ -357,6 +348,29 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
         configDescription: 'Generation parameters',
       };
 
+    // Open Interpreter coding-agent target
+    case 'openinterpreter':
+      return {
+        title: 'Open Interpreter Target',
+        icon: <Terminal className="size-5 text-primary" />,
+        targetIdLabel: 'Target ID',
+        targetIdPlaceholder: 'openinterpreter',
+        helpText: <>Run coding-agent evaluations against an Open Interpreter app-server.</>,
+        docUrl: 'https://www.promptfoo.dev/docs/providers/openinterpreter/',
+        examples: {
+          title: 'Open Interpreter Target Example',
+          items: [{ code: 'openinterpreter', description: 'Open Interpreter app-server target' }],
+        },
+        configExample: {
+          interpreter_path: 'interpreter',
+          working_dir: './workspace',
+          skip_git_repo_check: true,
+          sandbox_mode: 'read-only',
+          turn_timeout_ms: 60000,
+        },
+        configDescription: 'Open Interpreter executable, workspace, sandbox, and timeout options',
+      };
+
     // Default fallback for custom and other providers
     default:
       return {
@@ -404,6 +418,8 @@ const CustomTargetConfiguration = ({
   setRawConfigJson,
   bodyError,
   providerType,
+  onConfigErrorChange,
+  preserveConfigErrorOnUnchangedConfig = false,
 }: CustomTargetConfigurationProps) => {
   const [targetId, setTargetId] = useState(selectedTarget.id?.replace('file://', '') || '');
   const [docsExpanded, setDocsExpanded] = useState(false);
@@ -435,10 +451,23 @@ const CustomTargetConfiguration = ({
     setRawConfigJson(content);
     try {
       const parsedConfig = JSON.parse(content);
+      if (
+        typeof parsedConfig !== 'object' ||
+        parsedConfig === null ||
+        Array.isArray(parsedConfig)
+      ) {
+        onConfigErrorChange?.('Configuration must be a JSON object');
+        return;
+      }
+
+      if (preserveConfigErrorOnUnchangedConfig && deepEqual(parsedConfig, selectedTarget.config)) {
+        return;
+      }
+
       updateCustomTarget('config', parsedConfig);
-    } catch (error) {
-      // Allow invalid JSON while typing - error is shown via bodyError prop
-      console.error('Invalid JSON configuration:', error);
+      onConfigErrorChange?.(null, { ...selectedTarget, config: parsedConfig });
+    } catch {
+      onConfigErrorChange?.('Invalid JSON configuration');
     }
   };
 
@@ -446,11 +475,21 @@ const CustomTargetConfiguration = ({
     if (rawConfigJson.trim()) {
       try {
         const parsed = JSON.parse(rawConfigJson);
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+          onConfigErrorChange?.('Configuration must be a JSON object');
+          return;
+        }
+
+        if (preserveConfigErrorOnUnchangedConfig && deepEqual(parsed, selectedTarget.config)) {
+          return;
+        }
+
         const formatted = JSON.stringify(parsed, null, 2);
         setRawConfigJson(formatted);
         updateCustomTarget('config', parsed);
+        onConfigErrorChange?.(null, { ...selectedTarget, config: parsed });
       } catch {
-        // Error state is already shown via bodyError prop
+        onConfigErrorChange?.('Invalid JSON configuration');
       }
     }
   };

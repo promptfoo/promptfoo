@@ -8,6 +8,7 @@ interface ResponseParserTestModalProps {
   onClose: () => void;
   currentTransform: string;
   onApply: (code: string) => void;
+  isTargetConfigInvalid?: () => boolean;
 }
 
 const ResponseParserTestModal: React.FC<ResponseParserTestModalProps> = ({
@@ -15,6 +16,7 @@ const ResponseParserTestModal: React.FC<ResponseParserTestModalProps> = ({
   onClose,
   currentTransform,
   onApply,
+  isTargetConfigInvalid,
 }) => {
   const [testInput, setTestInput] = useState('');
   const [editableTransform, setEditableTransform] = useState('');
@@ -28,6 +30,9 @@ const ResponseParserTestModal: React.FC<ResponseParserTestModalProps> = ({
 
   // Test handler function for response transform
   const handleTest = async (transformCode: string, testInput: string) => {
+    if (isTargetConfigInvalid?.()) {
+      return { success: false, error: 'Invalid target configuration' };
+    }
     const response = await callApi('/providers/test-response-transform', {
       method: 'POST',
       headers: {

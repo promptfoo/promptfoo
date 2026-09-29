@@ -19,6 +19,7 @@ vi.mock('child_process', () => ({
 }));
 
 import { PythonShell } from 'python-shell';
+import cliState from '../../src/cliState';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import logger from '../../src/logger';
 import * as pythonUtils from '../../src/python/pythonUtils';
@@ -27,6 +28,7 @@ import {
   removeSecureTempDirectory,
   writeSecureTempFile,
 } from '../../src/util/secureTempFiles';
+import { mockProcessEnv } from '../util/utils';
 
 const fsMock = vi.hoisted(() => ({
   writeFileSync: vi.fn(),
@@ -53,7 +55,8 @@ vi.mock('fs/promises', () => ({
   unlink: fsMock.unlinkSync,
 }));
 
-vi.mock('../../src/envars', () => ({
+vi.mock(import('../../src/envars'), async (importOriginal) => ({
+  ...(await importOriginal()),
   getEnvString: vi.fn(),
   getEnvBool: vi.fn(),
 }));
@@ -62,6 +65,7 @@ vi.mock('../../src/logger', () => ({
   default: {
     debug: vi.fn(),
     error: vi.fn(),
+    info: vi.fn(),
     warn: vi.fn(),
   },
 }));
@@ -97,6 +101,9 @@ describe('Python Utils', () => {
     mockExecFileAsync.mockReset();
     pythonUtils.state.cachedPythonPath = null;
     pythonUtils.state.validationPromise = null;
+    mockPythonShellInstance.stdout.on.mockReset();
+    mockPythonShellInstance.stderr.on.mockReset();
+    mockPythonShellInstance.end.mockReset();
     // Set default mock return values
     vi.mocked(getEnvString).mockReturnValue('');
     vi.mocked(getEnvBool).mockReturnValue(false);
@@ -511,6 +518,30 @@ describe('Python Utils', () => {
   });
 
   describe('runPython', () => {
+    it('passes file defaults to one-shot Python calls without changing process.env', async () => {
+      const restore = mockProcessEnv({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ type: 'final_result', data: 42 }),
+      );
+      mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
+      mockPythonShellInstance.end.mockImplementation((callback: (error: Error | null) => void) =>
+        callback(null),
+      );
+      try {
+        await cliState.withEnvFileOverrides({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }, () =>
+          pythonUtils.runPython('/path/to/script.py', 'call_api', []),
+        );
+        expect(PythonShell).toHaveBeenCalledWith(
+          'wrapper.py',
+          expect.objectContaining({
+            env: expect.objectContaining({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }),
+          }),
+        );
+        expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
+      } finally {
+        restore();
+      }
+    });
     beforeEach(() => {
       vi.clearAllMocks();
     });
@@ -609,6 +640,27 @@ describe('Python Utils', () => {
       const debugMessages = vi.mocked(logger.debug).mock.calls.flat().map(String).join('\n');
       expect(debugMessages).not.toContain('secret-input');
       expect(debugMessages).not.toContain('secret-result');
+    });
+
+    it('classifies routine stderr without reporting Python logging as errors', async () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ type: 'final_result', data: 'result' }),
+      );
+      mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
+      mockPythonShellInstance.stderr.on.mockImplementation((event: string, callback: any) => {
+        if (event === 'data') {
+          callback(Buffer.from('INFO:root:loaded config\nWARNING:root:slow response\n'));
+        }
+      });
+      mockPythonShellInstance.end.mockImplementation((callback: any) => {
+        callback(null);
+      });
+
+      await pythonUtils.runPython('/path/to/script.py', 'test_method', []);
+
+      expect(logger.info).toHaveBeenCalledWith('INFO:root:loaded config');
+      expect(logger.warn).toHaveBeenCalledWith('WARNING:root:slow response');
+      expect(logger.error).not.toHaveBeenCalled();
     });
 
     it('should throw an error if Python script does not return final_result', async () => {
