@@ -836,9 +836,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const finishReason = normalizeFinishReason(message.stop_reason);
     let output = outputFromMessage(message, config.showThinking ?? true);
     const isStructuredOutput = processedOutputFormat?.type === 'json_schema';
-    const fileReferences = isStructuredOutput
-      ? (message.fileReferences ?? message.content.flatMap(getFileReferences))
-      : [];
+    const fileReferences = message.fileReferences ?? message.content.flatMap(getFileReferences);
 
     if (isStructuredOutput) {
       // Parse completed JSON text, keeping file references in metadata and unfinished

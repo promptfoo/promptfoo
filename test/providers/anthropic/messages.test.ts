@@ -2438,18 +2438,25 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.tokenUsage).toMatchObject({ prompt: 60, completion: 14, total: 74 });
     });
 
-    it.each([false, true])(
-      'retains paused file references across an MCP handoff (stream: %s)',
-      async (stream) => {
+    it.each([
+      { stream: false, structured: false },
+      { stream: true, structured: false },
+      { stream: false, structured: true },
+      { stream: true, structured: true },
+    ])(
+      'retains paused files across an MCP handoff (stream: $stream, structured: $structured)',
+      async ({ stream, structured }) => {
         enableCache();
         provider = createProvider('claude-sonnet-4-6', {
           config: {
             stream,
             mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
-            output_format: {
-              type: 'json_schema',
-              schema: { type: 'object', properties: { answer: { type: 'string' } } },
-            },
+            ...(structured && {
+              output_format: {
+                type: 'json_schema',
+                schema: { type: 'object', properties: { answer: { type: 'string' } } },
+              },
+            }),
           },
         });
         mcpMocks.callTool.mockResolvedValueOnce({ content: 'Found Acme Solar.' });
@@ -2500,7 +2507,7 @@ describe('AnthropicMessagesProvider', () => {
                   content: [fileReferences[2]],
                 },
               },
-              { type: 'text', text: '{"answer":"solar"}' },
+              { type: 'text', text: structured ? '{"answer":"solar"}' : 'Solar report ready.' },
             ],
             stop_reason: 'end_turn',
             usage: { input_tokens: 30, output_tokens: 5 },
@@ -2520,9 +2527,15 @@ describe('AnthropicMessagesProvider', () => {
 
         const result = await provider.callApi('Create a solar report');
 
-        expect(result.output).toEqual({ answer: 'solar' });
+        expect(result.output).toEqual(
+          structured
+            ? { answer: 'solar' }
+            : `${JSON.stringify(fileReferences[2])}\n\nSolar report ready.`,
+        );
         expect(result.metadata?.fileReferences).toEqual(fileReferences);
         expect(result.metadata?.toolCalls).toHaveLength(1);
+        expect(result.tokenUsage).toMatchObject({ prompt: 60, completion: 15, total: 75 });
+        expect(result.cost).toBeCloseTo(0.000405, 10);
         expect(result.cached).not.toBe(true);
         expect(result.error).toBeUndefined();
         expect(stream ? streamed : create).toHaveBeenCalledTimes(3);
