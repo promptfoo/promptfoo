@@ -4,7 +4,10 @@ import Clone from 'rfdc';
 import { z } from 'zod';
 import logger from '../../logger';
 import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../util/dataUrl';
-import { maybeLoadFromExternalFile } from '../../util/file';
+import {
+  maybeLoadFromExternalFile,
+  maybeLoadStructuredConfigFromExternalFileWithVars,
+} from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { parseFileUrl } from '../../util/functions/loadFunction';
 import { renderVarsInObject } from '../../util/index';
@@ -1391,12 +1394,6 @@ export function loadFile(
   config_var: Tool[] | string | undefined,
   context_vars: Record<string, VarValue> | undefined,
 ) {
-  // Ensures that files are loaded correctly. Files may be defined in multiple ways:
-  // 1. Directly in the provider:
-  //    config_var will be the file path, which will be loaded here in maybeLoadFromExternalFile.
-  // 2. In a test variable that is used in the provider via a nunjucks:
-  //    context_vars will contain a string of the contents of the file with whitespace.
-  //    This will be inserted into the nunjucks in contfig_tools and the output needs to be parsed.
   const fileContents = maybeLoadFromExternalFile(renderVarsInObject(config_var, context_vars));
   if (typeof fileContents === 'string') {
     try {
@@ -1859,7 +1856,10 @@ export function validateFunctionCall(
     );
   }
 
-  const interpolatedFunctions = loadFile(functions, vars) as Tool[];
+  const interpolatedFunctions = loadFile(
+    maybeLoadStructuredConfigFromExternalFileWithVars(functions, vars),
+    undefined,
+  ) as Tool[];
 
   for (const functionCall of functionCalls) {
     // Parse function call and validate it against schema

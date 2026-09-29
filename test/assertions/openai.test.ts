@@ -468,6 +468,45 @@ describe('OpenAI assertions', () => {
   });
 
   describe('is-valid-openai-tools-call assertion', () => {
+    it('grades against the same literal schema used for the request', async () => {
+      const { maybeLoadToolsFromExternalFile } =
+        await vi.importActual<typeof import('../../src/util/file')>('../../src/util/file');
+      mocks.mockMaybeLoadToolsFromExternalFile.mockImplementation(maybeLoadToolsFromExternalFile);
+      const schema = {
+        type: 'object',
+        properties: { value: { type: 'string', enum: ['{{literal}}'] } },
+        required: ['value'],
+      };
+      const provider = new OpenAiChatCompletionProvider('test-provider', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'example',
+                parameters: '{{ schema }}' as unknown as OpenAiTool['function']['parameters'],
+              },
+            },
+          ],
+        },
+      });
+      const output = [
+        {
+          type: 'function',
+          function: { name: 'example', arguments: JSON.stringify({ value: '{{literal}}' }) },
+        },
+      ];
+      const result = await runAssertion({
+        assertion: toolsAssertion,
+        provider,
+        test: { vars: { schema, literal: 'replacement' } },
+        prompt: 'Return the literal fixture value.',
+        providerResponse: { output },
+      });
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
     it('should pass for a valid tools call with correct arguments', async () => {
       const output = [
         { type: 'function', function: { arguments: '{"x": 10, "y": 20}', name: 'add' } },
@@ -770,6 +809,9 @@ describe('OpenAI assertions', () => {
     });
 
     it('should render variables in tool definitions', async () => {
+      const { maybeLoadToolsFromExternalFile } =
+        await vi.importActual<typeof import('../../src/util/file')>('../../src/util/file');
+      mocks.mockMaybeLoadToolsFromExternalFile.mockImplementation(maybeLoadToolsFromExternalFile);
       const toolsOutput = [
         {
           id: 'call_123',

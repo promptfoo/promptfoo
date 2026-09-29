@@ -41,7 +41,7 @@ import {
   validateFunctionCall,
 } from '../../../src/providers/google/util';
 
-import type { Tool } from '../../../src/providers/google/types';
+import type { Schema, Tool } from '../../../src/providers/google/types';
 
 // Create a comprehensive mock for Google Auth Library
 // This prevents the real library from reading ~/.config/gcloud/ or environment
@@ -259,6 +259,36 @@ describe('util', () => {
         ],
       },
     ];
+
+    it('validates inserted schemas without reinterpreting their literal values', () => {
+      const schema = {
+        type: 'object',
+        properties: { value: { type: 'string', enum: ['{{literal}}'] } },
+        required: ['value'],
+      };
+      const tools: Tool[] = [
+        {
+          functionDeclarations: [
+            { name: 'example', parameters: '{{ schema }}' as unknown as Schema },
+          ],
+        },
+      ];
+      const vars = { schema, literal: 'replacement' };
+      expect(() =>
+        validateFunctionCall(
+          [{ functionCall: { name: 'example', args: { value: '{{literal}}' } } }],
+          tools,
+          vars,
+        ),
+      ).not.toThrow();
+      expect(() =>
+        validateFunctionCall(
+          [{ functionCall: { name: 'example', args: { value: 'replacement' } } }],
+          tools,
+          vars,
+        ),
+      ).toThrow('does not match schema');
+    });
 
     it('should validate Vertex/AIS format function call', () => {
       const output = [

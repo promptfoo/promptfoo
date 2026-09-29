@@ -39,14 +39,15 @@ const SCHEMA_TEMPLATE_KEYS = new Set([
 function renderStructuredConfig(
   config: any,
   vars?: Record<string, VarValue>,
-  allowDumpSafe = true,
+  allowStructured = true,
+  insertedValues?: WeakSet<object>,
 ): any {
   if (!vars || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return config;
   }
   if (typeof config === 'string') {
     const match = /^\{\{\s*([A-Za-z_]\w*)\s*(\|\s*dump\s*\|\s*safe\s*)?\}\}$/.exec(config);
-    if (match && (!match[2] || allowDumpSafe) && Object.hasOwn(vars, match[1])) {
+    if (match && allowStructured && Object.hasOwn(vars, match[1])) {
       const value = vars[match[1]];
       if (
         Array.isArray(value) ||
@@ -54,19 +55,22 @@ function renderStructuredConfig(
           typeof value === 'object' &&
           [Object.prototype, null].includes(Object.getPrototypeOf(value)))
       ) {
+        insertedValues?.add(value);
         return value;
       }
     }
     return renderVarsInObject(config, vars);
   }
   if (Array.isArray(config)) {
-    return config.map((item) => renderStructuredConfig(item, vars, false));
+    return config.map((item) =>
+      renderStructuredConfig(item, vars, allowStructured, insertedValues),
+    );
   }
   if (config && typeof config === 'object') {
     return Object.fromEntries(
       Object.entries(config).map(([key, value]) => [
         key,
-        renderStructuredConfig(value, vars, SCHEMA_TEMPLATE_KEYS.has(key)),
+        renderStructuredConfig(value, vars, SCHEMA_TEMPLATE_KEYS.has(key), insertedValues),
       ]),
     );
   }
@@ -496,7 +500,7 @@ export function maybeLoadResponseSchemaFromExternalFileWithVars(
   const loaded = maybeLoadFromExternalFile(rendered);
 
   // Render file contents once; inserted variable values must stay literal.
-  if (typeof rendered === 'string' && typeof loaded !== 'string') {
+  if (typeof rendered === 'string' && rendered.startsWith('file://')) {
     return renderStructuredConfig(loaded, vars);
   }
 
@@ -525,10 +529,16 @@ export function maybeLoadResponseFormatFromExternalFile(
   }
 
   // First, render variables and load the outer response_format
-  const rendered = renderStructuredConfig(responseFormat, vars);
+  const insertedValues = new WeakSet<object>();
+  const rendered = renderStructuredConfig(responseFormat, vars, true, insertedValues);
   const loaded = maybeLoadFromExternalFile(rendered);
 
-  if (!loaded || typeof loaded !== 'object') {
+  if (
+    !loaded ||
+    typeof loaded !== 'object' ||
+    insertedValues.has(loaded) ||
+    (loaded.json_schema && insertedValues.has(loaded.json_schema))
+  ) {
     return loaded;
   }
 
@@ -539,9 +549,7 @@ export function maybeLoadResponseFormatFromExternalFile(
     if (nestedSchema) {
       // Render file-loaded config, but preserve values already inserted from vars.
       const schemaForLoading =
-        typeof rendered === 'string' || typeof nestedSchema === 'string'
-          ? renderStructuredConfig(nestedSchema, vars)
-          : nestedSchema;
+        typeof rendered === 'string' ? renderStructuredConfig(nestedSchema, vars) : nestedSchema;
       const loadedSchema = maybeLoadFromExternalFile(schemaForLoading);
 
       // Return with the loaded schema in place
