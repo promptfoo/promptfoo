@@ -9,7 +9,7 @@ export interface HeliconeGatewayOptions extends OpenAiCompletionOptions {
   baseUrl?: string;
   /** Router name for custom routing (optional, uses /ai endpoint if not specified) */
   router?: string;
-  /** Model name in provider/model format (e.g., openai/gpt-4o, anthropic/claude-3-5-sonnet) */
+  /** Model name in provider/model format (e.g., openai/gpt-4o, anthropic/claude-sonnet-5) */
   model?: string;
 }
 

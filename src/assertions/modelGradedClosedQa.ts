@@ -1,10 +1,12 @@
-import { matchesClosedQa } from '../matchers/llmGrading';
+import { isGraderFailure, matchesClosedQa } from '../matchers/llmGrading';
+import { invertScore } from '../matchers/shared';
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleModelGradedClosedQa = async ({
   assertion,
+  inverse,
   renderedValue,
   outputString,
   test,
@@ -19,15 +21,24 @@ export const handleModelGradedClosedQa = async ({
   // Note: rubricPrompt will be rendered later in matchesClosedQa with proper variables
   // (input, criteria, completion) available at that point
 
+  const resp = await matchesClosedQa(
+    prompt,
+    renderedValue,
+    outputString,
+    test.options,
+    test.vars,
+    providerCallContext,
+  );
+
+  // Grader failures must remain failures under negation.
+  if (isGraderFailure(resp)) {
+    return { ...resp, assertion };
+  }
+
   return {
+    ...resp,
+    pass: resp.pass !== inverse,
+    score: inverse ? invertScore(resp.score) : resp.score,
     assertion,
-    ...(await matchesClosedQa(
-      prompt,
-      renderedValue,
-      outputString,
-      test.options,
-      test.vars,
-      providerCallContext,
-    )),
   };
 };

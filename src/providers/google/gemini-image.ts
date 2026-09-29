@@ -23,14 +23,10 @@ import type {
   ImageOutput,
   ProviderResponse,
 } from '../../types/index';
-import type { CompletionOptions } from './types';
-
-interface GeminiImageConfig extends CompletionOptions {
-  vertexai?: boolean;
-}
+import type { GoogleProviderConfig } from './types';
 
 interface GeminiImageOptions {
-  config?: GeminiImageConfig;
+  config?: GoogleProviderConfig;
   id?: string;
   env?: EnvOverrides;
 }
@@ -103,7 +99,7 @@ const MODEL_IMAGE_SIZES: Record<string, string[]> = {
  */
 export class GeminiImageProvider implements ApiProvider {
   modelName: string;
-  config: GeminiImageConfig;
+  config: GoogleProviderConfig;
   env?: EnvOverrides;
 
   constructor(modelName: string, options: GeminiImageOptions = {}) {
@@ -170,7 +166,6 @@ export class GeminiImageProvider implements ApiProvider {
       return this.callVertexApi(prompt, context);
     }
 
-    // Otherwise, try Google AI Studio.
     const apiKey = this.getApiKey();
     if (apiKey || this.config.apiKeyRequired === false) {
       return this.callAIStudioApi(prompt, context);

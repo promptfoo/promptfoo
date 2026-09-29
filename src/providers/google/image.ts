@@ -14,10 +14,10 @@ import {
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
-import type { CompletionOptions } from './types';
+import type { GoogleProviderConfig } from './types';
 
 interface GoogleImageOptions {
-  config?: CompletionOptions;
+  config?: GoogleProviderConfig;
   id?: string;
   env?: EnvOverrides;
 }
@@ -73,7 +73,7 @@ const IMAGEN_COSTS: Record<string, number> = {
 
 export class GoogleImageProvider implements ApiProvider {
   modelName: string;
-  config: CompletionOptions;
+  config: GoogleProviderConfig;
   env?: EnvOverrides;
   maxRetries: number = 3;
   baseRetryDelay: number = 1000; // 1 second
@@ -98,7 +98,6 @@ export class GoogleImageProvider implements ApiProvider {
     );
   }
 
-  /** Helper method to get Google client with credentials support. */
   private async getClientWithCredentials() {
     const credentials = loadCredentials(this.config.credentials);
     const { client } = await getGoogleClient({ credentials });
@@ -120,7 +119,6 @@ export class GoogleImageProvider implements ApiProvider {
       return this.callVertexApi(prompt);
     }
 
-    // Otherwise, try Google AI Studio.
     const apiKey = this.getApiKey();
     if (apiKey || this.config.apiKeyRequired === false) {
       return this.callGeminiApi(prompt);
