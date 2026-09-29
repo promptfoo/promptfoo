@@ -84,18 +84,6 @@ export default defineConfig([
       banner: '#!/usr/bin/env node',
     },
   },
-  // Keep pure assertions out of the host library's shared chunks and Node shims.
-  {
-    ...sharedBuildOptions,
-    entry: { pure: 'src/assertions/pure.ts' },
-    outDir: 'dist/src/assertions',
-    platform: 'neutral',
-    target: 'es2022',
-    format: ['esm', 'cjs'],
-    fixedExtension: false,
-    shims: false,
-    dts: true,
-  },
   // Library ESM build
   {
     ...sharedBuildOptions,

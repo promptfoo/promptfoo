@@ -8,7 +8,7 @@ import {
 } from '../../util/index';
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
-import { applyGpt6AstraRequestRules, isGpt6AstraModel } from '../openai/gpt6';
+import { applyGpt6RequestRules, getGpt6ResponsesReasoning, isGpt6Model } from '../openai/gpt6';
 import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
@@ -103,7 +103,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       // GPT-5 series (reasoning by default)
       lowerName.startsWith('gpt-5') ||
       lowerName.includes('-gpt-5') ||
-      isGpt6AstraModel(lowerName) ||
+      isGpt6Model(lowerName) ||
       // DeepSeek reasoning models
       lowerName.includes('deepseek-r1') ||
       lowerName.includes('deepseek_r1') ||
@@ -148,6 +148,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         : (config.modelName ?? this.deploymentName)
     ).toLowerCase();
     const isReasoningModel = this.isReasoningModel(capabilityModelName);
+    const isGPT6Model = isGpt6Model(capabilityModelName);
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined
@@ -159,17 +160,25 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       config.max_output_tokens ??
       (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
 
-    const temperatureDefault = config.omitDefaults
-      ? getEnvString('OPENAI_TEMPERATURE') === undefined
-        ? undefined
-        : getEnvFloat('OPENAI_TEMPERATURE')
-      : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const temperature = this.supportsTemperature(capabilityModelName)
-      ? (config.temperature ?? temperatureDefault)
+    const temperatureDefault =
+      config.omitDefaults || isGPT6Model
+        ? getEnvString('OPENAI_TEMPERATURE') === undefined
+          ? undefined
+          : getEnvFloat('OPENAI_TEMPERATURE')
+        : getEnvFloat('OPENAI_TEMPERATURE', 0);
+    const temperature =
+      isGPT6Model || this.supportsTemperature(capabilityModelName)
+        ? (config.temperature ?? temperatureDefault)
+        : undefined;
+    const gpt6Reasoning = isGPT6Model
+      ? getGpt6ResponsesReasoning(this.config, context?.prompt?.config, (value) =>
+          renderVarsInObject(value, context?.vars),
+        )
       : undefined;
-    const reasoningEffort = isReasoningModel
-      ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
-      : undefined;
+    const reasoningEffort =
+      isReasoningModel && !isGPT6Model
+        ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
+        : undefined;
 
     const instructions = config.instructions;
 
@@ -259,7 +268,16 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...(config.passthrough || {}),
     };
 
-    applyGpt6AstraRequestRules(body, capabilityModelName, 'responses');
+    if (isGPT6Model) {
+      if (gpt6Reasoning) {
+        Object.assign(body, { reasoning: gpt6Reasoning });
+      } else {
+        delete body.reasoning;
+      }
+    }
+    applyGpt6RequestRules(body, capabilityModelName, 'responses', {
+      defaultResponsesTemperature: config.omitDefaults ? undefined : 0,
+    });
 
     logger.debug('Azure Responses API request body', { body });
     return body;

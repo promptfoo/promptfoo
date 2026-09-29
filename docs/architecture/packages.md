@@ -82,53 +82,13 @@ dependency-light state implementation for embedded evaluators and focused tests.
 resume append behavior. The evaluator orchestrates evaluation behavior without
 importing the concrete `Eval` model.
 
-Assertion dispatch follows the same composition pattern. `src/assertions/registry.ts`
-defines a dependency-free generic registry. The published
-`promptfoo/assertions/pure` entry point provides a runner for
-deterministic assertions without loading providers, redteam, tracing, scripts,
-Node adapters, Node builtins, or external packages. Both ESM and CommonJS imports
-use a standalone bundle and portable declarations, separate from the root library's host runtime. The registry factories remain available from the root `promptfoo` entry point. The pure runner accepts already-rendered values; templating,
-transforms, and host context remain responsibilities of the compatibility
-runner. The dependency-oriented capability packs under
-`src/assertions/packs/` own model-graded, script, trace, optional-format,
-provider-runtime, webhook, and redteam handlers.
-`src/assertions/defaultRegistry.ts` composes every pack for the existing
-`runAssertion()` and `runAssertions()` compatibility APIs, which also accept an
-injected registry for focused tests and custom host compositions.
-
-Custom assertion names use the generic `AssertionParams<Type>` and
-`GradingResult<Type>` contracts. Pass the matching registry to `runAssertion`:
-
-```typescript
-import { AssertionRegistry, assertions } from 'promptfoo';
-import type { AssertionParams, GradingResult } from 'promptfoo';
-
-const registry = new AssertionRegistry<
-  AssertionParams<'custom-check'>,
-  GradingResult<'custom-check'>
->([
-  {
-    name: 'custom',
-    handlers: {
-      'custom-check': ({ assertion, outputString, renderedValue }) => {
-        const pass = outputString === renderedValue;
-        return { pass, score: pass ? 1 : 0, reason: 'custom comparison', assertion };
-      },
-    },
-  },
-]);
-
-await assertions.runAssertion({
-  assertion: { type: 'custom-check', value: 'expected' },
-  registry,
-  providerResponse: { output: 'expected' },
-  test: {},
-});
-```
-
-The existing built-in assertion types and configuration schema are unchanged.
-Custom registry names are supported by the programmatic single-assertion runner;
-batch configuration still uses the built-in assertion schema.
+`src/util/envFile.ts` owns plain `.env` file loading as a Node filesystem adapter.
+The imports from `src/envars.ts` and `src/server/server.ts` replace external
+`dotenv` calls at the same startup points; the edge baseline records these two
+internal dependencies. The loader imports only Node built-ins, so early loading
+does not initialize the logger, configuration state, or database. Keeping it
+separate from `setupEnv` preserves that initialization order without duplicating
+the parser across callers.
 
 The checker also resolves cross-layer source aliases such as `@promptfoo/*`.
 The browser-only `@app/*` alias stays inside the `app` layer. Alias spelling
@@ -176,3 +136,7 @@ npm run deps:ownership
 
 The report is intentionally descriptive for now. It gives us the evidence needed
 to move dependencies into future packages without guessing at ownership.
+
+It includes direct, optional, and peer dependency declarations. Peers marked
+optional in `peerDependenciesMeta` appear as `optional-peer`; other peers appear
+as `peer`. These labels describe the package contract, not what is installed.

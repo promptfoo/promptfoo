@@ -13,6 +13,15 @@ import type { OpenAiRealtimeOptions } from '../../../src/providers/openai/realti
 vi.mock('ws');
 const MockWebSocket = WebSocket as Mocked<typeof WebSocket>;
 
+it.each(['gpt-live-transcribe', 'gpt-live-transcribe-2026-09-01'])(
+  'direct Realtime callers get transcription guidance for %s',
+  (model) => {
+    expect(() => new OpenAiRealtimeProvider(model)).toThrow(
+      'dedicated Realtime transcription session',
+    );
+  },
+);
+
 // Mock logger
 vi.mock('../../../src/logger', () => ({
   __esModule: true,
