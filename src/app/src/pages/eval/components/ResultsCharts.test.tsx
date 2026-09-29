@@ -38,14 +38,6 @@ vi.mock('./store', () => ({
   useTableStore: vi.fn(),
 }));
 
-// Mock API calls
-vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
-  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
-  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
-  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
-}));
-
 describe('ResultsCharts', () => {
   const defaultProps = {};
 
@@ -100,7 +92,7 @@ describe('ResultsCharts', () => {
 
     const { container } = render(<ResultsCharts scores={scores} />);
     expect(screen.queryByRole('button')).toBeNull();
-    expect(container.querySelectorAll('canvas').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('canvas')).toHaveLength(3);
   });
 
   it('should render without errors with a large number of providers', () => {
@@ -418,50 +410,6 @@ describe('ResultsCharts', () => {
           raw: scatterData?.[0],
         }),
       ).toContain('right first output');
-    });
-
-    it('handles empty recentEvals array gracefully', () => {
-      const mockTable = {
-        head: {
-          prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
-          vars: [],
-        },
-        body: [
-          {
-            outputs: [
-              { score: 0.9, pass: true, text: 'test 1' },
-              { score: 0.8, pass: true, text: 'test 2' },
-            ],
-            vars: [],
-          },
-          {
-            outputs: [
-              { score: 0.7, pass: true, text: 'test 3' },
-              { score: 0.6, pass: false, text: 'test 4' },
-            ],
-            vars: [],
-          },
-        ],
-      };
-
-      // Calculate scores using the same logic as ResultsView
-      const scores = mockTable.body
-        .flatMap((row) => row.outputs.map((output) => output?.score))
-        .filter((score) => typeof score === 'number' && !Number.isNaN(score));
-
-      vi.mocked(useTableStore).mockReturnValue({
-        table: mockTable,
-        evalId: 'test-eval',
-        config: { description: 'test config' },
-        setTable: vi.fn(),
-        fetchEvalData: vi.fn(),
-      });
-
-      const { container } = render(<ResultsCharts {...defaultProps} scores={scores} />);
-
-      expect(container).toBeDefined();
-
-      expect(screen.queryByText('PerformanceOverTimeChart')).toBeNull();
     });
   });
 
