@@ -86,7 +86,7 @@ describe('NscaleImageProvider', () => {
       expect.any(Number),
     );
     expect(result).toMatchObject({
-      output: `![Generate a cat](${imageData})`,
+      output: imageData,
       images: [{ data: imageData, mimeType: 'image/png' }],
       cached: false,
       cost: 0.0013,

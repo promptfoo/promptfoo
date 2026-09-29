@@ -461,7 +461,7 @@ describe('XAI Image Provider', () => {
       );
 
       expect(result).toMatchObject({
-        output: `![Generate a cat](${imageData})`,
+        output: imageData,
         images: [{ data: imageData, mimeType: 'image/jpeg' }],
         cached: false,
         cost: 0.07, // xAI pricing: $0.07 per generated image
@@ -478,7 +478,7 @@ describe('XAI Image Provider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toMatchObject({
-        output: `![test prompt](${imageData})`,
+        output: imageData,
         images: [{ data: imageData, mimeType: 'image/jpeg' }],
         cached: true,
         cost: 0,
@@ -505,7 +505,7 @@ describe('XAI Image Provider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toMatchObject({
-        output: `![test prompt](${imageData})`,
+        output: imageData,
         images: [
           { data: imageData, mimeType: 'image/jpeg' },
           { data: imageData, mimeType: 'image/jpeg' },

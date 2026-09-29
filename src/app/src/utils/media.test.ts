@@ -677,6 +677,22 @@ describe('resolveBlobUri security', () => {
     expect(resolveBlobUri('https://api.example.com.evil/api/blobs/abc123')).toBeUndefined();
   });
 
+  it('preserves a configured API prefix that itself starts with /api', () => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('/api/promptfoo'));
+    expect(resolveBlobUri('promptfoo://blob/abc123')).toBe('/api/promptfoo/api/blobs/abc123');
+    expect(resolveBlobUri('storageRef:images/test.png')).toBe(
+      '/api/promptfoo/api/media/images/test.png',
+    );
+    expect(resolveBlobUri('/api/promptfoo/api/blobs/abc123')).toBe(
+      '/api/promptfoo/api/blobs/abc123',
+    );
+    expect(resolveBlobUri('/api/blobs/abc123')).toBe('/api/blobs/abc123');
+    expect(resolveVideoSource({ url: '/api/promptfoo/api/media/video.mp4' })?.src).toBe(
+      '/api/promptfoo/api/media/video.mp4',
+    );
+    expect(resolveBlobUri('/api/promptfood/api/blobs/abc123')).toBeUndefined();
+  });
+
   it('normalizes media paths before checking the API route', () => {
     expect(resolveBlobUri('/api/media/images/./test.png')).toBe('/api/media/images/test.png');
     expect(resolveBlobUri('/api/media/../users/me/avatar')).toBeUndefined();
@@ -764,6 +780,21 @@ describe('resolveImageSource security', () => {
   it('should convert long base64 strings from image objects to data URIs', () => {
     const base64 = 'A'.repeat(100); // Long enough to be treated as base64
     expect(resolveImageSource({ data: base64 })).toBe(`data:image/png;base64,${base64}`);
+  });
+
+  it('accepts short and line-wrapped base64 in explicit image objects', () => {
+    const gif = 'R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+    const wrapped = `${gif.slice(0, 16)}\r\n${gif.slice(16, 32)}\n${gif.slice(32)}`;
+    expect(resolveImageSource({ data: gif, format: 'gif' })).toBe(`data:image/gif;base64,${gif}`);
+    expect(resolveImageSource({ data: wrapped, format: 'gif' })).toBe(
+      `data:image/gif;base64,${gif}`,
+    );
+    expect(resolveImageSource(gif)).toBeUndefined();
+    expect(resolveImageSource(wrapped)).toBeUndefined();
+  });
+
+  it.each(['A', 'AAAA=', 'AA=A', 'not base64!'])('rejects malformed raw image data: %s', (data) => {
+    expect(resolveImageSource({ data })).toBeUndefined();
   });
 
   it('should return undefined for short strings that could be session IDs', () => {

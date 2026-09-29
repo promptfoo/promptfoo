@@ -789,6 +789,7 @@ export function buildStructuredImageOutputs(
 async function downloadExternalImage(
   url: string,
   outputFormat?: string,
+  abortSignal?: AbortSignal,
 ): Promise<ImageOutput | null> {
   try {
     const validatedTarget = await validateExternalImageTarget(url);
@@ -811,7 +812,7 @@ async function downloadExternalImage(
     try {
       const downloadOptions = {
         redirect: 'error',
-        signal: controller.signal,
+        signal: abortSignal ? AbortSignal.any([controller.signal, abortSignal]) : controller.signal,
         dispatcher,
         // Binary downloads must not be cloned for request logging or receive saved Cloud auth.
         headers: { 'x-promptfoo-silent': 'true' },
@@ -907,6 +908,7 @@ export async function buildSafeStructuredImageOutputs(
   data: any,
   outputFormat?: string,
   responseFormat?: string,
+  abortSignal?: AbortSignal,
 ): Promise<ImageOutput[] | undefined> {
   if (!Array.isArray(data.data) || data.data.length === 0) {
     return undefined;
@@ -919,16 +921,15 @@ export async function buildSafeStructuredImageOutputs(
         return { data: `data:${mimeType};base64,${item.b64_json}`, mimeType };
       }
 
-      if (responseFormat === 'b64_json' || !item.url) {
+      if (responseFormat === 'b64_json' || typeof item.url !== 'string') {
         return null;
       }
 
       if (isExternalImageUrl(item.url)) {
-        return downloadExternalImage(item.url, outputFormat);
+        return downloadExternalImage(item.url, outputFormat, abortSignal);
       }
 
-      const mimeType = inferMimeTypeFromUrl(item.url);
-      return mimeType ? { data: item.url, mimeType } : { data: item.url };
+      return item.url.startsWith('data:image/') ? { data: item.url } : null;
     }),
   );
 
@@ -956,6 +957,9 @@ export function formatStructuredImageOutput(
 
   const primaryImageSource = getPrimaryImageSource(images);
   if (primaryImageSource) {
+    if (primaryImageSource.startsWith('data:')) {
+      return primaryImageSource;
+    }
     return formatImageMarkdown(prompt, primaryImageSource);
   }
 

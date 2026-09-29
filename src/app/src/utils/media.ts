@@ -61,7 +61,8 @@ function resolveMediaUrl(url?: string | null): string | undefined {
 
   // Legacy API path - prepend base URL (check before resolveBlobUri since
   // that function returns paths starting with '/' directly without apiBaseUrl)
-  if (url.startsWith('/api/')) {
+  const apiBase = getApiBaseUrl();
+  if (url.startsWith('/api/') && !(apiBase && url.startsWith(`${apiBase}/api/`))) {
     return withApiBase(url);
   }
 
@@ -95,7 +96,7 @@ export function resolveBlobUri(uri?: string | null): string | undefined {
   }
 
   const apiBase = getApiBaseUrl();
-  const prefix = source.startsWith('/api/') ? '' : apiBase;
+  const prefix = apiBase && source.startsWith(`${apiBase}/api/`) ? apiBase : '';
   if (!source.startsWith(`${prefix}/api/`)) {
     return undefined;
   }
@@ -172,9 +173,17 @@ export function resolveImageSource(
   if (blobUrl) {
     return blobUrl;
   }
-  if (data.length >= 60 && /^[A-Za-z0-9+/=_-]+$/.test(data)) {
-    const format = typeof image === 'string' ? 'png' : image?.format || 'png';
-    return `data:image/${format};base64,${data}`;
+  if (typeof image === 'string') {
+    return data.length >= 60 && /^[A-Za-z0-9+/=_-]+$/.test(data)
+      ? `data:image/png;base64,${data}`
+      : undefined;
+  }
+  const base64 = data.replace(/[\t\n\r ]/g, '');
+  if (
+    base64 &&
+    /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}(?:==)?|[A-Za-z0-9+/]{3}=?)?$/.test(base64)
+  ) {
+    return `data:image/${image?.format || 'png'};base64,${base64}`;
   }
   return undefined;
 }

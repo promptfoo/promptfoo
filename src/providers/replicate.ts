@@ -12,9 +12,9 @@ import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { safeJsonStringify } from '../util/json';
-import { ellipsize } from '../util/text';
 import { sleep, sleepWithAbort } from '../util/time';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { buildSafeStructuredImageOutputs } from './openai/image';
 import { parseChatPrompt } from './shared';
 
 import type { EnvOverrides } from '../types/env';
@@ -757,21 +757,31 @@ export class ReplicateImageProvider extends ReplicateProvider {
       };
     }
 
-    if (!cached && isCacheEnabled()) {
+    const images = await buildSafeStructuredImageOutputs(
+      { data: [{ url }] },
+      undefined,
+      undefined,
+      options?.abortSignal,
+    );
+    throwIfAborted(options?.abortSignal);
+    if (!images?.[0]?.data) {
+      if (isCacheEnabled()) {
+        await cache.del(cacheKey);
+      }
+      return { error: 'The generated image could not be downloaded safely.' };
+    }
+
+    if ((!cached || url !== images[0].data) && isCacheEnabled()) {
       try {
-        await cache.set(cacheKey, JSON.stringify(response));
+        await cache.set(cacheKey, JSON.stringify(images[0].data));
       } catch (err) {
         logger.error(`Failed to cache response: ${String(err)}`);
       }
     }
 
-    const sanitizedPrompt = prompt
-      .replace(/\r?\n|\r/g, ' ')
-      .replace(/\[/g, '(')
-      .replace(/\]/g, ')');
-    const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
     return {
-      output: `![${ellipsizedPrompt}](${url})`,
+      output: images[0].data,
+      images,
       cached,
     };
   }

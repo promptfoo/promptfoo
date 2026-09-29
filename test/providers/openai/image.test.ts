@@ -111,7 +111,7 @@ describe('OpenAiImageProvider', () => {
       );
 
       expect(result).toMatchObject({
-        output: `![Generate a cat](${imageData})`,
+        output: imageData,
         images: [{ data: imageData, mimeType: 'image/png' }],
         cached: false,
         cost: 0.04, // Default cost for DALL-E 3 standard 1024x1024
@@ -131,7 +131,7 @@ describe('OpenAiImageProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toMatchObject({
-        output: `![test prompt](${imageData})`,
+        output: imageData,
         images: [{ data: imageData, mimeType: 'image/png' }],
         cached: true,
         cost: 0, // Cost is 0 for cached responses
@@ -199,7 +199,7 @@ describe('OpenAiImageProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toMatchObject({
-        output: `![test prompt](${imageData})`,
+        output: imageData,
         images: [
           { data: imageData, mimeType: 'image/png' },
           { data: imageData, mimeType: 'image/png' },
@@ -216,7 +216,7 @@ describe('OpenAiImageProvider', () => {
 
       const result = await provider.callApi('Test [prompt] with\nnewlines');
 
-      expect(result.output).toBe(`![Test (prompt) with newlines](${imageData})`);
+      expect(result.output).toBe(imageData);
     });
 
     it('should correctly use ID passed during construction', async () => {

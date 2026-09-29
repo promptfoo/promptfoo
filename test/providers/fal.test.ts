@@ -2,6 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
 import { getEnvString } from '../../src/envars';
 import { FalImageGenerationProvider } from '../../src/providers/fal';
+import { buildSafeStructuredImageOutputs } from '../../src/providers/openai/image';
+
+const imageData = 'data:image/png;base64,aW1hZ2U=';
+vi.mock('../../src/providers/openai/image', () => ({ buildSafeStructuredImageOutputs: vi.fn() }));
 
 const mockSubscribe = vi.hoisted(() => vi.fn());
 const mockConfig = vi.hoisted(() => vi.fn());
@@ -41,6 +45,9 @@ vi.mock('../../src/envars', async (importOriginal) => {
 describe('Fal Provider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(buildSafeStructuredImageOutputs).mockResolvedValue([
+      { data: imageData, mimeType: 'image/png' },
+    ]);
     mockCreateClient.mockImplementation(() => ({ subscribe: mockSubscribe }));
     vi.mocked(isCacheEnabled).mockReturnValue(false);
     vi.mocked(getCache).mockReturnValue({
@@ -173,7 +180,7 @@ describe('Fal Provider', () => {
         requestId: 'test-request-id',
       };
 
-      it('should call fal API and return markdown image with images array response', async () => {
+      it('should call fal API and return inline image data with images array response', async () => {
         mockSubscribe.mockResolvedValueOnce(mockImageResponse);
 
         const result = await provider.callApi('a cute cat');
@@ -188,18 +195,20 @@ describe('Fal Provider', () => {
         });
         expect(result).toEqual({
           cached: false,
-          output: '![a cute cat](https://example.com/image.png)',
+          output: imageData,
+          images: [{ data: imageData, mimeType: 'image/png' }],
         });
       });
 
-      it('should call fal API and return markdown image with single image response', async () => {
+      it('should call fal API and return inline image data with single image response', async () => {
         mockSubscribe.mockResolvedValueOnce(mockSingleImageResponse);
 
         const result = await provider.callApi('a beautiful landscape');
 
         expect(result).toEqual({
           cached: false,
-          output: '![a beautiful landscape](https://example.com/image.png)',
+          output: imageData,
+          images: [{ data: imageData, mimeType: 'image/png' }],
         });
       });
 
@@ -355,6 +364,30 @@ describe('Fal Provider', () => {
     });
 
     describe('caching behavior', () => {
+      it.each([false, true])(
+        'returns a download error and clears an unusable cached image: %s',
+        async (cached) => {
+          vi.mocked(isCacheEnabled).mockReturnValue(true);
+          const cache = getCache();
+          vi.mocked(cache.get).mockResolvedValue(
+            cached ? JSON.stringify('![fixture](https://example.com/image.png)') : undefined,
+          );
+          mockSubscribe.mockResolvedValue({
+            data: { images: [{ url: 'https://example.com/image.png' }] },
+          });
+          vi.mocked(buildSafeStructuredImageOutputs).mockResolvedValue(undefined);
+
+          const result = await provider.callApi('A benign image');
+
+          expect(result.error).toBe('The generated image could not be downloaded safely.');
+          expect(result.output).toBeUndefined();
+          expect(cache.del).toHaveBeenCalledWith(
+            expect.stringContaining('fal:fal-ai/flux/schnell:'),
+          );
+          expect(cache.set).not.toHaveBeenCalled();
+        },
+      );
+
       it('should use cached response when cache is enabled and available', async () => {
         vi.mocked(isCacheEnabled).mockImplementation(function () {
           return true;
@@ -389,8 +422,13 @@ describe('Fal Provider', () => {
 
         expect(result).toEqual({
           cached: true,
-          output: '![cached prompt](https://cached.example.com/image.png)',
+          output: imageData,
+          images: [{ data: imageData, mimeType: 'image/png' }],
         });
+        expect(buildSafeStructuredImageOutputs).toHaveBeenCalledWith({
+          data: [{ url: 'https://cached.example.com/image.png' }],
+        });
+        expect(mockCache.set).toHaveBeenCalledWith(expect.any(String), JSON.stringify(imageData));
         expect(mockSubscribe).not.toHaveBeenCalled();
         expect(mockCreateClient).not.toHaveBeenCalled();
         expect(mockCache.get).toHaveBeenCalledWith(
@@ -442,7 +480,7 @@ describe('Fal Provider', () => {
         });
         expect(mockCache.set).toHaveBeenCalledWith(
           expect.stringContaining('fal:fal-ai/flux/schnell:'),
-          JSON.stringify('![test prompt](https://example.com/image.png)'),
+          JSON.stringify(imageData),
         );
       });
 
@@ -499,10 +537,7 @@ describe('Fal Provider', () => {
         );
         expect(cacheKey).not.toContain(prompt);
         expect(cacheKey).not.toContain(contextSecret);
-        expect(mockCache.set).toHaveBeenCalledWith(
-          cacheKey,
-          JSON.stringify(`![${prompt}](https://example.com/image.png)`),
-        );
+        expect(mockCache.set).toHaveBeenCalledWith(cacheKey, JSON.stringify(imageData));
       });
 
       it('should not expose API key values in hashed cache keys', async () => {
@@ -644,7 +679,8 @@ describe('Fal Provider', () => {
 
         expect(result).toEqual({
           cached: false,
-          output: '![test prompt](https://example.com/image.png)',
+          output: imageData,
+          images: [{ data: imageData, mimeType: 'image/png' }],
         });
       });
     });
@@ -759,8 +795,16 @@ describe('Fal Provider', () => {
         const results = await Promise.all([providerA.callApi('A'), providerB.callApi('B')]);
 
         expect(results).toEqual([
-          { cached: false, output: '![A](https://example.com/image.png)' },
-          { cached: false, output: '![B](https://example.com/image.png)' },
+          {
+            cached: false,
+            output: imageData,
+            images: [{ data: imageData, mimeType: 'image/png' }],
+          },
+          {
+            cached: false,
+            output: imageData,
+            images: [{ data: imageData, mimeType: 'image/png' }],
+          },
         ]);
         expect(requests).toHaveLength(6);
         for (const name of ['a', 'b']) {

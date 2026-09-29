@@ -4,10 +4,16 @@ import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { ellipsize } from '../util/text';
+import { buildSafeStructuredImageOutputs } from './openai/image';
 import type { Cache } from 'cache-manager';
 
 import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ImageOutput,
+  ProviderResponse,
+} from '../types/index';
 
 type FalProviderOptions = {
   apiKey?: string;
@@ -143,7 +149,7 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
       );
     }
 
-    let response: FalResult<unknown> | undefined;
+    let response: FalResult<unknown> | string | undefined;
     let cache: Cache | undefined;
     let cached = false;
 
@@ -169,7 +175,24 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
       response = await this.runInference(input);
     }
 
-    if (!cached && cacheEnabled && cache && cacheKey) {
+    let images: ImageOutput[] | undefined;
+    const imageUrl =
+      typeof response === 'string' ? /^!\[[^\]]*\]\((.+)\)$/.exec(response)?.[1] : undefined;
+    const imageSource =
+      imageUrl ||
+      (typeof response === 'string' && response.startsWith('data:image/') ? response : undefined);
+    if (imageSource) {
+      images = await buildSafeStructuredImageOutputs({ data: [{ url: imageSource }] });
+      if (!images?.[0]?.data) {
+        if (cache && cacheKey) {
+          await cache.del(cacheKey);
+        }
+        return { error: 'The generated image could not be downloaded safely.' };
+      }
+      response = images[0].data;
+    }
+
+    if ((!cached || imageUrl) && cacheEnabled && cache && cacheKey) {
       try {
         await cache.set(cacheKey, JSON.stringify(response));
       } catch (err) {
@@ -180,6 +203,7 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
     return {
       cached,
       output: response,
+      ...(images && { images }),
     };
   }
 

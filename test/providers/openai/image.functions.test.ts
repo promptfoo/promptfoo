@@ -515,7 +515,7 @@ describe('OpenAI Image Provider Functions', () => {
       );
 
       expect(result).toMatchObject({
-        output: `![test prompt](data:image/png;base64,${Buffer.alloc(1024).toString('base64')})`,
+        output: `data:image/png;base64,${Buffer.alloc(1024).toString('base64')}`,
         images: [
           {
             data: `data:image/png;base64,${Buffer.alloc(1024).toString('base64')}`,
