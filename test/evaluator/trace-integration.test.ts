@@ -42,7 +42,8 @@ vi.mock('../../src/tracing/traceContext', async (importOriginal) => ({
 }));
 
 // Mock evaluatorTracing module
-vi.mock('../../src/tracing/evaluatorTracing', () => ({
+vi.mock('../../src/tracing/evaluatorTracing', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/evaluatorTracing')>()),
   generateTraceId: vi.fn(() => 'abcdef1234567890abcdef1234567890'),
   generateSpanId: vi.fn(() => '0123456789abcdef'),
   generateTraceparent: vi.fn((traceId, spanId) => `00-${traceId}-${spanId}-01`),
@@ -85,6 +86,33 @@ describe('evaluator trace integration', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('passes published tracing defaults to receiver startup for direct evaluator callers', async () => {
+    const provider = { id: 'tempo', endpoint: 'https://tempo.example.test' } as const;
+    const tracing = { enabled: true, otlp: { http: {} }, provider };
+    const testSuite: TestSuite = {
+      providers: [],
+      prompts: [],
+      tests: [],
+      tracing: tracing as TestSuite['tracing'],
+    };
+    const runtime: EvaluatorRuntime<Eval, EvalResult> = {
+      ...nodeEvaluatorRuntime,
+      resolveRuntimeTestSuite: (suite) => suite,
+    };
+
+    await evaluate(testSuite, mockEval, {}, runtime);
+
+    const evaluated = vi.mocked(evaluatorTracing.startOtlpReceiverIfNeeded).mock.calls[0][0];
+    expect(evaluated.tracing?.otlp?.http).toEqual({
+      enabled: true,
+      port: 4318,
+      host: '127.0.0.1',
+      acceptFormats: ['json', 'protobuf'],
+    });
+    expect(evaluated.tracing?.provider).toBe(provider);
+    expect(tracing.otlp.http).toEqual({});
   });
 
   it('should pass traceId through to assertions when tracing is enabled', async () => {

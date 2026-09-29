@@ -7,8 +7,11 @@ import {
   trace,
 } from '@opentelemetry/api';
 import { ExportResultCode, W3CTraceContextPropagator } from '@opentelemetry/core';
-import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import {
+  InMemorySpanExporter,
+  NodeTracerProvider,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-node';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   acquireOtel,
@@ -19,7 +22,7 @@ import {
 } from '../../src/tracing/otelSdk';
 import type { Span, Tracer, TracerProvider } from '@opentelemetry/api';
 import type { ExportResult } from '@opentelemetry/core';
-import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace-node';
 
 import type { OtelConfig } from '../../src/tracing/otelConfig';
 
