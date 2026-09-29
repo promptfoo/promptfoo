@@ -140,7 +140,6 @@ const YamlEditorComponent = ({
     // Deliberately omitting getTestSuite from dependencies to avoid potential re-render loops
   }, [initialYaml, initialConfig]);
 
-  // Track unsaved changes
   React.useEffect(() => {
     onDirtyChange?.(hasUnsavedChanges);
   }, [hasUnsavedChanges, onDirtyChange]);
