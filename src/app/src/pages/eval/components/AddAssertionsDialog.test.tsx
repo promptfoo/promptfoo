@@ -1,5 +1,6 @@
+import { mockCallApiRoutes } from '@app/tests/apiMocks';
 import { callApi } from '@app/utils/api';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AddAssertionsDialog from './AddAssertionsDialog';
@@ -11,9 +12,13 @@ describe('AddAssertionsDialog', () => {
   const onApplied = vi.fn();
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(callApi).mockImplementation(
-      async () => new Response(JSON.stringify({ added: true, pass: true, score: 1 })),
-    );
+    mockCallApiRoutes([
+      {
+        method: 'POST',
+        path: '/eval/eval-1/results/result-2/assertions',
+        response: { added: true, pass: true, score: 1 },
+      },
+    ]);
   });
   function show() {
     return render(
@@ -28,7 +33,7 @@ describe('AddAssertionsDialog', () => {
 
   it('adds a check to the selected output and refreshes the table', async () => {
     show();
-    fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'expected text' } });
+    await userEvent.type(screen.getByLabelText('Text'), 'expected text');
     await userEvent.click(screen.getByRole('button', { name: 'Add assertion' }));
     await waitFor(() => expect(onApplied).toHaveBeenCalledTimes(1));
     expect(callApi).toHaveBeenCalledWith(
@@ -54,13 +59,21 @@ describe('AddAssertionsDialog', () => {
   });
 
   it('shows an error and permits a retry without losing the input', async () => {
-    vi.mocked(callApi).mockResolvedValueOnce(
-      new Response(JSON.stringify({ error: 'An update is already running for this evaluation' }), {
+    mockCallApiRoutes([
+      {
+        method: 'POST',
+        path: '/eval/eval-1/results/result-2/assertions',
         status: 409,
-      }),
-    );
+        response: { error: 'An update is already running for this evaluation' },
+      },
+      {
+        method: 'POST',
+        path: '/eval/eval-1/results/result-2/assertions',
+        response: { added: true, pass: true, score: 1 },
+      },
+    ]);
     show();
-    fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'keep this' } });
+    await userEvent.type(screen.getByLabelText('Text'), 'keep this');
     await userEvent.click(screen.getByRole('button', { name: 'Add assertion' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('An update is already running');
     expect(screen.getByLabelText('Text')).toHaveValue('keep this');
@@ -71,20 +84,24 @@ describe('AddAssertionsDialog', () => {
   });
 
   it('prevents duplicate submissions while a request is pending', async () => {
-    let resolve!: (response: Response) => void;
-    vi.mocked(callApi).mockImplementationOnce(
-      () =>
-        new Promise((done) => {
-          resolve = done;
-        }),
-    );
+    let resolve!: (response: { added: boolean; pass: boolean; score: number }) => void;
+    const pendingResponse = new Promise((done) => {
+      resolve = done;
+    });
+    mockCallApiRoutes([
+      {
+        method: 'POST',
+        path: '/eval/eval-1/results/result-2/assertions',
+        response: () => pendingResponse,
+      },
+    ]);
     show();
-    fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'text' } });
+    await userEvent.type(screen.getByLabelText('Text'), 'text');
     await userEvent.click(screen.getByRole('button', { name: 'Add assertion' }));
     expect(screen.getByRole('button', { name: 'Adding…' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
     expect(screen.getByLabelText('Text')).toBeDisabled();
-    resolve(new Response(JSON.stringify({ added: false, pass: true, score: 1 })));
+    resolve({ added: false, pass: true, score: 1 });
     await waitFor(() => expect(onApplied).toHaveBeenCalledTimes(1));
     expect(callApi).toHaveBeenCalledTimes(1);
   });

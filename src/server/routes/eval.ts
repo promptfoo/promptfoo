@@ -46,20 +46,14 @@ import type {
 
 export const evalRouter = Router();
 
-const activeEvalMutationsByEval = new Map<string, string>();
+const activeEvalMutationsByEval = new Set<string>();
 
-function reserveEvalMutation(evalId: string, operationId: string): boolean {
+function reserveEvalMutation(evalId: string): boolean {
   if (activeEvalMutationsByEval.has(evalId)) {
     return false;
   }
-  activeEvalMutationsByEval.set(evalId, operationId);
+  activeEvalMutationsByEval.add(evalId);
   return true;
-}
-
-function releaseEvalMutation(evalId: string, operationId: string): void {
-  if (activeEvalMutationsByEval.get(evalId) === operationId) {
-    activeEvalMutationsByEval.delete(evalId);
-  }
 }
 
 function getTopLevelComponentResults(componentResults: GradingResult[]): GradingResult[] {
@@ -821,8 +815,7 @@ evalRouter.post(
       return;
     }
     const { evalId, id } = params.data;
-    const operationId = crypto.randomUUID();
-    if (!reserveEvalMutation(evalId, operationId)) {
+    if (!reserveEvalMutation(evalId)) {
       res.status(409).json({ error: 'An update is already running for this evaluation' });
       return;
     }
@@ -913,7 +906,7 @@ evalRouter.post(
     } catch (error) {
       sendError(res, 500, 'Failed to add assertion', error);
     } finally {
-      releaseEvalMutation(evalId, operationId);
+      activeEvalMutationsByEval.delete(evalId);
     }
   },
 );
@@ -934,8 +927,7 @@ evalRouter.post(
     }
 
     const { evalId, id } = paramsResult.data;
-    const operationId = `rating:${crypto.randomUUID()}`;
-    if (!reserveEvalMutation(evalId, operationId)) {
+    if (!reserveEvalMutation(evalId)) {
       res.status(409).json({ error: 'An update is already running for this evaluation' });
       return;
     }
@@ -1018,7 +1010,7 @@ evalRouter.post(
     } catch (error) {
       sendError(res, 500, 'Failed to submit rating', error);
     } finally {
-      releaseEvalMutation(evalId, operationId);
+      activeEvalMutationsByEval.delete(evalId);
     }
   },
 );
