@@ -474,7 +474,16 @@ export async function synthesize({
     respObjects.length >= 1,
     `Expected at least one JSON object in the response for questions, got ${respObjects.length}`,
   );
-  const questionsWrapper = respObjects[0] as { questions: GeneratedQuestion[] };
+  const questionsWrapper = respObjects.find((obj): obj is { questions: GeneratedQuestion[] } =>
+    Array.isArray((obj as { questions?: unknown }).questions),
+  );
+  invariant(
+    questionsWrapper,
+    () =>
+      `Expected a JSON object of the form {questions: [...]} in the questions response, but the provider returned a different shape. ` +
+      `Check the provider's transformResponse and that it returns the model's text content. ` +
+      `Received: ${output.slice(0, 200)}`,
+  );
   const questions = sampleArray(questionsWrapper.questions, numQuestions);
 
   logger.debug(

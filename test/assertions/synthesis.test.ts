@@ -42,6 +42,56 @@ describe('synthesize', () => {
     expect(result).toHaveLength(1);
     expect(result).toEqual([{ metric: 'metric1', value: 'test question', type: 'pi' }]);
   });
+
+  it('should throw a clear error when the questions response has an unexpected shape', async () => {
+    // Valid JSON, but not the expected {questions: [...]} shape. Previously
+    // sampleArray(undefined) threw an unhandled TypeError.
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi
+        .fn<ApiProvider['callApi']>()
+        .mockResolvedValue({ output: '[{"label": "metric1"}, {"label": "metric2"}]' }),
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+    await expect(
+      synthesize({
+        provider: 'mock-provider',
+        prompts: ['Test prompt'],
+        tests: [],
+        numQuestions: 1,
+        type: 'pi',
+      }),
+    ).rejects.toThrow(/Expected a JSON object of the form \{questions: \[\.\.\.\]\}/);
+  });
+
+  it('should find the questions object even when it is not the first JSON object in the response', async () => {
+    let i = 0;
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(() => {
+        if (i === 0) {
+          i++;
+          return Promise.resolve({
+            output:
+              '{"note": "here are the questions"}\n{"questions": [{"label": "metric1", "question": "test question"}]}',
+          });
+        }
+        return Promise.resolve({ output: 'None' });
+      }),
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+    const result = await synthesize({
+      provider: 'mock-provider',
+      prompts: ['Test prompt'],
+      tests: [],
+      numQuestions: 1,
+      type: 'pi',
+    });
+
+    expect(result).toEqual([{ metric: 'metric1', value: 'test question', type: 'pi' }]);
+  });
 });
 
 describe('generateNewQuestionsPrompt', () => {
