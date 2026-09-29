@@ -2,12 +2,10 @@
 
 ## What This Example Demonstrates
 
-This example shows a complete prompt→LLM→sandboxed-execution→metric pipeline using:
-
-- `promptfoo` to run LLM prompts and manage evaluation cases.
-- An LLM provider to generate Python functions from a short problem prompt.
-- e2b sandboxes (via `e2b-code-interpreter`) to run generated code safely.
-- Per-run JSON metrics written to .promptfoo_results/ and a human-friendly markdown report produced by report.py.
+This example asks a model to write Python functions and grades them in E2B
+sandboxes. Promptfoo records the evaluation results; `metrics.py` saves per-test
+JSON under `.promptfoo_results/`, and `report.py` turns those metrics into a
+Markdown report.
 
 You can run this example with:
 
@@ -41,7 +39,7 @@ python -m venv .venv
 source .venv/bin/activate
 
 # install Python packages
-python -m pip install 'e2b-code-interpreter>=2.10.0,<3'
+python -m pip install -r requirements.txt
 npm i -g promptfoo
 ```
 
