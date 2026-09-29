@@ -74,7 +74,7 @@ const GeneratedTestCaseResponseSchema = z.object({
 });
 
 export const TestCaseGenerationResponseSchema = z.union([
-  GeneratedTestCaseResponseSchema.extend({ tokenUsage: BaseTokenUsageSchema.optional() }),
+  GeneratedTestCaseResponseSchema,
   z.object({
     testCases: z.array(GeneratedTestCaseResponseSchema),
     count: z.number().int().nonnegative(),

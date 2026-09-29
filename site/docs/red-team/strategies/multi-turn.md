@@ -34,7 +34,7 @@ When the strategy hits a refusal, it backtracks to an earlier point in the conve
 
 ## Use in Promptfoo
 
-Promptfoo supports several multi-turn [strategies](/docs/red-team/strategies/), including:
+Promptfoo supports five types of multi-turn [strategies](/docs/red-team/strategies/):
 
 #### 1. Crescendo
 

@@ -283,15 +283,9 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'audio',
-    action: async (testCases, injectVar, config, strategyId, runtimeContext) => {
+    action: async (testCases, injectVar, config) => {
       logger.debug(`Adding audio encoding to ${testCases.length} test cases`);
-      const newTestCases = await addAudioToBase64(
-        testCases,
-        injectVar,
-        config,
-        strategyId,
-        runtimeContext,
-      );
+      const newTestCases = await addAudioToBase64(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} audio encoded test cases`);
       return newTestCases;
     },
