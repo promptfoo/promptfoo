@@ -1683,7 +1683,7 @@ export const PLUGINS = [
   {
     category: 'Dataset',
     description:
-      "Tests jailbreak resistance using OpenAI's evaluation dataset of role-playing attacks and system manipulation",
+      'Checks response safety and optional safe controls using the pinned OpenAI Guardrails demo dataset',
     label: 'technical',
     link: '/docs/red-team/plugins/openai-guardrails/',
     name: 'OpenAI Guardrails',

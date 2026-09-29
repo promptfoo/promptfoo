@@ -13,7 +13,7 @@ This example demonstrates how to setup authentication with an HTTP provider usin
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js >=22.22.0 (Node.js 24 LTS recommended)
 - A JKS keystore file with a keypair for signing/verification
 
 ## Setup

@@ -1092,6 +1092,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '24'
       - uses: promptfoo/promptfoo-action@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -1112,11 +1115,12 @@ paths, TTLs, and explicit cache clearing.
 
 ### Grader model selection
 
-| Provider ID                                     | Reliability | Cost   | Use for                     |
-| ----------------------------------------------- | ----------- | ------ | --------------------------- |
-| `openai:responses:gpt-5.4`                      | High        | Higher | Production, complex rubrics |
-| `openai:responses:gpt-5-mini`                   | Medium      | Low    | Development, simple checks  |
-| `anthropic:messages:claude-sonnet-4-5-20250929` | High        | Medium | Production                  |
+Compare candidate graders against human-labeled examples from your task. Measure agreement, cost, and latency before choosing a production grader.
+
+| Provider  | Example grader IDs                                                         |
+| --------- | -------------------------------------------------------------------------- |
+| OpenAI    | `openai:responses:gpt-5.4`, `openai:responses:gpt-5-mini`                  |
+| Anthropic | `anthropic:messages:claude-sonnet-5`, `anthropic:messages:claude-opus-5-5` |
 
 Override via CLI:
 
@@ -1154,7 +1158,7 @@ judge to treat candidate output as untrusted data. See [LLM judge prompt templat
 
 ### What is the best LLM judge model?
 
-`openai:responses:gpt-5.4` and `anthropic:messages:claude-sonnet-4-5-20250929` are reliable for production. Use `openai:responses:gpt-5-mini` for development. The judge should be at least as capable as the system under test.
+Choose a model that agrees with human judgments on your rubric. Test it on both clear-cut and borderline cases, then compare its error rate, cost, and latency with other candidates. See [Grader model selection](#grader-model-selection) for example provider IDs.
 
 ### How do you do majority vote LLM judging?
 

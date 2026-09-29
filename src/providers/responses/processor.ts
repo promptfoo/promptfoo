@@ -1,5 +1,5 @@
 import logger from '../../logger';
-import { formatOpenAiError } from '../openai/util';
+import { formatOpenAiError, getOpenAICompletionTokenDetails } from '../openai/util';
 
 import type { ProviderResponse, TokenUsage } from '../../types/index';
 import type {
@@ -39,7 +39,7 @@ function extractMetadata(data: any, processedOutput: ProcessedOutput): Record<st
  * Extract token usage from response data, handling both OpenAI Chat Completions format
  * (prompt_tokens, completion_tokens) and Azure Responses format (input_tokens, output_tokens)
  */
-function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
+export function getResponsesTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
       const totalTokens =
@@ -49,34 +49,14 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
       const promptTokens = data.usage.prompt_tokens || data.usage.input_tokens || 0;
       const completionTokens = data.usage.completion_tokens || data.usage.output_tokens || 0;
       const totalTokens = data.usage.total_tokens || promptTokens + completionTokens;
-      const outputTokenDetails =
-        data.usage.completion_tokens_details ?? data.usage.output_tokens_details;
-      const cachedInputTokens =
-        data.usage.prompt_tokens_details?.cached_tokens ??
-        data.usage.input_tokens_details?.cached_tokens ??
-        0;
+      const completionDetails = getOpenAICompletionTokenDetails(data.usage);
 
       return {
         total: totalTokens,
         prompt: promptTokens,
         completion: completionTokens,
         numRequests: 1,
-        ...(outputTokenDetails
-          ? {
-              completionDetails: {
-                reasoning: outputTokenDetails.reasoning_tokens,
-                acceptedPrediction: outputTokenDetails.accepted_prediction_tokens,
-                rejectedPrediction: outputTokenDetails.rejected_prediction_tokens,
-                ...(cachedInputTokens > 0 ? { cacheReadInputTokens: cachedInputTokens } : {}),
-              },
-            }
-          : cachedInputTokens > 0
-            ? {
-                completionDetails: {
-                  cacheReadInputTokens: cachedInputTokens,
-                },
-              }
-            : {}),
+        ...(completionDetails ? { completionDetails } : {}),
       };
     }
   }
@@ -123,7 +103,7 @@ export class ResponsesProcessor {
       if (processedOutput.isRefusal) {
         return {
           output: processedOutput.refusal,
-          tokenUsage: getTokenUsage(data, cached),
+          tokenUsage: getResponsesTokenUsage(data, cached),
           isRefusal: true,
           cached,
           ...(cost === undefined ? {} : { cost }),
@@ -148,7 +128,7 @@ export class ResponsesProcessor {
 
       const result: ProviderResponse = {
         output: finalOutput,
-        tokenUsage: getTokenUsage(data, cached),
+        tokenUsage: getResponsesTokenUsage(data, cached),
         cached,
         ...(cost === undefined ? {} : { cost }),
         raw: data,

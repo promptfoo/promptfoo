@@ -107,6 +107,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   jailbreak:
     '[DEPRECATED] Use jailbreak:meta instead. Single-shot optimization of safety bypass techniques.',
   'jailbreak:composite': 'Combines multiple jailbreak techniques for enhanced effectiveness',
+  'jailbreak:goblin':
+    'Multi-turn jailbreak strategy focused on encoding techniques, math, and logic problems',
   'jailbreak:hydra':
     'Multi-turn conversational attacks with meta-learning that adapts strategy based on full conversation history',
   'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
@@ -161,7 +163,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'off-topic':
     'Tests whether AI systems can be manipulated to go off-topic from their intended purpose',
   'openai-guardrails':
-    'Tests jailbreak resistance using OpenAI Guardrails evaluation dataset with role-playing attacks and system manipulation',
+    'Checks response safety and optional safe controls using the pinned OpenAI Guardrails demo dataset',
   overreliance: 'Tests for overreliance on system assumptions',
   'pharmacy:controlled-substance-compliance':
     'Tests adherence to DEA regulations for controlled substance prescribing, dispensing, and monitoring',
@@ -411,6 +413,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   intent: 'Intent',
   jailbreak: 'Single-shot Optimization [DEPRECATED]',
   'jailbreak:composite': 'Multi-Vector Safety Bypass',
+  'jailbreak:goblin': 'Goblin Multi-turn',
   'jailbreak:hydra': 'Hydra Multi-turn',
   'jailbreak:likert': 'Likert Scale Jailbreak',
   'jailbreak:meta': 'Meta-Agent Strategic Jailbreak',
@@ -1228,7 +1231,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'off-topic':
     'Tests whether AI systems can be manipulated to go off-topic by performing tasks outside their domain',
   'openai-guardrails':
-    'Tests jailbreak resistance using OpenAI Guardrails evaluation dataset of role-playing attacks, system manipulation, and obfuscation techniques',
+    'Checks response safety and unjustified refusals using the pinned OpenAI Guardrails demo dataset',
   'pharmacy:controlled-substance-compliance':
     'Tests adherence to DEA regulations for controlled substance prescribing, dispensing, and monitoring, including schedule restrictions, quantity limits, early refill detection, PDMP requirements, and red flags for prescription fraud or diversion',
   'pharmacy:dosage-calculation':
@@ -1300,6 +1303,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   jailbreak:
     '[DEPRECATED] Use jailbreak:meta instead. Optimizes single-turn attacks to bypass security controls.',
   'jailbreak:composite': 'Chains multiple attack vectors for enhanced effectiveness',
+  'jailbreak:goblin':
+    'Multi-turn jailbreak strategy focused on encoding techniques, math, and logic problems',
   'jailbreak:hydra':
     'Multi-turn conversational attacks with meta-learning that adapts strategy based on full conversation history',
   'jailbreak:likert': 'Uses Likert scale-based prompts to bypass content filters',
@@ -1345,6 +1350,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   image: 'Image',
   jailbreak: 'Single-shot Optimization [DEPRECATED]',
   'jailbreak:composite': 'Composite Jailbreaks',
+  'jailbreak:goblin': 'Goblin Multi-Turn',
   'jailbreak:hydra': 'Hydra Multi-Turn',
   'jailbreak:likert': 'Likert Scale Jailbreak',
   'jailbreak:meta': 'Meta Agent',

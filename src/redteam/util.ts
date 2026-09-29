@@ -4,12 +4,13 @@ import { getRequestTimeoutMs } from '../providers/shared';
 import { type Inputs } from '../types/shared';
 import { safeJsonStringify } from '../util/json';
 import { escapeRegExp } from '../util/text';
+import { getErrorTokenUsage } from '../util/tokenUsageUtils';
 import { pluginDescriptions } from './constants';
 import { DATASET_PLUGINS } from './constants/strategies';
+import { recordGenerationTokenUsage } from './generationTokenUsage';
 import {
   type InputMaterializationContext,
   type MaterializedInputVariablesResult,
-  materializeInputVariables,
   materializeInputVariablesWithMetadata,
 } from './inputVariables';
 import {
@@ -17,31 +18,9 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from './remoteGeneration';
+import { remoteGenerationContextPayload } from './remoteGenerationContext';
 
-import type { CallApiContextParams, ProviderResponse } from '../types/index';
-
-export const redteamLogger: {
-  debug(message: string): unknown;
-  error(message: string): unknown;
-  warn(message: string): unknown;
-} = logger;
-
-export async function fetchRemoteRedteamDataset(url: string, datasetName: string): Promise<string> {
-  logger.debug(`[${datasetName}] Fetching dataset from ${url}`);
-
-  const { data, status, statusText } = await fetchWithCache<string>(
-    url,
-    {},
-    getRequestTimeoutMs(),
-    'text',
-  );
-  if (status < 200 || status >= 300) {
-    throw new Error(`[${datasetName}] HTTP status: ${status} ${statusText}`);
-  }
-
-  logger.debug(`[${datasetName}] Got ${data.length} bytes of dataset data`);
-  return data;
-}
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
 
 /**
  * Regex pattern for matching <Prompt> tags in multi-input redteam generation output.
@@ -101,13 +80,6 @@ export function extractVariablesFromJson(
     }
   }
   return extractedVars;
-}
-
-export function extractMaterializedVariablesFromJson(
-  parsed: Record<string, unknown>,
-  inputs: Inputs,
-): Record<string, string> {
-  return materializeInputVariables(extractVariablesFromJson(parsed, inputs), inputs);
 }
 
 export async function extractMaterializedVariablesFromJsonWithMetadata(
@@ -361,6 +333,8 @@ export function getShortPluginId(pluginId: string): string {
  * @param purpose - The purpose of the system.
  * @param pluginId - Optional plugin ID to provide context about the attack type.
  * @param policy - Optional policy text for custom policy tests to improve intent extraction.
+ * @param targetId - Optional cloud target database ID used by remote task handlers to resolve target-owned provider context.
+ * @param provider - Optional tracked generation provider used to account for the remote request.
  * @returns The extracted goal, or null if extraction fails.
  */
 export async function extractGoalFromPrompt(
@@ -368,6 +342,8 @@ export async function extractGoalFromPrompt(
   purpose: string,
   pluginId?: string,
   policy?: string,
+  targetId?: string,
+  provider?: ApiProvider,
 ): Promise<string | null> {
   if (neverGenerateRemote()) {
     logger.debug('Remote generation disabled, skipping goal extraction');
@@ -395,14 +371,17 @@ export async function extractGoalFromPrompt(
     purpose,
     ...(pluginDescription && { pluginContext: pluginDescription }),
     ...(policy && { policy }),
+    ...remoteGenerationContextPayload(targetId),
   };
 
   interface ExtractIntentResponse {
     intent?: string;
+    tokenUsage?: ProviderResponse['tokenUsage'];
   }
 
+  let responseRecorded = false;
   try {
-    const { data, status, statusText } = await fetchWithCache<ExtractIntentResponse>(
+    const { cached, data, status, statusText } = await fetchWithCache<ExtractIntentResponse>(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -411,6 +390,11 @@ export async function extractGoalFromPrompt(
       },
       getRequestTimeoutMs(),
     );
+
+    if (provider) {
+      recordGenerationTokenUsage(provider, { tokenUsage: data?.tokenUsage, cached });
+      responseRecorded = true;
+    }
 
     logger.debug(
       `Goal extraction response - Status: ${status} ${statusText || ''}, Data: ${JSON.stringify(data)}`,
@@ -430,6 +414,9 @@ export async function extractGoalFromPrompt(
 
     return data.intent;
   } catch (error) {
+    if (provider && !responseRecorded) {
+      recordGenerationTokenUsage(provider, { tokenUsage: getErrorTokenUsage(error) });
+    }
     logger.warn(`Error extracting goal: ${error}`);
     return null;
   }

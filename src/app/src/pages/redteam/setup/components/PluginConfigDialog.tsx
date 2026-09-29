@@ -294,9 +294,8 @@ export default function PluginConfigDialog({
         specificConfig = (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              OpenAI Guardrails tests your model against jailbreak attempts from OpenAI's official
-              eval dataset, including role-playing attacks, system manipulation, and obfuscation
-              techniques.
+              Uses the pinned OpenAI Guardrails demo dataset. Each English sample becomes one test
+              case.
             </p>
             <div className="flex items-center space-x-2">
               <Checkbox
@@ -311,9 +310,8 @@ export default function PluginConfigDialog({
               </Label>
             </div>
             <p className="text-xs text-muted-foreground">
-              When enabled, tests are split as evenly as possible between safe and jailbreak
-              prompts. Safe prompts test whether your guardrails are too strict and incorrectly
-              block legitimate requests (over-blocking/false positives).
+              Samples safe and jailbreak-labeled rows as evenly as availability allows. Safe
+              controls check for unjustified refusals within the assistant's stated purpose.
             </p>
           </div>
         );
