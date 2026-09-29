@@ -10,6 +10,7 @@ import cliState from '../../src/cliState';
 import { __resetPromptConversationCacheForTests, evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
+import { EchoProvider } from '../../src/providers/echo';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import {
   type ApiProvider,
@@ -51,8 +52,27 @@ describeEvaluator('evaluator execution control', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
 
+    expect(sleep).toHaveBeenCalledTimes(1);
     expect(sleep).toHaveBeenCalledWith(100);
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['the provider', 100, undefined],
+    ['the evaluation', undefined, 125],
+  ])('applies the Echo delay only once when set on %s', async (_name, providerDelay, evalDelay) => {
+    const provider = new EchoProvider({ delay: providerDelay });
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Echo test')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { delay: evalDelay });
+
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenCalledWith(providerDelay ?? evalDelay);
   });
 
   it('evaluates with no provider delay', async () => {
@@ -108,7 +128,7 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
-  it('continues cleanup after a JSONL writer fails to close', async () => {
+  it('continues cleanup and recovers a JSONL close failure when results persisted', async () => {
     const outputPath = path.join(os.tmpdir(), `promptfoo-evaluator-${randomUUID()}.jsonl`);
     const originalClose = JsonlFileWriter.prototype.close;
     const closeSpy = vi
@@ -118,6 +138,7 @@ describeEvaluator('evaluator execution control', () => {
         throw new Error('simulated close failure');
       });
     const shutdownSpy = vi.spyOn(providerRegistry, 'shutdownAll').mockResolvedValue();
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
     const provider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
       callApi: vi.fn().mockResolvedValue({
@@ -133,9 +154,13 @@ describeEvaluator('evaluator execution control', () => {
 
     try {
       const evalRecord = new Eval({ outputPath });
-      await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow('simulated close failure');
+      // Results persisted, so the close failure is recoverable (the output file is
+      // regenerated from the database) — the run still succeeds and cleanup still runs.
+      await expect(evaluate(testSuite, evalRecord, {})).resolves.toBeDefined();
       expect(shutdownSpy).toHaveBeenCalledOnce();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('simulated close failure'));
     } finally {
+      warnSpy.mockRestore();
       closeSpy.mockRestore();
       shutdownSpy.mockRestore();
       fs.rmSync(outputPath, { force: true });
@@ -674,87 +699,113 @@ describeEvaluator('evaluator execution control', () => {
     expect(mockApiProviderWithError.callApi).toHaveBeenCalledTimes(1);
   });
 
-  it('should handle evaluation timeout without tearing down the shared provider', async () => {
-    vi.useFakeTimers();
+  it.each([
+    { name: 'explicit timeout', timeoutMs: 100, envTimeout: '0', waitMs: 100, success: false },
+    {
+      name: 'environment fallback',
+      timeoutMs: undefined,
+      envTimeout: '100',
+      waitMs: 100,
+      success: false,
+    },
+    { name: 'explicit zero', timeoutMs: 0, envTimeout: '100', waitMs: 5000, success: true },
+    {
+      name: 'explicit positive override',
+      timeoutMs: 6000,
+      envTimeout: '100',
+      waitMs: 5000,
+      success: true,
+    },
+  ])(
+    'honors $name without tearing down the shared provider',
+    async ({ timeoutMs, envTimeout, waitMs, success }) => {
+      vi.stubEnv('PROMPTFOO_EVAL_TIMEOUT_MS', envTimeout);
+      vi.useFakeTimers();
 
-    const mockAddResult = vi.fn().mockResolvedValue(undefined);
-    let longTimer: NodeJS.Timeout | null = null;
+      const mockAddResult = vi.fn().mockResolvedValue(undefined);
+      let longTimer: NodeJS.Timeout | null = null;
 
-    const slowApiProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('slow-provider'),
-      callApi: vi.fn().mockImplementation(() => {
-        return new Promise((resolve) => {
-          longTimer = setTimeout(() => {
-            resolve({
-              output: 'Slow response',
-              tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-            });
-          }, 5000);
-        });
-      }),
-      cleanup: vi.fn(),
-    };
+      const slowApiProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('slow-provider'),
+        callApi: vi.fn().mockImplementation(() => {
+          return new Promise((resolve) => {
+            longTimer = setTimeout(() => {
+              resolve({
+                output: 'Slow response',
+                tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+              });
+            }, 5000);
+          });
+        }),
+        cleanup: vi.fn(),
+      };
 
-    const mockEval = {
-      id: 'mock-eval-id',
-      results: [],
-      prompts: [],
-      persisted: false,
-      config: {},
-      addResult: mockAddResult,
-      addPrompts: vi.fn().mockResolvedValue(undefined),
-      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
-      getResults: vi.fn().mockResolvedValue([]),
-      toEvaluateSummary: vi.fn().mockResolvedValue({
+      const mockEval = {
+        id: 'mock-eval-id',
         results: [],
         prompts: [],
-        stats: {
-          successes: 0,
-          failures: 0,
-          errors: 1,
-          tokenUsage: createEmptyTokenUsage(),
-        },
-      }),
-      save: vi.fn().mockResolvedValue(undefined),
-      setVars: vi.fn().mockResolvedValue(undefined),
-      setDurationMs: vi.fn(),
-    };
-
-    const testSuite: TestSuite = {
-      providers: [slowApiProvider],
-      prompts: [toPrompt('Test prompt')],
-      tests: [{}],
-    };
-
-    try {
-      const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 100 });
-      await vi.advanceTimersByTimeAsync(100);
-      await evalPromise;
-
-      expect(slowApiProvider.callApi).toHaveBeenCalledWith(
-        'Test prompt',
-        expect.anything(),
-        expect.objectContaining({
-          abortSignal: expect.any(AbortSignal),
+        persisted: false,
+        config: {},
+        addResult: mockAddResult,
+        addPrompts: vi.fn().mockResolvedValue(undefined),
+        fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+        getResults: vi.fn().mockResolvedValue([]),
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [],
+          prompts: [],
+          stats: {
+            successes: 0,
+            failures: 0,
+            errors: 1,
+            tokenUsage: createEmptyTokenUsage(),
+          },
         }),
-      );
+        save: vi.fn().mockResolvedValue(undefined),
+        setVars: vi.fn().mockResolvedValue(undefined),
+        setDurationMs: vi.fn(),
+      };
 
-      expect(mockAddResult).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('Evaluation timed out after 100ms'),
-          success: false,
-          failureReason: ResultFailureReason.ERROR,
-        }),
-      );
+      const testSuite: TestSuite = {
+        providers: [slowApiProvider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [{}],
+      };
 
-      expect(slowApiProvider.cleanup).not.toHaveBeenCalled();
-    } finally {
-      if (longTimer) {
-        clearTimeout(longTimer);
+      try {
+        const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs });
+        await vi.advanceTimersByTimeAsync(waitMs);
+        await evalPromise;
+
+        expect(slowApiProvider.callApi).toHaveBeenCalledWith(
+          'Test prompt',
+          expect.anything(),
+          timeoutMs === 0
+            ? undefined
+            : expect.objectContaining({ abortSignal: expect.any(AbortSignal) }),
+        );
+
+        expect(mockAddResult).toHaveBeenCalledWith(
+          expect.objectContaining({
+            ...(success
+              ? { response: expect.objectContaining({ output: 'Slow response' }) }
+              : {
+                  error: expect.stringContaining('Evaluation timed out after 100ms'),
+                }),
+            success,
+            failureReason: success ? ResultFailureReason.NONE : ResultFailureReason.ERROR,
+          }),
+        );
+
+        expect(slowApiProvider.cleanup).not.toHaveBeenCalled();
+      } finally {
+        if (longTimer) {
+          clearTimeout(longTimer);
+        }
+        vi.useRealTimers();
+        vi.unstubAllEnvs();
       }
-      vi.useRealTimers();
-    }
-  });
+    },
+  );
 
   it('should not block timeout rows when a provider call does not settle after abort', async () => {
     vi.useFakeTimers();

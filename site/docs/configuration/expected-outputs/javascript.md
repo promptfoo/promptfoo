@@ -1,7 +1,7 @@
 ---
 sidebar_position: 50
 sidebar_label: Javascript
-description: Build sophisticated JavaScript validators for LLM outputs with async operations, scoring logic, and comprehensive error handling
+description: Validate LLM outputs with JavaScript expressions, async checks, and custom scoring
 ---
 
 # Javascript assertions
@@ -47,15 +47,23 @@ assert:
       };
 ```
 
+## Timeouts
+
+`evaluateOptions.timeoutMs` limits how long an evaluation waits for a test. Set it to `0` to disable the timeout, including one set by `PROMPTFOO_EVAL_TIMEOUT_MS`.
+
+JavaScript assertions run on the evaluation thread. Synchronous work prevents the timeout timer from firing until that work returns.
+
 ## Handling objects
 
-If the LLM outputs a JSON object (such as in the case of tool/function calls), then `output` will already be parsed as an object:
+For string expressions and `file://` scripts, `output` keeps its type after any provider, test, or assertion [transforms](/docs/configuration/guide#transforming-outputs). If it is an object or array (such as tool/function calls), access it directly:
 
 ```yaml
 assert:
   - type: javascript
     value: output[0].function.name === 'get_current_weather'
 ```
+
+JSON text remains a string; use `JSON.parse(output)` to parse it. [Inline function assertions](#inline-assertions) always receive a string, with objects serialized as JSON.
 
 ## Return type
 
@@ -69,11 +77,17 @@ interface GradingResult {
   pass: boolean;
   score: number;
   reason: string;
-  componentResults?: GradingResult[];
+  namedScores?: Record<string, number> | null;
+  namedScoreWeights?: Record<string, number> | null;
+  componentResults?: GradingResult[] | null;
 }
 ```
 
 If `componentResults` is set, a table of assertion details will be shown in the test output modal in the Eval view.
+
+Numeric returns, `score`, and all values in `namedScores` and `namedScoreWeights` must be finite, including in nested `componentResults`. `NaN` or infinity fails the assertion; finite scores outside 0–1 are accepted. `pass: false` still fails when `reason` is empty.
+
+A `componentResults` array must contain a valid grading result at every index; sparse arrays are rejected.
 
 ## Multiline functions
 
@@ -88,6 +102,7 @@ assert:
         return {
           pass: true,
           score: 0.5,
+          reason: 'Output matches the expected value',
         };
       }
       return {
@@ -96,27 +111,6 @@ assert:
         reason: 'Assertion failed',
       };
 ```
-
-## Timeouts
-
-Set `evaluateOptions.timeoutMs` to bound configured JavaScript assertions. Inline string
-assertions and `file://` or `package:` assertion modules run in an isolated worker when a
-timeout is configured, so promptfoo can interrupt synchronous code that would otherwise block
-the eval.
-
-```yaml
-evaluateOptions:
-  timeoutMs: 5000
-
-tests:
-  - assert:
-      - type: javascript
-        value: file://assertions/check-output.js
-```
-
-When using promptfoo through the Node API, function-valued assertions keep access to their
-surrounding JavaScript closures and run in-process. Use an inline string, `file://`, or
-`package:` assertion when its execution must be interruptible by `timeoutMs`.
 
 ## Using test context
 
@@ -268,30 +262,17 @@ Here's a more complex example that uses an async function to hit an external val
 ```js
 const VALIDATION_ENDPOINT = 'https://example.com/api/validate';
 
-async function evaluate(modelResponse) {
-  try {
-    const response = await fetch(VALIDATION_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain',
-      },
-      body: modelResponse,
-    });
+module.exports = async (output, context) => {
+  const response = await fetch(VALIDATION_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain',
+    },
+    body: output,
+  });
 
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    throw error;
-  }
-}
-
-async function main(output, context) {
-  const success = await evaluate(output);
-  console.log(`success: ${testResult}`);
-  return success;
-}
-
-module.exports = main;
+  return response.json();
+};
 ```
 
 You can also return complete [`GradingResult`](/docs/configuration/reference/#gradingresult) objects. For example:
@@ -356,7 +337,7 @@ If you are using promptfoo as a JS package, you can build your assertion inline:
 }
 ```
 
-Output will always be a string, so if your [custom response parser](/docs/providers/http/#function-parser) returned an object, you can use `JSON.parse(output)` to convert it back to an object.
+Here `output` is always a string, so if your [custom response parser](/docs/providers/http/#function-parser) returned an object, use `JSON.parse(output)` to convert it back.
 
 ## Using trace data
 

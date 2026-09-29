@@ -1,25 +1,27 @@
+import { EventEmitter } from 'node:events';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockWriteFileSync, mockReadFileSync, mockGetDbSignalPath, mockLoggerWarn } = vi.hoisted(
-  () => ({
+const { mockWriteFileSync, mockReadFileSync, mockGetDbSignalPath, mockLoggerWarn, mockWatch } =
+  vi.hoisted(() => ({
     mockWriteFileSync: vi.fn(),
     mockReadFileSync: vi.fn(),
     mockGetDbSignalPath: vi.fn().mockReturnValue('/mock/path/signal.txt'),
     mockLoggerWarn: vi.fn(),
-  }),
-);
+    mockWatch: vi.fn(),
+  }));
 
 vi.mock('fs', () => ({
   default: {
     writeFileSync: mockWriteFileSync,
     readFileSync: mockReadFileSync,
     existsSync: vi.fn(),
-    watch: vi.fn(),
+    watch: mockWatch,
   },
   writeFileSync: mockWriteFileSync,
   readFileSync: mockReadFileSync,
   existsSync: vi.fn(),
-  watch: vi.fn(),
+  watch: mockWatch,
 }));
 
 vi.mock('../../src/logger', () => ({
@@ -36,6 +38,7 @@ vi.mock('../../src/database/index', () => ({
 import {
   readSignalEvalId,
   readSignalFile,
+  setupSignalWatcher,
   updateSignalFile,
   updateSignalFileForDeletedEvals,
 } from '../../src/database/signal';
@@ -51,6 +54,39 @@ describe('signal', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.useRealTimers();
+  });
+
+  describe('setupSignalWatcher', () => {
+    it('coalesces changes at the trailing edge', () => {
+      vi.useFakeTimers();
+      const watcher = new EventEmitter();
+      mockWatch.mockReturnValue(watcher);
+      const onChange = vi.fn();
+      expect(setupSignalWatcher(onChange)).toBe(watcher);
+
+      watcher.emit('change');
+      vi.advanceTimersByTime(200);
+      watcher.emit('change');
+      vi.advanceTimersByTime(249);
+      expect(onChange).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(onChange).toHaveBeenCalledOnce();
+      watcher.emit('close');
+    });
+
+    it('cancels a pending notification when the watcher closes', () => {
+      vi.useFakeTimers();
+      const watcher = new EventEmitter();
+      mockWatch.mockReturnValue(watcher);
+      const onChange = vi.fn();
+      setupSignalWatcher(onChange);
+      watcher.emit('change');
+      watcher.emit('close');
+      vi.runAllTimers();
+      expect(onChange).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    });
   });
 
   describe('updateSignalFile', () => {

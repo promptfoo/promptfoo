@@ -14,10 +14,7 @@ export function isPackagePath(path: any): path is string {
   return typeof path === 'string' && path.startsWith('package:');
 }
 
-export function resolvePackageReference(
-  packageInstancePath: string,
-  basePath: string,
-): { filePath: string; entityName: string; packageName: string } {
+export async function loadFromPackage(packageInstancePath: string, basePath: string): Promise<any> {
   const [, packageName, entityName] = packageInstancePath.split(':');
 
   if (!packageName || !entityName) {
@@ -32,15 +29,6 @@ export function resolvePackageReference(
   if (!filePath) {
     throw new Error(`Package not found: ${packageName}. Make sure it's installed in ${basePath}`);
   }
-
-  return { filePath, entityName, packageName };
-}
-
-export async function loadFromPackage(packageInstancePath: string, basePath: string): Promise<any> {
-  const { entityName, filePath, packageName } = resolvePackageReference(
-    packageInstancePath,
-    basePath,
-  );
 
   // Then, try to import the module
   let module;
