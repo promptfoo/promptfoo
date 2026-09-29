@@ -409,6 +409,7 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
  * @see evaluate for full evaluation pipeline
  */
 async function runAssertionInternal({
+  evalId,
   prompt,
   provider,
   assertion,
@@ -420,6 +421,7 @@ async function runAssertionInternal({
   traceData,
   claimStoredGradingUsage,
 }: {
+  evalId?: string;
   prompt?: string;
   provider?: ApiProvider;
   assertion: Assertion;
@@ -617,14 +619,16 @@ async function runAssertionInternal({
       ? activeTraceparent
       : generateTraceparent(traceId, generateSpanId())
     : undefined;
-  const providerCallContext: CallApiContextParams | undefined = provider
-    ? {
-        originalProvider: provider,
-        prompt: { raw: prompt || '', label: '' },
-        vars: resolvedVars,
-        ...(graderTraceparent && { traceparent: graderTraceparent }),
-      }
-    : undefined;
+  const providerCallContext: CallApiContextParams | undefined =
+    provider || evalId
+      ? {
+          originalProvider: provider,
+          ...(evalId && { evaluationId: evalId }),
+          prompt: { raw: prompt || '', label: '' },
+          vars: resolvedVars,
+          ...(graderTraceparent && { traceparent: graderTraceparent }),
+        }
+      : undefined;
 
   const finalTest = getFinalTest(
     vars === undefined ? test : { ...test, vars: resolvedVars },
@@ -754,6 +758,7 @@ export async function runAssertion(
  * @see evaluate for full evaluation pipeline
  */
 export async function runAssertions({
+  evalId,
   assertScoringFunction,
   latencyMs,
   prompt,
@@ -763,6 +768,7 @@ export async function runAssertions({
   vars,
   traceId,
 }: {
+  evalId?: string;
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
   prompt?: string;
@@ -855,6 +861,7 @@ export async function runAssertions({
     }
 
     const result = await runAssertion({
+      evalId,
       prompt,
       provider,
       providerResponse,

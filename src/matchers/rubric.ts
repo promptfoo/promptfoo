@@ -1093,7 +1093,7 @@ export async function matchesVideoRubric(
   }
   let resolved;
   try {
-    resolved = await resolveVideoBytes(video);
+    resolved = await resolveVideoBytes(video, providerCallContext?.evaluationId);
   } catch (error) {
     logger.debug('[VideoRubric] Failed to resolve managed video', { error });
     return { ...graderFail(videoResolutionErrorMessage(error)), assertion };

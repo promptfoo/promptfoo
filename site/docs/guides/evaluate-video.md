@@ -49,7 +49,7 @@ scores match the criteria.
 ## How Grading Works
 
 The video provider stores the clip, and the assertion reads it through Promptfoo's
-managed storage. It sends the video and rubric inline to the judge, then validates
+trusted blob storage for the current evaluation. It sends the video and rubric inline to the judge, then validates
 the returned JSON grade. Promptfoo applies a 20 MiB request budget, including
 base64 encoding and provider settings. See the [video rubric reference](/docs/configuration/expected-outputs/model-graded/video-rubric#video-size-limits-and-judge-output)
 for limits and supported storage.

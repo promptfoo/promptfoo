@@ -21,14 +21,14 @@ or `GEMINI_API_KEY`; `GOOGLE_API_KEY` takes precedence when both are set.
 
 ## Supported video providers
 
-The assertion requires a managed `blobRef` or `storageRef` in the provider's `video`
-response. Built-in video providers can store generated media locally for grading.
-For Bedrock video providers, keep `downloadFromS3` enabled.
+The assertion requires a blob stored for the current evaluation by a trusted provider
+or included in a portable import. Google Veo and Gemini Interactions record this
+provenance when they save generated videos. A copied blob URI alone does not authorize
+grading its contents.
 
-External video URLs, including S3 and cloud-storage URLs, are not downloaded by the
-assertion. Custom storage adapters must implement the optional bounded-read capability
-(`getByHashBounded` for blobs or `retrieveBounded` for media). An adapter without that
-capability produces a grading error; the assertion does not fall back to an unbounded read.
+Sora's legacy `storageRef` output is not supported. External video URLs, including S3
+and cloud-storage URLs, are not downloaded by the assertion. Custom blob adapters must
+implement `getByHashBounded`; adapters without that capability produce a grading error.
 
 ## Overriding the grading provider
 
@@ -102,7 +102,7 @@ and the [video evaluation guide](/docs/guides/evaluate-video) for runnable confi
 ## Requirements
 
 - A judge that accepts Google's inline video message format
-- A managed video in storage that supports bounded reads
+- A trusted video blob associated with the evaluation, in storage that supports bounded reads
 - Credentials for generation and grading
 
 ## Further reading

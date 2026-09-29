@@ -19,4 +19,5 @@ npx promptfoo@latest eval --no-cache -o output.json
 Inspect `success`, `score`, `error`, and the grading reason in the exported results.
 The provider stores generated videos locally before grading. The complete grading
 request must fit Promptfoo's 20 MiB budget, including base64 encoding and the rubric.
-External video URLs and storage adapters without bounded reads cannot be graded.
+The video must be a trusted blob associated with the evaluation. External URLs, Sora
+`storageRef` outputs, and blob adapters without bounded reads cannot be graded.

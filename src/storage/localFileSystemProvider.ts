@@ -12,7 +12,6 @@ import * as path from 'path';
 
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
-import { readFileBounded } from './boundedRead';
 
 import type {
   LocalStorageConfig,
@@ -182,10 +181,6 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
     };
 
     return { ref, deduplicated: false };
-  }
-
-  async retrieveBounded(key: string, maxBytes: number): Promise<Buffer> {
-    return readFileBounded(this.getFilePath(key), maxBytes);
   }
 
   async retrieve(key: string): Promise<Buffer> {

@@ -97,9 +97,6 @@ export interface MediaStorageProvider {
    */
   retrieve(key: string): Promise<Buffer>;
 
-  /** Optional capability; must reject oversized reads without unbounded allocation. */
-  retrieveBounded?(key: string, maxBytes: number): Promise<Buffer>;
-
   /**
    * Check if media exists
    * @param key - Storage key

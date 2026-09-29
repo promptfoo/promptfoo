@@ -44,20 +44,6 @@ describe('media storage provider injection', () => {
     expect(customProvider.exists).toHaveBeenCalledWith('clip.wav');
   });
 
-  it('requires an explicit bounded-read capability from custom adapters', async () => {
-    const retrieve = vi.fn().mockResolvedValue(Buffer.from('fixture'));
-    const provider = { providerId: 'custom', retrieve } as unknown as MediaStorageProvider;
-    setMediaStorage(provider);
-    await expect(retrieveMedia('video/fixture.mp4', 10)).rejects.toMatchObject({
-      code: 'unsupported',
-    });
-    expect(retrieve).not.toHaveBeenCalled();
-    provider.retrieveBounded = vi.fn().mockResolvedValue(Buffer.from('fixture'));
-    await expect(retrieveMedia('video/fixture.mp4', 10)).resolves.toEqual(Buffer.from('fixture'));
-    expect(provider.retrieveBounded).toHaveBeenCalledWith('video/fixture.mp4', 10);
-    expect(retrieve).not.toHaveBeenCalled();
-  });
-
   it('returns to local storage after the custom provider is reset', () => {
     const customProvider = { providerId: 'custom' } as MediaStorageProvider;
 

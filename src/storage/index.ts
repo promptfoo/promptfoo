@@ -22,7 +22,6 @@
 
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { BoundedReadError } from './boundedRead';
 import { LocalFileSystemProvider } from './localFileSystemProvider';
 
 import type { LocalStorageConfig, MediaMetadata, MediaStorageProvider, StoreResult } from './types';
@@ -74,14 +73,8 @@ export async function storeMedia(data: Buffer, metadata: MediaMetadata): Promise
 /**
  * Retrieve media data by key
  */
-export async function retrieveMedia(key: string, maxBytes?: number): Promise<Buffer> {
+export async function retrieveMedia(key: string): Promise<Buffer> {
   const storage = getMediaStorage();
-  if (maxBytes !== undefined) {
-    if (!storage.retrieveBounded) {
-      throw new BoundedReadError('unsupported');
-    }
-    return storage.retrieveBounded(key, maxBytes);
-  }
   return storage.retrieve(key);
 }
 

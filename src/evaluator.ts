@@ -1470,6 +1470,7 @@ async function gradeRunEvalResponse({
       { abortSignal, providerCallQueue, rateLimitRegistry },
       () =>
         runAssertions({
+          evalId,
           prompt: renderedPrompt,
           provider,
           providerResponse: assertionProviderResponse,
@@ -1490,6 +1491,7 @@ async function gradeRunEvalResponse({
     { abortSignal, rateLimitRegistry },
     () =>
       runAssertions({
+        evalId,
         prompt: renderedPrompt,
         provider,
         providerResponse: assertionProviderResponse,

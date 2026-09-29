@@ -59,6 +59,7 @@ describe('matchesVideoRubric', () => {
       { provider: mocks.gradingProvider },
       { animal: 'cat' },
       { type: 'video-rubric', value: 'The video shows a cat', threshold: 0.8 },
+      { evaluationId: 'eval-fixture', prompt: { raw: 'fixture', label: 'fixture' }, vars: {} },
     );
 
     expect(result).toEqual(
@@ -74,6 +75,10 @@ describe('matchesVideoRubric', () => {
       }),
     );
 
+    expect(mocks.resolveVideoBytes).toHaveBeenCalledWith(
+      { url: 'https://example.com/video.mp4' },
+      'eval-fixture',
+    );
     expect(mocks.gradingProvider.callApi).toHaveBeenCalledTimes(1);
     expect(mocks.getDefaultProviders).not.toHaveBeenCalled();
     const multimodalPrompt = JSON.parse(vi.mocked(mocks.gradingProvider.callApi).mock.calls[0][0]);

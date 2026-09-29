@@ -6,6 +6,7 @@ import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src/types/index';
+import * as video from '../../src/util/video';
 import {
   mockApiProvider,
   mockGradingApiProviderFails,
@@ -15,6 +16,52 @@ import {
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator assertions', () => {
+  it.each([1, 2])(
+    'passes evaluator identity to video grading at concurrency %s',
+    async (maxConcurrency) => {
+      const resolve = vi.spyOn(video, 'resolveVideoBytes').mockResolvedValue({
+        buffer: Buffer.from('Benign video fixture'),
+        mimeType: 'video/mp4',
+      });
+      vi.mocked(mockApiProvider.callApi).mockResolvedValue({
+        output: 'Fixture video',
+        video: {
+          blobRef: {
+            hash: 'fixture-hash',
+            mimeType: 'video/mp4',
+            sizeBytes: 20,
+            uri: 'promptfoo://blob/fixture-hash',
+            provider: 'filesystem',
+          },
+        },
+      });
+      const grader: ApiProvider = {
+        id: () => 'fixture-video-grader',
+        callApi: vi
+          .fn()
+          .mockResolvedValue({ output: { pass: true, score: 1, reason: 'Fixture grade' } }),
+      };
+      const suite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Fixture video')],
+        tests: [
+          {
+            metadata: { evaluationId: 'configured-label' },
+            assert: [{ type: 'video-rubric', value: 'Fixture rubric', provider: grader }],
+          },
+        ],
+      };
+      const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      try {
+        await evaluate(suite, evalRecord, { maxConcurrency });
+        expect(resolve).toHaveBeenCalledWith(expect.any(Object), evalRecord.id);
+        expect((await evalRecord.toEvaluateSummary()).results[0].success).toBe(true);
+      } finally {
+        resolve.mockRestore();
+      }
+    },
+  );
+
   it.each(['failed', 'aborted'])(
     'preserves completed audio output when grading is %s',
     async (outcome) => {

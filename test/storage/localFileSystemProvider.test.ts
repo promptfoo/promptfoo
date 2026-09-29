@@ -53,18 +53,6 @@ describe('LocalFileSystemProvider', () => {
     );
   });
 
-  it('reads managed videos within a byte budget', async () => {
-    tempDir = createTempDir('promptfoo-media-');
-    const provider = new LocalFileSystemProvider({ basePath: tempDir });
-    const data = Buffer.from('video fixture');
-    const { ref } = await provider.store(data, { contentType: 'video/mp4', mediaType: 'video' });
-    await expect(provider.retrieveBounded(ref.key, data.length)).resolves.toEqual(data);
-    await expect(provider.retrieveBounded(ref.key, data.length - 1)).rejects.toMatchObject({
-      code: 'too-large',
-    });
-    await expect(provider.retrieve(ref.key)).resolves.toEqual(data);
-  });
-
   it('stores and retrieves media under the base path', async () => {
     tempDir = createTempDir('promptfoo-media-');
     const provider = new LocalFileSystemProvider({ basePath: tempDir });
