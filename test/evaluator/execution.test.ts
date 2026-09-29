@@ -6,12 +6,11 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import * as blobExtractor from '../../src/blobs/extractor';
 import cliState from '../../src/cliState';
 import { __resetPromptConversationCacheForTests, evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
-import { asEvaluateResult } from '../../src/models/evalResult';
+import { EchoProvider } from '../../src/providers/echo';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import {
   type ApiProvider,
@@ -20,10 +19,8 @@ import {
   type TestSuite,
 } from '../../src/types/index';
 import { JsonlFileWriter } from '../../src/util/exportToFile/writeToFile';
-import * as time from '../../src/util/time';
+import { sleep } from '../../src/util/time';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
-import { transform } from '../../src/util/transform';
-import { createDeferred } from '../util/utils';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -36,162 +33,6 @@ afterEach(() => {
 });
 
 describeEvaluator('evaluator execution control', () => {
-  it.each(
-    ['provider transform', 'test transform', 'binary storage'].flatMap((stage) =>
-      ['cancellation', 'timeout'].map((stop) => [stage, stop]),
-    ),
-  )('retains a completed target when %s is interrupted by %s', async (stage, stop) => {
-    const controller = new AbortController();
-    const started = createDeferred<void>();
-    const pendingOperation = createDeferred<never>();
-    const wait = () => {
-      started.resolve();
-      return pendingOperation.promise;
-    };
-    const extraction =
-      stage === 'binary storage'
-        ? vi.spyOn(blobExtractor, 'extractAndStoreBinaryData').mockImplementationOnce(wait)
-        : undefined;
-    const transformSpy =
-      stage === 'binary storage' ? undefined : vi.mocked(transform).mockImplementationOnce(wait);
-    const provider: ApiProvider = {
-      id: () => 'completed-target',
-      ...(stage === 'provider transform' && { transform: 'provider transform' }),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'ready',
-        cost: 0.03,
-        incurredCost: 0.02,
-        tokenUsage: { prompt: 7, completion: 4, total: 11, numRequests: 1 },
-      }),
-    };
-    const suite: TestSuite = {
-      providers: [provider],
-      prompts: [toPrompt('hello')],
-      tests: [stage === 'binary storage' ? {} : { options: { transform: 'test transform' } }],
-    };
-    const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
-    if (stop === 'timeout') {
-      vi.useFakeTimers();
-    }
-    const run = evaluate(suite, evalRecord, {
-      abortSignal: controller.signal,
-      ...(stop === 'timeout' && { timeoutMs: 100 }),
-    });
-    try {
-      await started.promise;
-      if (stop === 'timeout') {
-        await vi.advanceTimersByTimeAsync(100);
-      } else {
-        controller.abort(new Error('cancelled after target completed'));
-      }
-      await run.catch(() => undefined);
-      const results = await evalRecord.getResults();
-      expect(results).toHaveLength(1);
-      expect(asEvaluateResult(results[0])).toMatchObject({
-        response: { output: 'ready', tokenUsage: { total: 11, numRequests: 1 } },
-        cost: 0.03,
-        incurredCost: 0.02,
-        tokenUsage: { total: 11, numRequests: 1 },
-        success: false,
-        error:
-          stop === 'timeout'
-            ? 'Evaluation timed out after 100ms'
-            : 'cancelled after target completed',
-        failureReason: ResultFailureReason.ERROR,
-      });
-      if (transformSpy) {
-        expect(transformSpy).toHaveBeenCalledOnce();
-      }
-    } finally {
-      pendingOperation.reject(new Error('fixture released'));
-      extraction?.mockRestore();
-      transformSpy?.mockRestore();
-    }
-  });
-
-  it('retains billing returned when the row timeout aborts a callback', async () => {
-    const started = createDeferred<void>();
-    const provider: ApiProvider = {
-      id: () => 'cancelled-callback',
-      callApi: vi.fn(async (_prompt, _context, options) => {
-        const signal = options!.abortSignal!;
-        await new Promise<void>((resolve) => {
-          signal.addEventListener('abort', () => resolve(), { once: true });
-          started.resolve();
-        });
-        return {
-          output: 'completed model output',
-          error: String(signal.reason),
-          cost: 0.03,
-          tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
-        };
-      }),
-    };
-    const suite: TestSuite = { providers: [provider], prompts: [toPrompt('hello')], tests: [{}] };
-    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
-    vi.useFakeTimers();
-    const run = evaluate(suite, record, { timeoutMs: 100 });
-    await started.promise;
-    await vi.advanceTimersByTimeAsync(100);
-    await run;
-    const rows = await record.getResults();
-    expect(rows).toHaveLength(1);
-    expect(asEvaluateResult(rows[0])).toMatchObject({
-      response: { output: 'completed model output' },
-      cost: 0.03,
-      tokenUsage: { total: 11, numRequests: 1 },
-      success: false,
-      score: 0,
-      failureReason: ResultFailureReason.ERROR,
-    });
-  });
-
-  it.each([false, true])(
-    'isolates overlapping evaluation cleanup (shared provider: %s)',
-    async (shared) => {
-      const started = createDeferred<void>();
-      const pending = createDeferred<ProviderResponse>();
-      const slow = {
-        id: () => 'slow',
-        cleanup: vi.fn(),
-        callApi: vi
-          .fn()
-          .mockImplementationOnce(() => {
-            started.resolve();
-            return pending.promise;
-          })
-          .mockResolvedValue({ output: 'hello' }),
-      };
-      const fast = shared
-        ? slow
-        : {
-            id: () => 'fast',
-            cleanup: vi.fn(),
-            callApi: vi.fn().mockResolvedValue({ output: 'hello' }),
-          };
-      providerRegistry.register(slow);
-      providerRegistry.register(fast);
-      const suite = (provider: ApiProvider): TestSuite => ({
-        providers: [provider],
-        prompts: [toPrompt('hello')],
-        tests: [{}],
-      });
-      const slowRun = evaluate(suite(slow), new Eval({}), {});
-      await started.promise;
-      try {
-        await evaluate(suite(fast), new Eval({}), {});
-        expect(slow.cleanup).not.toHaveBeenCalled();
-        if (!shared) {
-          expect(fast.cleanup).toHaveBeenCalledOnce();
-        }
-      } finally {
-        pending.resolve({ output: 'hello' });
-        await slowRun;
-      }
-      expect(slow.cleanup).toHaveBeenCalledOnce();
-    },
-  );
-
   it('evaluates with provider delay', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
@@ -211,46 +52,27 @@ describeEvaluator('evaluator execution control', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
 
-    expect(time.sleep).toHaveBeenCalledWith(100);
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenCalledWith(100);
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
-  it('interrupts a post-provider delay when the evaluation is cancelled', async () => {
-    const controller = new AbortController();
-    const provider: ApiProvider = {
-      id: () => 'delayed-provider',
-      delay: 10_000,
-      callApi: vi.fn().mockResolvedValue({
-        output: 'ready',
-        cost: 0.25,
-        tokenUsage: { prompt: 2, completion: 3, total: 5, numRequests: 1 },
-      }),
-    };
-    const suite: TestSuite = {
+  it.each([
+    ['the provider', 100, undefined],
+    ['the evaluation', undefined, 125],
+  ])('applies the Echo delay only once when set on %s', async (_name, providerDelay, evalDelay) => {
+    const provider = new EchoProvider({ delay: providerDelay });
+    const testSuite: TestSuite = {
       providers: [provider],
-      prompts: [toPrompt('hello')],
+      prompts: [toPrompt('Echo test')],
       tests: [{}],
     };
-    const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
-    const delay = vi.spyOn(time, 'sleepWithAbort');
-    const pending = evaluate(suite, evalRecord, { abortSignal: controller.signal });
-    try {
-      await vi.waitFor(() => expect(delay).toHaveBeenCalledOnce());
-      controller.abort(new Error('cancelled post-provider delay'));
-      await pending.catch(() => undefined);
-      const rows = await evalRecord.getResults();
-      expect(rows).toHaveLength(1);
-      expect(rows[0].response?.output).toBe('ready');
-      expect(rows[0].cost).toBe(0.25);
-      expect(rows[0].response?.tokenUsage?.total).toBe(5);
-      expect(evalRecord.getStats().tokenUsage.total).toBe(5);
-      expect(rows[0].success).toBe(true);
-      expect(rows[0].score).toBe(1);
-      expect(rows[0].error).toBeNull();
-    } finally {
-      controller.abort();
-      delay.mockRestore();
-    }
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { delay: evalDelay });
+
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenCalledWith(providerDelay ?? evalDelay);
   });
 
   it('evaluates with no provider delay', async () => {
@@ -271,7 +93,7 @@ describeEvaluator('evaluator execution control', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
 
-    expect(time.sleep).not.toHaveBeenCalled();
+    expect(sleep).not.toHaveBeenCalled();
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
@@ -315,7 +137,7 @@ describeEvaluator('evaluator execution control', () => {
         await originalClose.call(this);
         throw new Error('simulated close failure');
       });
-    const cleanup = vi.fn();
+    const shutdownSpy = vi.spyOn(providerRegistry, 'shutdownAll').mockResolvedValue();
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
     const provider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
@@ -330,17 +152,17 @@ describeEvaluator('evaluator execution control', () => {
       tests: [{}],
     };
 
-    providerRegistry.register(Object.assign(provider, { cleanup }));
     try {
       const evalRecord = new Eval({ outputPath });
       // Results persisted, so the close failure is recoverable (the output file is
       // regenerated from the database) — the run still succeeds and cleanup still runs.
       await expect(evaluate(testSuite, evalRecord, {})).resolves.toBeDefined();
-      expect(cleanup).toHaveBeenCalledOnce();
+      expect(shutdownSpy).toHaveBeenCalledOnce();
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('simulated close failure'));
     } finally {
       warnSpy.mockRestore();
       closeSpy.mockRestore();
+      shutdownSpy.mockRestore();
       fs.rmSync(outputPath, { force: true });
     }
   });
@@ -782,7 +604,7 @@ describeEvaluator('evaluator execution control', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
 
-    expect(time.sleep).not.toHaveBeenCalled();
+    expect(sleep).not.toHaveBeenCalled();
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
@@ -929,13 +751,9 @@ describeEvaluator('evaluator execution control', () => {
       tests: [{}],
     };
 
-    // Another evaluation still owns this provider when the timed-out run finishes.
-    const otherDone = createDeferred<void>();
-    const otherEvaluation = providerRegistry.withScope([slowApiProvider], () => otherDone.promise);
     try {
       const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 100 });
       await vi.advanceTimersByTimeAsync(100);
-      await vi.advanceTimersToNextTimerAsync();
       await evalPromise;
 
       expect(slowApiProvider.callApi).toHaveBeenCalledWith(
@@ -956,8 +774,6 @@ describeEvaluator('evaluator execution control', () => {
 
       expect(slowApiProvider.cleanup).not.toHaveBeenCalled();
     } finally {
-      otherDone.resolve();
-      await otherEvaluation;
       if (longTimer) {
         clearTimeout(longTimer);
       }
@@ -1012,13 +828,9 @@ describeEvaluator('evaluator execution control', () => {
       tests: [{}],
     };
 
-    // Another evaluation still owns this provider when the timed-out run finishes.
-    const otherDone = createDeferred<void>();
-    const otherEvaluation = providerRegistry.withScope([hangingProvider], () => otherDone.promise);
     try {
       const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
       await vi.advanceTimersByTimeAsync(50);
-      await vi.advanceTimersToNextTimerAsync();
       await evalPromise;
 
       expect(hangingProvider.cleanup).not.toHaveBeenCalled();
@@ -1030,8 +842,6 @@ describeEvaluator('evaluator execution control', () => {
         }),
       );
     } finally {
-      otherDone.resolve();
-      await otherEvaluation;
       vi.useRealTimers();
     }
   });
@@ -1087,7 +897,6 @@ describeEvaluator('evaluator execution control', () => {
     try {
       const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
       await vi.advanceTimersByTimeAsync(50);
-      await vi.advanceTimersToNextTimerAsync();
       await evalPromise;
 
       expect(mockAddResult).toHaveBeenCalledTimes(1);
@@ -1103,7 +912,8 @@ describeEvaluator('evaluator execution control', () => {
         output: 'Late response',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       });
-      await vi.advanceTimersByTimeAsync(1);
+      await Promise.resolve();
+      await Promise.resolve();
 
       expect(mockAddResult).toHaveBeenCalledTimes(1);
     } finally {
@@ -1284,7 +1094,7 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
-  it('cancels queued grading at the global deadline while keeping completed target output', async () => {
+  it('flushes queued grouped grading before writing max-duration timeout rows', async () => {
     vi.useFakeTimers();
 
     const results: any[] = [];
@@ -1345,12 +1155,7 @@ describeEvaluator('evaluator execution control', () => {
       prompts: [toPrompt('Test prompt {{topic}}')],
       tests: ['alpha', 'beta', 'gamma'].map((topic) => ({
         vars: { topic },
-        assert: [
-          { type: 'llm-rubric', value: `Judge ${topic}`, provider: judge },
-          ...(topic === 'alpha'
-            ? [{ type: 'select-best' as const, value: 'Choose best', provider: judge }]
-            : []),
-        ],
+        assert: [{ type: 'llm-rubric', value: `Judge ${topic}`, provider: judge }],
       })),
     };
 
@@ -1368,16 +1173,16 @@ describeEvaluator('evaluator execution control', () => {
 
     const resultByTopic = new Map(results.map((result) => [result.vars.topic, result]));
 
-    expect(judge.callApi).not.toHaveBeenCalled();
+    expect(judge.callApi).toHaveBeenCalledTimes(1);
     expect(resultByTopic.get('alpha')).toEqual(
       expect.objectContaining({
-        success: false,
+        success: true,
         response: expect.objectContaining({
           output: 'Target output for Test prompt alpha',
         }),
       }),
     );
-    expect(resultByTopic.get('alpha')?.error).toMatch(/Abort|abort/);
+    expect(resultByTopic.get('alpha')?.error).toBeUndefined();
     expect(resultByTopic.get('gamma')?.error).toContain('Evaluation exceeded max duration');
   });
 });

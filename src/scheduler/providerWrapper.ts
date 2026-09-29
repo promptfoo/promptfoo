@@ -5,6 +5,7 @@
  * code paths that bypass the main evaluator.
  */
 
+import { hasFunctionToolCallValidator } from '../contracts/providers';
 import { parseRetryAfter } from './headerParser';
 import {
   getProviderResponseHeaders,
@@ -12,12 +13,7 @@ import {
   type RateLimitExecuteOptions,
 } from './types';
 
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderResponse,
-} from '../types/providers';
+import type { ApiProvider, ProviderResponse } from '../types/providers';
 import type { RateLimitRegistry } from './rateLimitRegistry';
 
 /**
@@ -43,14 +39,28 @@ export function isRateLimitWrapped(provider: ApiProvider): boolean {
  * Create rate limit detection options for ProviderResponse.
  * Shared between providerWrapper and evaluator for consistency.
  */
-export function createProviderRateLimitOptions(
-  abortSignal?: AbortSignal,
-): RateLimitExecuteOptions<ProviderResponse> {
+export function createProviderRateLimitOptions<
+  Result extends ProviderResponse = ProviderResponse,
+>(): RateLimitExecuteOptions<Result> {
   return {
-    ...(abortSignal && { abortSignal }),
-    getHeaders: getProviderResponseHeaders,
+    // Provider errors are values carrying output, usage and HTTP metadata.
+    // Keep that evidence when the scheduler has no retries left.
+    onRateLimitExhausted: (result, error) =>
+      result.error ? result : { ...result, error: error.message },
+    // Non-retryable rate limits must not feed the shared
+    // rate-limit state either: a billing 429 that also carries
+    // `x-ratelimit-remaining-*: 0` and a reset timestamp would otherwise
+    // park every queued and subsequent call until that reset instead of
+    // letting them fail fast.
+    getHeaders: (result: ProviderResponse | undefined) =>
+      result?.metadata?.rateLimitRetryable === false || result?.metadata?.rateLimitKind === 'quota'
+        ? undefined
+        : getProviderResponseHeaders(result),
     isRateLimited: isProviderResponseRateLimited,
     getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
+      if (result?.metadata?.rateLimitRetryable === false) {
+        return undefined;
+      }
       const rawHeaders = getProviderResponseHeaders(result);
       if (rawHeaders) {
         // Normalize header keys to lowercase for consistent access
@@ -87,7 +97,7 @@ export function createProviderRateLimitOptions(
 /**
  * Wrap a provider with rate limiting.
  *
- * The wrapped provider will use the registry for all callApi calls,
+ * The wrapped provider uses the registry for every supported operation,
  * automatically handling rate limits, retries, and adaptive concurrency.
  *
  * @param provider - The provider to wrap
@@ -103,7 +113,16 @@ export function wrapProviderWithRateLimiting(
     return provider;
   }
 
-  const originalCallApi = provider.callApi.bind(provider);
+  const wrapOperation = <Args extends unknown[], Result extends ProviderResponse>(
+    operation: (...args: Args) => Promise<Result>,
+  ) => {
+    return (...args: Args): Promise<Result> =>
+      registry.execute<Result>(
+        provider,
+        () => operation.apply(provider, args),
+        createProviderRateLimitOptions<Result>(),
+      );
+  };
 
   const wrappedProvider: ApiProvider = {
     ...provider,
@@ -111,21 +130,29 @@ export function wrapProviderWithRateLimiting(
     [Symbol.for('promptfoo.capabilityDelegate')]: provider,
     // Explicitly delegate id() since prototype methods aren't copied by spread
     id: () => provider.id(),
-    callClassificationApi: provider.callClassificationApi?.bind(provider),
-    callEmbeddingApi: provider.callEmbeddingApi?.bind(provider),
-    callSimilarityApi: provider.callSimilarityApi?.bind(provider),
-    callModerationApi: provider.callModerationApi?.bind(provider),
-    callApi: async (
-      prompt: string,
-      context?: CallApiContextParams,
-      options?: CallApiOptionsParams,
-    ): Promise<ProviderResponse> => {
-      return registry.execute(
-        provider,
-        () => originalCallApi(prompt, context, options),
-        createProviderRateLimitOptions(options?.abortSignal),
-      );
-    },
+    config: provider.config,
+    handlesOwnDelay: provider.handlesOwnDelay,
+    handlesOwnRetries: provider.handlesOwnRetries,
+    cleanup: provider.cleanup?.bind(provider),
+    getSessionId: provider.getSessionId?.bind(provider),
+    getAudioInputFormat: provider.getAudioInputFormat?.bind(provider),
+    toJSON: provider.toJSON?.bind(provider),
+    ...(hasFunctionToolCallValidator(provider) && {
+      validateFunctionToolCall: provider.validateFunctionToolCall.bind(provider),
+    }),
+    callApi: wrapOperation(provider.callApi),
+    callClassificationApi: provider.callClassificationApi
+      ? wrapOperation(provider.callClassificationApi)
+      : undefined,
+    callEmbeddingApi: provider.callEmbeddingApi
+      ? wrapOperation(provider.callEmbeddingApi)
+      : undefined,
+    callSimilarityApi: provider.callSimilarityApi
+      ? wrapOperation(provider.callSimilarityApi)
+      : undefined,
+    callModerationApi: provider.callModerationApi
+      ? wrapOperation(provider.callModerationApi)
+      : undefined,
   };
 
   // Mark as wrapped to prevent double-wrapping

@@ -4,13 +4,11 @@ import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../
 import logger from '../../logger';
 import {
   type ApiModerationProvider,
-  type CallApiContextParams,
-  type CallApiOptionsParams,
   inheritProviderCapabilities,
   type ModerationFlag,
   type ProviderModerationResponse,
 } from '../../types/providers';
-import { awaitProviderOperation, getRequestTimeoutMs } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { appendOpenAiApiPath } from './util';
 
@@ -89,28 +87,16 @@ function getOpenAIModerationAuthCacheNamespace(apiKey: string): string {
   return createHmac('sha256', apiKey).update(OPENAI_MODERATION_CACHE_HASH_KEY).digest('hex');
 }
 
-const scopedModerationRequests = new WeakMap<
-  AbortSignal,
-  Map<string, Promise<OpenAIModerationFetchResult>>
->();
-
 function fetchOpenAIModerationWithDedupe(
   inflightCacheKey: string,
   fetcher: () => Promise<OpenAIModerationFetchResult>,
-  abortSignal?: AbortSignal,
 ): Promise<OpenAIModerationFetchResult> {
-  // Requests share work only when their cancellation scope also matches.
-  let requests = OPENAI_MODERATION_INFLIGHT_REQUESTS;
-  if (abortSignal) {
-    requests = scopedModerationRequests.get(abortSignal) ?? new Map();
-    scopedModerationRequests.set(abortSignal, requests);
-  }
-  let inflightRequest = requests.get(inflightCacheKey);
+  let inflightRequest = OPENAI_MODERATION_INFLIGHT_REQUESTS.get(inflightCacheKey);
   if (!inflightRequest) {
     inflightRequest = fetcher().finally(() => {
-      requests.delete(inflightCacheKey);
+      OPENAI_MODERATION_INFLIGHT_REQUESTS.delete(inflightCacheKey);
     });
-    requests.set(inflightCacheKey, inflightRequest);
+    OPENAI_MODERATION_INFLIGHT_REQUESTS.set(inflightCacheKey, inflightRequest);
   }
   return inflightRequest;
 }
@@ -255,10 +241,7 @@ export class OpenAiModerationProvider
   async callModerationApi(
     _userPrompt: string,
     assistantResponse: string | (TextInput | ImageInput)[],
-    _context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
   ): Promise<ProviderModerationResponse> {
-    options?.abortSignal?.throwIfAborted();
     const apiKey = this.getApiKey();
     if (this.requiresApiKey() && !apiKey) {
       return handleApiError(this.getMissingApiKeyErrorMessage());
@@ -274,12 +257,8 @@ export class OpenAiModerationProvider
     });
 
     if (useCache) {
-      const cache = getCache();
-      const cachedResponse = await awaitProviderOperation(
-        cache.get(cacheKey),
-        options?.abortSignal,
-      );
-      options?.abortSignal?.throwIfAborted();
+      const cache = await getCache();
+      const cachedResponse = await cache.get(cacheKey);
 
       if (cachedResponse) {
         logger.debug('Returning cached moderation response');
@@ -301,7 +280,6 @@ export class OpenAiModerationProvider
       ...this.getOpenAiRequestHeaders(),
     };
 
-    let completedResponse: ProviderModerationResponse | undefined;
     try {
       const { data, status, statusText } = await fetchOpenAIModerationWithDedupe(
         getScopedCacheKey(cacheKey),
@@ -310,7 +288,6 @@ export class OpenAiModerationProvider
             appendOpenAiApiPath(this.getApiUrl(), 'moderations'),
             {
               method: 'POST',
-              signal: options?.abortSignal,
               headers,
               body: requestBody,
             },
@@ -319,7 +296,6 @@ export class OpenAiModerationProvider
             true,
             this.config.maxRetries,
           ),
-        options?.abortSignal,
       );
 
       if (status < 200 || status >= 300) {
@@ -332,21 +308,15 @@ export class OpenAiModerationProvider
       logger.debug(`\tOpenAI moderation API response: ${JSON.stringify(data)}`);
 
       const response = parseOpenAIModerationResponse(data);
-      completedResponse = response;
 
       if (useCache) {
-        options?.abortSignal?.throwIfAborted();
-        const cache = getCache();
-        await awaitProviderOperation(
-          cache.set(cacheKey, JSON.stringify(response)),
-          options?.abortSignal,
-        );
+        const cache = await getCache();
+        await cache.set(cacheKey, JSON.stringify(response));
       }
 
-      options?.abortSignal?.throwIfAborted();
       return response;
     } catch (err) {
-      return { ...completedResponse, ...handleApiError(err) };
+      return handleApiError(err);
     }
   }
 }

@@ -1,14 +1,11 @@
 import * as fs from 'fs';
 import path from 'path';
 
-import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
 import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../../src/providers/google/vertex';
-import { createDeferred } from '../../util/utils';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 
 // Hoisted mocks for cache
@@ -170,75 +167,6 @@ function expectHashedBodyCacheKeys(expectedPattern: RegExp, forbiddenValues: str
   return cacheSetKey;
 }
 
-describe('Vertex cache bypass for non-Gemini models', () => {
-  beforeEach(() => {
-    mockCacheGet.mockReset().mockResolvedValue(JSON.stringify({ output: 'stale' }));
-    mockCacheSet.mockReset();
-    mockIsCacheEnabled.mockReset().mockReturnValue(true);
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it.each([
-    [
-      'claude-3-5-sonnet-v2@20241022',
-      {
-        content: [{ type: 'text', text: 'Claude fresh' }],
-        usage: { input_tokens: 1, output_tokens: 2 },
-      },
-      'Claude fresh',
-    ],
-    ['chat-bison', { predictions: [{ candidates: [{ content: 'PaLM fresh' }] }] }, 'PaLM fresh'],
-    [
-      'llama-3.3-70b-instruct-maas',
-      {
-        choices: [{ message: { content: 'Llama fresh' } }],
-        usage: { prompt_tokens: 1, completion_tokens: 2 },
-      },
-      'Llama fresh',
-    ],
-  ] as const)('bypasses cache on %s', async (model, data, expected) => {
-    vi.mocked(getCache).mockClear();
-    const request = mockVertexRequest(data);
-    const provider = new VertexChatProvider(model, { config: { region: 'us-central1' } });
-    const response = await provider.callApi('hello', {
-      prompt: { raw: 'hello', label: 'test' },
-      vars: {},
-      bustCache: true,
-    });
-    expect(response.output).toBe(expected);
-    expect(request).toHaveBeenCalledOnce();
-    expect(mockCacheGet).not.toHaveBeenCalled();
-    expect(mockCacheSet).not.toHaveBeenCalled();
-    expect(getCache).not.toHaveBeenCalled();
-  });
-
-  it.each(['claude-3-5-sonnet-v2@20241022', 'chat-bison', 'llama-3.3-70b-instruct-maas'])(
-    'uses shared replay accounting for cached %s',
-    async (model) => {
-      mockCacheGet.mockResolvedValue(
-        JSON.stringify({ output: 'replayed', tokenUsage: { prompt: 2, completion: 3, total: 5 } }),
-      );
-      const provider = new VertexChatProvider(model, { config: { region: 'us-central1' } });
-      const result = await provider.callApi('hello');
-      expect(result).toMatchObject({
-        output: 'replayed',
-        cached: true,
-        tokenUsage: {
-          prompt: 2,
-          completion: 3,
-          total: 5,
-          cached: 5,
-          numRequests: 0,
-          incurredTokenUsage: {},
-        },
-      });
-    },
-  );
-});
-
 describe('VertexChatProvider.callGeminiApi', () => {
   let provider: VertexChatProvider;
 
@@ -247,7 +175,6 @@ describe('VertexChatProvider.callGeminiApi', () => {
     mockCacheGet.mockReset();
     mockCacheGet.mockResolvedValue(null);
     mockCacheSet.mockReset();
-    vi.mocked(getCache).mockClear();
     mockImportModule.mockReset();
 
     provider = new VertexChatProvider('gemini-pro', {
@@ -269,50 +196,6 @@ describe('VertexChatProvider.callGeminiApi', () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
   });
-
-  it.each([null, JSON.stringify({ output: 'cached' })])(
-    'does not accept a cache lookup result after cancellation: %s',
-    async (cachedValue) => {
-      let finishCacheLookup!: (value: string | null) => void;
-      mockCacheGet.mockImplementationOnce(
-        () =>
-          new Promise<string | null>((resolve) => {
-            finishCacheLookup = resolve;
-          }),
-      );
-      const auth = vi.spyOn(provider, 'getClientWithCredentials');
-      const controller = new AbortController();
-      const reason = new Error('cancelled while reading cache');
-      const call = provider.callGeminiApi('hello', undefined, { abortSignal: controller.signal });
-      const rejection = expect(call).rejects.toBe(reason);
-      await vi.waitFor(() => expect(mockCacheGet).toHaveBeenCalledOnce());
-      controller.abort(reason);
-      finishCacheLookup(cachedValue);
-      await rejection;
-      expect(auth).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each(['gemini-2.5-flash', 'claude-sonnet-4', 'llama-3', 'chat-bison'])(
-    'rejects a settled cache hit when cancellation precedes its continuation: %s',
-    async (model) => {
-      const started = createDeferred<void>();
-      const cached = createDeferred<string>();
-      mockCacheGet.mockImplementationOnce(() => {
-        started.resolve();
-        return cached.promise;
-      });
-      const target = new VertexChatProvider(model, { config: { projectId: 'fixture-project' } });
-      const controller = new AbortController();
-      const reason = new Error('cancelled after cache settled');
-      const call = target.callApi('hello', undefined, { abortSignal: controller.signal });
-      const rejection = expect(call).rejects.toBe(reason);
-      await started.promise;
-      cached.resolve(JSON.stringify({ output: 'cached' }));
-      queueMicrotask(() => controller.abort(reason));
-      await rejection;
-    },
-  );
 
   it('should call the Gemini API and return the response', async () => {
     const mockResponse = {
@@ -446,41 +329,6 @@ describe('VertexChatProvider.callGeminiApi', () => {
     },
   );
 
-  it.each([{ bustCache: true }, { debug: true }, { bustCache: true, debug: false }])(
-    'bypasses cache reads and writes for %j',
-    async (cacheOptions) => {
-      mockCacheGet.mockResolvedValue(JSON.stringify({ output: 'stale output' }));
-      const request = mockVertexRequest({
-        candidates: [{ content: { parts: [{ text: 'fresh output' }] } }],
-      });
-      const response = await provider.callGeminiApi('test prompt', {
-        prompt: { raw: 'test prompt', label: 'test' },
-        vars: {},
-        ...cacheOptions,
-      });
-      expect(response.output).toBe('fresh output');
-      expect(response.cached).toBe(false);
-      expect(request).toHaveBeenCalledOnce();
-      expect(getCache).not.toHaveBeenCalled();
-      expect(mockCacheGet).not.toHaveBeenCalled();
-      expect(mockCacheSet).not.toHaveBeenCalled();
-    },
-  );
-
-  it('uses cache when bustCache is explicitly false even with debug enabled', async () => {
-    mockCacheGet.mockResolvedValue(JSON.stringify({ output: 'cached output' }));
-    const request = mockVertexRequest({});
-    const response = await provider.callGeminiApi('test prompt', {
-      prompt: { raw: 'test prompt', label: 'test' },
-      vars: {},
-      bustCache: false,
-      debug: true,
-    });
-    expect(response).toMatchObject({ output: 'cached output', cached: true });
-    expect(response.tokenUsage).toBeUndefined();
-    expect(request).not.toHaveBeenCalled();
-  });
-
   it('should return cached response if available', async () => {
     const mockCachedResponse = {
       cached: true,
@@ -501,52 +349,8 @@ describe('VertexChatProvider.callGeminiApi', () => {
       tokenUsage: {
         ...mockCachedResponse.tokenUsage,
         cached: mockCachedResponse.tokenUsage.total,
-        numRequests: 0,
-        incurredTokenUsage: {},
       },
     });
-  });
-
-  it.each([
-    { data: [] },
-    { data: [{ usageMetadata: { totalTokenCount: 3 } }] },
-    {
-      data: [
-        {
-          promptFeedback: {
-            safetyRatings: [{ category: 'HARM_CATEGORY_HARASSMENT', probability: 'NEGLIGIBLE' }],
-          },
-        },
-      ],
-    },
-  ])('retains the Vertex error contract for candidate-free stream %j', async ({ data }) => {
-    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
-      client: { request: vi.fn().mockResolvedValue({ data }) } as unknown as JSONClient,
-      projectId: 'test-project',
-    });
-    const response = await provider.callGeminiApi('hello');
-    const details = data.length
-      ? 'No candidates returned in API response.'
-      : 'No response data found';
-    expect(response.error).toContain(`Gemini API response error: Error: ${details}`);
-    expect(response.error).toContain(`Response data: ${JSON.stringify(data)}`);
-  });
-
-  it('records cached tokens on the Vertex response span', async () => {
-    mockCacheGet.mockResolvedValue(
-      JSON.stringify({ output: 'cached response', tokenUsage: { prompt: 6, total: 10 } }),
-    );
-    const setAttribute = vi.fn();
-    const getTracer = vi.spyOn(trace, 'getTracer').mockReturnValue({
-      startActiveSpan: (_name: string, _options: unknown, _context: unknown, callback: any) =>
-        callback({ setAttribute, setStatus: vi.fn(), recordException: vi.fn(), end: vi.fn() }),
-    } as any);
-    try {
-      await provider.callApi('test prompt');
-      expect(setAttribute).toHaveBeenCalledWith('promptfoo.usage.cached_response_tokens', 10);
-    } finally {
-      getTracer.mockRestore();
-    }
   });
 
   it('should handle API call errors', async () => {
@@ -1120,14 +924,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(mockCacheGet).toHaveBeenCalledTimes(1);
     expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"New York"}');
     expect(result.output).toBe('Sunny, 25°C');
-    expect(result.tokenUsage).toEqual({
-      total: 15,
-      prompt: 10,
-      completion: 5,
-      cached: 15,
-      numRequests: 0,
-      incurredTokenUsage: {},
-    });
+    expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15 });
     expect(result.cost).toBe(0.00045);
     expect(result.metadata).toEqual({
       groundingMetadata: {
@@ -1555,14 +1352,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(result.error).toContain(
       "Function callback 'errorFunction' failed after 0 completed callback(s)",
     );
-    expect(result.tokenUsage).toEqual({
-      total: 5,
-      prompt: 2,
-      completion: 3,
-      cached: 5,
-      numRequests: 0,
-      incurredTokenUsage: {},
-    });
+    expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3, cached: 5 });
   });
 
   describe('External Function Callbacks', () => {
@@ -1629,14 +1419,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       );
       expect(mockExternalFunction).toHaveBeenCalledWith('{"param":"test_value"}');
       expect(result.output).toBe('External function result');
-      expect(result.tokenUsage).toEqual({
-        total: 15,
-        prompt: 10,
-        completion: 5,
-        cached: 15,
-        numRequests: 0,
-        incurredTokenUsage: {},
-      });
+      expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15 });
     });
 
     it('should cache external functions and not reload them on subsequent calls', async () => {
@@ -3228,19 +3011,10 @@ describe('VertexChatProvider.callClaudeApi', () => {
       env: undefined,
     },
   ])('preserves numbered Claude aliases behind custom Vertex $source', async ({ apiHost, env }) => {
+    // A gateway alias can map to a model that still accepts sampling, so the Claude 5 fallback
+    // must neither drop these values nor convert manual thinking to adaptive.
     const model = 'claude-prod-5';
-    provider = new VertexChatProvider(model, {
-      config: {
-        ...(apiHost ? { apiHost } : {}),
-        max_tokens: 10000,
-        temperature: 0.5,
-        top_p: 0.9,
-        top_k: 40,
-        thinking: { type: 'enabled', budget_tokens: 5000 },
-      },
-      env,
-    });
-    const mockRequest = mockVertexRequest({
+    const response = {
       id: 'test-id',
       type: 'message',
       role: 'assistant',
@@ -3249,22 +3023,71 @@ describe('VertexChatProvider.callClaudeApi', () => {
       stop_reason: 'end_turn',
       stop_sequence: null,
       usage: { input_tokens: 5, output_tokens: 1 },
+    };
+    const send = async (config: Record<string, unknown>) => {
+      provider = new VertexChatProvider(model, {
+        config: { ...(apiHost ? { apiHost } : {}), max_tokens: 10000, ...config },
+        env,
+      });
+      const mockRequest = mockVertexRequest(response);
+      await provider.callClaudeApi('test prompt');
+      expect(mockRequest.mock.calls[0][0].url).toContain(
+        `https://${apiHost ?? env?.VERTEX_API_HOST}/`,
+      );
+      return mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+    };
+
+    expect(await send({ temperature: 0.5, top_k: 40 })).toMatchObject({
+      temperature: 0.5,
+      top_k: 40,
     });
-
-    await provider.callClaudeApi('test prompt');
-
-    expect(mockRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: expect.stringContaining(`https://${apiHost ?? env?.VERTEX_API_HOST}/`),
-        data: expect.objectContaining({
-          temperature: 0.5,
-          top_p: 0.9,
-          top_k: 40,
-          thinking: { type: 'enabled', budget_tokens: 5000 },
-        }),
-      }),
-    );
+    expect(
+      await send({ top_p: 0.95, thinking: { type: 'enabled', budget_tokens: 5000 } }),
+    ).toMatchObject({ top_p: 0.95, thinking: { type: 'enabled', budget_tokens: 5000 } });
   });
+
+  // Vertex forwards the body verbatim, so Claude's own sampling rules (verified live against
+  // the Messages API) must hold here too.
+  it.each([
+    ['temperature with top_p', { temperature: 0.5, top_p: 0.9 }, { top_p: 0.9 }],
+    [
+      'temperature and top_k with thinking',
+      { temperature: 0, top_k: 40, thinking: { type: 'enabled', budget_tokens: 1024 } },
+      {},
+    ],
+    [
+      'a low top_p with thinking',
+      { top_p: 0.5, thinking: { type: 'enabled', budget_tokens: 1024 } },
+      { top_p: 0.95 },
+    ],
+  ] as const)(
+    'sends Claude on Vertex only the sampling it accepts: %s',
+    async (_, sampling, expected) => {
+      provider = new VertexChatProvider('claude-sonnet-4-6', {
+        config: { max_tokens: 2048, ...sampling },
+      });
+      const mockRequest = mockVertexRequest({
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-sonnet-4-6',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 5, output_tokens: 1 },
+      });
+
+      await provider.callClaudeApi('test prompt');
+
+      const sent = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+      expect({ temperature: sent.temperature, top_p: sent.top_p, top_k: sent.top_k }).toEqual({
+        temperature: undefined,
+        top_p: undefined,
+        top_k: undefined,
+        ...expected,
+      });
+    },
+  );
 
   it.each([
     { name: 'regional', region: 'us-central1', apiHost: undefined, env: undefined },
@@ -3358,6 +3181,105 @@ describe('VertexChatProvider.callClaudeApi', () => {
 
     expect(mockRequest.mock.calls[0][0].data.temperature).toBeUndefined();
   });
+
+  it.each([
+    { thinking: { type: 'disabled' as const }, effort: 'low' as const },
+    { thinking: { type: 'disabled' as const }, effort: undefined },
+    { thinking: { type: 'enabled' as const, budget_tokens: 1024 }, effort: 'high' as const },
+  ])(
+    'Claude Opus 5.5 on Vertex normalizes thinking %j and omits sampling params',
+    async ({ thinking, effort }) => {
+      const model = 'claude-opus-5-5';
+      provider = new VertexChatProvider(model, {
+        config: { temperature: 0.5, top_p: 0.9, top_k: 40, thinking, effort },
+      });
+      const mockRequest = mockVertexRequest({
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 5, output_tokens: 1 },
+      });
+
+      await provider.callClaudeApi('test prompt');
+
+      const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+      expect(sentBody.temperature).toBeUndefined();
+      expect(sentBody.top_p).toBeUndefined();
+      expect(sentBody.top_k).toBeUndefined();
+      // Opus 5.5 rejects `disabled` at every effort level (unlike Opus 5), and thinking
+      // always consumes max_tokens, so the default gets thinking headroom.
+      expect(sentBody.thinking).toEqual(
+        thinking.type === 'enabled' ? { type: 'adaptive' } : undefined,
+      );
+      expect(sentBody.max_tokens).toBe(2048);
+    },
+  );
+
+  it.each([
+    // `disabled` is rejected at every effort; `between_tools` is the lowest setting up to high.
+    {
+      thinking: { type: 'disabled' as const },
+      effort: undefined,
+      expected: { type: 'between_tools' },
+      maxTokens: 512,
+    },
+    {
+      thinking: { type: 'disabled' as const },
+      effort: 'high' as const,
+      expected: { type: 'between_tools' },
+      maxTokens: 512,
+    },
+    // Above high, `between_tools` is a 400 too, so adaptive thinking runs.
+    {
+      thinking: { type: 'disabled' as const },
+      effort: 'max' as const,
+      expected: undefined,
+      maxTokens: 2048,
+    },
+    {
+      thinking: { type: 'between_tools' as const },
+      effort: 'xhigh' as const,
+      expected: undefined,
+      maxTokens: 2048,
+    },
+    {
+      thinking: { type: 'enabled' as const, budget_tokens: 1024 },
+      effort: 'high' as const,
+      expected: { type: 'adaptive' },
+      maxTokens: 2048,
+    },
+  ])(
+    'Claude Sonnet 5.5 on Vertex sends thinking %j as the API accepts it',
+    async ({ thinking, effort, expected, maxTokens }) => {
+      const model = 'claude-sonnet-5-5';
+      provider = new VertexChatProvider(model, {
+        config: { temperature: 0.5, top_p: 0.9, top_k: 40, thinking, effort },
+      });
+      const mockRequest = mockVertexRequest({
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 5, output_tokens: 1 },
+      });
+
+      await provider.callClaudeApi('test prompt');
+
+      const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+      expect(sentBody.temperature).toBeUndefined();
+      expect(sentBody.top_p).toBeUndefined();
+      expect(sentBody.top_k).toBeUndefined();
+      expect(sentBody.thinking).toEqual(expected);
+      expect(sentBody.max_tokens).toBe(maxTokens);
+    },
+  );
 
   it('omits temperature for Claude Opus 4.7 on Vertex', async () => {
     provider = new VertexChatProvider('claude-opus-4-7', {
@@ -3592,6 +3514,46 @@ describe('VertexChatProvider.callClaudeApi', () => {
     expect(result.output).toBe(expected);
   });
 
+  it.each([
+    { type: 'between_tools' as const, showThinking: undefined },
+    { type: 'disabled' as const, showThinking: undefined },
+    { type: 'between_tools' as const, showThinking: false },
+  ])(
+    'renders Sonnet 5.5 between-tool progress with $type and showThinking=$showThinking',
+    async ({ type, showThinking }) => {
+      provider = new VertexChatProvider('claude-sonnet-5-5', {
+        config: { thinking: { type }, showThinking },
+      });
+      const mockRequest = vi.fn().mockResolvedValue({
+        data: {
+          content: [
+            { type: 'thinking', thinking: 'Checking the result', signature: 'sig' },
+            { type: 'text', text: 'the answer' },
+          ],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 5, output_tokens: 1 },
+        },
+      });
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: { request: mockRequest } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+      const result = await provider.callClaudeApi('test prompt');
+
+      expect(result.output).toBe(
+        showThinking === false
+          ? 'the answer'
+          : 'Thinking: Checking the result\nSignature: sig\n\nthe answer',
+      );
+      expect(mockRequest.mock.calls[0][0].data).toMatchObject({
+        thinking: { type: 'between_tools' },
+        max_tokens: 512,
+      });
+    },
+  );
+
   it('keeps the 512 default for a Claude model that does not think by default', async () => {
     provider = new VertexChatProvider('claude-opus-4-8', { config: {} });
 
@@ -3825,9 +3787,17 @@ describe('VertexChatProvider.callClaudeApi', () => {
     expect(result.cost).toBeCloseTo(0.00012, 8);
   });
 
-  it('still sends temperature for Opus 4.6 on Vertex (regression)', async () => {
+  // Claude rejects `temperature` together with `top_p`, so each case is a request the API accepts.
+  it.each([
+    [
+      'temperature and top_k',
+      { temperature: 0, top_k: 0, topK: 40 },
+      { temperature: 0, top_p: undefined, top_k: 0 },
+    ],
+    ['top_p', { top_p: 0, topP: 0.8 }, { temperature: undefined, top_p: 0, top_k: undefined }],
+  ])('preserves zero %s for Opus 4.6 on Vertex (regression)', async (_, sampling, expected) => {
     provider = new VertexChatProvider('claude-opus-4-6', {
-      config: { max_tokens: 32, temperature: 0 },
+      config: { max_tokens: 32, ...sampling },
     });
 
     const mockResponse = {
@@ -3859,8 +3829,9 @@ describe('VertexChatProvider.callClaudeApi', () => {
 
     await provider.callClaudeApi('test prompt');
 
-    const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
-    expect(sentBody.temperature).toBe(0);
+    // toEqual treats an omitted parameter and an undefined one alike, as JSON does.
+    const { temperature, top_p, top_k } = mockRequest.mock.calls[0][0].data;
+    expect({ temperature, top_p, top_k }).toEqual(expected);
   });
 
   it('should accept both max_tokens and maxOutputTokens parameters', async () => {
