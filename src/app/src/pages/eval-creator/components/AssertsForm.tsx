@@ -13,13 +13,6 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Textarea } from '@app/components/ui/textarea';
-import {
-  ARRAY_VALUE_ASSERTION_TYPES,
-  NAMED_MATCHER_ASSERTION_TYPES,
-  REQUIRED_STRING_ASSERTION_TYPES,
-  REQUIRED_STRING_OR_ARRAY_ASSERTION_TYPES,
-  REQUIRED_TEXT_OR_NUMBER_ASSERTION_TYPES,
-} from './assertionValueValidation';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 interface AssertsFormProps {
@@ -102,27 +95,13 @@ const assertTypes: AssertionType[] = [
   'not-webhook',
 ];
 
-const usesStructuredValue = (type: AssertionType) =>
-  ARRAY_VALUE_ASSERTION_TYPES.has(type) ||
-  REQUIRED_STRING_OR_ARRAY_ASSERTION_TYPES.has(type) ||
-  NAMED_MATCHER_ASSERTION_TYPES.has(type) ||
-  ['equals', 'moderation', 'trajectory:tool-set', 'trajectory:tool-sequence'].includes(
-    type.replace(/^not-/, ''),
-  );
-
-function parseAssertionValue(type: AssertionType, value: Assertion['value']): Assertion['value'] {
-  if (typeof value === 'string' && usesStructuredValue(type)) {
-    try {
-      const parsed: unknown = JSON.parse(value);
-      if (!ARRAY_VALUE_ASSERTION_TYPES.has(type) || Array.isArray(parsed)) {
-        return parsed as Assertion['value'];
-      }
-    } catch {
-      // Preserve incomplete input while it is being edited.
-    }
-  }
-  return value;
-}
+// Assertion types that accept comma-separated values
+const ARRAY_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
+  'contains-any',
+  'contains-all',
+  'not-contains-any',
+  'not-contains-all',
+]);
 
 // Assertion types that require an LLM
 const LLM_ASSERTION_TYPES = new Set<AssertionType>([
@@ -141,22 +120,40 @@ const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'trajectory:goal-success',
 ]);
 
+function isToolSet(type: AssertionType): boolean {
+  return type === 'trajectory:tool-set' || type === 'not-trajectory:tool-set';
+}
+
+function parseToolSet(value: Assertion['value']): Assertion['value'] {
+  if (typeof value === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch {
+      // Keep incomplete JSON visible so validation can explain the error.
+    }
+  }
+  return value;
+}
+
 const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
   const [asserts, setAsserts] = useState<Assertion[]>(initialValues || []);
-  const [rawValues, setRawValues] = useState<(string | undefined)[]>(
+  const [toolSetText, setToolSetText] = useState<(string | undefined)[]>(
     () => initialValues?.map(() => undefined) ?? [],
   );
 
   const handleAdd = () => {
     const newAsserts = [...asserts, { type: 'equals' as AssertionType, value: '' }];
     setAsserts(newAsserts);
-    setRawValues((values) => [...values, undefined]);
+    setToolSetText((values) => [...values, undefined]);
     onAdd(newAsserts);
   };
 
   const handleRemoveAssert = (indexToRemove: number) => {
     const newAsserts = asserts.filter((_, index) => index !== indexToRemove);
-    setRawValues((values) => values.filter((_, index) => index !== indexToRemove));
+    setToolSetText((values) => values.filter((_, index) => index !== indexToRemove));
     setAsserts(newAsserts);
     onAdd(newAsserts);
   };
@@ -202,19 +199,14 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                         ? {
                             ...a,
                             type: newValue as AssertionType,
-                            value: usesStructuredValue(newValue as AssertionType)
-                              ? parseAssertionValue(newValue as AssertionType, a.value)
-                              : REQUIRED_STRING_ASSERTION_TYPES.has(newValue as AssertionType) ||
-                                  REQUIRED_TEXT_OR_NUMBER_ASSERTION_TYPES.has(
-                                    newValue as AssertionType,
-                                  )
-                                ? (rawValues[index] ??
-                                  (typeof a.value === 'string'
-                                    ? a.value
-                                    : JSON.stringify(a.value, null, 2)))
-                                : a.value,
+                            value: isToolSet(newValue as AssertionType)
+                              ? parseToolSet(a.value)
+                              : a.value,
                           }
                         : a,
+                    );
+                    setToolSetText((values) =>
+                      values.map((value, i) => (i === index ? undefined : value)),
                     );
                     setAsserts(newAsserts);
                     onAdd(newAsserts);
@@ -241,26 +233,30 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                   <Textarea
                     id={`assert-value-${index}`}
                     placeholder={
-                      assert.type.endsWith('trajectory:tool-set')
+                      isToolSet(assert.type)
                         ? '["search", "summarize"]'
                         : 'Enter expected value or criteria...'
                     }
                     value={
-                      rawValues[index] ??
-                      (typeof assert.value === 'string'
-                        ? assert.value
-                        : typeof assert.value === 'number'
-                          ? String(assert.value)
-                          : assert.value === undefined
-                            ? ''
-                            : JSON.stringify(assert.value, null, 2))
+                      isToolSet(assert.type)
+                        ? (toolSetText[index] ??
+                          (typeof assert.value === 'string'
+                            ? assert.value
+                            : (JSON.stringify(assert.value, null, 2) ?? '')))
+                        : typeof assert.value === 'string'
+                          ? assert.value
+                          : typeof assert.value === 'number'
+                            ? String(assert.value)
+                            : ''
                     }
                     onChange={(e) => {
-                      const rawValue = e.target.value;
-                      setRawValues((values) =>
-                        values.map((value, i) => (i === index ? rawValue : value)),
-                      );
-                      const newValue = parseAssertionValue(assert.type, rawValue);
+                      const text = e.target.value;
+                      if (isToolSet(assert.type)) {
+                        setToolSetText((values) =>
+                          values.map((value, i) => (i === index ? text : value)),
+                        );
+                      }
+                      const newValue = isToolSet(assert.type) ? parseToolSet(text) : text;
                       const newAsserts = asserts.map((a, i) =>
                         i === index ? { ...a, value: newValue } : a,
                       );
