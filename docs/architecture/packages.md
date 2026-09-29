@@ -63,12 +63,11 @@ nor quietly pick up a new npm dependency or Node builtin such as `node:fs`. A
 
 ## Layer Dependency Ratchet
 
-`src/validation` owns the pure file-extension and filter-range helpers used by
-configuration schemas. It is a separate leaf with no external dependencies.
-Existing `src/util/fileExtensions` and `src/util/filterRange` imports remain
-compatibility shims that share the same functions and extension array. These
-helpers are not exports of the public contracts barrel. Range warning logging
-remains in the Node adapter, `src/util/filterRangeWarn.ts`.
+`src/validation` contains the file-extension and filter-range helpers used by
+configuration schemas, with no Node or package dependencies. The original
+`src/util/fileExtensions` and `src/util/filterRange` paths re-export the same
+functions and extension array. Range warnings stay in
+`src/util/filterRangeWarn.ts`.
 
 Each private layer declares its currently allowed dependencies in
 `architecture/layers.json`. The current graph still has transitional edges, so
@@ -89,6 +88,14 @@ dependency-light state implementation for embedded evaluators and focused tests.
 `src/node/evaluatorRuntime.ts` continues to own JSONL writer construction and
 resume append behavior. The evaluator orchestrates evaluation behavior without
 importing the concrete `Eval` model.
+
+`src/util/envFile.ts` owns plain `.env` file loading as a Node filesystem adapter.
+The imports from `src/envars.ts` and `src/server/server.ts` replace external
+`dotenv` calls at the same startup points; the edge baseline records these two
+internal dependencies. The loader imports only Node built-ins, so early loading
+does not initialize the logger, configuration state, or database. Keeping it
+separate from `setupEnv` preserves that initialization order without duplicating
+the parser across callers.
 
 The checker also resolves cross-layer source aliases such as `@promptfoo/*`.
 The browser-only `@app/*` alias stays inside the `app` layer. Alias spelling
@@ -136,3 +143,7 @@ npm run deps:ownership
 
 The report is intentionally descriptive for now. It gives us the evidence needed
 to move dependencies into future packages without guessing at ownership.
+
+It includes direct, optional, and peer dependency declarations. Peers marked
+optional in `peerDependenciesMeta` appear as `optional-peer`; other peers appear
+as `peer`. These labels describe the package contract, not what is installed.

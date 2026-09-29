@@ -56,12 +56,11 @@ export function normalizeScriptAssertionResult(
   return {
     ...result,
     pass,
-    reason:
-      pass === result.pass
-        ? result.reason
-        : pass
-          ? 'Assertion passed'
-          : `${labels.code} returned ${result.pass ? 'true' : 'false'}`,
+    reason: inverse
+      ? pass
+        ? 'Assertion passed'
+        : result.reason || `${labels.code} returned true`
+      : result.reason,
     assertion: result.assertion ?? assertion,
   };
 }
@@ -81,11 +80,7 @@ export function normalizeScriptObjectResult(
 
   if (!isGradingResult(mappedObj)) {
     throw new Error(
-      `${labels.language} assertion must return a boolean, number, or {pass, score, reason} object. Got instead:\n${JSON.stringify(
-        mappedObj,
-        null,
-        2,
-      )}`,
+      `${labels.language} assertion must return a boolean, number, or {pass, score, reason} object with finite scores and weights. Got type ${typeof result}.`,
     );
   }
 
