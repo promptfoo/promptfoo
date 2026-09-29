@@ -115,7 +115,7 @@ huggingface:token-classification:dslim/bert-base-NER
 
 Embeddings with sentence-transformers:
 
-```yaml
+```text
 # Sentence similarity
 huggingface:sentence-similarity:sentence-transformers/all-MiniLM-L6-v2
 
@@ -156,7 +156,7 @@ Supported environment variables:
 - `HF_TOKEN` - your HuggingFace API token (recommended)
 - `HF_API_TOKEN` - alternative name for your HuggingFace API token
 
-The provider can pass through configuration parameters to the API. See [HuggingFace Inference API documentation](https://huggingface.co/docs/api-inference/tasks/overview) for task-specific parameters.
+The provider can pass through configuration parameters to the API. See [HuggingFace Inference Providers API reference](https://huggingface.co/docs/inference-providers/tasks/index) for task-specific parameters.
 
 Here's an example of how this provider might appear in your promptfoo config:
 
@@ -200,7 +200,7 @@ You can also explicitly disable chat completion format with `chatCompletion: fal
 
 ## Inference endpoints
 
-HuggingFace provides the ability to pay for private hosted inference endpoints. First, go the [Create a new Endpoint](https://ui.endpoints.huggingface.co/new) and select a model and hosting setup.
+Hugging Face offers paid, dedicated [Inference Endpoints](https://huggingface.co/docs/inference-endpoints/guides/create_endpoint). Create an endpoint and choose a model, hosting setup, and security level.
 
 ![huggingface inference endpoint creation](/img/docs/huggingface-create-endpoint.png)
 

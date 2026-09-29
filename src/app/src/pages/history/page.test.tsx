@@ -2,7 +2,7 @@ import React from 'react';
 
 import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import HistoryPage from './page';
 

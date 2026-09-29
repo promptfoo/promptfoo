@@ -202,6 +202,9 @@ describe('VVAH example provider', () => {
     'NUL.txt',
     'CONIN$',
     'CONOUT$.txt',
+    ...['COM', 'LPT'].flatMap((device) =>
+      ['¹', '²', '³'].flatMap((digit) => [`${device}${digit}`, `src/${device}${digit}.txt`]),
+    ),
   ])('rejects unsafe fixture path %s before spawning', async (name) => {
     vi.mocked(spawn).mockImplementation(() => {
       throw new Error('Unexpected scan');
