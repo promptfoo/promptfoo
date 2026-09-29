@@ -131,9 +131,12 @@ function extractFromRecord(obj: Record<string, unknown>): string[] {
 }
 
 export function extractPersonas(output: string): string[] {
+  // Markdown fences are common in otherwise valid JSON responses, including raw arrays.
+  const json = output.trim().replace(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i, '$1');
+
   // 1. Try direct JSON parsing
   try {
-    const parsed = JSON.parse(output);
+    const parsed = JSON.parse(json);
     if (Array.isArray(parsed)) {
       const fromArray = extractFromList(parsed);
       if (fromArray.length > 0) {
