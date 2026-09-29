@@ -1,4 +1,5 @@
 ---
+title: 'GPT-5.2 vs o3: Benchmark on Your Own Data'
 sidebar_label: 'GPT-5.2 vs o3'
 description: 'Benchmark OpenAI o3 reasoning model against GPT-5.2 for cost, latency, and accuracy to optimize model selection decisions'
 slug: gpt-vs-reasoning-model
@@ -8,7 +9,8 @@ slug: gpt-vs-reasoning-model
 
 OpenAI's o3 is a reasoning model designed to spend more time thinking before responding, excelling at complex math and logic tasks.
 
-GPT-5.2 outperforms o3 on most general benchmarks, but o3 still leads on deep reasoning tasks like advanced math and multi-step logic problems.
+The models make different cost, latency, and quality tradeoffs. Benchmark representative tasks
+from your workload before selecting one.
 
 This guide describes how to compare `o3` against `gpt-5.2` using promptfoo, with a focus on performance, cost, and latency.
 
@@ -125,7 +127,7 @@ tests:
         value: darkness
   - vars:
       riddle: >-
-        Suppose I have a cabbage, a goat and a lion, and I need to get them across a river. I have a boat that can only carry myself and a single other item. I am not allowed to leave the cabbage and lion alone together, and I am not allowed to leave the lion and goat alone together. How can I safely get all three across?
+        Suppose I have a cabbage, a goat and a lion, and I need to get them across a river. I have a boat that can only carry myself and a single other item. I am not allowed to leave the cabbage and goat alone together, and I am not allowed to leave the lion and goat alone together. How can I safely get all three across?
   - vars:
       riddle: 'The surgeon, who is the boy''s father says, "I can''t operate on this boy, he''s my son!" Who is the surgeon to the boy?'
     assert:

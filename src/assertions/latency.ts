@@ -1,6 +1,10 @@
 import type { AssertionParams, GradingResult } from '../types/index';
 
-export const handleLatency = ({ assertion, latencyMs }: AssertionParams): GradingResult => {
+export const handleLatency = ({
+  assertion,
+  latencyMs,
+  inverse,
+}: AssertionParams): GradingResult => {
   if (assertion.threshold === undefined) {
     throw new Error('Latency assertion must have a threshold in milliseconds');
   }
@@ -9,13 +13,15 @@ export const handleLatency = ({ assertion, latencyMs }: AssertionParams): Gradin
       'Latency assertion does not support cached results. Rerun the eval with --no-cache',
     );
   }
-  const pass = latencyMs <= assertion.threshold;
+  const pass = latencyMs <= assertion.threshold !== inverse;
   return {
     pass,
     score: pass ? 1 : 0,
     reason: pass
       ? 'Assertion passed'
-      : `Latency ${latencyMs}ms is greater than threshold ${assertion.threshold}ms`,
+      : `Latency ${latencyMs}ms is ${
+          inverse ? 'less than or equal to' : 'greater than'
+        } threshold ${assertion.threshold}ms`,
     assertion,
   };
 };
@@ -42,7 +48,7 @@ export const handleTtft = ({
     // This covers streams with no content and configured detectors that never match.
     throw new Error(
       'TTFT could not be measured: no matching content was detected in the stream. ' +
-        'If streamFormat or streamFirstTokenPattern is configured, verify the pattern matches your endpoint. ' +
+        'If streamFormat is configured, verify it matches your endpoint. ' +
         'Otherwise confirm that the endpoint returns SSE/chunked output when stream: true is set.',
     );
   }
@@ -66,6 +72,5 @@ export const handleTtft = ({
         ? `Time to first token ${ttft}ms must exceed threshold ${threshold}ms`
         : `Time to first token ${ttft}ms exceeds threshold ${threshold}ms`,
     assertion,
-    namedScores: { ttft_ms: ttft },
   };
 };

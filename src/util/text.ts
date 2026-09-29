@@ -6,6 +6,11 @@
  */
 export function ellipsize(str: string, maxLen: number): string {
   if (str.length > maxLen) {
+    if (maxLen < 3) {
+      // Not enough room for the ellipsis; hard-truncate so the result still
+      // respects maxLen instead of slicing with a negative index.
+      return str.slice(0, Math.max(0, maxLen));
+    }
     return str.slice(0, maxLen - 3) + '...';
   }
   return str;

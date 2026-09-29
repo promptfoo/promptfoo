@@ -9,20 +9,49 @@ import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
-import { parseRateLimitHeaders, parseRetryAfter } from '../../scheduler/headerParser';
+import { parseRateLimitHeaders } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
-import { sanitizeUrl } from '../sanitizer';
+import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
+import { CloudAuthRedirectError } from './cloudAuthRedirects';
 import {
   extractRateLimitErrorCode,
+  extractRateLimitErrorType,
   HttpRateLimitError,
-  isHardQuotaCode,
   type SystemError,
 } from './errors';
-import { monkeyPatchFetch } from './monkeyPatchFetch';
+import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
 import { getFetchRetryContextMaxRetries } from './retryContext';
+import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
 import type { FetchOptions } from './types';
+
+// Credential failures are not transient HTTP failures and must not be retried by this layer.
+class RequestAuthenticationError extends Error {}
+
+async function resolveAuthenticationHeaders(
+  getAuthHeaders: NonNullable<FetchOptions['getAuthHeaders']>,
+  explicitHeaders: HeadersInit | undefined,
+  signal: AbortSignal | null | undefined,
+): Promise<Record<string, string>> {
+  signal?.throwIfAborted();
+  let headers: Headers;
+  try {
+    headers = new Headers(await getAuthHeaders(signal ?? undefined));
+  } catch (error) {
+    signal?.throwIfAborted();
+    throw Object.assign(
+      new RequestAuthenticationError(
+        error instanceof Error ? error.message : 'Request authentication failed',
+      ),
+      { cause: error },
+    );
+  }
+  signal?.throwIfAborted();
+  // Never mutate the original headers: a retry must not inherit the previous attempt's token.
+  new Headers(explicitHeaders).forEach((value, name) => headers.set(name, value));
+  return Object.fromEntries(headers);
+}
 
 // Cached agents to avoid recreating on every request.
 // Keep separate entries per resolved connection count so overlapping requests
@@ -45,8 +74,9 @@ const cachedProxyAgents: Map<string, Dispatcher> = new Map();
 function getConnectionPoolSize(): number {
   const envConnections = getEnvString('PROMPTFOO_FETCH_CONNECTIONS');
   if (envConnections != null) {
-    const parsed = parseInt(envConnections, 10);
-    if (!isNaN(parsed)) {
+    const normalized = envConnections.trim();
+    const parsed = Number(normalized);
+    if (/^\d+$/.test(normalized) && Number.isSafeInteger(parsed) && parsed > 0) {
       return parsed;
     }
   }
@@ -84,7 +114,9 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
     connect: tlsOptions,
-  }).compose(interceptors.decompress({ skipErrorResponses: false }));
+  })
+    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(stripDecompressionHeaders());
   cachedAgents.set(concurrency, agent);
   return agent;
 }
@@ -108,7 +140,9 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
     keepAliveTimeout: 30_000,
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
-  }).compose(interceptors.decompress({ skipErrorResponses: false }));
+  })
+    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(stripDecompressionHeaders());
   cachedProxyAgents.set(cacheKey, agent);
   return agent;
 }
@@ -175,6 +209,7 @@ export async function fetchWithProxy(
   options: FetchOptions = {},
   abortSignal?: AbortSignal,
 ): Promise<Response> {
+  options = preserveCloudAuthRedirects(url, options);
   let finalUrl = url;
   let finalUrlString = getFetchUrlString(url);
 
@@ -190,8 +225,9 @@ export async function fetchWithProxy(
     : options.signal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
+  const { getAuthHeaders, ...requestOptions } = options;
   const finalOptions: FetchOptions & { dispatcher?: any } = {
-    ...options,
+    ...requestOptions,
     headers: getFetchWithProxyHeaders(url, options),
     signal: combinedSignal,
   };
@@ -200,27 +236,35 @@ export async function fetchWithProxy(
     try {
       const parsedUrl = new URL(url);
       if (parsedUrl.username || parsedUrl.password) {
-        if (
-          finalOptions.headers &&
-          'Authorization' in (finalOptions.headers as Record<string, string>)
-        ) {
+        const headers = (finalOptions.headers ?? {}) as Record<string, string>;
+        // Header names are case-insensitive, and a Headers instance or array lowercases them.
+        // Matching only `Authorization` would add a second value that servers receive combined.
+        if (Object.keys(headers).some((name) => name.toLowerCase() === 'authorization')) {
           logger.warn(
             'Both URL credentials and Authorization header present - URL credentials will be ignored',
           );
         } else {
-          // Move credentials to Authorization header
-          const username = parsedUrl.username || '';
-          const password = parsedUrl.password || '';
-          const credentials = Buffer.from(`${username}:${password}`).toString('base64');
+          // Userinfo percent-encodes reserved characters, and HTTP clients decode it before
+          // Basic auth, so a password written as p%40ss must authenticate as p@ss. A malformed
+          // escape has no decoding and stays as written.
+          const credentials = [parsedUrl.username, parsedUrl.password]
+            .map((part) => {
+              try {
+                return decodeURIComponent(part);
+              } catch {
+                return part;
+              }
+            })
+            .join(':');
           finalOptions.headers = {
-            ...(finalOptions.headers as Record<string, string>),
-            Authorization: `Basic ${credentials}`,
+            ...headers,
+            Authorization: `Basic ${Buffer.from(credentials).toString('base64')}`,
           };
         }
         parsedUrl.username = '';
         parsedUrl.password = '';
         finalUrl = parsedUrl.toString();
-        finalUrlString = finalUrl.toString();
+        finalUrlString = finalUrl;
       }
     } catch (e) {
       logger.debug(`URL parsing failed in fetchWithProxy: ${e}`);
@@ -263,7 +307,18 @@ export async function fetchWithProxy(
   const maxTransientRetries = disableTransientRetries ? 0 : 3;
 
   for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
-    const response = await monkeyPatchFetch(finalUrl, finalOptions);
+    let attemptOptions = finalOptions;
+    if (getAuthHeaders) {
+      attemptOptions = {
+        ...finalOptions,
+        headers: await resolveAuthenticationHeaders(
+          getAuthHeaders,
+          finalOptions.headers,
+          combinedSignal,
+        ),
+      };
+    }
+    const response = await monkeyPatchFetch(finalUrl, attemptOptions);
 
     if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
       const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
@@ -334,32 +389,30 @@ export function isRateLimited(response: Response): boolean {
 
 /**
  * Compute how long to wait after a rate-limited response.
- * Reads `Retry-After`, `X-RateLimit-Reset`, and OpenAI-style reset headers.
+ * Reads `retry-after-ms`, `Retry-After`, `X-RateLimit-Reset`, and OpenAI-style reset headers.
  * Default: 60s.
  */
 export function computeRateLimitWaitMs(response: Response): number {
+  const parsedHeaders = parseRateLimitHeaders(Object.fromEntries(response.headers.entries()));
   const rateLimitReset = response.headers.get('X-RateLimit-Reset');
-  const retryAfter = response.headers.get('Retry-After');
   const openaiReset =
     response.headers.get('x-ratelimit-reset-requests') ||
     response.headers.get('x-ratelimit-reset-tokens');
 
-  let waitTime = 60_000;
-
   if (openaiReset) {
-    const parsedHeaders = parseRateLimitHeaders(Object.fromEntries(response.headers.entries()));
     if (parsedHeaders.resetAt !== undefined) {
-      waitTime = Math.max(parsedHeaders.resetAt - Date.now(), 0);
+      return Math.max(parsedHeaders.resetAt - Date.now(), 0);
     }
-  } else if (rateLimitReset) {
-    const resetTime = new Date(Number.parseInt(rateLimitReset) * 1000);
-    const now = new Date();
-    waitTime = Math.max(resetTime.getTime() - now.getTime() + 1000, 0);
-  } else if (retryAfter) {
-    waitTime = parseRetryAfter(retryAfter) ?? waitTime;
   }
 
-  return waitTime;
+  if (rateLimitReset) {
+    const resetAt = Number.parseInt(rateLimitReset, 10) * 1000;
+    if (Number.isFinite(resetAt) && resetAt >= 0) {
+      return Math.max(resetAt - Date.now() + 1000, 0);
+    }
+  }
+
+  return parsedHeaders.retryAfterMs ?? 60_000;
 }
 
 /**
@@ -373,14 +426,49 @@ const RATE_LIMIT_JITTER_MS = 1000;
  * uniform random jitter to avoid synchronized retry storms when many
  * concurrent requests hit the same rate limit.
  */
-export async function handleRateLimit(response: Response): Promise<void> {
+function getAbortError(signal: AbortSignal): Error {
+  const reason = signal.reason;
+  if (reason instanceof Error && reason.name === 'AbortError') {
+    return reason;
+  }
+  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+async function sleepWithAbort(waitTime: number, signal?: AbortSignal | null): Promise<void> {
+  if (!signal) {
+    await sleep(waitTime);
+    return;
+  }
+  if (signal.aborted) {
+    throw getAbortError(signal);
+  }
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, waitTime);
+    const onAbort = () => {
+      clearTimeout(timeout);
+      signal.removeEventListener('abort', onAbort);
+      reject(getAbortError(signal));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+export async function handleRateLimit(
+  response: Response,
+  signal?: AbortSignal | null,
+): Promise<void> {
   const waitTime = computeRateLimitWaitMs(response);
   const jitter = Math.floor(Math.random() * RATE_LIMIT_JITTER_MS);
   const totalWait = waitTime + jitter;
   logger.debug(
     `Rate limited, waiting ${totalWait}ms (base ${waitTime}ms + ${jitter}ms jitter) before retry`,
   );
-  await sleep(totalWait);
+  await sleepWithAbort(totalWait, signal);
 }
 
 /**
@@ -408,34 +496,38 @@ const RATE_LIMIT_BODY_PEEK_BYTES = 64 * 1024;
  */
 async function peekRateLimitBody(
   response: Response,
-): Promise<{ body: unknown; code: string | undefined }> {
+): Promise<{ body: unknown; code: string | undefined; type: string | undefined }> {
   let cloned: Response;
   try {
     cloned = response.clone();
   } catch (err) {
     logger.debug(`[fetch] peekRateLimitBody: clone failed, skipping body code lookup: ${err}`);
-    return { body: undefined, code: undefined };
+    return { body: undefined, code: undefined, type: undefined };
   }
 
   let text: string;
   try {
-    text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES);
+    text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES, { requireStream: true });
   } catch (err) {
     logger.debug(`[fetch] peekRateLimitBody: body read failed: ${err}`);
-    return { body: undefined, code: undefined };
+    return { body: undefined, code: undefined, type: undefined };
   }
 
   if (!text) {
-    return { body: undefined, code: undefined };
+    return { body: undefined, code: undefined, type: undefined };
   }
 
   try {
     const json = JSON.parse(text);
-    return { body: json, code: extractRateLimitErrorCode(json) };
+    return {
+      body: json,
+      code: extractRateLimitErrorCode(json),
+      type: extractRateLimitErrorType(json),
+    };
   } catch {
     // Keep the raw bytes for diagnostics; no code is extractable.
     logger.debug('[fetch] peekRateLimitBody: response body was not JSON');
-    return { body: text, code: undefined };
+    return { body: text, code: undefined, type: undefined };
   }
 }
 
@@ -443,15 +535,18 @@ async function peekRateLimitBody(
  * Drain a Response's body into a string, but stop reading once `maxBytes`
  * have been collected. Each streamed chunk is bounded to the remaining
  * budget *before* it enters the in-memory buffer, so a single oversized
- * chunk cannot exceed `maxBytes` of retained memory. Falls back to
- * `.text()` when the body stream isn't available (some Response polyfills);
- * in that path we consult `Content-Length` first to skip materializing
- * very large bodies entirely.
+ * chunk cannot exceed `maxBytes` of retained memory. `requireStream` skips
+ * streamless polyfills to guarantee bounded buffering for rate-limit peeking.
+ * Other callers retain the legacy text fallback, which buffers before truncation.
  */
-async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
+export async function readBoundedText(
+  response: Response,
+  maxBytes: number,
+  options: { requireStream?: boolean } = {},
+): Promise<string> {
   if (!response.body) {
     const contentLength = Number.parseInt(response.headers?.get?.('content-length') ?? '', 10);
-    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    if (options.requireStream || (Number.isFinite(contentLength) && contentLength > maxBytes)) {
       return '';
     }
     const text = await response.text();
@@ -489,10 +584,24 @@ async function readBoundedText(response: Response, maxBytes: number): Promise<st
   return new TextDecoder().decode(merged);
 }
 
+/**
+ * Retry-After / reset timing from a rate-limit response's headers, for callers
+ * that build an {@link HttpRateLimitError} from an SDK error rather than a
+ * `Response`. Keeps the header parsing in one place.
+ */
+export function rateLimitTimingFromHeaders(headers: Record<string, string>): {
+  retryAfterMs?: number;
+  resetAt?: number;
+} {
+  const parsed = parseRateLimitHeaders(headers);
+  return { retryAfterMs: parsed.retryAfterMs, resetAt: parsed.resetAt };
+}
+
 function buildHttpRateLimitError(
   response: Response,
   body: unknown,
   code: string | undefined,
+  type: string | undefined,
 ): HttpRateLimitError {
   const headers = Object.fromEntries(response.headers.entries());
   const parsed = parseRateLimitHeaders(headers);
@@ -502,6 +611,7 @@ function buildHttpRateLimitError(
     retryAfterMs: parsed.retryAfterMs,
     resetAt: parsed.resetAt,
     code,
+    type,
     headers,
     body,
   });
@@ -533,7 +643,6 @@ export function isTransientError(response: Response): boolean {
 
 /**
  * Fetch with automatic retries and rate limit handling
- * Returns raw Response object for unified processing
  */
 export type { FetchOptions } from './types';
 
@@ -554,7 +663,7 @@ export type { FetchOptions } from './types';
  */
 function urlForLog(url: RequestInfo): string {
   const raw = typeof url === 'string' ? url : url.url;
-  return sanitizeUrl(raw);
+  return sanitizeUrlForLogging(raw);
 }
 
 async function handleRateLimitedResponse(
@@ -562,6 +671,7 @@ async function handleRateLimitedResponse(
   url: RequestInfo,
   attempt: number,
   maxRetries: number,
+  signal?: AbortSignal | null,
 ): Promise<void> {
   // Only the 429 path produces a structured error. A 200 OK with
   // `X-RateLimit-Remaining=0` is a soft hint that we're approaching a limit —
@@ -569,29 +679,35 @@ async function handleRateLimitedResponse(
   // error on retry exhaustion would be misleading and pointlessly buffers a
   // 64 KB body peek on every successful call.
   const isHardRateLimit = response.status === 429;
-  const { body, code } = isHardRateLimit
-    ? await peekRateLimitBody(response)
-    : { body: undefined, code: undefined };
   const safeUrl = urlForLog(url);
 
-  // Hard quota codes (e.g. insufficient_quota) won't resolve on retry. Fail
+  // Classify a 429 up front: `HttpRateLimitError` derives `kind` from the body
+  // code / type and the Retry-After downgrade, so the fail-fast decision below
+  // sees the same classification callers do.
+  let rateLimitError: HttpRateLimitError | undefined;
+  if (isHardRateLimit) {
+    const { body, code, type } = await peekRateLimitBody(response);
+    rateLimitError = buildHttpRateLimitError(response, body, code, type);
+  }
+
+  // Hard quota failures (e.g. insufficient_quota) won't resolve on retry. Fail
   // fast with a structured error so the caller can stop instead of amplifying
   // load against an exhausted account.
-  if (isHardRateLimit && isHardQuotaCode(code)) {
+  if (rateLimitError?.kind === 'quota') {
     logger.debug(
-      `Quota exhausted on URL ${safeUrl}: HTTP ${response.status} (code: ${code}), failing fast.`,
+      `Quota exhausted on URL ${safeUrl}: HTTP ${response.status} (code: ${rateLimitError.code}), failing fast.`,
     );
-    throw buildHttpRateLimitError(response, body, code);
+    throw rateLimitError;
   }
 
   if (attempt >= maxRetries) {
-    if (isHardRateLimit) {
+    if (rateLimitError) {
       // No retries remain: throw a structured error instead of a bare string
       // so callers can read Retry-After / reset / code without re-parsing.
       logger.debug(
         `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
       );
-      throw buildHttpRateLimitError(response, body, code);
+      throw rateLimitError;
     }
     throw new Error(
       `Rate limited: ${response.status} ${response.statusText} after ${maxRetries + 1} attempts`,
@@ -601,17 +717,19 @@ async function handleRateLimitedResponse(
   logger.debug(
     `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
   );
-  await handleRateLimit(response);
+  await handleRateLimit(response, signal);
 }
 
-function formatFetchErrorMessage(error: unknown): string {
+function formatFetchErrorMessage(error: unknown, url: RequestInfo): string {
   if (!(error instanceof Error)) {
     return String(error);
   }
   const typedError = error as SystemError;
-  let message = `${typedError.name}: ${typedError.message}`;
+  const rawUrl = typeof url === 'string' ? url : url.url;
+  const redactUrl = (value: string) => value.split(rawUrl).join(urlForLog(url));
+  let message = `${typedError.name}: ${redactUrl(typedError.message)}`;
   if (typedError.cause) {
-    message += ` (Cause: ${typedError.cause})`;
+    message += ` (Cause: ${redactUrl(String(typedError.cause))})`;
   }
   if (typedError.code) {
     message += ` (Code: ${typedError.code})`;
@@ -625,11 +743,13 @@ export async function fetchWithRetries(
   timeout: number,
   maxRetries?: number,
 ): Promise<Response> {
+  options = preserveCloudAuthRedirects(url, options);
   const contextMaxRetries = getFetchRetryContextMaxRetries();
   maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
+  const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
 
   for (let i = 0; i <= maxRetries; i++) {
     let response;
@@ -646,7 +766,7 @@ export async function fetchWithRetries(
       }
 
       if (response && isRateLimited(response)) {
-        await handleRateLimitedResponse(response, url, i, maxRetries);
+        await handleRateLimitedResponse(response, url, i, maxRetries, signal);
         continue;
       }
 
@@ -656,404 +776,30 @@ export async function fetchWithRetries(
       if (error instanceof Error && error.name === 'AbortError') {
         throw error;
       }
+      if (signal?.aborted) {
+        throw getAbortError(signal);
+      }
 
-      // Structured rate-limit errors are already final (quota fail-fast or
-      // retries exhausted) and carry retry-after / reset metadata. Don't
-      // swallow them in the generic retry path.
-      if (error instanceof HttpRateLimitError) {
+      // Do not retry policy rejections, credential failures, or already-final rate-limit errors.
+      if (
+        error instanceof CloudAuthRedirectError ||
+        error instanceof HttpRateLimitError ||
+        error instanceof RequestAuthenticationError
+      ) {
         throw error;
       }
 
-      const errorMessage = formatFetchErrorMessage(error);
+      const errorMessage = formatFetchErrorMessage(error, url);
 
       logger.debug(
         `Request to ${urlForLog(url)} failed (attempt #${i + 1}), retrying: ${errorMessage}`,
       );
       if (i < maxRetries) {
         const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
-        await sleep(waitTime);
+        await sleepWithAbort(waitTime, signal);
       }
       lastErrorMessage = errorMessage;
     }
   }
   throw new Error(`Request failed after ${maxRetries} retries: ${lastErrorMessage}`);
-}
-
-/**
- * Timing metrics captured while consuming a streaming HTTP response.
- *
- * Applies to text modalities only. Timing values are milliseconds.
- *
- * ## Precise field definitions
- *
- * `timeToFirstToken` is the wall time from request dispatch (when the
- * HTTP request is sent) to a detection event on the response body. The
- * default detection event is "first non-whitespace byte of the response
- * body" — a format-agnostic proxy for TTFT. For SSE streams this fires
- * on the first `data: ...` frame, which often carries framing metadata
- * (e.g. OpenAI's `{"delta":{"role":"assistant"}}`) rather than the first
- * model-generated content token.
- *
- * For canonical TTFT as defined in ML benchmarking literature (vLLM,
- * MLPerf, OpenAI performance docs) — "time from request dispatch to the
- * first model-generated output token" — pass a `firstTokenDetector` that
- * inspects the accumulated stream text and returns true when the first
- * content token has arrived. For OpenAI Chat Completions SSE:
- *
- *   firstTokenDetector: (buf) => /"delta":\s*\{[^}]*"content":"[^"]/.test(buf)
- *
- * `totalStreamTime` is from the arrival of the first response-body chunk to
- * the arrival of the last response-body chunk. It excludes connection/server
- * time before the first body bytes and excludes any idle tail while an
- * already-delivered stream remains open.
- *
- * `multiChunkDelivery` is true when the transport delivered more than
- * one network chunk (`ReadableStream.getReader().read()` call). It does
- * NOT mean the upstream model emitted multiple tokens. A server that
- * flushes every SSE event in one TCP write reports `false`. A server
- * that buffers and flushes in bursts reports `true`. Use this to detect
- * whether the stream actually progressed incrementally versus arrived
- * in a single burst (in which case `tokensPerSecond` is omitted).
- *
- * `tokensPerSecond` is populated by the caller (the HTTP provider) after
- * `transformResponse` produces the final content string. It uses a
- * `chars / 4` heuristic that is a standard English-prose proxy but
- * underestimates token counts for CJK text, code, and base64. It is
- * intentionally NOT computed from the raw stream buffer here because SSE
- * frame wrappers inflate character counts by 20x-60x.
- */
-export interface StreamingMetrics {
-  /**
-   * Milliseconds from request dispatch to the first detected "token event".
-   * See interface JSDoc for the precise definition and detector semantics.
-   */
-  timeToFirstToken?: number;
-  /**
-   * Milliseconds from first response-body chunk arrival to last chunk arrival.
-   * Excludes request processing before body bytes arrive and any idle tail before close.
-   * May include protocol framing that arrives before the detected content token.
-   * Populated by `processStreamingResponse`.
-   */
-  totalStreamTime?: number;
-  /**
-   * Number of UTF-16 code units in the final completion text (i.e. after
-   * `transformResponse` has parsed the stream). This is the exact raw
-   * measurement — no heuristic. Divide by `totalStreamTime` and multiply by
-   * 1000 to get chars/second, or pass through your own tokenizer for an
-   * exact tokens-per-second figure that does not depend on the chars/4
-   * approximation used by `tokensPerSecond`.
-   */
-  completionChars?: number;
-  /**
-   * Approximate throughput in "tokens" per second where a "token" is
-   * defined as 4 UTF-16 code units (the OpenAI-documented English-prose
-   * heuristic). Computed as `Math.ceil(completionChars / 4) / totalStreamTime * 1000`.
-   * Only populated when the response delivered multiple network chunks
-   * and the stream window is at least `MIN_MEANINGFUL_STREAM_WINDOW_MS`.
-   *
-   * NOT accurate for CJK text, code, or base64 — prefer `completionChars`
-   * with your own tokenizer when precision matters.
-   */
-  tokensPerSecond?: number;
-  /** True when the transport delivered more than one network chunk. */
-  multiChunkDelivery?: boolean;
-}
-
-/**
- * Predicate called after each chunk is appended. When it returns true,
- * `timeToFirstToken` is stamped. Receives the accumulated raw response
- * text (across all chunks so far) so patterns can safely span chunk
- * boundaries.
- */
-export type FirstTokenDetector = (accumulatedText: string) => boolean;
-
-/**
- * Default detector: fires on the first non-whitespace byte in the new chunk.
- * Exported for callers that want to explicitly opt into the format-agnostic
- * wire-level proxy rather than a format-specific content detector.
- */
-export const firstNonWhitespaceByteDetector: FirstTokenDetector = (accumulatedText) => {
-  for (let i = 0; i < accumulatedText.length; i++) {
-    if (accumulatedText.charCodeAt(i) > 32) {
-      return true;
-    }
-  }
-  return false;
-};
-
-/**
- * Supported text streaming response formats. Selects a built-in content-token
- * detector so callers do not have to reverse-engineer the SSE shape. These
- * detectors do not measure audio stream latency.
- *
- * - `openai-chat`: OpenAI Chat Completions (`/v1/chat/completions`). Fires on
- *   the first delta with a non-empty `content` string. Skips the leading
- *   `{"delta":{"role":"assistant"}}` framing frame.
- * - `openai-responses`: OpenAI Responses API (`/v1/responses`). Fires on the
- *   first `response.output_text.delta` event with a non-empty `delta`.
- * - `anthropic-messages`: Anthropic Messages API (`/v1/messages`). Fires on
- *   the first `content_block_delta` event with a non-empty `text_delta`.
- *
- * If your endpoint is not one of these, use `streamFirstTokenPattern` with a
- * custom regex or omit it entirely to get the default wire-level proxy.
- */
-export type StreamFormat = 'openai-chat' | 'openai-responses' | 'anthropic-messages';
-const BUILT_IN_STREAM_FORMAT = Symbol('builtInStreamFormat');
-type BuiltInStreamFormatDetector = FirstTokenDetector & {
-  [BUILT_IN_STREAM_FORMAT]: StreamFormat;
-};
-
-function parseSseDataEvents(accumulatedText: string): unknown[] {
-  return accumulatedText.split(/\r?\n/).flatMap((line) => {
-    const event = parseSseDataLine(line);
-    return event === undefined ? [] : [event];
-  });
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function parseSseDataLine(line: string): unknown | undefined {
-  if (!line.startsWith('data:')) {
-    return undefined;
-  }
-
-  const data = line.slice('data:'.length).trim();
-  if (!data || data === '[DONE]') {
-    return undefined;
-  }
-
-  try {
-    return JSON.parse(data) as unknown;
-  } catch {
-    return undefined;
-  }
-}
-
-const STREAM_FORMAT_EVENT_DETECTORS: Record<StreamFormat, (event: unknown) => boolean> = {
-  'openai-chat': (event) => {
-    if (!isRecord(event) || !Array.isArray(event.choices)) {
-      return false;
-    }
-    return event.choices.some(
-      (choice) =>
-        isRecord(choice) && isRecord(choice.delta) && isNonEmptyString(choice.delta.content),
-    );
-  },
-  'openai-responses': (event) =>
-    isRecord(event) && event.type === 'response.output_text.delta' && isNonEmptyString(event.delta),
-  'anthropic-messages': (event) =>
-    isRecord(event) &&
-    isRecord(event.delta) &&
-    event.delta.type === 'text_delta' &&
-    isNonEmptyString(event.delta.text),
-};
-
-/**
- * Build a first-token detector for a known streaming format.
- * When passed to `processStreamingResponse`, its format marker enables
- * incremental SSE processing instead of repeatedly parsing accumulated text.
- */
-export function detectorForStreamFormat(format: StreamFormat): FirstTokenDetector {
-  const detector = ((accumulatedText) =>
-    parseSseDataEvents(accumulatedText).some(
-      STREAM_FORMAT_EVENT_DETECTORS[format],
-    )) as BuiltInStreamFormatDetector;
-  detector[BUILT_IN_STREAM_FORMAT] = format;
-  return detector;
-}
-
-function createIncrementalStreamFormatDetector(
-  format: StreamFormat,
-): (chunk: string, final: boolean) => boolean {
-  let pendingLine = '';
-  return (chunk, final) => {
-    const lines = `${pendingLine}${chunk}`.split(/\r?\n/);
-    pendingLine = final ? '' : (lines.pop() ?? '');
-    return lines.some((line) => {
-      const event = parseSseDataLine(line);
-      return event !== undefined && STREAM_FORMAT_EVENT_DETECTORS[format](event);
-    });
-  };
-}
-
-function getBuiltInStreamFormat(
-  detector: FirstTokenDetector | undefined,
-): StreamFormat | undefined {
-  return (detector as BuiltInStreamFormatDetector | undefined)?.[BUILT_IN_STREAM_FORMAT];
-}
-
-interface StreamingDetectionOptions {
-  firstTokenDetector?: FirstTokenDetector;
-  firstTokenDetectorWindowChars?: number;
-  streamFormat?: StreamFormat;
-}
-
-function createStreamingTokenDetector(
-  opts?: StreamingDetectionOptions,
-): (chunk: string, final: boolean) => boolean {
-  const builtInFormat = opts?.firstTokenDetector
-    ? getBuiltInStreamFormat(opts.firstTokenDetector)
-    : opts?.streamFormat;
-  if (builtInFormat !== undefined) {
-    return createIncrementalStreamFormatDetector(builtInFormat);
-  }
-
-  if (opts?.firstTokenDetector) {
-    const detector = opts.firstTokenDetector;
-    const windowChars = opts.firstTokenDetectorWindowChars;
-    let detectorText = '';
-    return (chunk) => {
-      detectorText += chunk;
-      if (windowChars !== undefined) {
-        detectorText = detectorText.slice(-windowChars);
-      }
-      return detector(detectorText);
-    };
-  }
-
-  return (chunk) => firstNonWhitespaceByteDetector(chunk);
-}
-
-/**
- * Consume a streaming HTTP response and collect timing metrics.
- *
- * `timeToFirstToken` is measured from `requestStartTime` so it captures
- * connection setup and server processing, not just stream-read latency.
- * Pass a `firstTokenDetector` to customize when TTFT fires (see
- * `StreamingMetrics` JSDoc for canonical-TTFT examples).
- *
- * @param response - The Response object to process as a stream
- * @param requestStartTime - The timestamp when the request was initiated (ms since epoch)
- * @param opts.firstTokenDetector - Predicate that decides when TTFT fires. Defaults
- *   to `firstNonWhitespaceByteDetector` (first non-whitespace body byte).
- * @param opts.streamFormat - Built-in SSE detector, processed once per completed event.
- *   Ignored when an unrelated custom `firstTokenDetector` is provided.
- * @param opts.firstTokenDetectorWindowChars - Optional rolling character window retained
- *   for a custom detector. Use this for pattern detectors over untrusted streams.
- */
-export async function processStreamingResponse(
-  response: Response,
-  requestStartTime: number,
-  opts?: StreamingDetectionOptions,
-): Promise<{ text: string; streamingMetrics: StreamingMetrics }> {
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error(`Response has no readable body (status ${response.status})`);
-  }
-
-  const detectToken = createStreamingTokenDetector(opts);
-  const decoder = new TextDecoder();
-  const chunks: string[] = [];
-  let firstTokenTime: number | undefined;
-  let firstByteTime: number | undefined;
-  let lastByteTime: number | undefined;
-  let chunkCount = 0;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-
-      const now = Date.now();
-      // Pin totalStreamTime strictly between first and last byte so the
-      // window is "bytes arriving on the wire", not "time in this function."
-      if (firstByteTime === undefined) {
-        firstByteTime = now;
-      }
-      lastByteTime = now;
-
-      const chunk = decoder.decode(value, { stream: true });
-      chunks.push(chunk);
-      chunkCount++;
-
-      // Stamp TTFT on the first chunk whose arrival causes the detector to pass.
-      // Measure from requestStartTime so network overhead (TCP/TLS/headers) is included.
-      if (firstTokenTime === undefined && detectToken(chunk, false)) {
-        firstTokenTime = now - requestStartTime;
-      }
-    }
-
-    // Flush any buffered decoder state at EOF. This preserves the same
-    // replacement-character behavior as Response.text() for truncated UTF-8.
-    const trailingText = decoder.decode();
-    if (trailingText) {
-      chunks.push(trailingText);
-    }
-    if (
-      firstTokenTime === undefined &&
-      lastByteTime !== undefined &&
-      detectToken(trailingText, true)
-    ) {
-      firstTokenTime = lastByteTime - requestStartTime;
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  const totalStreamTime =
-    firstByteTime !== undefined && lastByteTime !== undefined
-      ? lastByteTime - firstByteTime
-      : undefined;
-
-  return {
-    text: chunks.join(''),
-    streamingMetrics: {
-      // Left undefined on all-whitespace streams so the ttft assertion reports "could not measure".
-      timeToFirstToken: firstTokenTime,
-      totalStreamTime,
-      multiChunkDelivery: chunkCount > 1,
-    },
-  };
-}
-
-/**
- * Minimum streamed window below which `tokensPerSecond` is suppressed.
- *
- * Rationale (why 50ms specifically):
- *
- * 1. Cross-region HTTP round-trip times to major LLM endpoints sit in the
- *    10-40ms range on a typical cloud or residential link, so inter-chunk
- *    gaps shorter than ~50ms are dominated by network buffering jitter
- *    rather than model generation cadence.
- * 2. The rate formula is `chars/4 / streamWindowMs * 1000`. At 50ms the
- *    denominator is large enough that a +/-5ms clock jitter moves the
- *    reported rate by at most 10%, which matches the chars/4 heuristic's
- *    own precision floor for English text.
- * 3. Below ~50ms, real multi-chunk streams tend to represent a single TCP
- *    packet arriving in two network-stack reads (kernel -> userspace
- *    boundary). Reporting throughput for that case misrepresents the
- *    model's token-generation speed.
- *
- * Callers that want the raw rate at any window can compute it from
- * `completionChars` and `totalStreamTime` directly; this constant only
- * governs the convenience `tokensPerSecond` field.
- */
-export const MIN_MEANINGFUL_STREAM_WINDOW_MS = 50;
-
-/**
- * Compute tokens-per-second using content chars (chars/4 heuristic) over the
- * streamed window. Returns `undefined` when the window is too short or
- * content is empty — in those cases the number would be misleading (or
- * infinite) rather than informative.
- */
-export function estimateStreamingTokensPerSecond(
-  completionChars: number,
-  streamWindowMs: number | undefined,
-): number | undefined {
-  if (
-    completionChars <= 0 ||
-    streamWindowMs === undefined ||
-    streamWindowMs < MIN_MEANINGFUL_STREAM_WINDOW_MS
-  ) {
-    return undefined;
-  }
-  return (Math.ceil(completionChars / 4) / streamWindowMs) * 1000;
 }

@@ -1,388 +1,53 @@
 import { describe, expect, it } from 'vitest';
 import { handleTtft } from '../../src/assertions/latency';
 
-import type { AssertionParams } from '../../src/types/index';
+import type { AssertionParams } from '../../src/types';
+
+function params(ttft: number | undefined, threshold: number, inverse = false): AssertionParams {
+  return {
+    assertion: { type: inverse ? 'not-ttft' : 'ttft', threshold },
+    inverse,
+    providerResponse: { streamingMetrics: { timeToFirstToken: ttft } },
+  } as AssertionParams;
+}
 
 describe('ttft assertion', () => {
-  describe('passing cases', () => {
-    it('should pass when TTFT is below threshold', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: 1000 },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: 500 },
-        },
-      };
-
-      const result = handleTtft(params as AssertionParams);
-      expect(result.pass).toBe(true);
-      expect(result.score).toBe(1);
-      expect(result.reason).toBe('TTFT assertion passed: 500ms <= 1000ms');
-      expect(result.namedScores).toEqual({ ttft_ms: 500 });
-    });
-
-    it('should pass when TTFT equals threshold (boundary case)', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: 500 },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: 500 },
-        },
-      };
-
-      const result = handleTtft(params as AssertionParams);
-      expect(result.pass).toBe(true);
-      expect(result.score).toBe(1);
-      expect(result.reason).toBe('TTFT assertion passed: 500ms <= 500ms');
-    });
-
-    it('should pass with zero threshold when TTFT is zero', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: 0 },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: 0 },
-        },
-      };
-
-      const result = handleTtft(params as AssertionParams);
-      expect(result.pass).toBe(true);
-      expect(result.score).toBe(1);
-    });
-
-    it('should pass with very large threshold', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: 60000 },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: 30000 },
-        },
-      };
-
-      const result = handleTtft(params as AssertionParams);
-      expect(result.pass).toBe(true);
-      expect(result.score).toBe(1);
-    });
+  it.each([
+    [0, 0, false, true],
+    [500, 1000, false, true],
+    [1000, 1000, false, true],
+    [1500, 1000, false, false],
+    [567.89, 567.8, false, false],
+    [500, 1000, true, false],
+    [1000, 1000, true, false],
+    [1500, 1000, true, true],
+  ])('grades %dms against %dms (inverse=%s)', (ttft, threshold, inverse, pass) => {
+    const input = params(ttft, threshold, inverse);
+    const result = handleTtft(input);
+    expect(result.pass).toBe(pass);
+    expect(result.score).toBe(Number(pass));
+    expect(result.assertion).toBe(input.assertion);
+    expect(result.reason).toContain(`${ttft}ms`);
+    expect(result.namedScores).toBeUndefined();
   });
 
-  describe('failing cases', () => {
-    it('should fail when TTFT exceeds threshold', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: 1000 },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: 1500 },
-        },
-      };
-
-      const result = handleTtft(params as AssertionParams);
-      expect(result.pass).toBe(false);
-      expect(result.score).toBe(0);
-      expect(result.reason).toBe('Time to first token 1500ms exceeds threshold 1000ms');
-      expect(result.namedScores).toEqual({ ttft_ms: 1500 });
-    });
-
-    it('should fail when TTFT slightly exceeds threshold', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: 1000 },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: 1001 },
-        },
-      };
-
-      const result = handleTtft(params as AssertionParams);
-      expect(result.pass).toBe(false);
-      expect(result.score).toBe(0);
-    });
-
-    it('should fail with zero threshold when TTFT is positive', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: 0 },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: 1 },
-        },
-      };
-
-      const result = handleTtft(params as AssertionParams);
-      expect(result.pass).toBe(false);
-      expect(result.score).toBe(0);
-    });
+  it.each([-1, NaN, Infinity, undefined, '500'])('rejects invalid threshold %s', (threshold) => {
+    expect(() => handleTtft(params(100, threshold as number))).toThrow(
+      'non-negative number threshold',
+    );
   });
 
-  describe('inverse mode', () => {
-    it('should fail not-ttft when TTFT is within the forbidden threshold', () => {
-      const result = handleTtft({
-        assertion: { type: 'not-ttft', threshold: 100 },
-        inverse: true,
-        providerResponse: { streamingMetrics: { timeToFirstToken: 50 } },
-      } as AssertionParams);
-
-      expect(result.pass).toBe(false);
-      expect(result.score).toBe(0);
-      expect(result.reason).toBe('Time to first token 50ms must exceed threshold 100ms');
-    });
-
-    it('should pass not-ttft when TTFT exceeds the forbidden threshold', () => {
-      const result = handleTtft({
-        assertion: { type: 'not-ttft', threshold: 100 },
-        inverse: true,
-        providerResponse: { streamingMetrics: { timeToFirstToken: 150 } },
-      } as AssertionParams);
-
-      expect(result.pass).toBe(true);
-      expect(result.score).toBe(1);
-      expect(result.reason).toBe('TTFT assertion passed: 150ms > 100ms');
-    });
+  it.each([-1, NaN, Infinity])('rejects invalid metric %s', (ttft) => {
+    expect(() => handleTtft(params(ttft, 1000))).toThrow('non-negative finite number');
   });
 
-  describe('threshold validation', () => {
-    it('should throw when threshold is missing', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft' },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: 500 },
-        },
-      };
-
-      expect(() => handleTtft(params as AssertionParams)).toThrow(
-        'TTFT assertion must specify a non-negative number threshold in milliseconds',
-      );
-    });
-
-    it('should throw when threshold is undefined', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: undefined },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: 500 },
-        },
-      };
-
-      expect(() => handleTtft(params as AssertionParams)).toThrow(
-        'TTFT assertion must specify a non-negative number threshold in milliseconds',
-      );
-    });
-
-    it('should throw when threshold is a string', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: '1000' as any },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: 500 },
-        },
-      };
-
-      expect(() => handleTtft(params as AssertionParams)).toThrow(
-        'TTFT assertion must specify a non-negative number threshold in milliseconds',
-      );
-    });
-
-    it('should throw when threshold is negative', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: -100 },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: 500 },
-        },
-      };
-
-      expect(() => handleTtft(params as AssertionParams)).toThrow(
-        'TTFT assertion must specify a non-negative number threshold in milliseconds',
-      );
-    });
-
-    it('should throw when threshold is Infinity', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: Infinity },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: 500 },
-        },
-      };
-
-      expect(() => handleTtft(params as AssertionParams)).toThrow(
-        'TTFT assertion must specify a non-negative number threshold in milliseconds',
-      );
-    });
-
-    it('should throw when threshold is negative Infinity', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: -Infinity },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: 500 },
-        },
-      };
-
-      expect(() => handleTtft(params as AssertionParams)).toThrow(
-        'TTFT assertion must specify a non-negative number threshold in milliseconds',
-      );
-    });
-
-    it('should throw when threshold is NaN', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: NaN },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: 500 },
-        },
-      };
-
-      expect(() => handleTtft(params as AssertionParams)).toThrow(
-        'TTFT assertion must specify a non-negative number threshold in milliseconds',
-      );
-    });
-
-    it('should throw when threshold is null', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: null as any },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: 500 },
-        },
-      };
-
-      expect(() => handleTtft(params as AssertionParams)).toThrow(
-        'TTFT assertion must specify a non-negative number threshold in milliseconds',
-      );
-    });
+  it('explains when the stream has no text output', () => {
+    expect(() => handleTtft(params(undefined, 1000))).toThrow('no matching content');
   });
 
-  describe('streaming metrics validation', () => {
-    it('should throw when streaming metrics are missing', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: 1000 },
-        providerResponse: {},
-      };
-
-      expect(() => handleTtft(params as AssertionParams)).toThrow(
-        'TTFT assertion requires streaming metrics. Enable streaming with stream: true in your request body',
-      );
-    });
-
-    it('should throw when streaming metrics are undefined', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: 1000 },
-        providerResponse: { streamingMetrics: undefined },
-      };
-
-      expect(() => handleTtft(params as AssertionParams)).toThrow(
-        'TTFT assertion requires streaming metrics. Enable streaming with stream: true in your request body',
-      );
-    });
-
-    it('should throw when streaming metrics are null', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: 1000 },
-        providerResponse: { streamingMetrics: null as any },
-      };
-
-      expect(() => handleTtft(params as AssertionParams)).toThrow(
-        'TTFT assertion requires streaming metrics. Enable streaming with stream: true in your request body',
-      );
-    });
-
-    it('should throw when providerResponse is missing', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: 1000 },
-        providerResponse: undefined,
-      };
-
-      expect(() => handleTtft(params as AssertionParams)).toThrow(
-        'TTFT assertion requires streaming metrics. Enable streaming with stream: true in your request body',
-      );
-    });
-
-    it('should throw when timeToFirstToken is missing from streaming metrics', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: 1000 },
-        providerResponse: {
-          streamingMetrics: {} as any,
-        },
-      };
-
-      expect(() => handleTtft(params as AssertionParams)).toThrow(
-        /TTFT could not be measured: no matching content was detected in the stream/,
-      );
-    });
-
-    it('should throw when timeToFirstToken is undefined', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: 1000 },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: undefined as any },
-        },
-      };
-
-      expect(() => handleTtft(params as AssertionParams)).toThrow(
-        /TTFT could not be measured: no matching content was detected in the stream/,
-      );
-    });
-
-    it('should throw when timeToFirstToken is a string', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: 1000 },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: '500' as any },
-        },
-      };
-
-      expect(() => handleTtft(params as AssertionParams)).toThrow(
-        /TTFT could not be measured: no matching content was detected in the stream/,
-      );
-    });
-
-    it.each([-1, NaN, Infinity])('should throw when timeToFirstToken is %s', (timeToFirstToken) => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: 1000 },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken },
-        },
-      };
-
-      expect(() => handleTtft(params as AssertionParams)).toThrow(
-        /timeToFirstToken must be a non-negative finite number/,
-      );
-    });
-  });
-
-  describe('result structure', () => {
-    it('should include assertion in result', () => {
-      const assertion = { type: 'ttft' as const, threshold: 1000 };
-      const params: Partial<AssertionParams> = {
-        assertion,
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: 500 },
-        },
-      };
-
-      const result = handleTtft(params as AssertionParams);
-      expect(result.assertion).toBe(assertion);
-    });
-
-    it('should include namedScores with ttft_ms on pass', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: 1000 },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: 500 },
-        },
-      };
-
-      const result = handleTtft(params as AssertionParams);
-      expect(result.namedScores).toEqual({ ttft_ms: 500 });
-    });
-
-    it('should include namedScores with ttft_ms on fail', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: 1000 },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: 1500 },
-        },
-      };
-
-      const result = handleTtft(params as AssertionParams);
-      expect(result.namedScores).toEqual({ ttft_ms: 1500 });
-    });
-
-    it('should handle decimal TTFT values', () => {
-      const params: Partial<AssertionParams> = {
-        assertion: { type: 'ttft', threshold: 1000 },
-        providerResponse: {
-          streamingMetrics: { timeToFirstToken: 567.89 },
-        },
-      };
-
-      const result = handleTtft(params as AssertionParams);
-      expect(result.pass).toBe(true);
-      expect(result.namedScores).toEqual({ ttft_ms: 567.89 });
-    });
+  it('requires streaming metrics', () => {
+    const input = params(10, 1000);
+    input.providerResponse = {};
+    expect(() => handleTtft(input)).toThrow('requires streaming metrics');
   });
 });

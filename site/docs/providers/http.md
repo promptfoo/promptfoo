@@ -348,6 +348,8 @@ transformRequest: 'file://transforms/request.js:transformRequest'
 
 ## Response Transform
 
+Compressed responses are decoded automatically. A request fails if a decompression stage produces more than 64 MiB of data.
+
 The `transformResponse` option allows you to extract and transform the API response. If no `transformResponse` is specified, the provider will attempt to parse the response as JSON. If JSON parsing fails, it will return the raw text response.
 
 You can override this behavior by specifying a `transformResponse` in the provider config. The `transformResponse` can be one of the following:
@@ -592,7 +594,7 @@ This will import the function `parseResponse` from the file `path/to/parser.js`.
 
 ### Guardrails Support
 
-If your HTTP target has guardrails set up, you need to return an object with both `output` and `guardrails` fields from your transform. The `guardrails` field should be a top-level field in your returned object and must conform to the [GuardrailResponse](/docs/configuration/reference#guardrails) interface. For example:
+If your HTTP target has guardrails set up, return a non-empty `output` and a top-level `guardrails` object from the transform. The object must conform to the [GuardrailResponse](/docs/configuration/reference#guardrails) interface. `flagged` controls the assertion verdict; `flaggedInput` and `flaggedOutput` only describe which side triggered.
 
 ```yaml
 providers:
@@ -600,11 +602,35 @@ providers:
     config:
       url: 'https://example.com/api'
       transformResponse: |
-        {
-          output: json.choices[0].message.content,
-          guardrails: { flagged: context.response.headers['x-content-filtered'] === 'true' }
+        (json, text, context) => {
+          const status = context?.response?.status;
+          if (json.error) {
+            throw new Error(
+              json.error?.message || `Guardrail request failed with HTTP ${status ?? 'unknown'}`,
+            );
+          }
+          if (typeof json.blocked !== 'boolean') {
+            throw new Error('Guardrail response did not include a boolean blocked decision');
+          }
+          if (!json.blocked && status && (status < 200 || status >= 300)) {
+            throw new Error(`Guardrail returned an allow decision with HTTP ${status}`);
+          }
+          return {
+            output: json.output || json.blockReason || text || 'Guardrail returned an empty response',
+            guardrails: {
+              flagged: json.blocked,
+              flaggedInput: json.blocked && json.stage === 'input',
+              flaggedOutput: json.blocked && json.stage === 'output',
+              reason: json.blockReason
+            },
+            metadata: { guardrail: json.guardrailDetails }
+          };
         }
 ```
+
+Return an expected safety block as `output` plus `guardrails`, even when the upstream API uses a structured 4xx response. Throw from `transformResponse` on a timeout, partial execution, filter error, or unknown schema. Otherwise, an indeterminate result can become `flagged: false`. Provider errors skip assertions.
+
+See [Testing and Validating Guardrails](/docs/guides/testing-guardrails) for response patterns and [the assertion reference](/docs/configuration/expected-outputs/guardrails) for exact pass/fail behavior.
 
 ### Ending Multi-turn Conversations
 
@@ -1594,7 +1620,7 @@ Example Response
 Session Parser value:
 
 ```yaml
-sessionParser: 'data.body.responses[0]?.sessionId
+sessionParser: 'data.body.responses[0]?.sessionId'
 ```
 
 The parser can take a string, file or function like the response parser.
@@ -1629,8 +1655,14 @@ sessionParser: 'data.body.sessionId'
 ```
 
 ```yaml
-sessionParser: 'data.headers.["x-session-Id"]'
+sessionParser: 'data.headers["x-session-id"]'
 ```
+
+:::note
+
+Response header names are normalized to lowercase, so a server that returns `X-Session-Id` is accessed as `data.headers["x-session-id"]`.
+
+:::
 
 ### Client-side session management
 
@@ -1740,12 +1772,11 @@ defaultTest:
 
 **Config options**
 
-| Option                    | Type                                                          | Default | Purpose                                                                                                            |
-| ------------------------- | ------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------ |
-| `streamFormat`            | `'openai-chat' \| 'openai-responses' \| 'anthropic-messages'` | unset   | Use built-in canonical-TTFT detector for the named protocol                                                        |
-| `streamFirstTokenPattern` | regex source string                                           | unset   | Custom detector matched against the most recent 64 KiB of stream text. Overrides `streamFormat` when both are set. |
+| Option         | Type                                                          | Default | Purpose                                                     |
+| -------------- | ------------------------------------------------------------- | ------- | ----------------------------------------------------------- |
+| `streamFormat` | `'openai-chat' \| 'openai-responses' \| 'anthropic-messages'` | unset   | Use built-in canonical-TTFT detector for the named protocol |
 
-When `stream: true` is set, response caching is automatically disabled so every TTFT measurement reflects a live call.
+When `stream: true` is set, response caching is disabled so each measurement reflects a live call. The OpenAI formats count refusal text as output. Format-specific detection accepts LF, CRLF, and CR line endings and rejects events larger than 64 KiB before the first text output.
 
 ### Parsing Streaming Responses
 
@@ -1807,25 +1838,24 @@ This parser would extract `"The quick brown fox"` from the example response abov
 
 Supported config options:
 
-| Option                  | Type                    | Description                                                                                                                                                                         |
-| ----------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| url                     | string                  | The URL to send the HTTP request to. Supports Nunjucks templates. If not provided, the `id` of the provider will be used as the URL.                                                |
-| request                 | string                  | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                                                                   |
-| method                  | string                  | HTTP method (GET, POST, etc). Defaults to POST if body is provided, GET otherwise.                                                                                                  |
-| headers                 | Record\<string, string> | Key-value pairs of HTTP headers to include in the request.                                                                                                                          |
-| body                    | object \| string        | The request body. For POST requests, objects are automatically stringified as JSON.                                                                                                 |
-| multipart               | object                  | Multipart form configuration with ordered `parts`. Supports text fields, local file uploads, and generated PDF/PNG/JPEG documents.                                                  |
-| queryParams             | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                           |
-| transformRequest        | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
-| transformResponse       | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
-| streamFormat            | string                  | Built-in TTFT detector for `openai-chat`, `openai-responses`, or `anthropic-messages` streaming responses.                                                                          |
-| streamFirstTokenPattern | string                  | Custom regex source matched against the recent stream text to identify the first content token. Overrides `streamFormat`.                                                           |
-| tokenEstimation         | object                  | Configuration for optional token usage estimation. See Token Estimation section above for details.                                                                                  |
-| maxRetries              | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
-| validateStatus          | string \| Function      | A function or string expression that returns true if the status code should be treated as successful. By default, accepts all status codes.                                         |
-| auth                    | object                  | Authentication configuration (bearer, api_key, basic, oauth, or file). See [Authentication](#authentication) section.                                                               |
-| signatureAuth           | object                  | Digital signature authentication configuration. See [Digital Signature Authentication](#digital-signature-authentication) section.                                                  |
-| tls                     | object                  | Configuration for TLS/HTTPS connections including client certificates, CA certificates, and cipher settings. See TLS Configuration Options above.                                   |
+| Option            | Type                    | Description                                                                                                                                                                         |
+| ----------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| url               | string                  | The URL to send the HTTP request to. Supports Nunjucks templates. If not provided, the `id` of the provider will be used as the URL.                                                |
+| request           | string                  | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                                                                   |
+| method            | string                  | HTTP method (GET, POST, etc). Defaults to POST if body is provided, GET otherwise.                                                                                                  |
+| headers           | Record\<string, string> | Key-value pairs of HTTP headers to include in the request.                                                                                                                          |
+| body              | object \| string        | The request body. For POST requests, objects are automatically stringified as JSON.                                                                                                 |
+| multipart         | object                  | Multipart form configuration with ordered `parts`. Supports text fields, local file uploads, and generated PDF/PNG/JPEG documents.                                                  |
+| queryParams       | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                           |
+| transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
+| transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
+| streamFormat      | string                  | Built-in TTFT detector for `openai-chat`, `openai-responses`, or `anthropic-messages` streaming responses.                                                                          |
+| tokenEstimation   | object                  | Configuration for optional token usage estimation. See Token Estimation section above for details.                                                                                  |
+| maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
+| validateStatus    | string \| Function      | A function or string expression that returns true if the status code should be treated as successful. By default, accepts all status codes.                                         |
+| auth              | object                  | Authentication configuration (bearer, api_key, basic, oauth, or file). See [Authentication](#authentication) section.                                                               |
+| signatureAuth     | object                  | Digital signature authentication configuration. See [Digital Signature Authentication](#digital-signature-authentication) section.                                                  |
+| tls               | object                  | Configuration for TLS/HTTPS connections including client certificates, CA certificates, and cipher settings. See TLS Configuration Options above.                                   |
 
 In addition to a full URL, the provider `id` field accepts `http` or `https` as values.
 
@@ -1847,12 +1877,12 @@ providers:
     config:
       url: 'https://example.com/api'
       # Function-based validation
-      validateStatus: (status) => status < 500  # Accept any status below 500
+      validateStatus: (status) => status < 500 # Accept any status below 500
       # Or string-based expression
-      validateStatus: 'status >= 200 && status <= 299'  # Accept only 2xx responses
+      validateStatus: 'status >= 200 && status <= 299' # Accept only 2xx responses
       # Or load from file
-      validateStatus: 'file://validators/status.js'  # Load default export
-      validateStatus: 'file://validators/status.js:validateStatus'  # Load specific function
+      validateStatus: 'file://validators/status.js' # Load default export
+      validateStatus: 'file://validators/status.js:validateStatus' # Load specific function
 ```
 
 Example validator file (`validators/status.js`):

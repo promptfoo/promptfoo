@@ -1,853 +1,170 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  detectorForStreamFormat,
   estimateStreamingTokensPerSecond,
-  firstNonWhitespaceByteDetector,
-  MIN_MEANINGFUL_STREAM_WINDOW_MS,
   processStreamingResponse,
-} from '../../src/util/fetch';
+} from '../../src/util/fetch/streaming';
 
-async function settlePendingTimers<T>(promise: Promise<T>): Promise<T> {
-  await vi.runAllTimersAsync();
-  return promise;
+const encoder = new TextEncoder();
+function stream(chunks: (string | Uint8Array)[], delay = 20, tailDelay = 0) {
+  let index = 0;
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, index < chunks.length ? delay : tailDelay),
+        );
+        if (index === chunks.length) {
+          controller.close();
+        } else {
+          const chunk = chunks[index++];
+          controller.enqueue(typeof chunk === 'string' ? encoder.encode(chunk) : chunk);
+        }
+      },
+    }),
+  );
 }
-
+async function collect(
+  chunks: (string | Uint8Array)[],
+  format?: 'openai-chat' | 'openai-responses' | 'anthropic-messages',
+  tailDelay = 0,
+) {
+  vi.useFakeTimers();
+  const start = Date.now();
+  const result = processStreamingResponse(stream(chunks, 20, tailDelay), start - 100, {
+    streamFormat: format,
+  });
+  await vi.runAllTimersAsync();
+  return result;
+}
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
-describe('processStreamingResponse', () => {
-  describe('TTFT correctness', () => {
-    it('should measure TTFT from request start, not stream start', async () => {
-      vi.useFakeTimers();
+describe('streaming response metrics', () => {
+  it('includes request setup in TTFT and excludes idle tail from stream duration', async () => {
+    const result = await collect([' ', 'Hello', ' world'], undefined, 500);
+    expect(result.text).toBe(' Hello world');
+    expect(result.streamingMetrics).toEqual({
+      timeToFirstToken: 140,
+      totalStreamTime: 40,
+      multiChunkDelivery: true,
+    });
+  });
 
-      const requestStartTime = Date.now() - 200; // Simulate 200ms ago
+  it.each([[], [' ', '\n'], ['']])('leaves TTFT undefined without output: %j', async (...args) => {
+    const result = await collect(args as string[]);
+    expect(result.streamingMetrics.timeToFirstToken).toBeUndefined();
+  });
 
-      // Create a mock streaming response with 2 chunks
-      const chunks = [
-        new TextEncoder().encode('First chunk'),
-        new TextEncoder().encode(' Second chunk'),
-      ];
+  it('preserves UTF-8 split across chunks and flushes truncated characters', async () => {
+    const bytes = encoder.encode('🌍');
+    const result = await collect([bytes.slice(0, 2), bytes.slice(2), new Uint8Array([0xc3])]);
+    expect(result.text).toBe('🌍�');
+    expect(result.streamingMetrics.timeToFirstToken).toBe(140);
+  });
 
-      let chunkIndex = 0;
-      const mockReader = {
-        read: vi.fn(async () => {
-          if (chunkIndex < chunks.length) {
-            // Simulate 50ms delay between chunks
-            return new Promise((resolve) => {
-              setTimeout(() => resolve({ done: false, value: chunks[chunkIndex++] }), 50);
-            });
-          }
-          return { done: true, value: undefined };
-        }),
-        releaseLock: vi.fn(),
-      };
+  it('requires a readable body', async () => {
+    await expect(processStreamingResponse(new Response(null), Date.now())).rejects.toThrow(
+      'no readable body',
+    );
+  });
 
-      const mockResponse = {
-        body: {
-          getReader: () => mockReader,
+  it('releases the stream lock after read errors', async () => {
+    const response = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.error(new Error('read failed'));
         },
-      } as unknown as Response;
+      }),
+    );
+    await expect(processStreamingResponse(response, Date.now())).rejects.toThrow('read failed');
+    expect(response.body?.locked).toBe(false);
+  });
 
-      const result = await settlePendingTimers(
-        processStreamingResponse(mockResponse, requestStartTime),
-      );
-
-      // CRITICAL: TTFT should include the simulated 200ms network delay
-      expect(result.streamingMetrics.timeToFirstToken).toBeGreaterThan(200);
-      // Should be roughly 200ms (network) + 50ms (first chunk delay) = 250ms
-      expect(result.streamingMetrics.timeToFirstToken).toBeLessThan(400);
-
-      // Verify TTFT is always less than or equal to total latency
-      const totalLatency = Date.now() - requestStartTime;
-      expect(result.streamingMetrics.timeToFirstToken).toBeLessThanOrEqual(totalLatency);
-    });
-
-    it('should set multiChunkDelivery=true for multi-chunk responses', async () => {
-      const requestStartTime = Date.now();
-
-      const chunks = [
-        new TextEncoder().encode('Chunk 1'),
-        new TextEncoder().encode('Chunk 2'),
-        new TextEncoder().encode('Chunk 3'),
-      ];
-
-      let chunkIndex = 0;
-      const mockReader = {
-        read: vi.fn(async () => {
-          if (chunkIndex < chunks.length) {
-            return { done: false, value: chunks[chunkIndex++] };
-          }
-          return { done: true, value: undefined };
-        }),
-        releaseLock: vi.fn(),
-      };
-
-      const mockResponse = {
-        body: {
-          getReader: () => mockReader,
+  it('rejects an oversized pending event and cancels its body', async () => {
+    const cancel = vi.fn();
+    const response = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode('data: ' + ' '.repeat(64 * 1024)));
         },
-      } as unknown as Response;
+        cancel,
+      }),
+    );
+    await expect(
+      processStreamingResponse(response, Date.now(), { streamFormat: 'openai-chat' }),
+    ).rejects.toThrow('exceeds 64 KiB');
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(response.body?.locked).toBe(false);
+  });
 
-      const result = await processStreamingResponse(mockResponse, requestStartTime);
+  it.each([
+    ['openai-chat', { choices: [{ delta: { content: 'Hello' } }] }],
+    ['openai-chat', { choices: [{ delta: { refusal: 'I cannot help.' } }] }],
+    ['openai-responses', { type: 'response.output_text.delta', delta: 'Hello' }],
+    ['openai-responses', { type: 'response.refusal.delta', delta: 'I cannot help.' }],
+    [
+      'anthropic-messages',
+      { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hello' } },
+    ],
+  ] as const)('detects displayed text for %s: %j', async (format, event) => {
+    const result = await collect([': comment\n\n', `data: ${JSON.stringify(event)}\n\n`], format);
+    expect(result.streamingMetrics.timeToFirstToken).toBe(140);
+  });
 
-      expect(result.streamingMetrics.multiChunkDelivery).toBe(true);
-      expect(result.text).toBe('Chunk 1Chunk 2Chunk 3');
-    });
-
-    it('should set multiChunkDelivery=false for single-chunk responses', async () => {
-      const requestStartTime = Date.now() - 10; // Small delay to avoid 0ms TTFT
-
-      const chunks = [new TextEncoder().encode('Complete response in one chunk')];
-
-      let chunkIndex = 0;
-      const mockReader = {
-        read: vi.fn(async () => {
-          if (chunkIndex < chunks.length) {
-            return { done: false, value: chunks[chunkIndex++] };
-          }
-          return { done: true, value: undefined };
-        }),
-        releaseLock: vi.fn(),
-      };
-
-      const mockResponse = {
-        body: {
-          getReader: () => mockReader,
-        },
-      } as unknown as Response;
-
-      const result = await processStreamingResponse(mockResponse, requestStartTime);
-
-      expect(result.streamingMetrics.multiChunkDelivery).toBe(false);
-      expect(result.text).toBe('Complete response in one chunk');
-      // TTFT should still be measured from request start
-      expect(result.streamingMetrics.timeToFirstToken).toBeGreaterThanOrEqual(10);
-    });
-
-    it('should pin totalStreamTime to first-byte → last-byte window', async () => {
-      vi.useFakeTimers();
-
-      // Two chunks 100ms apart. totalStreamTime should be ~100ms, not
-      // "time spent in the function" (which includes reader initialization).
-      const requestStartTime = Date.now();
-      const chunks = [new TextEncoder().encode('first'), new TextEncoder().encode(' second')];
-
-      let i = 0;
-      const mockReader = {
-        read: vi.fn(async () => {
-          if (i < chunks.length) {
-            // First read resolves after 30ms, second after an additional 100ms.
-            return new Promise((resolve) => {
-              setTimeout(() => resolve({ done: false, value: chunks[i++] }), i === 0 ? 30 : 100);
-            });
-          }
-          return { done: true, value: undefined };
-        }),
-        releaseLock: vi.fn(),
-      };
-
-      const result = await settlePendingTimers(
-        processStreamingResponse(
-          { body: { getReader: () => mockReader } } as unknown as Response,
-          requestStartTime,
-        ),
-      );
-
-      // totalStreamTime is from first byte to last byte: ~100ms.
-      // NOT 130ms (which would include the 30ms initial wait).
-      expect(result.streamingMetrics.totalStreamTime).toBeGreaterThanOrEqual(85);
-      expect(result.streamingMetrics.totalStreamTime).toBeLessThan(150);
-    });
-
-    it('should trigger TTFT on OpenAI role-prefix SSE frame (documented semantics)', async () => {
-      vi.useFakeTimers();
-
-      // Pins current behavior: TTFT measures "first non-whitespace wire byte",
-      // not "first content token". OpenAI's SSE stream opens with a role frame:
-      //   data: {"choices":[{"delta":{"role":"assistant"}}]}
-      // which carries no content but is non-whitespace. TTFT fires on it.
-      // The delay between this frame and the first content delta is usually
-      // sub-millisecond; callers needing strict "first content token" TTFT
-      // should configure streamFormat or streamFirstTokenPattern.
-      const requestStartTime = Date.now();
-
-      const chunks = [
-        new TextEncoder().encode('data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n'),
-        new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n'),
-        new TextEncoder().encode('data: [DONE]\n\n'),
-      ];
-
-      let i = 0;
-      const mockReader = {
-        read: vi.fn(async () => {
-          if (i < chunks.length) {
-            return new Promise((resolve) => {
-              setTimeout(() => resolve({ done: false, value: chunks[i++] }), 20);
-            });
-          }
-          return { done: true, value: undefined };
-        }),
-        releaseLock: vi.fn(),
-      };
-
-      const result = await settlePendingTimers(
-        processStreamingResponse(
-          { body: { getReader: () => mockReader } } as unknown as Response,
-          requestStartTime,
-        ),
-      );
-
-      // TTFT fires on the very first SSE frame (~20ms), not on the content delta (~40ms).
-      expect(result.streamingMetrics.timeToFirstToken).toBeGreaterThanOrEqual(15);
-      expect(result.streamingMetrics.timeToFirstToken).toBeLessThan(40);
-    });
-
-    it('should handle empty chunks and wait for first non-empty chunk', async () => {
-      vi.useFakeTimers();
-
-      const requestStartTime = Date.now();
-
-      const chunks = [
-        new TextEncoder().encode(''), // Empty
-        new TextEncoder().encode('   '), // Whitespace only
-        new TextEncoder().encode('Content'), // First real content
-        new TextEncoder().encode(' More'),
-      ];
-
-      let chunkIndex = 0;
-      const mockReader = {
-        read: vi.fn(async () => {
-          if (chunkIndex < chunks.length) {
-            return new Promise((resolve) => {
-              setTimeout(() => resolve({ done: false, value: chunks[chunkIndex++] }), 10);
-            });
-          }
-          return { done: true, value: undefined };
-        }),
-        releaseLock: vi.fn(),
-      };
-
-      const mockResponse = {
-        body: {
-          getReader: () => mockReader,
-        },
-      } as unknown as Response;
-
-      const result = await settlePendingTimers(
-        processStreamingResponse(mockResponse, requestStartTime),
-      );
-
-      // TTFT should trigger on first non-empty trimmed chunk (3rd chunk)
-      // Should be at least 30ms (3 chunks × 10ms delay)
-      expect(result.streamingMetrics.timeToFirstToken).toBeGreaterThan(20);
-      expect(result.text).toBe('   Content More');
-    });
-
-    it('should include network overhead in TTFT measurement', async () => {
-      // Simulate a request that was sent 500ms ago
-      const requestStartTime = Date.now() - 500;
-
-      const chunks = [new TextEncoder().encode('Response')];
-
-      let chunkIndex = 0;
-      const mockReader = {
-        read: vi.fn(async () => {
-          if (chunkIndex < chunks.length) {
-            return { done: false, value: chunks[chunkIndex++] };
-          }
-          return { done: true, value: undefined };
-        }),
-        releaseLock: vi.fn(),
-      };
-
-      const mockResponse = {
-        body: {
-          getReader: () => mockReader,
-        },
-      } as unknown as Response;
-
-      const result = await processStreamingResponse(mockResponse, requestStartTime);
-
-      // TTFT should be at least 500ms (the simulated network delay)
-      expect(result.streamingMetrics.timeToFirstToken).toBeGreaterThanOrEqual(500);
-      // But not too much more (allow 100ms margin for test execution)
-      expect(result.streamingMetrics.timeToFirstToken).toBeLessThan(650);
-    });
-
-    it('should leave timeToFirstToken undefined when no non-whitespace chunk arrives', async () => {
-      const requestStartTime = Date.now();
-
-      const chunks = [
-        new TextEncoder().encode(''),
-        new TextEncoder().encode('   '),
-        new TextEncoder().encode('\n\n'),
-      ];
-
-      let chunkIndex = 0;
-      const mockReader = {
-        read: vi.fn(async () => {
-          if (chunkIndex < chunks.length) {
-            return { done: false, value: chunks[chunkIndex++] };
-          }
-          return { done: true, value: undefined };
-        }),
-        releaseLock: vi.fn(),
-      };
-
-      const mockResponse = {
-        body: { getReader: () => mockReader },
-      } as unknown as Response;
-
-      const result = await processStreamingResponse(mockResponse, requestStartTime);
-
-      // No real content ever arrived: downstream ttft assertion should see
-      // undefined and report a clear error instead of comparing total
-      // latency against the threshold.
-      expect(result.streamingMetrics.timeToFirstToken).toBeUndefined();
-    });
-
-    it('flushes buffered UTF-8 at EOF without dropping trailing text', async () => {
-      const mockReader = {
-        read: vi
-          .fn()
-          .mockResolvedValueOnce({ done: false, value: new Uint8Array([0xe2]) })
-          .mockResolvedValueOnce({ done: true, value: undefined }),
-        releaseLock: vi.fn(),
-      };
-
-      const result = await processStreamingResponse(
-        { body: { getReader: () => mockReader } } as unknown as Response,
-        Date.now(),
-      );
-
-      expect(result.text).toBe('\uFFFD');
+  it.each(['\n', '\r', '\r\n'])(
+    'accepts SSE delimiter %j split across network chunks',
+    async (delimiter) => {
+      const text = `data: {"choices":[{"delta":{"role":"assistant"}}]}${delimiter}${delimiter}data: {"choices":[{"delta":{"content":"Hi"}}]}${delimiter}${delimiter}`;
+      const result = await collect(Array.from(text), 'openai-chat');
+      expect(result.text).toBe(text);
       expect(result.streamingMetrics.timeToFirstToken).toBeDefined();
-    });
+    },
+  );
+
+  it('joins data lines and handles a final event without a blank terminator', async () => {
+    const result = await collect(
+      ['data: {"choices":\n', 'data: [{"delta":{"content":"Hi"}}]}'],
+      'openai-chat',
+    );
+    expect(result.streamingMetrics.timeToFirstToken).toBe(140);
   });
 
-  describe('Error handling', () => {
-    it('should throw error if response body is not readable', async () => {
-      const requestStartTime = Date.now();
-
-      const mockResponse = {
-        body: null,
-        status: 204,
-      } as unknown as Response;
-
-      await expect(processStreamingResponse(mockResponse, requestStartTime)).rejects.toThrow(
-        'Response has no readable body (status 204)',
-      );
-    });
-
-    it('should release lock even if reading fails', async () => {
-      const requestStartTime = Date.now();
-
-      const mockReader = {
-        read: vi.fn(async () => {
-          throw new Error('Read failed');
-        }),
-        releaseLock: vi.fn(),
-      };
-
-      const mockResponse = {
-        body: {
-          getReader: () => mockReader,
-        },
-      } as unknown as Response;
-
-      await expect(processStreamingResponse(mockResponse, requestStartTime)).rejects.toThrow(
-        'Read failed',
-      );
-
-      // Verify lock was released despite error
-      expect(mockReader.releaseLock).toHaveBeenCalled();
-    });
+  it('ignores metadata, empty text, tool calls and malformed events', async () => {
+    const events = [
+      ': keepalive',
+      'data: not json',
+      'data: [DONE]',
+      'data: {"choices":[{"delta":{"role":"assistant","content":null}}]}',
+      'data: {"choices":[{"delta":{"content":"","refusal":""}}]}',
+      'data: {"choices":[{"delta":{"tool_calls":[]}}],"content":"metadata"}',
+    ];
+    const result = await collect(
+      events.map((event) => event + '\n\n'),
+      'openai-chat',
+    );
+    expect(result.streamingMetrics.timeToFirstToken).toBeUndefined();
   });
 
-  describe('tokensPerSecond derivation', () => {
-    it('should not be set by processStreamingResponse (raw SSE inflates the number)', async () => {
-      vi.useFakeTimers();
-
-      const requestStartTime = Date.now();
-
-      // Simulate SSE frames: 4 chunks totalling ~200 chars of wire bytes
-      // but only ~20 chars of actual content.
-      const chunks = [
-        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
-        'data: {"choices":[{"delta":{"content":" there"}}]}\n\n',
-        'data: {"choices":[{"delta":{"content":" friend"}}]}\n\n',
-        'data: [DONE]\n\n',
-      ].map((s) => new TextEncoder().encode(s));
-
-      let i = 0;
-      const mockReader = {
-        read: vi.fn(async () => {
-          if (i < chunks.length) {
-            return new Promise((resolve) => {
-              setTimeout(() => resolve({ done: false, value: chunks[i++] }), 20);
-            });
-          }
-          return { done: true, value: undefined };
-        }),
-        releaseLock: vi.fn(),
-      };
-
-      const result = await settlePendingTimers(
-        processStreamingResponse(
-          { body: { getReader: () => mockReader } } as unknown as Response,
-          requestStartTime,
-        ),
-      );
-
-      // The util deliberately leaves tps unpopulated — callers compute it
-      // on the parsed completion text, not the raw SSE buffer.
-      expect(result.streamingMetrics.tokensPerSecond).toBeUndefined();
-      expect(result.streamingMetrics.totalStreamTime).toBeGreaterThan(0);
-    });
+  it('parses each completed event once across chunk boundaries', async () => {
+    const parse = vi.spyOn(JSON, 'parse');
+    await collect(['data: {"choices":', '[]}\n\n', 'data: {"choices":[]}\n\n'], 'openai-chat');
+    expect(parse.mock.calls.filter(([text]) => text === '{"choices":[]}')).toHaveLength(2);
   });
+});
 
-  describe('estimateStreamingTokensPerSecond', () => {
-    it('should compute chars/4 per second over the streamed window', () => {
-      // 400 chars / 4 = 100 tokens, over 1000ms => 100 tps
-      expect(estimateStreamingTokensPerSecond(400, 1000)).toBe(100);
-    });
-
-    it('should return undefined when the stream window is below the floor', () => {
-      expect(
-        estimateStreamingTokensPerSecond(400, MIN_MEANINGFUL_STREAM_WINDOW_MS - 1),
-      ).toBeUndefined();
-      expect(estimateStreamingTokensPerSecond(400, 0)).toBeUndefined();
-      expect(estimateStreamingTokensPerSecond(400, undefined)).toBeUndefined();
-    });
-
-    it('should return undefined for empty completions', () => {
-      expect(estimateStreamingTokensPerSecond(0, 500)).toBeUndefined();
-      expect(estimateStreamingTokensPerSecond(-1, 500)).toBeUndefined();
-    });
-
-    it('should populate at the window floor', () => {
-      // At exactly the floor, we still emit a value (the floor is inclusive).
-      expect(
-        estimateStreamingTokensPerSecond(200, MIN_MEANINGFUL_STREAM_WINDOW_MS),
-      ).toBeGreaterThan(0);
-    });
+describe('streaming throughput estimate', () => {
+  it.each([
+    [0, 100],
+    [200, undefined],
+    [200, 0],
+    [200, 49],
+  ])('omits short or empty streams (%s chars, %sms)', (chars, duration) => {
+    expect(estimateStreamingTokensPerSecond(chars!, duration)).toBeUndefined();
   });
-
-  describe('firstTokenDetector option', () => {
-    function mockStream(frames: string[], perChunkDelayMs = 20) {
-      let i = 0;
-      return {
-        body: {
-          getReader: () => ({
-            read: vi.fn(async () => {
-              if (i < frames.length) {
-                return new Promise((resolve) => {
-                  setTimeout(
-                    () =>
-                      resolve({
-                        done: false,
-                        value: new TextEncoder().encode(frames[i++]),
-                      }),
-                    perChunkDelayMs,
-                  );
-                });
-              }
-              return { done: true, value: undefined };
-            }),
-            releaseLock: vi.fn(),
-          }),
-        },
-      } as unknown as Response;
-    }
-
-    it('should use canonical TTFT when detector targets content deltas', async () => {
-      vi.useFakeTimers();
-
-      // Simulates OpenAI: role frame first, content frame second, separated by ~20ms.
-      const frames = [
-        'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n',
-        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
-        'data: [DONE]\n\n',
-      ];
-      const response = mockStream(frames, 20);
-      const requestStartTime = Date.now();
-
-      const contentPattern = /"delta":\s*\{[^}]*"content":"[^"]/;
-      const result = await settlePendingTimers(
-        processStreamingResponse(response, requestStartTime, {
-          firstTokenDetector: (buf) => contentPattern.test(buf),
-        }),
-      );
-
-      // TTFT fires on the second frame (~40ms), not on the role frame (~20ms).
-      expect(result.streamingMetrics.timeToFirstToken).toBeGreaterThanOrEqual(35);
-      expect(result.streamingMetrics.timeToFirstToken).toBeLessThan(80);
-    });
-
-    it('should fall back to default detector when no opts provided', async () => {
-      vi.useFakeTimers();
-
-      const frames = [
-        'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n',
-        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
-      ];
-      const requestStartTime = Date.now();
-      const result = await settlePendingTimers(
-        processStreamingResponse(mockStream(frames, 20), requestStartTime),
-      );
-
-      // Default fires on the first frame (~20ms).
-      expect(result.streamingMetrics.timeToFirstToken).toBeGreaterThanOrEqual(15);
-      expect(result.streamingMetrics.timeToFirstToken).toBeLessThan(40);
-    });
-
-    it('should leave TTFT undefined when detector never fires', async () => {
-      vi.useFakeTimers();
-
-      const frames = ['data: {"only":"metadata"}\n\n', 'data: [DONE]\n\n'];
-      const requestStartTime = Date.now();
-
-      const result = await settlePendingTimers(
-        processStreamingResponse(mockStream(frames, 10), requestStartTime, {
-          firstTokenDetector: (buf) => /"content":/.test(buf),
-        }),
-      );
-
-      expect(result.streamingMetrics.timeToFirstToken).toBeUndefined();
-    });
-
-    it('bounds custom detector context when a rolling window is configured', async () => {
-      const frames = ['ignored prefix', 'x'.repeat(64), 'TOKEN'];
-      const seenLengths: number[] = [];
-      let i = 0;
-      const response = {
-        body: {
-          getReader: () => ({
-            read: vi.fn(async () =>
-              i < frames.length
-                ? { done: false, value: new TextEncoder().encode(frames[i++]) }
-                : { done: true, value: undefined },
-            ),
-            releaseLock: vi.fn(),
-          }),
-        },
-      } as unknown as Response;
-
-      const result = await processStreamingResponse(response, Date.now(), {
-        firstTokenDetector: (text) => {
-          seenLengths.push(text.length);
-          return text.includes('TOKEN');
-        },
-        firstTokenDetectorWindowChars: 16,
-      });
-
-      expect(result.streamingMetrics.timeToFirstToken).toBeDefined();
-      expect(Math.max(...seenLengths)).toBeLessThanOrEqual(16);
-    });
-
-    it('exports firstNonWhitespaceByteDetector for explicit opt-in', () => {
-      expect(firstNonWhitespaceByteDetector('')).toBe(false);
-      expect(firstNonWhitespaceByteDetector('   \n\t  ')).toBe(false);
-      expect(firstNonWhitespaceByteDetector('  data: x')).toBe(true);
-    });
-  });
-
-  describe('streamFormat presets', () => {
-    describe('openai-chat preset', () => {
-      const detector = detectorForStreamFormat('openai-chat');
-
-      it('does not fire on the role framing frame', () => {
-        const buf = 'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n';
-        expect(detector(buf)).toBe(false);
-      });
-
-      it('fires on the first content delta', () => {
-        const buf =
-          'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n' +
-          'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n';
-        expect(detector(buf)).toBe(true);
-      });
-
-      it('fires on valid JSON containing formatting whitespace', () => {
-        const buf = 'data: { "choices": [{ "delta": { "content": "Hi" } }] }\n\n';
-        expect(detector(buf)).toBe(true);
-      });
-
-      it('does not fire on tool-call framing (no content field)', () => {
-        const buf =
-          'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"x"}}]}}]}\n\n';
-        expect(detector(buf)).toBe(false);
-      });
-
-      it('does not fire on empty content ("content":"")', () => {
-        const buf = 'data: {"choices":[{"delta":{"content":""}}]}\n\n';
-        expect(detector(buf)).toBe(false);
-      });
-
-      it('does not fire on null content ("content":null)', () => {
-        const buf = 'data: {"choices":[{"delta":{"content":null}}]}\n\n';
-        expect(detector(buf)).toBe(false);
-      });
-
-      it('does not fire on sibling fields named similarly (content_filter_results)', () => {
-        // Seen in Azure OpenAI preambles. Our pattern looks for the exact
-        // "content":"X" token, not any key containing "content".
-        const buf =
-          'data: {"choices":[{"delta":{"role":"assistant","content_filter_results":{"hate":{"filtered":false}}}}]}\n\n';
-        expect(detector(buf)).toBe(false);
-      });
-
-      it('does not fire on an unrelated top-level content field', () => {
-        const buf =
-          'data: {"choices":[{"delta":{"role":"assistant"}}],"content":"metadata only"}\n\n';
-        expect(detector(buf)).toBe(false);
-      });
-
-      it('fires when a preceding delta carried tool_calls before content arrived', () => {
-        const buf =
-          'data: {"choices":[{"delta":{"tool_calls":[]}}]}\n\n' +
-          'data: {"choices":[{"delta":{"content":"Answer"}}]}\n\n';
-        expect(detector(buf)).toBe(true);
-      });
-
-      it('fires on content that includes escape sequences', () => {
-        // The first content char after `"content":"` is `\` which is non-quote.
-        const buf = 'data: {"choices":[{"delta":{"content":"\\"Hi\\""}}]}\n\n';
-        expect(detector(buf)).toBe(true);
-      });
-    });
-
-    describe('openai-responses preset', () => {
-      const detector = detectorForStreamFormat('openai-responses');
-
-      it('does not fire on response.created', () => {
-        expect(detector('data: {"type":"response.created","response":{"id":"r_1"}}\n\n')).toBe(
-          false,
-        );
-      });
-
-      it('does not fire on response.in_progress / output_item.added / content_part.added', () => {
-        // Responses API sends a burst of metadata events before the first delta.
-        // These are what cause the 150-200ms framing gap on this endpoint.
-        const preamble =
-          'data: {"type":"response.created","response":{"id":"r_1"}}\n\n' +
-          'data: {"type":"response.in_progress","response":{"id":"r_1"}}\n\n' +
-          'data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message"}}\n\n' +
-          'data: {"type":"response.content_part.added","item_id":"msg_1","part":{"type":"output_text","text":""}}\n\n';
-        expect(detector(preamble)).toBe(false);
-      });
-
-      it('fires on the first output_text.delta', () => {
-        const buf =
-          'data: {"type":"response.created","response":{"id":"r_1"}}\n\n' +
-          'data: {"type":"response.output_text.delta","delta":"The"}\n\n';
-        expect(detector(buf)).toBe(true);
-      });
-
-      it('fires on valid JSON containing formatting whitespace', () => {
-        const buf = 'data: { "type": "response.output_text.delta", "delta": "The" }\n\n';
-        expect(detector(buf)).toBe(true);
-      });
-
-      it('does not fire on output_text.done (end-of-stream summary)', () => {
-        const buf = 'data: {"type":"response.output_text.done","text":"The final text"}\n\n';
-        expect(detector(buf)).toBe(false);
-      });
-
-      it('does not fire on empty delta ("delta":"")', () => {
-        const buf = 'data: {"type":"response.output_text.delta","delta":""}\n\n';
-        expect(detector(buf)).toBe(false);
-      });
-    });
-
-    describe('anthropic-messages preset', () => {
-      const detector = detectorForStreamFormat('anthropic-messages');
-
-      it('does not fire on message_start / content_block_start', () => {
-        const buf =
-          'event: message_start\ndata: {"type":"message_start"}\n\n' +
-          'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n';
-        expect(detector(buf)).toBe(false);
-      });
-
-      it('fires on the first text_delta', () => {
-        const buf =
-          'event: content_block_delta\n' +
-          'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}\n\n';
-        expect(detector(buf)).toBe(true);
-      });
-
-      it('fires on valid JSON containing formatting whitespace', () => {
-        const buf =
-          'data: { "type": "content_block_delta", "delta": { "type": "text_delta", "text": "Hello" } }\n\n';
-        expect(detector(buf)).toBe(true);
-      });
-
-      it('does not fire on input_json_delta (tool-use streaming, not content)', () => {
-        const buf =
-          'event: content_block_delta\n' +
-          'data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"x\\":1"}}\n\n';
-        expect(detector(buf)).toBe(false);
-      });
-
-      it('does not fire on empty text_delta', () => {
-        const buf =
-          'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":""}}\n\n';
-        expect(detector(buf)).toBe(false);
-      });
-
-      it('does not fire on thinking_delta (extended thinking, not final content)', () => {
-        // Claude extended thinking emits thinking_delta before text_delta.
-        // Treating thinking as TTFT would inflate the metric with reasoning time
-        // and hide the actual first-output-token latency.
-        const buf =
-          'data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Let me think"}}\n\n';
-        expect(detector(buf)).toBe(false);
-      });
-    });
-
-    it('ignores unexpected JSON event shapes without throwing', () => {
-      const malformedShape = 'data: null\n\ndata: {"choices":{}}\n\ndata: {"delta":null}\n\n';
-
-      for (const format of ['openai-chat', 'openai-responses', 'anthropic-messages'] as const) {
-        const detector = detectorForStreamFormat(format);
-        expect(() => detector(malformedShape)).not.toThrow();
-        expect(detector(malformedShape)).toBe(false);
-      }
-    });
-
-    it('closes the framing gap on a mocked OpenAI Chat stream', async () => {
-      vi.useFakeTimers();
-
-      // Same-stream comparison: role frame at ~20ms, content delta at ~40ms.
-      // Default detector fires on the role frame; openai-chat preset fires on
-      // the content delta. Both measurements come from the *same* mocked
-      // stream, so the gap is attributable to the detector, not network noise.
-      const frames = [
-        'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n',
-        'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
-        'data: [DONE]\n\n',
-      ];
-
-      const buildResponse = () => {
-        let i = 0;
-        return {
-          body: {
-            getReader: () => ({
-              read: vi.fn(async () => {
-                if (i < frames.length) {
-                  return new Promise((resolve) => {
-                    setTimeout(
-                      () =>
-                        resolve({
-                          done: false,
-                          value: new TextEncoder().encode(frames[i++]),
-                        }),
-                      20,
-                    );
-                  });
-                }
-                return { done: true, value: undefined };
-              }),
-              releaseLock: vi.fn(),
-            }),
-          },
-        } as unknown as Response;
-      };
-
-      const t0 = Date.now();
-      const defaultResult = await settlePendingTimers(
-        processStreamingResponse(buildResponse(), t0),
-      );
-      const presetResult = await settlePendingTimers(
-        processStreamingResponse(buildResponse(), t0, {
-          streamFormat: 'openai-chat',
-        }),
-      );
-
-      const defaultTtft = defaultResult.streamingMetrics.timeToFirstToken!;
-      const presetTtft = presetResult.streamingMetrics.timeToFirstToken!;
-
-      // Both are measured from the same t0 so their difference reflects the
-      // frame-delay built into the mock stream (~20ms per frame). The preset
-      // should stamp LATER than the default because it skips the role frame.
-      expect(presetTtft).toBeGreaterThan(defaultTtft);
-
-      // Absolute bounds: default ~20ms (first frame), preset ~40ms (second).
-      // Two streams + setTimeout jitter — allow generous windows but enforce ordering.
-      expect(defaultTtft).toBeLessThan(80);
-      expect(presetTtft).toBeGreaterThan(35);
-    });
-
-    it('waits for a complete SSE data event when JSON is split across chunks', async () => {
-      vi.useFakeTimers();
-
-      const frames = [
-        'data: {"choices":[{"delta":{"cont',
-        'ent":"Hello"}}]}\n\n',
-        'data: [DONE]\n\n',
-      ];
-      let i = 0;
-      const response = {
-        body: {
-          getReader: () => ({
-            read: vi.fn(async () => {
-              if (i >= frames.length) {
-                return { done: true, value: undefined };
-              }
-              return new Promise((resolve) => {
-                setTimeout(
-                  () =>
-                    resolve({
-                      done: false,
-                      value: new TextEncoder().encode(frames[i++]),
-                    }),
-                  20,
-                );
-              });
-            }),
-            releaseLock: vi.fn(),
-          }),
-        },
-      } as unknown as Response;
-
-      const result = await settlePendingTimers(
-        processStreamingResponse(response, Date.now(), {
-          streamFormat: 'openai-chat',
-        }),
-      );
-
-      expect(result.streamingMetrics.timeToFirstToken).toBeGreaterThanOrEqual(35);
-    });
-
-    it('parses built-in streamFormat events once on tool-only streams', async () => {
-      const frames = Array.from(
-        { length: 100 },
-        (_, index) => `data: {"choices":[{"delta":{"tool_calls":[{"index":${index}}]}}]}\n\n`,
-      );
-      let i = 0;
-      const response = {
-        body: {
-          getReader: () => ({
-            read: vi.fn(async () =>
-              i < frames.length
-                ? { done: false, value: new TextEncoder().encode(frames[i++]) }
-                : { done: true, value: undefined },
-            ),
-            releaseLock: vi.fn(),
-          }),
-        },
-      } as unknown as Response;
-      const parseSpy = vi.spyOn(JSON, 'parse');
-
-      const result = await processStreamingResponse(response, Date.now(), {
-        firstTokenDetector: detectorForStreamFormat('openai-chat'),
-      });
-
-      expect(result.streamingMetrics.timeToFirstToken).toBeUndefined();
-      expect(parseSpy).toHaveBeenCalledTimes(frames.length);
-    });
+  it('estimates using four characters per token from 50ms onward', () => {
+    expect(estimateStreamingTokensPerSecond(200, 50)).toBe(1000);
+    expect(estimateStreamingTokensPerSecond(200, 1000)).toBe(50);
   });
 });

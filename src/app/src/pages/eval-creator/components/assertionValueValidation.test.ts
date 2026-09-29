@@ -23,13 +23,9 @@ describe('getRunnableAssertionValueError', () => {
       );
     });
 
-    it('rejects numeric 0 because runtime treats it as an absent contains value', () => {
-      expect(getRunnableAssertionValueError(make({ type: 'contains', value: 0 }))).toMatch(
-        /Enter an expected value/,
-      );
-      expect(getRunnableAssertionValueError(make({ type: 'icontains', value: 0 }))).toMatch(
-        /Enter an expected value/,
-      );
+    it('accepts numeric 0 because runtime supports it as a contains value', () => {
+      expect(getRunnableAssertionValueError(make({ type: 'contains', value: 0 }))).toBeUndefined();
+      expect(getRunnableAssertionValueError(make({ type: 'icontains', value: 0 }))).toBeUndefined();
     });
 
     it('accepts non-blank strings and finite numbers', () => {

@@ -72,12 +72,7 @@ describe('TTFT End-to-End Integration', () => {
         res.write(`data: ${JSON.stringify(data)}\n\n`);
         chunkIndex++;
 
-        // Simulate 50ms between chunks
-        if (chunkIndex < chunks.length) {
-          setTimeout(sendChunk, 50);
-        } else {
-          setTimeout(sendChunk, 50);
-        }
+        setTimeout(sendChunk, 50);
       };
 
       // Start sending chunks after 100ms (simulate server processing)
@@ -247,7 +242,6 @@ describe('TTFT End-to-End Integration', () => {
       const ttft = result.streamingMetrics!.timeToFirstToken!;
       const latency = result.latencyMs!;
 
-      // CRITICAL INVARIANT: TTFT must always be <= latency
       expect(ttft).toBeLessThanOrEqual(latency);
     });
   });

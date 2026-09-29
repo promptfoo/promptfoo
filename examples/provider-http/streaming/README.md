@@ -65,7 +65,7 @@ providers:
       streamFormat: openai-chat # Canonical "first content token" TTFT
 ```
 
-Supported `streamFormat` values: `openai-chat`, `openai-responses`, `anthropic-messages`. If your endpoint is not one of these, use `streamFirstTokenPattern` with a custom regex, or omit both and TTFT falls back to "first non-whitespace response byte" (a format-agnostic wire-level proxy).
+Supported `streamFormat` values: `openai-chat`, `openai-responses`, `anthropic-messages`. If your endpoint is not one of these, omit `streamFormat` and TTFT falls back to "first non-whitespace response byte" (a format-agnostic wire-level proxy).
 
 ### Performance Assertions
 

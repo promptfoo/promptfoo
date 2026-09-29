@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HttpProvider } from '../../src/providers/http';
 import * as fetchModule from '../../src/util/fetch';
 
@@ -8,16 +8,41 @@ async function settlePendingTimers<T>(promise: Promise<T>): Promise<T> {
 }
 
 describe('HttpProvider streaming integration', () => {
-  let _originalFetchWithRetries: typeof fetchModule.fetchWithRetries;
-
-  beforeEach(() => {
-    _originalFetchWithRetries = fetchModule.fetchWithRetries;
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
+
+  it.each(['timeout', 'caller'])(
+    'aborts a pending streaming body on %s cancellation',
+    async (source) => {
+      const timeout = new AbortController();
+      const caller = new AbortController();
+      vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeout.signal);
+      vi.spyOn(fetchModule, 'fetchWithRetries').mockImplementation(
+        async (_url, options) =>
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                options?.signal?.addEventListener(
+                  'abort',
+                  () => controller.error(new Error('stream interrupted')),
+                  { once: true },
+                );
+              },
+            }),
+          ),
+      );
+      const provider = new HttpProvider('https://example.com/stream', {
+        config: { body: { stream: true } },
+      });
+      const result = provider.callApi('Hello', undefined, { abortSignal: caller.signal });
+      const rejection = expect(result).rejects.toThrow('stream interrupted');
+      await vi.waitFor(() => expect(fetchModule.fetchWithRetries).toHaveBeenCalledOnce());
+      (source === 'timeout' ? timeout : caller).abort();
+      await rejection;
+    },
+  );
 
   describe('TTFT measurement', () => {
     it('should measure TTFT correctly for streaming responses', async () => {
@@ -315,36 +340,6 @@ describe('HttpProvider streaming integration', () => {
       expect(result.latencyMs).toBeLessThan(150);
     });
 
-    it('rejects a malformed streamFirstTokenPattern at construction (fail fast)', () => {
-      // Compile the regex in the constructor so users get a synchronous
-      // error at config load, not a silent failure mid-eval or a crash
-      // on the first request.
-      expect(
-        () =>
-          new HttpProvider('https://api.example.com/chat', {
-            config: {
-              method: 'POST',
-              body: { stream: true },
-              // Unmatched character class: invalid RegExp.
-              streamFirstTokenPattern: '(',
-            },
-          }),
-      ).toThrow(/Invalid regular expression/);
-    });
-
-    it('accepts a valid streamFirstTokenPattern at construction', () => {
-      expect(
-        () =>
-          new HttpProvider('https://api.example.com/chat', {
-            config: {
-              method: 'POST',
-              body: { stream: true },
-              streamFirstTokenPattern: '"delta":\\s*\\{[^}]*"content":"[^"]',
-            },
-          }),
-      ).not.toThrow();
-    });
-
     it('leaves completionChars undefined when transformResponse returns non-string without .output', async () => {
       vi.useFakeTimers();
 
@@ -397,7 +392,7 @@ describe('HttpProvider streaming integration', () => {
 
       expect(result.streamingMetrics).toBeDefined();
       expect(result.streamingMetrics?.timeToFirstToken).toBeDefined();
-      // Ambiguous completion text → honest undefined, not raw SSE length.
+      // An object without output does not identify the completion text.
       expect(result.streamingMetrics?.completionChars).toBeUndefined();
       expect(result.streamingMetrics?.tokensPerSecond).toBeUndefined();
     });
