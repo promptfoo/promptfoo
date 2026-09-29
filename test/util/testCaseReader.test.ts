@@ -1257,7 +1257,7 @@ describe('readTests', () => {
         vars: 'vars1.yaml',
         metadata: {
           source: 'dataset-column',
-          __promptfoo: { retained: 'internal-value', remote: true },
+          __promptfoo: { retained: 'internal-value', remote: true, remoteVars: [] },
         },
       },
     ]);

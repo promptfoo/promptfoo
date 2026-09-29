@@ -2,7 +2,7 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getNunjucksEngine } from './templates';
 
-import type { VarValue } from '../types';
+import type { TestCase, VarValue } from '../types';
 import type { EnvOverrides } from '../types/env';
 
 /**
@@ -94,8 +94,31 @@ export function renderEnvOnlyInObject<T>(
   }
 
   if (typeof obj === 'object' && obj !== null) {
+    const remote = (obj as TestCase).metadata?.__promptfoo;
     const result: Record<string, unknown> = {};
     for (const key in obj) {
+      const value = (obj as Record<string, unknown>)[key];
+      if (remote?.remote === true) {
+        if (key === 'vars') {
+          const remoteVars = new Set(remote.remoteVars ?? Object.keys(value ?? {}));
+          result[key] =
+            value && typeof value === 'object' && !Array.isArray(value)
+              ? Object.fromEntries(
+                  Object.entries(value).map(([name, item]) => [
+                    name,
+                    remoteVars.has(name)
+                      ? item
+                      : renderEnvOnlyInObject(item, envOverrides, replaceBase),
+                  ]),
+                )
+              : value;
+          continue;
+        }
+        if (key === 'providerOutput' || key === 'description' || key === 'metadata') {
+          result[key] = value;
+          continue;
+        }
+      }
       if (key === '_conversation') {
         // Conversation history is runtime data and may contain untrusted model output.
         // Preserve it as literal data instead of rendering env templates.

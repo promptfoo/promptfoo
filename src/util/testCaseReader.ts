@@ -54,7 +54,12 @@ function preserveRemoteTests(tests: TestCase[]): TestCase[] {
       ...test,
       metadata: {
         ...test.metadata,
-        __promptfoo: { ...test.metadata?.__promptfoo, remote: true },
+        __promptfoo: {
+          ...test.metadata?.__promptfoo,
+          remote: true,
+          remoteVars:
+            typeof test.vars === 'object' && test.vars !== null ? Object.keys(test.vars) : [],
+        },
       },
     };
   });

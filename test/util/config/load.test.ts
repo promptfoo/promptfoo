@@ -2882,6 +2882,35 @@ describe('readConfig with environment variable substitution', () => {
     },
   );
 
+  it.each([undefined, ['input']])(
+    'keeps exported remote data literal on reload (%j)',
+    async (remoteVars) => {
+      mockProcessEnv({ MY_VAR: 'local fixture value' });
+      const literal = '{{env.MY_VAR}}';
+      const test = {
+        vars: { input: literal },
+        providerOutput: literal,
+        description: literal,
+        metadata: { __promptfoo: { remote: true, remoteVars }, langfuseTraceId: literal },
+        assert: [{ type: 'equals', value: literal }],
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({
+          providers: ['echo'],
+          prompts: ['{{input}}'],
+          tests: [test],
+          defaultTest: { vars: { local: literal } },
+        }),
+      );
+      vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+      const result = await readConfig('saved-config.json');
+      expect(result.tests).toEqual([
+        { ...test, assert: [{ type: 'equals', value: 'local fixture value' }] },
+      ]);
+      expect(result.defaultTest).toMatchObject({ vars: { local: 'local fixture value' } });
+    },
+  );
+
   it('should preserve env templates in static _conversation vars', async () => {
     mockProcessEnv({ MY_API_KEY: 'sk-test-12345' });
     const mockConfig = {

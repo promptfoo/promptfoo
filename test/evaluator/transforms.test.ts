@@ -38,6 +38,26 @@ describeEvaluator('evaluator transforms', () => {
     },
   );
 
+  it('renders local defaults for legacy remote rows without a remoteVars list', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('{{input}} | {{local}}')],
+      defaultTest: { vars: { source: 'local value', local: '{{source}}' } },
+      tests: [
+        {
+          providerOutput: 'stored answer',
+          vars: { input: '{{literal}}' },
+          metadata: { __promptfoo: { remote: true } },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.results[0].prompt.raw).toBe('{{literal}} | local value');
+    expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+  });
+
   it('evaluate with transform option - default test', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

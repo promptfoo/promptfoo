@@ -134,6 +134,23 @@ describe('sanitizeConfigForOutput', () => {
     expect(JSON.stringify(output)).not.toContain('private-value');
   });
 
+  it('retains imported variable names when stripping user metadata', () => {
+    const config = {
+      tests: [
+        {
+          vars: { input: '{{literal}}', local: '{{source}}' },
+          providerOutput: 'stored',
+          metadata: { note: 'remove me', __promptfoo: { remote: true, remoteVars: ['input'] } },
+        },
+      ],
+    };
+    const result = sanitizeConfigForOutput(config, { shouldStripMetadata: true });
+    expect(result.tests).toMatchObject([
+      { metadata: { __promptfoo: { remote: true, remoteVars: ['input'] } } },
+    ]);
+    expect(config.tests[0].metadata.note).toBe('remove me');
+  });
+
   it('strips saved test data while preserving remote-row safety and local replay data', () => {
     const test = {
       vars: { input: 'private test vars' },

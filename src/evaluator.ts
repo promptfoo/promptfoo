@@ -2487,6 +2487,13 @@ function mergeScenarioTest(
     ...test.metadata,
   };
   mergedMetadata.conversationId ??= `__scenario_${scenarioIndex}__`;
+  if (mergedMetadata.__promptfoo?.remote === true) {
+    mergedMetadata.__promptfoo = {
+      ...mergedMetadata.__promptfoo,
+      remoteVars:
+        mergedMetadata.__promptfoo.remoteVars ?? Object.keys({ ...data.vars, ...test.vars }),
+    };
+  }
 
   return {
     ...(defaultTest || {}),
@@ -2515,6 +2522,15 @@ async function prepareTestVariables(
   const inputTransformDefault = getDefaultTest(testSuite)?.options?.transformVars;
 
   for (const testCase of tests) {
+    if (testCase.metadata?.__promptfoo?.remote === true) {
+      testCase.metadata = {
+        ...testCase.metadata,
+        __promptfoo: {
+          ...testCase.metadata.__promptfoo,
+          remoteVars: testCase.metadata.__promptfoo.remoteVars ?? Object.keys(testCase.vars ?? {}),
+        },
+      };
+    }
     testCase.vars = {
       ...(getDefaultTest(testSuite)?.vars || {}),
       ...testCase?.vars,
@@ -2558,12 +2574,13 @@ async function applyInputTransform(
   if (testCase.providerOutput !== undefined && testCase.metadata?.__promptfoo?.remote === true) {
     // Transformed imported values are data, including aliases created by transformVars.
     const metadata = testCase.metadata.__promptfoo;
-    metadata.remoteVars = [
-      ...new Set([
-        ...(metadata.remoteVars ?? Object.keys(testCase.vars ?? {})),
-        ...Object.keys(transformedVars),
-      ]),
-    ];
+    testCase.metadata = {
+      ...testCase.metadata,
+      __promptfoo: {
+        ...metadata,
+        remoteVars: [...new Set([...(metadata.remoteVars ?? []), ...Object.keys(transformedVars)])],
+      },
+    };
   }
   testCase.vars = { ...testCase.vars, ...transformedVars };
 }
