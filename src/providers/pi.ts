@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import fs from 'fs';
 import fsPromises from 'fs/promises';
 import os from 'os';
@@ -13,7 +13,7 @@ import {
   withGenAISpan,
 } from '../tracing/genaiTracer';
 import { resolveAgenticWorkingDir, validateAgenticWorkingDir } from './agentic-utils';
-import { assertIsolatedWorkingDir, clearRepositoryEnv } from './agentWorkspace';
+import { clearRepositoryEnv, isAgentWorkspace } from './agentWorkspace';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -31,18 +31,12 @@ const PI_PACKAGE_NAME = '@earendil-works/pi-coding-agent';
 
 const DEFAULT_TIMEOUT_MS = 600_000;
 const KILL_GRACE_MS = 5_000;
-// After the pi process exits, wait briefly for stdio to flush before settling.
-// A descendant process that inherited stdout can otherwise hold the 'close'
-// event open forever.
+// A descendant holding stdout can delay 'close' after Pi exits.
 const STDIO_FLUSH_GRACE_MS = 1_000;
 const MAX_STDERR_LENGTH = 16_384;
-// Hard cap on retained stderr bytes; prevents unbounded memory from a noisy
-// process (the display is trimmed separately by truncateStderr).
+// Retain bounded diagnostics; truncateStderr separately limits their display.
 const MAX_STDERR_BYTES = 256 * 1024;
-// Default cap on retained stdout (the JSONL event stream). A runaway or
-// adversarial agent — or a tool echoing a large file — could otherwise grow the
-// accumulator without bound and OOM the eval process. Overridable per provider
-// via `max_output_bytes`.
+// Bound the retained JSONL stream; configurable with max_output_bytes.
 const DEFAULT_MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
 
 // Flag names whose VALUE is a credential (only reachable via user extra_args;
@@ -168,9 +162,6 @@ export interface PiProviderConfig {
    */
   working_dir?: string;
 
-  /** Run eval steps in an isolated copy of working_dir. */
-  copy_working_dir?: boolean | 'git' | 'copy';
-
   /**
    * Tool allowlist passed to `--tools` (built-in, extension, and custom tools).
    * Built-in tools: read, bash, edit, write, grep, find, ls.
@@ -233,7 +224,7 @@ export interface PiProviderConfig {
    */
   agent_dir?: string;
 
-  /** Path to the pi executable. Overrides package/PATH resolution. */
+  /** Absolute path to the pi executable. Overrides package/PATH resolution. */
   pi_path?: string;
 
   /** Extra environment variables for the pi process */
@@ -286,6 +277,7 @@ interface PiMessage {
   content?: PiContentPart[] | string;
   provider?: string;
   model?: string;
+  responseModel?: string;
   usage?: PiUsage;
   stopReason?: string;
   errorMessage?: string;
@@ -401,7 +393,7 @@ export function findPiCliScript(baseDirs: Array<string | undefined>): string | u
 }
 
 function piInstallGuidance(): string {
-  return dedent`The pi coding agent CLI is required but was not found.
+  return dedent`The pi coding agent CLI (0.99.1 or later) is required but was not found.
 
     Install it with one of:
       npm install -g ${PI_PACKAGE_NAME}
@@ -449,9 +441,10 @@ export class PiProvider implements ApiProvider {
    */
   private resolvePiCommand(config: PiProviderConfig): { command: string; argsPrefix: string[] } {
     if (config.pi_path) {
-      const resolved = path.isAbsolute(config.pi_path)
-        ? config.pi_path
-        : path.resolve(resolveBasePath(), config.pi_path);
+      if (!path.isAbsolute(config.pi_path)) {
+        throw new Error('pi_path must be an absolute path to the Pi executable or CLI script.');
+      }
+      const resolved = config.pi_path;
       if (resolved.endsWith('.js') || resolved.endsWith('.mjs')) {
         return { command: process.execPath, argsPrefix: [resolved] };
       }
@@ -461,7 +454,7 @@ export class PiProvider implements ApiProvider {
     // The node_modules walk is stable for the lifetime of a provider instance;
     // cache it so repeated calls don't re-stat the directory tree.
     if (this.cachedCliScript === undefined) {
-      this.cachedCliScript = findPiCliScript([cliState.basePath, process.cwd()]) ?? null;
+      this.cachedCliScript = findPiCliScript([process.cwd()]) ?? null;
     }
     if (this.cachedCliScript) {
       logger.debug(`[Pi] Using project-local pi CLI: ${this.cachedCliScript}`);
@@ -603,9 +596,7 @@ export class PiProvider implements ApiProvider {
   }
 
   private buildEnv(config: PiProviderConfig): Record<string, string> {
-    // Seed with the full ambient environment, then overlay the configured
-    // provider env (EnvOverrides + config.env). Insertion order does not affect
-    // the resulting Record's values, so the merge is order-independent.
+    // Provider settings override the inherited environment.
     const env: Record<string, string> = {};
     for (const [key, value] of Object.entries(process.env)) {
       if (value !== undefined) {
@@ -626,7 +617,7 @@ export class PiProvider implements ApiProvider {
       }
     }
 
-    if (assertIsolatedWorkingDir(config)) {
+    if (config.working_dir && isAgentWorkspace(config.working_dir)) {
       clearRepositoryEnv(env);
     }
     return env;
@@ -653,14 +644,20 @@ export class PiProvider implements ApiProvider {
 
   private prepareCall(context?: CallApiContextParams): PiPreparedCall {
     const promptConfig = (context?.prompt?.config ?? {}) as PiProviderConfig;
+    // Test rows can choose a model and thinking level, but cannot change execution settings.
     const config: PiProviderConfig = {
       ...this.config,
-      ...promptConfig,
-      // Shallow spread would replace the whole env record; merge it instead.
-      ...(this.config.env || promptConfig.env
-        ? { env: { ...this.config.env, ...promptConfig.env } }
-        : {}),
+      ...(typeof promptConfig.model === 'string' ? { model: promptConfig.model } : {}),
+      ...(typeof promptConfig.thinking === 'string' ? { thinking: promptConfig.thinking } : {}),
     };
+    if (
+      ('copy_working_dir' in this.config && this.config.copy_working_dir) ||
+      ('copy_working_dir' in promptConfig && promptConfig.copy_working_dir)
+    ) {
+      throw new Error(
+        'Pi does not support copy_working_dir. Configure an isolated working_dir instead.',
+      );
+    }
 
     if (config.apiKey && !this.getApiKeyEnvVar(config)) {
       throw new Error(
@@ -670,8 +667,6 @@ export class PiProvider implements ApiProvider {
         or pass the credential through the env config option instead.`,
       );
     }
-
-    assertIsolatedWorkingDir(config);
 
     if (config.working_dir) {
       const workingDir =
@@ -702,9 +697,7 @@ export class PiProvider implements ApiProvider {
         env: options.env,
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
-        // Run pi in its own process group on POSIX so we can signal pi AND any
-        // tool grandchildren it spawned (e.g. bash) on timeout/abort/overflow,
-        // instead of orphaning them. Windows has no equivalent here.
+        // Keep descendants in a group for POSIX cancellation.
         detached: process.platform !== 'win32',
       });
 
@@ -718,11 +711,41 @@ export class PiProvider implements ApiProvider {
       let aborted = false;
       let settled = false;
       let exitSignal: NodeJS.Signals | null = null;
+      let treeCleanup: Promise<void> | undefined;
 
-      // Signal pi directly (so the mockable child.kill path stays exercised) and,
-      // on POSIX, the whole process group via the negative pid so descendant
-      // tool processes are terminated too.
       const signalGroup = (signal: NodeJS.Signals) => {
+        if (process.platform === 'win32' && typeof child.pid === 'number') {
+          treeCleanup ??= Promise.resolve().then(
+            () =>
+              new Promise<void>((resolveCleanup, rejectCleanup) => {
+                const windowsDir = process.env.SystemRoot;
+                if (!windowsDir || !path.win32.isAbsolute(windowsDir)) {
+                  rejectCleanup(
+                    new Error('Cannot locate the Windows system directory for Pi cleanup'),
+                  );
+                  return;
+                }
+                execFile(
+                  path.win32.join(windowsDir, 'System32', 'taskkill.exe'),
+                  ['/PID', String(child.pid), '/T', '/F'],
+                  { windowsHide: true, timeout: KILL_GRACE_MS },
+                  (error) => (error ? rejectCleanup(error) : resolveCleanup()),
+                );
+              }),
+          );
+          // Keep the rejection handled until the child closes or the fallback settles.
+          void treeCleanup.catch((error) => {
+            try {
+              child.kill();
+            } catch (killError) {
+              logger.debug('[Pi] Failed to signal process after cleanup error', {
+                error: killError,
+              });
+            }
+            finish(() => reject(new Error(`Failed to stop Pi process tree: ${error.message}`)));
+          });
+          return;
+        }
         try {
           child.kill(signal);
         } catch (err) {
@@ -740,14 +763,9 @@ export class PiProvider implements ApiProvider {
 
       const killChild = () => {
         signalGroup('SIGTERM');
-        setTimeout(() => {
-          // Force-kill the whole group, not gated on pi's own liveness: pi may
-          // have exited cleanly from SIGTERM while a tool grandchild (e.g. a
-          // bash that ignores SIGTERM) is still alive in the group. child.kill
-          // on an already-exited child is a safe no-op, and process.kill(-pid)
-          // throws ESRCH (caught) once the group is gone.
-          signalGroup('SIGKILL');
-        }, KILL_GRACE_MS).unref();
+        if (process.platform !== 'win32' || typeof child.pid !== 'number') {
+          setTimeout(() => signalGroup('SIGKILL'), KILL_GRACE_MS).unref();
+        }
       };
 
       const timeoutHandle = setTimeout(() => {
@@ -769,7 +787,7 @@ export class PiProvider implements ApiProvider {
         settled = true;
         clearTimeout(timeoutHandle);
         options.abortSignal?.removeEventListener('abort', abortListener);
-        fn();
+        void (treeCleanup ?? Promise.resolve()).then(fn, reject);
       };
 
       // setEncoding makes Node buffer partial multi-byte UTF-8 sequences across
@@ -797,7 +815,7 @@ export class PiProvider implements ApiProvider {
           try {
             const event = JSON.parse(line) as PiEvent;
             if (
-              (event?.type === 'agent_end' && event.willRetry !== true) ||
+              event?.type === 'agent_settled' ||
               (event?.type === 'response' &&
                 event.command === 'prompt' &&
                 (event.success === false || event.data?.disposition === 'handled'))
@@ -1025,8 +1043,9 @@ export class PiProvider implements ApiProvider {
     if (finalMessage.provider) {
       metadata.provider_id = finalMessage.provider;
     }
-    if (finalMessage.model) {
-      metadata.model = finalMessage.model;
+    const model = finalMessage.responseModel ?? finalMessage.model;
+    if (model) {
+      metadata.model = model;
     }
     if (toolCalls.length > 0) {
       metadata.toolCalls = toolCalls;
@@ -1034,6 +1053,12 @@ export class PiProvider implements ApiProvider {
 
     return {
       output: this.getMessageText(finalMessage),
+      ...(finalMessage.stopReason
+        ? {
+            finishReason:
+              finalMessage.stopReason === 'toolUse' ? 'tool_calls' : finalMessage.stopReason,
+          }
+        : {}),
       ...usageCostRaw,
       ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
     };
@@ -1123,7 +1148,7 @@ export class PiProvider implements ApiProvider {
       if (failure) {
         return { error: failure.error ?? 'Pi rejected the prompt' };
       }
-      if (!events.some((event) => event?.type === 'agent_end' && event.willRetry !== true)) {
+      if (!events.some((event) => event?.type === 'agent_settled')) {
         const stderrSuffix = runResult.stderr ? `\n${truncateStderr(runResult.stderr)}` : '';
         return { error: `Pi exited before completing the run.${stderrSuffix}` };
       }

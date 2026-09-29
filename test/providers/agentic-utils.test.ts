@@ -69,6 +69,8 @@ describe('agentic-utils', () => {
     });
 
     it('recognizes coding-agent runtimes that can return rubric grading verdicts', () => {
+      expect(isAgenticGradingProvider(provider('pi'))).toBe(false);
+      expect(isAgenticGradingProvider(provider('pi:fixture/model'))).toBe(false);
       expect(isAgenticGradingProvider(provider('openai:codex-sdk'))).toBe(true);
       expect(isAgenticGradingProvider(provider('anthropic:claude-agent-sdk'))).toBe(true);
       expect(isAgenticGradingProvider(provider('openai:responses:gpt-5.5'))).toBe(false);

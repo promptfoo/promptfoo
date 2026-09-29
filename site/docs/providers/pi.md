@@ -29,7 +29,7 @@ npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 curl -fsSL https://pi.dev/install.sh | sh
 ```
 
-Or install it into your project, where promptfoo resolves it automatically:
+Or install it into the project where you run promptfoo. Automatic discovery searches that directory and its parents:
 
 ```bash
 npm install --ignore-scripts @earendil-works/pi-coding-agent
@@ -39,7 +39,7 @@ Use a current Pi release that supports RPC mode and the resource controls listed
 
 :::note
 
-On Windows, use the project-local install (or set `pi_path` to the package's `dist/cli.js`): promptfoo runs the package script with Node directly, while a globally installed `pi.cmd` shim on PATH cannot be spawned without a shell.
+On Windows, use the project-local install (or set `pi_path` to the package's CLI script (listed in its `package.json` `bin.pi` field)): promptfoo runs the package script with Node directly, while a globally installed `pi.cmd` shim on PATH cannot be spawned without a shell.
 
 :::
 
@@ -53,6 +53,8 @@ export OPENAI_API_KEY=your_api_key_here
 ```
 
 Subscription-backed providers configured through Pi's login flow also work because the provider uses your Pi config directory (`~/.pi/agent`) by default.
+
+Use Pi 0.99.1 or later, which reports completed RPC runs with `agent_settled`.
 
 ## Quick Start
 
@@ -111,34 +113,39 @@ With `bash`, `edit`, or `write` enabled, the agent executes commands and modifie
 
 :::
 
+Prompt and test options may override `model` and `thinking`. Executable, tool, path,
+environment, resource discovery, and timeout settings come from the provider configuration.
+Automatic `copy_working_dir` workspaces are not supported. Use an explicitly isolated
+`working_dir` when a run needs its own files. Pi is not an `agent-rubric` grader
+because it cannot receive the target’s copied workspace through this integration.
+
 ## Configuration
 
-| Option                  | Type                      | Default       | Description                                                                                   |
-| ----------------------- | ------------------------- | ------------- | --------------------------------------------------------------------------------------------- |
-| `model`                 | `string`                  | pi default    | Model pattern passed to `--model` (`provider/id`, optional `:<thinking>` suffix)              |
-| `provider_id`           | `string`                  | -             | Provider name passed to `--provider`; unnecessary when `model` uses the `provider/id` form    |
-| `thinking`              | `string`                  | -             | Thinking level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`                            |
-| `apiKey`                | `string`                  | env vars      | API key for the selected provider, injected via its standard env var                          |
-| `api_key_env`           | `string`                  | -             | Env var name that carries `apiKey` (required for providers promptfoo does not recognize)      |
-| `working_dir`           | `string`                  | temp dir      | Directory pi operates in; enables read-only tools                                             |
-| `tools`                 | `string[]`                | see above     | Tool allowlist (`read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`, plus extension tools)  |
-| `exclude_tools`         | `string[]`                | -             | Tool denylist                                                                                 |
-| `copy_working_dir`      | `boolean` or `git`/`copy` | `false`       | Create a fresh workspace for each eval step; requires `working_dir`                           |
-| `no_tools`              | `boolean`                 | -             | Disable all tools                                                                             |
-| `system_prompt`         | `string`                  | pi default    | Replace pi's system prompt                                                                    |
-| `append_system_prompt`  | `string`                  | -             | Append to pi's system prompt                                                                  |
-| `load_extensions`       | `boolean`                 | `false`       | Load pi extensions from the agent dir and working dir                                         |
-| `load_skills`           | `boolean`                 | `false`       | Load pi skills                                                                                |
-| `load_prompt_templates` | `boolean`                 | `false`       | Expand pi prompt templates in prompts                                                         |
-| `load_context_files`    | `boolean`                 | `false`       | Load AGENTS.md / CLAUDE.md from the working directory                                         |
-| `trust_project_files`   | `boolean`                 | `false`       | Trust project-local pi files (`--approve`): `.pi/settings.json`, project extensions/SYSTEM.md |
-| `agent_dir`             | `string`                  | `~/.pi/agent` | Pi config directory (sets `PI_CODING_AGENT_DIR`)                                              |
-| `pi_path`               | `string`                  | auto          | Path to the pi executable                                                                     |
-| `env`                   | `object`                  | -             | Extra environment variables for the pi process                                                |
-| `extra_args`            | `string[]`                | -             | Additional CLI arguments; use `apiKey` or `env` for credentials                               |
-| `timeout`               | `number`                  | `600000`      | Maximum run time per call in milliseconds                                                     |
-| `offline`               | `boolean`                 | `true`        | Pass `--offline` to skip pi's startup version checks and telemetry (LLM calls are unaffected) |
-| `max_output_bytes`      | `number`                  | `33554432`    | Cap on retained stdout before the run is aborted (guards against runaway/large tool output)   |
+| Option                  | Type       | Default       | Description                                                                                   |
+| ----------------------- | ---------- | ------------- | --------------------------------------------------------------------------------------------- |
+| `model`                 | `string`   | pi default    | Model pattern passed to `--model` (`provider/id`, optional `:<thinking>` suffix)              |
+| `provider_id`           | `string`   | -             | Provider name passed to `--provider`; unnecessary when `model` uses the `provider/id` form    |
+| `thinking`              | `string`   | -             | Thinking level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`                            |
+| `apiKey`                | `string`   | env vars      | API key for the selected provider, injected via its standard env var                          |
+| `api_key_env`           | `string`   | -             | Env var name that carries `apiKey` (required for providers promptfoo does not recognize)      |
+| `working_dir`           | `string`   | temp dir      | Directory pi operates in; enables read-only tools                                             |
+| `tools`                 | `string[]` | see above     | Tool allowlist (`read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`, plus extension tools)  |
+| `exclude_tools`         | `string[]` | -             | Tool denylist                                                                                 |
+| `no_tools`              | `boolean`  | -             | Disable all tools                                                                             |
+| `system_prompt`         | `string`   | pi default    | Replace pi's system prompt                                                                    |
+| `append_system_prompt`  | `string`   | -             | Append to pi's system prompt                                                                  |
+| `load_extensions`       | `boolean`  | `false`       | Load pi extensions from the agent dir and working dir                                         |
+| `load_skills`           | `boolean`  | `false`       | Load pi skills                                                                                |
+| `load_prompt_templates` | `boolean`  | `false`       | Expand pi prompt templates in prompts                                                         |
+| `load_context_files`    | `boolean`  | `false`       | Load AGENTS.md / CLAUDE.md from the working directory                                         |
+| `trust_project_files`   | `boolean`  | `false`       | Trust project-local pi files (`--approve`): `.pi/settings.json`, project extensions/SYSTEM.md |
+| `agent_dir`             | `string`   | `~/.pi/agent` | Pi config directory (sets `PI_CODING_AGENT_DIR`)                                              |
+| `pi_path`               | `string`   | auto          | Absolute path to the pi executable or CLI script                                              |
+| `env`                   | `object`   | -             | Extra environment variables for the pi process                                                |
+| `extra_args`            | `string[]` | -             | Additional CLI arguments; use `apiKey` or `env` for credentials                               |
+| `timeout`               | `number`   | `600000`      | Maximum run time per call in milliseconds                                                     |
+| `offline`               | `boolean`  | `true`        | Pass `--offline` to skip pi's startup version checks and telemetry (LLM calls are unaffected) |
+| `max_output_bytes`      | `number`   | `33554432`    | Cap on retained stdout before the run is aborted (guards against runaway/large tool output)   |
 
 Extension, skill, prompt-template, and context-file discovery are disabled by default so eval prompts are processed verbatim and results stay reproducible. The provider also passes `--no-approve`, so project-local pi files (a `.pi/settings.json`, project extensions, or a `.pi/SYSTEM.md` in the `working_dir`) are ignored even if the project was previously trusted. Discovery (`load_*`) and trust are independent: context files load without trust, while project-local extensions/skills/templates and `.pi/SYSTEM.md` require `trust_project_files: true` (`--approve`). pi's trust is all-or-nothing — enabling it trusts every project-local pi file, including a `settings.json` that can change the model.
 
@@ -150,6 +157,7 @@ The provider returns:
 - `tokenUsage` - Tokens summed across the final run's assistant turns (`prompt`, `completion`, `total`, `cached`, `numRequests`); cache reads/writes are exposed as `completionDetails.cacheReadInputTokens` and `completionDetails.cacheCreationInputTokens` when pi reports them
 - `cost` - USD cost as reported by pi
 - `metadata.toolCalls` - Tools the agent invoked, with arguments and error status
+- `finishReason` - Why the final assistant response stopped (`stop`, `length`, or `tool_calls`)
 - `metadata.model` / `metadata.provider_id` - Model that actually served the run
 - `raw` - JSON of all assistant messages
 

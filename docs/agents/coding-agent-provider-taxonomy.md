@@ -360,57 +360,29 @@ Docs and examples:
 
 Status: implemented and documented.
 
-Provider IDs:
+Provider IDs: `pi` and `pi:<provider>/<model>`, with an optional `:<thinking>` suffix.
 
-- `pi`
-- `pi:<provider>/<model>` (pi model pattern, optional `:<thinking>` suffix)
+- Starts Pi 0.99.1 or later with `--mode rpc --no-session` for each call. Prompts
+  travel through stdin unchanged; `agent_settled` marks completion.
+- Resolves the CLI from an absolute `pi_path`, a package under the current project
+  directory or its parents, or `PATH`.
+- Uses a temporary directory with tools disabled by default. A configured
+  `working_dir` enables `read`, `grep`, `find`, and `ls`.
+- Disables resource discovery and project trust by default. Execution settings
+  come from provider configuration; test rows may override `model` and `thinking`.
+- Returns assistant text, concrete model, stop reason, tool metadata, and the final
+  attempt's token usage and cost. Discarded retry attempts are not included.
+- Emits one GenAI span per call. Pi's internal operations have no native OTEL spans.
 
-Implemented capabilities:
+Pi runs with the user's privileges and inherited environment. Its working directory
+is not a sandbox; use an isolated environment for untrusted prompts with tools enabled.
+The default agent directory is `~/.pi/agent`, preserving Pi's stored credentials and
+custom models. Set `agent_dir` to use separate runtime configuration.
 
-- Spawns the `pi` CLI per call with `--mode rpc --no-session`; no npm package import is required.
-- Resolves the CLI from `pi_path`, a project-local
-  `@earendil-works/pi-coding-agent` install, or `PATH`, with actionable install
-  guidance when missing.
-- Supports provider/model selection, thinking levels, and system prompt
-  replacement or extension.
-- Supports temporary or configured working directories with OpenCode-style safe
-  defaults: chat-only without `working_dir`, read-only tools (`read`, `grep`,
-  `find`, `ls`) with it.
-- Disables extension/skill/prompt-template/context-file discovery by default for
-  reproducible evals; each is opt-in.
-- Maps per-message usage to summed `tokenUsage` and USD `cost`, and surfaces tool
-  activity in `metadata.toolCalls`.
-- Detects agent failures from `stopReason: error|aborted` because pi exits 0 in
-  RPC mode even when the run fails.
-- Emits a GenAI span with model, token usage, and cost, linked through `traceparent`.
+Calls do not share sessions or cached responses. Automatic `copy_working_dir` and
+`agent-rubric` workspace handoff are unsupported; use an explicitly isolated directory.
 
-Important limits:
-
-- Pi has no built-in permission or sandbox system; write-capable tools execute
-  with the user's privileges and are opt-in only.
-- The spawned pi process inherits promptfoo's full environment (pi resolves
-  provider credentials from env vars); isolate via container or stripped env
-  when evaluating untrusted prompts with tools enabled.
-- Sessions are always ephemeral (`--no-session`); there is no resume support.
-- Uses the user's `~/.pi/agent` config dir by default so subscription auth and
-  custom models work; set `agent_dir` to isolate.
-- Pi has no native OpenTelemetry support, so there is no deep tracing into the pi
-  runtime (no OTEL env injection); the provider-level `callApi` span is the trace
-  boundary. Pi's own install telemetry is disabled by the default `--offline`.
-- Project-local file trust (`.pi/settings.json`, project extensions/skills/
-  templates, `.pi/SYSTEM.md`) is off by default (`--no-approve`) and is a
-  separate axis from `load_*` discovery; opt in with `trust_project_files`
-  (`--approve`), which is all-or-nothing.
-- Prompts use RPC messages to preserve whitespace. Responses are not cached because
-  Pi can read files and runtime settings outside the configured working directory.
-- On pi auto-retry, reported `tokenUsage`/`cost` reflect the final attempt; pi
-  drops the failed attempt's message from its terminal `agent_end`, so discarded
-  attempts' tokens are not counted.
-
-Docs and examples:
-
-- `site/docs/providers/pi.md`
-- `examples/provider-pi/`
+See `site/docs/providers/pi.md` and `examples/provider-pi/` for configuration and examples.
 
 ## Current Naming Guidance
 

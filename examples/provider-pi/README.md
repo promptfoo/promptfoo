@@ -28,7 +28,7 @@ Or with the install script:
 curl -fsSL https://pi.dev/install.sh | sh
 ```
 
-Use a current Pi release with RPC support.
+Use Pi 0.99.1 or later.
 
 ### 2. Configure credentials
 
@@ -72,7 +72,7 @@ npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 
 ### Model Comparison
 
-The same agent harness compared across models from different providers. Requires `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY`.
+Compare models using the same Pi configuration. Requires `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY`.
 
 **Location**: `./model-comparison/`
 
@@ -85,7 +85,7 @@ npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 
 ## Provider Configuration
 
-The provider supports these high-value options:
+Common provider options:
 
 ```yaml
 providers:

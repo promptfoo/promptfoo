@@ -55,7 +55,7 @@ export function isAgenticProvider(provider: ApiProvider | null | undefined): boo
 }
 
 /**
- * Security scanners run agentic workflows but cannot return rubric grading verdicts.
+ * Rubric graders must return verdicts and accept the target workspace handoff.
  */
 export function isAgenticGradingProvider(provider: ApiProvider | null | undefined): boolean {
   if (!provider || !isAgenticProvider(provider)) {
@@ -63,7 +63,9 @@ export function isAgenticGradingProvider(provider: ApiProvider | null | undefine
   }
 
   const providerId = provider.id();
-  return providerId !== 'openai:codex-security' && !providerId.startsWith('openai:codex-security:');
+  return !['openai:codex-security', 'pi'].some(
+    (id) => providerId === id || providerId.startsWith(`${id}:`),
+  );
 }
 
 /**
