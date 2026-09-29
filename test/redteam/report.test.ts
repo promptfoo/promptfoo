@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { Severity } from '../../src/redteam/constants';
 import { makeInlinePolicyIdSync } from '../../src/redteam/plugins/policy/utils';
 import {
@@ -8,12 +8,7 @@ import {
   getStatus,
 } from '../../src/redteam/report';
 
-// Strip ANSI codes for easier testing
 const stripAnsi = (str: string) => str.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
-
-afterEach(() => {
-  vi.resetAllMocks();
-});
 
 describe('report', () => {
   describe('getPluginSeverity', () => {
@@ -24,7 +19,6 @@ describe('report', () => {
     });
 
     it('should return severity from riskCategorySeverityMap for known plugins', () => {
-      // pii plugins should have high severity
       expect(getPluginSeverity('pii:direct')).toBe(Severity.High);
     });
 
@@ -50,7 +44,7 @@ describe('report', () => {
 
     it('should truncate long policy text to 20 characters', () => {
       const longPolicy =
-        'This is a very long policy text that should be truncated because it exceeds forty characters';
+        'This is a very long policy text that should be truncated because it exceeds twenty characters';
       const result = getPluginDisplayId({
         id: 'policy',
         config: { policy: longPolicy },
@@ -58,7 +52,7 @@ describe('report', () => {
       expect(result).toBe(
         `policy [${makeInlinePolicyIdSync(longPolicy)}]: This is a very long ...`,
       );
-      expect(result.length).toBeLessThan(60); // Display ID should be reasonable length
+      expect(result.length).toBeLessThan(60);
     });
 
     it('should include cloud policy id prefixes with policy names', () => {
