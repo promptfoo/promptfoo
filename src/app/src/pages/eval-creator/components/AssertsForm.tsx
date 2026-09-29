@@ -13,6 +13,13 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Textarea } from '@app/components/ui/textarea';
+import {
+  ARRAY_VALUE_ASSERTION_TYPES,
+  NAMED_MATCHER_ASSERTION_TYPES,
+  REQUIRED_STRING_ASSERTION_TYPES,
+  REQUIRED_STRING_OR_ARRAY_ASSERTION_TYPES,
+  REQUIRED_TEXT_OR_NUMBER_ASSERTION_TYPES,
+} from './assertionValueValidation';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 interface AssertsFormProps {
@@ -95,18 +102,12 @@ const assertTypes: AssertionType[] = [
   'not-webhook',
 ];
 
-// Assertion types that accept comma-separated values
-const ARRAY_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
-  'contains-any',
-  'contains-all',
-  'not-contains-any',
-  'not-contains-all',
-]);
-
 const usesStructuredValue = (type: AssertionType) =>
   ARRAY_VALUE_ASSERTION_TYPES.has(type) ||
-  ['trajectory:tool-set', 'trajectory:tool-used', 'trajectory:tool-sequence'].some((value) =>
-    type.endsWith(value),
+  REQUIRED_STRING_OR_ARRAY_ASSERTION_TYPES.has(type) ||
+  NAMED_MATCHER_ASSERTION_TYPES.has(type) ||
+  ['equals', 'moderation', 'trajectory:tool-set', 'trajectory:tool-sequence'].includes(
+    type.replace(/^not-/, ''),
   );
 
 function parseAssertionValue(type: AssertionType, value: Assertion['value']): Assertion['value'] {
@@ -203,7 +204,10 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                             type: newValue as AssertionType,
                             value: usesStructuredValue(newValue as AssertionType)
                               ? parseAssertionValue(newValue as AssertionType, a.value)
-                              : usesStructuredValue(a.type)
+                              : REQUIRED_STRING_ASSERTION_TYPES.has(newValue as AssertionType) ||
+                                  REQUIRED_TEXT_OR_NUMBER_ASSERTION_TYPES.has(
+                                    newValue as AssertionType,
+                                  )
                                 ? (rawValues[index] ??
                                   (typeof a.value === 'string'
                                     ? a.value
@@ -247,11 +251,9 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                         ? assert.value
                         : typeof assert.value === 'number'
                           ? String(assert.value)
-                          : assert.value !== undefined &&
-                              typeof assert.value !== 'string' &&
-                              usesStructuredValue(assert.type)
-                            ? JSON.stringify(assert.value, null, 2)
-                            : '')
+                          : assert.value === undefined
+                            ? ''
+                            : JSON.stringify(assert.value, null, 2))
                     }
                     onChange={(e) => {
                       const rawValue = e.target.value;

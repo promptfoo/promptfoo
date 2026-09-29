@@ -63,6 +63,20 @@ describe('AssertsForm', () => {
   });
 
   it.each([
+    ...['bleu', 'similar', 'g-eval', 'moderation', 'skill-used', 'equals', 'not-equals'].map(
+      (to) => ({
+        from: 'contains-any',
+        value: ['hello world', 'hi there'],
+        to,
+        expected: ['hello world', 'hi there'],
+      }),
+    ),
+    {
+      from: 'trajectory:tool-used',
+      value: { name: 'lookup', goal: 'Find the fixture' },
+      to: 'trajectory:goal-success',
+      expected: { name: 'lookup', goal: 'Find the fixture' },
+    },
     { from: 'contains-any', value: 'foo', to: 'contains', expected: 'foo' },
     { from: 'contains-all', value: 'foo', to: 'contains', expected: 'foo' },
     {
@@ -86,8 +100,13 @@ describe('AssertsForm', () => {
         <AssertsForm onAdd={onAdd} initialValues={[{ type: from as AssertionType, value }]} />,
       );
       await user.click(screen.getByRole('combobox', { name: 'Type' }));
-      await user.click(screen.getByRole('option', { name: to }));
+      await user.click(
+        screen.getByRole('option', { name: (name) => name === to || name === `${to} (LLM)` }),
+      );
       expect(onAdd).toHaveBeenLastCalledWith([{ type: to, value: expected }]);
+      expect(screen.getByRole('textbox', { name: 'Value' })).toHaveValue(
+        typeof expected === 'string' ? expected : JSON.stringify(expected, null, 2),
+      );
     },
   );
 
@@ -107,8 +126,8 @@ describe('AssertsForm', () => {
     expect(input.value).toBe('[\n  "new"\n]');
     expect(input.selectionStart).toBe(word + 3);
     await user.click(screen.getByRole('combobox', { name: 'Type' }));
-    await user.click(screen.getByRole('option', { name: 'equals' }));
-    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'equals', value: input.value }]);
+    await user.click(screen.getByRole('option', { name: 'contains' }));
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'contains', value: input.value }]);
     await user.click(screen.getByRole('combobox', { name: 'Type' }));
     await user.click(screen.getByRole('option', { name: 'trajectory:tool-set' }));
     expect(onAdd).toHaveBeenLastCalledWith([{ type: 'trajectory:tool-set', value: ['new'] }]);

@@ -157,14 +157,14 @@ const OPTIONAL_SQL_CONFIGURATION_TYPES = new Set<AssertionType>([
   'not-contains-sql',
 ]);
 
-const REQUIRED_TEXT_OR_NUMBER_ASSERTION_TYPES = new Set<AssertionType>([
+export const REQUIRED_TEXT_OR_NUMBER_ASSERTION_TYPES = new Set<AssertionType>([
   'contains',
   'icontains',
   'not-contains',
   'not-icontains',
 ]);
 
-const REQUIRED_STRING_ASSERTION_TYPES = new Set<AssertionType>([
+export const REQUIRED_STRING_ASSERTION_TYPES = new Set<AssertionType>([
   'starts-with',
   'regex',
   'webhook',
@@ -198,7 +198,7 @@ const REQUIRED_STRING_ASSERTION_TYPES = new Set<AssertionType>([
   'not-ruby',
 ]);
 
-const REQUIRED_STRING_OR_ARRAY_ASSERTION_TYPES = new Set<AssertionType>([
+export const REQUIRED_STRING_OR_ARRAY_ASSERTION_TYPES = new Set<AssertionType>([
   'bleu',
   'not-bleu',
   'gleu',
