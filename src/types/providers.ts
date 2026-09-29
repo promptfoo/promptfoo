@@ -13,20 +13,17 @@ import type { Prompt } from './prompts';
 import type { Inputs, NunjucksFilterMap, TokenUsage, VarValue } from './shared';
 import type { TransformFunction } from './transform';
 
-export {
-  type ChatMessage,
-  FunctionToolCallValidationSetupError,
-  type GuardrailResponse,
-  type ImageOutput,
-  isFunctionToolCallValidationSetupError,
-  type ModerationFlag,
-  type ProviderClassificationResponse,
-  type ProviderEmbeddingResponse,
-  type ProviderModerationResponse,
-  type ProviderResponse,
-  type ProviderSimilarityResponse,
+export type {
+  ChatMessage,
+  GuardrailResponse,
+  ImageOutput,
+  ModerationFlag,
+  ProviderClassificationResponse,
+  ProviderEmbeddingResponse,
+  ProviderModerationResponse,
+  ProviderResponse,
+  ProviderSimilarityResponse,
 } from '../contracts/providers';
-
 export type { TokenUsage } from './shared';
 export type ProviderId = string;
 export type ProviderLabel = string;
@@ -129,7 +126,18 @@ export interface ApiProvider extends MinimalApiProvider {
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   config?: any;
   delay?: number;
+  /** True when callApi applies delay itself and the evaluator should not wait again. */
+  handlesOwnDelay?: boolean;
+  /**
+   * True when callApi owns retries for its operations, including requests that
+   * must not be replayed. Scheduling still applies, but the scheduler must not
+   * retry the whole call after its transport or SDK has finished. Subclasses
+   * replacing that behavior can override this with false to use scheduler retries.
+   */
+  handlesOwnRetries?: boolean;
   getSessionId?: () => string;
+  /** Native audio input content format accepted by this provider and its configured model. */
+  getAudioInputFormat?: () => 'openai' | 'google' | undefined;
   inputs?: Inputs;
   label?: ProviderLabel;
   transform?: string | TransformFunction;
@@ -155,7 +163,12 @@ export interface ApiClassificationProvider extends ApiProvider {
 }
 
 export interface ApiModerationProvider extends ApiProvider {
-  callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
+  callModerationApi: (
+    prompt: string,
+    response: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderModerationResponse>;
 }
 
 export type FilePath = string;

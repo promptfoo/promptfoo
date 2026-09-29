@@ -1,21 +1,12 @@
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
-import yaml from 'js-yaml';
 import { getEnvBool, getEnvString } from '../envars';
 import invariant from '../util/invariant';
+import { loadYaml } from './yamlLoad';
 
 import type { EvaluateResult, ResultFailureReason } from '../types/index';
 
 let ajvInstance: Ajv | null = null;
-
-export function createAjv(): Ajv {
-  const ajvOptions: ConstructorParameters<typeof Ajv>[0] = {
-    strictSchema: !getEnvBool('PROMPTFOO_DISABLE_AJV_STRICT_MODE'),
-  };
-  const instance = new Ajv(ajvOptions);
-  addFormats(instance);
-  return instance;
-}
 
 export function resetAjv(): void {
   if (getEnvString('NODE_ENV') !== 'test') {
@@ -26,7 +17,11 @@ export function resetAjv(): void {
 
 export function getAjv(): Ajv {
   if (!ajvInstance) {
-    ajvInstance = createAjv();
+    const ajvOptions: ConstructorParameters<typeof Ajv>[0] = {
+      strictSchema: !getEnvBool('PROMPTFOO_DISABLE_AJV_STRICT_MODE'),
+    };
+    ajvInstance = new Ajv(ajvOptions);
+    addFormats(ajvInstance);
   }
   return ajvInstance;
 }
@@ -134,6 +129,14 @@ export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): st
   }
 }
 
+function isEscapedQuote(line: string, quoteIndex: number): boolean {
+  let backslashCount = 0;
+  for (let i = quoteIndex - 1; i >= 0 && line[i] === '\\'; i--) {
+    backslashCount++;
+  }
+  return backslashCount % 2 === 1;
+}
+
 export function convertSlashCommentsToHash(str: string): string {
   // Split into lines, process each line, then join back
   return str
@@ -188,14 +191,14 @@ export function convertSlashCommentsToHash(str: string): string {
           case 'singleQuote':
             result += char;
             // Check for string end, but ignore apostrophes in words
-            if (char === "'" && prevChar !== '\\' && !/[a-zA-Z]/.test(nextChar)) {
+            if (char === "'" && !isEscapedQuote(line, i) && !/[a-zA-Z]/.test(nextChar)) {
               state = 'normal';
             }
             break;
 
           case 'doubleQuote':
             result += char;
-            if (char === '"' && prevChar !== '\\') {
+            if (char === '"' && !isEscapedQuote(line, i)) {
               state = 'normal';
             }
             break;
@@ -239,7 +242,7 @@ export function extractJsonObjects(str: string): object[] {
             }
 
             const processedJson = convertSlashCommentsToHash(potentialJson);
-            const parsedObj = yaml.load(processedJson, { json: true });
+            const parsedObj = loadYaml(processedJson, { json: true });
 
             if (typeof parsedObj === 'object' && parsedObj !== null) {
               jsonObjects.push(parsedObj);

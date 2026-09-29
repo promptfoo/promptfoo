@@ -34,6 +34,14 @@ export const handleTraceSpanDuration = ({
   }
 
   const { pattern = '*', max, percentile } = value;
+
+  if (
+    percentile !== undefined &&
+    (!Number.isFinite(percentile) || percentile < 0 || percentile > 100)
+  ) {
+    throw new Error('trace-span-duration assertion percentile must be a number between 0 and 100');
+  }
+
   const spans = assertionValueContext.trace.spans as TraceSpan[];
 
   // Filter spans by pattern and calculate durations
@@ -46,8 +54,6 @@ export const handleTraceSpanDuration = ({
   });
 
   if (matchingSpans.length === 0) {
-    // No spans to check: the duration constraint is vacuously satisfied (so a
-    // `not-` variant fails).
     const pass = !inverse;
     return {
       pass,
@@ -100,8 +106,6 @@ export const handleTraceSpanDuration = ({
     }
   }
 
-  // `not-trace-span-duration` negates the verdict; the reason still describes the
-  // measured durations.
   const finalPass = inverse ? !pass : pass;
   return {
     pass: finalPass,

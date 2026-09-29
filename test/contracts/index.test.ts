@@ -7,7 +7,6 @@ import {
   DocxInjectionPlacementSchema,
   EmailSchema,
   ErrorResponseSchema,
-  FunctionToolCallValidationSetupError,
   GetUserIdResponseSchema,
   GetUserResponseSchema,
   getInputDescription,
@@ -15,7 +14,6 @@ import {
   hasFunctionToolCallValidator,
   InputDefinitionObjectSchema,
   InputsSchema,
-  isFunctionToolCallValidationSetupError,
   isTransformFunction,
   LoginRequestSchema,
   NunjucksFilterMapSchema,
@@ -74,67 +72,25 @@ describe('contracts leaf surface', () => {
       expect(hasFunctionToolCallValidator({ validateFunctionToolCall: 'not-a-function' })).toBe(
         false,
       );
-
-      let capabilityTraps = 0;
-      const hostileProvider = new Proxy(
-        {},
-        {
-          has() {
-            capabilityTraps += 1;
-            throw new Error('capability trap exploded');
-          },
-        },
-      );
-      expect(hasFunctionToolCallValidator(hostileProvider)).toBe(false);
-      expect(capabilityTraps).toBe(1);
-
-      const setupError = new FunctionToolCallValidationSetupError('schema unavailable');
-      expect(isFunctionToolCallValidationSetupError(setupError)).toBe(true);
-      expect(
-        isFunctionToolCallValidationSetupError(
-          Object.assign(new Error('schema unavailable'), { code: setupError.code }),
-        ),
-      ).toBe(true);
-      expect(isFunctionToolCallValidationSetupError({ code: setupError.code })).toBe(false);
-      expect(isFunctionToolCallValidationSetupError(new Error('invalid output'))).toBe(false);
-      expect(
-        isFunctionToolCallValidationSetupError({
-          name: 'ValidationError',
-          message: 'ordinary invalid call',
-          get code() {
-            throw new Error('code getter exploded');
-          },
-        }),
-      ).toBe(false);
-
-      const inherited = Object.create({
-        code: setupError.code,
-        message: 'ordinary invalid call',
-        name: 'ValidationError',
-      });
-      expect(isFunctionToolCallValidationSetupError(inherited)).toBe(false);
-      expect(
-        isFunctionToolCallValidationSetupError(
-          Object.create(FunctionToolCallValidationSetupError.prototype),
-        ),
-      ).toBe(false);
-
-      let codeReads = 0;
-      expect(
-        isFunctionToolCallValidationSetupError({
-          name: 'ValidationError',
-          message: 'ordinary invalid call',
-          get code() {
-            codeReads += 1;
-            return setupError.code;
-          },
-        }),
-      ).toBe(false);
-      expect(codeReads).toBe(0);
     });
   });
 
   describe('ProviderEnvOverridesSchema', () => {
+    it('preserves Google Cloud project and location aliases', () => {
+      const env = {
+        GOOGLE_CLOUD_PROJECT: 'live-project',
+        GOOGLE_CLOUD_LOCATION: 'europe-west4',
+      };
+      expect(ProviderEnvOverridesSchema.parse(env)).toEqual(env);
+    });
+
+    it.each(['GOOGLE_CLOUD_PROJECT', 'GOOGLE_CLOUD_LOCATION'])(
+      'rejects non-string %s values',
+      (key) => {
+        expect(ProviderEnvOverridesSchema.safeParse({ [key]: 123 }).success).toBe(false);
+      },
+    );
+
     it('parses a known env key', () => {
       const parsed = ProviderEnvOverridesSchema.safeParse({ OPENAI_API_KEY: 'sk-known' });
       expect(parsed.success).toBe(true);
@@ -145,13 +101,30 @@ describe('contracts leaf surface', () => {
 
     it('preserves AWS_BEARER_TOKEN_BEDROCK (used by the Bedrock OpenAI Responses path)', () => {
       const parsed = ProviderEnvOverridesSchema.safeParse({
+        AWS_ACCESS_KEY_ID: 'access-key',
         AWS_BEARER_TOKEN_BEDROCK: 'bedrock-api-key',
         AWS_BEDROCK_REGION: 'us-east-2',
+        AWS_PROFILE: 'bedrock-profile',
+        AWS_SECRET_ACCESS_KEY: 'secret-key',
+        AWS_SESSION_TOKEN: 'session-token',
       });
       expect(parsed.success).toBe(true);
       if (parsed.success) {
+        expect(parsed.data.AWS_ACCESS_KEY_ID).toBe('access-key');
         expect(parsed.data.AWS_BEARER_TOKEN_BEDROCK).toBe('bedrock-api-key');
         expect(parsed.data.AWS_BEDROCK_REGION).toBe('us-east-2');
+        expect(parsed.data.AWS_PROFILE).toBe('bedrock-profile');
+        expect(parsed.data.AWS_SECRET_ACCESS_KEY).toBe('secret-key');
+        expect(parsed.data.AWS_SESSION_TOKEN).toBe('session-token');
+      }
+    });
+
+    it('preserves ANTHROPIC_CUSTOM_HEADERS so provider-scoped header clearing is valid', () => {
+      const parsed = ProviderEnvOverridesSchema.safeParse({ ANTHROPIC_CUSTOM_HEADERS: '' });
+
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data).toHaveProperty('ANTHROPIC_CUSTOM_HEADERS', '');
       }
     });
 
@@ -194,8 +167,27 @@ describe('contracts leaf surface', () => {
           numRequests: 1,
           completionDetails: { reasoning: 1 },
         },
+        attacker: {
+          prompt: 8,
+          completion: 2,
+          total: 10,
+          numRequests: 1,
+        },
+        generation: { prompt: 12, completion: 4, total: 16, numRequests: 2 },
       });
       expect(parsed.success).toBe(true);
+      expect(parsed).toMatchObject({
+        success: true,
+        data: {
+          attacker: {
+            prompt: 8,
+            completion: 2,
+            total: 10,
+            numRequests: 1,
+          },
+          generation: { prompt: 12, completion: 4, total: 16, numRequests: 2 },
+        },
+      });
     });
 
     it('parses CompletionTokenDetailsSchema with all fields', () => {

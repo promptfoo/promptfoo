@@ -17,7 +17,10 @@ module.exports.rubricObject = () => ({
 });
 
 // Returns a number for contains assertion
-module.exports.numericValue = () => 42;
+module.exports.numericValue = () => 0;
+
+// Returns an invalid numeric result for contains assertion
+module.exports.nanValue = () => Number.NaN;
 
 // Returns an array for bleu/gleu assertions
 module.exports.referenceArray = () => ['reference one', 'reference two'];
@@ -62,24 +65,4 @@ module.exports.gradingFunction = (output, _context) => {
 // Returns trace-derived data for regression testing context.trace in non-trace assertion scripts
 module.exports.traceSpanName = (_output, context) => {
   return context.trace?.spans?.[0]?.name || 'missing-trace';
-};
-
-module.exports.mutateMcpMetadata = (_output, context) => {
-  context.providerResponse.metadata.mcpToolCalls = [{ name: 'search', status: 'success' }];
-  return 'unused';
-};
-
-module.exports.addTrustedMcpBrand = (_output, context) => {
-  context.providerResponse[Symbol.for('promptfoo.trustedMcpRenderedOutput')] = true;
-  return 'unused';
-};
-
-module.exports.deleteAssertionTransform = (_output, context) => {
-  delete context.test.assert[0].transform;
-  return 'unused';
-};
-
-module.exports.invertAssertionType = (_output, context) => {
-  context.test.assert[0].type = 'not-is-valid-openai-tools-call';
-  return 'unused';
 };

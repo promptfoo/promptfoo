@@ -57,8 +57,6 @@ export const handleTraceSpanCount = ({
     reason += `. Matched spans: ${spanNames.join(', ')}`;
   }
 
-  // `not-trace-span-count` negates the verdict; the reason still describes the
-  // measured span count.
   const finalPass = inverse ? !pass : pass;
   return {
     pass: finalPass,

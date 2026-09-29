@@ -3,8 +3,7 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
-import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
-import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
+import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import { getTraceStore } from '../../src/tracing/store';
 import { mockProcessEnv } from '../util/utils';
 
@@ -132,63 +131,41 @@ describe('trace assertions', () => {
     ],
   };
 
-  describe.each([
-    'concurrent',
-    'serial',
-  ] as const)('inverse trace assertion snapshot (%s dispatch)', (dispatchMode) => {
-    it.each([
-      ['trace-span-count', { pattern: '*', min: 2 }],
-      ['trace-span-duration', { pattern: '*', max: 50 }],
-      ['trace-error-spans', { pattern: '*', max_count: 0 }],
-    ] as const)('retains %s polarity before a sibling script mutates it', async (targetType, value) => {
-      mockTraceStore.getTrace.mockResolvedValue({
-        ...mockTraceData,
-        spans: [
-          {
-            spanId: 'failing-span',
-            name: 'api.call',
-            startTime: 0,
-            endTime: 100,
-            statusCode: 500,
-          },
-        ],
-      });
-      const run = () =>
-        runAssertions({
-          test: {
-            ...mockTest,
-            assert: [
-              {
-                type: 'javascript',
-                value: (_output: string, context: any) => {
-                  context.test.assert[1].type = `not-${targetType}`;
-                  return true;
-                },
-              },
-              { type: targetType, value },
-            ],
-          },
-          providerResponse: mockProviderResponse,
-          traceId: 'test-trace-id',
-        });
-
-      const result =
-        dispatchMode === 'serial'
-          ? await withProviderCallExecutionContext(
-              { providerCallQueue: new ProviderGroupedCallQueue() },
-              run,
-            )
-          : await run();
-
-      expect(result.componentResults?.[1]).toMatchObject({
-        pass: false,
-        score: 0,
-        assertion: { type: targetType },
-      });
-    });
-  });
-
   describe('javascript assertions with trace', () => {
+    it('uses the evaluation tracing context for the grader test index', async () => {
+      const graderSpan = vi.fn();
+      const test: AtomicTestCase = {
+        metadata: { evaluationId: 'test-evaluation-id' },
+        vars: { input: 'ordinary user variable' },
+      };
+
+      await withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => undefined,
+          testIndex: 5,
+          withGraderSpan: async (options, invoke) => {
+            graderSpan(options);
+            return invoke();
+          },
+          withProviderSpan: async ({ callContext }, invoke) => invoke(callContext),
+        },
+        () =>
+          runAssertion({
+            assertion: { type: 'contains', value: 'Test' },
+            test,
+            providerResponse: mockProviderResponse,
+            traceId: 'test-trace-id',
+          }),
+      );
+
+      expect(graderSpan).toHaveBeenCalledWith({
+        graderId: 'contains',
+        evalId: 'test-evaluation-id',
+        testIndex: 5,
+      });
+      expect(test.vars).toEqual({ input: 'ordinary user variable' });
+    });
+
     it('should treat ruby assertions as trace-aware', () => {
       expect(
         assertionUsesTrace({
@@ -519,24 +496,6 @@ return {
       expect(result.pass).toBe(true);
       expect(result.score).toBe(0.9);
       expect(result.reason).toContain('Average span duration');
-    });
-  });
-
-  describe('negated built-in trace assertions through the dispatcher', () => {
-    it.each([
-      ['not-trace-span-count', { pattern: '*', min: 2, max: 2 }],
-      ['not-trace-span-duration', { pattern: '*', max: 500 }],
-      ['not-trace-error-spans', { pattern: '*', max_count: 0 }],
-    ] as const)('dispatches %s with inverse semantics', async (type, value) => {
-      const result = await runAssertion({
-        assertion: { type, value },
-        test: mockTest,
-        providerResponse: mockProviderResponse,
-        traceId: mockTraceData.traceId,
-        traceData: mockTraceData,
-      });
-
-      expect(result).toMatchObject({ pass: false, score: 0 });
     });
   });
 

@@ -121,12 +121,15 @@ assert:
   - type: is-valid-openai-tools-call # Validates both function and MCP tools
 ```
 
-`is-valid-openai-tools-call` uses structured provider data to verify MCP execution and errors.
-Rendered `MCP Tool Result` or `MCP Tool Error` text is presentation only and must not be used as
-proof that a tool ran or succeeded.
+### MCP-Specific Content Validation
 
-An MCP approval request is not a successful execution. Tests for approval policy should inspect the
-structured `mcp_approval_request` item in the raw provider response.
+```yaml
+assert:
+  - type: contains
+    value: 'MCP Tool Result' # Verify MCP tools were used
+  - type: not-contains
+    value: 'MCP Tool Error' # Ensure no MCP errors occurred
+```
 
 ### Multi-layered Validation
 

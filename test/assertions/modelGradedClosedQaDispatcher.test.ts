@@ -15,28 +15,35 @@ function grader(response: ProviderResponse): ApiProvider {
   } as ApiProvider;
 }
 
-async function runInverseClosedQa(response: ProviderResponse) {
+async function runClosedQa(
+  response: ProviderResponse,
+  type: 'model-graded-closedqa' | 'not-model-graded-closedqa',
+) {
   return runAssertion({
     prompt: 'question',
     provider: targetProvider,
-    assertion: { type: 'not-model-graded-closedqa', value: 'criterion' },
+    assertion: { type, value: 'criterion' },
     test: { options: { provider: grader(response) }, vars: {} },
     providerResponse: { output: 'answer' },
   });
 }
 
-describe('not-model-graded-closedqa dispatcher integration', () => {
+describe.each([
+  { type: 'model-graded-closedqa' as const, inverse: false },
+  { type: 'not-model-graded-closedqa' as const, inverse: true },
+])('$type dispatcher integration', ({ type, inverse }) => {
   it.each([
-    ['Y verdict', { output: 'Y' }, false, 0],
-    ['N verdict', { output: 'N' }, true, 1],
-    ['reasoned Y verdict', { output: 'Reasoning\nY' }, false, 0],
-    ['reasoned N verdict', { output: 'Reasoning\nN' }, true, 1],
-    ['compact N verdict', { output: 'Reasoning N' }, true, 1],
-    ['repeated Y verdict', { output: 'Reasoning Y Y' }, false, 0],
-  ] as const)('inverts the production %s score boundary', async (_name, response, pass, score) => {
-    const result = await runInverseClosedQa(response);
+    ['Y verdict', { output: 'Y' }, true],
+    ['N verdict', { output: 'N' }, false],
+    ['reasoned Y verdict', { output: 'Reasoning\nY' }, true],
+    ['reasoned N verdict', { output: 'Reasoning\nN' }, false],
+    ['compact N verdict', { output: 'Reasoning N' }, false],
+    ['repeated Y verdict', { output: 'Reasoning Y Y' }, true],
+  ] as const)('applies the %s', async (_name, response, positivePass) => {
+    const result = await runClosedQa(response, type);
+    const pass = inverse ? !positivePass : positivePass;
 
-    expect(result).toMatchObject({ pass, score });
+    expect(result).toMatchObject({ pass, score: pass ? 1 : 0 });
     expect(result.metadata?.graderError).toBeUndefined();
   });
 
@@ -74,8 +81,8 @@ describe('not-model-graded-closedqa dispatcher integration', () => {
       { output: 'I cannot grade this request Y', isRefusal: true },
       'Model grader refused to provide a verdict',
     ],
-  ] as const)('does not invert a %s', async (_name, response, reason) => {
-    const result = await runInverseClosedQa(response);
+  ] as const)('fails on a %s', async (_name, response, reason) => {
+    const result = await runClosedQa(response, type);
 
     expect(result).toMatchObject({
       pass: false,

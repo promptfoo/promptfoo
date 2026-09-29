@@ -14,6 +14,16 @@ vi.mock('../src/logger', () => ({
 import type { Assertion, CsvRow, TestCase } from '../src/types/index';
 
 describe('testCaseFromCsvRow', () => {
+  const INVALID_THRESHOLD_VALUES = [
+    'not-a-number',
+    'abc',
+    '0abc',
+    '0,8',
+    'Infinity',
+    '1e309',
+    '0x10',
+  ] as const;
+
   afterEach(() => {
     vi.resetAllMocks();
   });
@@ -364,22 +374,21 @@ describe('testCaseFromCsvRow', () => {
       );
     });
 
-    it.each([
-      'not-a-number',
-      '0abc',
-      '0,8',
-    ])('throws on invalid threshold value %s', (thresholdValue) => {
-      const key = '__config:__expected1:threshold';
-      const row: CsvRow = {
-        __expected1: 'similar:foo',
-        [key]: thresholdValue,
-      } as any;
+    it.each(INVALID_THRESHOLD_VALUES.slice(0, 3))(
+      'throws on invalid threshold value %s',
+      (thresholdValue) => {
+        const key = '__config:__expected1:threshold';
+        const row: CsvRow = {
+          __expected1: 'similar:foo',
+          [key]: thresholdValue,
+        } as any;
 
-      expect(() => testCaseFromCsvRow(row)).toThrow('Invalid numeric value for threshold');
-      expect(logger.error).toHaveBeenCalledWith(
-        `Invalid numeric value "${thresholdValue}" for config key "threshold" in column "__config:__expected1:threshold"`,
-      );
-    });
+        expect(() => testCaseFromCsvRow(row)).toThrow('Invalid numeric value for threshold');
+        expect(logger.error).toHaveBeenCalledWith(
+          `Invalid numeric value "${thresholdValue}" for config key "threshold" in column "__config:__expected1:threshold"`,
+        );
+      },
+    );
   });
   it('should preserve zero __threshold in the test case', () => {
     const row: CsvRow = {
@@ -396,13 +405,13 @@ describe('testCaseFromCsvRow', () => {
 
   it.each([
     ['empty', ''],
-    ['non-numeric', 'abc'],
+    ['non-numeric', INVALID_THRESHOLD_VALUES[1]],
     ['whitespace', '   '],
-    ['numeric prefix', '0abc'],
-    ['comma decimal', '0,8'],
-    ['non-finite literal', 'Infinity'],
-    ['overflow', '1e309'],
-    ['hexadecimal', '0x10'],
+    ['numeric prefix', INVALID_THRESHOLD_VALUES[2]],
+    ['comma decimal', INVALID_THRESHOLD_VALUES[3]],
+    ['non-finite literal', INVALID_THRESHOLD_VALUES[4]],
+    ['overflow', INVALID_THRESHOLD_VALUES[5]],
+    ['hexadecimal', INVALID_THRESHOLD_VALUES[6]],
   ])('should omit threshold for a %s __threshold cell', (_label, thresholdValue) => {
     const row: CsvRow = {
       __expected: 'equals:ok',
@@ -464,6 +473,8 @@ describe('assertionFromString', () => {
   });
 
   it('should create an is-json assertion with value', () => {
+    // Intentionally uses YAML-like `key:value` (without a space after `:`) to verify
+    // that assertionFromString preserves the original formatting exactly.
     const expected = `is-json:
       required: ['color']
       type:object
