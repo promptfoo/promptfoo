@@ -199,24 +199,26 @@ describe('handleTraceSpanDuration', () => {
     expect(result.assertion).toBe(params.assertion);
   });
 
-  it('should compute linear-interpolation percentile when method=linear', () => {
+  it.each([
+    { method: 'linear' as const, duration: '780.00', pass: false },
+    { method: 'nearest' as const, duration: '500.00', pass: true },
+  ])('uses $method percentiles at a fractional rank', ({ method, duration, pass }) => {
+    const value = { max: 600, percentile: 60, method };
     const params: AssertionParams = {
       ...defaultParams,
-      assertion: {
-        type: 'trace-span-duration',
-        value: { max: 5000, percentile: 50, method: 'linear' as const },
-      },
-      renderedValue: { max: 5000, percentile: 50, method: 'linear' as const },
+      assertion: { type: 'trace-span-duration', value },
+      renderedValue: value,
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
         trace: mockTraceData,
       },
     };
 
-    // sorted durations [5, 50, 500, 1200, 3000]; rank = 0.5*(5-1)=2 -> sorted[2] = 500
+    // Rank 2.4 lies between 500ms and 1200ms; the methods cross the 600ms budget.
     const result = handleTraceSpanDuration(params);
-    expect(result.pass).toBe(true);
-    expect(result.reason).toContain('50th percentile duration (500.00ms, method=linear)');
+    expect(result.pass).toBe(pass);
+    expect(result.score).toBe(pass ? 1 : 0);
+    expect(result.reason).toContain(`60th percentile duration (${duration}ms, method=${method})`);
   });
 
   it('should reject method values other than nearest or linear', () => {
