@@ -1080,7 +1080,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   ecommerce:
     'Comprehensive e-commerce AI safety testing for payment security and transaction integrity vulnerabilities including PCI DSS compliance, fraud detection, and price manipulation',
   telecom:
-    'Comprehensive telecommunications AI safety testing across CPNI protection, account security, regulatory compliance (FCC, TCPA, privacy laws), and telecom-specific fraud prevention',
+    'Tests telecommunications AI systems for CPNI protection, account security, FCC/TCPA and privacy compliance, and fraud prevention',
   'telecom:cpni-disclosure':
     'Tests for unauthorized disclosure of Customer Proprietary Network Information (CPNI) including call records, service details, and billing information in violation of FCC 47 U.S.C. Section 222',
   'telecom:location-disclosure':
