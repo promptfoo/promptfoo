@@ -107,8 +107,11 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
     return true;
   }
 
-  // Check for Anthropic with web_search tool
-  if (id.includes('anthropic') && hasTool(provider, (t) => t.type === 'web_search_20250305')) {
+  // Check for Anthropic with any version of its dated `web_search_YYYYMMDD` server tool.
+  if (
+    id.includes('anthropic') &&
+    hasTool(provider, (t) => typeof t.type === 'string' && /^web_search_\d{8}$/.test(t.type))
+  ) {
     return true;
   }
 
@@ -126,18 +129,17 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
 export async function loadWebSearchProvider(
   preferAnthropic: boolean = false,
 ): Promise<ApiProvider | null> {
-  // Anthropic Claude 4.8 Opus with web search tool
   const loadAnthropicWebSearch = async () => {
     try {
-      return await loadApiProvider('anthropic:messages:claude-opus-4-8', {
+      return await loadApiProvider('anthropic:messages:claude-opus-5-5', {
         options: {
           config: {
             tools: [
               {
-                type: 'web_search_20250305',
+                type: 'web_search_20260209',
                 name: 'web_search',
                 max_uses: 5,
-              } as any,
+              },
             ],
           },
         },
@@ -148,10 +150,9 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // OpenAI GPT-5.5 snapshot with web search tool (via responses API)
   const loadOpenAIWebSearch = async () => {
     try {
-      return await loadApiProvider('openai:responses:gpt-5.5-2026-04-23', {
+      return await loadApiProvider('openai:responses:gpt-6-sol', {
         options: {
           config: { tools: [{ type: 'web_search_preview' }] },
         },
