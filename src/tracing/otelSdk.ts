@@ -1,6 +1,20 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createRequire } from 'node:module';
 
-import { DiagConsoleLogger, DiagLogLevel, diag, propagation } from '@opentelemetry/api';
+import {
+  context,
+  createContextKey,
+  DiagConsoleLogger,
+  DiagLogLevel,
+  defaultTextMapGetter,
+  defaultTextMapSetter,
+  diag,
+  ProxyTracerProvider,
+  propagation,
+  ROOT_CONTEXT,
+  trace,
+} from '@opentelemetry/api';
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { BatchSpanProcessor, NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
@@ -8,38 +22,176 @@ import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic
 import logger from '../logger';
 import { VERSION } from '../version';
 import { LocalSpanExporter } from './localSpanExporter';
+import type { Tracer, TracerProvider } from '@opentelemetry/api';
 import type { SpanProcessor } from '@opentelemetry/sdk-trace-node';
 
 import type { OtelConfig } from './otelConfig';
 
 const require = createRequire(import.meta.url);
+const traceContextPropagator = new W3CTraceContextPropagator();
 
-// Singleton instances
-let provider: NodeTracerProvider | null = null;
-let initialized = false;
-
-// Use a global symbol to track handlers across module resets (important for tests)
-const OTEL_HANDLERS_KEY = Symbol.for('promptfoo.otelHandlers');
-
-interface OtelHandlers {
-  sigTermHandler: (() => void) | null;
-  sigIntHandler: (() => void) | null;
-  beforeExitHandler: (() => Promise<void>) | null;
-  registered: boolean;
+/** Explicit traceparent values use W3C format independently of the host's propagator. */
+export function extractTraceparentContext(traceparent: string) {
+  return traceContextPropagator.extract(ROOT_CONTEXT, { traceparent }, defaultTextMapGetter);
 }
 
-// Get or create the global handlers registry
-function getHandlers(): OtelHandlers {
-  const globalAny = globalThis as Record<symbol, OtelHandlers | undefined>;
-  if (!globalAny[OTEL_HANDLERS_KEY]) {
-    globalAny[OTEL_HANDLERS_KEY] = {
-      sigTermHandler: null,
-      sigIntHandler: null,
-      beforeExitHandler: null,
-      registered: false,
-    };
+/** W3C-only transport headers, independent of the host's propagator and baggage. */
+export function getTraceContextHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  traceContextPropagator.inject(context.active(), headers, defaultTextMapSetter);
+  return headers;
+}
+
+interface OtelScope {
+  provider?: NodeTracerProvider;
+}
+
+// Custom providers can load the public package alongside the CLI bundle. Share the
+// storage object, never a current provider, so both observe the same async scope.
+const OTEL_SCOPE_KEY = Symbol.for('promptfoo.otelScope');
+const OTEL_ROUTING_KEY = Symbol.for('promptfoo.otelRouting');
+interface OtelRoutingState {
+  provider: TracerProvider;
+  owners: Set<NodeTracerProvider>;
+  contextManager?: AsyncLocalStorageContextManager;
+}
+const globalScopes = globalThis as {
+  [OTEL_SCOPE_KEY]?: AsyncLocalStorage<OtelScope>;
+  [OTEL_ROUTING_KEY]?: OtelRoutingState;
+};
+const otelScope = (globalScopes[OTEL_SCOPE_KEY] ??= new AsyncLocalStorage<OtelScope>());
+const noopProvider = new ProxyTracerProvider();
+const routingState = (globalScopes[OTEL_ROUTING_KEY] ??= {
+  provider: createRoutingProvider(),
+  owners: new Set<NodeTracerProvider>(),
+});
+const ownedProviders = new Map<NodeTracerProvider, OtelScope>();
+const contextProbeKey = createContextKey('promptfoo.contextProbe');
+
+/** Isolate provider ownership even for evaluations with tracing disabled. */
+export function withOtelContext<T>(fn: () => T): T {
+  return otelScope.run({}, fn);
+}
+
+function getOtelScope(): OtelScope | undefined {
+  return otelScope.getStore();
+}
+
+/** Use the evaluation's provider without replacing a host application's global provider. */
+export function getOtelTracer(name: string, version?: string): Tracer {
+  const scope = getOtelScope();
+  if (!scope) {
+    return trace.getTracer(name, version);
   }
-  return globalAny[OTEL_HANDLERS_KEY]!;
+  if (scope.provider) {
+    return scope.provider.getTracer(name, version);
+  }
+  const globalProvider = trace.getTracerProvider();
+  if (isProxyTracerProvider(globalProvider)) {
+    // A disabled turn can outlive its async scope. Capture only a real host
+    // delegate; a dynamic router could later select another evaluation.
+    const hostTracer =
+      globalProvider.getDelegate() === routingState.provider
+        ? undefined
+        : globalProvider.getDelegateTracer(name, version);
+    return hostTracer ?? noopProvider.getTracer(name, version);
+  }
+  return trace.getTracer(name, version);
+}
+
+function isProxyTracerProvider(
+  provider: TracerProvider,
+): provider is TracerProvider & Pick<ProxyTracerProvider, 'getDelegate' | 'getDelegateTracer'> {
+  // OTel shares its global registration across installed API copies. Their
+  // public proxy methods are compatible even when class identities differ.
+  return (
+    'getDelegate' in provider &&
+    typeof provider.getDelegate === 'function' &&
+    'getDelegateTracer' in provider &&
+    typeof provider.getDelegateTracer === 'function'
+  );
+}
+
+function createRoutingProvider(): TracerProvider {
+  return {
+    getTracer(name, version, options) {
+      // A custom provider can cache this tracer before the first evaluation.
+      // Resolve both evaluation ownership and a later host SDK for each span.
+      const current = () => {
+        const globalProvider = trace.getTracerProvider();
+        if (
+          isProxyTracerProvider(globalProvider) &&
+          globalProvider.getDelegate() !== routingState.provider
+        ) {
+          const hostTracer = globalProvider.getDelegateTracer(name, version, options);
+          if (hostTracer) {
+            return hostTracer;
+          }
+        }
+        return (
+          getOtelScope()?.provider?.getTracer(name, version, options) ??
+          noopProvider.getTracer(name, version, options)
+        );
+      };
+      return {
+        startSpan: (spanName, spanOptions, parentContext) =>
+          current().startSpan(spanName, spanOptions, parentContext),
+        startActiveSpan(...args: unknown[]) {
+          const tracer = current();
+          return Reflect.apply(tracer.startActiveSpan, tracer, args);
+        },
+      };
+    },
+  };
+}
+
+function ensureGlobalTracerRouting(): void {
+  const globalProvider = trace.getTracerProvider();
+  // A host delegate owns global instrumentation, including its own delayed proxy.
+  if (isProxyTracerProvider(globalProvider) && !globalProvider.getDelegateTracer('promptfoo')) {
+    trace.setGlobalTracerProvider(routingState.provider);
+  }
+}
+
+function releaseGlobalTracingRegistrations(provider: NodeTracerProvider): void {
+  routingState.owners.delete(provider);
+  if (routingState.owners.size > 0) {
+    return;
+  }
+  const globalProvider = trace.getTracerProvider();
+  if (
+    isProxyTracerProvider(globalProvider) &&
+    globalProvider.getDelegate() === routingState.provider
+  ) {
+    // Release only our router so a host can register its tracer provider later.
+    // Cached tracers still route through the same shared state on later calls.
+    trace.disable();
+  }
+  const manager = routingState.contextManager;
+  if (manager) {
+    // Probe our manager directly: a replacement host manager cannot see its store.
+    const probe = context.active().setValue(contextProbeKey, manager);
+    if (manager.with(probe, () => context.active().getValue(contextProbeKey)) === manager) {
+      context.disable();
+    } else {
+      manager.disable();
+    }
+    routingState.contextManager = undefined;
+  }
+}
+
+function ensureContextManager(): void {
+  // A host may already own the context manager. Probe through the public API instead
+  // of replacing it. Shared ownership keeps the fallback alive for overlapping evaluations.
+  const probe = context.active().setValue(contextProbeKey, true);
+  if (!context.with(probe, () => context.active().getValue(contextProbeKey))) {
+    const manager = new AsyncLocalStorageContextManager().enable();
+    if (context.setGlobalContextManager(manager)) {
+      routingState.contextManager = manager;
+    } else {
+      manager.disable();
+    }
+  }
 }
 
 /**
@@ -53,8 +205,11 @@ function getHandlers(): OtelHandlers {
  * @param config - OTEL configuration
  */
 export function initializeOtel(config: OtelConfig): void {
-  if (initialized) {
-    logger.debug('[OtelSdk] Already initialized, skipping');
+  const scope = getOtelScope();
+  if (!scope) {
+    throw new Error('OpenTelemetry must be initialized within an evaluation context');
+  }
+  if (scope.provider) {
     return;
   }
 
@@ -73,10 +228,6 @@ export function initializeOtel(config: OtelConfig): void {
   if (config.debug) {
     diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
   }
-
-  // Register W3C Trace Context propagator for traceparent header support
-  propagation.setGlobalPropagator(new W3CTraceContextPropagator());
-  logger.debug('[OtelSdk] Registered W3C Trace Context propagator');
 
   // Create resource with service info
   const resource = resourceFromAttributes({
@@ -107,12 +258,16 @@ export function initializeOtel(config: OtelConfig): void {
   }
 
   // Create trace provider with resource and span processors
-  provider = new NodeTracerProvider({ resource, spanProcessors });
-
-  // Register the provider globally
-  provider.register();
-
-  initialized = true;
+  scope.provider = new NodeTracerProvider({ resource, spanProcessors });
+  ownedProviders.set(scope.provider, scope);
+  routingState.owners.add(scope.provider);
+  ensureContextManager();
+  // Propagation is stateless and process-wide. Per-eval cleanup must not unregister
+  // it: the public API cannot identify a replacement installed by the host.
+  if (propagation.fields().length === 0) {
+    propagation.setGlobalPropagator(traceContextPropagator);
+  }
+  ensureGlobalTracerRouting();
   logger.info('[OtelSdk] OpenTelemetry SDK initialized successfully');
 
   // Set up graceful shutdown
@@ -124,21 +279,30 @@ export function initializeOtel(config: OtelConfig): void {
  * Flushes any pending spans and releases resources.
  */
 export async function shutdownOtel(): Promise<void> {
-  if (!initialized || !provider) {
+  const scope = getOtelScope();
+  const provider = scope?.provider;
+  if (!provider) {
     return;
   }
+  scope.provider = undefined;
+  await shutdownProvider(provider);
+}
 
-  logger.debug('[OtelSdk] Shutting down OpenTelemetry SDK');
-
+async function shutdownProvider(provider: NodeTracerProvider): Promise<void> {
+  const scope = ownedProviders.get(provider);
+  if (scope?.provider === provider) {
+    scope.provider = undefined;
+  }
+  ownedProviders.delete(provider);
+  if (ownedProviders.size === 0) {
+    cleanupShutdownHandlers();
+  }
   try {
     await provider.shutdown();
-    logger.info('[OtelSdk] OpenTelemetry SDK shut down successfully');
   } catch (error) {
     logger.error('[OtelSdk] Error shutting down OpenTelemetry SDK', { error });
   } finally {
-    provider = null;
-    initialized = false;
-    cleanupShutdownHandlers();
+    releaseGlobalTracingRegistrations(provider);
   }
 }
 
@@ -147,7 +311,8 @@ export async function shutdownOtel(): Promise<void> {
  * Useful before process exit to ensure all spans are exported.
  */
 export async function flushOtel(): Promise<void> {
-  if (!initialized || !provider) {
+  const provider = getOtelScope()?.provider;
+  if (!provider) {
     return;
   }
 
@@ -165,70 +330,32 @@ export async function flushOtel(): Promise<void> {
  * Check if OTEL SDK is initialized and enabled.
  */
 export function isOtelInitialized(): boolean {
-  return initialized;
+  return getOtelScope()?.provider !== undefined;
 }
 
-/**
- * Set up handlers for graceful shutdown on process signals.
- * Uses once() listeners and tracks registration globally to avoid duplicates
- * across module resets (important for tests).
- */
+// Signal callbacks do not execute within an evaluation's async context. Drain only
+// providers owned here, and keep one set of listeners until the last scope closes.
+function onShutdown(): void {
+  void Promise.all([...ownedProviders.keys()].map(shutdownProvider));
+}
+
+async function onBeforeExit(): Promise<void> {
+  await Promise.allSettled([...ownedProviders.keys()].map((provider) => provider.forceFlush()));
+}
+
 function setupShutdownHandlers(): void {
-  const handlers = getHandlers();
-
-  // Skip if handlers are already registered
-  if (handlers.registered) {
-    return;
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    if (!process.listeners(signal).includes(onShutdown)) {
+      process.once(signal, onShutdown);
+    }
   }
-
-  const shutdown = async (signal: string) => {
-    logger.debug(`[OtelSdk] Received ${signal}, shutting down`);
-    await shutdownOtel();
-  };
-
-  // Create handler functions so we can remove them later if needed
-  // Note: Signal handlers are synchronous, but we use void to suppress
-  // the unhandled promise warning while still allowing async completion.
-  // The shutdown will complete before process exit because we're not
-  // calling process.exit() - we let Node.js exit naturally after async work.
-  handlers.sigTermHandler = () => {
-    void shutdown('SIGTERM');
-  };
-  handlers.sigIntHandler = () => {
-    void shutdown('SIGINT');
-  };
-  handlers.beforeExitHandler = async () => {
-    await flushOtel();
-  };
-
-  // Handle common termination signals
-  process.once('SIGTERM', handlers.sigTermHandler);
-  process.once('SIGINT', handlers.sigIntHandler);
-
-  // Handle beforeExit for graceful shutdown
-  process.once('beforeExit', handlers.beforeExitHandler);
-
-  handlers.registered = true;
+  if (!process.listeners('beforeExit').includes(onBeforeExit)) {
+    process.once('beforeExit', onBeforeExit);
+  }
 }
 
-/**
- * Clean up shutdown handlers.
- * Called during shutdown to prevent duplicate registrations on reinit.
- */
 function cleanupShutdownHandlers(): void {
-  const handlers = getHandlers();
-
-  if (handlers.sigTermHandler) {
-    process.removeListener('SIGTERM', handlers.sigTermHandler);
-    handlers.sigTermHandler = null;
-  }
-  if (handlers.sigIntHandler) {
-    process.removeListener('SIGINT', handlers.sigIntHandler);
-    handlers.sigIntHandler = null;
-  }
-  if (handlers.beforeExitHandler) {
-    process.removeListener('beforeExit', handlers.beforeExitHandler);
-    handlers.beforeExitHandler = null;
-  }
-  handlers.registered = false;
+  process.removeListener('SIGTERM', onShutdown);
+  process.removeListener('SIGINT', onShutdown);
+  process.removeListener('beforeExit', onBeforeExit);
 }

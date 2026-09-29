@@ -2,7 +2,13 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
-import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
+import {
+  type Attributes,
+  type Span,
+  SpanKind,
+  SpanStatusCode,
+  type Tracer,
+} from '@opentelemetry/api';
 import dedent from 'dedent';
 import { z } from 'zod';
 import { getEnvString, getProcessEnv } from '../../envars';
@@ -18,6 +24,7 @@ import {
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { getOtelTracer } from '../../tracing/otelSdk';
 import {
   formatRateLimitErrorMessage,
   HARD_QUOTA_ERROR_CODES,
@@ -1152,7 +1159,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     skillRootPrefixes: readonly string[] = [],
   ): Promise<any> {
     const { events } = await thread.runStreamed(prompt, runOptions);
-    const tracer = trace.getTracer('promptfoo.codex-sdk');
+    const tracer = getOtelTracer('promptfoo.codex-sdk');
     const state = this.createCodexStreamingState(prompt);
 
     try {
@@ -1208,7 +1215,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private handleStreamingEvent(
     event: any,
     state: CodexStreamingState,
-    tracer: ReturnType<typeof trace.getTracer>,
+    tracer: Tracer,
     eventTime: number,
     skillRootPrefixes: readonly string[],
   ): void {
@@ -1269,7 +1276,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private handleStreamingItemStarted(
     event: any,
     state: CodexStreamingState,
-    tracer: ReturnType<typeof trace.getTracer>,
+    tracer: Tracer,
     eventTime: number,
   ): void {
     const item = event.item;
@@ -1305,7 +1312,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private handleStreamingItemCompleted(
     event: any,
     state: CodexStreamingState,
-    tracer: ReturnType<typeof trace.getTracer>,
+    tracer: Tracer,
     eventTime: number,
     skillRootPrefixes: readonly string[],
   ): void {
@@ -1373,7 +1380,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   private startStreamingItemSpan(
-    tracer: ReturnType<typeof trace.getTracer>,
+    tracer: Tracer,
     item: any,
     itemId: string,
     startTime?: number,
@@ -1392,11 +1399,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     });
   }
 
-  private startTurnSpan(
-    state: CodexStreamingState,
-    tracer: ReturnType<typeof trace.getTracer>,
-    eventTime: number,
-  ): void {
+  private startTurnSpan(state: CodexStreamingState, tracer: Tracer, eventTime: number): void {
     openTurnSpan(state, { tracer, eventTime, system: 'openai', logLabel: 'CodexSDK' });
   }
 
