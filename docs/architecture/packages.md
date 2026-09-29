@@ -144,9 +144,10 @@ as `peer`. These labels describe the package contract, not what is installed.
 ## Verify the release artifact
 
 CI builds the package, packs it once, and runs the installed-package checks on
-that tarball. The release workflow uploads the verified file to a separate
-publish job. That job has no checkout and publishes with lifecycle scripts
-disabled, so publishing does not rebuild the package after verification.
+that tarball. The release workflow uploads a snapshot before those checks run,
+so installed code cannot change the uploaded package. A separate publish job
+starts only after the checks pass. It has no checkout and publishes that snapshot
+with lifecycle scripts disabled, without rebuilding the package.
 
 ```bash
 npm run build

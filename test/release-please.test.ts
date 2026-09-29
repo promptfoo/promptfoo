@@ -152,7 +152,7 @@ describe('npm artifact publication', () => {
   });
 
   it.each(['build', 'build-npm-backfill'])(
-    'uploads %s artifacts only after verification',
+    'snapshots %s artifacts before running installed code',
     (buildName) => {
       const steps = workflow.jobs?.[buildName]?.steps ?? [];
       const testIndex = steps.findIndex((step) => step.name === 'Test package artifact');
@@ -160,7 +160,8 @@ describe('npm artifact publication', () => {
         step.uses?.startsWith('actions/upload-artifact@'),
       );
       expect(testIndex).toBeGreaterThan(-1);
-      expect(uploadIndex).toBeGreaterThan(testIndex);
+      expect(uploadIndex).toBeGreaterThan(-1);
+      expect(uploadIndex).toBeLessThan(testIndex);
       expect(steps[testIndex].env?.PACKAGE_TARBALL).toBe(
         '${{ steps.package-artifact.outputs.tarball }}',
       );
