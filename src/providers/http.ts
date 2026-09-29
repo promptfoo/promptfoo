@@ -1751,6 +1751,13 @@ async function createHttpsAgent(
 }
 
 function requestsStreamingTransport(body: unknown): boolean {
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      return false;
+    }
+  }
   return (
     typeof body === 'object' && body !== null && (body as Record<string, unknown>).stream === true
   );
@@ -2741,8 +2748,7 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    // Read from rendered body so templated `stream` values are honored.
-    const isStreaming = requestsStreamingTransport(renderedConfig.body);
+    const isStreaming = requestsStreamingTransport(fetchOptions.body);
 
     const { response, streamingMetrics } = await this.fetchResponse(
       url,
@@ -2978,17 +2984,7 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    // Detect streaming in raw-request mode by parsing the JSON body.
-    // Non-JSON bodies (form-data, x-www-form-urlencoded) cannot express stream:true.
-    let parsedRawBody: unknown;
-    if (bodyContent) {
-      try {
-        parsedRawBody = JSON.parse(bodyContent);
-      } catch {
-        parsedRawBody = undefined;
-      }
-    }
-    const isStreaming = requestsStreamingTransport(parsedRawBody);
+    const isStreaming = requestsStreamingTransport(bodyContent);
 
     const { response, streamingMetrics } = await this.fetchResponse(
       url,

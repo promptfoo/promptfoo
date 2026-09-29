@@ -34,13 +34,34 @@ describe('HttpProvider streaming integration', () => {
           ),
       );
       const provider = new HttpProvider('https://example.com/stream', {
-        config: { body: { stream: true } },
+        config: { method: 'POST', body: { stream: true } },
       });
       const result = provider.callApi('Hello', undefined, { abortSignal: caller.signal });
       const rejection = expect(result).rejects.toThrow('stream interrupted');
       await vi.waitFor(() => expect(fetchModule.fetchWithRetries).toHaveBeenCalledOnce());
       (source === 'timeout' ? timeout : caller).abort();
       await rejection;
+    },
+  );
+
+  it.each([{ stream: true }, '{"stream":true}', '{{prompt}}'])(
+    'detects streaming in the rendered JSON body: %j',
+    async (body) => {
+      vi.spyOn(fetchModule, 'fetchWithRetries').mockResolvedValue(new Response('Hello'));
+      const provider = new HttpProvider('https://example.com/stream', {
+        config: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body },
+      });
+
+      const result = await provider.callApi('{"stream":true}');
+
+      expect(result.streamingMetrics?.timeToFirstToken).toBeDefined();
+      expect(result.cached).toBe(false);
+      expect(fetchModule.fetchWithRetries).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ body: '{"stream":true}' }),
+        expect.any(Number),
+        undefined,
+      );
     },
   );
 
