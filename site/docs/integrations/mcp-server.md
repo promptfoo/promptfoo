@@ -1,6 +1,6 @@
 ---
 title: Promptfoo MCP Server
-description: Run promptfoo as a local Model Context Protocol server for evaluation and red teaming capabilities
+description: Connect local AI agents to promptfoo through Model Context Protocol using STDIO or loopback HTTP, with setup instructions, tool examples, and trust boundaries.
 sidebar_label: MCP Server
 sidebar_position: 21
 ---
@@ -171,9 +171,9 @@ Choose the appropriate transport based on your use case:
 
 ### HTTP Security
 
-The HTTP transport exposes tools that can run evals, read local promptfoo configs, and write generated outputs. It only listens on `127.0.0.1`, rejects non-local `Host` headers, and blocks cross-site browser POSTs.
+The HTTP transport exposes tools that can run evals, read local promptfoo configs, and write generated outputs. It only listens on `127.0.0.1`, rejects non-local `Host` headers, and rejects remote browser origins on every route, including health and SSE.
 
-MCP tools that load config files accept YAML and JSON configs only. JavaScript and TypeScript configs are rejected because importing them executes code. Config globs and referenced files must also stay within the project directory where the MCP server started. Executable assertions and transforms must use workspace `file://` references, including through `run_assertion`. Script providers must name an existing workspace script; inline shell commands and `promptfoo://` provider references are rejected. Transcription inputs and browser screenshots follow the same file boundary. Workspace code runs with the MCP process's permissions.
+Local MCP clients are trusted. Tools run with the server process's permissions, including access to local files and executable configs. The HTTP listener has no authentication; do not expose it through a reverse proxy or port forwarding. Use STDIO when the client should manage the server process.
 
 ## Best Practices
 
