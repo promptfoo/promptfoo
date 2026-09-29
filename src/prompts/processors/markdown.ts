@@ -8,6 +8,7 @@ export function processMarkdownFile(filePath: string, prompt: Partial<Prompt>): 
     {
       raw: content,
       label: prompt.label || `${filePath}: ${content.slice(0, 50)}...`,
+      config: prompt.config,
     },
   ];
 }
