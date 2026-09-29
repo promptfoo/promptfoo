@@ -13,11 +13,13 @@ vi.mock('node:child_process', () => ({ spawn: vi.fn() }));
 let directory: string;
 let restoreEnvironment: (() => void) | undefined;
 let originalExitCode: typeof process.exitCode;
-let child: EventEmitter & { kill: ReturnType<typeof vi.fn> };
+let child: EventEmitter & { pid: number };
+const launchEnvironment = { PATH: path.dirname(process.execPath) };
 beforeEach(() => {
   directory = mkdtempSync(path.join(os.tmpdir(), 'promptfoo-update-test-'));
   originalExitCode = process.exitCode;
-  child = Object.assign(new EventEmitter(), { kill: vi.fn().mockReturnValue(true) });
+  child = Object.assign(new EventEmitter(), { pid: 12345 });
+  vi.spyOn(process, 'kill').mockReturnValue(true);
   vi.mocked(spawn)
     .mockReset()
     .mockReturnValue(child as any);
@@ -56,10 +58,10 @@ describe('update execution context', () => {
     const projectBin = path.join(project, 'bin');
     const alias = path.join(directory, 'alias');
     mkdirSync(projectBin, { recursive: true });
-    symlinkSync(projectBin, alias);
+    symlinkSync(projectBin, alias, 'junction');
     const runtimeBin = path.dirname(process.execPath);
     const context = createUpdateContext(
-      { PATH: `.:${projectBin}:${alias}:${runtimeBin}` },
+      { PATH: ['.', projectBin, alias, runtimeBin].join(path.delimiter) },
       project,
     );
     expect(context.env.PATH).toBe(realpathSync(runtimeBin));
@@ -68,30 +70,30 @@ describe('update execution context', () => {
   it('preserves a symlink to the active runtime when invoked from its home directory', () => {
     const runtimeBin = realpathSync(path.dirname(process.execPath));
     const alias = path.join(directory, 'runtime');
-    symlinkSync(runtimeBin, alias);
+    symlinkSync(runtimeBin, alias, 'junction');
     expect(createUpdateContext({ PATH: alias }, path.dirname(runtimeBin)).env.PATH).toBe(
       runtimeBin,
     );
   });
 
   it('fails closed when no launch PATH entries are eligible', () => {
-    expect(() => createUpdateContext({ PATH: `.:${directory}` }, directory)).toThrow(
-      'No trusted npm',
-    );
+    expect(() =>
+      createUpdateContext({ PATH: ['.', directory].join(path.delimiter) }, directory),
+    ).toThrow('No trusted npm');
   });
 });
 
 describe('npm update lifecycle', () => {
   it('pins the requested version and keeps the launch cwd', async () => {
-    const result = runNpmUpdate('1.2.3', {}, directory);
+    const result = runNpmUpdate('1.2.3', launchEnvironment, directory);
     expect(spawn).toHaveBeenCalledWith(
       'npm',
       ['install', '--global', 'promptfoo@1.2.3'],
       expect.objectContaining({
         cwd: directory,
         shell: false,
-        detached: false,
-        stdio: 'inherit',
+        detached: true,
+        stdio: ['ignore', 'inherit', 'inherit'],
       }),
     );
     child.emit('close', 0, null);
@@ -103,11 +105,13 @@ describe('npm update lifecycle', () => {
     ['SIGTERM', 143],
   ] as const)('forwards %s and waits for the child before cleanup', async (signal, exitCode) => {
     const existing = process.listeners(signal);
-    const result = runNpmUpdate('latest', {}, directory);
+    const result = runNpmUpdate('latest', launchEnvironment, directory);
     const added = process.listeners(signal).find((listener) => !existing.includes(listener));
     expect(added).toBeDefined();
     added!(signal);
-    expect(child.kill).toHaveBeenCalledWith(signal);
+    expect(process.kill).toHaveBeenCalledWith(-child.pid, signal);
+    added!(signal);
+    expect(process.kill).toHaveBeenCalledTimes(1);
     expect(process.exitCode).toBe(exitCode);
     expect(process.listeners(signal)).toContain(added);
     const rejection = expect(result).rejects.toThrow(`Update stopped by ${signal}`);
@@ -118,7 +122,7 @@ describe('npm update lifecycle', () => {
 
   it('does not report success if the child exits cleanly after interruption', async () => {
     const existing = process.listeners('SIGINT');
-    const result = runNpmUpdate('latest', {}, directory);
+    const result = runNpmUpdate('latest', launchEnvironment, directory);
     process.listeners('SIGINT').find((listener) => !existing.includes(listener))!('SIGINT');
     const rejection = expect(result).rejects.toThrow('Update stopped by SIGINT');
     child.emit('close', 0, null);
@@ -130,7 +134,7 @@ describe('npm update lifecycle', () => {
     [null, 'SIGTERM'],
     [null, null],
   ])('rejects unsuccessful close (%s, %s)', async (code, signal) => {
-    const result = runNpmUpdate('latest', {}, directory);
+    const result = runNpmUpdate('latest', launchEnvironment, directory);
     const rejection = expect(result).rejects.toThrow('Update');
     child.emit('close', code, signal);
     await rejection;
@@ -138,7 +142,7 @@ describe('npm update lifecycle', () => {
 
   it('removes signal listeners when a spawn error is followed by close', async () => {
     const listeners = process.listeners('SIGTERM');
-    const result = runNpmUpdate('latest', {}, directory);
+    const result = runNpmUpdate('latest', launchEnvironment, directory);
     const rejection = expect(result).rejects.toThrow('spawn failed');
     child.emit('error', new Error('spawn failed'));
     child.emit('close', -2, null);
@@ -151,12 +155,16 @@ describe('npm update lifecycle', () => {
     vi.mocked(spawn).mockImplementation(() => {
       throw new Error('spawn failed');
     });
-    await expect(runNpmUpdate('latest', {}, directory)).rejects.toThrow('spawn failed');
+    await expect(runNpmUpdate('latest', launchEnvironment, directory)).rejects.toThrow(
+      'spawn failed',
+    );
     expect(process.listeners('SIGTERM')).toEqual(listeners);
   });
 
   it('rejects an invalid version before creating a process', async () => {
-    await expect(runNpmUpdate('invalid-version', {}, directory)).rejects.toThrow('Invalid');
+    await expect(runNpmUpdate('invalid-version', launchEnvironment, directory)).rejects.toThrow(
+      'Invalid',
+    );
     expect(spawn).not.toHaveBeenCalled();
   });
 });

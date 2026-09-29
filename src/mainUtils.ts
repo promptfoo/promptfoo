@@ -110,7 +110,7 @@ function getRequestedCommand(argv: string[]): string | undefined {
     if (arg === '--env-file' || arg === '--env-path') {
       index++;
     } else if (
-      arg !== '-v' &&
+      !/^-[v]+$/.test(arg) &&
       arg !== '--verbose' &&
       !arg.startsWith('--env-file=') &&
       !arg.startsWith('--env-path=')

@@ -252,7 +252,7 @@ Create a URL that can be shared online. If no ID is provided, promptfoo shares t
 
 ## `promptfoo update`
 
-Update a verified global npm installation on macOS or Linux. Other installation methods receive manual instructions.
+Update a verified global npm installation on macOS or Linux. Other installation methods receive manual instructions. The command waits for npm to finish without accepting interactive input.
 
 | Option    | Description                                               |
 | --------- | --------------------------------------------------------- |

@@ -46,21 +46,29 @@ export async function runNpmUpdate(
   const context = createUpdateContext(sourceEnvironment, projectRoot);
   const child = spawn('npm', ['install', '--global', `promptfoo@${version}`], {
     ...context,
-    stdio: 'inherit',
+    // Own the process group so terminal Ctrl-C reaches npm only through forwarding.
+    // Closed stdin also prevents background terminal reads from stopping the group.
+    stdio: ['ignore', 'inherit', 'inherit'],
     shell: false,
-    detached: false,
+    detached: true,
   });
   let terminationSignal: NodeJS.Signals | undefined;
-  const forwardInterrupt = () => {
-    terminationSignal = 'SIGINT';
-    process.exitCode = 130;
-    child.kill('SIGINT');
+  const forwardSignal = (signal: NodeJS.Signals, exitCode: number) => {
+    if (terminationSignal) {
+      return;
+    }
+    terminationSignal = signal;
+    process.exitCode = exitCode;
+    if (child.pid) {
+      try {
+        process.kill(-child.pid, signal);
+      } catch {
+        // The installer may have exited before signal delivery.
+      }
+    }
   };
-  const forwardTermination = () => {
-    terminationSignal = 'SIGTERM';
-    process.exitCode = 143;
-    child.kill('SIGTERM');
-  };
+  const forwardInterrupt = () => forwardSignal('SIGINT', 130);
+  const forwardTermination = () => forwardSignal('SIGTERM', 143);
   process.once('SIGINT', forwardInterrupt);
   process.once('SIGTERM', forwardTermination);
   try {

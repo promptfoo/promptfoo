@@ -694,13 +694,16 @@ describe('shutdownGracefully', () => {
 
 describe('update command startup', () => {
   beforeEach(loadMainModule);
-  it.each([['update'], ['--env-file', 'fixture.env', 'update'], ['--verbose', 'update']])(
-    'skips project configuration for %j',
-    (...args) => {
-      expect(isUpdateCommandRequested(args)).toBe(true);
-      expect(shouldSkipDefaultConfigLoading(args)).toBe(true);
-    },
-  );
+  it.each([
+    ['update'],
+    ['--env-file', 'fixture.env', 'update'],
+    ['--verbose', 'update'],
+    ['-vv', 'update', '--force'],
+    ['-vvv', '--', 'update'],
+  ])('skips project configuration for %j', (...args) => {
+    expect(isUpdateCommandRequested(args)).toBe(true);
+    expect(shouldSkipDefaultConfigLoading(args)).toBe(true);
+  });
   it('does not mistake an option value for the update command', () => {
     expect(isUpdateCommandRequested(['--env-file', 'update', 'eval'])).toBe(false);
   });

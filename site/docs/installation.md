@@ -128,7 +128,7 @@ promptfoo update
 
 The command verifies that the active CLI belongs to npm's global package directory before installing the newer release. For other package managers, local dependencies, containers, temporary installations such as `npx`, and Windows, it prints manual instructions.
 
-Use `promptfoo update --check` to check without installing. Use `promptfoo update --force` to reinstall even when the current version is latest or update checks are disabled. Updates run in the foreground and preserve npm settings from the launch environment, including registry and install-script policy.
+Use `promptfoo update --check` to check without installing. Use `promptfoo update --force` to reinstall even when the current version is latest or update checks are disabled. Updates wait for npm to finish and preserve npm settings from the launch environment, including registry and install-script policy. The updater does not accept interactive input; use npm directly if your installation requires a prompt.
 
 For a guide on running your first evaluation, please refer to our [Getting Started guide](./getting-started.md).
 

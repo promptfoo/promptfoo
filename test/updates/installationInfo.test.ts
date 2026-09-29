@@ -6,6 +6,10 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getInstallationInfo } from '../../src/updates/installationInfo';
 
+vi.mock('node:path', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:path')>();
+  return { ...actual, default: actual.posix };
+});
 vi.mock('node:child_process', () => ({ execFileSync: vi.fn(), spawn: vi.fn() }));
 vi.mock('node:fs', async (importOriginal) => ({
   ...(await importOriginal<typeof import('node:fs')>()),
