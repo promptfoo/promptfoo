@@ -7,7 +7,7 @@ description: Red team prompt extraction vulnerabilities by testing AI systems fo
 
 Use the Prompt Extraction plugin to test whether a model reveals the hidden instructions that define its role, policies, or task framing. The target is not just verbatim prompt leakage, but also partial disclosures that expose meaningful internal guidance.
 
-This relates to [OWASP LLM07:2025 System Prompt Leakage](https://genai.owasp.org/llmrisk/llm072025-system-prompt-leakage/). OWASP emphasizes the exposure of sensitive information and controls; prompt disclosure alone does not establish that an application is vulnerable.
+Prompt extraction relates to [OWASP LLM07:2025 System Prompt Leakage](https://genai.owasp.org/llmrisk/llm072025-system-prompt-leakage/). OWASP emphasizes the exposure of sensitive information and controls; prompt disclosure alone does not establish that an application is vulnerable.
 
 ## Purpose
 
