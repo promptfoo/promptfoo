@@ -404,7 +404,7 @@ This configuration allows the model to first search for relevant information, th
 
 ##### Paused Turns
 
-A long server-tool run (many searches, fetches, or code executions) can stop with `stop_reason: pause_turn` before Claude finishes. Promptfoo resumes the turn automatically, up to 5 times, in the same code execution container. The result holds the whole turn's output, token usage, and cost. A turn that is still paused after that keeps its partial output, reports `finishReason: pause_turn`, and logs a warning.
+A long server-tool run can stop with `stop_reason: pause_turn` before Claude finishes. Promptfoo resumes it up to 5 times, preserving the code execution container and summing each request's usage and cost. Structured output uses the final response's JSON; generated file references remain in `metadata.fileReferences`. If resuming fails or reaches the limit, the result keeps its partial output with `finishReason: pause_turn`, logs a warning, and is not cached. Cancellation stops further requests.
 
 ##### Memory Tool
 
