@@ -6,12 +6,22 @@ prompts:
   - file://./prompt.yaml
 
 providers:
-  # Grok 4.6 and 4.5 are not available to EU API Console users. Non-EU users can
-  # opt in by uncommenting these provider blocks.
+  # Optional flagship models. Check availability in your xAI region before enabling them.
+  # - id: xai:grok-4.7
+  #   config:
+  #     reasoning_effort: '{{ effort }}'
+  #     max_completion_tokens: 4096
+
+  # - id: xai:responses:grok-4.7
+  #   config:
+  #     reasoning:
+  #       effort: '{{ effort }}'
+  #     max_output_tokens: 4096
+
   # - id: xai:grok-4.6
   #   config:
   #     temperature: 0.7
-  #     reasoning_effort: high # low, medium, or high (grok-4.6 does not accept none)
+  #     reasoning_effort: high # low, medium, high, or xhigh (grok-4.6 does not accept none)
   #     max_completion_tokens: 4096
 
   # - id: xai:grok-4.5
@@ -52,4 +62,5 @@ defaultTest:
 
 tests:
   - vars:
+      effort: xhigh
       problem: 'A baker has 3 boxes of cookies. Each box contains 15 cookies. He sells 12 cookies. How many cookies does he have left?'

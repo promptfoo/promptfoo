@@ -34,9 +34,6 @@ const INTERNAL_TRACE_METADATA_KEYS = new Set([
  * normalized into OTLP attributes that its trajectory assertions understand.
  */
 export class OTLPTracingExporter implements TracingExporter {
-  /**
-   * Export traces and spans to their configured OTLP endpoint.
-   */
   async export(items: (Trace | Span<any>)[], signal?: AbortSignal): Promise<void> {
     const spans = items.filter((item): item is Span<any> => item.type === 'trace.span');
     if (spans.length === 0) {
@@ -96,9 +93,6 @@ export class OTLPTracingExporter implements TracingExporter {
     );
   }
 
-  /**
-   * Transform openai-agents-js spans to OTLP JSON format.
-   */
   private transformToOTLP(spans: Span<any>[]): any {
     const spansByService = new Map<string, Span<any>[]>();
     const defaultServiceName = getTracingServiceName();
@@ -129,9 +123,6 @@ export class OTLPTracingExporter implements TracingExporter {
     };
   }
 
-  /**
-   * Convert a single span to OTLP format.
-   */
   private spanToOTLP(span: Span<any>): any {
     const startTime = span.startedAt ? new Date(span.startedAt).getTime() : Date.now();
     const endTime = span.endedAt ? new Date(span.endedAt).getTime() : undefined;
@@ -421,9 +412,6 @@ export class OTLPTracingExporter implements TracingExporter {
     return { stringValue: String(value) };
   }
 
-  /**
-   * Convert hex string to base64 for OTLP JSON payloads.
-   */
   private hexToBase64(hex: string, kind: 'trace' | 'span'): string {
     if (!hex) {
       return '';
@@ -631,19 +619,18 @@ function sanitizeCredentialText(value: string): string {
   }
 
   if (
-    !value.trim().startsWith('{') &&
     /"ciphertext"\s*:\s*"[^"]+"/.test(value) &&
-    /"tag"\s*:\s*"[^"]+"/.test(value)
+    /"tag"\s*:\s*"[^"]+"/.test(value) &&
+    /"(?:protected|unprotected|recipients|header)"\s*:/.test(value)
   ) {
     return '<redacted>';
   }
 
-  for (const [, key] of value.matchAll(
-    /<(?:[\w.-]+:)?([A-Za-z_][A-Za-z\d_.-]*)\b[^>\r\n]{0,4096}>/gi,
-  )) {
-    if (isCredentialAttributeKey(key)) {
-      return '<redacted>';
-    }
+  if (
+    /"kty"\s*:\s*"(?:RSA|EC|OKP|oct)"/.test(value) &&
+    /"(?:d|p|q|dp|dq|qi|oth|k)"\s*:/.test(value)
+  ) {
+    return '<redacted>';
   }
 
   // YAML values can span lines, including flow collections under credential keys.
@@ -665,7 +652,9 @@ function sanitizeCredentialText(value: string): string {
 
   const netrc = value.replace(/^[ \t]*#[^\r\n]*/gm, '');
   if (
-    /(?:^|[\r\n])[ \t]*(?:machine\s+\S+\s+|default\s+)(?:login|password|account)\b/i.test(netrc) &&
+    /(?:^|[\r\n])[ \t]*(?:machine\s+\S+|default)\b/i.test(netrc) &&
+    (/(?:^|\s)login\s+\S/i.test(netrc) ||
+      /(?:machine\s+\S+|default)\s+(?:password|account)\b/i.test(netrc)) &&
     /(?:^|\s)(?:password|account)\s+\S/i.test(netrc)
   ) {
     return '<redacted>';
@@ -719,7 +708,7 @@ function sanitizeCredentialText(value: string): string {
       },
     )
     .replace(
-      /\b([a-z][a-z\d+.-]*:\/\/)[^\s/?#]+@/gi,
+      /(?<![\w])((?:[a-z][a-z\d+.-]*:)?\/\/)[^\s/?#]+@/gi,
       (_match, prefix: string) => `${prefix}<redacted>@`,
     )
     .replace(
@@ -752,24 +741,23 @@ function sanitizeCredentialText(value: string): string {
 }
 
 function hasCredentialNamedPayload(value: string): boolean {
-  if (
-    /content-disposition:[^\r\n]*\bname=["']?[A-Za-z_][A-Za-z\d_.-]*["']?/i.test(value) &&
-    [...value.matchAll(/\bname=["']?([A-Za-z_][A-Za-z\d_.-]*)["']?/gi)].some(([, key]) =>
-      isCredentialAttributeKey(key),
-    )
-  ) {
-    return true;
-  }
-  for (const [, attributes] of value.matchAll(/<(?:[\w.-]+:)?[\w.-]+\b([^>\r\n]{0,4096})>/g)) {
-    const key = attributes.match(
-      /\b(?:name|key)[ \t\r\n]*=[ \t\r\n]*["']([A-Za-z_][A-Za-z\d_.-]*)["']/i,
-    )?.[1];
-    if (
-      key &&
-      isCredentialAttributeKey(key) &&
-      (/\bvalue[ \t\r\n]*=[ \t\r\n]*["']/i.test(attributes) || !/\/\s*$/.test(attributes))
-    ) {
+  for (const [, quotedName, unquotedName] of value.matchAll(
+    /content-disposition:[^\r\n]*?\bname\s*=\s*(?:["']([^"'\r\n]*)["']|([^\s;]+))/gi,
+  )) {
+    if (isCredentialAttributeKey(quotedName ?? unquotedName)) {
       return true;
+    }
+  }
+  // Excluding nested delimiters keeps malformed markup scans linear.
+  for (const [, tag] of value.matchAll(/<([^<>\r\n]*)>/g)) {
+    const name = tag.match(/^(?:[\w.-]+:)?([A-Za-z_][A-Za-z\d_.-]*)\b/)?.[1];
+    if (name && isCredentialAttributeKey(name)) {
+      return true;
+    }
+    for (const [, field] of tag.matchAll(/\b(?:name|key)\s*=\s*["']([^"']*)["']/gi)) {
+      if (isCredentialAttributeKey(field)) {
+        return true;
+      }
     }
   }
   return false;
@@ -873,6 +861,8 @@ function isCredentialAttributeKey(key: string): boolean {
         'sig',
         'signature',
         'pgpassword',
+        'session',
+        'sessionid',
       ].includes(part)
     ) {
       if (
@@ -907,31 +897,34 @@ function isCredentialAttributeKey(key: string): boolean {
 }
 
 function sanitizeAttributeByKey(key: string, value: unknown): unknown {
-  if (isCredentialAttributeKey(key)) {
+  try {
+    if (isCredentialAttributeKey(key) || ArrayBuffer.isView(value)) {
+      return '<redacted>';
+    }
+    // Preserve intentional toJSON objects; inspect native byte views before serialization.
+    if (Array.isArray(value) || (isRecord(value) && typeof value.toJSON !== 'function')) {
+      return sanitizeStructuredAttribute(value);
+    }
+    return value;
+  } catch {
     return '<redacted>';
   }
-  if (ArrayBuffer.isView(value)) {
-    return '<redacted>';
-  }
-  // Walk plain objects before JSON serialization so nested native byte views cannot
-  // turn into ordinary { type, data } records. Preserve intentional toJSON objects.
-  if (Array.isArray(value) || (isRecord(value) && typeof value.toJSON !== 'function')) {
-    return sanitizeStructuredAttribute(value);
-  }
-  return value;
 }
 
 function isCredentialPairValue(source: Record<string, unknown> | unknown[], key: string) {
   if (Array.isArray(source)) {
     const option = source[Number(key) - 1];
     const value = source[Number(key)];
+    if (typeof option !== 'string') {
+      return false;
+    }
+    if (Number(key) % 2 === 1 && /^[A-Za-z][A-Za-z\d_.-]*$/.test(option)) {
+      return isCredentialAttributeKey(option);
+    }
     return (
-      typeof option === 'string' &&
       !(typeof value === 'string' && /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(value)) &&
       (['-u', '--user', '--proxy-user'].includes(option) ||
-        (isCredentialAttributeKey(option) &&
-          (/^--?[A-Za-z][A-Za-z\d_.-]*$/.test(option) ||
-            (Number(key) % 2 === 1 && /^[A-Za-z][A-Za-z\d_.-]*$/.test(option)))))
+        (isCredentialAttributeKey(option) && /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(option)))
     );
   }
   return (
@@ -993,6 +986,19 @@ function sanitizeStructuredAttribute(
   value: Record<string, unknown> | unknown[],
   state: { changed: boolean } = { changed: false },
   normalizeScalars = false,
+): Record<string, unknown> | unknown[] | string {
+  try {
+    return sanitizeStructuredAttributeValue(value, state, normalizeScalars);
+  } catch {
+    state.changed = true;
+    return '<redacted>';
+  }
+}
+
+function sanitizeStructuredAttributeValue(
+  value: Record<string, unknown> | unknown[],
+  state: { changed: boolean },
+  normalizeScalars: boolean,
 ): Record<string, unknown> | unknown[] | string {
   const budget = { remaining: MAX_STRUCTURED_ATTRIBUTE_NODES };
   if (isJwe(value, budget)) {

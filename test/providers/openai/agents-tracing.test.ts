@@ -79,6 +79,62 @@ describe('OTLPTracingExporter', () => {
   }
 
   it.each(['json', 'protobuf'] as const)(
+    'redacts credential text formats without changing ordinary metadata in %s',
+    async (format) => {
+      const { attributes } = await exportCustomData(
+        {
+          xml: '<config><password>fixture-value</password></config>',
+          multipart:
+            'Content-Disposition: form-data; name="credentials[password]"\r\n\r\nfixture-value',
+          url: '//fixture-user:fixture-value@example.test/resource',
+          publicUrl: '//example.test/resource',
+          message: 'machine learning uses account metadata',
+        },
+        format,
+      );
+      expect(attributes.xml).toBe('<redacted>');
+      expect(attributes.multipart).toBe('<redacted>');
+      expect(attributes.url).toBe('//<redacted>@example.test/resource');
+      expect(attributes.publicUrl).toBe('//example.test/resource');
+      expect(attributes.message).toBe('machine learning uses account metadata');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'keeps healthy spans when an attribute accessor fails in %s',
+    async (format) => {
+      const unreadable = Object.defineProperty({}, 'ciphertext', {
+        enumerable: true,
+        get() {
+          throw new Error('unreadable attribute');
+        },
+      });
+      const { attributes } = await exportCustomData({ details: unreadable, result: 'ok' }, format);
+      expect(attributes.details).toBe('<redacted>');
+      expect(attributes.result).toBe('ok');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'redacts credential names without hiding public metadata in %s',
+    async (format) => {
+      const { attributes } = await exportCustomData(
+        {
+          session_id: 'fixture-session',
+          credentials: 'fixture-credential',
+          certificateContent: 'public certificate',
+          token_count: 10,
+        },
+        format,
+      );
+      expect(attributes.session_id).toBe('<redacted>');
+      expect(attributes.credentials).toBe('<redacted>');
+      expect(attributes.certificateContent).toBe('public certificate');
+      expect(attributes.token_count).toBe(10);
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
     'redacts JWT headers containing JSON whitespace in %s',
     async (format) => {
       const tokens = ['{ "alg": "RS256" }', '\t{\r\n"alg":"RS256"}\n'].map(
