@@ -210,6 +210,32 @@ describe('runEval', () => {
     expect(sleepSpy).not.toHaveBeenCalled();
   });
 
+  it('combines remote-variable and configured inject-variable literal protection', async () => {
+    const literal = '{{settings.marker}}';
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: '{{prompt}} | {{input}}', label: 'literal fixture' },
+      test: {
+        vars: { input: literal, prompt: literal, settings: { marker: 'local value' } },
+        metadata: { __promptfoo: { remote: true, remoteVars: ['input'] } },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [],
+        redteam: { injectVar: 'prompt' },
+      } as unknown as TestSuite,
+      conversations: {},
+      registers: {},
+    });
+    expect(results[0].prompt.raw).toBe(`${literal} | ${literal}`);
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      `${literal} | ${literal}`,
+      expect.anything(),
+      undefined,
+    );
+  });
+
   it('renders local defaults while keeping imported stored-output values literal', async () => {
     const results = await runEval({
       ...defaultOptions,
