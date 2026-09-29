@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'node:url';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -143,6 +144,20 @@ describe('resolveTestsWatchPaths', () => {
     expect(resolve('file://report[1].csv' as TestSuiteConfig['tests'])).toEqual([
       path.join(base, 'report[1].csv'),
     ]);
+  });
+
+  it('preserves literal percent escapes in existing per-variable file references', () => {
+    const filename = path.join(base, 'literal%20value.txt');
+    expect(resolve([{ vars: { value: `file://${filename}` } }])).toEqual([filename]);
+  });
+
+  it.each([false, true])('watches canonical vars URLs inside a test file (list: %s)', (asList) => {
+    const filename = path.join(base, 'vars with spaces.yaml');
+    fs.writeFileSync(filename, 'source: loaded');
+    const reference = pathToFileURL(filename).href;
+    const testsFile = path.join(base, `canonical-${asList}.json`);
+    fs.writeFileSync(testsFile, JSON.stringify([{ vars: asList ? [reference] : reference }]));
+    expect(resolve(testsFile)).toEqual([testsFile, filename]);
   });
 
   it('watches file references nested inside a tests file', () => {

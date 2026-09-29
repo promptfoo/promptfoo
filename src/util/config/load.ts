@@ -44,6 +44,7 @@ import { PromptSchema } from '../../validators/prompts';
 import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
+import { fileReferenceToPath } from '../pathUtils';
 import { promptfooCommand } from '../promptfooCommand';
 import { preserveTracingCredentialReferences } from '../sanitizer';
 import {
@@ -662,12 +663,16 @@ async function prepareCombinedConfig(
 
   let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
 
-  const resolveConfigPath = (basePath: string, reference: string): string => {
+  const resolveConfigPath = (basePath: string, reference: string, varsFile = false): string => {
     if (reference.includes('{{')) {
       reference = cliState.withEnv(combinedEnv, () => renderEnvOnlyInObject(reference));
     }
     if (reference.includes('{{') || isRemoteTestsReference(reference)) {
       return reference;
+    }
+    if (varsFile) {
+      // Keep a filesystem path after decoding so later loading does not decode it twice.
+      return path.resolve(basePath, fileReferenceToPath(reference));
     }
     const prefix = reference.startsWith('file://') ? 'file://' : '';
     return prefix + path.resolve(basePath, reference.slice(prefix.length));
@@ -728,9 +733,9 @@ async function prepareCombinedConfig(
       ...(source.vars && {
         vars:
           typeof source.vars === 'string'
-            ? resolveConfigPath(basePath, source.vars)
+            ? resolveConfigPath(basePath, source.vars, true)
             : Array.isArray(source.vars)
-              ? source.vars.map((value) => resolveConfigPath(basePath, value))
+              ? source.vars.map((value) => resolveConfigPath(basePath, value, true))
               : resolveNestedFileReferences(basePath, source.vars),
       }),
       ...(typeof source.provider === 'string' &&

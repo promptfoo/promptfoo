@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import nunjucks from 'nunjucks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -648,6 +649,65 @@ describe('suite environment loading', () => {
     ]);
     expect(testSuite.scenarios?.[0].tests[0].vars).toEqual({ scenario: 'loaded' });
   });
+
+  it.each(['file://literal%20vars.yaml', 'literal%20vars.yaml'])(
+    'preserves literal percent escapes in relative vars paths: %s',
+    async (vars) => {
+      const configPath = writeConfig('literal-vars', { defaultTest: { vars } });
+      const filename = path.join(path.dirname(configPath), 'literal%20vars.yaml');
+      fs.writeFileSync(filename, 'source: literal');
+      const { testSuite, defaultTestSources, basePath } = await resolveConfigs(
+        { config: [configPath] },
+        {},
+      );
+      expect(testSuite.defaultTest).toMatchObject({ vars: { source: 'literal' } });
+      expect(resolveTestsWatchPaths(defaultTestSources, basePath)).toEqual([filename]);
+    },
+  );
+
+  it.each([false, true])(
+    'loads canonical vars URLs across test sources (list: %s)',
+    async (asList) => {
+      const dir = path.join(tempDir, 'canonical vars');
+      fs.mkdirSync(dir);
+      const varsReference = (name: string) => {
+        const filename = path.join(dir, `${name} vars.yaml`);
+        fs.writeFileSync(filename, `${name}: loaded`);
+        const reference = pathToFileURL(filename).href;
+        return asList ? [reference] : reference;
+      };
+      const defaults = varsReference('default');
+      fs.writeFileSync(
+        path.join(dir, 'tests.json'),
+        JSON.stringify([{ vars: varsReference('row') }]),
+      );
+      const configPath = path.join(dir, 'config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          prompts: ['Hello'],
+          providers: ['echo'],
+          defaultTest: { vars: defaults },
+          tests: [{ vars: varsReference('inline') }, 'file://tests.json'],
+          scenarios: [{ config: [{}], tests: [{ vars: varsReference('scenario') }] }],
+        }),
+      );
+
+      const { testSuite, defaultTestSources, basePath } = await resolveConfigs(
+        { config: [configPath] },
+        {},
+      );
+      expect(testSuite.defaultTest).toMatchObject({ vars: { default: 'loaded' } });
+      expect(testSuite.tests?.map((test) => test.vars)).toEqual([
+        { inline: 'loaded' },
+        { row: 'loaded' },
+      ]);
+      expect(testSuite.scenarios?.[0].tests[0].vars).toEqual({ scenario: 'loaded' });
+      expect(resolveTestsWatchPaths(defaultTestSources, basePath)).toEqual([
+        path.join(dir, 'default vars.yaml'),
+      ]);
+    },
+  );
 
   it.each<{
     first: TestCaseWithVarsFile['vars'];

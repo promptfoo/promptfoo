@@ -22,6 +22,7 @@ import { isApiProvider } from '../types/providers';
 import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { fileReferenceToPath } from './pathUtils';
 import { renderEnvOnlyInObject } from './render';
 import { parseXlsxFile } from './xlsx';
 import { loadYaml } from './yamlLoad';
@@ -74,7 +75,7 @@ export async function readTestFiles(
 
   const ret: Record<string, string | string[] | object> = {};
   for (const pathOrGlob of pathOrGlobs) {
-    const resolvedPath = path.resolve(basePath, pathOrGlob.replace(/^file:\/\//, ''));
+    const resolvedPath = path.resolve(basePath, fileReferenceToPath(pathOrGlob));
 
     const paths = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
@@ -908,9 +909,15 @@ function hasGlobMagic(reference: string): boolean {
  * watching a pattern's parent directory instead would rerun the evaluation on every
  * unrelated edit beneath it, including the run's own output file.
  */
-function resolveTestsFileReference(reference: string, basePath: string): string[] {
+function resolveTestsFileReference(
+  reference: string,
+  basePath: string,
+  varsFile = false,
+): string[] {
   reference = renderEnvOnlyInObject(reference);
-  const withoutScheme = reference.replace(/^file:\/\//, '');
+  const withoutScheme = varsFile
+    ? fileReferenceToPath(reference)
+    : reference.replace(/^file:\/\//, '');
   if (isRemoteTestsReference(withoutScheme)) {
     return [];
   }
@@ -989,8 +996,16 @@ function collectConfigFileReferences(
     return [];
   }
   seen.add(value);
-  const children = Array.isArray(value) ? value : Object.values(value);
-  return children.flatMap((item) => collectConfigFileReferences(item, basePath, seen));
+  return Object.entries(value).flatMap(([key, item]) => {
+    if (
+      key === 'vars' &&
+      (typeof item === 'string' ||
+        (Array.isArray(item) && item.every((reference) => typeof reference === 'string')))
+    ) {
+      return resolveTestsWatchPaths([{ vars: item }], basePath);
+    }
+    return collectConfigFileReferences(item, basePath, seen);
+  });
 }
 
 /**
@@ -1038,7 +1053,7 @@ export function resolveTestsWatchPaths(
       if (typeof entry.vars === 'string' || Array.isArray(entry.vars)) {
         const references = Array.isArray(entry.vars) ? entry.vars : [entry.vars];
         return references.flatMap((value) =>
-          typeof value === 'string' ? resolveTestsFileReference(value, basePath) : [],
+          typeof value === 'string' ? resolveTestsFileReference(value, basePath, true) : [],
         );
       }
       // A mapping: only file:// values are file references, the rest are literal vars.
