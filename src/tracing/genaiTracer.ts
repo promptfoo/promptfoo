@@ -744,8 +744,7 @@ export function buildChatSpanContext(args: {
 }
 
 /**
- * Extract only the basic token counts for providers whose spans omit response
- * bodies and detailed usage. Keep their existing capture policy explicit.
+ * Extract basic token counts without capturing response bodies or detailed usage.
  */
 export function extractTokenUsageAttributes(response: ProviderResponse): GenAISpanResult {
   const result: GenAISpanResult = {};
