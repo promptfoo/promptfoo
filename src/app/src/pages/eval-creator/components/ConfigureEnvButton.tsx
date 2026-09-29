@@ -135,6 +135,36 @@ const ConfigureEnvButton = () => {
 
               <EnvSection title="Amazon Bedrock">
                 <EnvField
+                  label="Bedrock API key"
+                  envKey="AWS_BEARER_TOKEN_BEDROCK"
+                  value={env.AWS_BEARER_TOKEN_BEDROCK || ''}
+                  onChange={handleEnvChange}
+                />
+                <EnvField
+                  label="AWS access key ID"
+                  envKey="AWS_ACCESS_KEY_ID"
+                  value={env.AWS_ACCESS_KEY_ID || ''}
+                  onChange={handleEnvChange}
+                />
+                <EnvField
+                  label="AWS secret access key"
+                  envKey="AWS_SECRET_ACCESS_KEY"
+                  value={env.AWS_SECRET_ACCESS_KEY || ''}
+                  onChange={handleEnvChange}
+                />
+                <EnvField
+                  label="AWS session token"
+                  envKey="AWS_SESSION_TOKEN"
+                  value={env.AWS_SESSION_TOKEN || ''}
+                  onChange={handleEnvChange}
+                />
+                <EnvField
+                  label="AWS profile"
+                  envKey="AWS_PROFILE"
+                  value={env.AWS_PROFILE || ''}
+                  onChange={handleEnvChange}
+                />
+                <EnvField
                   label="Bedrock Region"
                   envKey="AWS_BEDROCK_REGION"
                   value={env.AWS_BEDROCK_REGION || ''}

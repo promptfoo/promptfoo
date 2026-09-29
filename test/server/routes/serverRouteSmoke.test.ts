@@ -44,7 +44,6 @@ const mocks = vi.hoisted(() => ({
   fetchWithProxy: vi.fn(),
   getAvailableProviders: vi.fn(),
   getBlobByHash: vi.fn(),
-  getBlobUrl: vi.fn(),
   getDb: vi.fn(),
   getEnvBool: vi.fn(),
   getEnvFloat: vi.fn(),
@@ -91,7 +90,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../src/blobs', () => ({
   getBlobByHash: mocks.getBlobByHash,
-  getBlobUrl: mocks.getBlobUrl,
 }));
 
 vi.mock('../../../src/blobs/extractor', () => ({
@@ -657,32 +655,6 @@ const smokeCases: SmokeCase[] = [
     openApiPath: '/api/redteam/cancel',
     path: '/api/redteam/cancel',
     expectedStatus: 400,
-  },
-  {
-    method: 'post',
-    openApiPath: '/api/redteam/config-agent/start',
-    path: '/api/redteam/config-agent/start',
-    body: {},
-    expectedStatus: 400,
-  },
-  {
-    method: 'post',
-    openApiPath: '/api/redteam/config-agent/input',
-    path: '/api/redteam/config-agent/input',
-    body: {},
-    expectedStatus: 400,
-  },
-  {
-    method: 'get',
-    openApiPath: '/api/redteam/config-agent/session/{sessionId}',
-    path: '/api/redteam/config-agent/session/missing-session',
-    expectedStatus: 404,
-  },
-  {
-    method: 'delete',
-    openApiPath: '/api/redteam/config-agent/session/{sessionId}',
-    path: '/api/redteam/config-agent/session/missing-session',
-    expectedStatus: 200,
   },
   {
     method: 'post',

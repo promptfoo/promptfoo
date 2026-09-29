@@ -122,6 +122,7 @@ const MULTI_TURN_HANDLERS: Record<MultiTurnStrategy, MultiTurnHandler> = {
   crescendo: handleCrescendoLikeStrategy,
   custom: handleCrescendoLikeStrategy,
   'jailbreak:hydra': handleHydraStrategy,
+  'jailbreak:goblin': handleGoblinStrategy,
 };
 
 export async function generateMultiTurnPrompt(
@@ -365,6 +366,31 @@ async function handleMischievousUserStrategy(
 async function handleHydraStrategy(
   ctx: MultiTurnHandlerContext,
 ): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
+  return handleHydraLikeStrategy(ctx, {
+    strategyName: 'Hydra',
+    metadataPrefix: 'hydra',
+    taskId: 'hydra-decision',
+  });
+}
+
+async function handleGoblinStrategy(
+  ctx: MultiTurnHandlerContext,
+): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
+  return handleHydraLikeStrategy(ctx, {
+    strategyName: 'Goblin',
+    metadataPrefix: 'goblin',
+    taskId: 'goblin-decision',
+  });
+}
+
+async function handleHydraLikeStrategy(
+  ctx: MultiTurnHandlerContext,
+  options: {
+    strategyName: 'Hydra' | 'Goblin';
+    metadataPrefix: 'hydra' | 'goblin';
+    taskId: 'hydra-decision' | 'goblin-decision';
+  },
+): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
   const turnNumber = ctx.turn + 1;
   const stateful =
     typeof ctx.stateful === 'boolean'
@@ -376,9 +402,12 @@ async function handleHydraStrategy(
     ctx.generatedPrompt ||
     `${ctx.pluginId}-${ctx.strategyId}`;
 
-  const hydraTestRunId =
-    typeof ctx.baseMetadata['hydraTestRunId'] === 'string'
-      ? (ctx.baseMetadata['hydraTestRunId'] as string)
+  const testRunIdMetadataKey = `${options.metadataPrefix}TestRunId`;
+  const scanIdMetadataKey = `${options.metadataPrefix}ScanId`;
+
+  const testRunId =
+    typeof ctx.baseMetadata[testRunIdMetadataKey] === 'string'
+      ? (ctx.baseMetadata[testRunIdMetadataKey] as string)
       : sha256(
           JSON.stringify({
             pluginId: ctx.pluginId,
@@ -387,12 +416,12 @@ async function handleHydraStrategy(
           }),
         ).slice(0, 32);
 
-  const hydraScanId =
-    typeof ctx.baseMetadata['hydraScanId'] === 'string'
-      ? (ctx.baseMetadata['hydraScanId'] as string)
+  const scanId =
+    typeof ctx.baseMetadata[scanIdMetadataKey] === 'string'
+      ? (ctx.baseMetadata[scanIdMetadataKey] as string)
       : typeof ctx.baseMetadata['scanId'] === 'string'
         ? (ctx.baseMetadata['scanId'] as string)
-        : hydraTestRunId;
+        : testRunId;
 
   let modifiers: Record<string, string> | undefined;
   if (ctx.baseMetadata['modifiers'] && typeof ctx.baseMetadata['modifiers'] === 'object') {
@@ -405,9 +434,9 @@ async function handleHydraStrategy(
   }
 
   const innerRequest = {
-    task: 'hydra-decision',
-    testRunId: hydraTestRunId,
-    scanId: hydraScanId,
+    task: options.taskId,
+    testRunId,
+    scanId,
     turn: turnNumber,
     goal: ctx.effectiveGoal,
     purpose: ctx.purpose ?? undefined,
@@ -420,8 +449,8 @@ async function handleHydraStrategy(
     ),
   };
 
-  const hydraBody = {
-    task: 'hydra-decision',
+  const requestBody = {
+    task: options.taskId,
     prompt: JSON.stringify(innerRequest),
     jsonOnly: true,
     preferSmallModel: false,
@@ -434,13 +463,15 @@ async function handleHydraStrategy(
     {
       method: 'POST',
       headers: getRemoteGenerationHeaders(),
-      body: JSON.stringify(hydraBody),
+      body: JSON.stringify(requestBody),
     },
     getRequestTimeoutMs(),
   );
 
   if (!response.ok) {
-    throw new Error(`Hydra task failed with status ${response.status}: ${await response.text()}`);
+    throw new Error(
+      `${options.strategyName} task failed with status ${response.status}: ${await response.text()}`,
+    );
   }
 
   const data = await response.json();
@@ -455,7 +486,7 @@ async function handleHydraStrategy(
           : '';
 
   if (!nextPrompt) {
-    throw new Error('Hydra task did not return a valid next prompt');
+    throw new Error(`${options.strategyName} task did not return a valid next prompt`);
   }
 
   const done = nextPrompt.trim() === '###STOP###' || turnNumber >= ctx.resolvedMaxTurns;
@@ -466,9 +497,9 @@ async function handleHydraStrategy(
     metadata: {
       ...ctx.baseMetadata,
       goal: ctx.effectiveGoal,
-      hydra: {
-        testRunId: hydraTestRunId,
-        scanId: hydraScanId,
+      [options.metadataPrefix]: {
+        testRunId,
+        scanId,
         stateful,
         tokenUsage: data?.tokenUsage,
       },

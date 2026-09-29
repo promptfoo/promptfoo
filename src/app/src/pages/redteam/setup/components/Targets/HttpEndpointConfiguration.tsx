@@ -1,6 +1,6 @@
 import './syntax-highlighting.css';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
@@ -28,10 +28,10 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Switch } from '@app/components/ui/switch';
-import Prism from '@app/lib/prism';
+import { highlightJS } from '@app/lib/codeHighlight';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import {
   AlignLeft,
   Check,
@@ -43,44 +43,13 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
-import { ConfigAgentDrawer } from '../ConfigAgent';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 import PostmanImportDialog from './PostmanImportDialog';
 import ResponseParserTestModal from './ResponseParserTestModal';
 import TestSection from './TestSection';
 
-import type { DiscoveredConfig } from '../../hooks/useConfigAgent';
 import type { ProviderOptions } from '../../types';
 import type { TestResult } from './TestSection';
-
-function joinEndpointUrl(baseUrl: string, path?: string): string {
-  if (!path) {
-    return baseUrl;
-  }
-
-  const base = new URL(baseUrl);
-  const requested = new URL(path, base.origin);
-  const normalizePathname = (pathname: string) => pathname.replace(/\/+$/, '') || '/';
-  if (normalizePathname(base.pathname) === normalizePathname(requested.pathname)) {
-    for (const [key, value] of requested.searchParams) {
-      if (!base.searchParams.has(key)) {
-        base.searchParams.append(key, value);
-      }
-    }
-    return base.toString();
-  }
-
-  const basePath = base.pathname.replace(/\/+$/, '');
-  const requestedPath = requested.pathname.replace(/^\/+/, '');
-  base.pathname = `${basePath}/${requestedPath}`.replace(/\/{2,}/g, '/');
-  for (const [key, value] of requested.searchParams) {
-    if (!base.searchParams.has(key)) {
-      base.searchParams.append(key, value);
-    }
-  }
-  base.hash = requested.hash;
-  return base.toString();
-}
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
@@ -91,6 +60,7 @@ interface HttpEndpointConfigurationProps {
   setUrlError: (error: string | null) => void;
   onTargetTested?: (success: boolean) => void;
   onSessionTested?: (success: boolean) => void;
+  isTargetConfigInvalid?: () => boolean;
 }
 
 interface GeneratedConfig {
@@ -101,23 +71,12 @@ interface GeneratedConfig {
     headers?: Record<string, string>;
     body?: unknown;
     request?: string;
+    useHttps?: boolean;
     transformRequest?: string;
     transformResponse?: string;
     sessionParser?: string;
   };
 }
-
-const highlightJS = (code: string): string => {
-  try {
-    const grammar = Prism?.languages?.javascript;
-    if (!grammar) {
-      return code;
-    }
-    return Prism.highlight(code, grammar, 'javascript');
-  } catch {
-    return code;
-  }
-};
 
 const HttpEndpointConfiguration = ({
   selectedTarget,
@@ -128,6 +87,7 @@ const HttpEndpointConfiguration = ({
   setUrlError,
   onTargetTested,
   onSessionTested,
+  isTargetConfigInvalid,
 }: HttpEndpointConfigurationProps): React.ReactElement => {
   const [requestBody, setRequestBody] = useState(
     typeof selectedTarget.config.body === 'string'
@@ -171,7 +131,6 @@ Content-Type: application/json
 
   // Import menu state
   const [postmanDialogOpen, setPostmanDialogOpen] = useState(false);
-  const [configAgentOpen, setConfigAgentOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // Test Target state
@@ -184,15 +143,28 @@ Content-Type: application/json
 
   // Request body type (json or text)
   const [requestBodyType, setRequestBodyType] = useState<'json' | 'text'>('json');
+  const targetUrl =
+    (typeof selectedTarget.config.url === 'string' && selectedTarget.config.url.trim()) ||
+    (/^https?:\/\//i.test(selectedTarget.id) ? selectedTarget.id : undefined);
+  const [urlInput, setUrlInput] = useState(() => targetUrl ?? '');
+  const isUrlInputFocused = useRef(false);
+  useEffect(() => {
+    if (!isUrlInputFocused.current) {
+      setUrlInput(targetUrl ?? '');
+    }
+  }, [targetUrl]);
 
   // Handle test target
   const handleTestTarget = useCallback(async () => {
+    if (isTargetConfigInvalid?.()) {
+      onTargetTested?.(false);
+      return;
+    }
     setIsTestRunning(true);
     setTestResult(null);
 
     // Validate URL before testing (skip validation for raw request mode)
     if (!selectedTarget.config?.request) {
-      const targetUrl = selectedTarget.config?.url;
       if (!targetUrl || targetUrl.trim() === '' || targetUrl === 'http') {
         setTestResult({
           success: false,
@@ -270,7 +242,7 @@ Content-Type: application/json
     } finally {
       setIsTestRunning(false);
     }
-  }, [selectedTarget, onTargetTested]);
+  }, [selectedTarget, onTargetTested, targetUrl, isTargetConfigInvalid]);
 
   // Auto-size the raw request textarea between 10rem and 40rem based on line count
   const computeRawTextareaHeight = useCallback((text: string) => {
@@ -499,6 +471,7 @@ ${exampleRequest}`;
       if (generatedConfig.config.request) {
         resetState(true);
         updateCustomTarget('request', generatedConfig.config.request);
+        updateCustomTarget('useHttps', generatedConfig.config.useHttps === true);
       } else {
         resetState(false);
         if (generatedConfig.config.url) {
@@ -559,37 +532,6 @@ ${exampleRequest}`;
     }
   };
 
-  const handleConfigAgentDiscovered = useCallback(
-    (discoveredConfig: DiscoveredConfig, baseUrl: string) => {
-      const fullUrl = joinEndpointUrl(baseUrl, discoveredConfig.path);
-      const headers = discoveredConfig.headers ?? {};
-      const body = discoveredConfig.body ?? '';
-
-      setBodyError(null);
-      setUrlError(null);
-      setHeaders(
-        Object.entries(headers).map(([key, value]) => ({
-          key,
-          value: String(value),
-        })),
-      );
-      setRequestBody(typeof body === 'string' ? body : JSON.stringify(body, null, 2));
-      updateCustomTarget('config', {
-        ...selectedTarget.config,
-        request: undefined,
-        url: fullUrl,
-        method: discoveredConfig.method,
-        headers,
-        body,
-        transformResponse: discoveredConfig.transformResponse,
-        useHttps: false,
-      });
-
-      setConfigAgentOpen(false);
-    },
-    [selectedTarget.config, setBodyError, setUrlError, updateCustomTarget],
-  );
-
   return (
     <div className="min-w-0">
       <div className="mb-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -614,12 +556,8 @@ ${exampleRequest}`;
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setConfigAgentOpen(true)}>
-              <Sparkles className="mr-2 size-4" />
-              Auto-Configure from URL
-            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setConfigDialogOpen(true)}>
-              <AlignLeft className="mr-2 size-4" />
+              <Sparkles className="mr-2 size-4" />
               Auto-fill from Example
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setPostmanDialogOpen(true)}>
@@ -681,8 +619,18 @@ ${exampleRequest}`;
                 </Select>
                 <Input
                   id="url"
-                  value={selectedTarget.config.url}
-                  onChange={(e) => updateCustomTarget('url', e.target.value)}
+                  value={urlInput}
+                  onChange={(e) => {
+                    setUrlInput(e.target.value);
+                    updateCustomTarget('url', e.target.value);
+                  }}
+                  onFocus={() => {
+                    isUrlInputFocused.current = true;
+                  }}
+                  onBlur={() => {
+                    isUrlInputFocused.current = false;
+                    setUrlInput(targetUrl ?? '');
+                  }}
                   className={cn('min-w-0 flex-1', urlError && 'border-destructive')}
                   placeholder="https://example.com/api/chat"
                 />
@@ -871,6 +819,7 @@ ${exampleRequest}`;
             variant="outline"
             size="sm"
             onClick={() => setResponseTestOpen(true)}
+            disabled={isTargetConfigInvalid?.()}
             className="absolute right-2 top-2 z-10"
           >
             <Play className="mr-1 size-4" />
@@ -885,9 +834,8 @@ ${exampleRequest}`;
           testResult={testResult}
           handleTestTarget={handleTestTarget}
           disabled={
-            selectedTarget.config.request
-              ? !selectedTarget.config.request
-              : !selectedTarget.config.url
+            Boolean(isTargetConfigInvalid?.()) ||
+            (selectedTarget.config.request ? !selectedTarget.config.request : !targetUrl)
           }
           detailsExpanded={testDetailsExpanded}
           onDetailsExpandedChange={setTestDetailsExpanded}
@@ -1010,6 +958,7 @@ ${exampleRequest}`;
         updateCustomTarget={updateCustomTarget}
         defaultRequestTransform={selectedTarget.config.transformRequest}
         onSessionTested={onSessionTested}
+        isTargetConfigInvalid={isTargetConfigInvalid}
       />
 
       {/* Response Transform Test Dialog */}
@@ -1018,14 +967,7 @@ ${exampleRequest}`;
         onClose={() => setResponseTestOpen(false)}
         currentTransform={selectedTarget.config.transformResponse || ''}
         onApply={(code) => updateCustomTarget('transformResponse', code)}
-      />
-
-      {/* Config Agent Drawer */}
-      <ConfigAgentDrawer
-        open={configAgentOpen}
-        onClose={() => setConfigAgentOpen(false)}
-        initialUrl={selectedTarget.config.url || ''}
-        onConfigDiscovered={handleConfigAgentDiscovered}
+        isTargetConfigInvalid={isTargetConfigInvalid}
       />
     </div>
   );

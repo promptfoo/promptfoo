@@ -64,28 +64,3 @@ export function parseHunkHeader(line: string): HunkHeader | null {
     newCount: match[4] ? parseInt(match[4], 10) : 1,
   };
 }
-
-/**
- * Determines which type of line this is within a diff hunk.
- *
- * @param line - A line within a diff hunk
- * @returns The type of line
- */
-export type DiffLineType = 'context' | 'added' | 'removed' | 'marker' | 'other';
-
-export function getDiffLineType(line: string): DiffLineType {
-  if (line.startsWith('-')) {
-    return 'removed';
-  }
-  if (line.startsWith('+')) {
-    return 'added';
-  }
-  if (line.startsWith(' ')) {
-    return 'context';
-  }
-  if (line.startsWith('\\')) {
-    // Special marker like "\ No newline at end of file"
-    return 'marker';
-  }
-  return 'other';
-}

@@ -1,5 +1,3 @@
-import { lookup } from 'node:dns/promises';
-
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
@@ -11,9 +9,6 @@ vi.mock('../../../src/redteam/shared');
 vi.mock('../../../src/redteam/remoteGeneration');
 vi.mock('../../../src/util/fetch/index');
 vi.mock('../../../src/server/services/redteamTestCaseGenerationService');
-vi.mock('node:dns/promises', () => ({
-  lookup: vi.fn(),
-}));
 
 // Import after mocking
 import logger from '../../../src/logger';
@@ -21,6 +16,7 @@ import { Plugins } from '../../../src/redteam/plugins/index';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { doRedteamRun } from '../../../src/redteam/shared';
+import { Strategies } from '../../../src/redteam/strategies/index';
 import {
   extractGeneratedPrompt,
   getPluginConfigurationError,
@@ -35,22 +31,6 @@ const mockedDoRedteamRun = vi.mocked(doRedteamRun);
 const mockedGetRemoteGenerationUrl = vi.mocked(getRemoteGenerationUrl);
 const mockedNeverGenerateRemote = vi.mocked(neverGenerateRemote);
 const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
-const mockedLookup = vi.mocked(lookup);
-const debugSpy = vi.spyOn(logger, 'debug');
-
-function jsonResponse(body: unknown, init?: ResponseInit): Response {
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-    ...init,
-  });
-}
-
-async function waitForFetchCalls(callCount: number): Promise<void> {
-  await vi.waitFor(() => {
-    expect(mockedFetchWithProxy.mock.calls.length).toBeGreaterThanOrEqual(callCount);
-  });
-}
 
 describe('Redteam Routes', () => {
   let app: ReturnType<typeof createApp>;
@@ -65,10 +45,20 @@ describe('Redteam Routes', () => {
 
       // Default mock implementations
       mockedGetPluginConfigurationError.mockReturnValue(null);
-      mockedRedteamProviderManager.getProvider.mockResolvedValue({
-        id: () => 'test-provider',
-        callApi: vi.fn(),
-      } as any);
+      mockedRedteamProviderManager.getProviderSelection.mockImplementation(
+        async ({ provider, fallbackProvider } = {}) => {
+          const selected = provider ?? fallbackProvider;
+          return {
+            provider: {
+              id: () => 'test-provider',
+              callApi: vi.fn(),
+            } as any,
+            source: provider ? 'explicit' : fallbackProvider ? 'fallback' : 'default',
+            localProviderSpec: selected,
+            persistableId: typeof selected === 'string' ? selected : undefined,
+          };
+        },
+      );
       mockedExtractGeneratedPrompt.mockReturnValue('generated test prompt');
     });
 
@@ -133,6 +123,231 @@ describe('Redteam Routes', () => {
           expect.objectContaining({ purpose: 'general AI assistant' }),
         );
         expect(response.body.prompt).toBe('generated test prompt');
+      });
+
+      it('uses request-scoped provider selection without reading process-global config', async () => {
+        const mockPluginFactory = {
+          key: 'aegis',
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: {
+              id: 'aegis',
+              config: {},
+            },
+            strategy: {
+              id: 'basic',
+              config: {},
+            },
+            config: {
+              applicationDefinition: {
+                purpose: 'test assistant',
+              },
+            },
+          });
+
+        expect(response.status).toBe(200);
+        expect(mockedRedteamProviderManager.getProviderSelection).toHaveBeenCalledWith({
+          provider: undefined,
+          ignoreCliState: true,
+        });
+      });
+
+      it('passes the current preview provider through validated request data', async () => {
+        const mockPluginFactory = {
+          key: 'aegis',
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: {
+              id: 'aegis',
+              config: {},
+            },
+            strategy: {
+              id: 'basic',
+              config: {},
+            },
+            config: {
+              applicationDefinition: {
+                purpose: 'test assistant',
+              },
+            },
+            provider: 'openai:chat:gpt-4.1',
+          });
+
+        expect(response.status).toBe(200);
+        expect(mockedRedteamProviderManager.getProviderSelection).toHaveBeenCalledWith({
+          provider: 'openai:chat:gpt-4.1',
+          ignoreCliState: true,
+        });
+      });
+
+      it('preserves custom environment overrides on object preview providers', async () => {
+        const mockPluginFactory = {
+          key: 'aegis',
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const provider = {
+          id: 'openai:chat:${MY_MODEL}',
+          env: {
+            MY_MODEL: 'gpt-4.1',
+            MY_CUSTOM_KEY: 'secret',
+            OPENAI_API_KEY: 'standard-key',
+          },
+        };
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: { id: 'aegis', config: {} },
+            strategy: { id: 'basic', config: {} },
+            config: { applicationDefinition: { purpose: 'test assistant' } },
+            provider,
+          });
+
+        expect(response.status).toBe(200);
+        expect(mockedRedteamProviderManager.getProviderSelection).toHaveBeenCalledWith({
+          provider,
+          ignoreCliState: true,
+        });
+      });
+
+      it.each([
+        ['empty string', ''],
+        ['whitespace string', '   '],
+        ['missing object id', {}],
+        ['empty object id', { id: '' }],
+      ])('treats an %s preview provider as unset', async (_name, provider) => {
+        const mockPluginFactory = {
+          key: 'aegis',
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: { id: 'aegis', config: {} },
+            strategy: { id: 'basic', config: {} },
+            config: { applicationDefinition: { purpose: 'test assistant' } },
+            provider,
+          });
+
+        expect(response.status).toBe(200);
+        expect(mockedRedteamProviderManager.getProviderSelection).toHaveBeenCalledWith({
+          provider: undefined,
+          ignoreCliState: true,
+        });
+      });
+
+      it('passes the resolved preview provider through strategy generation', async () => {
+        const previewProvider = {
+          id: () => 'preview-provider',
+          callApi: vi.fn(),
+        };
+        mockedRedteamProviderManager.getProviderSelection.mockResolvedValue({
+          provider: previewProvider as any,
+          source: 'explicit',
+          localProviderSpec: 'openai:chat:gpt-4.1',
+          persistableId: 'openai:chat:gpt-4.1',
+        });
+        const mockPluginFactory = {
+          key: 'aegis',
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+        const strategyAction = vi.fn().mockResolvedValue([{ vars: { query: 'transformed' } }]);
+        const strategySpy = vi.spyOn(Strategies, 'find').mockReturnValue({
+          id: 'math-prompt',
+          action: strategyAction,
+        } as any);
+
+        try {
+          const response = await request(app)
+            .post('/api/redteam/generate-test')
+            .send({
+              plugin: { id: 'aegis', config: {} },
+              strategy: { id: 'math-prompt', config: {} },
+              config: { applicationDefinition: { purpose: 'test assistant' } },
+              provider: 'openai:chat:gpt-4.1',
+            });
+
+          expect(response.status).toBe(200);
+          expect(strategyAction).toHaveBeenCalledWith(
+            expect.any(Array),
+            'query',
+            expect.not.objectContaining({ redteamProvider: expect.anything() }),
+            'math-prompt',
+            {
+              generationProviderSelection: {
+                provider: previewProvider,
+                source: 'explicit',
+                localProviderSpec: 'openai:chat:gpt-4.1',
+                persistableId: 'openai:chat:gpt-4.1',
+              },
+            },
+          );
+          expect(strategyAction.mock.calls[0]?.[2]).not.toHaveProperty('__generationProvider');
+        } finally {
+          strategySpy.mockRestore();
+        }
+      });
+
+      it('keeps the cached provider spec serializable during strategy generation', async () => {
+        const previewProvider = {
+          id: () => 'cached-preview-provider',
+          callApi: vi.fn(),
+          apiKey: 'resolved-secret',
+        };
+        mockedRedteamProviderManager.getProviderSelection.mockResolvedValue({
+          provider: previewProvider as any,
+          source: 'cache',
+          localProviderSpec: 'anthropic:claude-sonnet-4',
+          persistableId: 'anthropic:claude-sonnet-4',
+        });
+        const mockPluginFactory = {
+          key: 'aegis',
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+        const strategyAction = vi.fn().mockResolvedValue([{ vars: { query: 'transformed' } }]);
+        const strategySpy = vi.spyOn(Strategies, 'find').mockReturnValue({
+          id: 'math-prompt',
+          action: strategyAction,
+        } as any);
+
+        try {
+          const response = await request(app)
+            .post('/api/redteam/generate-test')
+            .send({
+              plugin: { id: 'aegis', config: {} },
+              strategy: { id: 'math-prompt', config: {} },
+              config: { applicationDefinition: { purpose: 'test assistant' } },
+            });
+
+          expect(response.status).toBe(200);
+          expect(strategyAction.mock.calls[0]?.[2]).not.toHaveProperty('redteamProvider');
+          expect(strategyAction.mock.calls[0]?.[2]).not.toHaveProperty('apiKey');
+          expect(strategyAction.mock.calls[0]?.[4]).toEqual({
+            generationProviderSelection: {
+              provider: previewProvider,
+              source: 'cache',
+              localProviderSpec: 'anthropic:claude-sonnet-4',
+              persistableId: 'anthropic:claude-sonnet-4',
+            },
+          });
+        } finally {
+          strategySpy.mockRestore();
+        }
       });
 
       it('should exclude dataset-exempt plugins with multi-input config', async () => {
@@ -253,8 +468,13 @@ describe('Redteam Routes', () => {
         expect(mockPluginFactory.action).toHaveBeenCalled();
       });
 
-      it('should exclude system-prompt-override with multi-input config', async () => {
-        // 'system-prompt-override' is a MULTI_INPUT_EXCLUDED_PLUGIN
+      it('should not exclude system-prompt-override with multi-input config', async () => {
+        const mockPluginFactory = {
+          key: 'system-prompt-override',
+          action: vi.fn().mockResolvedValue([{ vars: { __prompt: 'test' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
         const response = await request(app)
           .post('/api/redteam/generate-test')
           .send({
@@ -276,11 +496,11 @@ describe('Redteam Routes', () => {
           });
 
         expect(response.status).toBe(200);
-        expect(response.body).toEqual({ testCases: [], count: 0 });
+        expect(mockPluginFactory.action).toHaveBeenCalled();
+        expect(response.body.prompt).toBe('generated test prompt');
       });
 
       it('should NOT exclude special-token-injection without multi-input config', async () => {
-        // 'special-token-injection' is a MULTI_INPUT_EXCLUDED_PLUGIN
         const mockPluginFactory = {
           key: 'special-token-injection',
           action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
@@ -675,6 +895,17 @@ describe('Redteam Routes', () => {
       expect(runArgs).not.toHaveProperty('maxConcurrency');
     });
 
+    it('should ignore a request-supplied filesystem base path', async () => {
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'test', basePath: '../private' } });
+
+      expect(response.status).toBe(200);
+      expect(mockedDoRedteamRun.mock.calls[0][0].liveRedteamConfig).toEqual({
+        purpose: 'test',
+      });
+    });
+
     it('should return 400 when config is missing', async () => {
       const response = await request(app).post('/api/redteam/run').send({});
 
@@ -751,13 +982,16 @@ describe('Redteam Routes', () => {
   });
 
   describe('POST /redteam/:taskId', () => {
+    let debugSpy: ReturnType<typeof vi.spyOn>;
+
     beforeEach(() => {
       vi.resetAllMocks();
-      debugSpy.mockClear();
+      debugSpy = vi.spyOn(logger, 'debug');
       mockedGetRemoteGenerationUrl.mockReturnValue('https://api.example.com/task');
     });
 
     afterEach(() => {
+      debugSpy.mockRestore();
       vi.resetAllMocks();
     });
 
@@ -867,65 +1101,6 @@ describe('Redteam Routes', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBe('No job currently running');
-    });
-  });
-
-  describe('configuration agent endpoints', () => {
-    let app: ReturnType<typeof createApp>;
-
-    beforeEach(() => {
-      vi.clearAllMocks();
-      mockedLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }] as any);
-      app = createApp();
-    });
-
-    afterEach(() => {
-      vi.resetAllMocks();
-    });
-
-    it('sanitizes API key material from session and config responses', async () => {
-      mockedFetchWithProxy.mockImplementation(async (_url, options) => {
-        const headers = options?.headers as Record<string, string> | undefined;
-        if (options?.method === 'HEAD') {
-          return new Response('', { status: 200 });
-        }
-        if (headers?.Authorization === 'Bearer sk-test-secret') {
-          return jsonResponse({
-            choices: [{ message: { content: 'hello' } }],
-          });
-        }
-        return jsonResponse({ error: { message: 'API key required' } }, { status: 401 });
-      });
-
-      const startResponse = await request(app)
-        .post('/api/redteam/config-agent/start')
-        .send({ baseUrl: 'https://api.example.com' });
-
-      expect(startResponse.status).toBe(200);
-      const { sessionId } = startResponse.body.data;
-
-      await waitForFetchCalls(3);
-
-      const inputResponse = await request(app).post('/api/redteam/config-agent/input').send({
-        sessionId,
-        type: 'api_key',
-        value: 'sk-test-secret',
-        field: 'apiKey',
-      });
-
-      expect(inputResponse.status).toBe(200);
-      expect(JSON.stringify(inputResponse.body)).not.toContain('sk-test-secret');
-      expect(Object.values(inputResponse.body.data.session.finalConfig.headers)).toContain(
-        'Bearer ••••cret',
-      );
-
-      const sessionResponse = await request(app).get(
-        `/api/redteam/config-agent/session/${sessionId}`,
-      );
-
-      expect(sessionResponse.status).toBe(200);
-      expect(JSON.stringify(sessionResponse.body)).not.toContain('sk-test-secret');
-      expect(Object.values(sessionResponse.body.data.config.headers)).toContain('Bearer ••••cret');
     });
   });
 

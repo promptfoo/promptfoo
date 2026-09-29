@@ -8,13 +8,13 @@
 src/redteam/
 ├── plugins/      # Vulnerability-specific test generators
 │   ├── pii.ts             # PII leakage detection
-│   ├── harmful.ts         # Harmful content generation
-│   ├── sql-injection.ts   # SQL injection attempts
+│   ├── harmful/           # Harmful content generation
+│   ├── sqlInjection.ts    # SQL injection attempts
 │   └── ...
 ├── strategies/   # Attack transformation techniques
-│   ├── jailbreak.ts       # Guardrail bypass attempts
-│   ├── prompt-injection.ts
-│   ├── base64.ts         # Obfuscation strategies
+│   ├── iterative.ts       # Iterative jailbreak refinement
+│   ├── promptInjections/  # jailbreak-templates strategy
+│   ├── base64.ts          # Obfuscation strategies
 │   └── ...
 └── graders.ts    # Response evaluation logic
 ```
@@ -26,20 +26,6 @@ src/redteam/
 **Strategies** transform test cases into adversarial variants (how to attack).
 
 **Graders** evaluate if attacks succeeded (did it work?).
-
-## Configuration Agent
-
-`ConfigurationAgent` in `configAgent/` probes HTTP endpoints and guides the user
-through any missing authentication or request-shape details before a red team
-run. It reports the discovered request configuration to the setup UI; it does not
-generate plugin cases, apply red team Strategy implementations, or grade attacks
-itself.
-
-Use it when a target endpoint exists but its URL path, headers, body template, or
-response transform still need to be discovered. A typical workflow is: probe the
-endpoint, refine the configuration with the user's inputs, verify the candidate
-request, apply the resulting target configuration, and then run the usual
-plugins, strategies, and Grader components against that target.
 
 ## Plugin vs Strategy
 

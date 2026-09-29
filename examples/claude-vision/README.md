@@ -9,7 +9,7 @@ cd claude-vision
 
 ## Usage
 
-Getting Started with claude 3.5 sonnet via Anthropic and/or AWS Bedrock
+Getting started with Claude vision via Anthropic and/or AWS Bedrock. The config runs Claude Haiku 4.5 and Claude Sonnet 5 side by side.
 
 To get started, set your environment variables:
 

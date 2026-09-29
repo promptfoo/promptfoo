@@ -1,10 +1,15 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { callApi } from '@app/utils/api';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
+
+import type { ProviderOptions } from '../../types';
+
+vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
 
 vi.mock('react-simple-code-editor', () => ({
   default: ({ value, onValueChange }: any) => (
@@ -16,67 +21,6 @@ vi.mock('react-simple-code-editor', () => ({
   ),
 }));
 
-vi.mock('../ConfigAgent', () => ({
-  ConfigAgentDrawer: ({ onConfigDiscovered }: any) => (
-    <>
-      <button
-        type="button"
-        onClick={() =>
-          onConfigDiscovered?.(
-            {
-              apiType: 'openai_compatible',
-              method: 'POST',
-              path: '/v1/chat/completions',
-              headers: { Authorization: 'Bearer edited-token' },
-              body: { messages: [{ role: 'user', content: '{{prompt}}' }] },
-              transformResponse: 'json.choices[0].message.content',
-            },
-            'https://edited.example.com',
-          )
-        }
-      >
-        Apply ConfigAgent result
-      </button>
-      <button
-        type="button"
-        onClick={() =>
-          onConfigDiscovered?.(
-            {
-              apiType: 'openai_compatible',
-              method: 'POST',
-              path: '/v1/chat/completions',
-              headers: { 'Content-Type': 'application/json' },
-              body: { model: 'gpt-test', messages: [{ role: 'user', content: '{{prompt}}' }] },
-              transformResponse: 'json.choices[0].message.content',
-            },
-            'https://edited.example.com/v1/chat/completions',
-          )
-        }
-      >
-        Apply full endpoint result
-      </button>
-      <button
-        type="button"
-        onClick={() =>
-          onConfigDiscovered?.(
-            {
-              apiType: 'openai_compatible',
-              method: 'POST',
-              path: '/v1/chat/completions?api-version=2025-01-01',
-              headers: { 'Content-Type': 'application/json' },
-              body: { messages: [{ role: 'user', content: '{{prompt}}' }] },
-              transformResponse: 'json.choices[0].message.content',
-            },
-            'https://edited.example.com/proxy?tenant=team-a',
-          )
-        }
-      >
-        Apply base URL with query
-      </button>
-    </>
-  ),
-}));
-
 // Wrapper component for providing tooltip context
 const Wrapper = ({ children }: { children: React.ReactNode }) => (
   <TooltipProvider>{children}</TooltipProvider>
@@ -85,6 +29,61 @@ const Wrapper = ({ children }: { children: React.ReactNode }) => (
 const renderWithProviders = (ui: React.ReactElement) => {
   return render(ui, { wrapper: Wrapper });
 };
+
+describe('HttpEndpointConfiguration - Generated raw requests', () => {
+  beforeEach(() => {
+    vi.mocked(callApi).mockReset();
+  });
+
+  it.each([
+    [false, true, true],
+    [true, true, true],
+    [true, false, false],
+    [false, false, false],
+    [true, undefined, false],
+    [false, undefined, false],
+  ])('changes HTTPS from %s to generated %s', async (initialHttps, useHttps, expectedHttps) => {
+    const request = 'GET /ready HTTP/1.1\nHost: example.com\n\n';
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'http', config: { request, useHttps } }),
+    } as Response);
+    let selected: ProviderOptions;
+    function Harness() {
+      const [target, setTarget] = React.useState<ProviderOptions>({
+        id: 'http',
+        config: { request: 'GET /old HTTP/1.1\nHost: example.com\n\n', useHttps: initialHttps },
+      });
+      selected = target;
+      return (
+        <HttpEndpointConfiguration
+          selectedTarget={target}
+          updateCustomTarget={(field, value) =>
+            setTarget((previous) => ({
+              ...previous,
+              config: { ...previous.config, [field]: value },
+            }))
+          }
+          bodyError={null}
+          urlError={null}
+          setBodyError={() => {}}
+          setUrlError={() => {}}
+        />
+      );
+    }
+    renderWithProviders(<Harness />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Import' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Auto-fill from Example' }));
+    await user.click(screen.getByRole('button', { name: 'Generate' }));
+    await user.click(await screen.findByRole('button', { name: 'Apply Configuration' }));
+    expect(selected!.config).toMatchObject({ request, useHttps: expectedHttps });
+    expect(screen.getByRole('switch', { name: 'Use HTTPS' })).toHaveAttribute(
+      'data-state',
+      expectedHttps ? 'checked' : 'unchecked',
+    );
+  });
+});
 
 describe('HttpEndpointConfiguration - Header Field Layout', () => {
   let mockUpdateCustomTarget: (field: string, value: unknown) => void;
@@ -204,83 +203,6 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
     expect(dialog).toHaveClass('flex', 'max-h-[90vh]', 'flex-col', 'overflow-hidden');
     expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
     expect(footer).toHaveClass('shrink-0');
-  });
-
-  it('applies the discovered HTTP config atomically', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(
-      <HttpEndpointConfiguration
-        {...defaultProps}
-        updateCustomTarget={mockUpdateCustomTarget}
-        setBodyError={mockSetBodyError}
-        urlError={defaultProps.urlError}
-        setUrlError={mockSetUrlError}
-      />,
-    );
-
-    await user.click(screen.getByRole('button', { name: 'Apply ConfigAgent result' }));
-
-    expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
-    expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
-      'config',
-      expect.objectContaining({
-        request: undefined,
-        url: 'https://edited.example.com/v1/chat/completions',
-        method: 'POST',
-        headers: { Authorization: 'Bearer edited-token' },
-        body: { messages: [{ role: 'user', content: '{{prompt}}' }] },
-        transformResponse: 'json.choices[0].message.content',
-        useHttps: false,
-      }),
-    );
-  });
-
-  it('does not duplicate a path already present in the discovered base URL', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(
-      <HttpEndpointConfiguration
-        {...defaultProps}
-        updateCustomTarget={mockUpdateCustomTarget}
-        setBodyError={mockSetBodyError}
-        urlError={defaultProps.urlError}
-        setUrlError={mockSetUrlError}
-      />,
-    );
-
-    await user.click(screen.getByRole('button', { name: 'Apply full endpoint result' }));
-
-    expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
-      'config',
-      expect.objectContaining({
-        url: 'https://edited.example.com/v1/chat/completions',
-        body: {
-          model: 'gpt-test',
-          messages: [{ role: 'user', content: '{{prompt}}' }],
-        },
-      }),
-    );
-  });
-
-  it('appends the endpoint path before existing base URL query parameters', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(
-      <HttpEndpointConfiguration
-        {...defaultProps}
-        updateCustomTarget={mockUpdateCustomTarget}
-        setBodyError={mockSetBodyError}
-        urlError={defaultProps.urlError}
-        setUrlError={mockSetUrlError}
-      />,
-    );
-
-    await user.click(screen.getByRole('button', { name: 'Apply base URL with query' }));
-
-    expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
-      'config',
-      expect.objectContaining({
-        url: 'https://edited.example.com/proxy/v1/chat/completions?tenant=team-a&api-version=2025-01-01',
-      }),
-    );
   });
 
   it('should maintain header Name and Value field layout constraints when bodyError state changes', () => {
