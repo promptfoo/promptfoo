@@ -87,7 +87,7 @@ export const TOOL_DEFINITIONS: ToolMetadata[] = [
   // Generation Tools
   {
     name: 'generate_dataset',
-    description: 'Generate test datasets using AI for comprehensive evaluation coverage',
+    description: 'Generate test datasets using AI',
     parameters:
       'prompt: string (required), instructions?: string, numSamples?: number (1-100, default: 10), provider?: string, outputPath?: string',
     annotations: { readOnlyHint: false, idempotentHint: false, longRunningHint: true },
@@ -120,7 +120,7 @@ export const TOOL_DEFINITIONS: ToolMetadata[] = [
   },
   {
     name: 'redteam_run',
-    description: 'Execute comprehensive security testing against AI applications',
+    description: 'Run security tests against AI applications',
     parameters:
       'configPath?: string, output?: string, force?: boolean, maxConcurrency?: number (1-10), delay?: number, filterProviders?: string (regex), remote?: boolean',
     annotations: {
