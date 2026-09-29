@@ -52,6 +52,40 @@ describe('Bedrock cost override integration', () => {
     expect(result.tokenUsage?.prompt).toBe(35);
   });
 
+  it.each(['amazon.nova-pro-v1:0', 'amazon.nova-2-lite-v1:0'])(
+    'prices native Nova cache counters for %s',
+    async (modelName) => {
+      const provider = new AwsBedrockCompletionProvider(modelName, { config: rates });
+      const body = Buffer.from(
+        JSON.stringify({
+          output: { message: { role: 'assistant', content: [{ text: 'Hello' }] } },
+          usage: {
+            inputTokens: 10,
+            outputTokens: 20,
+            totalTokens: 55,
+            cacheReadInputTokenCount: 20,
+            cacheWriteInputTokenCount: 5,
+          },
+        }),
+      );
+      vi.spyOn(provider, 'getBedrockInstance').mockResolvedValue({
+        invokeModel: vi.fn().mockResolvedValue({
+          body: Object.assign(body, { transformToString: () => body.toString() }),
+        }),
+        config: {},
+      } as never);
+
+      const result = await provider.callApi('Say hello');
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Hello');
+      expect(result.cost).toBeCloseTo(0.55);
+      expect(result.tokenUsage?.completionDetails).toEqual({
+        cacheReadInputTokens: 20,
+        cacheCreationInputTokens: 5,
+      });
+    },
+  );
+
   it('keeps response-cache hits free of fresh InvokeModel charges', async () => {
     const provider = new AwsBedrockCompletionProvider(model, { config: rates });
     vi.mocked(isCacheEnabled).mockReturnValue(true);

@@ -1333,6 +1333,15 @@ export const BEDROCK_MODEL = {
         completion: coerceStrToNum(usage.outputTokens),
         total: coerceStrToNum(usage.totalTokens),
         numRequests: 1,
+        ...(usage.cacheReadInputTokenCount !== undefined ||
+        usage.cacheWriteInputTokenCount !== undefined
+          ? {
+              completionDetails: {
+                cacheReadInputTokens: coerceStrToNum(usage.cacheReadInputTokenCount),
+                cacheCreationInputTokens: coerceStrToNum(usage.cacheWriteInputTokenCount),
+              },
+            }
+          : {}),
       };
     },
   },
@@ -1486,6 +1495,15 @@ export const BEDROCK_MODEL = {
         completion: coerceStrToNum(usage.outputTokens),
         total: coerceStrToNum(usage.totalTokens),
         numRequests: 1,
+        ...(usage.cacheReadInputTokenCount !== undefined ||
+        usage.cacheWriteInputTokenCount !== undefined
+          ? {
+              completionDetails: {
+                cacheReadInputTokens: coerceStrToNum(usage.cacheReadInputTokenCount),
+                cacheCreationInputTokens: coerceStrToNum(usage.cacheWriteInputTokenCount),
+              },
+            }
+          : {}),
       };
     },
   },
