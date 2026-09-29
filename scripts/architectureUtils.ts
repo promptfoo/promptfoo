@@ -114,7 +114,7 @@ function validateDependencies(config: LayerConfig, layerNames: Set<string>): voi
     for (const allowedDependency of layer.allowedDependencies) {
       if (typeof allowedDependency !== 'string' || !layerNames.has(allowedDependency)) {
         throw new Error(
-          `Architecture layer "${layer.name}" allows unknown dependency "${String(allowedDependency)}".`,
+          `Architecture layer "${layer.name}" allows unknown dependency "${allowedDependency}".`,
         );
       }
     }
@@ -444,9 +444,10 @@ export function resolveInternalModule(
   const candidates = [
     unresolvedPath,
     ...runtimeSourceCandidates,
-    ...DECLARATION_EXTENSIONS.map((extension) => unresolvedPath + extension),
     ...TYPESCRIPT_EXTENSIONS.map((extension) => `${unresolvedPath}${extension}`),
+    ...DECLARATION_EXTENSIONS.map((extension) => `${unresolvedPath}${extension}`),
     ...DIRECTORY_INDEXES.map((indexFile) => path.join(unresolvedPath, indexFile)),
+    ...DECLARATION_EXTENSIONS.map((extension) => path.join(unresolvedPath, `index${extension}`)),
   ];
 
   for (const candidate of candidates) {
@@ -1067,13 +1068,13 @@ export function buildArchitectureReport(
     const externalSpecifiers = new Set<string>();
     const unresolvedReferences: ArchitectureModuleReference[] = [];
     const unresolvedSet = new Set(unresolvedInternal);
+    const includesKind = (reference: ModuleReference) =>
+      mode === 'combined' ||
+      reference.kind === 'value' ||
+      (mode === 'value-and-deferred' && reference.kind === 'deferred');
     for (const file of files) {
       for (const reference of byImporter.get(file) ?? []) {
-        if (
-          mode !== 'combined' &&
-          reference.kind !== 'value' &&
-          !(mode === 'value-and-deferred' && reference.kind === 'deferred')
-        ) {
+        if (!includesKind(reference)) {
           continue;
         }
         if (reference.resolvedImport) {
@@ -1090,18 +1091,10 @@ export function buildArchitectureReport(
       externalSpecifiers: [...externalSpecifiers].sort(),
       unresolvedReferences,
       unscannedInternal: unscannedInternal.filter(
-        (reference) =>
-          files.has(reference.importer) &&
-          (mode === 'combined' ||
-            reference.kind === 'value' ||
-            (mode === 'value-and-deferred' && reference.kind === 'deferred')),
+        (reference) => files.has(reference.importer) && includesKind(reference),
       ),
       computedReferences: sourceScan.computedReferences.filter(
-        (reference) =>
-          files.has(reference.importer) &&
-          (mode === 'combined' ||
-            reference.kind === 'value' ||
-            (mode === 'value-and-deferred' && reference.kind === 'deferred')),
+        (reference) => files.has(reference.importer) && includesKind(reference),
       ),
     };
   };

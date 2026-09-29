@@ -82,6 +82,14 @@ dependency-light state implementation for embedded evaluators and focused tests.
 resume append behavior. The evaluator orchestrates evaluation behavior without
 importing the concrete `Eval` model.
 
+`src/util/envFile.ts` owns plain `.env` file loading as a Node filesystem adapter.
+The imports from `src/envars.ts` and `src/server/server.ts` replace external
+`dotenv` calls at the same startup points; the edge baseline records these two
+internal dependencies. The loader imports only Node built-ins, so early loading
+does not initialize the logger, configuration state, or database. Keeping it
+separate from `setupEnv` preserves that initialization order without duplicating
+the parser across callers.
+
 The checker also resolves cross-layer source aliases such as `@promptfoo/*`.
 The browser-only `@app/*` alias stays inside the `app` layer. Alias spelling
 does not exempt a browser import from the same layer and path checks as a
@@ -129,11 +137,13 @@ npm run deps:ownership
 The report is intentionally descriptive for now. It gives us the evidence needed
 to move dependencies into future packages without guessing at ownership.
 
-## Architecture Measurement Views
+It includes direct, optional, and peer dependency declarations. Peers marked
+optional in `peerDependenciesMeta` appear as `optional-peer`; other peers appear
+as `peer`. These labels describe the package contract, not what is installed.
 
-The boundary ratchets still count every literal module reference together, including
-explicit type imports, dynamic imports, and `require.resolve`. They exclude the
-public facade as an importer. No existing allowance changes when using a report:
+## Architecture Reports
+
+The checker can report references, cycles, and files reachable from an entrypoint:
 
 ```bash
 npm run architecture:check -- --report
@@ -141,25 +151,22 @@ npx tsx scripts/checkArchitectureBoundaries.ts --json > architecture-report.json
 npx tsx scripts/checkArchitectureBoundaries.ts --json --entrypoint=src/contracts.ts
 ```
 
-JSON goes to stdout; check diagnostics go to stderr and failures retain a nonzero
-exit status. Reports include separate explicit-type, value-capable, deferred
-(`import()`), and resolution-only (`require.resolve`) views, layer cycles, and
-file cycles. Mixed imports count once as value-capable; ordinary imports may
-still be erased by TypeScript. CommonJS `require()` is value-capable, even inside
-a function; this analysis does not infer execution timing or scope bindings.
+JSON goes to stdout and check diagnostics go to stderr. Failed checks still return
+a nonzero exit status. Reports preserve the existing boundary limits: enforcement
+counts all literal references together and excludes imports from the public facade.
 
-Entrypoint reports include the facade and compare combined, value-capable, and
-value-capable-plus-deferred reach. Lists of external specifiers describe direct
-source references, not their transitive installed dependencies. Unresolved
-internal references (including non-TypeScript assets) and computed loaders retain
-source locations so incomplete reach is visible. References to files outside the
-scanned scope (such as ignored files and declarations) are listed separately. Aliased loader functions and
-arbitrary runtime resolution are outside the scanner's syntax coverage. The
-CommonJS forms recognized here are single-argument `require(target)` and
-`require.resolve(target)`; computed member access and resolution options are not
-modeled.
+Reports separate explicit type references, value references, dynamic imports, and
+`require.resolve` calls. Mixed imports count as value references. Entrypoint reports
+include the facade and compare all references, value references alone, and value
+references plus dynamic imports. External specifiers name direct source references.
 
-These are source graphs, not shipped browser bundles or install-size measurements.
-They do not model Vite substitutions, tree shaking, or compiler import elision.
-Layer cycles do not establish file cycles, and back-edges are violations of the
-configured order, not a minimum cut or an estimate of remaining extraction work.
+Unresolved internal references, computed loaders, and references to ignored or
+declaration files include source locations. Implementation files take precedence
+over declaration fallbacks. The scanner recognizes single-argument `require()` and
+`require.resolve()` calls, including calls inside functions. It does not follow
+aliased loaders, computed member access, resolution options, or runtime bindings.
+
+These source graphs do not account for compiler import removal, Vite substitutions,
+tree shaking, or transitive installed dependencies. Layer cycles and file cycles
+are reported separately. Back-edges show violations of the configured layer order;
+they do not measure the work needed to remove cycles.

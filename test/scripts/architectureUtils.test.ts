@@ -210,6 +210,35 @@ describe('resolveInternalModule', () => {
       expect(resolveInternalModule(repoRoot, 'src/index.ts', './module')).toBe('src/module.d.mts');
     });
 
+    it.each([
+      ['.ts', '.d.ts'],
+      ['.tsx', '.d.ts'],
+      ['.mts', '.d.mts'],
+      ['.cts', '.d.cts'],
+    ])('prefers %s implementations over %s declarations', (implementation, declaration) => {
+      write(`src/module${implementation}`);
+      write(`src/module${declaration}`);
+      expect(resolveInternalModule(repoRoot, 'src/index.ts', './module')).toBe(
+        `src/module${implementation}`,
+      );
+    });
+
+    it.each(['.d.ts', '.d.mts', '.d.cts'])(
+      'resolves declaration-only directories with index%s',
+      (extension) => {
+        write(`src/types/index${extension}`);
+        expect(resolveInternalModule(repoRoot, 'src/index.ts', './types')).toBe(
+          `src/types/index${extension}`,
+        );
+      },
+    );
+
+    it('prefers directory implementations over declaration indexes', () => {
+      write('src/types/index.ts');
+      write('src/types/index.d.ts');
+      expect(resolveInternalModule(repoRoot, 'src/index.ts', './types')).toBe('src/types/index.ts');
+    });
+
     it('returns undefined for non-existent internal paths', () => {
       expect(resolveInternalModule(repoRoot, 'src/foo.ts', './missing')).toBeUndefined();
     });
