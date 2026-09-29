@@ -11,14 +11,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { Check, Copy, X } from 'lucide-react';
-import AddAssertionsDialog from './AddAssertionsDialog';
 import ChatMessages, { type Message } from './ChatMessages';
 import { DebuggingPanel } from './DebuggingPanel';
 import { EvaluationPanel } from './EvaluationPanel';
 import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
 import { OutputsPanel } from './OutputsPanel';
 import { PromptEditor } from './PromptEditor';
-import { useTableStore } from './store';
 import type { GradingResult, Vars } from '@promptfoo/types';
 
 import type { Trace } from '../../../components/traces/TraceView';
@@ -157,7 +155,6 @@ interface EvalOutputPromptDialogProps {
   testCaseId?: string;
   testIndex?: number;
   promptIndex?: number;
-  resultId?: string;
   variables?: Vars;
   onAddFilter?: (filter: FilterConfig) => void;
   onResetFilters?: () => void;
@@ -180,7 +177,6 @@ export default function EvalOutputPromptDialog({
   testCaseId,
   testIndex,
   promptIndex,
-  resultId,
   variables,
   onAddFilter,
   onResetFilters,
@@ -189,7 +185,6 @@ export default function EvalOutputPromptDialog({
   cloudConfig,
   readOnly = false,
 }: EvalOutputPromptDialogProps) {
-  const { refreshTable, table } = useTableStore();
   const [activeTab, setActiveTab] = useState('prompt-output');
   const [copied, setCopied] = useState(false);
   const [copiedFields, setCopiedFields] = useState<{ [key: string]: boolean }>({});
@@ -201,7 +196,6 @@ export default function EvalOutputPromptDialog({
   const [replayOutput, setReplayOutput] = useState<string | null>(null);
   const [replayError, setReplayError] = useState<string | null>(null);
   const [traces, setTraces] = useState<Trace[]>([]);
-  const [addAssertionsOpen, setAddAssertionsOpen] = useState(false);
 
   useEffect(() => {
     setCopied(false);
@@ -371,16 +365,8 @@ export default function EvalOutputPromptDialog({
     metadata &&
     Object.keys(metadata).filter((key) => !HIDDEN_METADATA_KEYS.includes(key)).length > 0;
 
-  const availableScopes = [resultId ? 'results' : null, testIndex == null ? null : 'tests'].filter(
-    Boolean,
-  ) as Array<'results' | 'tests'>;
-
-  const defaultScope = availableScopes[0] || 'results';
-
   const visibleTabs: string[] = ['prompt-output'];
-  const canShowEvaluationTab = hasEvaluationData || availableScopes.length > 0;
-
-  if (canShowEvaluationTab) {
+  if (hasEvaluationData) {
     visibleTabs.push('evaluation');
   }
   if (hasMessagesData) {
@@ -437,7 +423,7 @@ export default function EvalOutputPromptDialog({
             >
               {hasOutputContent ? 'Prompt & Output' : 'Prompt'}
             </TabsTrigger>
-            {canShowEvaluationTab && (
+            {hasEvaluationData && (
               <TabsTrigger
                 value="evaluation"
                 className="-mb-px rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-3"
@@ -516,26 +502,8 @@ export default function EvalOutputPromptDialog({
             </TabsContent>
 
             {/* Evaluation Panel */}
-            {canShowEvaluationTab && (
+            {hasEvaluationData && (
               <TabsContent value="evaluation" className="mt-0">
-                {evaluationId && availableScopes.length > 0 && (
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h4 className="text-sm font-medium">Assertions</h4>
-                      <p className="text-xs text-muted-foreground">
-                        Add new assertions and re-score this output.
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setAddAssertionsOpen(true)}
-                      disabled={readOnly}
-                    >
-                      Add assertions
-                    </Button>
-                  </div>
-                )}
                 <EvaluationPanel gradingResults={gradingResults} />
               </TabsContent>
             )}
@@ -591,21 +559,6 @@ export default function EvalOutputPromptDialog({
             )}
           </div>
         </Tabs>
-
-        {evaluationId && availableScopes.length > 0 && (
-          <AddAssertionsDialog
-            open={addAssertionsOpen}
-            onClose={() => setAddAssertionsOpen(false)}
-            evalId={evaluationId}
-            availableScopes={availableScopes}
-            defaultScope={defaultScope}
-            resultId={resultId}
-            testIndex={testIndex}
-            promptCount={table?.head.prompts.length}
-            onApplied={refreshTable}
-            readOnly={readOnly}
-          />
-        )}
       </SheetContent>
     </Sheet>
   );

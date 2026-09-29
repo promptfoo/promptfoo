@@ -25,7 +25,7 @@ import type {
   ResultsFile,
   UnifiedConfig,
 } from '@promptfoo/types';
-import type { VisibilityState } from '@tanstack/table-core';
+import type { VisibilityState } from '@tanstack/react-table';
 
 function computeHighlightCount(table: EvaluateTable | null): number {
   if (!table) {
@@ -219,11 +219,6 @@ interface ColumnState {
   columnVisibility: VisibilityState;
 }
 
-export interface PaginationState {
-  pageIndex: number;
-  pageSize: number;
-}
-
 export type ResultsFilterType =
   | 'metric'
   | 'metadata'
@@ -309,9 +304,9 @@ interface TableState {
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
   isStreaming: boolean;
-  setIsStreaming: (isStreaming: boolean) => void;
   tableRefreshToken: number;
   refreshTable: () => void;
+  setIsStreaming: (isStreaming: boolean) => void;
 
   shouldHighlightSearchText: boolean;
 
@@ -634,10 +629,9 @@ export const useTableStore = create<TableState>()(
 
     isFetching: false,
     isStreaming: false,
-    setIsStreaming: (isStreaming: boolean) => set(() => ({ isStreaming })),
     tableRefreshToken: 0,
-    refreshTable: () =>
-      set((prevState) => ({ tableRefreshToken: prevState.tableRefreshToken + 1 })),
+    refreshTable: () => set((state) => ({ tableRefreshToken: state.tableRefreshToken + 1 })),
+    setIsStreaming: (isStreaming: boolean) => set(() => ({ isStreaming })),
 
     shouldHighlightSearchText: false,
 

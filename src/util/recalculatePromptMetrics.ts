@@ -1,22 +1,22 @@
 import logger from '../logger';
-import Eval from '../models/eval';
 import { ResultFailureReason } from '../types/index';
 import { accumulateNamedMetric } from '../util/namedMetrics';
 import {
-  accumulateAssertionTokenUsage,
+  accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
-  createEmptyAssertions,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
 
+import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
 import type { DerivedMetric, PromptMetrics } from '../types/index';
 
 // Batch size of 1000 balances memory usage vs. database query overhead for large evals (40K+ results).
 const RECALCULATE_BATCH_SIZE = 1000;
 
-function createPromptMetrics(): PromptMetrics {
+function createPromptMetrics(existing?: PromptMetrics): PromptMetrics {
   return {
+    ...(existing?.redteam ? { redteam: existing.redteam } : {}),
     score: 0,
     testPassCount: 0,
     testFailCount: 0,
@@ -43,6 +43,11 @@ function accumulateResultMetrics(metrics: PromptMetrics, result: EvalResult): vo
 
   metrics.score += result.score ?? 0;
   metrics.totalLatencyMs += result.latencyMs || 0;
+  const incurredCost = result.response?.incurredCost ?? (result.response?.cached ? 0 : undefined);
+  if (incurredCost !== undefined || metrics.incurredCost !== undefined) {
+    metrics.incurredCost =
+      (metrics.incurredCost ?? metrics.cost) + (incurredCost ?? result.cost ?? 0);
+  }
   metrics.cost += result.cost || 0;
 
   for (const [key, value] of Object.entries(result.namedScores || {})) {
@@ -60,14 +65,13 @@ function accumulateResultMetrics(metrics: PromptMetrics, result: EvalResult): vo
   }
 
   if (result.response?.tokenUsage) {
-    accumulateResponseTokenUsage(metrics.tokenUsage, {
-      tokenUsage: result.response.tokenUsage,
-    });
+    accumulateResponseTokenUsage(metrics.tokenUsage, result.response);
   }
 
   if (result.gradingResult?.tokensUsed) {
-    metrics.tokenUsage.assertions ||= createEmptyAssertions();
-    accumulateAssertionTokenUsage(metrics.tokenUsage.assertions, result.gradingResult.tokensUsed);
+    accumulateGradingTokenUsage(metrics.tokenUsage, result.gradingResult.tokensUsed, {
+      cached: result.gradingResult.metadata?.cachedResponse,
+    });
   }
 }
 
@@ -120,7 +124,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
   const promptMetricsMap = new Map<number, PromptMetrics>();
 
   for (const [promptIdx] of evalRecord.prompts.entries()) {
-    promptMetricsMap.set(promptIdx, createPromptMetrics());
+    promptMetricsMap.set(promptIdx, createPromptMetrics(evalRecord.prompts[promptIdx].metrics));
   }
 
   let currentResultId: string | undefined;

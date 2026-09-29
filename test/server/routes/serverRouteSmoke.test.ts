@@ -44,7 +44,6 @@ const mocks = vi.hoisted(() => ({
   fetchWithProxy: vi.fn(),
   getAvailableProviders: vi.fn(),
   getBlobByHash: vi.fn(),
-  getBlobUrl: vi.fn(),
   getDb: vi.fn(),
   getEnvBool: vi.fn(),
   getEnvFloat: vi.fn(),
@@ -91,7 +90,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../src/blobs', () => ({
   getBlobByHash: mocks.getBlobByHash,
-  getBlobUrl: mocks.getBlobUrl,
 }));
 
 vi.mock('../../../src/blobs/extractor', () => ({
@@ -501,29 +499,16 @@ const smokeCases: SmokeCase[] = [
   },
   {
     method: 'post',
+    openApiPath: '/api/eval/{evalId}/results/{id}/assertions',
+    path: '/api/eval/eval-1/results/result-1/assertions',
+    body: {},
+    expectedStatus: 400,
+  },
+  {
+    method: 'post',
     openApiPath: '/api/eval/{evalId}/results/{id}/rating',
     path: '/api/eval/eval-1/results/result-1/rating',
     body: {},
-    expectedStatus: 400,
-  },
-  {
-    method: 'post',
-    openApiPath: '/api/eval/{evalId}/assertions',
-    path: '/api/eval/eval-1/assertions',
-    body: {},
-    expectedStatus: 400,
-  },
-  {
-    method: 'get',
-    openApiPath: '/api/eval/{evalId}/assertions/job/{jobId}',
-    path: '/api/eval/eval-1/assertions/job/job-1',
-    expectedStatus: 404,
-  },
-  {
-    method: 'post',
-    openApiPath: '/api/eval/{evalId}/assertions/generate',
-    path: '/api/eval/eval-1/assertions/generate',
-    body: { numAssertions: 0 },
     expectedStatus: 400,
   },
   {

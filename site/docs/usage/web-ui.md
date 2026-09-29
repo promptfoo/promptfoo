@@ -59,20 +59,8 @@ Hover to reveal actions. Hold `Shift` for more:
 | ⭐  | Highlight | Mark for review (`Shift`)                       |
 | 📋  | Copy      | Copy to clipboard (`Shift`)                     |
 | 🔗  | Share     | Link to this output (`Shift`)                   |
-| ⋯   | More      | Re-run a cell or add assertions (`Shift`)       |
 
 Ratings and comments persist and are included in exports—use them to build training datasets.
-
-## Add assertions after a run
-
-Use **More → Add assertion** on a cell to score an existing output, or the table toolbar
-after applying filters or search to apply assertions to selected test cases. Post-hoc
-assertions update saved results without rerunning the target model.
-
-Model-based assertions can make a new grading request for every selected output. When
-applying them to test cases, the viewer shows a minimum request estimate because a test
-case can contain outputs from multiple prompts or providers. Only one post-hoc update can
-run for an eval at a time; wait for it to finish before starting another.
 
 ## Eval Actions
 
@@ -156,3 +144,9 @@ Viewer state syncs to the URL—bookmark or share filtered views:
 ```text
 /eval/abc123?filterMode=failures&search=timeout
 ```
+
+### Add an assertion to a saved output
+
+In a local evaluation, use **Add assertion** in an output cell's actions to check its saved response. You can check text equality, substrings, prefixes, or JSON validity. Text values are literal; file references, package references, and templates are not supported. The result and table metrics update without another model call. Repeating the same check does not add a duplicate.
+
+Existing assertions and human ratings are preserved. Results with custom scoring or missing assertion details must be re-evaluated from their original configuration. This action applies to one output and is unavailable while comparing evaluations.

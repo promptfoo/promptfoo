@@ -1,18 +1,9 @@
 import React, { useCallback, useId, useMemo } from 'react';
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@app/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
-import { useToast } from '@app/hooks/useToast';
-import { cn } from '@app/lib/utils';
 import { formatDuration } from '@app/utils/date';
 import {
   normalizeMediaText,
@@ -31,18 +22,15 @@ import { diffJson, diffSentences, diffWords } from 'diff';
 import {
   Check,
   ClipboardCopy,
-  FileCode,
   Hash,
   Link,
-  Loader2,
-  MoreHorizontal,
   Pencil,
-  Play,
   Plus,
   Search,
   Star,
   ThumbsDown,
   ThumbsUp,
+  X,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import logger from '../../../../../logger';
@@ -121,7 +109,7 @@ export function isImageProvider(provider: string | undefined): boolean {
  * - 'openai:video:sora-2' (OpenAI Sora)
  * - 'openai:video:sora-2-pro' (OpenAI Sora Pro)
  * - 'google:video:veo-3.1-generate-preview' (Google Veo)
- * - 'google:video:veo-2-generate' (Google Veo 2)
+ * - 'google:video:veo-3.1-fast-generate-preview' (Google Veo Fast)
  * Used to skip truncation for video content.
  */
 export function isVideoProvider(provider: string | undefined): boolean {
@@ -1045,20 +1033,15 @@ function renderOutputActions({
   copied,
   linked,
   isHighlighted,
+  isRedteam,
   activeRating,
   openPrompt,
   output,
   text,
   rowIndex,
-  testIdx,
   promptIndex,
   evaluationId,
   testCaseId,
-  promptCount,
-  mutationsDisabled,
-  openAssertions,
-  copiedAssertion,
-  isReplaying,
   cloudConfig,
   addFilter,
   resetFilters,
@@ -1072,30 +1055,22 @@ function renderOutputActions({
   handleCommentOpen,
   handlePromptOpen,
   handlePromptClose,
-  handleRerun,
-  handleCopyAsAssertion,
-  setOpenAssertions,
-  onAssertionsApplied,
+  handleAddAssertion,
   setActionsHovered,
 }: {
   showExtraActions: boolean;
   copied: boolean;
   linked: boolean;
   isHighlighted: boolean;
+  isRedteam: boolean;
   activeRating: boolean | null;
   openPrompt: boolean;
   output: EvaluateTableOutput;
   text: string;
   rowIndex: number;
-  testIdx?: number;
   promptIndex: number;
   evaluationId?: string;
   testCaseId?: string;
-  promptCount?: number;
-  mutationsDisabled: boolean;
-  openAssertions: boolean;
-  copiedAssertion: boolean;
-  isReplaying: boolean;
   cloudConfig: ReturnType<typeof useCloudConfig>['data'];
   addFilter: ReturnType<typeof useTableStore.getState>['addFilter'];
   resetFilters: ReturnType<typeof useTableStore.getState>['resetFilters'];
@@ -1109,12 +1084,12 @@ function renderOutputActions({
   handleCommentOpen: () => void;
   handlePromptOpen: () => void;
   handlePromptClose: () => void;
-  handleRerun: () => void;
-  handleCopyAsAssertion: () => void;
-  setOpenAssertions: (open: boolean) => void;
-  onAssertionsApplied: () => void;
+  handleAddAssertion?: () => void;
   setActionsHovered: (hovered: boolean) => void;
 }): React.ReactNode {
+  const passActionLabel = isRedteam ? 'Mark as safe' : 'Mark test passed';
+  const failActionLabel = isRedteam ? 'Mark as vulnerable' : 'Mark test failed';
+
   return (
     <div
       className="cell-actions"
@@ -1123,6 +1098,21 @@ function renderOutputActions({
     >
       {showExtraActions && (
         <>
+          {handleAddAssertion && (
+            <Tooltip disableHoverableContent>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="action p-1 rounded hover:bg-muted transition-colors"
+                  onClick={handleAddAssertion}
+                  aria-label="Add assertion"
+                >
+                  <Plus className="size-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Add assertion to this output</TooltipContent>
+            </Tooltip>
+          )}
           <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
               <button
@@ -1168,52 +1158,6 @@ function renderOutputActions({
             </TooltipTrigger>
             <TooltipContent>Toggle test highlight</TooltipContent>
           </Tooltip>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="action p-1 rounded hover:bg-muted transition-colors"
-                aria-label="More actions"
-              >
-                <MoreHorizontal className="size-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem
-                onClick={handleRerun}
-                disabled={
-                  mutationsDisabled ||
-                  isReplaying ||
-                  !evaluationId ||
-                  !output.prompt ||
-                  testIdx == null
-                }
-              >
-                {isReplaying ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Play className="size-4" />
-                )}
-                {isReplaying ? 'Re-running...' : 'Re-run cell'}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => setOpenAssertions(true)}
-                disabled={mutationsDisabled || !evaluationId}
-              >
-                <Plus className="size-4" />
-                Add assertion
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleCopy}>
-                <ClipboardCopy className="size-4" />
-                {copied ? 'Copied!' : 'Copy output'}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleCopyAsAssertion}>
-                <FileCode className="size-4" />
-                {copiedAssertion ? 'Copied!' : 'Copy as assertion'}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </>
       )}
       <Tooltip disableHoverableContent>
@@ -1223,15 +1167,19 @@ function renderOutputActions({
             className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === true ? 'active text-emerald-600 dark:text-emerald-400' : ''}`}
             onClick={() => handleRating(true)}
             aria-pressed={activeRating === true}
-            aria-label="Mark test passed"
+            aria-label={passActionLabel}
           >
-            <ThumbsUp
-              className={`size-4 ${activeRating === true ? 'stroke-emerald-700 dark:stroke-emerald-300' : ''}`}
-              fill={activeRating === true ? 'currentColor' : 'none'}
-            />
+            {isRedteam ? (
+              <Check className="size-4" />
+            ) : (
+              <ThumbsUp
+                className={`size-4 ${activeRating === true ? 'stroke-emerald-700 dark:stroke-emerald-300' : ''}`}
+                fill={activeRating === true ? 'currentColor' : 'none'}
+              />
+            )}
           </button>
         </TooltipTrigger>
-        <TooltipContent>Mark test passed (score 1.0)</TooltipContent>
+        <TooltipContent>{passActionLabel} (score 1.0)</TooltipContent>
       </Tooltip>
       <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
@@ -1240,15 +1188,19 @@ function renderOutputActions({
             className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === false ? 'active text-red-600 dark:text-red-400' : ''}`}
             onClick={() => handleRating(false)}
             aria-pressed={activeRating === false}
-            aria-label="Mark test failed"
+            aria-label={failActionLabel}
           >
-            <ThumbsDown
-              className={`size-4 ${activeRating === false ? 'stroke-red-700 dark:stroke-red-300' : ''}`}
-              fill={activeRating === false ? 'currentColor' : 'none'}
-            />
+            {isRedteam ? (
+              <X className="size-4" />
+            ) : (
+              <ThumbsDown
+                className={`size-4 ${activeRating === false ? 'stroke-red-700 dark:stroke-red-300' : ''}`}
+                fill={activeRating === false ? 'currentColor' : 'none'}
+              />
+            )}
           </button>
         </TooltipTrigger>
-        <TooltipContent>Mark test failed (score 0.0)</TooltipContent>
+        <TooltipContent>{failActionLabel} (score 0.0)</TooltipContent>
       </Tooltip>
       <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
@@ -1303,9 +1255,8 @@ function renderOutputActions({
               providerPrompt={getActualPrompt(output.response, { formatted: true })}
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
-              testIndex={testIdx ?? rowIndex}
+              testIndex={rowIndex}
               promptIndex={promptIndex}
-              resultId={output.id}
               variables={output.metadata?.inputVars || output.testCase?.vars}
               onAddFilter={addFilter}
               onResetFilters={resetFilters}
@@ -1316,19 +1267,6 @@ function renderOutputActions({
           )}
         </>
       )}
-      {openAssertions && (
-        <AddAssertionsDialog
-          open={openAssertions}
-          onClose={() => setOpenAssertions(false)}
-          evalId={evaluationId}
-          availableScopes={testIdx == null ? ['results'] : ['results', 'tests']}
-          defaultScope="results"
-          resultId={output.id}
-          testIndex={testIdx}
-          promptCount={promptCount}
-          onApplied={onAssertionsApplied}
-        />
-      )}
     </div>
   );
 }
@@ -1337,14 +1275,13 @@ export interface EvalOutputCellProps {
   output: EvaluateTableOutput;
   maxTextLength: number;
   rowIndex: number;
-  testIdx?: number;
   rowPositionIndex?: number;
   promptIndex: number;
   showStats: boolean;
+  isRedteam?: boolean;
   onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
   evaluationId?: string;
   testCaseId?: string;
-  mutationsDisabled?: boolean;
 }
 
 /**
@@ -1369,7 +1306,6 @@ function EvalOutputCell({
   output,
   maxTextLength,
   rowIndex,
-  testIdx,
   rowPositionIndex = rowIndex,
   promptIndex,
   onRating,
@@ -1377,9 +1313,9 @@ function EvalOutputCell({
   showDiffs,
   searchText,
   showStats,
+  isRedteam = false,
   evaluationId,
   testCaseId,
-  mutationsDisabled = false,
 }: EvalOutputCellProps & {
   firstOutput?: EvaluateTableOutput | null;
   showDiffs: boolean;
@@ -1395,17 +1331,15 @@ function EvalOutputCell({
     showPassReasons,
     maxImageWidth,
     maxImageHeight,
+    inComparisonMode,
   } = useResultsViewSettingsStore();
 
-  const { shouldHighlightSearchText, addFilter, resetFilters, refreshTable, table } =
-    useTableStore();
+  const { shouldHighlightSearchText, addFilter, resetFilters, refreshTable } = useTableStore();
   const { data: cloudConfig } = useCloudConfig();
   const { replayEvaluation, fetchTraces } = useEvalOperations();
-  const { showToast } = useToast();
 
   const [openPrompt, setOpen] = React.useState(false);
   const [openAssertions, setOpenAssertions] = React.useState(false);
-  const [isReplaying, setIsReplaying] = React.useState(false);
   const locationHash = useEvalDetailsHash();
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
     getHumanRating(output)?.pass ?? null,
@@ -1476,13 +1410,6 @@ function EvalOutputCell({
   const [commentDraftText, setCommentDraftText] = React.useState(
     output.gradingResult?.comment || '',
   );
-  const originalText = stringifyOutputText(output.text);
-  const outputIdentity = `${output.id ?? ''}:${originalText}`;
-  const [replayState, setReplayState] = React.useState<{
-    outputIdentity: string;
-    text: string | null;
-  }>(() => ({ outputIdentity, text: null }));
-  const replayedText = replayState.outputIdentity === outputIdentity ? replayState.text : null;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Reset local draft state when switching outputs that share the same stored comment value.
   React.useEffect(() => {
@@ -1520,7 +1447,7 @@ function EvalOutputCell({
     setCommentDraftText(newCommentText);
   };
 
-  const text = replayedText ?? originalText;
+  const text = stringifyOutputText(output.text);
   const normalizedText = normalizeMediaText(text);
   const inlineImageSrc = resolveImageSource(text);
   const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
@@ -1573,13 +1500,9 @@ function EvalOutputCell({
 
   const [linked, setLinked] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
-  const [copiedAssertion, setCopiedAssertion] = React.useState(false);
   const isMountedRef = React.useRef(true);
   const linkedResetTimeoutRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const copiedResetTimeoutRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
-  const copiedAssertionResetTimeoutRef = React.useRef<ReturnType<
-    typeof globalThis.setTimeout
-  > | null>(null);
 
   const clearLinkedResetTimeout = useCallback(() => {
     if (linkedResetTimeoutRef.current !== null) {
@@ -1595,13 +1518,6 @@ function EvalOutputCell({
     }
   }, []);
 
-  const clearCopiedAssertionResetTimeout = useCallback(() => {
-    if (copiedAssertionResetTimeoutRef.current !== null) {
-      globalThis.clearTimeout(copiedAssertionResetTimeoutRef.current);
-      copiedAssertionResetTimeoutRef.current = null;
-    }
-  }, []);
-
   React.useEffect(() => {
     isMountedRef.current = true;
 
@@ -1609,9 +1525,8 @@ function EvalOutputCell({
       isMountedRef.current = false;
       clearLinkedResetTimeout();
       clearCopiedResetTimeout();
-      clearCopiedAssertionResetTimeout();
     };
-  }, [clearLinkedResetTimeout, clearCopiedResetTimeout, clearCopiedAssertionResetTimeout]);
+  }, [clearLinkedResetTimeout, clearCopiedResetTimeout]);
 
   const scheduleLinkedReset = useCallback(() => {
     clearLinkedResetTimeout();
@@ -1632,16 +1547,6 @@ function EvalOutputCell({
       }
     }, 3000);
   }, [clearCopiedResetTimeout]);
-
-  const scheduleCopiedAssertionReset = useCallback(() => {
-    clearCopiedAssertionResetTimeout();
-    copiedAssertionResetTimeoutRef.current = globalThis.setTimeout(() => {
-      copiedAssertionResetTimeoutRef.current = null;
-      if (isMountedRef.current) {
-        setCopiedAssertion(false);
-      }
-    }, 3000);
-  }, [clearCopiedAssertionResetTimeout]);
 
   const handleRowShareLink = () => {
     const url = new URL(window.location.href);
@@ -1685,58 +1590,6 @@ function EvalOutputCell({
       });
   };
 
-  const handleCopyAsAssertion = () => {
-    const assertion = `- type: equals\n  value: ${JSON.stringify(text)}`;
-    navigator.clipboard
-      .writeText(assertion)
-      .then(() => {
-        if (!isMountedRef.current) {
-          return;
-        }
-        setCopiedAssertion(true);
-        scheduleCopiedAssertionReset();
-      })
-      .catch((error) => {
-        if (!isMountedRef.current) {
-          return;
-        }
-        logger.error('Failed to copy assertion to clipboard', { error: getErrorMessage(error) });
-      });
-  };
-
-  const handleRerun = async () => {
-    if (!evaluationId || !output.prompt || testIdx == null) {
-      return;
-    }
-
-    setIsReplaying(true);
-    showToast('Re-running cell...', 'info');
-
-    try {
-      const result = await replayEvaluation({
-        evaluationId,
-        testIndex: testIdx,
-        prompt: typeof output.prompt === 'string' ? output.prompt : JSON.stringify(output.prompt),
-        variables: output.metadata?.inputVars || output.testCase?.vars,
-      });
-
-      if (result.error) {
-        showToast(`Re-run failed: ${result.error}`, 'error');
-      } else {
-        setReplayState({ outputIdentity, text: result.output ?? '' });
-        showToast('Cell re-run complete. Showing the new output in this cell.', 'success');
-        refreshTable();
-      }
-    } catch (error) {
-      showToast(
-        `Re-run failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'error',
-      );
-    } finally {
-      setIsReplaying(false);
-    }
-  };
-
   const latencyDisplay = getLatencyDisplay(output);
   // Check for token usage in both output.tokenUsage and output.response?.tokenUsage.
   const tokenUsage = output.tokenUsage || output.response?.tokenUsage;
@@ -1766,19 +1619,7 @@ function EvalOutputCell({
   const showExtraActions = shiftKeyPressed || actionsHovered;
 
   return (
-    <div
-      id={`eval-output-cell-${outputCellId}`}
-      className={cn('cell', isReplaying && 'relative')}
-      style={cellStyle}
-    >
-      {isReplaying && (
-        <div className="absolute inset-0 bg-background/80 backdrop-blur-[1px] z-10 flex items-center justify-center rounded">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            <span>Re-running...</span>
-          </div>
-        </div>
-      )}
+    <div id={`eval-output-cell-${outputCellId}`} className="cell" style={cellStyle}>
       {renderStatusBlock({
         showPassFail,
         statusClass,
@@ -1823,20 +1664,15 @@ function EvalOutputCell({
         copied,
         linked,
         isHighlighted: commentIsHighlighted,
+        isRedteam,
         activeRating,
         openPrompt,
         output,
         text,
         rowIndex,
-        testIdx,
         promptIndex,
         evaluationId,
         testCaseId,
-        promptCount: table?.head.prompts.length,
-        mutationsDisabled,
-        openAssertions,
-        copiedAssertion,
-        isReplaying,
         cloudConfig,
         addFilter,
         resetFilters,
@@ -1850,16 +1686,24 @@ function EvalOutputCell({
         handleCommentOpen,
         handlePromptOpen,
         handlePromptClose,
-        handleRerun,
-        handleCopyAsAssertion,
-        setOpenAssertions,
-        onAssertionsApplied: refreshTable,
+        handleAddAssertion:
+          evaluationId && output.id && !inComparisonMode && !cloudConfig?.isEnabled
+            ? () => setOpenAssertions(true)
+            : undefined,
         setActionsHovered,
       })}
       {lightboxOpen && lightboxImage && (
         <div className="lightbox" onClick={() => toggleLightbox()}>
           <img src={lightboxImage} alt="Lightbox" />
         </div>
+      )}
+      {openAssertions && evaluationId && output.id && (
+        <AddAssertionsDialog
+          evalId={evaluationId}
+          resultId={output.id}
+          onClose={() => setOpenAssertions(false)}
+          onApplied={refreshTable}
+        />
       )}
       {commentDialogOpen && (
         <CommentDialog

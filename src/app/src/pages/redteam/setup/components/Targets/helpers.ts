@@ -3,6 +3,10 @@ export function getProviderType(providerId?: string): string | undefined {
     return undefined;
   }
 
+  if (providerId === 'openai:codex-security' || providerId.startsWith('openai:codex-security:')) {
+    return 'codex-security';
+  }
+
   if (providerId.startsWith('file://')) {
     if (/\.(js|ts)(?::[^/\\]+)?$/i.test(providerId)) {
       return 'javascript';
@@ -19,11 +23,14 @@ export function getProviderType(providerId?: string): string | undefined {
     return 'file';
   }
 
-  // Handle provider formats like 'openrouter:openai/gpt-5.4' or 'azure:chat:'
-  if (providerId.includes(':')) {
-    return providerId.split(':')[0];
+  // Handle provider formats like 'openrouter:openai/gpt-6-sol' or 'azure:chat:'
+  const providerType = providerId.includes(':') ? providerId.split(':')[0] : providerId;
+  if (providerType === 'https') {
+    return 'http';
+  }
+  if (providerType === 'ws' || providerType === 'wss') {
+    return 'websocket';
   }
 
-  // Direct provider types
-  return providerId;
+  return providerType;
 }

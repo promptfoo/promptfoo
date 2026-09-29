@@ -14,7 +14,7 @@ import { ConfigSchemas } from '../types/api/configs';
 import { EvalSchemas } from '../types/api/eval';
 import { MediaSchemas } from '../types/api/media';
 import { ModelAuditSchemas } from '../types/api/modelAudit';
-import { ProviderSchemas } from '../types/api/providers';
+import { JsonProviderOptionsWithIdSchema, ProviderSchemas } from '../types/api/providers';
 import { RedteamSchemas } from '../types/api/redteam';
 import { ServerSchemas } from '../types/api/server';
 import { TracesSchemas } from '../types/api/traces';
@@ -43,6 +43,9 @@ const OpenApiCreateJobRequestSchema = z
   })
   .passthrough();
 
+// Provider test routes still parse ProviderOptionsWithIdSchema at runtime. Keep
+// their OpenAPI shape intentionally loose instead of advertising preview-only
+// JSON env semantics that those routes do not preserve.
 const OpenApiProviderOptionsWithIdSchema = z
   .object({
     id: z.string().min(1),
@@ -65,36 +68,26 @@ const OpenApiTestSessionRequestSchema = z.object({
   mainInputVariable: z.string().optional(),
 });
 
+// Runtime normalization accepts blank/incomplete provider values as unset. OpenAPI
+// documents only the non-empty values that remain after normalization.
+const OpenApiPreviewGenerationProviderSchema = z.union([
+  z.string().min(1),
+  JsonProviderOptionsWithIdSchema,
+]);
+
+const OpenApiTestCaseGenerationRequestSchema = RedteamSchemas.GenerateTest.Request.extend({
+  provider: OpenApiPreviewGenerationProviderSchema.optional(),
+});
+
 const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.Response,
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-const OpenApiPosthocAssertionSchema = z
-  .object({
-    type: z.string().min(1),
-  })
-  .passthrough();
+export const SERVER_OPENAPI_ROUTE_COUNT = 68;
 
-const OpenApiPosthocAssertionsRequestSchema = EvalSchemas.AddAssertions.Request.extend({
-  assertions: z.array(OpenApiPosthocAssertionSchema).min(1).max(100),
-});
-
-const OpenApiGenerateAssertionsResponseSchema = z.object({
-  success: z.literal(true),
-  data: z.object({
-    assertions: z.array(OpenApiPosthocAssertionSchema),
-    context: z.object({
-      numPromptsAnalyzed: z.number().int().nonnegative(),
-      numOutputsAnalyzed: z.number().int().nonnegative(),
-      existingAssertionCount: z.number().int().nonnegative(),
-    }),
-  }),
-});
-
-export const SERVER_OPENAPI_ROUTE_COUNT = 70;
-
-type OpenApiSchema = ZodMediaTypeObject['schema'];
+type OpenApiSchema = NonNullable<ZodMediaTypeObject['schema']>;
+type OpenApiResponse = ResponseConfig & { description: string };
 type RouteRequest = NonNullable<RouteConfig['request']>;
 type RegisteredRouteConfig = RouteConfig & {
   operationId: string;
@@ -136,7 +129,7 @@ export function createServerOpenApiRegistry() {
     name: string,
     zodSchema: z.ZodType,
     description = 'Successful response',
-  ): ResponseConfig {
+  ): OpenApiResponse {
     return {
       description,
       content: {
@@ -147,7 +140,7 @@ export function createServerOpenApiRegistry() {
     };
   }
 
-  function evalTableResponse(): ResponseConfig {
+  function evalTableResponse(): OpenApiResponse {
     return {
       description:
         'Evaluation table data. `format=json` returns an exported table object and `format=csv` returns CSV.',
@@ -164,7 +157,7 @@ export function createServerOpenApiRegistry() {
     };
   }
 
-  function rawJsonResponse(description: string, openApiSchema: OpenApiSchema): ResponseConfig {
+  function rawJsonResponse(description: string, openApiSchema: OpenApiSchema): OpenApiResponse {
     return {
       description,
       content: {
@@ -175,7 +168,7 @@ export function createServerOpenApiRegistry() {
     };
   }
 
-  function errorResponse(description: string): ResponseConfig {
+  function errorResponse(description: string): OpenApiResponse {
     return jsonResponse('ErrorResponse', ErrorResponseSchema, description);
   }
 
@@ -191,11 +184,11 @@ export function createServerOpenApiRegistry() {
     return errorResponse('Server error');
   }
 
-  function noContent(description = 'No content'): ResponseConfig {
+  function noContent(description = 'No content'): OpenApiResponse {
     return { description };
   }
 
-  function binaryResponse(description: string): ResponseConfig {
+  function binaryResponse(description: string): OpenApiResponse {
     return {
       description,
       content: {
@@ -209,7 +202,7 @@ export function createServerOpenApiRegistry() {
     };
   }
 
-  function redirectResponse(description: string): ResponseConfig {
+  function redirectResponse(description: string): OpenApiResponse {
     return {
       description,
       headers: {
@@ -618,6 +611,25 @@ export function createServerOpenApiRegistry() {
 
   register({
     method: 'post',
+    path: '/api/eval/{evalId}/results/{id}/assertions',
+    operationId: 'addResultAssertion',
+    tags: ['Eval'],
+    summary: 'Add a deterministic assertion to one saved output',
+    request: {
+      params: params('SubmitRatingParams', EvalSchemas.AddResultAssertion.Params),
+      body: jsonBody('AddResultAssertionRequest', EvalSchemas.AddResultAssertion.Request),
+    },
+    responses: {
+      200: jsonResponse('AddResultAssertionResponse', EvalSchemas.AddResultAssertion.Response),
+      400: validationError(),
+      404: notFound('Evaluation or result not found'),
+      409: errorResponse('Evaluation update already in progress'),
+      500: serverError(),
+    },
+  });
+
+  register({
+    method: 'post',
     path: '/api/eval/{evalId}/results/{id}/rating',
     operationId: 'submitEvalResultRating',
     tags: ['Eval'],
@@ -631,58 +643,6 @@ export function createServerOpenApiRegistry() {
       400: validationError(),
       404: notFound('Result or evaluation not found'),
       409: errorResponse('Evaluation update already in progress'),
-      500: serverError(),
-    },
-  });
-
-  register({
-    method: 'post',
-    path: '/api/eval/{evalId}/assertions',
-    operationId: 'addEvalAssertions',
-    tags: ['Eval'],
-    summary: 'Add assertions to evaluation results',
-    request: {
-      params: params('EvalAssertionsParams', EvalSchemas.AddAssertions.Params),
-      body: jsonBody('PosthocAssertionsRequest', OpenApiPosthocAssertionsRequestSchema),
-    },
-    responses: {
-      200: jsonResponse('PosthocAssertionsResponse', EvalSchemas.AddAssertions.Response),
-      400: validationError(),
-      404: notFound('Evaluation or result not found'),
-      409: errorResponse('Evaluation update already in progress'),
-    },
-  });
-
-  register({
-    method: 'get',
-    path: '/api/eval/{evalId}/assertions/job/{jobId}',
-    operationId: 'getEvalAssertionJob',
-    tags: ['Eval'],
-    summary: 'Get post-hoc assertion job status',
-    request: {
-      params: params('EvalAssertionJobParams', EvalSchemas.AssertionJob.Params),
-    },
-    responses: {
-      200: jsonResponse('AssertionJobStatusResponse', EvalSchemas.AssertionJob.Response),
-      400: validationError(),
-      404: notFound('Assertion job not found'),
-    },
-  });
-
-  register({
-    method: 'post',
-    path: '/api/eval/{evalId}/assertions/generate',
-    operationId: 'generateEvalAssertions',
-    tags: ['Eval'],
-    summary: 'Generate assertion suggestions for an evaluation',
-    request: {
-      params: params('GenerateEvalAssertionsParams', EvalSchemas.GenerateAssertions.Params),
-      body: jsonBody('GenerateEvalAssertionsRequest', EvalSchemas.GenerateAssertions.Request),
-    },
-    responses: {
-      200: jsonResponse('GenerateEvalAssertionsResponse', OpenApiGenerateAssertionsResponseSchema),
-      400: validationError(),
-      404: notFound('Evaluation not found'),
       500: serverError(),
     },
   });
@@ -1038,7 +998,7 @@ export function createServerOpenApiRegistry() {
     tags: ['Redteam'],
     summary: 'Generate one or more redteam test cases',
     request: {
-      body: jsonBody('TestCaseGenerationRequest', RedteamSchemas.GenerateTest.Request),
+      body: jsonBody('TestCaseGenerationRequest', OpenApiTestCaseGenerationRequestSchema),
     },
     responses: {
       200: jsonResponse('TestCaseGenerationResponse', RedteamSchemas.GenerateTest.Response),

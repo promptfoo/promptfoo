@@ -1,12 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import Ajv2020 from 'ajv/dist/2020';
 import { describe, expect, it } from 'vitest';
 import {
   createServerOpenApiDocument,
   createServerOpenApiRegistry,
   SERVER_OPENAPI_ROUTE_COUNT,
 } from '../../src/openapi/server';
+import { TestCaseGenerationSchema } from '../../src/types/api/redteam';
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace'] as const;
 
@@ -81,8 +83,6 @@ describe('server OpenAPI generation', () => {
     const addEvalResultsOperation = paths['/api/eval/{id}/results']?.post as any;
     const createEvalJobOperation = paths['/api/eval/job']?.post as any;
     const evalTableOperation = paths['/api/eval/{id}/table']?.get as any;
-    const submitRatingOperation = paths['/api/eval/{evalId}/results/{id}/rating']?.post as any;
-    const addAssertionsOperation = paths['/api/eval/{evalId}/assertions']?.post as any;
     const getMediaOperation = paths['/api/media/{type}/{filename}']?.get as any;
     const getMediaInfoOperation = paths['/api/media/info/{type}/{filename}']?.get as any;
     const getBlobOperation = paths['/api/blobs/{hash}']?.get as any;
@@ -116,18 +116,6 @@ describe('server OpenAPI generation', () => {
     );
     expect(addEvalResultsOperation?.responses['204']).toEqual(
       expect.objectContaining({ description: 'Results added' }),
-    );
-    expect(submitRatingOperation?.responses['409']).toEqual(
-      expect.objectContaining({ description: 'Evaluation update already in progress' }),
-    );
-    expect(
-      addAssertionsOperation?.requestBody?.content?.['application/json']?.schema?.properties
-        ?.assertions?.items,
-    ).toEqual(
-      expect.objectContaining({
-        properties: expect.objectContaining({ type: expect.objectContaining({ type: 'string' }) }),
-        required: expect.arrayContaining(['type']),
-      }),
     );
     expect(
       createEvalJobOperation?.requestBody?.content?.['application/json']?.schema?.required,
@@ -200,6 +188,62 @@ describe('server OpenAPI generation', () => {
         type: 'object',
       }),
     );
+    expect(providerTestRequest.properties.providerOptions.properties.env).toBeUndefined();
+  });
+
+  it('matches preview provider input placement validation', () => {
+    const document = createServerOpenApiDocument();
+    const requestSchema = (document.paths?.['/api/redteam/generate-test']?.post as any)?.requestBody
+      ?.content?.['application/json']?.schema;
+    const request = {
+      plugin: { id: 'aegis', config: {} },
+      strategy: { id: 'basic', config: {} },
+      config: { applicationDefinition: { purpose: 'test assistant' } },
+      provider: {
+        id: 'openai:chat:gpt-4.1',
+        inputs: {
+          document: {
+            description: 'PDF document',
+            type: 'pdf',
+            config: { injectionPlacements: ['comment'] },
+          },
+        },
+      },
+    };
+    const validateOpenApiRequest = new Ajv2020({ allErrors: true, strict: false }).compile(
+      requestSchema,
+    );
+
+    expect(validateOpenApiRequest(request)).toBe(false);
+    expect(TestCaseGenerationSchema.safeParse(request).success).toBe(false);
+  });
+
+  it('preserves required OpenAPI 3.1 response descriptions and media schemas', () => {
+    const document = createServerOpenApiDocument();
+
+    for (const { method, path, operation } of operations(document)) {
+      const responses = (
+        operation as {
+          responses?: Record<
+            string,
+            { description?: string; content?: Record<string, { schema?: unknown }> }
+          >;
+        }
+      ).responses;
+
+      for (const [status, response] of Object.entries(responses ?? {})) {
+        expect(response.description, `${method.toUpperCase()} ${path} ${status}`).toEqual(
+          expect.any(String),
+        );
+
+        for (const [mediaType, content] of Object.entries(response.content ?? {})) {
+          expect(
+            content.schema,
+            `${method.toUpperCase()} ${path} ${status} ${mediaType}`,
+          ).toBeDefined();
+        }
+      }
+    }
   });
 
   it('documents explicit server-error response paths', () => {

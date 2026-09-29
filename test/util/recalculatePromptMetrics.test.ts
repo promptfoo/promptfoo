@@ -49,6 +49,19 @@ describe('recalculatePromptMetrics', () => {
     expect(metrics?.tokenUsage.assertions?.total).toBe(0);
   });
 
+  it('preserves counters for plugin and strategy graders that were not re-run', async () => {
+    const eval_ = await EvalFactory.create();
+    const redteam = {
+      pluginPassCount: { fixture: 1 },
+      pluginFailCount: { fixture: 2 },
+      strategyPassCount: { basic: 1 },
+      strategyFailCount: { basic: 2 },
+    };
+    eval_.prompts[0].metrics!.redteam = redteam;
+    await recalculatePromptMetrics(eval_);
+    expect((await Eval.findById(eval_.id))?.prompts[0].metrics?.redteam).toEqual(redteam);
+  });
+
   it('counts pass/fail/error results and assertion outcomes', async () => {
     const eval_ = await EvalFactory.create({ numResults: 0 });
 
@@ -259,7 +272,7 @@ describe('recalculatePromptMetrics', () => {
     expect(metrics?.tokenUsage.assertions?.total).toBe(3);
     expect(metrics?.tokenUsage.assertions?.prompt).toBe(1);
     expect(metrics?.tokenUsage.assertions?.completion).toBe(2);
-    expect(metrics?.tokenUsage.assertions?.numRequests).toBe(0);
+    expect(metrics?.tokenUsage.assertions?.numRequests).toBe(1);
   });
 
   it('recalculates expression-based derived metrics from persisted row scores', async () => {

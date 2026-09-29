@@ -14,35 +14,6 @@ import EvalOutputCell, { isImageProvider, isVideoProvider } from './EvalOutputCe
 
 import type { EvalOutputCellProps } from './EvalOutputCell';
 
-const mockReplayEvaluation = vi.hoisted(() => vi.fn());
-const mockFetchTraces = vi.hoisted(() => vi.fn());
-const mockShowToast = vi.hoisted(() => vi.fn());
-
-vi.mock('@app/hooks/useEvalOperations', () => ({
-  useEvalOperations: () => ({
-    replayEvaluation: mockReplayEvaluation,
-    fetchTraces: mockFetchTraces,
-  }),
-}));
-
-vi.mock('@app/hooks/useToast', () => ({
-  useToast: () => ({
-    showToast: mockShowToast,
-  }),
-}));
-
-vi.mock('./AddAssertionsDialog', () => ({
-  default: vi.fn(({ open, resultId, testIndex }) =>
-    open ? (
-      <div
-        data-testid="add-assertions-dialog"
-        data-result-id={resultId}
-        data-test-index={testIndex}
-      />
-    ) : null,
-  ),
-}));
-
 // Mock the EvalOutputPromptDialog component to check what props are passed to it
 vi.mock('./EvalOutputPromptDialog', () => ({
   default: vi.fn(({ gradingResults, metadata, onClose }) => (
@@ -80,9 +51,6 @@ const defaultResultsViewSettings = {
 
 const defaultTableStoreState = {
   shouldHighlightSearchText: false,
-  addFilter: vi.fn(),
-  resetFilters: vi.fn(),
-  refreshTable: vi.fn(),
 };
 
 const mockResultsViewSettings = {
@@ -99,8 +67,6 @@ const resetMockStoreState = () => {
 };
 
 beforeEach(() => {
-  vi.clearAllMocks();
-  mockReplayEvaluation.mockResolvedValue({ output: 'Updated output' });
   resetMockStoreState();
   window.history.replaceState({}, '', '/');
 });
@@ -214,6 +180,24 @@ describe('EvalOutputCell', () => {
     timers?.restore();
     timers = undefined;
   });
+
+  it.each([
+    [true, 'Mark as safe', 'Mark as vulnerable', 'lucide-check', 'lucide-x'],
+    [false, 'Mark test passed', 'Mark test failed', 'lucide-thumbs-up', 'lucide-thumbs-down'],
+  ])(
+    'shows the correct grading actions when isRedteam is %s',
+    (isRedteam, passLabel, failLabel, passIcon, failIcon) => {
+      renderWithProviders(<EvalOutputCell {...defaultProps} isRedteam={isRedteam} />);
+
+      const passButton = screen.getByRole('button', { name: passLabel });
+      const failButton = screen.getByRole('button', { name: failLabel });
+
+      expect(passButton.querySelector('svg')).toHaveClass(passIcon);
+      expect(failButton.querySelector('svg')).toHaveClass(failIcon);
+      expect(passButton).not.toHaveTextContent(passLabel);
+      expect(failButton).not.toHaveTextContent(failLabel);
+    },
+  );
 
   it('handles outputs without text without throwing', () => {
     const propsWithoutText: MockEvalOutputCellProps = {
@@ -967,10 +951,18 @@ describe('EvalOutputCell', () => {
       await clipboard.writeText.mock.results[0]?.value;
     });
 
+    // Flush query notifications without advancing the three-second link feedback timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(1);
 
     unmount();
 
+    // The shared cloud query removes unused entries on its zero-delay GC timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(0);
   });
 
@@ -1000,6 +992,10 @@ describe('EvalOutputCell', () => {
       await writeTextPromise;
     });
 
+    // The shared cloud query removes unused entries on its zero-delay GC timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(0);
   });
 
@@ -2336,74 +2332,6 @@ describe('EvalOutputCell extra actions hover behavior', () => {
     expect(actionsArea).toHaveAttribute('class', 'cell-actions');
   });
 
-  it('opens the add assertions dialog from the more actions menu', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(<EvalOutputCell {...defaultProps} evaluationId="eval-123" testIdx={7} />);
-
-    await user.click(screen.getByRole('button', { name: /more actions/i }));
-    await user.click(screen.getByText('Add assertion'));
-
-    const dialog = screen.getByTestId('add-assertions-dialog');
-    expect(dialog).toHaveAttribute('data-result-id', 'test-id');
-    expect(dialog).toHaveAttribute('data-test-index', '7');
-  });
-
-  it('disables mutating more-menu actions for comparison outputs', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(
-      <EvalOutputCell {...defaultProps} evaluationId="eval-123" testIdx={7} mutationsDisabled />,
-    );
-
-    await user.click(screen.getByRole('button', { name: /more actions/i }));
-
-    expect(screen.getByRole('menuitem', { name: 'Re-run cell' })).toHaveAttribute('data-disabled');
-    expect(screen.getByRole('menuitem', { name: 'Add assertion' })).toHaveAttribute(
-      'data-disabled',
-    );
-  });
-
-  it('copies the output as an assertion from the more actions menu', async () => {
-    const user = userEvent.setup();
-    const clipboard = mockClipboardWriteText();
-    renderWithProviders(<EvalOutputCell {...defaultProps} />);
-
-    await user.click(screen.getByRole('button', { name: /more actions/i }));
-    await user.click(screen.getByRole('menuitem', { name: /copy as assertion/i }));
-
-    await waitFor(() => {
-      expect(clipboard.writeText).toHaveBeenCalledWith(
-        '- type: equals\n  value: "Test output text"',
-      );
-    });
-  });
-
-  it('re-runs the cell using the stable test index and refreshes the table', async () => {
-    const user = userEvent.setup();
-    renderWithProviders(
-      <EvalOutputCell {...defaultProps} evaluationId="eval-123" rowIndex={1} testIdx={7} />,
-    );
-
-    await user.click(screen.getByRole('button', { name: /more actions/i }));
-    await user.click(screen.getByText('Re-run cell'));
-
-    await waitFor(() => {
-      expect(mockReplayEvaluation).toHaveBeenCalledWith({
-        evaluationId: 'eval-123',
-        testIndex: 7,
-        prompt: 'Test prompt',
-        variables: defaultProps.output.testCase?.vars,
-      });
-    });
-    await waitFor(() => {
-      expect(mockTableStoreState.refreshTable).toHaveBeenCalled();
-    });
-    expect(await screen.findByText('Updated output')).toBeInTheDocument();
-    expect(mockShowToast).toHaveBeenCalledWith(
-      'Cell re-run complete. Showing the new output in this cell.',
-      'success',
-    );
-  });
-
   it('shows extra actions when shift key is pressed (mocked as true)', () => {
     // With useShiftKey mocked to return true, extra actions should be visible
     const { container } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
@@ -2415,7 +2343,6 @@ describe('EvalOutputCell extra actions hover behavior', () => {
     expect(screen.getByLabelText('Toggle test highlight')).toBeInTheDocument();
     expect(screen.getByLabelText('Copy link to output')).toBeInTheDocument();
     expect(screen.getByLabelText('Copy output to clipboard')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /more actions/i })).toBeInTheDocument();
   });
 
   it('keeps utility and review actions in a stable, grouped order', () => {
@@ -2432,7 +2359,6 @@ describe('EvalOutputCell extra actions hover behavior', () => {
       'Copy output to clipboard',
       'Copy link to output',
       'Toggle test highlight',
-      'More actions',
       'Mark test passed',
       'Mark test failed',
       'Set test score',
@@ -2461,6 +2387,10 @@ describe('isImageProvider helper function', () => {
 
   it('should return true for Gemini 2.5 Flash image provider', () => {
     expect(isImageProvider('google:gemini-2.5-flash-image')).toBe(true);
+  });
+
+  it('should return true for Gemini 3.1 Flash-Lite image provider (Nano Banana 2 Lite)', () => {
+    expect(isImageProvider('google:gemini-3.1-flash-lite-image')).toBe(true);
   });
 
   it('should return false for text completion providers', () => {
@@ -2497,8 +2427,8 @@ describe('isVideoProvider helper function', () => {
     expect(isVideoProvider('google:video:veo-3.1-generate-preview')).toBe(true);
   });
 
-  it('should return true for Google Veo 2 provider', () => {
-    expect(isVideoProvider('google:video:veo-2-generate')).toBe(true);
+  it('should return true for Google Veo 3.1 Fast provider', () => {
+    expect(isVideoProvider('google:video:veo-3.1-fast-generate-preview')).toBe(true);
   });
 
   it('should return true for any provider with :video: in the name', () => {

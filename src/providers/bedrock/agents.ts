@@ -10,6 +10,7 @@ import type {
   InferenceConfig,
   InvokeAgentCommandInput,
   InvokeAgentCommandOutput,
+  KnowledgeBaseRetrievalConfiguration,
   SessionState,
 } from '@aws-sdk/client-bedrock-agent-runtime';
 
@@ -106,13 +107,7 @@ interface BedrockAgentsOptions {
   // Knowledge Base Configuration
   knowledgeBaseConfigurations?: Array<{
     knowledgeBaseId: string;
-    retrievalConfiguration?: {
-      vectorSearchConfiguration: {
-        numberOfResults?: number;
-        overrideSearchType?: 'HYBRID' | 'SEMANTIC';
-        filter?: Record<string, any>;
-      };
-    };
+    retrievalConfiguration?: KnowledgeBaseRetrievalConfiguration;
   }>;
 
   // Action Group Configuration
@@ -252,23 +247,79 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
   }
 
   /**
+   * Check operator shapes before the SDK silently drops unknown filter keys.
+   */
+  private hasRetrievalFilterShape(filter: unknown): boolean {
+    if (!filter || typeof filter !== 'object' || Array.isArray(filter)) {
+      return false;
+    }
+    const entries = Object.entries(filter).filter(([, value]) => value !== undefined);
+    if (entries.length !== 1) {
+      return false;
+    }
+    const [operator, operand] = entries[0];
+    if (operator === 'andAll' || operator === 'orAll') {
+      return (
+        Array.isArray(operand) &&
+        operand.length >= 2 &&
+        operand.every((child) => this.hasRetrievalFilterShape(child))
+      );
+    }
+    // Preserve the SDK's explicit escape hatch for a newer union member.
+    if (operator === '$unknown') {
+      return (
+        Array.isArray(operand) &&
+        operand.length === 2 &&
+        typeof operand[0] === 'string' &&
+        operand[1] !== undefined
+      );
+    }
+    return (
+      [
+        'equals',
+        'notEquals',
+        'greaterThan',
+        'greaterThanOrEquals',
+        'lessThan',
+        'lessThanOrEquals',
+        'in',
+        'notIn',
+        'startsWith',
+        'listContains',
+        'stringContains',
+      ].includes(operator) &&
+      operand !== null &&
+      typeof operand === 'object' &&
+      !Array.isArray(operand) &&
+      typeof operand.key === 'string' &&
+      operand.value !== undefined
+    );
+  }
+
+  /**
    * Build the session state from configuration
    */
   private buildSessionState(): SessionState | undefined {
-    if (!this.config.sessionState) {
+    // ID-only entries use the agent's deployed configuration. Runtime overrides
+    // require retrievalConfiguration, so do not send those legacy entries.
+    const knowledgeBaseConfigurations = this.config.knowledgeBaseConfigurations?.filter(
+      (configuration) => configuration.retrievalConfiguration,
+    );
+    if (!this.config.sessionState && !knowledgeBaseConfigurations?.length) {
       return undefined;
     }
 
     // Build session state according to AWS SDK types
     // Note: Using partial typing due to AWS SDK type constraints
     const sessionState: SessionState = {
-      sessionAttributes: this.config.sessionState.sessionAttributes,
-      promptSessionAttributes: this.config.sessionState.promptSessionAttributes,
-      invocationId: this.config.sessionState.invocationId,
+      sessionAttributes: this.config.sessionState?.sessionAttributes,
+      promptSessionAttributes: this.config.sessionState?.promptSessionAttributes,
+      invocationId: this.config.sessionState?.invocationId,
+      ...(knowledgeBaseConfigurations?.length && { knowledgeBaseConfigurations }),
     } as SessionState;
 
     // Handle returnControlInvocationResults if present
-    if (this.config.sessionState.returnControlInvocationResults) {
+    if (this.config.sessionState?.returnControlInvocationResults) {
       (sessionState as any).returnControlInvocationResults =
         this.config.sessionState.returnControlInvocationResults;
     }
@@ -391,6 +442,17 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       };
     }
 
+    for (const [index, configuration] of (
+      this.config.knowledgeBaseConfigurations ?? []
+    ).entries()) {
+      const filter = configuration.retrievalConfiguration?.vectorSearchConfiguration?.filter;
+      if (filter !== undefined && !this.hasRetrievalFilterShape(filter)) {
+        return {
+          error: `Invalid knowledgeBaseConfigurations[${index}].retrievalConfiguration.vectorSearchConfiguration.filter: use an AWS RetrievalFilter with one operator, such as equals, or andAll/orAll with at least two operands. Flat metadata maps are not supported.`,
+        };
+      }
+    }
+
     const client = await this.getAgentRuntimeClient();
 
     // Generate session ID if not provided
@@ -416,18 +478,14 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       sessionState: this.buildSessionState(),
       memoryId: this.config.memoryId,
 
-      // Advanced configurations - using type assertions for preview features
-      // The AWS SDK types may not be fully up to date with all Bedrock Agents features
-      // These configurations are validated by AWS at runtime
+      // Legacy configuration keys are retained for compatibility, but the SDK
+      // omits these control-plane settings from InvokeAgent requests.
       ...(inferenceConfig && { inferenceConfig }),
       ...(this.config.guardrailConfiguration && {
         guardrailConfiguration: this.config.guardrailConfiguration,
       }),
       ...(this.config.promptOverrideConfiguration && {
         promptOverrideConfiguration: this.config.promptOverrideConfiguration as any,
-      }),
-      ...(this.config.knowledgeBaseConfigurations && {
-        knowledgeBaseConfigurations: this.config.knowledgeBaseConfigurations as any,
       }),
       ...(this.config.actionGroups && {
         actionGroups: this.config.actionGroups as any,
@@ -441,7 +499,8 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
 
     // Cache key based on agent ID and prompt (excluding volatile fields)
     const cache = await getCache();
-    const cacheKey = `bedrock-agent:${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${sha256(
+    // Earlier cached results omitted KB overrides and could claim an unapplied guardrail.
+    const cacheKey = `bedrock-agent:v2:${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${sha256(
       JSON.stringify({
         prompt,
         actionGroups: this.config.actionGroups,
@@ -493,13 +552,6 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
           ...(responseSessionId && { sessionId: responseSessionId }),
           ...(trace && { trace }),
           ...(this.config.memoryId && { memoryId: this.config.memoryId }),
-          ...(this.config.guardrailConfiguration && {
-            guardrails: {
-              applied: true,
-              guardrailId: this.config.guardrailConfiguration.guardrailId,
-              guardrailVersion: this.config.guardrailConfiguration.guardrailVersion,
-            },
-          }),
         },
       };
 
