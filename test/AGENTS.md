@@ -26,6 +26,10 @@ npm run test:integration
 - **NEVER** increase test timeouts - fix the slow test
 - **NEVER** use `.only()` or `.skip()` in committed code
 - **ALWAYS** clean up mocks in `afterEach`
+- Test the dependency behavior Promptfoo uses, not package versions, minimums, or manifest/lockfile
+  agreement. Leave those to package tooling; use fixture versions when version handling itself is
+  the behavior under test. Record a shipped advisory or compromise fix as one row in
+  `KNOWN_BAD_RELEASES` (`test/package-manifests.test.ts`), not as a new test.
 - Tests run in **random order by default** (configured in vitest.config.ts)
   - Use `--sequence.shuffle=false` to disable when debugging specific failures
   - Use `--sequence.seed=12345` to reproduce a specific order

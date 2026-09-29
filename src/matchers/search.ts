@@ -6,7 +6,7 @@ import { hasWebSearchCapability, loadWebSearchProvider } from '../providers/webS
 import { extractFirstJsonObject } from '../util/json';
 import { callProviderWithContext, getGradingProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
-import { tryParse } from './shared';
+import { graderFail, tryParse } from './shared';
 
 import type {
   ApiProvider,
@@ -92,11 +92,13 @@ export async function matchesSearchRubric(
   );
 
   if (resp.error || !resp.output) {
+    // A provider that errored gave no verdict to invert on; `graderFail` tags it
+    // so not-search-rubric never flips a transport failure into a pass.
     return {
-      pass: false,
-      score: 0,
-      reason: `Search rubric evaluation failed: ${resp.error || 'No output'}`,
-      tokensUsed: resp.tokenUsage,
+      ...graderFail(
+        `Search rubric evaluation failed: ${resp.error || 'No output'}`,
+        resp.tokenUsage,
+      ),
       assertion,
     };
   }
@@ -109,8 +111,12 @@ export async function matchesSearchRubric(
       searchResults?: unknown;
     };
 
+    if (typeof result.pass !== 'boolean') {
+      throw new Error('Missing boolean search verdict');
+    }
+
     // Apply threshold if specified
-    let pass = result.pass ?? false;
+    let pass = result.pass;
     const score = typeof result.score === 'number' ? result.score : pass ? 1 : 0;
 
     if (assertion?.threshold !== undefined) {
@@ -128,20 +134,16 @@ export async function matchesSearchRubric(
         searchProvider: searchProvider.id(),
       },
     };
-  } catch (err) {
-    // JSON extraction failed - fall back to naive substring matching
-    logger.warn(
-      `[search-rubric] Could not parse structured JSON from provider response, falling back to substring matching: ${(err as Error).message}`,
-    );
-    const outputLower = String(resp.output).toLowerCase();
-    const pass = outputLower.includes('"pass":true') || outputLower.includes('"pass": true');
+  } catch {
+    logger.warn('[search-rubric] Could not parse a grading verdict from provider response');
 
     return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: resp.output as string,
+      pass: false,
+      score: 0,
+      reason: 'Search rubric evaluation failed: Expected a JSON object with a boolean "pass" field',
       tokensUsed: resp.tokenUsage,
       assertion,
+      metadata: { graderError: true },
     };
   }
 }

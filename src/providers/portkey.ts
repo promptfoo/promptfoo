@@ -115,9 +115,7 @@ function resolvePortkeyApiKey(
   config: PortkeyConfig = {},
   env?: ProviderOptions['env'],
 ): string | undefined {
-  // The per-provider `env:` override wins over ambient process env, matching how the
-  // upstream credential is resolved in getApiKey below.
-  return config.portkeyApiKey || env?.PORTKEY_API_KEY || getEnvString('PORTKEY_API_KEY');
+  return resolveProviderApiKey({ apiKey: config.portkeyApiKey }, env, ['PORTKEY_API_KEY']);
 }
 
 export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider {
@@ -158,48 +156,38 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
   override getOpenAiRequestHeaders(
     customHeaders: Record<string, string> | undefined = this.config.headers,
   ): Record<string, string> {
-    return canonicalizeAuthorization(
-      super.getOpenAiRequestHeaders(
-        getPortkeyHeaders(
-          { ...this.config, headers: customHeaders },
-          resolvePortkeyApiKey(this.config, this.env),
-        ),
-      ),
+    const headers = getPortkeyHeaders(
+      { ...this.config, headers: customHeaders },
+      resolvePortkeyApiKey(this.config, this.env),
     );
+    // Chat resolves its bearer before applying prompt headers. Reject a prompt override
+    // that changes credential routing unless the caller supplies Authorization explicitly.
+    if (
+      !hasHeaderOverride(headers, 'Authorization') &&
+      this.getApiKey() !== this.getApiKey({ ...this.config, headers })
+    ) {
+      throw new Error(
+        'Portkey prompt headers change upstream credential routing. Configure the route on the provider or set Authorization explicitly.',
+      );
+    }
+    return canonicalizeAuthorization(super.getOpenAiRequestHeaders(headers));
   }
 
-  /**
-   * Resolves the `Authorization` bearer, which Portkey forwards to the upstream provider.
-   *
-   * Only a direct passthrough sends one. A model catalog slug (`@provider/model`, in the model
-   * name or in `portkeyProvider`), a legacy virtual key, and a bare model name all leave the
-   * provider credential with Portkey, so nothing is forwarded there — including an apiKey
-   * inherited from a shared provider config. `OPENAI_API_KEY` names one specific vendor's
-   * credential, so it is inherited only when the config routes to that vendor; otherwise a
-   * `portkey:claude-sonnet-4-6` target would ship the user's OpenAI key to a different
-   * provider. A passthrough to another vendor takes its bearer from `config.apiKey`; in the
-   * managed shapes, where nothing is forwarded, only `config.headers` can still set one.
-   */
-  getApiKey(): string | undefined {
-    // Provider names come from user YAML, so guard the type and compare case-insensitively:
-    // `portkeyProvider: OpenAI` names the same upstream as `openai`.
-    const upstream =
-      typeof this.config.portkeyProvider === 'string'
-        ? this.config.portkeyProvider.toLowerCase()
-        : '';
+  /** Resolve the upstream bearer from the effective Portkey route, including header overrides. */
+  getApiKey(config: PortkeyConfig = this.config): string | undefined {
+    const headers = new Headers(getPortkeyHeaders(config));
+    const upstream = headers.get('x-portkey-provider')?.toLowerCase();
     if (
       !upstream ||
       upstream.startsWith('@') ||
       this.modelName.startsWith('@') ||
-      this.config.portkeyVirtualKey
+      headers.get('x-portkey-virtual-key')
     ) {
       return undefined;
     }
-    // Only `apiKey` is passed through: the constructor sets `apiKeyEnvar` to PORTKEY_API_KEY
-    // for the missing-key diagnostics, and honouring it here would put Portkey's own key in
-    // the bearer.
+    // apiKeyEnvar names the gateway credential for diagnostics, never the upstream bearer.
     return resolveProviderApiKey(
-      { apiKey: this.config.apiKey },
+      { apiKey: config.apiKey },
       this.env,
       upstream === 'openai' ? ['OPENAI_API_KEY'] : [],
     );

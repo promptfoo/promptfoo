@@ -55,7 +55,9 @@ A Portkey request can carry two credentials, and they are sent in different plac
 | Your Portkey key            | `x-portkey-api-key`     | `PORTKEY_API_KEY`, or `portkeyApiKey` in config                        |
 | The upstream provider's key | `Authorization: Bearer` | `apiKey` in config, or `OPENAI_API_KEY` when `portkeyProvider: openai` |
 
-A provider key is only sent for direct passthrough, meaning a `portkeyProvider` that is not a model catalog slug. Everywhere else — a slug (in `portkeyProvider` or in the model name), a virtual key, or a bare model name — Portkey holds the provider credential, so the Portkey key is all you need and promptfoo forwards nothing. `OPENAI_API_KEY` is inherited only when the config routes to OpenAI; passthrough to any other provider needs an explicit `apiKey`.
+For direct passthrough, set `portkeyProvider` to the upstream provider. OpenAI passthrough can use `OPENAI_API_KEY`; other providers need an explicit `apiKey`. Credential selection follows the effective `x-portkey-provider` and `x-portkey-virtual-key` headers, including provider-level overrides. Catalog slugs, virtual keys, and models without an upstream selector use credentials managed by Portkey and do not forward a bearer automatically.
+
+Prompt-level headers that change upstream credential routing require an explicit `Authorization` header, or the request fails before contacting Portkey. Otherwise, configure the route on the provider.
 
 To send additional headers, use `config.headers`:
 

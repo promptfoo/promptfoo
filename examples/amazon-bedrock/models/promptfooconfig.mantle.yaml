@@ -7,10 +7,11 @@ description: 'Bedrock Mantle Chat Completions endpoint (bedrock:mantle:<id>)'
 # not serve (and that therefore do not appear in `aws bedrock list-foundation-models`) — e.g.
 # zai.glm-4.6, deepseek.v3.1, google.gemma-4-*, and the mantle-namespaced Qwen *-instruct ids.
 #
-# Authenticate with an Amazon Bedrock API key, and set a region where the model is offered
+# Authenticate with AWS_PROFILE / the default AWS credential chain for refreshing short-term
+# tokens, or supply AWS_BEARER_TOKEN_BEDROCK directly. Set a region where the model is offered
 # (list with: GET https://bedrock-mantle.<region>.api.aws/v1/models):
 #
-#   AWS_BEARER_TOKEN_BEDROCK=... npm run local -- eval -c examples/amazon-bedrock/models/promptfooconfig.mantle.yaml --no-cache
+#   AWS_PROFILE=bedrock-prod npm run local -- eval -c examples/amazon-bedrock/models/promptfooconfig.mantle.yaml --no-cache
 
 prompts:
   - 'Answer in one short sentence: {{question}}'
