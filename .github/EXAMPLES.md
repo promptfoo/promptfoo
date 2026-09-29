@@ -2,7 +2,8 @@
 
 `workflows/examples.yml` runs credential-free example regressions, with one isolated
 job per registered example/runtime and one aggregate `Examples` status check. It
-replaces the Docker-only, Python-provider-only, and OpenAI Agents workflows. Core Python wrapper
+replaces the Docker-only, Python-provider-only, OpenAI Agents, and Google ADK
+workflows. Core Python wrapper
 tests stay in `main.yml`.
 
 PRs run the affected registered examples. Changes to `src/`, build scripts/config,
@@ -33,6 +34,24 @@ python3.10 .github/scripts/examples.py run docker-sandbox
 python3.14 .github/scripts/examples.py run docker-sandbox
 ```
 
+After building the local CLI, run the Google ADK profiles with the same entrypoint:
+
+```bash
+python3.12 .github/scripts/examples.py run google-adk
+python3.14 .github/scripts/examples.py run google-adk
+python3.10 .github/scripts/examples.py run google-adk-minimums
+python3.12 .github/scripts/examples.py run google-adk-litellm
+```
+
+ADK's default profiles keep the minimal Gemini installation; the Python 3.10
+profile pins every direct dependency to its declared minimum. The separate
+LiteLLM profile adds only the documented optional adapter. Each runs the provider
+loader tests and both original configs through the built CLI and real SDKs against
+loopback model fixtures. Model errors and wrong tool arguments must fail; the
+positive cases retain the original state, artifact, tool, and native trace assertions.
+The ADK HTTP fixtures and CLI harness live in `scripts/tests/google_adk/`, outside
+the downloadable example. These tests do not measure hosted-model quality.
+
 The runner creates and cleans up a temporary virtual environment, installs the
 example requirements, and runs the registered test suites. Fresh environments
 must also pass `pip check`.
@@ -51,8 +70,9 @@ incompatible `h11` requirement. This profile checks runtime compatibility, not
 ## Register another example
 
 Add an `Example` entry in `scripts/examples.py`, choosing its supported runtimes,
-test directories/patterns, and any Node or Docker requirements. Keep assertions
-beside the example and use local model fixtures, not paid API calls. Each profile
+test directories/patterns, and any Node, Docker, or optional package requirements.
+Keep example configs simple; put substantial test harnesses under `scripts/tests/`
+and use local model fixtures, not paid API calls. Each profile
 gets a fresh environment; do not combine unrelated SDK requirements. Add selection
 coverage in `scripts/test_examples.py`, then run:
 
@@ -106,6 +126,21 @@ These checks prove runtime contracts, not hosted-model quality or an OS security
 boundary. The Unix-local workflow executes commands on the test host. The harness
 uses synthetic files, an allowlisted environment, dummy credentials, local model
 and trace endpoints, an isolated copy/database, and bounded child process groups.
+
+## F-Score
+
+Run the offline dataset preparation and local metadata path regressions without a
+Node build or model credentials:
+
+```bash
+python3.10 .github/scripts/examples.py run f-score
+python3.14 .github/scripts/examples.py run f-score
+```
+
+Both runtimes install the example requirements, check dependency consistency, and
+run the two existing Python tests. The three TypeScript metric regressions in
+`test/examples/evalFScore.test.ts` remain part of the normal repository test suite;
+they are not run by this Python-only profile.
 
 ## Redteam LangChain
 

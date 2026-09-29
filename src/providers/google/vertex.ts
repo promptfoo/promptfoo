@@ -373,10 +373,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
     const resolvedTemperature = samplingParamsDeprecated ? undefined : this.config.temperature;
     const resolvedTopP = samplingParamsDeprecated
       ? undefined
-      : this.config.top_p || this.config.topP;
+      : (this.config.top_p ?? this.config.topP);
     const resolvedTopK = samplingParamsDeprecated
       ? undefined
-      : this.config.top_k || this.config.topK;
+      : (this.config.top_k ?? this.config.topK);
 
     // Vertex forwards the body verbatim, so apply the same combination rules the Anthropic
     // API enforces (temperature vs top_p, and the limits extended thinking imposes).

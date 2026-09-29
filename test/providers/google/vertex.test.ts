@@ -3685,9 +3685,17 @@ describe('VertexChatProvider.callClaudeApi', () => {
     expect(result.cost).toBeCloseTo(0.00012, 8);
   });
 
-  it('still sends temperature for Opus 4.6 on Vertex (regression)', async () => {
+  // Claude rejects `temperature` together with `top_p`, so each case is a request the API accepts.
+  it.each([
+    [
+      'temperature and top_k',
+      { temperature: 0, top_k: 0, topK: 40 },
+      { temperature: 0, top_p: undefined, top_k: 0 },
+    ],
+    ['top_p', { top_p: 0, topP: 0.8 }, { temperature: undefined, top_p: 0, top_k: undefined }],
+  ])('preserves zero %s for Opus 4.6 on Vertex (regression)', async (_, sampling, expected) => {
     provider = new VertexChatProvider('claude-opus-4-6', {
-      config: { max_tokens: 32, temperature: 0 },
+      config: { max_tokens: 32, ...sampling },
     });
 
     const mockResponse = {
@@ -3719,8 +3727,9 @@ describe('VertexChatProvider.callClaudeApi', () => {
 
     await provider.callClaudeApi('test prompt');
 
-    const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
-    expect(sentBody.temperature).toBe(0);
+    // toEqual treats an omitted parameter and an undefined one alike, as JSON does.
+    const { temperature, top_p, top_k } = mockRequest.mock.calls[0][0].data;
+    expect({ temperature, top_p, top_k }).toEqual(expected);
   });
 
   it('should accept both max_tokens and maxOutputTokens parameters', async () => {
