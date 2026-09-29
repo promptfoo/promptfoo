@@ -96,14 +96,8 @@ npm run test:package-artifact -- --browser
 npm run test:package-artifact -- --profile omit-optional --browser
 ```
 
-The default profile uses the installed package's Playwright CLI to download matching
-Chromium into a temporary directory. Provisioning uses the CI job budget; the browser
-fixture keeps its separate one-minute deadline. It checks Unicode input, clicking, extraction,
-stealth at launch, a missing-selector error, and recovery against local HTML. Results
-must have scores 1/0/1 and exactly one deliberate error.
-
-The optional-omitted profile downloads nothing and checks the provider's missing-module
-error. Neither profile installs missing browser packages or uses a shared browser cache.
-
-CI runs both profiles on Linux Node 24. Release, backfill, and other platform jobs
-run browser checks only when `--browser` is selected.
+The default profile downloads matching Chromium with the installed Playwright CLI
+into a temporary directory, then checks Unicode input, clicks, extraction, stealth,
+a missing-selector error, and recovery on local HTML. Expected scores are 1/0/1.
+The optional-omitted profile checks the missing-module error without downloading.
+Both run on Linux Node 24 in CI; other jobs require `--browser`.

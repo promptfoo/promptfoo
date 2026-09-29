@@ -1,19 +1,14 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
-import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
-// Copy beside the installed consumer's package.json. Pass --browsers-path for
-// the harness's Chromium installation; this fixture never downloads browsers.
-const fixturePath = fileURLToPath(import.meta.url);
+import { runIsolated } from './isolated.mjs';
 
 async function checkBrowser(stateDir, profile) {
-  const consumerRequire = createRequire(import.meta.url);
-  const packageRequire = createRequire(consumerRequire.resolve('promptfoo'));
+  const packageRequire = createRequire(createRequire(import.meta.url).resolve('promptfoo'));
   const { evaluate, loadApiProvider } = await import('promptfoo');
   if (profile === 'omit-optional') {
     assert.throws(() => packageRequire.resolve('@playwright/browser-chromium/package.json'), {
@@ -72,11 +67,12 @@ async function checkBrowser(stateDir, profile) {
     },
   });
   assert.equal(provider.id(), 'browser-provider');
+  const inputs = ['café 日本語 🚀', 'deliberate failure', 'recovered'];
   const record = await evaluate(
     {
       prompts: ['{{value}}'],
       providers: [provider],
-      tests: ['café 日本語 🚀', 'deliberate failure', 'recovered'].map((value, index) => ({
+      tests: inputs.map((value, index) => ({
         vars: { value, selector: index === 1 ? '#missing' : '#answer' },
         assert: [{ type: 'equals', value: `browser:${value}` }],
       })),
@@ -97,15 +93,8 @@ async function checkBrowser(stateDir, profile) {
     } else {
       assert.equal(result.error, undefined);
       assert.equal(result.response.error, undefined);
-      assert.equal(
-        result.response.output,
-        `browser:${index === 0 ? 'café 日本語 🚀' : 'recovered'}`,
-      );
-      assert.equal(
-        result.response.metadata.webdriver,
-        'hidden',
-        'Stealth must load at browser launch',
-      );
+      assert.equal(result.response.output, `browser:${inputs[index]}`);
+      assert.equal(result.response.metadata.webdriver, 'hidden', 'Stealth must load at launch');
     }
   }
   assert.equal(summary.stats.successes, 2);
@@ -114,12 +103,6 @@ async function checkBrowser(stateDir, profile) {
 }
 
 if (process.argv[2] === '--child') {
-  // Exit before the outer timeout: Playwright handles SIGTERM, so relying only on
-  // that signal can leave a stuck fixture waiting for graceful browser shutdown.
-  setTimeout(() => {
-    console.error('Installed browser fixture exceeded its 45 second budget');
-    process.exit(1);
-  }, 45_000).unref();
   await checkBrowser(process.argv[3], process.argv[4]);
 } else {
   const { values } = parseArgs({
@@ -139,40 +122,14 @@ if (process.argv[2] === '--child') {
       'Expected an existing browser directory',
     );
   }
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-browser-artifact-'));
-  try {
-    for (const directory of ['config', 'cache', 'tmp', 'browsers']) {
-      fs.mkdirSync(path.join(stateDir, directory));
-    }
-    const platformEnv = Object.fromEntries(
-      ['PATH', 'Path', 'SystemRoot', 'WINDIR', 'COMSPEC', 'PATHEXT', 'LANG', 'LC_ALL']
-        .filter((key) => process.env[key] !== undefined)
-        .map((key) => [key, process.env[key]]),
-    );
-    execFileSync(process.execPath, [fixturePath, '--child', stateDir, values.profile], {
-      cwd: path.dirname(fixturePath),
-      env: {
-        ...platformEnv,
-        NODE_PATH: '',
-        IS_TESTING: 'false',
-        PROMPTFOO_CONFIG_DIR: path.join(stateDir, 'config'),
-        PROMPTFOO_CACHE_PATH: path.join(stateDir, 'cache'),
-        PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
-        PROMPTFOO_DISABLE_TELEMETRY: '1',
-        PROMPTFOO_DISABLE_UPDATE: 'true',
-        PROMPTFOO_TRACING_ENABLED: 'false',
-        PROMPTFOO_ENABLE_OTEL: 'false',
-        PLAYWRIGHT_BROWSERS_PATH: values['browsers-path']
-          ? path.resolve(values['browsers-path'])
-          : path.join(stateDir, 'browsers'),
-        TMPDIR: path.join(stateDir, 'tmp'),
-        TEMP: path.join(stateDir, 'tmp'),
-        TMP: path.join(stateDir, 'tmp'),
-      },
-      stdio: 'inherit',
-      timeout: 60_000,
-    });
-  } finally {
-    fs.rmSync(stateDir, { recursive: true, force: true });
-  }
+  await runIsolated(import.meta.url, {
+    label: 'browser',
+    args: [values.profile],
+    directories: ['browsers'],
+    env: (stateDir) => ({
+      PLAYWRIGHT_BROWSERS_PATH: values['browsers-path']
+        ? path.resolve(values['browsers-path'])
+        : path.join(stateDir, 'browsers'),
+    }),
+  });
 }

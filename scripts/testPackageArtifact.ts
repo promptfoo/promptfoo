@@ -934,8 +934,7 @@ async function main(): Promise<void> {
     if (values.browser) {
       const browserArgs = ['browser.mjs', '--profile', values.profile];
       if (values.profile === 'default') {
-        // Resolve from Promptfoo so shallow installs cannot borrow checkout dependencies.
-        // Fail undeclared capabilities before downloading the consumer's matching browser.
+        // Check installed dependencies before downloading their matching browser.
         packageRequire.resolve('puppeteer-extra-plugin-stealth');
         const playwrightManifest = packageRequire.resolve('playwright/package.json');
         const playwright = JSON.parse(fs.readFileSync(playwrightManifest, 'utf8')) as {
@@ -943,8 +942,7 @@ async function main(): Promise<void> {
         };
         assert.equal(typeof playwright.bin.playwright, 'string');
         const browsersPath = path.join(tempDir, 'browsers');
-        // Provisioning follows the install lifecycle and the CI job budget. Only the
-        // browser fixture below uses runAsync's one-minute execution deadline.
+        // Browser downloads use the CI job deadline, not the fixture timeout.
         console.log(
           run(
             process.execPath,

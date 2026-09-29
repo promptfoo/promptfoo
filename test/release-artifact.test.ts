@@ -33,16 +33,16 @@ afterEach(() => {
 });
 
 describe('exact artifact release', () => {
-  it('runs built smoke examples in the build job, not the isolated artifact consumer', () => {
+  it('runs smoke examples after the build', () => {
     const ci = yaml.load(
       fs.readFileSync(path.resolve(__dirname, '../.github/workflows/main.yml'), 'utf8'),
     ) as { jobs: Record<string, Job> };
     const smokeCommand = 'npm run test:smoke -- test/smoke/agent-skill-examples.test.ts';
     const buildSteps = ci.jobs.build.steps;
+    const buildIndex = buildSteps.findIndex((step) => step.run === 'npm run build');
     const smokeIndex = buildSteps.findIndex((step) => step.run === smokeCommand);
-    expect(smokeIndex).toBeGreaterThan(
-      buildSteps.findIndex((step) => step.run === 'npm run build'),
-    );
+    expect(buildIndex).toBeGreaterThan(-1);
+    expect(smokeIndex).toBeGreaterThan(buildIndex);
     expect(ci.jobs['artifact-consumer'].steps.some((step) => step.run === smokeCommand)).toBe(
       false,
     );
