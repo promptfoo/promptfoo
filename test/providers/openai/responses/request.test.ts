@@ -65,6 +65,28 @@ function mockBackgroundCreateAndPoll(
 }
 
 describe('OpenAiResponsesProvider request building', () => {
+  it.each([
+    'gpt-live-transcribe',
+    'gpt-live-transcribe-2026-09-01',
+    'gpt-live-1',
+    'gpt-live-1-2026-09-01',
+  ])('rejects prompt-scoped voice model %s before making a Responses request', async (model) => {
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'fixture-key' },
+    });
+    await expect(
+      provider.callApi('Hi', {
+        vars: {},
+        prompt: { raw: 'Hi', label: 'Hi', config: { passthrough: { model } } },
+      }),
+    ).rejects.toThrow(
+      model.startsWith('gpt-live-transcribe')
+        ? 'dedicated Realtime transcription session'
+        : 'openai:live:',
+    );
+    expect(cache.fetchWithCache).not.toHaveBeenCalled();
+  });
+
   it('should format and call the responses API correctly', async () => {
     const mockApiResponse = {
       id: 'resp_abc123',
@@ -3666,10 +3688,11 @@ describe('OpenAiResponsesProvider request building', () => {
     await provider.getOpenAiBody('Test prompt');
 
     expect(logger.warn).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(logger.warn).mock.calls[0][0]).toContain(
-      'frequency_penalty, presence_penalty, seed, stop',
-    );
-    expect(vi.mocked(logger.warn).mock.calls[0][0]).toContain('openai:chat:gpt-5.6-luna');
+    expect(logger.warn).toHaveBeenCalledWith(expect.any(String), {
+      provider: provider.id(),
+      model: 'gpt-5.6-luna',
+      options: ['frequency_penalty', 'presence_penalty', 'seed', 'stop'],
+    });
   });
 
   it('should not warn when no Chat Completions-only options are set', async () => {
@@ -3691,7 +3714,10 @@ describe('OpenAiResponsesProvider request building', () => {
     await provider.getOpenAiBody('Test prompt');
 
     expect(logger.warn).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(logger.warn).mock.calls[0][0]).toContain('presence_penalty');
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ options: ['presence_penalty'] }),
+    );
   });
 
   it('should not suggest openai:chat for a non-OpenAI Responses provider', async () => {
@@ -3702,7 +3728,37 @@ describe('OpenAiResponsesProvider request building', () => {
     await provider.getOpenAiBody('Test prompt');
 
     expect(logger.warn).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(logger.warn).mock.calls[0][0]).toContain('seed');
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ options: ['seed'] }),
+    );
     expect(vi.mocked(logger.warn).mock.calls[0][0]).not.toContain('openai:chat:');
+  });
+  it('does not recommend Chat Completions for a Responses-only model', async () => {
+    const provider = new OpenAiResponsesProvider('o3-pro', {
+      config: { apiKey: 'test-key', seed: 42 },
+    });
+    await provider.getOpenAiBody('Test prompt');
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(logger.warn).mock.calls[0][0]).not.toContain('openai:chat:o3-pro');
+  });
+
+  it('warns when legacy function options would be dropped', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-5.6-luna', {
+      config: {
+        apiKey: 'test-key',
+        functions: [{ name: 'lookup', parameters: { type: 'object', properties: {} } }],
+        function_call: { name: 'lookup' },
+      },
+    });
+    const { body } = await provider.getOpenAiBody('Test prompt');
+    expect(body).not.toHaveProperty('functions');
+    expect(body).not.toHaveProperty('function_call');
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        options: expect.arrayContaining(['functions', 'function_call']),
+      }),
+    );
   });
 });

@@ -7,6 +7,7 @@ import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { fetchJson, GoogleLiveProvider, tryGetThenPost } from '../../../src/providers/google/live';
+import { getGoogleAccessToken } from '../../../src/providers/google/util';
 import * as fetchModule from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -121,6 +122,8 @@ describe('GoogleLiveProvider', () => {
     // call history but preserves implementations, and async work scheduled by
     // a prior test can still record calls before the next test runs.
     mockFetchWithProxy.mockReset();
+    mockImportModule.mockReset();
+    vi.mocked(getGoogleAccessToken).mockReset().mockResolvedValue(undefined);
 
     const spawnMock = vi.mocked((await import('child_process')).spawn);
     spawnMock.mockReset();
@@ -182,6 +185,744 @@ describe('GoogleLiveProvider', () => {
 
   it('should return the correct id', () => {
     expect(provider.id()).toBe('google:live:gemini-2.0-flash-exp');
+  });
+
+  describe('Gemini 3.8 Live', () => {
+    const extendedModel = 'gemini-3.8-live-extended-thinking';
+    const emit = async (message: object) => {
+      await mockWs.onmessage?.({ data: JSON.stringify(message) } as WebSocket.MessageEvent);
+    };
+    const connect = (run: () => Promise<void>) => {
+      vi.mocked(WebSocket).mockImplementation(function () {
+        setImmediate(async () => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          await emit({ setupComplete: {} });
+          await run();
+        });
+        return mockWs;
+      });
+    };
+
+    it.each([true, false])(
+      'prefers a Gemini API key over incidental Cloud ADC (explicit=%s)',
+      async (explicit) => {
+        const restoreEnv = mockProcessEnv({ GOOGLE_API_KEY: 'env-gemini-key' });
+        try {
+          vi.mocked(getGoogleAccessToken).mockResolvedValue('cloud-only-token');
+          provider = new GoogleLiveProvider('gemini-3.8-live', {
+            config: explicit ? { apiKey: 'explicit-gemini-key' } : {},
+          });
+          connect(() =>
+            emit({ serverContent: { outputTranscription: { text: 'Hello' }, turnComplete: true } }),
+          );
+          expect((await provider.callApi('Hello')).error).toBeUndefined();
+          expect(getGoogleAccessToken).not.toHaveBeenCalled();
+          expect(WebSocket).toHaveBeenCalledWith(
+            expect.stringContaining(`?key=${explicit ? 'explicit-gemini-key' : 'env-gemini-key'}`),
+          );
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
+    it('uses explicit OAuth credentials instead of an environment API key', async () => {
+      const restoreEnv = mockProcessEnv({ GOOGLE_API_KEY: 'env-gemini-key' });
+      const credentials = '{"type":"service_account"}';
+      try {
+        vi.mocked(getGoogleAccessToken).mockResolvedValue('gemini-oauth-token');
+        provider = new GoogleLiveProvider('gemini-3.8-live', { config: { credentials } });
+        connect(() =>
+          emit({ serverContent: { outputTranscription: { text: 'Hello' }, turnComplete: true } }),
+        );
+        expect((await provider.callApi('Hello')).error).toBeUndefined();
+        expect(getGoogleAccessToken).toHaveBeenCalledWith(credentials);
+        expect(WebSocket).toHaveBeenCalledWith(
+          expect.stringContaining('?access_token=gemini-oauth-token'),
+        );
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('does not fall back to another identity when explicit OAuth credentials fail', async () => {
+      const restoreEnv = mockProcessEnv({ GOOGLE_API_KEY: 'env-gemini-key' });
+      try {
+        provider = new GoogleLiveProvider('gemini-3.8-live', {
+          config: { credentials: '{"type":"service_account"}' },
+        });
+        await expect(provider.callApi('Hello')).rejects.toThrow(
+          'Google authentication is not configured',
+        );
+        expect(WebSocket).not.toHaveBeenCalled();
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('uses ADC when no API key or explicit credentials are configured', async () => {
+      const restoreEnv = mockProcessEnv({ GOOGLE_API_KEY: undefined, GEMINI_API_KEY: undefined });
+      try {
+        vi.mocked(getGoogleAccessToken).mockResolvedValue('gemini-oauth-token');
+        provider = new GoogleLiveProvider('gemini-3.8-live', {});
+        connect(() =>
+          emit({ serverContent: { outputTranscription: { text: 'Hello' }, turnComplete: true } }),
+        );
+        expect((await provider.callApi('Hello')).error).toBeUndefined();
+        expect(getGoogleAccessToken).toHaveBeenCalledWith(undefined);
+        expect(WebSocket).toHaveBeenCalledWith(
+          expect.stringContaining('?access_token=gemini-oauth-token'),
+        );
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('honors an effective prompt API-key override', async () => {
+      provider = new GoogleLiveProvider('gemini-3.8-live', { config: { apiKey: 'base-key' } });
+      connect(() =>
+        emit({ serverContent: { outputTranscription: { text: 'Hello' }, turnComplete: true } }),
+      );
+      await provider.callApi('Hello', {
+        prompt: { raw: 'Hello', label: 'Hello', config: { apiKey: 'prompt-key' } },
+        vars: {},
+      });
+      expect(WebSocket).toHaveBeenCalledWith(expect.stringContaining('?key=prompt-key'));
+    });
+
+    it.each(['gemini-3.8-live', extendedModel])(
+      'defaults %s to audio with transcription',
+      async (modelName) => {
+        provider = new GoogleLiveProvider(modelName, { config: { apiKey: 'test-api-key' } });
+        connect(async () => {
+          await emit({
+            serverContent: {
+              outputTranscription: { text: 'Hello' },
+              turnComplete: true,
+              interactionStatus: 'IDLE',
+            },
+          });
+        });
+
+        const result = await provider.callApi('Hello');
+        expect(result.error).toBeUndefined();
+        expect(result.output).toMatchObject({ text: 'Hello' });
+        expect(WebSocket).toHaveBeenCalledWith(
+          expect.stringContaining('generativelanguage.v1alpha.'),
+        );
+        expect(JSON.parse(mockWs.send.mock.calls[0][0] as string)).toMatchObject({
+          setup: {
+            model: `models/${modelName}`,
+            generationConfig: { responseModalities: ['AUDIO'] },
+            outputAudioTranscription: {},
+          },
+        });
+        expect(JSON.parse(mockWs.send.mock.calls[1][0] as string)).toEqual({
+          realtimeInput: { text: 'Hello' },
+        });
+        const generationConfig = JSON.parse(mockWs.send.mock.calls[0][0] as string).setup
+          .generationConfig;
+        if (modelName === extendedModel) {
+          expect(generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'LOW' });
+        } else {
+          expect(generationConfig).not.toHaveProperty('thinkingConfig');
+        }
+      },
+    );
+
+    it.each([
+      ['gemini-3.8-live', false],
+      [extendedModel, false],
+      ['gemini-3.8-live', true],
+      [extendedModel, true],
+    ] as const)(
+      'sanitizes snake-case tool parameters in the %s setup frame (single external tool: %s)',
+      async (modelName, singleExternalTool) => {
+        const tools = [
+          {
+            function_declarations: [
+              {
+                name: 'lookup',
+                parameters: {
+                  type: 'object' as const,
+                  additionalProperties: false,
+                  $schema: 'https://json-schema.org/draft/2020-12/schema',
+                  properties: { code: { type: 'string' as const, default: 'ignored' } },
+                  required: ['code'],
+                },
+              },
+            ],
+          },
+        ];
+        const original = structuredClone(tools);
+        if (singleExternalTool) {
+          mockImportModule.mockResolvedValueOnce({ getTools: () => tools[0] });
+        }
+        provider = new GoogleLiveProvider(modelName, {
+          config: {
+            apiKey: 'test-api-key',
+            tools: singleExternalTool ? 'file://tools.js:getTools' : tools,
+          },
+        });
+        connect(() =>
+          emit({
+            serverContent: { outputTranscription: { text: 'Done' }, turnComplete: true },
+            interactionStatus: 'IDLE',
+          }),
+        );
+        expect((await provider.callApi('Look up the code')).error).toBeUndefined();
+        const tool = JSON.parse(mockWs.send.mock.calls[0][0] as string).setup.tools[0];
+        expect(tool).not.toHaveProperty('function_declarations');
+        expect(tool.functionDeclarations[0].parameters).toEqual({
+          type: 'OBJECT',
+          properties: { code: { type: 'STRING' } },
+          required: ['code'],
+        });
+        if (modelName === extendedModel) {
+          expect(tool.functionDeclarations[0].behavior).toBe('NON_BLOCKING');
+        }
+        expect(tools).toEqual(original);
+      },
+    );
+
+    it.each([
+      ['gemini-3.8-live', true],
+      ['gemini-3.8-live', false],
+      [extendedModel, true],
+      [extendedModel, false],
+    ] as const)(
+      'deduplicates declarations across %s setup tools (canonical first: %s)',
+      async (modelName, canonicalFirst) => {
+        const canonical = {
+          name: 'lookup',
+          behavior: 'NON_BLOCKING' as const,
+          parameters: {
+            type: 'object' as const,
+            properties: { code: { type: 'string' as const } },
+            required: ['code'],
+            additionalProperties: false,
+          },
+        };
+        const camelTool = { functionDeclarations: [canonical] };
+        const snakeTool = {
+          function_declarations: [{ name: 'lookup', behavior: 'BLOCKING' as const }],
+        };
+        const tools = canonicalFirst ? [camelTool, snakeTool] : [snakeTool, camelTool];
+        const original = structuredClone(tools);
+        provider = new GoogleLiveProvider(modelName, {
+          config: { apiKey: 'test-api-key', tools },
+        });
+        connect(() =>
+          emit({
+            serverContent: { outputTranscription: { text: 'Done' }, turnComplete: true },
+            interactionStatus: 'IDLE',
+          }),
+        );
+
+        expect((await provider.callApi('Look up the code')).error).toBeUndefined();
+        expect(JSON.parse(mockWs.send.mock.calls[0][0] as string).setup.tools).toEqual([
+          {
+            functionDeclarations: [
+              {
+                ...canonical,
+                parameters: {
+                  type: 'OBJECT',
+                  properties: { code: { type: 'STRING' } },
+                  required: ['code'],
+                },
+              },
+            ],
+          },
+        ]);
+        expect(tools).toEqual(original);
+      },
+    );
+
+    it.each(['gemini-3.8-live', extendedModel])(
+      'maps TEXT to audio transcription for %s on v1beta',
+      async (modelName) => {
+        provider = new GoogleLiveProvider(modelName, {
+          config: {
+            apiKey: 'test-api-key',
+            apiVersion: 'v1beta',
+            generationConfig: { responseModalities: ['TEXT'] },
+          },
+        });
+        connect(async () => {
+          await emit({
+            serverContent: { turnComplete: true, outputTranscription: { text: 'Done' } },
+            interactionStatus: 'IDLE',
+          });
+        });
+        expect((await provider.callApi('Hello')).output).toMatchObject({ text: 'Done' });
+        expect(WebSocket).toHaveBeenCalledWith(
+          expect.stringContaining('generativelanguage.v1beta.'),
+        );
+        expect(
+          JSON.parse(mockWs.send.mock.calls[0][0] as string).setup.generationConfig
+            .responseModalities,
+        ).toEqual(['AUDIO']);
+      },
+    );
+
+    it.each(['top-level', 'server-content'])(
+      'waits for %s IDLE after filler, reasoning, and tools',
+      async (location) => {
+        const callback = vi.fn().mockResolvedValue({ code: 'ORCHID' });
+        const tools = [
+          {
+            functionDeclarations: [
+              { name: 'lookup', parameters: { type: 'object' as const, properties: {} } },
+            ],
+          },
+        ];
+        provider = new GoogleLiveProvider(extendedModel, {
+          config: {
+            apiKey: 'test-api-key',
+            tools,
+            functionToolCallbacks: { lookup: callback },
+            generationConfig: { thinkingConfig: { thinkingLevel: 'HIGH' } },
+          },
+        });
+        connect(async () => {
+          await emit({
+            serverContent: {
+              outputTranscription: { text: 'Checking. ' },
+              turnComplete: true,
+              interactionStatus: 'IN_PROGRESS',
+            },
+            usageMetadata: { promptTokenCount: 10, responseTokenCount: 2, totalTokenCount: 12 },
+          });
+          expect(mockWs.close).not.toHaveBeenCalled();
+          await emit({ interactionStatus: 'IN_PROGRESS' });
+          expect(mockWs.close).not.toHaveBeenCalled();
+          await emit({
+            toolCall: { functionCalls: [{ id: 'lookup-1', name: 'lookup', args: {} }] },
+            interactionStatus: 'IN_PROGRESS',
+          });
+          expect(callback).toHaveBeenCalledWith('{}');
+          expect(JSON.parse(mockWs.send.mock.calls[2][0] as string)).toEqual({
+            toolResponse: {
+              functionResponses: [{ id: 'lookup-1', name: 'lookup', response: { code: 'ORCHID' } }],
+            },
+          });
+          await emit({
+            serverContent: {
+              modelTurn: {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: 'audio/pcm;rate=24000',
+                      data: Buffer.from([1, 0, 2, 0]).toString('base64'),
+                    },
+                  },
+                ],
+              },
+              outputTranscription: { text: 'ORCHID' },
+              turnComplete: true,
+            },
+          });
+          expect(mockWs.close).not.toHaveBeenCalled();
+          const status =
+            location === 'top-level'
+              ? { interactionStatus: 'IDLE' }
+              : { serverContent: { interactionStatus: 'IDLE' } };
+          await emit({
+            ...status,
+            usageMetadata: {
+              promptTokenCount: 12,
+              responseTokenCount: 4,
+              thoughtsTokenCount: 3,
+              totalTokenCount: 19,
+            },
+          });
+        });
+        const result = await provider.callApi('Look up the code');
+        expect(result.error).toBeUndefined();
+        expect(result.output).toMatchObject({
+          text: 'Checking. ORCHID',
+          toolCall: { functionCalls: [{ name: 'lookup' }] },
+        });
+        expect(result.audio?.transcript).toBe('Checking. ORCHID');
+        expect(Buffer.from(result.audio!.data!, 'base64').subarray(44)).toEqual(
+          Buffer.from([1, 0, 2, 0]),
+        );
+        expect(result.tokenUsage).toMatchObject({
+          prompt: 22,
+          completion: 6,
+          total: 31,
+          numRequests: 2,
+          completionDetails: { reasoning: 3 },
+        });
+        expect(result.cost).toBeCloseTo((22 * 0.75 + 9 * 4.5) / 1e6);
+        const setup = JSON.parse(mockWs.send.mock.calls[0][0] as string).setup;
+        expect(setup.tools[0].functionDeclarations[0].behavior).toBe('NON_BLOCKING');
+        expect(setup.generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'HIGH' });
+        expect(tools[0].functionDeclarations[0]).not.toHaveProperty('behavior');
+      },
+    );
+
+    it('does not send the next user input until Extended Thinking becomes idle', async () => {
+      provider = new GoogleLiveProvider(extendedModel, { config: { apiKey: 'test-api-key' } });
+      connect(async () => {
+        await emit({
+          serverContent: {
+            outputTranscription: { text: 'Working. ' },
+            turnComplete: true,
+            interactionStatus: 'IN_PROGRESS',
+          },
+        });
+        expect(mockWs.send).toHaveBeenCalledTimes(2);
+        await emit({
+          serverContent: { outputTranscription: { text: 'First. ' }, turnComplete: true },
+          interaction_status: 'IDLE',
+        });
+        expect(mockWs.send).toHaveBeenCalledTimes(3);
+        expect(JSON.parse(mockWs.send.mock.calls[2][0] as string)).toEqual({
+          realtimeInput: { text: 'Second question' },
+        });
+        expect(mockWs.close).not.toHaveBeenCalled();
+        await emit({
+          serverContent: { outputTranscription: { text: 'Second.' }, interactionStatus: 'IDLE' },
+        });
+      });
+      const result = await provider.callApi(
+        JSON.stringify([
+          { role: 'user', content: 'First question' },
+          { role: 'user', content: 'Second question' },
+        ]),
+      );
+      expect(result.output).toMatchObject({ text: 'Working. First. Second.' });
+    });
+
+    it('does not truncate standard Live speech when empty or unknown frames arrive', async () => {
+      provider = new GoogleLiveProvider('gemini-3.8-live', { config: { apiKey: 'test-api-key' } });
+      connect(async () => {
+        await emit({ serverContent: { outputTranscription: { text: 'The capital of ' } } });
+        await emit({});
+        await emit({ futureMessage: {} });
+        expect(mockWs.close).not.toHaveBeenCalled();
+        await emit({
+          serverContent: { outputTranscription: { text: 'France is Paris.' }, turnComplete: true },
+        });
+      });
+      expect((await provider.callApi('What is the capital of France?')).output).toMatchObject({
+        text: 'The capital of France is Paris.',
+      });
+    });
+
+    it.each(['gemini-3.8-live', extendedModel])(
+      'marks finite audio boundaries for %s',
+      async (modelName) => {
+        provider = new GoogleLiveProvider(modelName, { config: { apiKey: 'test-api-key' } });
+        connect(async () => {
+          await emit({
+            serverContent: {
+              outputTranscription: { text: 'Paris' },
+              turnComplete: true,
+              interactionStatus: 'IDLE',
+            },
+          });
+        });
+        const result = await provider.callApi(
+          JSON.stringify([
+            {
+              role: 'user',
+              parts: [
+                { inlineData: { mimeType: 'audio/pcm;rate=16000', data: 'AQACAA==' } },
+                { text: 'Name the city' },
+              ],
+            },
+          ]),
+        );
+        expect(result.output).toMatchObject({ text: 'Paris' });
+        const sent = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+        expect(sent[0].setup.realtimeInputConfig).toEqual({
+          automaticActivityDetection: { disabled: true },
+        });
+        expect(sent.slice(1)).toEqual([
+          { realtimeInput: { activityStart: {} } },
+          { realtimeInput: { audio: { mimeType: 'audio/pcm;rate=16000', data: 'AQACAA==' } } },
+          { realtimeInput: { text: 'Name the city' } },
+          { realtimeInput: { activityEnd: {} } },
+        ]);
+      },
+    );
+
+    it('waits for the standard Live answer after tool generationComplete and turnComplete', async () => {
+      provider = new GoogleLiveProvider('gemini-3.8-live', {
+        config: {
+          apiKey: 'test-api-key',
+          functionToolCallbacks: { lookup: () => ({ code: 'ORCHID' }) },
+        },
+      });
+      connect(async () => {
+        await emit({ toolCall: { functionCalls: [{ id: '1', name: 'lookup', args: {} }] } });
+        await emit({ serverContent: { generationComplete: true } });
+        await emit({ serverContent: { turnComplete: true } });
+        expect(mockWs.close).not.toHaveBeenCalled();
+        await emit({ serverContent: { outputTranscription: { text: 'ORCHID' } } });
+        await emit({ serverContent: { generationComplete: true } });
+        await emit({ serverContent: { turnComplete: true } });
+      });
+      expect((await provider.callApi('Look up the code')).output).toMatchObject({ text: 'ORCHID' });
+    });
+
+    it.each([false, true])(
+      'waits for a fresh IDLE and answer after a delayed tool response (multi-turn: %s)',
+      async (multiTurn) => {
+        let resolveTool!: (value: { code: string }) => void;
+        const callback = vi.fn(
+          () =>
+            new Promise<{ code: string }>((resolve) => {
+              resolveTool = resolve;
+            }),
+        );
+        let finishFrames!: () => void;
+        const framesFinished = new Promise<void>((resolve) => {
+          finishFrames = resolve;
+        });
+        let closedWhileWaiting = false;
+        let sentWhileWaiting = 0;
+        let closedAfterStaleIdle = false;
+        let sentAfterStaleIdle = 0;
+        let closedBeforeFreshIdle = false;
+        let sentBeforeFreshIdle = 0;
+        const pcm = Buffer.from([1, 0, 2, 0]);
+        provider = new GoogleLiveProvider(extendedModel, {
+          config: { apiKey: 'test-api-key', functionToolCallbacks: { lookup: callback } },
+        });
+        connect(async () => {
+          const toolFrame = emit({
+            toolCall: { functionCalls: [{ id: '1', name: 'lookup', args: {} }] },
+          });
+          // Queue one IDLE before the callback starts, then another with filler
+          // content while it is running. Neither can acknowledge the tool result.
+          const earlyIdleFrame = emit({ interactionStatus: 'IDLE' });
+          await flushAsyncEvents();
+          const idleFrame = emit({
+            serverContent: {
+              outputTranscription: { text: 'Checking. ' },
+              interaction_status: 'IDLE',
+            },
+          });
+          await flushAsyncEvents();
+          closedWhileWaiting = mockWs.close.mock.calls.length > 0;
+          sentWhileWaiting = mockWs.send.mock.calls.length;
+          resolveTool({ code: 'ORCHID' });
+          await Promise.all([toolFrame, earlyIdleFrame, idleFrame]);
+          closedAfterStaleIdle = mockWs.close.mock.calls.length > 0;
+          sentAfterStaleIdle = mockWs.send.mock.calls.length;
+          await emit({
+            serverContent: {
+              modelTurn: {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: 'audio/pcm;rate=24000',
+                      data: pcm.toString('base64'),
+                    },
+                  },
+                ],
+              },
+              outputTranscription: { text: 'ORCHID' },
+              turnComplete: true,
+            },
+          });
+          closedBeforeFreshIdle = mockWs.close.mock.calls.length > 0;
+          sentBeforeFreshIdle = mockWs.send.mock.calls.length;
+          await emit({ interactionStatus: 'IDLE' });
+          if (multiTurn) {
+            await emit({
+              serverContent: { outputTranscription: { text: ' Done' } },
+              interactionStatus: 'IDLE',
+            });
+          }
+          finishFrames();
+        });
+        const result = await provider.callApi(
+          multiTurn
+            ? JSON.stringify([
+                { role: 'user', content: 'Look up the code' },
+                { role: 'user', content: 'Next' },
+              ])
+            : 'Look up the code',
+        );
+        await framesFinished;
+        expect(result.error).toBeUndefined();
+        expect(result.output).toMatchObject({
+          text: multiTurn ? 'Checking. ORCHID Done' : 'Checking. ORCHID',
+        });
+        expect(Buffer.from(result.audio!.data!, 'base64').subarray(44)).toEqual(pcm);
+        expect(closedWhileWaiting).toBe(false);
+        expect(sentWhileWaiting).toBe(2);
+        expect(closedAfterStaleIdle).toBe(false);
+        expect(sentAfterStaleIdle).toBe(3);
+        expect(closedBeforeFreshIdle).toBe(false);
+        expect(sentBeforeFreshIdle).toBe(3);
+        expect(JSON.parse(mockWs.send.mock.calls[2][0] as string)).toEqual({
+          toolResponse: {
+            functionResponses: [{ id: '1', name: 'lookup', response: { code: 'ORCHID' } }],
+          },
+        });
+        if (multiTurn) {
+          expect(JSON.parse(mockWs.send.mock.calls[3][0] as string)).toEqual({
+            realtimeInput: { text: 'Next' },
+          });
+        }
+      },
+    );
+
+    it('waits for a fresh IDLE after the last response in a tool-call batch', async () => {
+      let resolveFirst!: (value: { code: string }) => void;
+      let resolveSecond!: (value: { code: string }) => void;
+      const firstResult = new Promise<{ code: string }>((resolve) => {
+        resolveFirst = resolve;
+      });
+      const secondResult = new Promise<{ code: string }>((resolve) => {
+        resolveSecond = resolve;
+      });
+      const callback = vi
+        .fn()
+        .mockImplementationOnce(() => firstResult)
+        .mockImplementationOnce(() => secondResult);
+      let sentBeforeSecondResult = 0;
+      let closedAfterStaleIdle = false;
+      provider = new GoogleLiveProvider(extendedModel, {
+        config: { apiKey: 'test-api-key', functionToolCallbacks: { lookup: callback } },
+      });
+      connect(async () => {
+        const toolFrame = emit({
+          toolCall: {
+            functionCalls: [
+              { id: '1', name: 'lookup', args: { reservation: 'first' } },
+              { id: '2', name: 'lookup', args: { reservation: 'second' } },
+            ],
+          },
+        });
+        await flushAsyncEvents();
+        resolveFirst({ code: 'ORCHID' });
+        await flushAsyncEvents();
+        const staleIdle = emit({ interactionStatus: 'IDLE' });
+        sentBeforeSecondResult = mockWs.send.mock.calls.length;
+        resolveSecond({ code: 'LILY' });
+        await Promise.all([toolFrame, staleIdle]);
+        closedAfterStaleIdle = mockWs.close.mock.calls.length > 0;
+        await emit({
+          serverContent: { outputTranscription: { text: 'ORCHID and LILY' } },
+          interactionStatus: 'IDLE',
+        });
+      });
+      const result = await provider.callApi('Look up both codes');
+      expect(result.error).toBeUndefined();
+      expect(result.output).toMatchObject({ text: 'ORCHID and LILY' });
+      expect(callback).toHaveBeenCalledTimes(2);
+      expect(sentBeforeSecondResult).toBe(3);
+      expect(closedAfterStaleIdle).toBe(false);
+      expect(
+        mockWs.send.mock.calls.slice(2).map(([message]) => JSON.parse(message as string)),
+      ).toEqual([
+        {
+          toolResponse: {
+            functionResponses: [{ id: '1', name: 'lookup', response: { code: 'ORCHID' } }],
+          },
+        },
+        {
+          toolResponse: {
+            functionResponses: [{ id: '2', name: 'lookup', response: { code: 'LILY' } }],
+          },
+        },
+      ]);
+    });
+
+    it('completes a standard Live tool follow-up containing only binary audio', async () => {
+      const pcm = Buffer.from([1, 0, 2, 0]);
+      provider = new GoogleLiveProvider('gemini-3.8-live', {
+        config: {
+          apiKey: 'test-api-key',
+          timeoutMs: 500,
+          functionToolCallbacks: { lookup: () => ({ code: 'ORCHID' }) },
+        },
+      });
+      connect(async () => {
+        await emit({ toolCall: { functionCalls: [{ id: '1', name: 'lookup', args: {} }] } });
+        await mockWs.onmessage?.({ data: pcm } as WebSocket.MessageEvent);
+        await emit({ serverContent: { generationComplete: true } });
+        await emit({ serverContent: { turnComplete: true } });
+      });
+      const result = await provider.callApi('Look up the code');
+      expect(result.error).toBeUndefined();
+      expect(Buffer.from(result.audio!.data!, 'base64').subarray(44)).toEqual(pcm);
+    });
+
+    it.each([
+      [
+        'gemini-3.8-live',
+        { thinkingConfig: { thinkingLevel: 'LOW' as const } },
+        'gemini-3.8-live does not support thinkingConfig. Use gemini-3.8-live-extended-thinking instead.',
+      ],
+      [
+        extendedModel,
+        { thinkingConfig: { thinkingLevel: 'MINIMAL' as const } },
+        'gemini-3.8-live-extended-thinking supports thinkingLevel LOW, MEDIUM, or HIGH.',
+      ],
+      [
+        extendedModel,
+        { thinkingConfig: { thinkingBudget: 100 } },
+        'gemini-3.8-live-extended-thinking does not support thinkingBudget. Use thinkingLevel LOW, MEDIUM, or HIGH.',
+      ],
+      [
+        'gemini-3.8-live',
+        { proactivity: { proactiveAudio: false } },
+        'Gemini 3.8 Live has permanently enabled proactive audio; proactivity.proactiveAudio cannot be false.',
+      ],
+      [
+        extendedModel,
+        { enableAffectiveDialog: true },
+        'Gemini 3.8 Live does not support enableAffectiveDialog.',
+      ],
+    ])(
+      'rejects unsupported configuration for %s: %j',
+      async (modelName, generationConfig, error) => {
+        provider = new GoogleLiveProvider(modelName, {
+          config: { apiKey: 'test-api-key', generationConfig },
+        });
+        expect((await provider.callApi('Hello')).error).toBe(error);
+        expect(WebSocket).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects blocking tools for Extended Thinking', async () => {
+      provider = new GoogleLiveProvider(extendedModel, {
+        config: {
+          apiKey: 'test-api-key',
+          tools: [{ functionDeclarations: [{ name: 'lookup', behavior: 'BLOCKING' }] }],
+        },
+      });
+      expect((await provider.callApi('Hello')).error).toContain('requires NON_BLOCKING');
+      expect(WebSocket).not.toHaveBeenCalled();
+    });
+
+    it('reports an error if the connection closes after a filler without IDLE', async () => {
+      provider = new GoogleLiveProvider(extendedModel, { config: { apiKey: 'test-api-key' } });
+      connect(async () => {
+        await emit({
+          serverContent: {
+            outputTranscription: { text: 'Working' },
+            turnComplete: true,
+            interactionStatus: 'IN_PROGRESS',
+          },
+        });
+        mockWs.onclose?.({
+          code: 1006,
+          reason: 'Disconnected',
+          wasClean: false,
+        } as WebSocket.CloseEvent);
+      });
+      const result = await provider.callApi('Hello');
+      expect(result.error).toContain('closed unexpectedly');
+      expect(result.output).toBeUndefined();
+    });
   });
 
   it('should send client_content for older Live models', async () => {
@@ -1946,7 +2687,7 @@ describe('GoogleLiveProvider', () => {
           timeoutMs: 500,
           apiKey: 'test-api-key',
           functionToolStatefulApi: {
-            file: 'examples/google-live/counter_api.py',
+            file: 'mock-counter-api.py',
             url: 'http://127.0.0.1:5000',
           },
         },
@@ -2168,7 +2909,7 @@ describe('GoogleLiveProvider', () => {
         tool_choice: 'none',
         tools: 'file://tools.js:getTools',
         functionToolStatefulApi: {
-          file: 'examples/google-live/counter_api.py',
+          file: 'mock-counter-api.py',
           url: 'http://127.0.0.1:8765',
         },
       },
@@ -2477,7 +3218,7 @@ describe('GoogleLiveProvider', () => {
         timeoutMs: 500,
         apiKey: 'test-api-key',
         functionToolStatefulApi: {
-          file: 'examples/google-live/counter_api.py',
+          file: 'mock-counter-api.py',
           url: 'http://127.0.0.1:5000',
         },
         tools: [
@@ -2570,7 +3311,7 @@ describe('GoogleLiveProvider', () => {
           timeoutMs: 500,
           apiKey: 'test-api-key',
           functionToolStatefulApi: {
-            file: 'examples/google-live/counter_api.py',
+            file: 'mock-counter-api.py',
             url: 'http://127.0.0.1:8765',
             pythonExecutable: '/custom/python/path',
           },
@@ -2591,9 +3332,9 @@ describe('GoogleLiveProvider', () => {
 
       expect(validatePythonPathMock).toHaveBeenCalledWith('/custom/python/path', true);
 
-      expect(mockSpawn).toHaveBeenCalledWith('/custom/python/bin', [
-        'examples/google-live/counter_api.py',
-      ]);
+      expect(mockSpawn).toHaveBeenCalledWith('/custom/python/bin', ['mock-counter-api.py'], {
+        env: process.env,
+      });
     });
 
     it('should handle errors when spawning Python process', async () => {
@@ -2618,7 +3359,7 @@ describe('GoogleLiveProvider', () => {
             timeoutMs: 500,
             apiKey: 'test-api-key',
             functionToolStatefulApi: {
-              file: 'examples/google-live/counter_api.py',
+              file: 'mock-counter-api.py',
               url: 'http://127.0.0.1:8765',
             },
           },
@@ -2669,7 +3410,7 @@ describe('GoogleLiveProvider', () => {
           timeoutMs: 500,
           apiKey: 'test-api-key',
           functionToolStatefulApi: {
-            file: 'examples/google-live/counter_api.py',
+            file: 'mock-counter-api.py',
             url: 'http://127.0.0.1:8765',
           },
         },
@@ -2685,7 +3426,12 @@ describe('GoogleLiveProvider', () => {
         return mockWs;
       });
 
-      await providerWithStatefulApi.callApi('Test prompt');
+      await cliState.withEnvFileOverrides({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }, () =>
+        providerWithStatefulApi.callApi('Test prompt'),
+      );
+      expect(mockSpawn).toHaveBeenCalledWith(expect.any(String), expect.any(Array), {
+        env: expect.objectContaining({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }),
+      });
 
       expect(mockStdout.on).toHaveBeenCalledWith('data', expect.any(Function));
       expect(mockStderr.on).toHaveBeenCalledWith('data', expect.any(Function));
@@ -2710,7 +3456,7 @@ describe('GoogleLiveProvider', () => {
             timeoutMs: 500,
             apiKey: 'test-api-key',
             functionToolStatefulApi: {
-              file: 'examples/google-live/counter_api.py',
+              file: 'mock-counter-api.py',
               url: 'http://127.0.0.1:8765',
             },
           },
@@ -2730,9 +3476,9 @@ describe('GoogleLiveProvider', () => {
 
         expect(validatePythonPathMock).toHaveBeenCalledWith('/env/python3', true);
 
-        expect(mockSpawn).toHaveBeenCalledWith('/env/python3', [
-          'examples/google-live/counter_api.py',
-        ]);
+        expect(mockSpawn).toHaveBeenCalledWith('/env/python3', ['mock-counter-api.py'], {
+          env: process.env,
+        });
       } finally {
         if (originalEnv) {
           mockProcessEnv({ PROMPTFOO_PYTHON: originalEnv });
@@ -2767,7 +3513,7 @@ describe('GoogleLiveProvider', () => {
           timeoutMs: 500,
           apiKey: 'test-api-key',
           functionToolStatefulApi: {
-            file: 'examples/google-live/counter_api.py',
+            file: 'mock-counter-api.py',
             url: 'http://127.0.0.1:8765',
           },
         },

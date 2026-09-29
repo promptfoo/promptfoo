@@ -384,7 +384,11 @@ describe('OpenAiResponsesProvider response formats', () => {
             json_schema: {
               name: 'pet',
               strict: false,
-              schema: { type: 'object' as const, properties: { name: { type: 'string' } } },
+              schema: {
+                type: 'object' as const,
+                properties: { name: { type: 'string' } },
+                additionalProperties: true,
+              },
             },
           },
         },

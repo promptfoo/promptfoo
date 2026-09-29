@@ -256,14 +256,3 @@ export async function addVideoToBase64(
     progress.stop();
   }
 }
-
-export async function writeVideoFile(base64Video: string, outputFilePath: string): Promise<void> {
-  try {
-    const videoBuffer = Buffer.from(base64Video, 'base64');
-    await fsPromises.writeFile(outputFilePath, videoBuffer);
-    logger.info(`Video file written to: ${outputFilePath}`);
-  } catch (error) {
-    logger.error(`Failed to write video file: ${error}`);
-    throw error;
-  }
-}
