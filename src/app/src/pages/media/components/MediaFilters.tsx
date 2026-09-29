@@ -153,6 +153,11 @@ export function MediaFilters({
   };
 
   const handleEvalFilterKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.nativeEvent.isComposing) {
+      event.stopPropagation();
+      return;
+    }
+
     if (!evalSearchOpen) {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         setEvalSearchOpen(true);
@@ -274,6 +279,11 @@ export function MediaFilters({
           <PopoverContent
             className="w-[280px] sm:w-[320px] p-0"
             align="start"
+            onEscapeKeyDown={(event) => {
+              if (event.isComposing) {
+                event.preventDefault();
+              }
+            }}
             onOpenAutoFocus={(event) => {
               event.preventDefault();
               evalSearchInputRef.current?.focus();

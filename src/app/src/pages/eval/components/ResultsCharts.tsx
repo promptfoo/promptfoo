@@ -1,7 +1,13 @@
 import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@app/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -524,46 +530,38 @@ function ScatterChart({ table }: ChartProps) {
   }, [table, xAxisPrompt, yAxisPrompt]);
 
   return (
-    <>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Compare prompt outputs</DialogTitle>
-          </DialogHeader>
-          <div className="flex gap-4 py-4">
-            <Select
-              value={String(xAxisPrompt)}
-              onValueChange={(val) => setXAxisPrompt(Number(val))}
-            >
-              <SelectTrigger aria-label="X-axis prompt" className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {table.head.prompts.map((_prompt, idx) => (
-                  <SelectItem key={idx} value={String(idx)}>
-                    Prompt {idx + 1}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={String(yAxisPrompt)}
-              onValueChange={(val) => setYAxisPrompt(Number(val))}
-            >
-              <SelectTrigger aria-label="Y-axis prompt" className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {table.head.prompts.map((_prompt, idx) => (
-                  <SelectItem key={idx} value={String(idx)}>
-                    Prompt {idx + 1}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </DialogContent>
-      </Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Compare prompt outputs</DialogTitle>
+        </DialogHeader>
+        <div className="flex gap-4 py-4">
+          <Select value={String(xAxisPrompt)} onValueChange={(val) => setXAxisPrompt(Number(val))}>
+            <SelectTrigger aria-label="X-axis prompt" className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {table.head.prompts.map((_prompt, idx) => (
+                <SelectItem key={idx} value={String(idx)}>
+                  Prompt {idx + 1}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={String(yAxisPrompt)} onValueChange={(val) => setYAxisPrompt(Number(val))}>
+            <SelectTrigger aria-label="Y-axis prompt" className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {table.head.prompts.map((_prompt, idx) => (
+                <SelectItem key={idx} value={String(idx)}>
+                  Prompt {idx + 1}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </DialogContent>
       <section role="region" aria-labelledby={titleId} aria-describedby={summaryId}>
         <h3 id={titleId} className="sr-only">
           Prompt score comparison chart
@@ -580,17 +578,14 @@ function ScatterChart({ table }: ChartProps) {
           onClick={() => setOpen(true)}
         ></canvas>
         <div className="mt-2 flex justify-end">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-auto max-w-full whitespace-normal"
-            onClick={() => setOpen(true)}
-          >
-            Compare prompt outputs
-          </Button>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm" className="h-auto max-w-full whitespace-normal">
+              Compare prompt outputs
+            </Button>
+          </DialogTrigger>
         </div>
       </section>
-    </>
+    </Dialog>
   );
 }
 

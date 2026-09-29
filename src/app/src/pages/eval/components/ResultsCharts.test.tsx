@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Chart } from 'chart.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -164,6 +164,10 @@ describe('ResultsCharts', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByLabelText('X-axis prompt')).toBeInTheDocument();
     expect(screen.getByLabelText('Y-axis prompt')).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Compare prompt outputs' })).toHaveFocus(),
+    );
   });
 
   it('should render without errors with a large number of providers', () => {
