@@ -29,9 +29,11 @@ import type {
   MemoryToolConfig,
   WebFetchToolConfig,
   WebFetchToolConfig20260209,
+  WebFetchToolConfig20260318,
   WebFetchToolConfigV2,
   WebSearchToolConfig,
   WebSearchToolConfig20260209,
+  WebSearchToolConfig20260318,
 } from '../../../src/providers/anthropic/types';
 
 type AnthropicUsageWithOutputDetails = NonNullable<Anthropic.Messages.Message['usage']> & {
@@ -587,35 +589,36 @@ describe('Anthropic utilities', () => {
       expect(result).toBe('Hello');
     });
 
-    it('should concatenate text blocks without tool_use blocks', () => {
-      const message: AnthropicTestMessage = {
+    // Web search and document citations split one passage at each cited span, including
+    // inside a sentence or a markdown table row, so adjacent text blocks join with nothing.
+    it('should concatenate adjacent text blocks exactly as written', () => {
+      const cited = [{ type: 'web_search_result_location', url: 'https://example.com' }];
+      const message = {
         content: [
-          { type: 'text', text: 'Hello', citations: [] },
-          { type: 'text', text: 'World', citations: [] },
+          { type: 'text', text: '| Tokyo | ', citations: null },
+          { type: 'text', text: '14.2 million', citations: cited },
+          { type: 'text', text: ' |\n| Delhi | ', citations: null },
+          { type: 'text', text: '34.6 million', citations: cited },
+          { type: 'text', text: ' |', citations: null },
         ],
-        id: '',
-        model: '',
-        role: 'assistant',
-        stop_details: null,
-        stop_reason: null,
-        stop_sequence: null,
-        type: 'message',
-        container: null,
-        usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_creation: null,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-          server_tool_use: null,
-          service_tier: null,
-          inference_geo: null,
-          output_tokens_details: null,
-        },
-      };
+      } as unknown as Anthropic.Messages.Message;
 
-      const result = outputFromMessage(message, false);
-      expect(result).toBe('Hello\n\nWorld');
+      expect(outputFromMessage(message, false)).toBe(
+        '| Tokyo | 14.2 million |\n| Delhi | 34.6 million |',
+      );
+    });
+
+    it('should keep text on either side of a tool call as separate paragraphs', () => {
+      const message = {
+        content: [
+          { type: 'text', text: 'Searching.', citations: null },
+          { type: 'server_tool_use', id: 'srvtoolu_1', name: 'web_search', input: {} },
+          { type: 'web_search_tool_result', tool_use_id: 'srvtoolu_1', content: [] },
+          { type: 'text', text: 'Found it.', citations: null },
+        ],
+      } as unknown as Anthropic.Messages.Message;
+
+      expect(outputFromMessage(message, false)).toBe('Searching.\n\nFound it.');
     });
 
     it('should handle content with tool_use blocks', () => {
@@ -794,6 +797,199 @@ describe('Anthropic utilities', () => {
       } as unknown as Anthropic.Messages.Message;
 
       expect(outputFromMessage(message, true)).toBe('Final answer');
+    });
+
+    it.each([true, false])(
+      'should preserve file references with showThinking=%s',
+      (showThinking) => {
+        const file = { type: 'container_upload', file_id: 'file_report' } as const;
+        const message = {
+          content: [
+            { type: 'thinking', thinking: '', signature: 'abc123' },
+            { type: 'text', text: 'Created the report.', citations: null },
+            file,
+          ],
+        } as Anthropic.Messages.Message;
+
+        expect(outputFromMessage(message, showThinking)).toBe(
+          `Created the report.\n\n${JSON.stringify(file)}`,
+        );
+      },
+    );
+
+    it.each([true, false])(
+      'should preserve paused tool steps with showThinking=%s',
+      (showThinking) => {
+        const toolBlocks: Anthropic.Messages.ContentBlock[] = [
+          {
+            type: 'server_tool_use',
+            id: 'srvtoolu_1',
+            name: 'web_search',
+            input: {},
+            caller: { type: 'direct' },
+          },
+          {
+            type: 'web_search_tool_result',
+            tool_use_id: 'srvtoolu_1',
+            content: [],
+            caller: { type: 'direct' },
+          },
+        ];
+        const message = {
+          content: [{ type: 'thinking', thinking: '', signature: 'abc123' }, ...toolBlocks],
+          stop_reason: 'pause_turn',
+        } as Anthropic.Messages.Message;
+
+        expect(outputFromMessage(message, showThinking)).toBe(
+          toolBlocks.map((block) => JSON.stringify(block)).join('\n\n'),
+        );
+      },
+    );
+
+    it.each([
+      {
+        type: 'bash_code_execution_tool_result',
+        tool_use_id: 'srvtoolu_bash',
+        content: {
+          type: 'bash_code_execution_result',
+          stdout: 'Execution log',
+          stderr: 'Execution warning',
+          return_code: 0,
+          content: [
+            { type: 'bash_code_execution_output', file_id: 'file_report' },
+            { type: 'bash_code_execution_output', file_id: 'file_chart' },
+          ],
+        },
+      },
+      {
+        type: 'code_execution_tool_result',
+        tool_use_id: 'srvtoolu_python',
+        content: {
+          type: 'code_execution_result',
+          stdout: 'Execution log',
+          stderr: 'Execution warning',
+          return_code: 0,
+          content: [
+            { type: 'code_execution_output', file_id: 'file_report' },
+            { type: 'code_execution_output', file_id: 'file_chart' },
+          ],
+        },
+      },
+      {
+        type: 'code_execution_tool_result',
+        tool_use_id: 'srvtoolu_encrypted',
+        content: {
+          type: 'encrypted_code_execution_result',
+          encrypted_stdout: 'Encrypted search payload',
+          stderr: 'Execution warning',
+          return_code: 0,
+          content: [
+            { type: 'code_execution_output', file_id: 'file_report' },
+            { type: 'code_execution_output', file_id: 'file_chart' },
+          ],
+        },
+      },
+    ] satisfies Anthropic.Messages.ContentBlock[])(
+      'should preserve generated files from $content.type without execution payloads',
+      (result) => {
+        const message = {
+          content: [
+            { type: 'thinking', thinking: '', signature: 'abc123' },
+            result,
+            { type: 'text', text: 'Created the report and chart.', citations: null },
+          ],
+          stop_reason: 'end_turn',
+        } as Anthropic.Messages.Message;
+        const fileType =
+          result.type === 'bash_code_execution_tool_result'
+            ? 'bash_code_execution_output'
+            : 'code_execution_output';
+        const expected =
+          `{"type":"${fileType}","file_id":"file_report"}\n\n` +
+          `{"type":"${fileType}","file_id":"file_chart"}\n\nCreated the report and chart.`;
+
+        expect(outputFromMessage(message, true)).toBe(expected);
+        expect(outputFromMessage(message, false)).toBe(expected);
+      },
+    );
+
+    it.each([
+      {
+        type: 'bash_code_execution_tool_result',
+        tool_use_id: 'srvtoolu_bash',
+        content: {
+          type: 'bash_code_execution_result',
+          stdout: 'Execution log',
+          stderr: '',
+          return_code: 0,
+          content: [],
+        },
+      },
+      {
+        type: 'code_execution_tool_result',
+        tool_use_id: 'srvtoolu_python',
+        content: {
+          type: 'code_execution_result',
+          stdout: 'Execution log',
+          stderr: '',
+          return_code: 0,
+          content: [],
+        },
+      },
+      {
+        type: 'code_execution_tool_result',
+        tool_use_id: 'srvtoolu_encrypted',
+        content: {
+          type: 'encrypted_code_execution_result',
+          encrypted_stdout: 'Encrypted search payload',
+          stderr: '',
+          return_code: 0,
+          content: [],
+        },
+      },
+      {
+        type: 'bash_code_execution_tool_result',
+        tool_use_id: 'srvtoolu_bash_error',
+        content: { type: 'bash_code_execution_tool_result_error', error_code: 'unavailable' },
+      },
+      {
+        type: 'code_execution_tool_result',
+        tool_use_id: 'srvtoolu_python_error',
+        content: { type: 'code_execution_tool_result_error', error_code: 'unavailable' },
+      },
+    ] satisfies Anthropic.Messages.ContentBlock[])(
+      'should omit completed $content.type without generated files',
+      (result) => {
+        const message = {
+          content: [result, { type: 'text', text: '{"pass": true}', citations: null }],
+          stop_reason: 'end_turn',
+        } as Anthropic.Messages.Message;
+
+        expect(outputFromMessage(message, false)).toBe('{"pass": true}');
+      },
+    );
+
+    // The search blocks must not end up ahead of a completed answer, even with thinking.
+    it('should omit server tool blocks when thinking is present', () => {
+      const message = {
+        content: [
+          { type: 'thinking', thinking: '', signature: 'abc123' },
+          {
+            type: 'server_tool_use',
+            id: 'srvtoolu_1',
+            name: 'web_search',
+            input: { query: 'Iceland population' },
+          },
+          {
+            type: 'web_search_tool_result',
+            tool_use_id: 'srvtoolu_1',
+            content: [{ type: 'web_search_result', url: 'https://example.com', title: 'Iceland' }],
+          },
+          { type: 'text', text: '{"pass": true, "score": 1}', citations: [] },
+        ],
+      } as unknown as Anthropic.Messages.Message;
+
+      expect(outputFromMessage(message, true)).toBe('{"pass": true, "score": 1}');
     });
 
     it('should exclude thinking blocks when showThinking is false', () => {
@@ -1572,6 +1768,70 @@ describe('Anthropic utilities', () => {
         allowed_domains: ['example.com'],
       });
       expect(requiredBetaFeatures).toEqual([]);
+    });
+
+    it('should process web_fetch_20260318 tool with response_inclusion', () => {
+      const tool: WebFetchToolConfig20260318 = {
+        type: 'web_fetch_20260318',
+        name: 'web_fetch',
+        max_uses: 3,
+        use_cache: false,
+        response_inclusion: 'excluded',
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([tool]);
+
+      expect(processedTools).toHaveLength(1);
+      expect(processedTools[0]).toMatchObject({
+        type: 'web_fetch_20260318',
+        name: 'web_fetch',
+        max_uses: 3,
+        use_cache: false,
+        response_inclusion: 'excluded',
+      });
+      expect(requiredBetaFeatures).toEqual([]);
+    });
+
+    it('should process web_search_20260318 tool with response_inclusion', () => {
+      const tool: WebSearchToolConfig20260318 = {
+        type: 'web_search_20260318',
+        name: 'web_search',
+        max_uses: 2,
+        response_inclusion: 'excluded',
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([tool]);
+
+      expect(processedTools).toHaveLength(1);
+      expect(processedTools[0]).toMatchObject({
+        type: 'web_search_20260318',
+        name: 'web_search',
+        max_uses: 2,
+        response_inclusion: 'excluded',
+      });
+      expect(requiredBetaFeatures).toEqual([]);
+    });
+
+    // Dropping url_sources would silently widen the set of fetchable URLs.
+    it.each([
+      'web_fetch_20250910',
+      'web_fetch_20260209',
+      'web_fetch_20260309',
+      'web_fetch_20260318',
+    ] as const)('forwards url_sources on %s', (type) => {
+      const url_sources: Anthropic.Messages.WebFetchURLSources = {
+        user_input: { type: 'none' },
+        server_tool_results: { type: 'all' },
+      };
+      const { processedTools } = processAnthropicTools([{ type, name: 'web_fetch', url_sources }]);
+      expect(processedTools[0]).toMatchObject({ url_sources });
+    });
+
+    it('drops response_inclusion on tool versions that do not support it', () => {
+      const { processedTools } = processAnthropicTools([
+        { type: 'web_search_20260209', name: 'web_search', response_inclusion: 'excluded' } as any,
+      ]);
+      expect(processedTools[0]).not.toHaveProperty('response_inclusion');
     });
 
     it('should process web_fetch_20260309 tool with all optional parameters', () => {

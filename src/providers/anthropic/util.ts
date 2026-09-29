@@ -7,8 +7,10 @@ import type {
   AnthropicToolConfig,
   ClaudeEffort,
   WebFetchToolConfig,
+  WebFetchToolConfig20260318,
   WebFetchToolConfigV2,
   WebSearchToolConfig,
+  WebSearchToolConfig20260318,
 } from './types';
 
 // Model definitions with cost information
@@ -615,34 +617,57 @@ export function applyClaudeRegionalPremium(modelName: string, config: any): any 
   return { ...config, regionalPremiumMultiplier: CLAUDE_REGIONAL_ENDPOINT_PREMIUM };
 }
 
-export function outputFromMessage(message: Anthropic.Messages.Message, showThinking: boolean) {
-  const hasToolUse = message.content.some((block) => block.type === 'tool_use');
-  const hasThinking = message.content.some(
-    (block) => block.type === 'thinking' || block.type === 'redacted_thinking',
-  );
-
-  if (hasToolUse || hasThinking) {
-    return message.content
-      .map((block) => {
-        if (block.type === 'text') {
-          return block.text;
-        } else if (block.type === 'thinking' && showThinking && block.thinking.trim() !== '') {
-          return `Thinking: ${block.thinking}\nSignature: ${block.signature}`;
-        } else if (block.type === 'redacted_thinking' && showThinking) {
-          return `Redacted Thinking: ${block.data}`;
-        } else if (block.type !== 'thinking' && block.type !== 'redacted_thinking') {
-          return JSON.stringify(block);
-        }
-        return '';
-      })
-      .filter((text) => text !== '')
-      .join('\n\n');
+export function getFileReferences(
+  block: Anthropic.Messages.ContentBlock,
+): { type: string; file_id: string }[] {
+  if (block.type === 'container_upload') {
+    return [{ type: block.type, file_id: block.file_id }];
   }
-  return message.content
-    .map((block) => {
-      return (block as Anthropic.Messages.TextBlock).text;
-    })
-    .join('\n\n');
+  if (
+    (block.type === 'code_execution_tool_result' ||
+      block.type === 'bash_code_execution_tool_result') &&
+    'content' in block.content
+  ) {
+    return block.content.content.map(({ type, file_id }) => ({ type, file_id }));
+  }
+  return [];
+}
+
+export function outputFromMessage(message: Anthropic.Messages.Message, showThinking: boolean) {
+  const segments: string[] = [];
+  let previousBlockWasText = false;
+  for (const block of message.content) {
+    if (block.type === 'text') {
+      // Citation boundaries can split a sentence or table row across text blocks.
+      if (previousBlockWasText) {
+        segments[segments.length - 1] += block.text;
+      } else {
+        segments.push(block.text);
+      }
+      previousBlockWasText = true;
+      continue;
+    }
+    previousBlockWasText = false;
+    if (block.type === 'thinking' && showThinking && block.thinking.trim() !== '') {
+      segments.push(`Thinking: ${block.thinking}\nSignature: ${block.signature}`);
+    } else if (block.type === 'redacted_thinking' && showThinking) {
+      segments.push(`Redacted Thinking: ${block.data}`);
+    } else if (
+      block.type === 'tool_use' ||
+      (message.stop_reason === 'pause_turn' &&
+        block.type !== 'thinking' &&
+        block.type !== 'redacted_thinking')
+    ) {
+      segments.push(JSON.stringify(block));
+    } else {
+      // Keep generated files without including execution logs or encrypted payloads.
+      for (const file of getFileReferences(block)) {
+        segments.push(JSON.stringify(file));
+      }
+    }
+    // Omit other completed server-tool blocks so they cannot obscure the answer.
+  }
+  return segments.filter((segment) => segment !== '').join('\n\n');
 }
 
 /**
@@ -919,11 +944,7 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   return {};
 }
 
-/**
- * Config fields copied onto the SDK tool object, in the order they are written. Order is
- * significant only in that it fixes the key order of the emitted object; the `satisfies`
- * clauses keep these lists honest against the config interfaces.
- */
+// Fields forwarded to each server-tool version.
 const WEB_FETCH_FIELDS = [
   'allowed_callers',
   'max_uses',
@@ -934,7 +955,18 @@ const WEB_FETCH_FIELDS = [
   'cache_control',
   'defer_loading',
   'strict',
+  'url_sources',
 ] as const satisfies readonly (keyof WebFetchToolConfig)[];
+
+const WEB_FETCH_20260309_FIELDS = [
+  ...WEB_FETCH_FIELDS,
+  'use_cache',
+] as const satisfies readonly (keyof WebFetchToolConfigV2)[];
+
+const WEB_FETCH_20260318_FIELDS = [
+  ...WEB_FETCH_20260309_FIELDS,
+  'response_inclusion',
+] as const satisfies readonly (keyof WebFetchToolConfig20260318)[];
 
 const WEB_SEARCH_FIELDS = [
   'allowed_callers',
@@ -946,6 +978,32 @@ const WEB_SEARCH_FIELDS = [
   'strict',
   'user_location',
 ] as const satisfies readonly (keyof WebSearchToolConfig)[];
+
+const WEB_SEARCH_20260318_FIELDS = [
+  ...WEB_SEARCH_FIELDS,
+  'response_inclusion',
+] as const satisfies readonly (keyof WebSearchToolConfig20260318)[];
+
+/** SDK fields on a server tool that its field list would drop without warning. */
+type UnforwardedToolFields<Tool, Fields extends readonly string[]> = Exclude<
+  keyof Tool,
+  'name' | 'type' | Fields[number]
+>;
+
+// Fail type-checking if an SDK update adds a field these lists would silently drop.
+type _ServerToolFieldsAreForwarded<T extends never> = T;
+type _AllServerToolFieldsForwarded = _ServerToolFieldsAreForwarded<
+  | UnforwardedToolFields<Anthropic.Messages.WebFetchTool20250910, typeof WEB_FETCH_FIELDS>
+  | UnforwardedToolFields<Anthropic.Messages.WebFetchTool20260209, typeof WEB_FETCH_FIELDS>
+  | UnforwardedToolFields<Anthropic.Messages.WebFetchTool20260309, typeof WEB_FETCH_20260309_FIELDS>
+  | UnforwardedToolFields<Anthropic.Messages.WebFetchTool20260318, typeof WEB_FETCH_20260318_FIELDS>
+  | UnforwardedToolFields<Anthropic.Messages.WebSearchTool20250305, typeof WEB_SEARCH_FIELDS>
+  | UnforwardedToolFields<Anthropic.Messages.WebSearchTool20260209, typeof WEB_SEARCH_FIELDS>
+  | UnforwardedToolFields<
+      Anthropic.Messages.WebSearchTool20260318,
+      typeof WEB_SEARCH_20260318_FIELDS
+    >
+>;
 
 interface ServerToolSpec {
   /** Tool name the API expects; always overrides whatever `name` the user config carried. */
@@ -968,17 +1026,13 @@ const SERVER_TOOL_SPECS = new Map<string, ServerToolSpec>([
     { name: 'web_fetch', fields: WEB_FETCH_FIELDS, betaFeature: 'web-fetch-2025-09-10' },
   ],
   ['web_fetch_20260209', { name: 'web_fetch', fields: WEB_FETCH_FIELDS }],
-  // The 20260309 version is the only one that supports use_cache.
-  [
-    'web_fetch_20260309',
-    {
-      name: 'web_fetch',
-      fields: [...WEB_FETCH_FIELDS, 'use_cache' satisfies keyof WebFetchToolConfigV2],
-    },
-  ],
+  // use_cache arrived in 20260309; response_inclusion in 20260318.
+  ['web_fetch_20260309', { name: 'web_fetch', fields: WEB_FETCH_20260309_FIELDS }],
+  ['web_fetch_20260318', { name: 'web_fetch', fields: WEB_FETCH_20260318_FIELDS }],
   // Web search needs no beta header in the current SDK.
   ['web_search_20250305', { name: 'web_search', fields: WEB_SEARCH_FIELDS }],
   ['web_search_20260209', { name: 'web_search', fields: WEB_SEARCH_FIELDS }],
+  ['web_search_20260318', { name: 'web_search', fields: WEB_SEARCH_20260318_FIELDS }],
 ]);
 
 /**
