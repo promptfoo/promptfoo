@@ -4,7 +4,6 @@ import os from 'os';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearCache, disableCache, enableCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import {
   findPiCliScript,
@@ -25,7 +24,8 @@ vi.mock('../../src/tracing/genaiTracer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/tracing/genaiTracer')>()),
 }));
 
-vi.mock('child_process', () => ({
+vi.mock('child_process', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('child_process')>()),
   spawn: vi.fn(),
 }));
 
@@ -127,32 +127,9 @@ function spawnedOptions(callIndex = 0): Record<string, any> {
   return mockSpawn.mock.calls[callIndex][2] as Record<string, any>;
 }
 
-/** Write a pi config file with an explicit mtime so mtime+size fingerprints change deterministically. */
-function writeConfigAt(filePath: string, body: string, mtimeMs: number) {
-  fs.writeFileSync(filePath, body);
-  fs.utimesSync(filePath, new Date(mtimeMs), new Date(mtimeMs));
-}
-
-/** Assert an agent-dir change busted the cache: two distinct runs, no cache hit. */
-function expectCacheBusted(
-  first: { output?: string; cached?: boolean },
-  second: { output?: string; cached?: boolean },
-) {
-  expect(first.output).toBe('first');
-  expect(second.output).toBe('second');
-  expect(second.cached).toBeFalsy();
-  expect(mockSpawn).toHaveBeenCalledTimes(2);
-}
-
 describe('PiProvider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    disableCache();
-  });
-
-  afterEach(async () => {
-    await clearCache();
-    enableCache();
   });
 
   describe('id and construction', () => {
@@ -170,7 +147,7 @@ describe('PiProvider', () => {
   });
 
   describe('CLI arguments', () => {
-    it('runs in JSON mode with hermetic defaults and no tools', async () => {
+    it('runs in RPC mode with discovery and tools disabled', async () => {
       mockPiRun(defaultEvents());
       const provider = new PiProvider();
 
@@ -180,7 +157,7 @@ describe('PiProvider', () => {
       const args = spawnedArgs();
       expect(args).toEqual([
         '--mode',
-        'json',
+        'rpc',
         '--no-session',
         '--offline',
         '--no-tools',
@@ -386,15 +363,56 @@ describe('PiProvider', () => {
   });
 
   describe('prompt delivery', () => {
-    it('writes the prompt to stdin and closes it', async () => {
-      const child = mockPiRun(defaultEvents());
-      const provider = new PiProvider();
+    it.each(['the prompt text', '  padded\n', '\t \n'])(
+      'preserves the RPC prompt %j',
+      async (prompt) => {
+        const child = mockPiRun(defaultEvents());
+        const provider = new PiProvider();
 
-      await provider.callApi('the prompt text');
+        await provider.callApi(prompt);
 
-      expect(child.stdin.write).toHaveBeenCalledWith('the prompt text');
-      expect(child.stdin.end).toHaveBeenCalled();
-    });
+        expect(child.stdin.write).toHaveBeenCalledWith(
+          `${JSON.stringify({ type: 'prompt', message: prompt })}\n`,
+        );
+        expect(child.stdin.end).toHaveBeenCalled();
+      },
+    );
+  });
+
+  it('reports RPC prompt errors and closes input', async () => {
+    const child = mockPiRun([
+      { type: 'response', command: 'prompt', success: false, error: 'No model configured' },
+    ]);
+    const result = await new PiProvider().callApi('hello');
+    expect(result.error).toBe('No model configured');
+    expect(child.stdin.end).toHaveBeenCalledTimes(1);
+  });
+
+  it('finishes when an extension handles the prompt without starting an agent run', async () => {
+    const child = mockPiRun([
+      { type: 'response', command: 'prompt', success: true, data: { disposition: 'handled' } },
+    ]);
+    const result = await new PiProvider().callApi('/fixture');
+    expect(child.stdin.end).toHaveBeenCalledTimes(1);
+    expect(result.error).toContain('before completing the run');
+  });
+
+  it('keeps input open until a complete final event arrives', async () => {
+    const child = new FakeChildProcess();
+    mockSpawn.mockReturnValueOnce(child as never);
+    const pending = new PiProvider().callApi('hello');
+    await vi.waitFor(() => expect(child.stdin.write).toHaveBeenCalled());
+    expect(child.stdin.end).not.toHaveBeenCalled();
+    child.stdout.emit('data', JSON.stringify({ type: 'agent_end', willRetry: true }) + '\n');
+    expect(child.stdin.end).not.toHaveBeenCalled();
+    const final =
+      JSON.stringify({ type: 'agent_end', messages: [assistantMessage('done')] }) + '\n';
+    child.stdout.emit('data', final.slice(0, 20));
+    expect(child.stdin.end).not.toHaveBeenCalled();
+    child.stdout.emit('data', final.slice(20));
+    expect(child.stdin.end).toHaveBeenCalledTimes(1);
+    child.emit('close', 0);
+    expect((await pending).output).toBe('done');
   });
 
   describe('environment', () => {
@@ -415,7 +433,7 @@ describe('PiProvider', () => {
 
       // pi resolves a relative value from its temp/working cwd, so the provider
       // must hand it an absolute path (resolved from the config base path) that
-      // matches the directory the cache fingerprint covers.
+      // resolves from the configuration directory.
       expect(spawnedOptions().env.PI_CODING_AGENT_DIR).toBe(
         path.resolve('/test/basePath', 'rel-agent'),
       );
@@ -639,7 +657,7 @@ describe('PiProvider', () => {
       ]);
     });
 
-    it('falls back to message_end events when agent_end is missing', async () => {
+    it('rejects partial output when agent_end is missing', async () => {
       mockPiRun([
         { type: 'message_end', message: assistantMessage('partial result') },
         { type: 'turn_end' },
@@ -648,7 +666,7 @@ describe('PiProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(result.output).toBe('partial result');
+      expect(result.error).toContain('before completing the run');
     });
 
     it('skips malformed JSON lines', async () => {
@@ -699,7 +717,7 @@ describe('PiProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(result.error).toContain('Pi agent produced no assistant response');
+      expect(result.error).toContain('before completing the run');
       expect(result.error).toContain('something broke');
     });
 
@@ -716,7 +734,6 @@ describe('PiProvider', () => {
     it('treats a nonzero exit as an error even when events were emitted', async () => {
       // A mid-run crash leaves partial events behind; the truncated transcript
       // must not be reported (or cached) as a successful response.
-      enableCache();
       mockPiRun(defaultEvents('truncated mid-run'), { exitCode: 1, stderr: 'pi crashed' });
       mockPiRun(defaultEvents('recovered'));
       const provider = new PiProvider();
@@ -820,7 +837,7 @@ describe('PiProvider', () => {
           type: 'message_end',
           message: assistantMessage('fallback', { usage: buildUsage(70, 7, 0.003) }),
         },
-        { type: 'turn_end' },
+        { type: 'agent_end', messages: [] },
       ]);
       const provider = new PiProvider();
 
@@ -899,6 +916,14 @@ describe('PiProvider', () => {
   });
 
   describe('working_dir validation', () => {
+    it('rejects copy_working_dir calls outside an eval-managed workspace', async () => {
+      const provider = new PiProvider({
+        config: { working_dir: os.tmpdir(), copy_working_dir: true },
+      });
+      await expect(provider.callApi('hello')).rejects.toThrow('not made by an eval step');
+      expect(mockSpawn).not.toHaveBeenCalled();
+    });
+
     it('rejects a missing working directory', async () => {
       const provider = new PiProvider({ config: { working_dir: '/does/not/exist-pi-test' } });
 
@@ -1055,12 +1080,10 @@ describe('PiProvider', () => {
       expect(mockSpawn).not.toHaveBeenCalled();
     });
 
-    it('reports the abort before serving a cache hit when already aborted', async () => {
-      enableCache();
-      mockPiRun(defaultEvents('cached answer'));
+    it('honors cancellation after a previous successful call', async () => {
+      mockPiRun(defaultEvents('previous answer'));
       const provider = new PiProvider();
 
-      // Populate the cache for this prompt.
       await provider.callApi('abort me');
 
       const controller = new AbortController();
@@ -1069,7 +1092,6 @@ describe('PiProvider', () => {
         abortSignal: controller.signal,
       });
 
-      // The aborted row must not report a (cached) success.
       expect(result.error).toBe('Pi call aborted before it started');
       expect(result.cached).toBeUndefined();
       expect(mockSpawn).toHaveBeenCalledTimes(1);
@@ -1180,302 +1202,16 @@ describe('PiProvider', () => {
     });
   });
 
-  describe('caching', () => {
-    it('serves the second identical call from cache', async () => {
-      enableCache();
-      mockPiRun(defaultEvents('cached answer'));
-      const provider = new PiProvider();
+  it('runs identical calls again so changing runtime inputs cannot reuse stale output', async () => {
+    mockPiRun(defaultEvents('first'));
+    mockPiRun(defaultEvents('second'));
+    const provider = new PiProvider();
 
-      const first = await provider.callApi('cache me');
-      const second = await provider.callApi('cache me');
-
-      expect(first.output).toBe('cached answer');
-      expect(second.output).toBe('cached answer');
-      expect(second.cached).toBe(true);
-      expect(mockSpawn).toHaveBeenCalledTimes(1);
-    });
-
-    it('does not cache error responses', async () => {
-      enableCache();
-      mockPiRun([
-        {
-          type: 'agent_end',
-          messages: [assistantMessage('', { stopReason: 'error', errorMessage: 'rate limited' })],
-          willRetry: false,
-        },
-      ]);
-      mockPiRun(defaultEvents('recovered'));
-      const provider = new PiProvider();
-
-      const first = await provider.callApi('retry me');
-      const second = await provider.callApi('retry me');
-
-      expect(first.error).toBe('rate limited');
-      expect(second.output).toBe('recovered');
-      expect(mockSpawn).toHaveBeenCalledTimes(2);
-    });
-
-    it('spawns again when caching is disabled', async () => {
-      mockPiRun(defaultEvents());
-      mockPiRun(defaultEvents());
-      const provider = new PiProvider();
-
-      await provider.callApi('no cache');
-      await provider.callApi('no cache');
-
-      expect(mockSpawn).toHaveBeenCalledTimes(2);
-    });
-
-    it('excludes the apiKey from the cache key', async () => {
-      enableCache();
-      mockPiRun(defaultEvents('shared answer'));
-      const first = new PiProvider({ config: { provider_id: 'anthropic', apiKey: 'key-one' } });
-      const second = new PiProvider({ config: { provider_id: 'anthropic', apiKey: 'key-two' } });
-
-      await first.callApi('same prompt');
-      const result = await second.callApi('same prompt');
-
-      // Different credentials must map to the same cache entry: the key
-      // never incorporates the secret.
-      expect(result.cached).toBe(true);
-      expect(mockSpawn).toHaveBeenCalledTimes(1);
-    });
-
-    it('excludes the credential env var from the cache key even when set via config.env', async () => {
-      enableCache();
-      mockPiRun(defaultEvents('shared answer'));
-      const first = new PiProvider({
-        config: { model: 'openai/gpt-4o-mini', env: { OPENAI_API_KEY: 'k1' } },
-      });
-      const second = new PiProvider({
-        config: { model: 'openai/gpt-4o-mini', env: { OPENAI_API_KEY: 'k2' } },
-      });
-
-      await first.callApi('same prompt');
-      const result = await second.callApi('same prompt');
-
-      expect(result.cached).toBe(true);
-      expect(mockSpawn).toHaveBeenCalledTimes(1);
-    });
-
-    it('does not bust the cache when only a secret-named env value changes', async () => {
-      enableCache();
-      mockPiRun(defaultEvents('shared answer'));
-      // CUSTOM_TOKEN is secret-named (redacted); OPENAI_BASE_URL is identical.
-      const first = new PiProvider({
-        config: { env: { CUSTOM_TOKEN: 'tok-1', OPENAI_BASE_URL: 'http://proxy' } },
-      });
-      const second = new PiProvider({
-        config: { env: { CUSTOM_TOKEN: 'tok-2', OPENAI_BASE_URL: 'http://proxy' } },
-      });
-
-      await first.callApi('same prompt');
-      const result = await second.callApi('same prompt');
-
-      expect(result.cached).toBe(true);
-      expect(mockSpawn).toHaveBeenCalledTimes(1);
-    });
-
-    it('busts the cache when a non-secret env value changes', async () => {
-      enableCache();
-      mockPiRun(defaultEvents('answer-a'));
-      mockPiRun(defaultEvents('answer-b'));
-      const first = new PiProvider({ config: { env: { OPENAI_BASE_URL: 'http://proxy-a' } } });
-      const second = new PiProvider({ config: { env: { OPENAI_BASE_URL: 'http://proxy-b' } } });
-
-      const a = await first.callApi('same prompt');
-      const b = await second.callApi('same prompt');
-
-      // Different backends must not collide on one cache entry.
-      expect(a.output).toBe('answer-a');
-      expect(b.output).toBe('answer-b');
-      expect(b.cached).toBeFalsy();
-      expect(mockSpawn).toHaveBeenCalledTimes(2);
-    });
-
-    it('strips credentials embedded in URL env values from the cache key', async () => {
-      enableCache();
-      mockPiRun(defaultEvents('shared'));
-      // Same host/path, only the embedded userinfo credential differs.
-      const first = new PiProvider({
-        config: { env: { OPENAI_BASE_URL: 'https://user:secret-a@gw.example/v1?token=aaa' } },
-      });
-      const second = new PiProvider({
-        config: { env: { OPENAI_BASE_URL: 'https://user:secret-b@gw.example/v1?token=bbb' } },
-      });
-
-      await first.callApi('same prompt');
-      const result = await second.callApi('same prompt');
-
-      // The raw secret must not reach the key, so the two runs share an entry.
-      expect(result.cached).toBe(true);
-      expect(mockSpawn).toHaveBeenCalledTimes(1);
-    });
-
-    it('busts the cache when agent_dir config files change', async () => {
-      enableCache();
-      const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-agent-'));
-      const settingsPath = path.join(agentDir, 'settings.json');
-      try {
-        // Different size + explicit mtime so the mtime/size fingerprint changes
-        // deterministically regardless of write timing resolution.
-        writeConfigAt(settingsPath, JSON.stringify({ model: 'one' }), 1000);
-        mockPiRun(defaultEvents('first'));
-        mockPiRun(defaultEvents('second'));
-        const provider = new PiProvider({ config: { agent_dir: agentDir } });
-
-        const first = await provider.callApi('same prompt');
-        writeConfigAt(settingsPath, JSON.stringify({ model: 'a-different-longer-model-id' }), 2000);
-        const second = await provider.callApi('same prompt');
-
-        expectCacheBusted(first, second);
-      } finally {
-        fs.rmSync(agentDir, { recursive: true, force: true });
-      }
-    });
-
-    it('keeps configs with a different api_key_env on separate cache entries', async () => {
-      enableCache();
-      mockPiRun(defaultEvents('a'));
-      mockPiRun(defaultEvents('b'));
-      const first = new PiProvider({
-        config: { provider_id: 'custom', apiKey: 'k', api_key_env: 'VAR_A' },
-      });
-      const second = new PiProvider({
-        config: { provider_id: 'custom', apiKey: 'k', api_key_env: 'VAR_B' },
-      });
-
-      await first.callApi('same prompt');
-      const result = await second.callApi('same prompt');
-
-      // The credential value is redacted, but the resolved env var NAME differs,
-      // so the configs must not collide on one cache entry.
-      expect(result.cached).toBeFalsy();
-      expect(mockSpawn).toHaveBeenCalledTimes(2);
-    });
-
-    it('busts the cache when an agent_dir system prompt file changes', async () => {
-      enableCache();
-      const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-sysprompt-'));
-      const systemPath = path.join(agentDir, 'SYSTEM.md');
-      try {
-        writeConfigAt(systemPath, 'You are terse.', 1000);
-        mockPiRun(defaultEvents('first'));
-        mockPiRun(defaultEvents('second'));
-        const provider = new PiProvider({ config: { agent_dir: agentDir } });
-
-        const first = await provider.callApi('same prompt');
-        writeConfigAt(systemPath, 'You are a verbose and thorough assistant.', 2000);
-        const second = await provider.callApi('same prompt');
-
-        expectCacheBusted(first, second);
-      } finally {
-        fs.rmSync(agentDir, { recursive: true, force: true });
-      }
-    });
-
-    it('fingerprints an agent dir supplied via env (not just agent_dir)', async () => {
-      enableCache();
-      const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-envagent-'));
-      const settingsPath = path.join(agentDir, 'settings.json');
-      try {
-        writeConfigAt(settingsPath, JSON.stringify({ model: 'one' }), 1000);
-        mockPiRun(defaultEvents('first'));
-        mockPiRun(defaultEvents('second'));
-        const provider = new PiProvider({ config: { env: { PI_CODING_AGENT_DIR: agentDir } } });
-
-        const first = await provider.callApi('same prompt');
-        writeConfigAt(settingsPath, JSON.stringify({ model: 'a-different-longer-model-id' }), 2000);
-        const second = await provider.callApi('same prompt');
-
-        expectCacheBusted(first, second);
-      } finally {
-        fs.rmSync(agentDir, { recursive: true, force: true });
-      }
-    });
-
-    it('fingerprints the default agent dir under an overridden child HOME', async () => {
-      enableCache();
-      const home = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-home-'));
-      const settingsPath = path.join(home, '.pi', 'agent', 'settings.json');
-      fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
-      try {
-        writeConfigAt(settingsPath, JSON.stringify({ model: 'one' }), 1000);
-        mockPiRun(defaultEvents('first'));
-        mockPiRun(defaultEvents('second'));
-        // HOME overridden via env, no agent_dir: pi reads <HOME>/.pi/agent.
-        const provider = new PiProvider({ config: { env: { HOME: home } } });
-
-        const first = await provider.callApi('same prompt');
-        writeConfigAt(settingsPath, JSON.stringify({ model: 'a-different-longer-model-id' }), 2000);
-        const second = await provider.callApi('same prompt');
-
-        expectCacheBusted(first, second);
-      } finally {
-        fs.rmSync(home, { recursive: true, force: true });
-      }
-    });
-
-    it('keeps distinct prompts and models on separate cache entries', async () => {
-      enableCache();
-      mockPiRun(defaultEvents('a'));
-      mockPiRun(defaultEvents('b'));
-      mockPiRun(defaultEvents('c'));
-      const openai = new PiProvider({ config: { model: 'openai/gpt-4o-mini' } });
-      const anthropic = new PiProvider({ config: { model: 'anthropic/claude-sonnet-4-5' } });
-
-      await openai.callApi('prompt one');
-      await openai.callApi('prompt two'); // different prompt
-      await anthropic.callApi('prompt one'); // different model
-
-      // No over-collapse: each distinct (prompt, model) spawned its own run.
-      expect(mockSpawn).toHaveBeenCalledTimes(3);
-    });
-
-    it('excludes a custom non-secret-named credential var via the credentialEnvVar check', async () => {
-      // LLM_GATEWAY does NOT match SECRET_ENV_NAME_PATTERN, so the only thing
-      // keeping its value out of the cache key is the `key === credentialVar`
-      // exclusion. Two different secret values must still share a cache entry.
-      enableCache();
-      mockPiRun(defaultEvents('shared'));
-      const first = new PiProvider({
-        config: {
-          provider_id: 'custom',
-          api_key_env: 'LLM_GATEWAY',
-          env: { LLM_GATEWAY: 'secret-1' },
-        },
-      });
-      const second = new PiProvider({
-        config: {
-          provider_id: 'custom',
-          api_key_env: 'LLM_GATEWAY',
-          env: { LLM_GATEWAY: 'secret-2' },
-        },
-      });
-
-      await first.callApi('same prompt');
-      const result = await second.callApi('same prompt');
-
-      expect(result.cached).toBe(true);
-      expect(mockSpawn).toHaveBeenCalledTimes(1);
-    });
-
-    it('does not bust the cache when only an ambient process.env value changes', async () => {
-      // Ambient process.env is deliberately excluded from the cache key (only
-      // configured env participates), so a shell-set value change does not bust.
-      enableCache();
-      mockPiRun(defaultEvents('ambient'));
-      const provider = new PiProvider({ config: { model: 'openai/gpt-4o-mini' } });
-
-      vi.stubEnv('PROMPTFOO_PI_AMBIENT', 'one');
-      await provider.callApi('same prompt');
-      vi.stubEnv('PROMPTFOO_PI_AMBIENT', 'two');
-      const result = await provider.callApi('same prompt');
-      vi.unstubAllEnvs();
-
-      expect(result.cached).toBe(true);
-      expect(mockSpawn).toHaveBeenCalledTimes(1);
-    });
+    expect((await provider.callApi('same prompt')).output).toBe('first');
+    const second = await provider.callApi('same prompt');
+    expect(second.output).toBe('second');
+    expect(second.cached).toBeFalsy();
+    expect(mockSpawn).toHaveBeenCalledTimes(2);
   });
 
   describe('tracing', () => {
@@ -1512,16 +1248,16 @@ describe('PiProvider', () => {
       });
     });
 
-    it('does not open a span for a cache hit', async () => {
-      enableCache();
+    it('traces each repeated call', async () => {
       mockPiRun(defaultEvents('once'));
+      mockPiRun(defaultEvents('twice'));
       const provider = new PiProvider();
 
-      await provider.callApi('cache me'); // spawns -> 1 span
-      await provider.callApi('cache me'); // cache hit -> no span
+      await provider.callApi('same prompt');
+      await provider.callApi('same prompt');
 
-      expect(spanSpy).toHaveBeenCalledTimes(1);
-      expect(mockSpawn).toHaveBeenCalledTimes(1);
+      expect(spanSpy).toHaveBeenCalledTimes(2);
+      expect(mockSpawn).toHaveBeenCalledTimes(2);
     });
 
     it('uses the pi system label for a bare default-model run', async () => {

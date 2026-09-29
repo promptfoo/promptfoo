@@ -286,10 +286,10 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const { PiProvider } = await import('./pi');
 
-      // pi - uses pi's configured default model
-      // pi:<provider>/<model> - explicit model pattern (e.g. pi:anthropic/claude-sonnet-4-5)
-      // join(':') preserves pi's optional :<thinking> suffix (e.g. pi:sonnet:high)
-      const modelPattern = providerPath.split(':').slice(1).join(':');
+      const modelPattern = providerPath.slice(3);
+      if (providerPath !== 'pi' && !modelPattern.trim()) {
+        throw new Error('Pi requires a model after pi:, or use pi for the configured default');
+      }
       return new PiProvider({
         ...providerOptions,
         id: providerOptions.id ?? providerPath,

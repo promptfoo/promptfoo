@@ -1,5 +1,4 @@
 import { spawn } from 'child_process';
-import crypto from 'crypto';
 import fs from 'fs';
 import fsPromises from 'fs/promises';
 import os from 'os';
@@ -13,15 +12,8 @@ import {
   extractProviderResponseAttributes,
   withGenAISpan,
 } from '../tracing/genaiTracer';
-import { sanitizeUrl } from '../util/sanitizer';
-import {
-  type CacheCheckResult,
-  cacheResponse,
-  getCachedResponse,
-  initializeAgenticCache,
-  resolveAgenticWorkingDir,
-  validateAgenticWorkingDir,
-} from './agentic-utils';
+import { resolveAgenticWorkingDir, validateAgenticWorkingDir } from './agentic-utils';
+import { assertIsolatedWorkingDir, clearRepositoryEnv } from './agentWorkspace';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -31,27 +23,7 @@ import type {
   ProviderResponse,
 } from '../types/index';
 
-/**
- * Pi Coding Agent Provider
- *
- * This provider runs evals through Pi (https://pi.dev), a minimal terminal coding
- * agent. Promptfoo spawns the `pi` CLI in one-shot JSON event-stream mode
- * (`pi --mode json --no-session`) for each call, so the provider exercises the same
- * runtime users get in their terminal.
- *
- * Installation (any of):
- *   npm install -g @earendil-works/pi-coding-agent
- *   npm install @earendil-works/pi-coding-agent   (project-local; resolved automatically)
- *   curl -fsSL https://pi.dev/install.sh | sh
- *
- * Pi has NO built-in permission or sandbox system, so promptfoo defaults are
- * conservative and mirror the OpenCode provider:
- * - No working_dir: runs in a temp directory with all tools disabled (chat-only)
- * - With working_dir: runs in that directory with read-only tools (read, grep, find, ls)
- *
- * For side effects (file writes, bash commands), configure `tools` explicitly.
- */
-
+// Run the installed Pi CLI with tools disabled unless a workspace or tools are configured.
 /** Read-only built-in tools enabled by default when working_dir is set */
 export const PI_READONLY_TOOLS = ['find', 'grep', 'ls', 'read'];
 
@@ -72,20 +44,6 @@ const MAX_STDERR_BYTES = 256 * 1024;
 // accumulator without bound and OOM the eval process. Overridable per provider
 // via `max_output_bytes`.
 const DEFAULT_MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
-
-// Pi config files in the agent dir that change run behavior and so participate
-// in the cache key: default model/provider (settings.json), custom model/
-// endpoint definitions (models.json), and system-prompt overrides (SYSTEM.md /
-// APPEND_SYSTEM.md). auth.json is intentionally excluded — it holds credentials
-// and must never enter a cache key. (Project-local copies live in the working
-// dir, which is fingerprinted separately.)
-const PI_AGENT_DIR_CONFIG_FILES = ['settings.json', 'models.json', 'SYSTEM.md', 'APPEND_SYSTEM.md'];
-
-// Env var names that look credential-bearing. Their values are kept out of the
-// cache key (only hashed key material is persisted, but per the repo's cache
-// hygiene rules raw secrets must never be hashed). Changing a secret also must
-// not bust the cache, matching the apiKey-independence guarantee.
-const SECRET_ENV_NAME_PATTERN = /(?:key|token|secret|password|passwd|credential|auth|cookie)/i;
 
 // Flag names whose VALUE is a credential (only reachable via user extra_args;
 // the provider never puts secrets on argv). Used to redact the debug-log argv.
@@ -118,20 +76,6 @@ export function redactArgsForLog(args: string[]): string[] {
     out.push(arg);
   }
   return out;
-}
-
-/**
- * Strip embedded credentials from a (non-secret-named) env value before it is
- * hashed into the cache key. A value like a gateway base URL can carry secrets
- * in its userinfo or query string (e.g. `https://user:pass@gw/v1` or
- * `?token=...`); hashing those raw would violate the cache-key hygiene rule even
- * though only the hash persists. Delegates to the shared sanitizeUrl (which
- * redacts credentials consistently, so cred-only differences still share a cache
- * entry); the URL-shape guard skips sanitizeUrl's warn-on-unparseable path for
- * the common non-URL env values, which are returned unchanged.
- */
-function sanitizeCacheValue(value: string): string {
-  return /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? sanitizeUrl(value) : value;
 }
 
 /**
@@ -223,6 +167,9 @@ export interface PiProviderConfig {
    * Relative paths are resolved from the directory containing the config file.
    */
   working_dir?: string;
+
+  /** Run eval steps in an isolated copy of working_dir. */
+  copy_working_dir?: boolean | 'git' | 'copy';
 
   /**
    * Tool allowlist passed to `--tools` (built-in, extension, and custom tools).
@@ -352,6 +299,11 @@ interface PiEvent {
   toolName?: string;
   args?: Record<string, unknown>;
   isError?: boolean;
+  willRetry?: boolean;
+  command?: string;
+  data?: { disposition?: string };
+  success?: boolean;
+  error?: string;
 }
 
 interface PiToolCall {
@@ -379,10 +331,7 @@ interface PiPreparedCall {
 }
 
 function resolveBasePath(): string {
-  // path.resolve handles a relative basePath (e.g. when the config is passed by
-  // a relative path, cliState.basePath is path.dirname of it) by resolving it
-  // against cwd, matching resolveAgenticWorkingDir. An empty basePath falls
-  // back to cwd.
+  // Config-relative paths use the same base as working_dir.
   return cliState.basePath ? path.resolve(cliState.basePath) : process.cwd();
 }
 
@@ -465,6 +414,7 @@ function piInstallGuidance(): string {
 }
 
 export class PiProvider implements ApiProvider {
+  readonly handlesOwnRetries = true;
   config: PiProviderConfig;
   env?: EnvOverrides;
 
@@ -526,21 +476,10 @@ export class PiProvider implements ApiProvider {
    * defaults: chat-only without a working directory, read-only tools with one.
    */
   private buildToolArgs(config: PiProviderConfig): string[] {
-    const args: string[] = [];
-
-    if (config.no_tools) {
-      args.push('--no-tools');
-    } else if (config.tools !== undefined) {
-      if (config.tools.length === 0) {
-        args.push('--no-tools');
-      } else {
-        args.push('--tools', config.tools.join(','));
-      }
-    } else if (config.working_dir) {
-      args.push('--tools', PI_READONLY_TOOLS.join(','));
-    } else {
-      args.push('--no-tools');
-    }
+    const tools = config.no_tools
+      ? []
+      : (config.tools ?? (config.working_dir ? PI_READONLY_TOOLS : []));
+    const args = tools.length > 0 ? ['--tools', tools.join(',')] : ['--no-tools'];
 
     if (config.exclude_tools?.length) {
       args.push('--exclude-tools', config.exclude_tools.join(','));
@@ -550,7 +489,7 @@ export class PiProvider implements ApiProvider {
   }
 
   private buildArgs(config: PiProviderConfig): string[] {
-    const args: string[] = ['--mode', 'json', '--no-session'];
+    const args: string[] = ['--mode', 'rpc', '--no-session'];
 
     if (config.offline !== false) {
       args.push('--offline');
@@ -588,13 +527,7 @@ export class PiProvider implements ApiProvider {
       args.push('--no-context-files');
     }
 
-    // Project trust is a separate axis from resource discovery: --approve trusts
-    // every project-local pi file (.pi/settings.json, project extensions/skills/
-    // templates, .pi/SYSTEM.md), which can change the model or behavior. Default
-    // to --no-approve so a trusted working_dir cannot alter a hermetic run and a
-    // non-interactive run cannot hang on a trust prompt. Context files
-    // (AGENTS.md/CLAUDE.md) load via discovery without trust, so load_* does NOT
-    // imply --approve; opt in explicitly with trust_project_files.
+    // Resource discovery does not grant project trust; context files load independently.
     args.push(config.trust_project_files ? '--approve' : '--no-approve');
 
     if (config.extra_args?.length) {
@@ -622,7 +555,7 @@ export class PiProvider implements ApiProvider {
    * provider_id or the provider prefix of the model pattern.
    *
    * The key is never passed via --api-key so it stays off the command line
-   * (visible in process listings) and out of the args-derived cache key.
+   * (visible in process listings) and out of debug logs.
    */
   private getApiKeyEnvVar(config: PiProviderConfig): string | undefined {
     if (config.api_key_env) {
@@ -693,6 +626,9 @@ export class PiProvider implements ApiProvider {
       }
     }
 
+    if (assertIsolatedWorkingDir(config)) {
+      clearRepositoryEnv(env);
+    }
     return env;
   }
 
@@ -701,8 +637,7 @@ export class PiProvider implements ApiProvider {
    * undefined. PI_CODING_AGENT_DIR may be set via agent_dir or env (config.env,
    * EnvOverrides, or the inherited process env); a relative value is resolved
    * against the config base path. buildEnv writes this resolved value into the
-   * child env so pi reads exactly the directory the cache fingerprint covers
-   * (pi would otherwise resolve a relative value from its own temp/working cwd).
+   * child env so relative paths use the configuration directory, not the temporary cwd.
    */
   private resolveConfiguredAgentDir(config: PiProviderConfig): string | undefined {
     const raw =
@@ -714,69 +649,6 @@ export class PiProvider implements ApiProvider {
       return undefined;
     }
     return path.isAbsolute(raw) ? raw : path.resolve(resolveBasePath(), raw);
-  }
-
-  /**
-   * The agent dir pi will actually read, including its default (`<HOME>/.pi/
-   * agent`) when none is configured. Used for cache fingerprinting so config
-   * changes in the effective dir bust the cache. Honors an overridden child HOME
-   * (config.env/EnvOverrides/process.env) so the default tracks the directory pi
-   * resolves, not promptfoo's own home.
-   */
-  private resolveEffectiveAgentDir(config: PiProviderConfig): string {
-    const configured = this.resolveConfiguredAgentDir(config);
-    if (configured) {
-      return configured;
-    }
-    const home = config.env?.HOME ?? this.envOverrides.HOME ?? process.env.HOME ?? os.homedir();
-    return path.join(home, '.pi', 'agent');
-  }
-
-  /**
-   * Behavior-affecting environment that should participate in the cache key:
-   * the explicitly-configured provider env (EnvOverrides + config.env), minus
-   * the resolved credential var and any secret-looking vars so that changing a
-   * credential still hits the same cache entry and no raw secret is ever hashed.
-   * The ambient process.env is deliberately excluded — it carries volatile,
-   * non-deterministic vars that would thrash the cache. Non-secret behavior vars
-   * (e.g. a base URL or region) are kept so changing them busts the cache.
-   */
-  private cacheEnv(config: PiProviderConfig): Record<string, string> {
-    const merged = this.mergeConfiguredEnv(config);
-    const credentialVar = this.getApiKeyEnvVar(config);
-    // Canonicalize (sort keys) and drop the credential var plus any secret-named
-    // var so semantically identical, credential-independent envs hash the same.
-    // Surviving values are sanitized to strip credentials embedded in URLs.
-    const sorted: Record<string, string> = {};
-    for (const key of Object.keys(merged).sort()) {
-      if (key === credentialVar || SECRET_ENV_NAME_PATTERN.test(key)) {
-        continue;
-      }
-      sorted[key] = sanitizeCacheValue(merged[key]);
-    }
-    return sorted;
-  }
-
-  /**
-   * Fingerprint the pi config files that change run behavior (default model in
-   * settings.json, custom model/endpoint defs in models.json, system-prompt
-   * overrides in SYSTEM.md/APPEND_SYSTEM.md) so editing them busts the cache.
-   * Uses mtime + size, NOT file contents: models.json can hold literal apiKeys
-   * and custom auth headers, and raw secrets must never be hashed into a cache
-   * key (auth.json is never read). Missing/unreadable files contribute a stable
-   * sentinel.
-   */
-  private agentDirFingerprint(agentDir: string): string {
-    const parts: string[] = [];
-    for (const file of PI_AGENT_DIR_CONFIG_FILES) {
-      try {
-        const stats = fs.statSync(path.join(agentDir, file));
-        parts.push(`${file}:${stats.mtimeMs}:${stats.size}`);
-      } catch {
-        parts.push(`${file}:absent`);
-      }
-    }
-    return crypto.createHash('sha256').update(parts.join('\n')).digest('hex');
   }
 
   private prepareCall(context?: CallApiContextParams): PiPreparedCall {
@@ -799,6 +671,8 @@ export class PiProvider implements ApiProvider {
       );
     }
 
+    assertIsolatedWorkingDir(config);
+
     if (config.working_dir) {
       const workingDir =
         resolveAgenticWorkingDir(config.working_dir, cliState.basePath) ?? process.cwd();
@@ -806,8 +680,7 @@ export class PiProvider implements ApiProvider {
       return { config, workingDir };
     }
 
-    // The temp directory is created later in callApi, after the cache and
-    // abort checks, so cache hits don't leave empty directories behind.
+    // Create a temporary directory only when the call starts.
     return { config, workingDir: undefined };
   }
 
@@ -837,6 +710,7 @@ export class PiProvider implements ApiProvider {
 
       let stdout = '';
       let stderr = '';
+      let rpcBuffer = '';
       let stdoutBytes = 0;
       let stderrBytes = 0;
       let stdoutOverflow = false;
@@ -915,6 +789,26 @@ export class PiProvider implements ApiProvider {
           return;
         }
         stdout += chunk;
+        rpcBuffer += chunk;
+        let newline: number;
+        while ((newline = rpcBuffer.indexOf('\n')) !== -1) {
+          const line = rpcBuffer.slice(0, newline);
+          rpcBuffer = rpcBuffer.slice(newline + 1);
+          try {
+            const event = JSON.parse(line) as PiEvent;
+            if (
+              (event?.type === 'agent_end' && event.willRetry !== true) ||
+              (event?.type === 'response' &&
+                event.command === 'prompt' &&
+                (event.success === false || event.data?.disposition === 'handled'))
+            ) {
+              // RPC stays alive between commands. EOF requests shutdown after this run.
+              child.stdin.end();
+            }
+          } catch {
+            // Ignore non-protocol output; parseEvents applies the same rule.
+          }
+        }
       });
       child.stderr.on('data', (chunk: string) => {
         if (stderrBytes >= MAX_STDERR_BYTES) {
@@ -928,8 +822,7 @@ export class PiProvider implements ApiProvider {
         // EPIPE if pi exits before reading the prompt; surfaced via exit code.
         logger.debug(`[Pi] stdin error: ${err.message}`);
       });
-      child.stdin.write(options.prompt);
-      child.stdin.end();
+      child.stdin.write(`${JSON.stringify({ type: 'prompt', message: options.prompt })}\n`);
 
       child.on('error', (err: NodeJS.ErrnoException) => {
         finish(() => {
@@ -988,7 +881,7 @@ export class PiProvider implements ApiProvider {
       try {
         events.push(JSON.parse(trimmed));
       } catch {
-        logger.debug(`[Pi] Skipping non-JSON output line: ${trimmed.slice(0, 200)}`);
+        logger.debug('[Pi] Skipping non-JSON output line');
       }
     }
     return events;
@@ -1151,9 +1044,6 @@ export class PiProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // Honor an already-aborted signal before any cache fingerprint work or read,
-    // so a cancelled/timed-out row reports the abort rather than a cached
-    // success when its prompt happens to be cached.
     if (callOptions?.abortSignal?.aborted) {
       return { error: 'Pi call aborted before it started' };
     }
@@ -1161,41 +1051,6 @@ export class PiProvider implements ApiProvider {
     const { config, workingDir } = this.prepareCall(context);
     const args = this.buildArgs(config);
 
-    const cacheResult = await initializeAgenticCache(
-      {
-        cacheKeyPrefix: 'pi',
-        workingDir: config.working_dir ? workingDir : undefined,
-        bustCache: context?.bustCache,
-      },
-      {
-        prompt,
-        // args capture model, provider, thinking, tools, prompts, and flags.
-        // config.apiKey never reaches args (env-var injection only). The cache
-        // env includes behavior-affecting provider env VALUES (so changing e.g.
-        // a base URL busts the cache) but excludes the resolved credential var
-        // (so swapping only the API key still hits the same entry). The agent
-        // dir fingerprint busts the cache when pi's settings.json/models.json
-        // change. Only hashes are persisted, so no secret reaches disk.
-        args,
-        env: this.cacheEnv(config),
-        // The credential env var NAME (not its secret value) — so two custom
-        // configs that differ only in api_key_env/provider do not collide.
-        credentialEnvVar: this.getApiKeyEnvVar(config) ?? null,
-        agentDirFingerprint: this.agentDirFingerprint(this.resolveEffectiveAgentDir(config)),
-      },
-    );
-
-    const cachedResponse = await getCachedResponse(cacheResult, 'Pi');
-    if (cachedResponse) {
-      return cachedResponse;
-    }
-
-    // Emit a GenAI span for the run so it joins the eval's trace (linked via
-    // context.traceparent) with model, token usage, cost, and cache-hit
-    // attributes — matching the other agentic providers. Cache hits return
-    // above without spawning, so they are not traced. Note: pi has no native
-    // OpenTelemetry support, so unlike the SDK-based providers we do not
-    // propagate TRACEPARENT into the child process (it would be inert).
     const spanContext = buildChatSpanContext({
       system: this.resolveGenAiSystem(config),
       model: config.model ?? 'default',
@@ -1206,26 +1061,19 @@ export class PiProvider implements ApiProvider {
 
     return withGenAISpan(
       spanContext,
-      () => this.executeRun({ args, workingDir, config, cacheResult, prompt, callOptions }),
+      () => this.executeRun({ args, workingDir, config, prompt, callOptions }),
       extractProviderResponseAttributes,
     );
   }
 
-  /**
-   * Spawn pi, map the result to a ProviderResponse, and cache successes. Runs
-   * inside the GenAI span opened by callApi. The temp dir (when there is no
-   * working_dir) is created here — after the cache/abort checks — so cache hits
-   * don't leave empty directories behind, and removed in the finally block.
-   */
   private async executeRun(opts: {
     args: string[];
     workingDir: string | undefined;
     config: PiProviderConfig;
-    cacheResult: CacheCheckResult;
     prompt: string;
     callOptions?: CallApiOptionsParams;
   }): Promise<ProviderResponse> {
-    const { args, workingDir, config, cacheResult, prompt, callOptions } = opts;
+    const { args, workingDir, config, prompt, callOptions } = opts;
     const runDir = workingDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-pi-'));
 
     const timeoutMs = config.timeout ?? DEFAULT_TIMEOUT_MS;
@@ -1257,10 +1105,7 @@ export class PiProvider implements ApiProvider {
         };
       }
 
-      // Pi exits 0 in JSON mode even when the agent run fails (failures show up
-      // as stopReason on the final message). A nonzero or signal exit means the
-      // CLI itself crashed, so any parsed events may be truncated mid-run; never
-      // report them as a successful (and cacheable) response.
+      // A successful process exit is required in addition to a completed agent run.
       if (runResult.exitCode !== 0) {
         const stderrSuffix = runResult.stderr ? `\n${truncateStderr(runResult.stderr)}` : '';
         const reason =
@@ -1271,13 +1116,18 @@ export class PiProvider implements ApiProvider {
       }
 
       const events = this.parseEvents(runResult.stdout);
-      const providerResponse = this.buildProviderResponse(events, runResult.stderr);
-
-      if (!providerResponse.error) {
-        await cacheResponse(cacheResult, providerResponse, 'Pi');
+      const failure = events.find(
+        (event) =>
+          event?.type === 'response' && event.command === 'prompt' && event.success === false,
+      );
+      if (failure) {
+        return { error: failure.error ?? 'Pi rejected the prompt' };
       }
-
-      return providerResponse;
+      if (!events.some((event) => event?.type === 'agent_end' && event.willRetry !== true)) {
+        const stderrSuffix = runResult.stderr ? `\n${truncateStderr(runResult.stderr)}` : '';
+        return { error: `Pi exited before completing the run.${stderrSuffix}` };
+      }
+      return this.buildProviderResponse(events, runResult.stderr);
     } catch (error) {
       if (
         (error instanceof Error && error.name === 'AbortError') ||
