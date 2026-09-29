@@ -425,7 +425,8 @@ function getMultimodalPromptFormat(provider: ApiProvider): MultimodalPromptForma
     const originalProvider = getOriginalProvider(provider);
     if (
       originalProvider.constructor?.name === 'GeminiImageProvider' ||
-      originalProvider.constructor?.name === 'GoogleLiveProvider'
+      originalProvider.constructor?.name === 'GoogleLiveProvider' ||
+      originalProvider.constructor?.name === 'VertexLiveProvider'
     ) {
       return 'google';
     }
@@ -855,6 +856,7 @@ export async function runJsonGradingPrompt({
   grading,
   label,
   providerCallContext,
+  providerPromptConfig,
   throwOnError,
   vars,
   images,
@@ -866,6 +868,8 @@ export async function runJsonGradingPrompt({
   grading: GradingConfig;
   label: string;
   providerCallContext?: CallApiContextParams;
+  /** Prompt config for the grader call, which providers merge over their own config. */
+  providerPromptConfig?: Record<string, unknown>;
   throwOnError?: boolean;
   vars: Record<string, VarValue>;
   images?: ImageOutput[];
@@ -894,6 +898,7 @@ export async function runJsonGradingPrompt({
     label,
     vars,
     providerCallContext,
+    providerPromptConfig,
   );
   if (resp.error || !resp.output) {
     if (throwOnError) {

@@ -21,6 +21,46 @@ afterEach(() => {
 });
 
 describe('cloud provider loader configuration', () => {
+  describe.each([
+    'google:image:imagen-3.0-generate-001',
+    'google:gemini-2.5-flash-image',
+    'google:live:gemini-3.1-flash-live-preview',
+  ])('%s credentials', (path) => {
+    it.each([
+      { config: {}, env: { GEMINI_API_KEY: 'scoped-alias' }, expected: 'scoped-alias' },
+      { config: { apiKey: 'explicit' }, env: { GOOGLE_API_KEY: 'scoped' }, expected: 'explicit' },
+      {
+        config: { apiKeyEnvar: 'PRIVATE_GOOGLE_KEY' },
+        env: { PRIVATE_GOOGLE_KEY: 'scoped-named' },
+        expected: 'scoped-named',
+      },
+      {
+        config: { apiKeyEnvar: 'MISSING_GOOGLE_KEY' },
+        env: { GOOGLE_API_KEY: 'scoped' },
+        expected: undefined,
+      },
+      {
+        config: {},
+        env: { GOOGLE_API_KEY: '', GEMINI_API_KEY: '', GOOGLE_GENERATIVE_AI_API_KEY: '' },
+        expected: undefined,
+      },
+    ])(
+      'resolves scoped and explicit keys without crossing named namespaces ($expected)',
+      async ({ config, env, expected }) => {
+        vi.stubEnv('GOOGLE_API_KEY', 'process-google');
+        vi.stubEnv('PRIVATE_GOOGLE_KEY', 'process-named');
+        vi.stubEnv('MISSING_GOOGLE_KEY', undefined);
+        const provider = await loadApiProvider(path, {
+          options: { id: 'custom-google-label', config, env },
+        });
+        expect(provider.id()).toBe('custom-google-label');
+        expect((provider as unknown as { getApiKey(): string | undefined }).getApiKey()).toBe(
+          expected,
+        );
+      },
+    );
+  });
+
   it('forwards Cloudera domain config while preserving the deployed endpoint and model', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: { choices: [{ message: { content: 'hello' } }] },

@@ -64,7 +64,6 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
       ...providerOptions,
       config: {
         ...providerOptions.config,
-        apiKey: providerOptions.config?.apiKey || providerOptions.env?.SNOWFLAKE_API_KEY,
         apiBaseUrl,
         apiKeyEnvar: 'SNOWFLAKE_API_KEY',
         passthrough: {
