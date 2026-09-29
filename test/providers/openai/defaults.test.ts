@@ -18,16 +18,16 @@ describe('OpenAI default providers', () => {
 
   describe('DefaultGradingProvider', () => {
     it('should use correct model version and configuration', () => {
-      expect(DefaultGradingProvider.modelName).toBe('gpt-5.5-2026-04-23');
-      expect(DefaultGradingProvider.id()).toBe('openai:gpt-5.5-2026-04-23');
+      expect(DefaultGradingProvider.modelName).toBe('gpt-6-sol');
+      expect(DefaultGradingProvider.id()).toBe('openai:gpt-6-sol');
       expect(DefaultGradingProvider.config).toEqual({});
     });
   });
 
   describe('DefaultGradingJsonProvider', () => {
     it('should use correct model version and JSON configuration', () => {
-      expect(DefaultGradingJsonProvider.modelName).toBe('gpt-5.5-2026-04-23');
-      expect(DefaultGradingJsonProvider.id()).toBe('openai:gpt-5.5-2026-04-23');
+      expect(DefaultGradingJsonProvider.modelName).toBe('gpt-6-sol');
+      expect(DefaultGradingJsonProvider.id()).toBe('openai:gpt-6-sol');
       expect(DefaultGradingJsonProvider.config).toEqual({
         response_format: { type: 'json_object' },
       });
@@ -36,8 +36,8 @@ describe('OpenAI default providers', () => {
 
   describe('DefaultSuggestionsProvider', () => {
     it('should use correct model version', () => {
-      expect(DefaultSuggestionsProvider.modelName).toBe('gpt-5.5-2026-04-23');
-      expect(DefaultSuggestionsProvider.id()).toBe('openai:gpt-5.5-2026-04-23');
+      expect(DefaultSuggestionsProvider.modelName).toBe('gpt-6-sol');
+      expect(DefaultSuggestionsProvider.id()).toBe('openai:gpt-6-sol');
       expect(DefaultSuggestionsProvider.config).toEqual({});
     });
   });
@@ -50,12 +50,26 @@ describe('OpenAI default providers', () => {
   });
 
   describe('DefaultWebSearchProvider', () => {
-    it('should use correct model snapshot and web search configuration', () => {
-      expect(DefaultWebSearchProvider.modelName).toBe('gpt-5.5-2026-04-23');
-      expect(DefaultWebSearchProvider.id()).toBe('openai:gpt-5.5-2026-04-23');
+    it('should use correct model and web search configuration', () => {
+      expect(DefaultWebSearchProvider.modelName).toBe('gpt-6-sol');
+      expect(DefaultWebSearchProvider.id()).toBe('openai:gpt-6-sol');
       expect(DefaultWebSearchProvider.config).toEqual({
         tools: [{ type: 'web_search_preview' }],
       });
     });
+  });
+
+  it('builds grading and search requests with the current model', async () => {
+    const { body: grading } =
+      await DefaultGradingJsonProvider.getOpenAiBody('Return a JSON grade.');
+    const { body: search } = await DefaultWebSearchProvider.getOpenAiBody('Find recent news.');
+
+    expect(grading.model).toBe('gpt-6-sol');
+    expect(grading.response_format).toEqual({ type: 'json_object' });
+    expect(grading).not.toHaveProperty('temperature');
+    expect(grading).not.toHaveProperty('max_tokens');
+    expect(search.model).toBe('gpt-6-sol');
+    expect(search.tools).toEqual([{ type: 'web_search_preview' }]);
+    expect(search).not.toHaveProperty('temperature');
   });
 });

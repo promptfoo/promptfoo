@@ -45,7 +45,6 @@ examples/provider-replicate/llama4-scout/output.*
 examples/simple-csv/output.*
 examples/simple-test/output.*
 examples/huggingface-dataset-factuality/.cache
-examples/redteam-dalle/images
 examples/redteam-medical-agent/redteam.yaml
 
 # Evaluation results
