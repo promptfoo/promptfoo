@@ -29,8 +29,7 @@ export class AbliterationProvider extends OpenAiChatCompletionProvider {
           normalizeApiBaseUrl(providerOptions.env?.ABLIT_API_BASE_URL) ??
           normalizeApiBaseUrl(getEnvString(ABLITERATION_API_BASE_URL_ENV_VAR)) ??
           ABLITERATION_API_BASE_URL,
-        // `||` (not `??`): an empty selector must fall back to ABLIT_KEY rather
-        // than leaving the base resolver to reach for OPENAI_API_KEY.
+        // Keep blank selectors in Abliteration's credential namespace.
         apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'ABLIT_KEY',
         showThinking: providerOptions.config?.showThinking ?? false,
       },
