@@ -444,7 +444,7 @@ describe('handleBleuScore', () => {
       renderedValue: ['', 'hello world'],
       outputString: 'hello',
       inverse: false,
-    } as AssertionParams);
+    });
     expect(result.pass).toBe(false);
     expect(result.score).toBeCloseTo(Math.exp(-1));
   });
