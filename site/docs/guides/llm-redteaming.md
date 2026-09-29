@@ -125,12 +125,14 @@ prompts:
 
 Some applications generate their prompts dynamically depending on variables. For example, suppose we want to determine the prompt based on the user's destination:
 
+Keep `{{query}}` as a literal placeholder so Promptfoo can preserve red team inputs as data when rendering the prompt.
+
 ```python
 def get_prompt(context):
   if context['vars']['destination'] == 'Australia':
-    return f"Act as a travel agent, mate: {context['vars']['query']}"
+    return "Act as a travel agent, mate: {{query}}"
 
-  return f"Act as a travel agent and help the user plan their trip. Be friendly and concise. User query: {context['vars']['query']}"
+  return "Act as a travel agent and help the user plan their trip. Be friendly and concise. User query: {{query}}"
 
 ```
 
@@ -146,10 +148,10 @@ The equivalent Javascript is also supported:
 ```js
 function getPrompt(context) {
   if (context.vars.destination === 'Australia') {
-    return `Act as a travel agent, mate: ${context.vars.query}`;
+    return 'Act as a travel agent, mate: {{query}}';
   }
 
-  return `Act as a travel agent and help the user plan their trip. Be friendly and concise. User query: ${context.vars.query}`;
+  return 'Act as a travel agent and help the user plan their trip. Be friendly and concise. User query: {{query}}';
 }
 ```
 
