@@ -77,9 +77,9 @@ The macOS/Windows jobs use `scripts/preparePackageArtifactTest.mjs` to copy only
 the acceptance scripts/fixtures into a temporary tool package. Its two tools
 and their complete dependency graph are copied from the repository lockfile,
 including integrity hashes and optional native packages, then installed with `npm ci`.
-The Promptfoo consumer resolves dependencies independently. These jobs need no
-repository dependency install or build. TypeScript incremental state is excluded
-from the archive.
+The installed Promptfoo consumer resolves dependencies independently. No repository
+dependency install or build is required on those platforms. Incremental TypeScript
+compiler state is excluded from the published archive.
 
 ## Browser capability
 
