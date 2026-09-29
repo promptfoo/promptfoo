@@ -507,6 +507,28 @@ describe('SessionsTab', () => {
   });
 
   describe('runSessionTest', () => {
+    it('normalizes saved TLS credentials before the session preview', async () => {
+      vi.mocked(callApi).mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true }),
+      } as Response);
+      const tls = { certificateType: 'none', jksContent: 'old-upload', keyAlias: 'old' };
+      render(
+        <SessionsTab
+          selectedTarget={{ ...baseProvider, config: { ...baseProvider.config, tls } }}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      await userEvent.setup().click(screen.getByRole('button', { name: /test session/i }));
+
+      const [, options] = vi.mocked(callApi).mock.calls[0];
+      const request = JSON.parse(options!.body as string);
+      expect(request.provider.config.tls).toEqual({ rejectUnauthorized: true });
+      expect(request.sessionConfig.sessionSource).toBe('server');
+      expect(tls.jksContent).toBe('old-upload');
+    });
+
     it('should call API with correct provider configuration', async () => {
       const user = userEvent.setup();
       const mockResponse = {

@@ -467,7 +467,7 @@ describe('getUnifiedConfig', () => {
       expect(tls.jksPath).toBe('/path/to/keystore.jks');
     });
 
-    it('should remove tls object entirely when empty after stripping UI fields', () => {
+    it('preserves the secure TLS default after stripping UI fields', () => {
       const configWithTls: SavedRedteamConfig = {
         ...baseConfig,
         target: {
@@ -485,7 +485,16 @@ describe('getUnifiedConfig', () => {
 
       const result = getUnifiedConfig(configWithTls);
 
-      expect(getFirstTargetConfig(result).tls).toBeUndefined();
+      expect(getFirstTargetConfig(result).tls).toEqual({ rejectUnauthorized: true });
+    });
+
+    it('preserves verification for an imported empty TLS block before visiting the form', () => {
+      const result = getUnifiedConfig({
+        ...baseConfig,
+        target: { ...baseConfig.target, config: { tls: {} } },
+      });
+
+      expect(getFirstTargetConfig(result).tls).toEqual({ rejectUnauthorized: true });
     });
 
     it('preserves explicit certificate verification without other TLS fields', () => {
