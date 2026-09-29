@@ -106,6 +106,14 @@
       "groupName": "Docusaurus packages"
     },
     {
+      "description": "Keep Docusaurus's react-router-config override on Router v5 until Docusaurus migrates away from it. The app's direct Router v8 dependency remains independently upgradable.",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["package.json"],
+      "matchDepTypes": ["overrides"],
+      "matchPackageNames": ["react-router"],
+      "allowedVersions": "<6"
+    },
+    {
       "description": "Group GitHub Actions packages together",
       "matchPackagePatterns": ["^@actions/"],
       "groupName": "GitHub Actions"

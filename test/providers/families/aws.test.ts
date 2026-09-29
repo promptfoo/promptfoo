@@ -330,13 +330,41 @@ describe('aws bedrock provider factory routing', () => {
   it.each([
     'bedrock:converse:anthropic.claude-3-5-haiku-20241022-v1:0',
     'bedrock:converse:us.anthropic.claude-3-5-haiku-20241022-v1:0',
-  ])('rejects a retired model on the explicit Converse route (%s)', async (providerPath) => {
-    // The converse: route builds AwsBedrockConverseProvider directly and never reaches
-    // getHandlerForModel, so without an explicit check a withdrawn model would only fail at
-    // the remote API.
+    'bedrock:kb:eu.anthropic.claude-3-5-haiku-20241022-v1:0',
+    'bedrock:knowledge-base:eu.anthropic.claude-3-5-haiku-20241022-v1:0',
+  ])(
+    'rejects a retired model on the explicit Converse and knowledge base routes (%s)',
+    async (providerPath) => {
+      await expect(
+        bedrockFactory.create(providerPath, { config: { region: 'us-east-1' } }, ctx),
+      ).rejects.toThrow(/Unknown Amazon Bedrock model/);
+    },
+  );
+
+  it.each(['kb', 'knowledge-base'])(
+    'validates the modelArn override on the %s route',
+    async (route) => {
+      const modelArn =
+        'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-opus-20240229-v1:0';
+      await expect(
+        bedrockFactory.create(
+          `bedrock:${route}:default`,
+          { config: { knowledgeBaseId: 'kb-123', modelArn } },
+          ctx,
+        ),
+      ).rejects.toThrow(`Unknown Amazon Bedrock model: ${modelArn}`);
+    },
+  );
+
+  it('allows an active modelArn to override a retired knowledge-base route model', async () => {
+    const modelArn = 'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0';
     await expect(
-      bedrockFactory.create(providerPath, { config: { region: 'us-east-1' } }, ctx),
-    ).rejects.toThrow(/Unknown Amazon Bedrock model/);
+      bedrockFactory.create(
+        'bedrock:kb:eu.anthropic.claude-3-5-haiku-20241022-v1:0',
+        { config: { knowledgeBaseId: 'kb-123', modelArn } },
+        ctx,
+      ),
+    ).resolves.toHaveProperty('kbConfig.modelArn', modelArn);
   });
 
   it('still allows a Converse model AWS continues to serve', async () => {
