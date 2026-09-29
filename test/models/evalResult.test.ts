@@ -9,6 +9,7 @@ import { hashPrompt } from '../../src/prompts/utils';
 import { WebSocketProvider } from '../../src/providers/websocket';
 import {
   type ApiProvider,
+  type Assertion,
   type AtomicTestCase,
   type EvaluateResult,
   type Prompt,
@@ -221,6 +222,40 @@ describe('EvalResult', () => {
 
     expect(reads).toBe(1);
     expect(result.metadata?.headers).toEqual({ authorization: '[REDACTED]' });
+  });
+
+  it('does not invoke assertion accessors during artifact projection', () => {
+    const readValue = vi.fn(() => 'fixture-only');
+    const assertion = { type: 'equals' };
+    Object.defineProperty(assertion, 'value', { enumerable: true, get: readValue });
+    const result = sanitizeResultForJsonlArtifact({
+      gradingResult: { pass: true, score: 1, reason: 'fixture', assertion },
+    });
+    expect(readValue).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain('fixture-only');
+    expect(result.gradingResult.assertion.type).toBe('equals');
+  });
+
+  it('preserves legacy scalar options during artifact projection', () => {
+    const result = sanitizeResultForJsonlArtifact({ testCase: { options: 'legacy options' } });
+    expect(result.testCase.options).toBe('legacy options');
+  });
+
+  it('redacts object-valued credential fields without dropping provider-map entries', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: {
+        options: {
+          provider: {
+            apiKey: { value: 'fixture-only' },
+            token: { config: { apiKey: 'fixture-only' } },
+          },
+        },
+      },
+    });
+    expect(result.testCase.options.provider).toEqual({
+      apiKey: '[REDACTED]',
+      token: { config: { apiKey: '[REDACTED]' } },
+    });
   });
 
   it('does not let result metadata serializers rename headers', () => {
@@ -873,6 +908,80 @@ describe('EvalResult', () => {
   });
 
   describe('createFromEvaluateResult', () => {
+    it.each<Assertion>([
+      {
+        type: 'is-json',
+        value: {
+          type: 'object',
+          properties: { token: { type: 'string' }, password: { type: 'string' } },
+          required: ['token'],
+        },
+      },
+      { type: 'equals', value: '{ "token": "test input",  "number": 1 }' },
+    ])('preserves $type assertion values while redacting grader settings', async (assertion) => {
+      const credential = 'fixture-grader-credential';
+      const gradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'ok',
+        assertion,
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'ok',
+            assertion: {
+              ...assertion,
+              provider: {
+                id: `https://grader.example/check?api_key=${credential}`,
+                config: { apiKey: credential },
+              },
+              config: { headers: { Authorization: credential } },
+            },
+          },
+        ],
+      };
+      const input = { ...mockEvaluateResult, gradingResult };
+      const artifact = sanitizeResultForJsonlArtifact(input);
+      const result = await EvalResult.createFromEvaluateResult(
+        `assertion-values-${assertion.type}`,
+        input,
+        { persist: true },
+      );
+
+      for (const saved of [artifact, result, await EvalResult.findById(result.id)]) {
+        expect(saved?.gradingResult?.assertion?.value).toEqual(assertion.value);
+        expect(saved?.gradingResult?.componentResults?.[0].assertion?.value).toEqual(
+          assertion.value,
+        );
+        expect(JSON.stringify(saved?.gradingResult)).not.toContain(credential);
+      }
+
+      result.gradingResult = gradingResult;
+      await result.save();
+      const updated = await EvalResult.findById(result.id);
+      expect(updated?.gradingResult?.assertion?.value).toEqual(assertion.value);
+      expect(updated?.gradingResult?.componentResults?.[0].assertion?.value).toEqual(
+        assertion.value,
+      );
+      expect(JSON.stringify(updated?.gradingResult)).not.toContain(credential);
+      expect(gradingResult.componentResults[0].assertion.provider.config.apiKey).toBe(credential);
+    });
+
+    it('preserves URL test inputs while redacting provider URL credentials', async () => {
+      const url = 'https://cdn.example/image?X-Amz-Signature=short-secret&q=hello world';
+      const vars = { image: url, imageUrl: url };
+      const provider: ProviderOptions = { id: 'test-provider', config: { apiBaseUrl: url } };
+      const result = await EvalResult.createFromEvaluateResult('url-inputs', {
+        ...mockEvaluateResult,
+        testCase: { ...mockTestCase, vars },
+        provider,
+      });
+      const saved = await EvalResult.findById(result.id);
+      expect(saved?.testCase.vars).toEqual(vars);
+      expect(saved?.provider.config?.apiBaseUrl).not.toContain('short-secret');
+    });
+
     it('should create and persist an EvalResult', async () => {
       const evalId = 'test-eval-id';
       const result = await EvalResult.createFromEvaluateResult(evalId, mockEvaluateResult);

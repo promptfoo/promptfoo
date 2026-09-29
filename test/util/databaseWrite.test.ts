@@ -48,6 +48,23 @@ describe('writeResultsToDatabase', () => {
     clearStandaloneEvalCache();
   });
 
+  it('redacts credentials in legacy result rows and table copies without changing data', async () => {
+    const results = createEvaluateSummaryV2();
+    const provider = { id: 'fixture-provider', config: { apiKey: 'fixture-only' } };
+    results.results[0].provider = provider;
+    results.table.body[0].test.options = { provider };
+    results.table.body[0].outputs[0].testCase.options = { provider };
+    results.table.head.prompts[0].config = { provider };
+    await writeResultsToDatabase(results, {});
+    const db = await getDb();
+    const saved = await db.select({ results: evalsTable.results }).from(evalsTable).get();
+    expect(JSON.stringify(saved?.results)).not.toContain('fixture-only');
+    const savedResults = saved?.results as typeof results;
+    expect(savedResults.results[0].response?.output).toEqual(results.results[0].response?.output);
+    expect(savedResults.table.body[0].outputs[0].text).toBe(results.table.body[0].outputs[0].text);
+    expect(provider.config.apiKey).toBe('fixture-only');
+  });
+
   it('rolls back related rows when a dependent insert fails', async () => {
     const db = await getDb();
     await db.run(`

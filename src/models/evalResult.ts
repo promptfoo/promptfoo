@@ -1,24 +1,29 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
+import { extractBlobHashesFromValue } from '../blobs/blobRefs';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
-import { getEnvBool } from '../envars';
+import { type EnvVarKey, getEnvBool, parseEnvBool } from '../envars';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
+import { PromptfooAttributes } from '../tracing/genaiTracer';
 import {
   type ApiProvider,
   type Assertion,
   type AssertionSet,
   type AtomicTestCase,
+  type EnvOverrides,
   type EvaluateResult,
+  type EvaluateSummaryV2,
   type GradingResult,
   isResultFailureReason,
   type Prompt,
   type ProviderOptions,
   type ProviderResponse,
   ResultFailureReason,
+  type TraceData,
 } from '../types/index';
 import { safeJsonStringify } from '../util/json';
 import { isSecretField, REDACTED, sanitizeObject } from '../util/sanitizer';
@@ -37,6 +42,7 @@ function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   try {
     return sanitizeObject(config, {
       context: 'provider config',
+      sanitizeUrls: true,
       maxDepth: Number.POSITIVE_INFINITY,
       redactErrorMessages: true,
       omitCircularRefs: true,
@@ -46,6 +52,48 @@ function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
     logger.debug('Unable to sanitize provider config safely; omitting config fields');
     return {};
   }
+}
+
+function stripMediaReferences(value: unknown): unknown {
+  if (
+    extractBlobHashesFromValue(value).length > 0 ||
+    (typeof value === 'string' && /^data:[^,]*,/i.test(value))
+  ) {
+    return '[output stripped]';
+  }
+  if (Array.isArray(value)) {
+    return value.map(stripMediaReferences);
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, stripMediaReferences(item)]),
+    );
+  }
+  return value;
+}
+
+function projectOutputMetadata<T>(
+  metadata: T,
+  stripOutput: boolean,
+  responseMetadata: ProviderResponse['metadata'],
+  testMetadata?: AtomicTestCase['metadata'],
+): T {
+  if (!stripOutput || !metadata || !responseMetadata || typeof metadata !== 'object') {
+    return metadata;
+  }
+  return Object.fromEntries(
+    Object.entries(metadata).flatMap(([key, value]) => {
+      if (
+        !Object.prototype.hasOwnProperty.call(responseMetadata, key) ||
+        (testMetadata && isDeepStrictEqual(value, testMetadata[key]))
+      ) {
+        return [[key, value]];
+      }
+      return key === 'audio' || key === 'blobUris'
+        ? []
+        : [[key, stripMediaReferences(sanitizeForDb(value))]];
+    }),
+  ) as T;
 }
 
 function projectProviderResponse(
@@ -60,57 +108,142 @@ function projectProviderResponse(
     return response;
   }
 
-  const projectedResponse = options.stripMetadata
+  const projectedResponse: ProviderResponse = options.stripMetadata
     ? (({ metadata: _metadata, ...rest }) => rest)(response)
     : { ...response };
 
   if (options.stripOutput) {
     projectedResponse.output = '[output stripped]';
+    delete projectedResponse.raw;
+    delete projectedResponse.providerTransformedOutput;
+    delete projectedResponse.audio;
+    delete projectedResponse.video;
+    delete projectedResponse.images;
+    if (projectedResponse.metadata) {
+      projectedResponse.metadata = projectOutputMetadata(
+        projectedResponse.metadata,
+        true,
+        projectedResponse.metadata,
+      );
+    }
   }
 
   return projectedResponse;
 }
 
-function projectPrompt(prompt: Prompt, stripPromptText: boolean): Prompt {
+export function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: boolean): T {
   return stripPromptText
     ? {
         ...prompt,
         raw: '[prompt stripped]',
+        template: undefined,
       }
     : prompt;
 }
 
+export function projectTracesForOutput(
+  traces: TraceData[],
+  {
+    shouldStripMetadata,
+    shouldStripPromptText,
+    shouldStripResponseOutput,
+    shouldStripTestVars,
+  }: ReturnType<typeof getStripFlags>,
+) {
+  if (
+    !shouldStripMetadata &&
+    !shouldStripPromptText &&
+    !shouldStripResponseOutput &&
+    !shouldStripTestVars
+  ) {
+    return traces;
+  }
+
+  return traces.map((trace) => {
+    let projectedTrace = trace;
+    if (shouldStripMetadata) {
+      const { metadata: _metadata, ...traceWithoutMetadata } = trace;
+      projectedTrace = traceWithoutMetadata;
+    } else if (shouldStripTestVars && trace.metadata && 'vars' in trace.metadata) {
+      const { metadata: traceMetadata, ...traceWithoutMetadata } = trace;
+      const { vars: _vars, ...metadata } = traceMetadata;
+      projectedTrace = {
+        ...traceWithoutMetadata,
+        ...(Object.keys(metadata).length > 0 && { metadata }),
+      };
+    }
+
+    if (!shouldStripPromptText && !shouldStripResponseOutput) {
+      return projectedTrace;
+    }
+
+    return {
+      ...projectedTrace,
+      spans: projectedTrace.spans.map((span) => {
+        if (!span.attributes) {
+          return span;
+        }
+
+        const projectedAttributes = { ...span.attributes };
+        if (shouldStripPromptText) {
+          delete projectedAttributes[PromptfooAttributes.REQUEST_BODY];
+        }
+        if (shouldStripResponseOutput) {
+          delete projectedAttributes[PromptfooAttributes.RESPONSE_BODY];
+        }
+
+        const { attributes: _attributes, ...projectedSpan } = span;
+        return {
+          ...projectedSpan,
+          ...(Object.keys(projectedAttributes).length > 0 && {
+            attributes: projectedAttributes,
+          }),
+        };
+      }),
+    };
+  });
+}
+
 function projectTestCase(
   testCase: AtomicTestCase,
-  options: { stripMetadata: boolean; stripVars: boolean },
+  options: { stripMetadata: boolean; stripVars: boolean; stripOutput: boolean },
 ): AtomicTestCase {
-  if (!options.stripMetadata && !options.stripVars) {
+  if (!options.stripMetadata && !options.stripVars && !options.stripOutput) {
     return testCase;
   }
 
-  const projectedTestCase = options.stripMetadata
+  const projectedTestCase: AtomicTestCase = options.stripMetadata
     ? (({ metadata: _metadata, ...rest }) => rest)(testCase)
     : { ...testCase };
 
   if (options.stripVars) {
     projectedTestCase.vars = undefined;
   }
+  if (options.stripOutput) {
+    delete projectedTestCase.providerOutput;
+  }
+  if (options.stripMetadata && testCase.metadata?.__promptfoo?.remote === true) {
+    projectedTestCase.metadata = { __promptfoo: { remote: true } };
+  }
 
   return projectedTestCase;
 }
 
-// Removes circular references and credentials from the provider object and ensures consistent format.
+// Project providers into their serializable, redacted public shape.
 export function sanitizeProvider(
   provider: ApiProvider | ProviderOptions | string,
 ): ProviderOptions {
   if (typeof provider === 'string') {
-    return { id: provider };
+    provider = { id: provider };
   }
 
   try {
     const { id, label, config } = provider;
     return {
-      id: typeof id === 'function' ? id.call(provider) : id,
+      id: sanitizeObject(typeof id === 'function' ? id.call(provider) : id, {
+        sanitizeUrls: true,
+        redactStringValues: false,
+      }),
       label,
       ...(config !== undefined && { config: sanitizeProviderConfig(config) }),
     };
@@ -121,12 +254,10 @@ export function sanitizeProvider(
   return { id: 'unknown' };
 }
 
-// Test and assertion provider slots also accept string ids and provider maps.
-// Preserve those public shapes while projecting concrete provider objects before
-// generic serialization can invoke an untrusted toJSON hook.
+// Preserve string ids and provider maps before serialization can invoke toJSON.
 function sanitizeProviderReference(provider: unknown, active = new WeakSet<object>()): unknown {
   if (typeof provider === 'string') {
-    return provider;
+    return sanitizeProvider(provider).id;
   }
   if (!provider || typeof provider !== 'object') {
     return provider;
@@ -145,13 +276,11 @@ function sanitizeProviderReference(provider: unknown, active = new WeakSet<objec
       return sanitizeProvider(provider as ApiProvider | ProviderOptions);
     }
     if (typeof id === 'string') {
-      const { label, config, ...options } = getDataProperties(provider) as ProviderOptions;
+      const { id: _id, label, config, ...options } = getDataProperties(provider) as ProviderOptions;
       const sanitizedOptions = sanitizeForDbWithSecrets(options);
       return {
         ...(sanitizedOptions && typeof sanitizedOptions === 'object' ? sanitizedOptions : {}),
-        id,
-        ...(label !== undefined && { label }),
-        ...(config !== undefined && { config: sanitizeProviderConfig(config) }),
+        ...sanitizeProvider({ id, label, config }),
       };
     }
     if ('env' in provider) {
@@ -164,7 +293,12 @@ function sanitizeProviderReference(provider: unknown, active = new WeakSet<objec
         )
         .map(([key, descriptor]) => [
           key,
-          isSecretField(key) && (descriptor.value === null || typeof descriptor.value !== 'object')
+          isSecretField(key) &&
+          !(
+            descriptor.value &&
+            typeof descriptor.value === 'object' &&
+            Object.hasOwn(descriptor.value, 'config')
+          )
             ? REDACTED
             : sanitizeForDbWithSecrets(sanitizeProviderReference(descriptor.value, active)),
         ]),
@@ -193,19 +327,8 @@ function getDataProperties(value: object): Record<string, unknown> {
   );
 }
 
-/**
- * Sanitize an object for database storage by removing circular references
- * and non-serializable values (functions, Timeout objects, etc.).
- * Uses safeJsonStringify which handles circular references gracefully.
- *
- * This prevents "Converting circular structure to JSON" errors that can occur
- * when Node.js Timeout objects or other non-serializable data leaks into results.
- * See: https://github.com/promptfoo/promptfoo/issues/7266
- *
- * Fallback behavior: if serialization returns `undefined` (for example, certain
- * non-JSON-serializable values) or parsing throws, this function preserves JSON
- * shape by returning `[]` for array inputs and `null` for non-array inputs.
- */
+// Remove cycles and non-JSON values without redacting arbitrary evaluation data.
+// Invalid values retain an empty array or null fallback. See issue #7266.
 function sanitizeForDb<T>(obj: T): T {
   if (obj === null || obj === undefined) {
     return obj;
@@ -213,18 +336,14 @@ function sanitizeForDb<T>(obj: T): T {
   try {
     const serialized = safeJsonStringify(obj);
     if (serialized === undefined) {
-      // safeJsonStringify returns undefined for non-serializable objects (e.g., BigInt)
-      // This is a rare edge case - log for debugging and return type-appropriate fallback
       logger.debug('sanitizeForDb: Failed to serialize object, using fallback', {
         valueType: typeof obj,
         isArray: Array.isArray(obj),
       });
-      // Preserve JSON shape: arrays return [], objects/primitives return null
       return (Array.isArray(obj) ? [] : null) as T;
     }
     return JSON.parse(serialized);
   } catch {
-    // If parsing fails, return type-appropriate fallback
     logger.debug('sanitizeForDb: Parse error, using fallback');
     return (Array.isArray(obj) ? [] : null) as T;
   }
@@ -246,6 +365,7 @@ function sanitizeForDbWithSecrets<T>(obj: T, redactStringValues = true): T {
       maxDepth: Number.POSITIVE_INFINITY,
       redactErrorMessages: true,
       redactStringValues,
+      sanitizeUrls: redactStringValues,
       throwOnError: true,
     }) as T;
   } catch {
@@ -258,7 +378,7 @@ function sanitizeAssertionForDb(assertion: Assertion | AssertionSet): Assertion 
   if (!assertion || typeof assertion !== 'object') {
     return sanitizeForDbWithSecrets(assertion) as Assertion;
   }
-  const captured = { ...assertion };
+  const captured = getDataProperties(assertion) as Assertion | AssertionSet;
   if ('assert' in captured) {
     const { assert, ...withoutAssertions } = captured;
     if (Array.isArray(assert)) {
@@ -272,7 +392,7 @@ function sanitizeAssertionForDb(assertion: Assertion | AssertionSet): Assertion 
   const { provider, ...withoutProvider } = captured;
   return {
     ...sanitizeForDbWithSecrets(withoutProvider),
-    value: sanitizeForDbWithSecrets(captured.value, false),
+    value: sanitizeForDb(captured.value),
     ...(captured.rubricPrompt !== undefined && {
       rubricPrompt: sanitizeForDbWithSecrets(captured.rubricPrompt, false),
     }),
@@ -290,10 +410,12 @@ function sanitizeTestCaseForDb(testCase: AtomicTestCase): AtomicTestCase {
     const { provider, assert, options, vars, providerOutput, ...fields } = getDataProperties(
       testCase,
     ) as AtomicTestCase;
-    const { provider: optionProvider, ...optionFields } = options ?? {};
+    const optionsRecord =
+      options && typeof options === 'object' && !Array.isArray(options) ? options : undefined;
+    const { provider: optionProvider, ...optionFields } = optionsRecord ?? {};
     const sanitized = sanitizeForDbWithSecrets({
       ...fields,
-      ...(options && { options: optionFields }),
+      ...(options && { options: optionsRecord ? optionFields : options }),
       ...(assert !== undefined && !Array.isArray(assert) && { assert }),
     }) as AtomicTestCase;
     if (optionProvider !== undefined && sanitized.options) {
@@ -672,11 +794,7 @@ function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefin
   };
 }
 
-// Apply the credential-header redaction trio to fields bound for
-// the database or a JSONL artifact. Single source of truth for which redactor pairs with which
-// field, shared by DB persistence (`createFromEvaluateResult` / `createManyFromEvaluateResult`)
-// and the JSONL artifact boundary (`sanitizeResultForJsonlArtifact`) so a newly added sensitive
-// field can't be redacted on one path while leaking from another.
+// Share response, grading, and metadata redaction between DB and JSONL writes.
 function redactSensitiveResultFieldsForDb<
   R extends ProviderResponse | null | undefined,
   G,
@@ -737,15 +855,18 @@ export function sanitizeResultFieldsForDb(
   };
 }
 
-// Read the `PROMPTFOO_STRIP_*` output-projection flags. Shared by the JSONL-artifact
-// sanitizer and the EvalResult -> EvaluateResult projection so both honor the same env.
-function getStripFlags() {
+// Shared by configuration and result-row output projections.
+export function getStripFlags(env?: EnvOverrides) {
+  const getFlag = (key: EnvVarKey) => {
+    const value = env?.[key];
+    return value === undefined ? getEnvBool(key, false) : parseEnvBool(String(value), false);
+  };
   return {
-    shouldStripPromptText: getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false),
-    shouldStripResponseOutput: getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false),
-    shouldStripTestVars: getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false),
-    shouldStripGradingResult: getEnvBool('PROMPTFOO_STRIP_GRADING_RESULT', false),
-    shouldStripMetadata: getEnvBool('PROMPTFOO_STRIP_METADATA', false),
+    shouldStripPromptText: getFlag('PROMPTFOO_STRIP_PROMPT_TEXT'),
+    shouldStripResponseOutput: getFlag('PROMPTFOO_STRIP_RESPONSE_OUTPUT'),
+    shouldStripTestVars: getFlag('PROMPTFOO_STRIP_TEST_VARS'),
+    shouldStripGradingResult: getFlag('PROMPTFOO_STRIP_GRADING_RESULT'),
+    shouldStripMetadata: getFlag('PROMPTFOO_STRIP_METADATA'),
   };
 }
 
@@ -757,14 +878,17 @@ function getStripFlags() {
  * grading result, metadata). In-memory rows keep their real values for hooks; only the
  * on-disk copy is sanitized.
  */
-export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
+export function sanitizeResultForJsonlArtifact<T extends object>(
+  result: T,
+  stripFlags = getStripFlags(),
+): T {
   const {
     shouldStripPromptText,
     shouldStripResponseOutput,
     shouldStripTestVars,
     shouldStripGradingResult,
     shouldStripMetadata,
-  } = getStripFlags();
+  } = stripFlags;
 
   const artifactResult = result as T & Record<string, unknown>;
   const redacted = redactSensitiveResultFieldsForDb({
@@ -786,6 +910,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
             {
               stripMetadata: shouldStripMetadata,
               stripVars: shouldStripTestVars,
+              stripOutput: shouldStripResponseOutput,
             },
           ),
         }
@@ -813,8 +938,57 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
     response,
     gradingResult: shouldStripGradingResult ? null : redacted.gradingResult,
     namedScores: sanitizeForDb(artifactResult.namedScores),
-    metadata: shouldStripMetadata ? {} : redacted.metadata,
+    metadata: shouldStripMetadata
+      ? {}
+      : projectOutputMetadata(
+          redacted.metadata,
+          shouldStripResponseOutput,
+          redacted.response?.metadata,
+          (artifactResult.testCase as AtomicTestCase | undefined)?.metadata,
+        ),
   } as T;
+}
+
+// Legacy imports store the result rows and table together in evals.results.
+export function sanitizeLegacyResults(results: EvaluateSummaryV2): EvaluateSummaryV2 {
+  const stripFlags = {
+    shouldStripPromptText: false,
+    shouldStripResponseOutput: false,
+    shouldStripTestVars: false,
+    shouldStripGradingResult: false,
+    shouldStripMetadata: false,
+  };
+  return {
+    ...results,
+    results: results.results.map((result) => sanitizeResultForJsonlArtifact(result, stripFlags)),
+    table: {
+      ...results.table,
+      head: {
+        ...results.table.head,
+        prompts: results.table.head.prompts.map((prompt) => ({
+          ...sanitizePromptForDb(prompt),
+          provider: sanitizeObject(prompt.provider, {
+            sanitizeUrls: true,
+            redactStringValues: false,
+          }),
+        })),
+      },
+      body: results.table.body.map((row) => ({
+        ...row,
+        test: sanitizeTestCaseForDb(row.test),
+        outputs: row.outputs.map((output) => ({
+          ...output,
+          provider: sanitizeObject(output.provider, {
+            sanitizeUrls: true,
+            redactStringValues: false,
+          }),
+          testCase: sanitizeTestCaseForDb(output.testCase),
+          response: sanitizeResponseForDb(sanitizeForDb(output.response)),
+          gradingResult: sanitizeGradingResultForDb(output.gradingResult),
+        })),
+      })),
+    },
+  };
 }
 
 export default class EvalResult {
@@ -855,13 +1029,7 @@ export default class EvalResult {
       ? sanitizeResultFieldsForDb({ ...result, response: processedResponse }, persistedMetadata)
       : undefined;
 
-    // Sanitize all JSON fields to remove circular references and non-serializable values.
-    // `testCase` and `prompt` can contain a resolved runtime provider under
-    // `options.provider` or `config.provider` (used for llm-rubric judging); that
-    // provider may hold a live SDK client with credentials (Anthropic apiKey, etc.)
-    // and circular references — see `sanitizeForDbWithSecrets`. Other fields go
-    // through the lighter `sanitizeForDb` which only strips circular refs /
-    // non-serializable values.
+    // Persisted results share one projection; in-memory fields keep their existing shape.
     const args = {
       id: crypto.randomUUID(),
       evalId,
@@ -1128,7 +1296,11 @@ export default class EvalResult {
       persisted: _persisted,
       ...rest
     } = this;
-    const persistedValues = { ...rest, ...sanitizeResultFieldsForDb(this) };
+    const persistedValues = {
+      ...rest,
+      error: this.error ?? null,
+      ...sanitizeResultFieldsForDb(this),
+    };
     //check if this exists in the db
     if (this.persisted) {
       await db
@@ -1144,14 +1316,14 @@ export default class EvalResult {
     invalidateEvaluationCache(this.evalId);
   }
 
-  toEvaluateResult(): EvaluateResult {
+  toEvaluateResult(stripFlags = getStripFlags()): EvaluateResult {
     const {
       shouldStripPromptText,
       shouldStripResponseOutput,
       shouldStripTestVars,
       shouldStripGradingResult,
       shouldStripMetadata,
-    } = getStripFlags();
+    } = stripFlags;
 
     const response = projectProviderResponse(this.response, {
       stripMetadata: shouldStripMetadata,
@@ -1163,6 +1335,7 @@ export default class EvalResult {
     const testCase = projectTestCase(this.testCase, {
       stripMetadata: shouldStripMetadata,
       stripVars: shouldStripTestVars,
+      stripOutput: shouldStripResponseOutput,
     });
     // Mirror the live accounting in the evaluator: a response counts as one provider
     // request even when it reports no token usage, and a grading result counts as one
@@ -1201,15 +1374,25 @@ export default class EvalResult {
       testIdx: this.testIdx,
       tokenUsage,
       vars: shouldStripTestVars ? {} : this.testCase.vars || {},
-      metadata: shouldStripMetadata ? {} : this.metadata,
+      metadata: shouldStripMetadata
+        ? {}
+        : projectOutputMetadata(
+            this.metadata,
+            shouldStripResponseOutput,
+            this.response?.metadata,
+            this.testCase.metadata,
+          ),
       failureReason: this.failureReason,
     };
   }
 }
 
 /** Normalize an `EvalResult` model instance or a plain `EvaluateResult` to `EvaluateResult`. */
-export function asEvaluateResult(result: EvalResult | EvaluateResult): EvaluateResult {
-  return 'toEvaluateResult' in result ? result.toEvaluateResult() : result;
+export function asEvaluateResult(
+  result: EvalResult | EvaluateResult,
+  stripFlags = getStripFlags(),
+): EvaluateResult {
+  return 'toEvaluateResult' in result ? result.toEvaluateResult(stripFlags) : result;
 }
 
 /** Canonical `testIdx:promptIdx` key used to dedupe/look up a result across the streaming,
