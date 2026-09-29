@@ -12,8 +12,8 @@ import {
   getGradingInputHash,
 } from '../../src/redteam/grading/storedResult';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
-import * as exfilTracking from '../../src/redteam/strategies/indirectWebPwn';
 import { getPiiLeakTestsForCategory } from '../../src/redteam/plugins/pii';
+import * as exfilTracking from '../../src/redteam/strategies/indirectWebPwn';
 
 import type { Assertion, AtomicTestCase, ProviderResponse } from '../../src/types/index';
 

@@ -286,6 +286,7 @@ async function storeExternalSpans(traceId: string, spans: SpanData[]): Promise<b
         spans.slice(index, index + EXTERNAL_SPAN_BATCH_SIZE),
         {
           warnIfMissingTrace: false,
+          updateExisting: true,
           ...(index > 0 && { skipTraceCheck: true }),
         },
       );

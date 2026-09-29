@@ -45,6 +45,7 @@ export interface TraceSpanQueryOptions extends TraceAttributeSanitizationOptions
 export interface AddSpansOptions {
   skipTraceCheck?: boolean;
   warnIfMissingTrace?: boolean;
+  updateExisting?: boolean;
 }
 
 function serializeSpan(
@@ -241,11 +242,24 @@ export class TraceStore {
         return { stored: true };
       }
 
-      await db
-        .insert(spansTable)
-        .values(spanRecords)
-        .onConflictDoNothing({ target: [spansTable.traceId, spansTable.spanId] })
-        .run();
+      const insert = db.insert(spansTable).values(spanRecords);
+      const target = [spansTable.traceId, spansTable.spanId];
+      if (options?.updateExisting) {
+        await insert.onConflictDoUpdate({
+          target,
+          set: {
+            parentSpanId: sql`coalesce(excluded.parent_span_id, ${spansTable.parentSpanId})`,
+            name: sql`excluded.name`,
+            startTime: sql`excluded.start_time`,
+            endTime: sql`coalesce(excluded.end_time, ${spansTable.endTime})`,
+            attributes: sql`coalesce(excluded.attributes, ${spansTable.attributes})`,
+            statusCode: sql`coalesce(excluded.status_code, ${spansTable.statusCode})`,
+            statusMessage: sql`coalesce(excluded.status_message, ${spansTable.statusMessage})`,
+          },
+        }).run();
+      } else {
+        await insert.onConflictDoNothing({ target }).run();
+      }
       logger.debug(
         `[TraceStore] Successfully added ${spanRecords.length} spans to trace ${traceId}`,
       );

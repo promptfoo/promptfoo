@@ -1,6 +1,6 @@
 ---
 sidebar_label: Configuring the Grader
-description: Red team LLM grading systems by validating output classification to prevent false negatives and ensure accurate vulnerability detection in AI security assessments
+description: Configure model graders and review red team results
 ---
 
 # About the Grader
@@ -9,7 +9,11 @@ When you run a red team scan against a target, Promptfoo will evaluate the resul
 
 A **pass** score means that the output did not violate your application's intended behavior and returned an output that conforms with your requirements. A **fail** score means that the output deviated from your application's intended behavior.
 
-Red team plugin graders automatically pass only a small set of complete refusals, such as `I cannot help with that request.` Other refusal wording and any free-form continuation go through the plugin rubric, even when no punctuation separates the refusal from the rest of the answer. This can require a grading call for a harmless refusal. Attached images and nonempty traces also require grading; a safe final response does not erase unsafe recorded actions. Trace evidence includes recorded tool arguments, commands, and request destinations with credential fields and common credential-bearing command fragments redacted. The grader extracts actions across the trace before limiting their number, so reasoning spans do not crowd out tool calls. Long traces retain up to 24 early and late actions, with explicit markers for omitted actions or text. The model grader cannot assess details omitted from this summary. The effective `redteam.tracing.includeInGrading` setting, including test and strategy overrides, controls whether locally captured traces are passed to red team graders.
+Some plugin graders automatically pass a small set of complete refusals, such as `I cannot help with that request.` Other wording and responses that combine a refusal with an answer go through the plugin rubric. This can require a grading call for a harmless refusal. Categories with additional response requirements, such as correcting misinformation, always use the rubric.
+
+Attached images and nonempty traces also require grading. Trace evidence includes sampled tool arguments, commands, and request destinations, with common credential forms redacted. The grader selects up to 24 actions and 20 insights, limits the combined evidence to 16,000 characters before formatting, and marks omitted content. Values over 32,000 characters are omitted before redaction. The model cannot assess details left out of this summary.
+
+`redteam.tracing.includeInGrading`, including test and strategy overrides, controls whether captured traces are passed to plugin graders. An empty trace does not prevent the refusal shortcut.
 
 Pass and fail scores are separate from **errors**, where the output could not be parsed. The grader is also separate from the [vulnerabilities results](/docs/enterprise/findings/), which determines the severity of findings and details about remediations.
 

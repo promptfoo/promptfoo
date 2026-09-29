@@ -1,7 +1,12 @@
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
+import {
+  assertionUsesTrace,
+  hasTraceAwareAssertions,
+  runAssertion,
+  runAssertions,
+} from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import { getTraceStore } from '../../src/tracing/store';
@@ -17,6 +22,15 @@ import type { TraceData } from '../../src/types/tracing';
 
 // Mock the trace store
 vi.mock('../../src/tracing/store');
+
+vi.mock('../../src/redteam/graders', () => ({
+  getGraderById: () => ({
+    getResult: async () => ({
+      grade: { pass: true, score: 1, reason: 'fixture' },
+      rubric: 'fixture rubric',
+    }),
+  }),
+}));
 
 // Mock Python execution
 vi.mock('../../src/python/wrapper', () => ({
@@ -60,6 +74,12 @@ vi.mock('../../src/python/wrapper', () => ({
 }));
 
 describe('trace assertions', () => {
+  it('recognizes inverse redteam assertions when trace grading is enabled', () => {
+    const assertions: Assertion[] = [{ type: 'not-promptfoo:redteam:mcp' as Assertion['type'] }];
+    expect(hasTraceAwareAssertions(assertions, true)).toBe(true);
+    expect(hasTraceAwareAssertions(assertions, false)).toBe(false);
+  });
+
   const originalBasePath = cliState.basePath;
   const originalTraceFetchEnv = {
     PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: process.env.PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS,
@@ -104,6 +124,7 @@ describe('trace assertions', () => {
 
   const mockProviderResponse: ProviderResponse = {
     output: 'Test output',
+    prompt: 'Fixture request',
   };
 
   const mockTraceData: TraceData = {

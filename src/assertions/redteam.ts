@@ -1,13 +1,13 @@
 import logger from '../logger';
 import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
-import { resolveTestTracingOptions } from '../redteam/providers/tracingOptions';
 import {
   getGradingAssertionHash,
   getGradingInputHash,
   getTargetConversation,
   withGradingUsage,
 } from '../redteam/grading/storedResult';
+import { resolveTestTracingOptions } from '../redteam/providers/tracingOptions';
 import { isAttackProvider } from '../redteam/shared/attackProviders';
 import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
 import { isApiProvider, isProviderOptions } from '../types/providers';

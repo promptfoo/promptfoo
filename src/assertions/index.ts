@@ -173,9 +173,10 @@ function assertionMayNeedTraceContext(
     return assertion.assert.some((item) => assertionMayNeedTraceContext(item, includeRedteamTrace));
   }
 
+  const baseType = getAssertionBaseType(assertion);
   if (
-    assertion.type.startsWith('promptfoo:redteam:coding-agent:') ||
-    (includeRedteamTrace && assertion.type.startsWith('promptfoo:redteam:'))
+    baseType.startsWith('promptfoo:redteam:coding-agent:') ||
+    (includeRedteamTrace && baseType.startsWith('promptfoo:redteam:'))
   ) {
     return true;
   }

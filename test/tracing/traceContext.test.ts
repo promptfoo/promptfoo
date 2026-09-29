@@ -98,6 +98,7 @@ describe('fetchTraceContext', () => {
     expect(fetchTrace).toHaveBeenCalledWith('trace-1', undefined);
     expect(mocks.addSpans).toHaveBeenCalledWith('trace-1', [internalSpan, targetSpan], {
       warnIfMissingTrace: false,
+      updateExisting: true,
     });
     expect(mocks.getSpans).toHaveBeenCalledWith('trace-1', {
       includeInternalSpans: false,

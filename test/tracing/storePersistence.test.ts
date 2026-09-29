@@ -69,6 +69,25 @@ describe('TraceStore span persistence', () => {
     expect(spans[0]).toMatchObject({ name: 'target.call', spanId: 'shared-span' });
   });
 
+  it('refreshes partial external spans without duplicating or crossing traces', async () => {
+    const traceStore = await createTrace('external-refresh');
+    await createTrace('separate-trace');
+    const initial = { spanId: 'shared-span', name: 'fixture operation', startTime: 1 };
+    await traceStore.addSpans('external-refresh', [initial]);
+    await traceStore.addSpans('separate-trace', [initial]);
+    await traceStore.addSpans('external-refresh', [{
+      ...initial, endTime: 2, statusCode: 1, attributes: { 'fixture.detail': 'completed' },
+    }], { updateExisting: true });
+    await traceStore.addSpans('external-refresh', [initial], { updateExisting: true });
+
+    const refreshed = await traceStore.getSpans('external-refresh');
+    expect(refreshed).toHaveLength(1);
+    expect(refreshed[0]).toMatchObject({
+      endTime: 2, statusCode: 1, attributes: { 'fixture.detail': 'completed' },
+    });
+    expect((await traceStore.getSpans('separate-trace'))[0].endTime).toBeUndefined();
+  });
+
   it('allows the same span ID in different traces', async () => {
     const firstTraceStore = await createTrace('first-trace');
     const secondTraceStore = await createTrace('second-trace');

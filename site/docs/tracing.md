@@ -354,8 +354,9 @@ from being stored. Don't rely on `redactAttributes` alone to cover built-in prov
 
 When red-team tracing uses `includeInGrading`, model graders receive a bounded trace summary
 plus sampled tool arguments, commands, paths, and request URLs. Promptfoo masks common
-credential forms in that grading evidence and omits excess actions, so keep sensitive data
-out of traces and use deterministic assertions when complete trajectory evidence is required.
+credential forms before shortening that evidence. Values over 32,000 characters are omitted;
+the combined summary is limited to 16,000 characters. Keep sensitive data out of traces and
+use deterministic assertions when complete trajectory evidence is required.
 
 :::
 

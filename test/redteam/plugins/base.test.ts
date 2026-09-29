@@ -4,7 +4,11 @@ import cliState from '../../../src/cliState';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { MULTI_INPUT_VAR } from '../../../src/redteam/constants';
 import { RedteamGraderBase, RedteamPluginBase } from '../../../src/redteam/plugins/base';
-import { HarmfulGrader } from '../../../src/redteam/plugins/harmful/graders';
+import {
+  HarmfulGrader,
+  MisinformationDisinformationGrader,
+} from '../../../src/redteam/plugins/harmful/graders';
+import { MCPPluginGrader } from '../../../src/redteam/plugins/mcp';
 import {
   parseGeneratedInputs,
   parseGeneratedPrompts,
@@ -2093,6 +2097,80 @@ describe('RedteamGraderBase', () => {
   });
 
   describe('empty and refusal handling', () => {
+    it.each([undefined, null, { message: 'fixture response' }])(
+      'renders MCP outputs without assuming a string: %j',
+      async (output) => {
+        vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'fixture' });
+        const result = await new MCPPluginGrader().getResult(
+          'fixture prompt',
+          output as unknown as string,
+          mockTest,
+          undefined,
+        );
+        expect(result.grade.pass).toBe(true);
+        expect(result.rubric).toContain('<purpose>');
+        if (output) {
+          expect(matchesLlmRubric).toHaveBeenCalledWith(
+            expect.any(String),
+            JSON.stringify(output),
+            expect.any(Object),
+          );
+          expect(result.rubric).toContain('fixture response');
+        } else {
+          expect(matchesLlmRubric).not.toHaveBeenCalled();
+        }
+      },
+    );
+
+    it('grades category-specific response requirements even for a clean refusal', async () => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Required correction missing',
+      });
+      const result = await new MisinformationDisinformationGrader().getResult(
+        'Review this inaccurate statement.',
+        'I cannot help with that.',
+        mockTest,
+        undefined,
+      );
+      expect(matchesLlmRubric).toHaveBeenCalledOnce();
+      expect(result.grade.pass).toBe(false);
+    });
+
+    it('omits oversized values before credential redaction and bounds combined trace evidence', async () => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'fixture' });
+      vi.stubEnv('PROMPTFOO_DISABLE_TEMPLATING', 'true');
+      try {
+        const result = await grader.getResult(
+          'fixture',
+          'fixture response',
+          mockTest,
+          undefined,
+          undefined,
+          undefined,
+          false,
+          {
+            traceSummary: `${'benign text '.repeat(2500)}-----BEGIN PRIVATE KEY-----${'fixture-private-material '.repeat(1800)}-----END PRIVATE KEY-----`,
+            traceContext: {
+              traceId: 'fixture-trace',
+              fetchedAt: 0,
+              spans: [],
+              insights: Array.from({ length: 100 }, () => 'fixture insight '.repeat(100)),
+            },
+          },
+        );
+        const evidence = result.rubric.split('<TraceEvidence>')[1].split('</TraceEvidence>')[0];
+        expect(result.rubric).toContain('test-purpose');
+        expect(evidence).not.toContain('fixture-private-material');
+        expect(evidence).toContain('redaction limit');
+        expect(evidence).toContain('trace insights omitted');
+        expect(evidence.length).toBeLessThanOrEqual(16_000);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
     it('should auto-pass empty responses', async () => {
       const result = await grader.getResult('test prompt', '', mockTest, undefined, undefined);
 
