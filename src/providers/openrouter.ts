@@ -28,8 +28,6 @@ import type {
   ProviderResponse,
 } from '../types/providers';
 import type { OpenAiChatCompletionCostData } from './openai/chat';
-import type { OpenAiCompletionOptions } from './openai/types';
-
 /**
  * Classify a choice-level error code arriving in a 200 envelope. The
  * gateway-level classifiers only see the transport status; a 429 or 5xx
@@ -231,7 +229,6 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
               : getOpenAiPartialOutput(
                   policy.partialOutput,
                   config.response_format?.type === 'json_schema',
-                ),
           ...(data.usage ? { tokenUsage: getTokenUsageWithRequestCount(data, cached) } : {}),
           cached,
           cost: this.calculateResponseCost(data, config),
@@ -298,7 +295,6 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     // Guard against a 200 response with an empty or missing `choices` array
     // (soft moderation block, upstream hiccup, or n>1 edge cases). Without this,
     // `data.choices[0]` is undefined and `.message` throws an opaque TypeError.
-    // Mirrors the sibling OpenAI-compatible providers (mistral.ts, ai21.ts).
     // The error string stays bounded: the raw payload can be large and is
     // provider-controlled.
     if (!Array.isArray(data?.choices) || !data.choices[0]?.message) {
@@ -316,7 +312,6 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     }
 
     // Process the response with special handling for Gemini
-    const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
     if (finishReason === 'error') {
       // A failed generation carries partial output that must not be graded;
       // the choice-level error object above can be absent on this path.
