@@ -910,7 +910,9 @@ describe('ReplicateImageProvider', () => {
         del: vi.fn(),
       };
       vi.mocked(getCache).mockReturnValue(cache as unknown as ReturnType<typeof getCache>);
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
       mockedFetchWithCache.mockResolvedValue({
+        deleteFromCache,
         data: { id: 'fixture', status: 'succeeded', output: ['https://example.com/image.png'] },
         cached: false,
         status: 200,
@@ -927,6 +929,7 @@ describe('ReplicateImageProvider', () => {
         expect.stringContaining('replicate:image:test-model:'),
       );
       expect(cache.set).not.toHaveBeenCalled();
+      expect(deleteFromCache).toHaveBeenCalledTimes(cached ? 0 : 1);
     },
   );
 

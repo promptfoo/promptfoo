@@ -647,7 +647,10 @@ type ExternalImageTargetValidation =
   | { blockReason: string; resolvedAddresses?: never }
   | { blockReason?: never; resolvedAddresses: LookupAddress[] };
 
-async function validateExternalImageTarget(url: string): Promise<ExternalImageTargetValidation> {
+async function validateExternalImageTarget(
+  url: string,
+  signal: AbortSignal,
+): Promise<ExternalImageTargetValidation> {
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(url);
@@ -683,7 +686,14 @@ async function validateExternalImageTarget(url: string): Promise<ExternalImageTa
   }
 
   try {
-    const resolvedAddresses = await lookup(hostname, { all: true, verbatim: true });
+    const resolvedAddresses = await new Promise<LookupAddress[]>((resolve, reject) => {
+      signal.throwIfAborted();
+      const onAbort = () => reject(signal.reason);
+      signal.addEventListener('abort', onAbort, { once: true });
+      lookup(hostname, { all: true, verbatim: true })
+        .then(resolve, reject)
+        .finally(() => signal.removeEventListener('abort', onAbort));
+    });
     if (resolvedAddresses.length === 0) {
       return { blockReason: `hostname ${hostname} did not resolve to any addresses` };
     }
@@ -791,8 +801,15 @@ async function downloadExternalImage(
   outputFormat?: string,
   abortSignal?: AbortSignal,
 ): Promise<ImageOutput | null> {
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(), getRequestTimeoutMs());
+  const signal = abortSignal
+    ? AbortSignal.any([controller.signal, abortSignal])
+    : controller.signal;
+  let dispatcher: Dispatcher | undefined;
   try {
-    const validatedTarget = await validateExternalImageTarget(url);
+    signal.throwIfAborted();
+    const validatedTarget = await validateExternalImageTarget(url, signal);
     if ('blockReason' in validatedTarget) {
       logger.warn('[OpenAI Image] Blocked unsafe external image URL', {
         url,
@@ -801,99 +818,88 @@ async function downloadExternalImage(
       return null;
     }
 
-    const dispatcher = await createPinnedExternalImageDispatcher(
-      url,
-      validatedTarget.resolvedAddresses,
-    );
-    const controller = new AbortController();
-    const timeoutHandle = setTimeout(() => controller.abort(), getRequestTimeoutMs());
-    let buffer: Buffer;
-    let mimeType: string;
-    try {
-      const downloadOptions = {
-        redirect: 'error',
-        signal: abortSignal ? AbortSignal.any([controller.signal, abortSignal]) : controller.signal,
-        dispatcher,
-        // Binary downloads must not be cloned for request logging or receive saved Cloud auth.
-        headers: { 'x-promptfoo-silent': 'true' },
-        skipCloudAuthInjection: true,
-      } as const;
-      const response = await fetchWithProxy(url, downloadOptions);
-      if (!response.ok) {
-        logger.warn('[OpenAI Image] Failed to download external image URL', {
-          url,
-          status: response.status,
-          statusText: response.statusText,
-        });
-        return null;
-      }
+    signal.throwIfAborted();
+    dispatcher = await createPinnedExternalImageDispatcher(url, validatedTarget.resolvedAddresses);
+    signal.throwIfAborted();
+    const downloadOptions = {
+      redirect: 'error',
+      signal,
+      dispatcher,
+      // Binary downloads must not be cloned for request logging or receive saved Cloud auth.
+      headers: { 'x-promptfoo-silent': 'true' },
+      skipCloudAuthInjection: true,
+    } as const;
+    const response = await fetchWithProxy(url, downloadOptions);
+    if (!response.ok) {
+      logger.warn('[OpenAI Image] Failed to download external image URL', {
+        url,
+        status: response.status,
+        statusText: response.statusText,
+      });
+      return null;
+    }
 
-      const contentLength = Number(response.headers.get('content-length') ?? 0);
-      if (Number.isFinite(contentLength) && contentLength > BLOB_MAX_SIZE) {
-        logger.warn('[OpenAI Image] External image exceeds blob size limit', {
-          url,
-          contentLength,
-          maxSizeBytes: BLOB_MAX_SIZE,
-        });
-        return null;
-      }
+    const contentLength = Number(response.headers.get('content-length') ?? 0);
+    if (Number.isFinite(contentLength) && contentLength > BLOB_MAX_SIZE) {
+      logger.warn('[OpenAI Image] External image exceeds blob size limit', {
+        url,
+        contentLength,
+        maxSizeBytes: BLOB_MAX_SIZE,
+      });
+      return null;
+    }
 
-      const chunks: Buffer[] = [];
-      let totalBytes = 0;
-      if (response.body) {
-        const reader = response.body.getReader();
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) {
-            break;
-          }
-          totalBytes += value.byteLength;
-          if (totalBytes > BLOB_MAX_SIZE) {
-            controller.abort();
-            logger.warn('[OpenAI Image] External image exceeded blob size limit during download', {
-              url,
-              sizeBytes: totalBytes,
-              maxSizeBytes: BLOB_MAX_SIZE,
-            });
-            return null;
-          }
-          chunks.push(Buffer.from(value));
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    if (response.body) {
+      const reader = response.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
         }
-      } else {
-        const arrayBuffer = await response.arrayBuffer();
-        totalBytes = arrayBuffer.byteLength;
+        totalBytes += value.byteLength;
         if (totalBytes > BLOB_MAX_SIZE) {
           controller.abort();
-          logger.warn('[OpenAI Image] External image exceeded blob size limit after download', {
+          logger.warn('[OpenAI Image] External image exceeded blob size limit during download', {
             url,
             sizeBytes: totalBytes,
             maxSizeBytes: BLOB_MAX_SIZE,
           });
           return null;
         }
-        chunks.push(Buffer.from(arrayBuffer));
+        chunks.push(Buffer.from(value));
       }
-
-      const responseMimeType = response.headers
-        .get('content-type')
-        ?.split(';', 1)[0]
-        ?.trim()
-        .toLowerCase();
-      mimeType =
-        responseMimeType || inferMimeTypeFromUrl(url) || getMimeTypeForOutputFormat(outputFormat);
-      if (!isSafeExternalImageMimeType(mimeType)) {
-        logger.warn('[OpenAI Image] External image response used an unsafe content type', {
+    } else {
+      const arrayBuffer = await response.arrayBuffer();
+      totalBytes = arrayBuffer.byteLength;
+      if (totalBytes > BLOB_MAX_SIZE) {
+        controller.abort();
+        logger.warn('[OpenAI Image] External image exceeded blob size limit after download', {
           url,
-          mimeType,
+          sizeBytes: totalBytes,
+          maxSizeBytes: BLOB_MAX_SIZE,
         });
         return null;
       }
-      buffer = Buffer.concat(chunks, totalBytes);
-    } finally {
-      clearTimeout(timeoutHandle);
-      controller.abort();
-      await dispatcher.destroy();
+      chunks.push(Buffer.from(arrayBuffer));
     }
+
+    const responseMimeType = response.headers
+      .get('content-type')
+      ?.split(';', 1)[0]
+      ?.trim()
+      .toLowerCase();
+    const mimeType =
+      responseMimeType || inferMimeTypeFromUrl(url) || getMimeTypeForOutputFormat(outputFormat);
+    if (!isSafeExternalImageMimeType(mimeType)) {
+      logger.warn('[OpenAI Image] External image response used an unsafe content type', {
+        url,
+        mimeType,
+      });
+      return null;
+    }
+    const buffer = Buffer.concat(chunks, totalBytes);
     return { data: `data:${mimeType};base64,${buffer.toString('base64')}`, mimeType };
   } catch (error) {
     logger.warn('[OpenAI Image] Failed to internalize external image URL', {
@@ -901,6 +907,10 @@ async function downloadExternalImage(
       error: String(error),
     });
     return null;
+  } finally {
+    clearTimeout(timeoutHandle);
+    controller.abort();
+    await dispatcher?.destroy();
   }
 }
 
@@ -933,10 +943,7 @@ export async function buildSafeStructuredImageOutputs(
     }),
   );
 
-  const safeImages = images.filter(
-    (item: ImageOutput | null): item is ImageOutput => item !== null,
-  );
-  return safeImages.length > 0 ? safeImages : undefined;
+  return images.every((item): item is ImageOutput => item !== null) ? images : undefined;
 }
 
 export function formatStructuredImageOutput(
@@ -1170,6 +1177,7 @@ export async function processApiResponse(
   outputFormat?: string,
   billingConfig: OpenAiImageOptions = {},
   deleteFromCache?: () => Promise<void>,
+  abortSignal?: AbortSignal,
 ): Promise<ProviderResponse> {
   const evictFromCache = deleteFromCache ?? data?.deleteFromCache;
 
@@ -1181,7 +1189,16 @@ export async function processApiResponse(
   }
 
   try {
-    const images = await buildSafeStructuredImageOutputs(data, outputFormat, responseFormat);
+    const images = await buildSafeStructuredImageOutputs(
+      data,
+      outputFormat,
+      responseFormat,
+      abortSignal,
+    );
+    if (!images && data.data?.length > 1) {
+      await evictFromCache?.();
+      return { error: 'One or more generated images could not be downloaded safely.' };
+    }
     const formattedOutput = formatStructuredImageOutput(
       data,
       prompt,
@@ -1232,7 +1249,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
@@ -1275,13 +1292,15 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     let cached = false;
     let latencyMs: number | undefined;
     let deleteFromCache: (() => Promise<void>) | undefined;
+    let updateCache: FetchWithCacheResult<unknown>['updateCache'];
     try {
-      ({ data, cached, status, statusText, latencyMs, deleteFromCache } = await callOpenAiImageApi(
-        appendOpenAiApiPath(this.getApiUrl(), endpoint),
-        body,
-        headers,
-        getRequestTimeoutMs(),
-      ));
+      ({ data, cached, status, statusText, latencyMs, deleteFromCache, updateCache } =
+        await callOpenAiImageApi(
+          appendOpenAiApiPath(this.getApiUrl(), endpoint),
+          body,
+          headers,
+          getRequestTimeoutMs(),
+        ));
 
       if (status < 200 || status >= 300) {
         return {
@@ -1296,7 +1315,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       };
     }
 
-    return processApiResponse(
+    const response = await processApiResponse(
       data,
       prompt,
       responseFormat,
@@ -1309,6 +1328,31 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       'output_format' in config ? config.output_format : undefined,
       config,
       deleteFromCache,
+      callApiOptions?.abortSignal,
     );
+    const images = response.images;
+    if (
+      images &&
+      data.data.some(
+        (item: { url?: string }) => typeof item.url === 'string' && isExternalImageUrl(item.url),
+      )
+    ) {
+      try {
+        await updateCache?.(
+          {
+            ...data,
+            data: data.data.map((item: object, index: number) => ({
+              ...item,
+              url: images[index].data,
+            })),
+          },
+          status,
+          statusText,
+        );
+      } catch (error) {
+        logger.warn('[OpenAI Image] Failed to cache image data', { error: String(error) });
+      }
+    }
+    return response;
   }
 }

@@ -76,6 +76,30 @@ describe('OpenAiImageProvider', () => {
   });
 
   describe('Basic functionality', () => {
+    it('reuses downloaded image bytes after the provider URL expires', async () => {
+      const updateCache = vi.fn();
+      vi.mocked(fetchWithCache).mockResolvedValue({ ...mockFetchResponse, updateCache });
+      const provider = new OpenAiImageProvider('dall-e-3', { config: { apiKey: 'test-key' } });
+      const first = await provider.callApi('A cat');
+      expect(first.error).toBeUndefined();
+      expect(updateCache).toHaveBeenCalledWith({ data: [{ url: imageData }] }, 200, 'OK');
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...mockFetchResponse,
+        data: updateCache.mock.calls[0][0],
+        cached: true,
+        updateCache,
+      });
+      vi.mocked(fetchWithProxy).mockRejectedValue(new Error('Image expired'));
+      const cached = await provider.callApi('A cat');
+      expect(cached.output).toEqual(first.output);
+      expect(cached.images?.map((image) => image.data)).toEqual(
+        first.images?.map((image) => image.data),
+      );
+      expect(cached.cached).toBe(true);
+      expect(cached.cost).toBe(0);
+      expect(fetchWithProxy).toHaveBeenCalledTimes(1);
+      expect(updateCache).toHaveBeenCalledTimes(1);
+    });
     it('should reject a per-prompt Codex-only image model override before dispatch', async () => {
       const provider = new OpenAiImageProvider('gpt-image-1.5', {
         config: { apiKey: 'test-key' },

@@ -1457,9 +1457,9 @@ async function gradeRunEvalResponse({
 
   const assertionProviderResponse = {
     ...processedResponse,
-    // Keep generated audio available to graders after persistence replaces its
-    // inline bytes with a blob reference in the saved result.
+    // Graders need inline media; saved results use blob references.
     ...(response.audio?.data ? { audio: response.audio } : {}),
+    ...(response.images?.length ? { images: response.images } : {}),
     providerTransformedOutput,
   };
 

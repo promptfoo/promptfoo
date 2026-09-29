@@ -723,6 +723,77 @@ describe('OpenAI Image Provider Functions', () => {
   });
 
   describe('buildSafeStructuredImageOutputs', () => {
+    it('ends a stalled DNS lookup when the caller cancels', async () => {
+      lookupMock.mockReturnValue(new Promise(() => {}));
+      const controller = new AbortController();
+      const pending = buildSafeStructuredImageOutputs(
+        { data: [{ url: 'https://example.com/image.png' }] },
+        undefined,
+        undefined,
+        controller.signal,
+      );
+      controller.abort();
+      await expect(pending).resolves.toBeUndefined();
+      expect(fetchWithProxy).not.toHaveBeenCalled();
+      expect(getFetchTlsOptions).not.toHaveBeenCalled();
+    });
+
+    it('includes DNS resolution in the download deadline', async () => {
+      vi.useFakeTimers();
+      try {
+        lookupMock.mockReturnValue(new Promise(() => {}));
+        const pending = buildSafeStructuredImageOutputs({
+          data: [{ url: 'https://example.com/image.png' }],
+        });
+        await vi.runAllTimersAsync();
+        await expect(pending).resolves.toBeUndefined();
+        expect(fetchWithProxy).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not replace a failed first image with a later successful image', async () => {
+      vi.mocked(fetchWithProxy).mockRejectedValueOnce(new Error('Image expired'));
+      const evict = vi.fn();
+      const result = await processApiResponse(
+        {
+          data: [
+            { url: 'https://example.com/first.png' },
+            { url: 'https://example.com/second.png' },
+          ],
+        },
+        'Two pictures',
+        'url',
+        true,
+        'dall-e-2',
+        '1024x1024',
+        undefined,
+        undefined,
+        2,
+        undefined,
+        {},
+        evict,
+      );
+      expect(result.error).toContain('One or more generated images');
+      expect(result.output).toBeUndefined();
+      expect(result.images).toBeUndefined();
+      expect(evict).toHaveBeenCalledOnce();
+    });
+
+    it('rejects an incomplete base64 batch', async () => {
+      const result = await processApiResponse(
+        { data: [{ b64_json: 'aW1hZ2U=' }, {}] },
+        'Two pictures',
+        'b64_json',
+        false,
+        'dall-e-2',
+        '1024x1024',
+      );
+      expect(result.error).toContain('One or more generated images');
+      expect(result.output).toBeUndefined();
+    });
     it('should download external URLs as inline image data', async () => {
       const result = await buildSafeStructuredImageOutputs({
         data: [{ url: 'https://example.com/image.jpg?size=large' }],

@@ -221,6 +221,38 @@ describeEvaluator('evaluator assertions', () => {
     },
   );
 
+  it.each([1, 2])(
+    'grades generated images after blob extraction with concurrency %s',
+    async (maxConcurrency) => {
+      const data = `data:image/png;base64,${Buffer.alloc(2048, 1).toString('base64')}`;
+      vi.mocked(mockApiProvider.callApi).mockResolvedValue({
+        output: data,
+        images: [{ data, mimeType: 'image/png' }],
+      });
+      const grader = mockGradingApiProviderPasses;
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Draw a circle')],
+        tests: [
+          { assert: [{ type: 'llm-rubric', value: 'There is a circle.', provider: grader }] },
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, { maxConcurrency });
+      const summary = await evalRecord.toEvaluateSummary();
+      const result = summary.results[0];
+      expect(result.success).toBe(true);
+      expect(result.response?.images?.[0].blobRef).toBeDefined();
+      expect(result.response?.images?.[0].data).toBeUndefined();
+      expect(result.response?.output).toBe(result.response?.images?.[0].blobRef?.uri);
+      const messages = JSON.parse(vi.mocked(grader.callApi).mock.calls[0][0]);
+      expect(messages.flatMap((message: { content: unknown }) => message.content)).toContainEqual({
+        type: 'image_url',
+        image_url: { url: data },
+      });
+    },
+  );
+
   it('evaluate with expected value matching output', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

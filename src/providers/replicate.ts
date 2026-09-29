@@ -665,6 +665,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
     )}`;
 
     let response: any | undefined;
+    let deletePredictionFromCache: (() => Promise<void>) | undefined;
     let cached = false;
     if (isCacheEnabled()) {
       const cachedResponse = await cache.get(cacheKey);
@@ -705,6 +706,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
         options?.abortSignal,
       );
       retainPrediction?.(release);
+      deletePredictionFromCache = creation.deleteFromCache;
       cached = creation.cached || shared;
       let prediction = creation.data as ReplicatePrediction;
 
@@ -768,6 +770,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
       if (isCacheEnabled()) {
         await cache.del(cacheKey);
       }
+      await deletePredictionFromCache?.();
       return { error: 'The generated image could not be downloaded safely.' };
     }
 
