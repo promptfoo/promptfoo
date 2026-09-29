@@ -690,6 +690,40 @@ describe('consent.js', () => {
   });
 
   describe('cross-region consent reuse', () => {
+    it.each(['o', 'n'])(
+      'preserves a saved %s-region refusal after entering an opt-in region',
+      (region) => {
+        setCookie('pf_country', 'DE');
+        setCookie('pf_consent', `v1.${region}.0.0`);
+        runConsent();
+        expect(getCookie('pf_consent')).toBe(`v1.${region}.0.0`);
+        expect(document.getElementById('cc-banner')).toBeNull();
+        expect(document.querySelectorAll('script[src]')).toHaveLength(0);
+      },
+    );
+
+    it('keeps opt-in consent provenance while visiting an opt-out region', () => {
+      setCookie('pf_country', 'US');
+      setCookie('pf_consent', 'v1.i.1.1');
+      runConsent();
+      expect(getCookie('pf_consent')).toBe('v1.i.1.1');
+      setCookie('pf_country', 'DE');
+      runConsent();
+      expect(document.getElementById('cc-banner')).toBeNull();
+      expect(getCookie('pf_consent')).toBe('v1.i.1.1');
+    });
+
+    it.each(['US', 'JP', 'DE'])('opens preferences before loading trackers in %s', (country) => {
+      setCookie('pf_country', country);
+      setCookie('pf_consent', 'v1.i.1.1');
+      window.location.hash = '#manage-cookies';
+      runConsent();
+      expect(document.getElementById('cc-overlay')).not.toBeNull();
+      expect(document.querySelectorAll('script[src]')).toHaveLength(0);
+      expect((window as any).__pf_consent).toBeNull();
+      expect(getCookie('pf_consent')).toBe('v1.i.1.1');
+    });
+
     it('invalidates opt-out consent when visiting from opt-in region', () => {
       // User consented in US (opt_out), now in EU
       setCookie('pf_country', 'DE');

@@ -184,8 +184,8 @@
     return null;
   }
 
-  function serializeConsent(analytics, marketing) {
-    var r = REGION_CODE[getRegion()] || 'n';
+  function serializeConsent(analytics, marketing, region) {
+    var r = region || REGION_CODE[getRegion()];
     return 'v1.' + r + '.' + (analytics ? 1 : 0) + '.' + (marketing ? 1 : 0);
   }
 
@@ -194,12 +194,12 @@
     window.dispatchEvent(new CustomEvent('pf_consent_change'));
   }
 
-  function saveConsent(analytics, marketing) {
+  function saveConsent(analytics, marketing, region) {
     var consent = {
       analytics: analytics ? 1 : 0,
       marketing: marketing && !navigator.globalPrivacyControl ? 1 : 0,
     };
-    setCookie(COOKIE, serializeConsent(consent.analytics, consent.marketing));
+    setCookie(COOKIE, serializeConsent(consent.analytics, consent.marketing, region));
     if (!consent.analytics) clearVendorCookies(ANALYTICS_COOKIE_PATTERNS);
     if (!consent.marketing) clearVendorCookies(MARKETING_COOKIE_PATTERNS);
     publishConsent(consent);
@@ -544,37 +544,33 @@
   }
 
   function showPreferencesFromHash() {
-    if (window.location.hash === '#manage-cookies') {
-      onReady(function () {
-        showPreferences();
-        history.replaceState(null, '', window.location.pathname + window.location.search);
-      });
-    }
+    if (window.location.hash !== '#manage-cookies') return false;
+    publishConsent(null);
+    onReady(checkHash);
+    return true;
   }
 
   function handleOptIn(consent) {
     var nextConsent = consent;
     // Invalidate consent obtained under a less-strict region (e.g. US opt-out).
     // The user must re-consent under opt-in rules.
-    if (nextConsent && nextConsent.region !== 'i') {
+    if (
+      nextConsent &&
+      nextConsent.region !== 'i' &&
+      (nextConsent.analytics || nextConsent.marketing)
+    ) {
       deleteCookie(COOKIE);
       clearVendorCookies();
       nextConsent = null;
     }
+    if (showPreferencesFromHash()) return;
     if (nextConsent) {
-      loadByConsent(saveConsent(nextConsent.analytics, nextConsent.marketing));
+      loadByConsent(saveConsent(nextConsent.analytics, nextConsent.marketing, nextConsent.region));
       onReady(checkHash);
       return;
     }
     publishConsent(null);
-    onReady(function () {
-      if (window.location.hash === '#manage-cookies') {
-        showPreferences();
-        history.replaceState(null, '', window.location.pathname + window.location.search);
-      } else {
-        showBanner();
-      }
-    });
+    onReady(showBanner);
   }
 
   function init() {
@@ -587,9 +583,13 @@
       return;
     }
 
-    var saved = saveConsent(consent ? consent.analytics : 1, consent ? consent.marketing : 1);
+    if (showPreferencesFromHash()) return;
+    var saved = saveConsent(
+      consent ? consent.analytics : 1,
+      consent ? consent.marketing : 1,
+      consent ? consent.region : undefined,
+    );
     loadByConsent(saved);
-    showPreferencesFromHash();
   }
 
   init();
