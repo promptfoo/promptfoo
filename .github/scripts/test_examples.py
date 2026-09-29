@@ -26,7 +26,7 @@ SCRIPT = Path(__file__).with_name("examples.py")
 class SelectionTests(unittest.TestCase):
     def test_full_run_preserves_every_registered_runtime(self):
         rows = select_examples(None)
-        self.assertEqual(len(rows), 16)
+        self.assertEqual(len(rows), 20)
         self.assertEqual(
             [(row["example"], row["python"]) for row in rows],
             [
@@ -46,6 +46,10 @@ class SelectionTests(unittest.TestCase):
                 ("rag-pdf-cli", "3.14"),
                 ("f-score", "3.10"),
                 ("f-score", "3.14"),
+                ("google-adk", "3.12"),
+                ("google-adk", "3.14"),
+                ("google-adk-minimums", "3.10"),
+                ("google-adk-litellm", "3.12"),
             ],
         )
 
@@ -56,6 +60,19 @@ class SelectionTests(unittest.TestCase):
             ["python-provider-upgrade", "python-provider-minimums"],
         )
         self.assertTrue(all(not row["node"] for row in rows))
+
+    def test_adk_changes_select_default_minimum_and_optional_profiles(self):
+        rows = select_examples(["examples/integration-google-adk/agent.py"])
+        self.assertEqual(
+            [(row["example"], row["python"]) for row in rows],
+            [
+                ("google-adk", "3.12"),
+                ("google-adk", "3.14"),
+                ("google-adk-minimums", "3.10"),
+                ("google-adk-litellm", "3.12"),
+            ],
+        )
+        self.assertTrue(all(row["node"] for row in rows))
 
     def test_langchain_changes_select_only_its_supported_runtimes(self):
         for filename in (
@@ -290,6 +307,36 @@ class GitSelectionTests(unittest.TestCase):
 
 
 class RunnerTests(unittest.TestCase):
+    def test_adk_optional_adapter_is_isolated_and_runs_its_own_suite(self):
+        with (
+            patch(
+                "examples.sys.version_info", types.SimpleNamespace(major=3, minor=12)
+            ),
+            patch("examples.Path.is_file", return_value=True),
+            patch("examples.venv.EnvBuilder.create") as create,
+            patch("examples.subprocess.run") as run,
+        ):
+            run_example("google-adk-litellm")
+        calls = run.call_args_list
+        self.assertIn("litellm>=1.101,<2", calls[0].args[0])
+        self.assertIn("-r", calls[0].args[0])
+        self.assertEqual(calls[1].args[0][1:], ("-m", "pip", "check"))
+        self.assertEqual(calls[2].args[0][-1], "*_test.py")
+        self.assertEqual(calls[3].args[0][-1], "test_litellm.py")
+        self.assertEqual(
+            Path(calls[3].args[0][-2]).resolve(),
+            SCRIPT.parent / "tests/google_adk",
+        )
+        self.assertEqual(len(calls), 4)
+        environment = create.call_args.args[0]
+        for call in calls:
+            self.assertTrue(str(call.args[0][0]).startswith(str(environment)))
+            self.assertEqual(call.kwargs["env"]["PROMPTFOO_PYTHON"], call.args[0][0])
+            self.assertTrue(call.kwargs["check"])
+        self.assertEqual(EXAMPLES["google-adk"].extra_requirements, ())
+        self.assertEqual(EXAMPLES["google-adk-minimums"].extra_requirements, ())
+        self.assertFalse(environment.exists())
+
     def test_langchain_runs_its_existing_provider_suite_in_isolation(self):
         with (
             patch(

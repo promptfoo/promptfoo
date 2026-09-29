@@ -125,6 +125,29 @@ EXAMPLES = {
         ("3.10", "3.14"),
         ((".", "dependencies_test.py"),),
     ),
+    "google-adk": Example(
+        "examples/integration-google-adk",
+        ("3.12", "3.14"),
+        ((".", "*_test.py"), ("../../.github/scripts/tests/google_adk", "test_cli.py")),
+        node=True,
+    ),
+    "google-adk-minimums": Example(
+        "examples/integration-google-adk",
+        ("3.10",),
+        ((".", "*_test.py"), ("../../.github/scripts/tests/google_adk", "test_cli.py")),
+        node=True,
+        minimums=True,
+    ),
+    "google-adk-litellm": Example(
+        "examples/integration-google-adk",
+        ("3.12",),
+        (
+            (".", "*_test.py"),
+            ("../../.github/scripts/tests/google_adk", "test_litellm.py"),
+        ),
+        node=True,
+        extra_requirements=("litellm>=1.101,<2",),
+    ),
 }
 
 # Shared runtime changes can break examples without changing their own directories.
@@ -251,6 +274,7 @@ def run_example(name: str) -> None:
         if example.seed:
             run(*pip, *example.seed)
         requirements = ROOT / example.directory / "requirements.txt"
+        # Resolve optional adapters together with the example's own bounds.
         install = [*pip, "-r", str(requirements), *example.extra_requirements]
         if example.minimums:
             constraints = Path(temporary) / "minimums.txt"
