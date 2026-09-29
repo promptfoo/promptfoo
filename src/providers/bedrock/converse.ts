@@ -24,8 +24,11 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import {
   getClaudeModelWarningName,
   isAlwaysOnAdaptiveThinkingClaudeModel,
+  isClaudeThinkingEnabled,
+  isForcedToolChoiceUnsupportedClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeClaudeThinkingConfig,
+  resolveClaudeSamplingParams,
 } from '../anthropic/util';
 import {
   executeProviderFunctionCallback,
@@ -43,7 +46,6 @@ import {
 } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import { calculateBedrockCost } from './pricing';
-import type Anthropic from '@anthropic-ai/sdk';
 import type {
   ContentBlock,
   ConverseCommandInput,
@@ -65,7 +67,7 @@ import type { DocumentType } from '@smithy/types';
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
 import type { TokenUsage, VarValue } from '../../types/shared';
-import type { ClaudeEffort } from '../anthropic/types';
+import type { ClaudeEffort, ClaudeThinkingConfig } from '../anthropic/types';
 import type { MCPConfig, MCPTool } from '../mcp/types';
 
 /**
@@ -82,9 +84,8 @@ export interface BedrockConverseOptions extends BedrockOptions {
   stopSequences?: string[];
   stop?: string[]; // Alias for compatibility
 
-  // Extended thinking (Claude models) — the SDK's own union, shared with the Anthropic
-  // and Bedrock InvokeModel providers so a new thinking mode lands in one place.
-  thinking?: Anthropic.Messages.ThinkingConfigParam;
+  // Shared with the Anthropic Messages and Bedrock InvokeModel providers.
+  thinking?: ClaudeThinkingConfig;
 
   // Reasoning configuration (Amazon Nova 2 models)
   // Note: When reasoning is enabled, temperature/topP/topK must NOT be set
@@ -861,8 +862,28 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // ValidationException. Drop both regardless of where they came from (config
     // or AWS_BEDROCK_TEMPERATURE / AWS_BEDROCK_TOP_P).
     const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
-    const temperature = reasoningEnabled || samplingParamsDeprecated ? undefined : temperatureValue;
-    const topP = reasoningEnabled || samplingParamsDeprecated ? undefined : topPValue;
+    let temperature = reasoningEnabled || samplingParamsDeprecated ? undefined : temperatureValue;
+    let topP = reasoningEnabled || samplingParamsDeprecated ? undefined : topPValue;
+    // Converse relays Claude's own rules as ValidationExceptions: no temperature with topP,
+    // and with extended thinking no temperature and a topP of at least 0.95. Other model
+    // families accept both, so only Claude models go through the shared resolver.
+    if (this.modelName.includes('anthropic.claude')) {
+      const rawThinking = this.config.additionalModelRequestFields?.thinking as
+        | { type?: string }
+        | undefined;
+      const { sampling, warnings } = resolveClaudeSamplingParams(
+        { temperature, top_p: topP },
+        {
+          thinkingEnabled: isClaudeThinkingEnabled(this.config.thinking ?? rawThinking),
+          samplingParamsDeprecated,
+        },
+      );
+      for (const warning of warnings) {
+        logger.warn(warning);
+      }
+      temperature = sampling.temperature;
+      topP = sampling.top_p;
+    }
 
     // Only return config if at least one field is set
     if (
@@ -934,13 +955,17 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const requestedToolChoice = configToolChoice
       ? convertToolChoiceToConverseFormat(configToolChoice)
       : undefined;
+    const modelRejectsForcedToolChoice = isForcedToolChoiceUnsupportedClaudeModel(this.modelName);
     const dropForcedToolChoice =
-      isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName) &&
+      (modelRejectsForcedToolChoice || isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName)) &&
       requestedToolChoice !== undefined &&
       ('any' in requestedToolChoice || 'tool' in requestedToolChoice);
     if (dropForcedToolChoice && !this.forcedToolChoiceRemovalWarned) {
+      const modelName = getClaudeModelWarningName(this.modelName) ?? 'this Claude model';
       logger.warn(
-        `Forced tool choice (any/tool) is incompatible with the always-on adaptive thinking of ${getClaudeModelWarningName(this.modelName) ?? 'this Claude model'} and has been omitted. The model decides when to call tools; remove toolChoice to silence this warning.`,
+        modelRejectsForcedToolChoice
+          ? `Forced tool choice (any/tool) is not supported on ${modelName} and has been omitted. The model decides when to call tools; remove toolChoice to silence this warning.`
+          : `Forced tool choice (any/tool) is incompatible with the always-on adaptive thinking of ${modelName} and has been omitted. The model decides when to call tools; remove toolChoice to silence this warning.`,
       );
       this.forcedToolChoiceRemovalWarned = true;
     }
@@ -984,10 +1009,14 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const fields: Record<string, unknown> = {
       ...(this.config.additionalModelRequestFields || {}),
     };
+    // Converse has no typed effort option, but `output_config.effort` is a supported escape
+    // hatch through these raw fields, so read it back out for the effort-capped thinking rules
+    // (turning thinking off at `xhigh`/`max` is a 400 on Opus 5 and Sonnet 5.5).
+    const effort = (fields.output_config as { effort?: ClaudeEffort } | undefined)?.effort;
     // Raw additional fields must not bypass the model's sampling/thinking constraints. Every
-    // sampling-deprecated Claude model (Fable/Mythos 5, Sonnet 5, Opus 4.7/4.8) rejects
-    // temperature/top_p/top_k, so strip them from the raw fields too; normalizeClaudeThinkingConfig
-    // then converts enabled -> adaptive and drops disabled only on the always-on Fable/Mythos models.
+    // sampling-deprecated Claude model (Claude 5, Opus 4.7/4.8) rejects temperature/top_p/top_k,
+    // so strip them from the raw fields too; normalizeClaudeThinkingConfig then converts enabled
+    // -> adaptive and applies the model's rules for `disabled` (dropped, or `between_tools`).
     if (isSamplingParamsDeprecatedClaudeModel(this.modelName)) {
       delete fields.temperature;
       delete fields.top_p;
@@ -995,11 +1024,6 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       const additionalThinking = fields.thinking as
         | { type: string; display?: 'summarized' | 'omitted' }
         | undefined;
-      // Converse has no typed effort option, but `output_config.effort` is a supported
-      // escape hatch through these raw fields — so read it back out and feed it to the
-      // normalizer, otherwise the effort-capped rule (disabled + xhigh/max is a 400)
-      // cannot fire on this path.
-      const effort = (fields.output_config as { effort?: ClaudeEffort } | undefined)?.effort;
       const normalizedThinking = normalizeClaudeThinkingConfig(
         this.modelName,
         additionalThinking,
@@ -1017,9 +1041,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       const normalizedThinking = normalizeClaudeThinkingConfig(
         this.modelName,
         this.config.thinking,
-        // Converse takes effort only via additionalModelRequestFields, which this path
-        // does not inspect, so the effort-capped rules cannot be evaluated here.
-        undefined,
+        effort,
       );
       if (normalizedThinking !== undefined) {
         fields.thinking = normalizedThinking;
@@ -1135,6 +1157,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const toolsDisabled = this.isRequestToolsDisabled(context);
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
+    const betweenToolsThinking =
+      (additionalModelRequestFields as { thinking?: { type?: string } } | undefined)?.thinking
+        ?.type === 'between_tools';
     const performanceConfig = this.buildPerformanceConfig();
     const serviceTier = this.buildServiceTier();
 
@@ -1175,7 +1200,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       if (cachedResponse) {
         logger.debug('Returning cached response');
         const parsed = JSON.parse(cachedResponse as string) as ConverseCommandOutput;
-        const result = await this.parseResponse(parsed, toolsDisabled);
+        const result = await this.parseResponse(parsed, toolsDisabled, betweenToolsThinking);
         return { ...result, cached: true };
       }
     }
@@ -1225,7 +1250,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       hasMetrics: !!response.metrics,
     });
 
-    return await this.parseResponse(response, toolsDisabled);
+    return await this.parseResponse(response, toolsDisabled, betweenToolsThinking);
   }
 
   /**
@@ -1376,6 +1401,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   private async parseResponse(
     response: ConverseCommandOutput,
     toolsDisabled = false,
+    betweenToolsThinking = false,
   ): Promise<ProviderResponse> {
     // Extract output text
     const outputMessage = response.output?.message;
@@ -1554,6 +1580,15 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
 
     if (dispatchResults.length > 0) {
+      if (betweenToolsThinking) {
+        const progress = extractTextFromContentBlocks(
+          content.filter((block) => block.reasoningContent),
+          showThinking,
+        );
+        if (progress) {
+          dispatchResults.unshift(progress);
+        }
+      }
       // Surface MCP failures via the response `error` field so downstream
       // consumers (assertions, exit codes, redteam grader) treat broken MCP
       // calls as failures rather than greenlighting them on the strength of an

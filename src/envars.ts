@@ -1,9 +1,9 @@
-import dotenv from 'dotenv';
 import { getEnvOverridesProvider } from './envOverrides';
+import { loadEnvFiles } from './util/envFile';
 
 import type { EnvOverrides } from './types/env';
 
-dotenv.config({ quiet: true });
+loadEnvFiles();
 
 // Define the supported environment variables and their types
 type EnvVars = {
