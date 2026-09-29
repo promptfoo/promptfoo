@@ -9,20 +9,9 @@ import type { PostHogContextType } from './PostHogContext';
 
 let consumerContext: Context<PostHogContextType>;
 
-vi.mock('posthog-js', () => {
-  const mockPosthogInstance = {
-    init: vi.fn((_key, config) => {
-      if (config.loaded) {
-        setTimeout(() => config.loaded(mockPosthogInstance), 0);
-      }
-    }),
-    identify: vi.fn(),
-    capture: vi.fn(),
-  };
-  return {
-    default: mockPosthogInstance,
-  };
-});
+vi.mock('posthog-js', () => ({
+  default: { init: vi.fn(), identify: vi.fn(), capture: vi.fn() },
+}));
 
 const mockFetchEmail = vi.fn();
 const mockFetchUserId = vi.fn();
@@ -40,7 +29,11 @@ const TestConsumer = () => {
 
 describe('PostHogProvider', () => {
   beforeEach(async () => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    vi.mocked(posthog.init).mockImplementation((_key, config) => {
+      queueMicrotask(() => config?.loaded?.(posthog));
+      return posthog;
+    });
     consumerContext = (await import('./PostHogContext')).PostHogContext;
 
     vi.mocked(useUserStore).mockReturnValue({
@@ -55,6 +48,7 @@ describe('PostHogProvider', () => {
   });
 
   afterEach(() => {
+    vi.resetAllMocks();
     vi.unstubAllEnvs();
     vi.resetModules();
   });

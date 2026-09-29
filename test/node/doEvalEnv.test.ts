@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getEnvString } from '../../src/envars';
+import { getEnvOverrides, getEnvString } from '../../src/envars';
 import { doEval } from '../../src/node/doEval';
 import { getEvalConfigFromCloud } from '../../src/util/cloud';
 import { mockProcessEnv } from '../util/utils';
@@ -79,6 +79,46 @@ describe('doEval environment files', () => {
     expect(outputs).toEqual(['first', 'second']);
     expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
   });
+
+  it.each(['invocation', 'configuration'] as const)(
+    'retains CLI %s file restrictions alongside suite overrides',
+    async (source) => {
+      const envPath = path.join(tempDir, 'cli.env');
+      fs.writeFileSync(envPath, 'IS_TESTING=true\n');
+      const evaluation = await doEval(
+        {
+          ...(source === 'invocation' ? { envPath: [envPath] } : {}),
+          write: false,
+          share: false,
+          table: false,
+          progressBar: false,
+        },
+        {
+          prompts: ['fixture'],
+          providers: [
+            async () => ({
+              output: JSON.stringify({
+                file: getEnvOverrides('file')?.IS_TESTING,
+                effective: getEnvString('IS_TESTING'),
+              }),
+            }),
+          ],
+          tests: [{ vars: {} }],
+          env: { IS_TESTING: 'false' },
+          ...(source === 'configuration' ? { commandLineOptions: { envPath: [envPath] } } : {}),
+        },
+        undefined,
+        { eventSource: 'cli', cache: false },
+      );
+      const [row] = await evaluation.getResults();
+      expect(row.success).toBe(true);
+      expect(JSON.parse(row.response?.output as string)).toEqual({
+        file: 'true',
+        effective: 'false',
+      });
+      expect(process.env.IS_TESTING).toBe('true');
+    },
+  );
 
   it('restores the caller environment when cloud loading fails', async () => {
     const envPath = path.join(tempDir, 'failed.env');
