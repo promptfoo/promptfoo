@@ -1230,6 +1230,25 @@ describe('prompt optimizer', () => {
     }
   });
 
+  it('rejects range partitioning before extensions can rewrite the selected tests', async () => {
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Base', label: 'Base' }],
+      tests: [{ vars: { id: 'first' } }, { vars: { id: 'second' } }],
+      extensions: ['file://rewrite-tests.ts:beforeAll'],
+    };
+
+    await expect(
+      optimizePromptTestSuite({ evaluateOptions: { filterRange: '0:2' } }, testSuite, {
+        validationSplit: 0.5,
+      }),
+    ).rejects.toThrow(
+      'Prompt optimization cannot combine filterRange and validationSplit with extensions. Resolve the test list before optimizing, or omit the validation split.',
+    );
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(getDefaultProviders).not.toHaveBeenCalled();
+  });
+
   it('does not run an implicit default test when filterRange selects no tests before validation split', async () => {
     const testSuite: TestSuite = {
       providers: [createMockProvider({ id: 'target-provider' })],

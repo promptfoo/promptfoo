@@ -749,6 +749,12 @@ function applyFilterRangeBeforeValidationSplit(
     return { filterRangeApplied: false, testSuite };
   }
 
+  if (testSuite.extensions?.length) {
+    throw new Error(
+      'Prompt optimization cannot combine filterRange and validationSplit with extensions. Resolve the test list before optimizing, or omit the validation split.',
+    );
+  }
+
   const tests = filterByRange(testSuite.tests, filterRange);
   if (tests.length === 0) {
     throw new Error('Prompt optimization filterRange did not select any tests.');
