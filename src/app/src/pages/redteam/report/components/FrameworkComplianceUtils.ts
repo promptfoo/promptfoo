@@ -16,7 +16,6 @@ export type TestResultStats = {
   failCount: number;
 };
 
-// Types for utility functions
 export type CategoryStats = Record<string, TestResultStats>;
 
 export type PluginCategories = {
@@ -39,32 +38,27 @@ export const expandPluginCollections = (
   plugins: string[],
   categoryStats: CategoryStats,
 ): Set<string> => {
-  const expandedPlugins = new Set<string>();
-  plugins.forEach((plugin) => {
-    if (plugin === 'harmful') {
-      // Add all harmful:* plugins that have stats, keeping one stat key per logical
-      // plugin: prefer the exact short key over its prefixed alias, mirroring the
-      // ordinary-plugin branch below. Without this, a report containing both
-      // 'harmful:hate' and 'promptfoo:redteam:harmful:hate' would render, count, and
-      // export the same plugin twice.
-      const keyByFrameworkPluginId = new Map<string, string>();
-      Object.keys(categoryStats).forEach((key) => {
-        const frameworkPluginId = getFrameworkPluginId(key);
-        if (frameworkPluginId !== 'harmful' && !frameworkPluginId.startsWith('harmful:')) {
-          return;
-        }
-        if (!keyByFrameworkPluginId.has(frameworkPluginId) || key === frameworkPluginId) {
-          keyByFrameworkPluginId.set(frameworkPluginId, key);
-        }
-      });
-      keyByFrameworkPluginId.forEach((key) => expandedPlugins.add(key));
-    } else {
-      const categoryStatsKey = categoryStats[plugin]
-        ? plugin
-        : Object.keys(categoryStats).find((key) => getFrameworkPluginId(key) === plugin);
-      expandedPlugins.add(categoryStatsKey ?? plugin);
+  const statsKeys = new Map<string, string>();
+  for (const key of Object.keys(categoryStats)) {
+    const pluginId = getFrameworkPluginId(key);
+    // Prefer the short ID when an imported report contains both aliases.
+    if (!statsKeys.has(pluginId) || key === pluginId) {
+      statsKeys.set(pluginId, key);
     }
-  });
+  }
+
+  const expandedPlugins = new Set<string>();
+  for (const plugin of plugins) {
+    if (plugin === 'harmful') {
+      for (const [pluginId, key] of statsKeys) {
+        if (pluginId === 'harmful' || pluginId.startsWith('harmful:')) {
+          expandedPlugins.add(key);
+        }
+      }
+    } else {
+      expandedPlugins.add(statsKeys.get(plugin) ?? plugin);
+    }
+  }
   return expandedPlugins;
 };
 
@@ -80,11 +74,8 @@ export const categorizePlugins = (
   const nonCompliantPlugins: string[] = [];
   const untestedPlugins: string[] = [];
 
-  // Process all plugins in the category
   Array.from(plugins).forEach((plugin) => {
-    // Check if plugin has test data
     if (categoryStats[plugin] && categoryStats[plugin].total > 0) {
-      // Plugin was tested
       const stats = categoryStats[plugin];
       if (stats.pass / stats.total >= passRateThreshold) {
         compliantPlugins.push(plugin);
@@ -92,7 +83,6 @@ export const categorizePlugins = (
         nonCompliantPlugins.push(plugin);
       }
     } else {
-      // Plugin was not tested
       untestedPlugins.push(plugin);
     }
   });

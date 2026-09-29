@@ -1,7 +1,7 @@
 import * as os from 'os';
 import * as path from 'path';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getConfigDirectoryPath,
@@ -38,6 +38,13 @@ vi.mock('node:fs', () => ({
   ...mockFs,
   default: mockFs,
 }));
+
+// js-yaml v5 is native ESM with a sealed namespace, so vi.spyOn cannot patch it.
+// Wrap dump in a spy-able mock that keeps the real implementation.
+vi.mock('js-yaml', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('js-yaml')>();
+  return { ...actual, dump: vi.fn(actual.dump) };
+});
 
 // Mock os module
 vi.mock('os');
@@ -156,12 +163,11 @@ describe('config management', () => {
     });
 
     it('should handle empty yaml content', () => {
-      const yamlDumpSpy = vi.spyOn(yaml, 'dump').mockReturnValue('');
+      vi.mocked(yaml.dump).mockReturnValueOnce('');
       const config = { description: 'test' };
       const result = writePromptfooConfig(config, outputPath);
       expect(result).toEqual(config);
       expect(mockFs.writeFileSync).not.toHaveBeenCalled();
-      yamlDumpSpy.mockRestore();
     });
   });
 });

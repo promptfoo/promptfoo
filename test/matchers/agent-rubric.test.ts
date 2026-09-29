@@ -104,6 +104,34 @@ describe('matchesAgentRubric', () => {
     );
   });
 
+  it('keeps reserved output and rubric vars ahead of user vars', async () => {
+    const { matchesAgentRubric } = await import('../../src/matchers/agent');
+
+    await matchesAgentRubric(
+      'rubric from assertion',
+      'output from provider',
+      { rubricPrompt: 'output={{ output }}\nrubric={{ rubric }}\nextra={{ extra }}' },
+      {
+        output: 'vars output sentinel',
+        rubric: 'vars rubric sentinel',
+        extra: 'kept user var',
+      },
+    );
+
+    const callApiMock = vi.mocked(mocks.codexProvider.callApi);
+    const [prompt, callApiContext] = callApiMock.mock.calls[0];
+    expect(prompt).toContain('output=output from provider');
+    expect(prompt).toContain('rubric=rubric from assertion');
+    expect(prompt).toContain('extra=kept user var');
+    expect(prompt).not.toContain('vars output sentinel');
+    expect(prompt).not.toContain('vars rubric sentinel');
+    expect(callApiContext?.vars).toMatchObject({
+      output: 'output from provider',
+      rubric: 'rubric from assertion',
+      extra: 'kept user var',
+    });
+  });
+
   it('rejects an explicitly configured plain text grader instead of falling back', async () => {
     const { matchesAgentRubric } = await import('../../src/matchers/agent');
     mocks.loadApiProvider.mockResolvedValue(mocks.textProvider);
@@ -117,6 +145,25 @@ describe('matchesAgentRubric', () => {
     expect(mocks.codexProvider.callApi).not.toHaveBeenCalled();
     expect(mocks.textProvider.callApi).not.toHaveBeenCalled();
   });
+
+  it.each(['openai:codex-security', 'openai:codex-security:gpt-5.6-sol'])(
+    'rejects %s as a rubric grader instead of treating scan findings as a passing verdict',
+    async (providerId) => {
+      const { matchesAgentRubric } = await import('../../src/matchers/agent');
+      const securityProvider = {
+        id: () => providerId,
+        callApi: vi.fn(async () => ({ output: JSON.stringify({ findings: [] }) })),
+      } as ApiProvider;
+      mocks.loadApiProvider.mockResolvedValue(securityProvider);
+
+      await expect(
+        matchesAgentRubric('Inspect the artifact', 'done', { provider: providerId }),
+      ).rejects.toThrow('agent-rubric assertion requires an agentic grading provider');
+
+      expect(securityProvider.callApi).not.toHaveBeenCalled();
+      expect(mocks.codexProvider.callApi).not.toHaveBeenCalled();
+    },
+  );
 
   it('applies llm-rubric threshold semantics to agent results', async () => {
     const { matchesAgentRubric } = await import('../../src/matchers/agent');

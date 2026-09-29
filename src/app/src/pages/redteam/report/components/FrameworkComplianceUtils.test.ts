@@ -87,6 +87,15 @@ describe('expandPluginCollections', () => {
     expect(result).toEqual(new Set(['harmful:hate']));
   });
 
+  it('prefers the short ID for ordinary plugins with conflicting aliases', () => {
+    const categoryStats: CategoryStats = {
+      'promptfoo:redteam:intent': { pass: 0, total: 10, failCount: 10 },
+      intent: { pass: 10, total: 10, failCount: 0 },
+    };
+
+    expect(expandPluginCollections(['intent'], categoryStats)).toEqual(new Set(['intent']));
+  });
+
   it('should match a mapped short plugin ID to its fully qualified categoryStats key', () => {
     const categoryStats: CategoryStats = {
       'promptfoo:redteam:intent': { pass: 1, total: 1, failCount: 0 },

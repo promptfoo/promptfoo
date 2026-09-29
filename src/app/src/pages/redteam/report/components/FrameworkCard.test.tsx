@@ -7,8 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrameworkCard from './FrameworkCard';
 import { type CategoryStats } from './FrameworkComplianceUtils';
 
-// Mock react-router-dom
-vi.mock('react-router-dom', () => ({
+// Mock react-router
+vi.mock('react-router', () => ({
   useNavigate: vi.fn(),
 }));
 
