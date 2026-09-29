@@ -157,7 +157,9 @@ export interface Tool {
 export type ClaudeThinkingConfig =
   | { type: 'enabled'; budget_tokens?: number; display?: 'summarized' | 'omitted' }
   | { type: 'adaptive'; display?: 'summarized' | 'omitted' }
-  | { type: 'disabled' };
+  | { type: 'disabled' }
+  // Claude Sonnet 5.5's lowest setting: no up-front thinking. It takes no other field.
+  | { type: 'between_tools' };
 
 export interface GoogleSpeechConfig {
   voiceConfig?: {

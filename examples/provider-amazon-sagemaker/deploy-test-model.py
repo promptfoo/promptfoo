@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 """
-SageMaker Deployment Helper Script
-
-This script helps deploy a test model on Amazon SageMaker for testing the promptfoo SageMaker provider.
-It uses the Hugging Face integration with SageMaker to deploy models.
+Deploy a Hugging Face model to SageMaker for testing the Promptfoo provider.
 
 Prerequisites:
 - AWS CLI configured

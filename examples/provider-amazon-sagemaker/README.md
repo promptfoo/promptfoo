@@ -31,19 +31,17 @@ This example shows how to:
 
 ## Optional Python deployment helper
 
-The normal Promptfoo evaluation uses Node.js and does not need Python packages.
-If you use `deploy-test-model.py` to create a test endpoint, use Python 3.10 or
-newer and install only Boto3:
+Promptfoo evals use Node.js and need no Python packages. To create a test endpoint
+with `deploy-test-model.py`, use Python 3.10 or newer and install Boto3:
 
 ```bash
 python -m pip install 'boto3>=1.43.98,<2'
 python deploy-test-model.py --help
 ```
 
-The helper calls SageMaker through Boto3; the separate `sagemaker` Python SDK is
-not required. Deployment creates billable AWS resources and needs the execution
-role and AWS permissions described in the script. Point the evaluation at an
-existing endpoint if you do not need to deploy a model.
+The helper uses Boto3, so the `sagemaker` Python SDK is not required. Deployment
+creates billable AWS resources and needs the execution role and permissions
+described in the script. To skip deployment, use an existing endpoint.
 
 ## Environment Variables
 
