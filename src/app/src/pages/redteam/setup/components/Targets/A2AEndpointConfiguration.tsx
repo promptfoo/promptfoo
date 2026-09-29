@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import Prism from '@app/lib/prism';
+import { highlightJSON } from '@app/lib/codeHighlight';
 import { cn } from '@app/lib/utils';
 import { AlertCircle, AlignLeft, ChevronDown, Code2, Eye, EyeOff, Server } from 'lucide-react';
 
@@ -96,18 +96,6 @@ const parseA2AScopes = (value: string): string[] =>
     .split(',')
     .map((scope) => scope.trim())
     .filter(Boolean);
-
-const highlightJSON = (code: string): string => {
-  try {
-    const grammar = Prism?.languages?.json;
-    if (!grammar) {
-      return code;
-    }
-    return Prism.highlight(code, grammar, 'json');
-  } catch {
-    return code;
-  }
-};
 
 const SecretInput = ({
   id,

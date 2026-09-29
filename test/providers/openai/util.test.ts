@@ -222,6 +222,7 @@ describe('calculateOpenAICost', () => {
     expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
     expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(true);
     expect(OPENAI_CODEX_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+    expect(calculateOpenAICost(model, {}, 1000, 500)).toBeCloseTo((1000 * 0.5 + 500 * 2) / 1e6, 6);
   });
 
   it('does not classify the Codex-surface-only Spark model as an API model', () => {
@@ -396,6 +397,7 @@ describe('calculateOpenAICost', () => {
   });
 
   it.each([
+    ['gpt-6.1-sol', 2, 10],
     ['gpt-5.6', 4, 20],
     ['gpt-5.6-sol', 4, 20],
     ['gpt-5.6-terra', 2, 12],
@@ -406,6 +408,7 @@ describe('calculateOpenAICost', () => {
   });
 
   it.each([
+    ['gpt-6.1-sol', 2, 10, 4, 15],
     ['gpt-5.6', 4, 20, 8, 30],
     ['gpt-5.6-sol', 4, 20, 8, 30],
     ['gpt-5.6-terra', 2, 12, 4, 18],
@@ -533,7 +536,11 @@ describe('calculateOpenAICost', () => {
     }
   });
 
-  // Availability re-verified against GET /v1/models/<id> on 2026-09-09.
+  it('should recognize GPT-6.1 Sol for Chat Completions and Responses', () => {
+    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-6.1-sol')).toBe(true);
+    expect(OPENAI_RESPONSES_ONLY_MODELS.some((model) => model.id === 'gpt-6.1-sol')).toBe(false);
+  });
+
   it.each([
     'computer-use-preview',
     'computer-use-preview-2025-03-11',
@@ -555,7 +562,7 @@ describe('calculateOpenAICost', () => {
     'o1-pro-2025-03-19',
     'o3-pro',
     'o3-pro-2025-06-10',
-  ])('should keep active Responses-only model %s out of Chat Completions routing', (model) => {
+  ])('should keep Responses-only model %s out of Chat Completions routing', (model) => {
     expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
     expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(true);
   });
@@ -798,7 +805,7 @@ describe('calculateOpenAICost', () => {
   });
 
   it('should use custom audioCost from config when provided', () => {
-    const audioCost = 0.05; // per 1M tokens
+    const audioCost = 0.05; // per token
 
     const promptTokens = 1000;
     const completionTokens = 500;
@@ -824,7 +831,7 @@ describe('calculateOpenAICost', () => {
     const audioOutputCostCustom = audioCost * audioCompletionTokens;
 
     const expectedTotalCost =
-      (baseInputCost + baseOutputCost + audioInputCostCustom + audioOutputCostCustom) / 1;
+      baseInputCost + baseOutputCost + audioInputCostCustom + audioOutputCostCustom;
 
     const cost = calculateOpenAICost(
       'gpt-4o-audio-preview',

@@ -2,7 +2,9 @@
 // module-under-test import below. See ./setup.ts for details.
 import './setup';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../../../src/cache';
+import { loadApiProvider } from '../../../../src/providers';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
 
 const unsupportedAudioModels = [
@@ -47,6 +49,9 @@ describe('OpenAiResponsesProvider model registry', () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.6-sol');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.6-terra');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.6-luna');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-6-sol');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-6.1-sol');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-6-luna');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.5');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.5-2026-04-23');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.5-pro');
@@ -164,5 +169,69 @@ describe('OpenAiResponsesProvider model registry', () => {
     for (const model of unsupportedAudioModels) {
       expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain(model);
     }
+  });
+});
+
+describe('Responses-only model requests', () => {
+  it.each([
+    ['computer-use-preview', 0.009],
+    ['computer-use-preview-2025-03-11', 0.009],
+    ['gpt-5-codex', 0.00625],
+    ['gpt-5.1-codex', 0.00625],
+    ['gpt-5.1-codex-max', 0.00625],
+    ['gpt-5.1-codex-mini', 0.00125],
+    ['gpt-5.2-codex', 0.00875],
+  ])('sends bare selector %s to Responses and preserves its cost', async (model, cost) => {
+    const provider = await loadApiProvider(`openai:${model}`, {
+      options: { config: { apiKey: 'fixture-key' } },
+    });
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        status: 'completed',
+        output: [
+          { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Hello' }] },
+        ],
+        usage: { input_tokens: 1000, output_tokens: 500, total_tokens: 1500 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const response = await provider.callApi('Say hello');
+
+    expect(fetchWithCache).toHaveBeenCalledTimes(1);
+    const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    expect(url).toBe('https://api.openai.com/v1/responses');
+    expect(request?.method).toBe('POST');
+    expect(JSON.parse(request?.body as string)).toMatchObject({ model, input: 'Say hello' });
+    expect(response.error).toBeUndefined();
+    expect(response.output).toBe('Hello');
+    expect(response.tokenUsage).toMatchObject({ prompt: 1000, completion: 500, total: 1500 });
+    expect(response.cost).toBeCloseTo(cost, 8);
+  });
+
+  it('returns the Responses API error for a restored bare selector', async () => {
+    const provider = await loadApiProvider('openai:gpt-5.1-codex', {
+      options: { config: { apiKey: 'fixture-key' } },
+    });
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        error: {
+          message: 'Model unavailable',
+          type: 'invalid_request_error',
+          code: 'model_not_found',
+        },
+      },
+      cached: false,
+      status: 404,
+      statusText: 'Not Found',
+    });
+
+    const response = await provider.callApi('Say hello');
+
+    expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe('https://api.openai.com/v1/responses');
+    expect(response.error).toContain('Model unavailable');
+    expect(response.output).toBeUndefined();
   });
 });
