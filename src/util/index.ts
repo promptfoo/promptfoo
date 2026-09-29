@@ -15,15 +15,18 @@ export { setupEnv } from './env';
 export {
   maybeLoadFromExternalFileWithVars,
   maybeLoadResponseFormatFromExternalFile,
-  maybeLoadResponseSchemaFromExternalFileWithVars,
-  maybeLoadStructuredConfigFromExternalFileWithVars,
   maybeLoadToolsFromExternalFile,
   parsePathOrGlob,
   readFilters,
   readOutput,
 } from './file';
 // Output operations
-export { createOutputMetadata, writeMultipleOutputs, writeOutput } from './output';
+export {
+  createOutputMetadata,
+  warnOnDegradedJsonlRecovery,
+  writeMultipleOutputs,
+  writeOutput,
+} from './output';
 // Provider utilities
 export { providerToIdentifier } from './provider';
 // Template rendering

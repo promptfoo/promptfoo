@@ -2,6 +2,7 @@ import { isLoggedIntoCloud } from '../../globalConfig/accounts';
 import { REDTEAM_SIMULATED_USER_TASK_ID } from '../../providers/promptfoo';
 import { type Message, SimulatedUser } from '../../providers/simulatedUser';
 import invariant from '../../util/invariant';
+import { accumulateAttackerTokenUsage } from '../../util/tokenUsageUtils';
 import { getLastMessageContent, messagesToRedteamHistory } from './shared';
 
 import type { ProviderResponse, TokenUsage } from '../../types/index';
@@ -12,6 +13,7 @@ type Config = {
   injectVar: string;
   maxTurns?: number;
   stateful?: boolean;
+  targetId?: string;
 };
 
 export default class RedteamMischievousUserProvider extends SimulatedUser {
@@ -33,12 +35,20 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
         instructions: `{{${config.injectVar}}}`,
         maxTurns,
         stateful: config.stateful ?? false,
+        targetId: config.targetId,
       },
     });
   }
 
   id() {
     return PROVIDER_ID;
+  }
+
+  protected accumulateSimulatedUserTokenUsage(
+    tokenUsage: TokenUsage,
+    response: ProviderResponse,
+  ): void {
+    accumulateAttackerTokenUsage(tokenUsage, response);
   }
 
   serializeOutput(

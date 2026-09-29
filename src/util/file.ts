@@ -3,18 +3,23 @@ import { access } from 'fs/promises';
 import * as path from 'path';
 
 import { type Options as CsvOptions, parse as csvParse } from 'csv-parse/sync';
-import { globSync, hasMagic } from 'glob';
-import yaml from 'js-yaml';
+import { escape as escapeGlob, globSync, hasMagic } from 'glob';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
-import { getEnvBool } from '../envars';
+import {
+  getEnvBool,
+  getEnvOverrides,
+  getProcessEnv,
+  isTemplateProcessEnvDisabled,
+} from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
-import { type RenderVarsInObjectOptions, renderVarsInObject } from './render';
+import { renderVarsInObject } from './render';
+import { loadYaml } from './yamlLoad';
 
 import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
@@ -25,20 +30,48 @@ type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
 const SCHEMA_TEMPLATE_KEYS = new Set([
   'input_schema',
   'inputSchema',
+  'json',
   'parameters',
   'responseSchema',
   'schema',
 ]);
 
-const STRUCTURED_SCHEMA_RENDER_OPTIONS: RenderVarsInObjectOptions = {
-  allowDumpSafeObjectReferences: (path) => {
-    if (path.length === 0) {
-      return true;
+function renderStructuredConfig(
+  config: any,
+  vars?: Record<string, VarValue>,
+  allowDumpSafe = true,
+): any {
+  if (!vars || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return config;
+  }
+  if (typeof config === 'string') {
+    const match = /^\{\{\s*([A-Za-z_]\w*)\s*(\|\s*dump\s*\|\s*safe\s*)?\}\}$/.exec(config);
+    if (match && (!match[2] || allowDumpSafe) && Object.hasOwn(vars, match[1])) {
+      const value = vars[match[1]];
+      if (
+        Array.isArray(value) ||
+        (value &&
+          typeof value === 'object' &&
+          [Object.prototype, null].includes(Object.getPrototypeOf(value)))
+      ) {
+        return value;
+      }
     }
-    const key = path[path.length - 1];
-    return typeof key === 'string' && SCHEMA_TEMPLATE_KEYS.has(key);
-  },
-};
+    return renderVarsInObject(config, vars);
+  }
+  if (Array.isArray(config)) {
+    return config.map((item) => renderStructuredConfig(item, vars, false));
+  }
+  if (config && typeof config === 'object') {
+    return Object.fromEntries(
+      Object.entries(config).map(([key, value]) => [
+        key,
+        renderStructuredConfig(value, vars, SCHEMA_TEMPLATE_KEYS.has(key)),
+      ]),
+    );
+  }
+  return renderVarsInObject(config, vars);
+}
 
 /**
  * Returns true if the path is accessible. ENOENT (and ENOTDIR, which Node
@@ -69,8 +102,10 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
 
   // Add environment variables as template globals
   env.addGlobal('env', {
-    ...process.env,
-    ...cliState.config?.env,
+    ...(isTemplateProcessEnvDisabled() ? {} : getProcessEnv()),
+    ...Object.fromEntries(
+      Object.entries(getEnvOverrides() ?? {}).filter(([, value]) => value !== undefined),
+    ),
   });
 
   return env;
@@ -109,7 +144,9 @@ export function maybeLoadFromExternalFile(
   }
 
   // Render the file path using Nunjucks
-  const renderedFilePath = getNunjucksEngineForFilePath().renderString(filePath, {});
+  const renderedFilePath = getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')
+    ? filePath
+    : getNunjucksEngineForFilePath().renderString(filePath, {});
 
   // Parse the file URL to extract file path and function name using existing utility
   // This handles colon splitting correctly, including Windows drive letters (C:\path)
@@ -148,9 +185,14 @@ export function maybeLoadFromExternalFile(
   const resolvedPath = path.resolve(cliState.basePath || '', pathToUse);
 
   // Check if the path contains glob patterns
-  if (hasMagic(pathToUse)) {
+  if (!fs.existsSync(resolvedPath) && hasMagic(pathToUse, { windowsPathsNoEscape: true })) {
     // Use globSync to expand the pattern
-    const matchedFiles = globSync(resolvedPath, {
+    const basePath = path.resolve(cliState.basePath || '');
+    const pattern = path.resolve(
+      escapeGlob(basePath, { windowsPathsNoEscape: true }),
+      path.relative(basePath, resolvedPath),
+    );
+    const matchedFiles = globSync(pattern, {
       windowsPathsNoEscape: true,
     });
 
@@ -180,7 +222,7 @@ export function maybeLoadFromExternalFile(
           allContents.push(parsed);
         }
       } else if (matchedFile.endsWith('.yaml') || matchedFile.endsWith('.yml')) {
-        const parsed = yaml.load(contents);
+        const parsed = loadYaml(contents);
         if (parsed === null || parsed === undefined) {
           continue; // Skip empty files
         }
@@ -229,7 +271,7 @@ export function maybeLoadFromExternalFile(
   }
   if (finalPath.endsWith('.yaml') || finalPath.endsWith('.yml')) {
     try {
-      return yaml.load(contents);
+      return loadYaml(contents);
     } catch (error) {
       throw new Error(`Failed to parse YAML file ${finalPath}: ${error}`);
     }
@@ -442,7 +484,7 @@ export function maybeLoadStructuredConfigFromExternalFileWithVars(
   config: any,
   vars?: Record<string, VarValue>,
 ): any {
-  const rendered = renderVarsInObject(config, vars, STRUCTURED_SCHEMA_RENDER_OPTIONS);
+  const rendered = renderStructuredConfig(config, vars);
   return maybeLoadFromExternalFile(rendered);
 }
 
@@ -450,14 +492,12 @@ export function maybeLoadResponseSchemaFromExternalFileWithVars(
   responseSchema: any,
   vars?: Record<string, VarValue>,
 ): any {
-  const rendered = renderVarsInObject(responseSchema, vars, STRUCTURED_SCHEMA_RENDER_OPTIONS);
+  const rendered = renderStructuredConfig(responseSchema, vars);
   const loaded = maybeLoadFromExternalFile(rendered);
 
-  // File-loaded schemas may still intentionally contain runtime vars, but an
-  // object injected directly from vars is already user data and must not be
-  // walked again, otherwise literal "{{...}}" schema text gets rewritten.
+  // Render file contents once; inserted variable values must stay literal.
   if (typeof rendered === 'string' && typeof loaded !== 'string') {
-    return renderVarsInObject(loaded, vars, STRUCTURED_SCHEMA_RENDER_OPTIONS);
+    return renderStructuredConfig(loaded, vars);
   }
 
   return loaded;
@@ -485,7 +525,7 @@ export function maybeLoadResponseFormatFromExternalFile(
   }
 
   // First, render variables and load the outer response_format
-  const rendered = renderVarsInObject(responseFormat, vars, STRUCTURED_SCHEMA_RENDER_OPTIONS);
+  const rendered = renderStructuredConfig(responseFormat, vars);
   const loaded = maybeLoadFromExternalFile(rendered);
 
   if (!loaded || typeof loaded !== 'object') {
@@ -497,12 +537,10 @@ export function maybeLoadResponseFormatFromExternalFile(
     const nestedSchema = loaded.schema || loaded.json_schema?.schema;
 
     if (nestedSchema) {
-      // The outer render may have already injected an object-valued schema.
-      // Only strings can still contain template/file references; object schemas
-      // should be preserved as data so literal "{{...}}" examples survive.
+      // Render file-loaded config, but preserve values already inserted from vars.
       const schemaForLoading =
-        typeof nestedSchema === 'string'
-          ? renderVarsInObject(nestedSchema, vars, STRUCTURED_SCHEMA_RENDER_OPTIONS)
+        typeof rendered === 'string' || typeof nestedSchema === 'string'
+          ? renderStructuredConfig(nestedSchema, vars)
           : nestedSchema;
       const loadedSchema = maybeLoadFromExternalFile(schemaForLoading);
 
@@ -537,7 +575,7 @@ export async function maybeLoadToolsFromExternalFile(
   tools: any,
   vars?: Record<string, VarValue>,
 ): Promise<any> {
-  const rendered = renderVarsInObject(tools, vars, STRUCTURED_SCHEMA_RENDER_OPTIONS);
+  const rendered = renderStructuredConfig(tools, vars);
 
   // Check if this is a Python/JS file reference with function name
   // These need special handling to execute the function and get the result
@@ -633,11 +671,7 @@ export async function maybeLoadToolsFromExternalFile(
         maybeLoadToolsFromExternalFile(item, typeof item === 'string' ? vars : undefined),
       ),
     );
-    // Flatten if all items are arrays (common case: multiple file:// references)
-    if (results.every((r) => Array.isArray(r))) {
-      return results.flat();
-    }
-    return results;
+    return results.flat();
   }
 
   // If tools is already an object (not a file reference), return it as-is
