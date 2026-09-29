@@ -847,12 +847,12 @@ describe('evalCommand', () => {
           config,
           testSuite: { prompts: [], providers: [] },
           basePath: watchBase,
-          defaultTestSource: { vars: [`file://${varsPath}`] },
+          defaultTestSources: ['file://defaults/default.yaml', { vars: ['second/defaults.yaml'] }],
         });
         vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => record as Eval);
         await doEval({ watch: true, write: false, tests }, config, defaultConfigPath, {});
         expect(chokidarMocks.watch).toHaveBeenCalledWith(
-          expect.arrayContaining([varsPath]),
+          expect.arrayContaining([path.resolve(watchBase, 'defaults/default.yaml'), varsPath]),
           expect.anything(),
         );
       },

@@ -672,7 +672,7 @@ describe('suite environment loading', () => {
         fs.writeFileSync(path.join(path.dirname(configPath), 'vars.yaml'), `source: ${name}`);
         return configPath;
       });
-      const { testSuite, defaultTestSource, basePath } = await resolveConfigs(
+      const { testSuite, defaultTestSources, basePath } = await resolveConfigs(
         { config: configs },
         {},
       );
@@ -680,9 +680,9 @@ describe('suite environment loading', () => {
       const selectedVars = second ?? first;
       if (typeof selectedVars === 'string' || Array.isArray(selectedVars)) {
         const source = second === undefined ? 'first' : 'second';
-        expect(
-          resolveTestsWatchPaths(defaultTestSource ? [defaultTestSource] : undefined, basePath),
-        ).toEqual([path.join(tempDir, source, 'vars.yaml')]);
+        expect(resolveTestsWatchPaths(defaultTestSources, basePath)).toEqual([
+          path.join(tempDir, source, 'vars.yaml'),
+        ]);
       }
     },
   );
@@ -1263,23 +1263,36 @@ describe('suite environment loading', () => {
     },
   );
 
-  it('uses config-relative references inside a nested defaultTest file', async () => {
-    const configPath = writeConfig('default-root', { defaultTest: 'file://defaults/default.yaml' });
-    const dir = path.dirname(configPath);
-    fs.mkdirSync(path.join(dir, 'defaults'));
-    fs.writeFileSync(
-      path.join(dir, 'defaults/default.yaml'),
-      'vars: vars.yaml\nprovider: file://provider.yaml',
-    );
-    fs.writeFileSync(path.join(dir, 'vars.yaml'), 'source: config-root');
-    fs.writeFileSync(path.join(dir, 'provider.yaml'), 'id: echo\nlabel: root');
-    fs.writeFileSync(path.join(dir, 'defaults/provider.yaml'), 'id: echo\nlabel: wrong-shadow');
-    const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
-    expect(testSuite.defaultTest).toMatchObject({
-      vars: { source: 'config-root' },
-      provider: { label: 'root' },
-    });
-  });
+  it.each([{ vars: 'vars.yaml' }, { vars: ['vars.yaml'] }])(
+    'loads and watches config-relative vars $vars inside a nested defaultTest file',
+    async ({ vars }) => {
+      const configPath = writeConfig('default-root', {
+        defaultTest: 'file://defaults/default.yaml',
+      });
+      const dir = path.dirname(configPath);
+      fs.mkdirSync(path.join(dir, 'defaults'));
+      const defaultsPath = path.join(dir, 'defaults/default.yaml');
+      fs.writeFileSync(
+        defaultsPath,
+        `vars: ${JSON.stringify(vars)}\nprovider: file://provider.yaml`,
+      );
+      fs.writeFileSync(path.join(dir, 'vars.yaml'), 'source: config-root');
+      fs.writeFileSync(path.join(dir, 'defaults/vars.yaml'), 'source: wrong-shadow');
+      fs.writeFileSync(path.join(dir, 'provider.yaml'), 'id: echo\nlabel: root');
+      fs.writeFileSync(path.join(dir, 'defaults/provider.yaml'), 'id: echo\nlabel: wrong-shadow');
+      const { testSuite, defaultTestSources, basePath } = await resolveConfigs(
+        { config: [configPath] },
+        {},
+      );
+      expect(testSuite.defaultTest).toMatchObject({
+        vars: { source: 'config-root' },
+        provider: { label: 'root' },
+      });
+      const watched = resolveTestsWatchPaths(defaultTestSources, basePath);
+      expect(watched).toEqual(expect.arrayContaining([defaultsPath, path.join(dir, 'vars.yaml')]));
+      expect(watched).not.toContain(path.join(dir, 'defaults/vars.yaml'));
+    },
+  );
 
   it('evaluates normalized file-backed defaults and merges non-overlapping command options', async () => {
     const configPath = writeConfig('default-runtime-file', {

@@ -927,7 +927,7 @@ export async function resolveConfigs(
   commandLineOptions?: Partial<CommandLineOptions>;
   selectedProviderConfigs?: TestSuiteConfig['providers'];
   testSources?: TestSource[];
-  defaultTestSource?: TestSuiteConfig['defaultTest'];
+  defaultTestSources?: (string | TestCaseWithVarsFile)[];
 }> {
   let fileConfig: Partial<UnifiedConfig> = {};
   let testSources: TestSource[] | undefined;
@@ -1030,6 +1030,12 @@ async function resolveLoadedConfig(
     processedDefaultTest = loaded as TestCaseWithVarsFile;
   } else if (typeof defaultTestRaw === 'object') {
     processedDefaultTest = defaultTestRaw;
+  }
+  const defaultTestSources: (string | TestCaseWithVarsFile)[] = processedDefaultTest
+    ? [processedDefaultTest]
+    : [];
+  if (typeof defaultTestRaw === 'string') {
+    defaultTestSources.unshift(defaultTestRaw);
   }
 
   const authoredTracing = fileConfig.tracing || defaultConfig.tracing;
@@ -1332,6 +1338,6 @@ async function resolveLoadedConfig(
     basePath,
     commandLineOptions,
     selectedProviderConfigs: filteredProviderConfigs,
-    defaultTestSource: defaultTestRaw,
+    defaultTestSources,
   };
 }

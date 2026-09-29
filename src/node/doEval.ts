@@ -341,7 +341,7 @@ async function doEvalWithEnv(
   const runEvaluationWithEnv = async (runEnv: EnvOverrides, initialization?: boolean) => {
     const startTime = Date.now();
     let testSources: Awaited<ReturnType<typeof resolveConfigs>>['testSources'];
-    let defaultTestSource: Awaited<ReturnType<typeof resolveConfigs>>['defaultTestSource'];
+    let defaultTestSources: Awaited<ReturnType<typeof resolveConfigs>>['defaultTestSources'];
     telemetry.record('command_used', {
       name: 'eval - started',
       watch: Boolean(cmdObj.watch),
@@ -529,7 +529,7 @@ async function doEvalWithEnv(
         basePath: _basePath,
         commandLineOptions,
         testSources,
-        defaultTestSource,
+        defaultTestSources,
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
@@ -1225,10 +1225,7 @@ async function doEvalWithEnv(
         // `--tests`, and its `--vars` alias, replace the config's own tests entirely
         // (see resolveConfigs), so `config.tests` already holds the command-line value.
         const cliTests = cmdObj.tests || cmdObj.vars;
-        const varPaths = resolveTestsWatchPaths(
-          defaultTestSource ? [defaultTestSource] : undefined,
-          basePath,
-        );
+        const varPaths = resolveTestsWatchPaths(defaultTestSources, basePath);
         if (cliTests) {
           // resolveConfigs loads `--tests` with no base path, so it resolves against the
           // working directory rather than the directory holding the config file.
