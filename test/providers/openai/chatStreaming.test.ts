@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { fetchProviderRequestWithRetries } from '../../../src/providers/fetch';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import { readOpenAiChatStream } from '../../../src/providers/openai/chatStream';
 import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -41,6 +42,145 @@ function createMockSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
 }
 
 describe('Streaming API', () => {
+  it.each(['timeout', 'caller'])(
+    'terminates a stalled body on %s and releases its reader',
+    async (cause) => {
+      vi.useFakeTimers();
+      const restoreEnv = mockProcessEnv({ REQUEST_TIMEOUT_MS: '25' });
+      try {
+        const caller = new AbortController();
+        let startRead!: () => void;
+        const started = new Promise<void>((resolve) => {
+          startRead = resolve;
+        });
+        let body!: ReadableStream<Uint8Array>;
+        let signal!: AbortSignal;
+        mockFetchWithRetries.mockImplementation(async (_url, options) => {
+          signal = options!.signal as AbortSignal;
+          body = new ReadableStream({
+            start(controller) {
+              signal.addEventListener('abort', () => controller.error(signal.reason), {
+                once: true,
+              });
+            },
+            pull() {
+              startRead();
+            },
+          });
+          return new Response(body);
+        });
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: { stream: true },
+        });
+        const pending = provider.callApi('Hello', undefined, { abortSignal: caller.signal });
+        await started;
+        expect(signal.aborted).toBe(false);
+        if (cause === 'caller') {
+          const cancelled = expect(pending).rejects.toThrow('Fixture cancellation');
+          caller.abort(new DOMException('Fixture cancellation', 'AbortError'));
+          await cancelled;
+        } else {
+          await vi.advanceTimersByTimeAsync(25);
+          const result = await pending;
+          expect(result.output).toBeUndefined();
+          expect(result.error).toContain('timed out after 25ms');
+        }
+        expect(signal.aborted).toBe(true);
+        expect(body.locked).toBe(false);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
+
+  it.each(['\r', '\n', '\r\n'])('accepts fragmented SSE line endings %j', async (lineEnding) => {
+    const raw =
+      'data: {"choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":"stop"}]}' +
+      lineEnding.repeat(2) +
+      'data: [DONE]' +
+      lineEnding.repeat(2);
+    const response = new Response(createMockSSEStream([...raw]));
+    const result = await readOpenAiChatStream(response, vi.fn());
+    expect(result.choices[0].message.content).toBe('Hello');
+  });
+
+  it('retains metadata from successive events', async () => {
+    const chunks = [
+      { id: 'fixture', first: 1, choices: [{ index: 0, delta: { content: 'Hello' } }] },
+      { second: 2, choices: [] },
+      { third: 3, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] },
+    ];
+    const body =
+      chunks.map((chunk) => 'data: ' + JSON.stringify(chunk) + '\n\n').join('') +
+      'data: [DONE]\n\n';
+    const result = await readOpenAiChatStream(new Response(body), vi.fn());
+    expect(result).toMatchObject({ id: 'fixture', first: 1, second: 2, third: 3 });
+  });
+
+  it.each([false, 0, '', true, []])(
+    'rejects malformed terminal error envelopes: %j',
+    async (error) => {
+      const chunk = { error, choices: [{ index: 0, delta: { content: 'Incomplete' } }] };
+      mockFetchWithRetries.mockResolvedValue(
+        new Response('data: ' + JSON.stringify(chunk) + '\n\n'),
+      );
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi('Hello');
+      expect(result.error).toContain('malformed SSE');
+      expect(result.output).toBeUndefined();
+    },
+  );
+
+  it('measures event limits in UTF-8 bytes across reads', async () => {
+    const chunk = JSON.stringify({
+      choices: [{ index: 0, delta: { content: '語'.repeat(350_000) }, finish_reason: 'stop' }],
+    });
+    const bytes = new TextEncoder().encode('data: ' + chunk + '\n\ndata: [DONE]\n\n');
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes.slice(0, 100));
+        controller.enqueue(bytes.slice(100));
+        controller.close();
+      },
+    });
+    await expect(readOpenAiChatStream(new Response(body), vi.fn())).rejects.toThrow('1 MiB limit');
+  });
+
+  it.each(['tool', 'legacy'])('preserves repeated %s function identifiers', async (kind) => {
+    const functionDeltas = [
+      { name: 'weather', arguments: '{' },
+      { name: 'weather', arguments: '}' },
+    ];
+    const chunks: unknown[] = functionDeltas.map((fn) => ({
+      choices: [
+        {
+          index: 0,
+          delta:
+            kind === 'tool'
+              ? { tool_calls: [{ index: 0, id: 'fixture-call', function: fn }] }
+              : { function_call: fn },
+        },
+      ],
+    }));
+    chunks.push({
+      choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
+    });
+    const body =
+      chunks.map((chunk) => 'data: ' + JSON.stringify(chunk) + '\n\n').join('') +
+      'data: [DONE]\n\n';
+    mockFetchWithRetries.mockResolvedValue(new Response(body));
+    const callback = vi.fn().mockResolvedValue('Clear skies');
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+      config: { stream: true, functionToolCallbacks: { weather: callback } },
+    });
+    const result = await provider.callApi('Weather?');
+    expect(result.error).toBeUndefined();
+    expect(callback).toHaveBeenCalledExactlyOnceWith('{}');
+    expect(result.output).toBe('Clear skies');
+  });
   it('preserves explicitly empty text and aborts the request after DONE', async () => {
     mockFetchWithRetries.mockResolvedValue(
       new Response(
@@ -888,36 +1028,6 @@ describe('Streaming API', () => {
     expect(callArgs[1]?.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it('should connect caller abort signals to streaming requests', async () => {
-    const abortController = new AbortController();
-    const sseChunks = [
-      'data: {"choices":[{"delta":{"content":"Test"},"finish_reason":"stop"}]}\n\n',
-      'data: [DONE]\n\n',
-    ];
-
-    mockFetchWithRetries.mockImplementation(async (_url, requestInit) => {
-      const requestSignal = requestInit?.signal as AbortSignal;
-      expect(requestSignal.aborted).toBe(false);
-      abortController.abort('caller cancelled');
-      expect(requestSignal.aborted).toBe(true);
-      return {
-        ok: true,
-        body: createMockSSEStream(sseChunks),
-      } as unknown as Response;
-    });
-
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-      config: { stream: true },
-    });
-    const result = await provider.callApi(
-      JSON.stringify([{ role: 'user', content: 'Test' }]),
-      undefined,
-      { abortSignal: abortController.signal },
-    );
-
-    expect(result.output).toBe('Test');
-  });
-
   it('should reject streaming audio output rather than returning incomplete media', async () => {
     const provider = new OpenAiChatCompletionProvider('gpt-4o-audio-preview', {
       config: { stream: true },
@@ -1162,19 +1272,6 @@ describe('Streaming API', () => {
 
     // Should return raw string when JSON parsing fails
     expect(result.output).toBe('not valid json {');
-  });
-
-  it('should handle timeout errors during streaming', async () => {
-    const timeoutError = new Error('Request timed out');
-    timeoutError.name = 'TimeoutError';
-    mockFetchWithRetries.mockRejectedValue(timeoutError);
-
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-      config: { stream: true },
-    });
-    const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
-
-    expect(result.error).toContain('timed out');
   });
 
   it('should fetch again instead of persisting streaming responses in the response cache', async () => {

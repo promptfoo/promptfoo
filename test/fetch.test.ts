@@ -1617,7 +1617,8 @@ describe('fetchWithRetries', () => {
       return false;
     });
 
-    const errorResponse = createMockResponse({
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const errorResponse = new Response(new ReadableStream({ cancel }), {
       status: 502,
       statusText: 'Bad Gateway',
     });
@@ -1633,6 +1634,7 @@ describe('fetchWithRetries', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(sleep).toHaveBeenCalledTimes(1);
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it('should handle rate limits with proper backoff', async () => {

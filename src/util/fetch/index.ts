@@ -751,6 +751,7 @@ export async function fetchWithRetries(
       );
 
       if (getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600) {
+        void response.body?.cancel().catch(() => undefined);
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
       }
 

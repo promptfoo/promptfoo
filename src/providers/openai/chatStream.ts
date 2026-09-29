@@ -99,12 +99,24 @@ function getSseData(line: string): string | undefined {
   return data.startsWith(' ') ? data.slice(1) : data;
 }
 
+function validateStreamingError(error: unknown): void {
+  if (
+    error != null &&
+    !(typeof error === 'string' && error.trim()) &&
+    !(typeof error === 'object' && !Array.isArray(error))
+  ) {
+    throw new Error('Invalid streaming error');
+  }
+}
+
 function appendFunctionCall(
   choice: OpenAiStreamingChoice,
   functionCallDelta: { name?: string; arguments?: string },
 ) {
   choice.functionCall ??= { name: '', arguments: '' };
-  choice.functionCall.name = appendText(choice.functionCall.name, functionCallDelta.name);
+  if (functionCallDelta.name != null) {
+    choice.functionCall.name = appendText('', functionCallDelta.name);
+  }
   choice.functionCall.arguments = appendText(
     choice.functionCall.arguments,
     functionCallDelta.arguments,
@@ -136,7 +148,9 @@ function appendToolCalls(
     if (toolCallDelta.id != null) {
       toolCall.id = appendText('', toolCallDelta.id);
     }
-    toolCall.function.name = appendText(toolCall.function.name, toolCallDelta.function?.name);
+    if (toolCallDelta.function?.name != null) {
+      toolCall.function.name = appendText('', toolCallDelta.function.name);
+    }
     toolCall.function.arguments = appendText(
       toolCall.function.arguments,
       toolCallDelta.function?.arguments,
@@ -200,6 +214,7 @@ function appendStreamingChoice(
   if (choice.delta?.content != null) {
     streamingChoice.content = appendText(streamingChoice.content ?? '', choice.delta.content);
   }
+  validateStreamingError(choice.error);
   if (choice.error != null) {
     streamingChoice.error = choice.error;
   }
@@ -245,6 +260,7 @@ function processOpenAiStreamingChunk(state: OpenAiStreamingState, data: string):
     if (!chunk || typeof chunk !== 'object' || Array.isArray(chunk)) {
       throw new Error('Invalid streaming chunk');
     }
+    validateStreamingError(chunk.error);
     if (chunk.error !== undefined && chunk.error !== null) {
       state.error = chunk.error;
     }
@@ -259,7 +275,7 @@ function processOpenAiStreamingChunk(state: OpenAiStreamingState, data: string):
       state.usage = chunk.usage;
     }
     const { choices: _choices, usage: _usage, error: _error, ...metadata } = chunk;
-    state.response = { ...state.response, ...metadata };
+    Object.assign(state.response, metadata);
     if (chunk.service_tier !== undefined) {
       state.serviceTier = chunk.service_tier;
     }
@@ -276,7 +292,7 @@ function processOpenAiStreamingChunk(state: OpenAiStreamingState, data: string):
 
 function processOpenAiSseEvent(state: OpenAiStreamingState, event: string): boolean {
   const dataLines = event
-    .split(/\r?\n/)
+    .split(/\r\n|\r|\n/)
     .map(getSseData)
     .filter((data): data is string => data !== undefined);
   if (dataLines.length === 0) {
@@ -324,10 +340,11 @@ export async function readOpenAiChatStream(
     choices: new Map(),
     completed: false,
     malformed: false,
-    response: {},
+    response: Object.create(null),
     events: 0,
   };
   let buffer = '';
+  let bufferedBytes = 0;
   let searchFrom = 0;
   let bytes = 0;
   let streamDone = false;
@@ -335,7 +352,12 @@ export async function readOpenAiChatStream(
     while (!streamDone) {
       const { done, value } = await reader.read();
       if (done) {
-        buffer += decoder.decode();
+        const finalText = decoder.decode();
+        buffer += finalText;
+        bufferedBytes += Buffer.byteLength(finalText);
+        if (bufferedBytes > 1024 * 1024) {
+          throw new Error('Streaming event exceeds the 1 MiB limit');
+        }
         if (buffer) {
           processOpenAiSseEvent(state, buffer);
         }
@@ -345,23 +367,27 @@ export async function readOpenAiChatStream(
       if (bytes > 32 * 1024 * 1024) {
         throw new Error('Streaming response exceeds the 32 MiB limit');
       }
-      buffer += decoder.decode(value, { stream: true });
-      const separator = /\r?\n\r?\n/g;
+      const text = decoder.decode(value, { stream: true });
+      buffer += text;
+      bufferedBytes += Buffer.byteLength(text);
+      const separator = /(?:\r\n|\r(?!\n)|\n){2}/g;
       separator.lastIndex = searchFrom;
       let start = 0;
       let match: RegExpExecArray | null;
       while ((match = separator.exec(buffer))) {
-        if (match.index - start > 1024 * 1024) {
+        const event = buffer.slice(start, match.index);
+        if (Buffer.byteLength(event) > 1024 * 1024) {
           throw new Error('Streaming event exceeds the 1 MiB limit');
         }
-        streamDone = processOpenAiSseEvent(state, buffer.slice(start, match.index));
+        streamDone = processOpenAiSseEvent(state, event);
         start = separator.lastIndex;
         if (streamDone) {
           break;
         }
       }
+      bufferedBytes -= Buffer.byteLength(buffer.slice(0, start));
       buffer = buffer.slice(start);
-      if (buffer.length > 1024 * 1024 && !streamDone) {
+      if (bufferedBytes > 1024 * 1024 && !streamDone) {
         throw new Error('Streaming event exceeds the 1 MiB limit');
       }
       searchFrom = Math.max(0, buffer.length - 3);
