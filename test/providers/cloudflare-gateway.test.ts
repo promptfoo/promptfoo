@@ -692,17 +692,24 @@ describe('CloudflareGateway Provider', () => {
       'replicate',
     ];
 
-    // Matching an Error instance compares the message exactly, which also pins the
-    // supported-provider list in the error to the one exercised above.
-    it.each(unsupportedProviders)('should reject %s provider', (providerName) => {
-      expect(() =>
-        createCloudflareGatewayProvider(`cloudflare-gateway:${providerName}:test-model`, {
-          config: minimumConfig,
-        }),
-      ).toThrow(
-        new Error(
+    it.each([...unsupportedProviders, 'unknown', 'toString', 'constructor', '__proto__'])(
+      'rejects %s before credential resolution through either entry point',
+      (providerName) => {
+        const expected = new Error(
           `Unsupported Cloudflare AI Gateway provider: "${providerName}". Supported providers: ${supportedProviders.join(', ')}`,
-        ),
+        );
+        expect(() =>
+          createCloudflareGatewayProvider(`cloudflare-gateway:${providerName}:test-model`),
+        ).toThrow(expected);
+        expect(() => new CloudflareGatewayOpenAiProvider(providerName, 'test-model', {})).toThrow(
+          expected,
+        );
+      },
+    );
+
+    it('requires the Messages provider for direct Anthropic construction', () => {
+      expect(() => new CloudflareGatewayOpenAiProvider('anthropic', 'test-model', {})).toThrow(
+        'Use CloudflareGatewayAnthropicProvider for the Anthropic Messages route.',
       );
     });
   });

@@ -29,6 +29,10 @@ describe('hasSpecificDocumentation', () => {
     expect(result).toBe(false);
   });
 
+  it('should return false for the retired GitHub Models provider', () => {
+    expect(hasSpecificDocumentation('github')).toBe(false);
+  });
+
   it('should return false when providerType is not a key in PROVIDER_DOCUMENTATION_MAP', () => {
     const providerType = 'notarealprovider';
 

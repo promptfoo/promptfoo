@@ -8,7 +8,7 @@
  *
  * Usage:
  *   cloudflare-gateway:openai:gpt-4o
- *   cloudflare-gateway:anthropic:claude-sonnet-4-6
+ *   cloudflare-gateway:anthropic:claude-sonnet-5
  *   cloudflare-gateway:groq:llama-3.3-70b-versatile
  *
  * @see https://developers.cloudflare.com/ai-gateway/
@@ -67,17 +67,8 @@ interface GatewayProviderConfig {
   apiKeyEnvar: string;
 }
 
-/**
- * Supported provider configurations for Cloudflare AI Gateway
- *
- * Only gateway routes that speak the OpenAI Chat Completions or Anthropic Messages
- * protocol are listed. Routes whose native endpoints reject those payloads
- * (workers-ai, google-ai-studio, cohere, huggingface, replicate) are deliberately
- * absent; use Cloudflare's OpenAI-compatible REST API or a custom provider instead.
- * AWS Bedrock is likewise unsupported because it requires AWS request signing.
- *
- * Note: azure-openai requires resourceName and deploymentName in config.
- */
+// The factory uses Anthropic Messages for anthropic; every other supported native
+// route must accept OpenAI Chat Completions. Azure also needs resource/deployment IDs.
 const PROVIDER_CONFIGS: Record<string, GatewayProviderConfig> = {
   openai: { apiKeyEnvar: 'OPENAI_API_KEY' },
   anthropic: { apiKeyEnvar: 'ANTHROPIC_API_KEY' },
@@ -271,6 +262,20 @@ export class CloudflareGatewayOpenAiProvider extends OpenAiChatCompletionProvide
     modelName: string,
     providerOptions: CloudflareGatewayProviderOptions,
   ) {
+    const providerConfig = Object.hasOwn(PROVIDER_CONFIGS, underlyingProvider)
+      ? PROVIDER_CONFIGS[underlyingProvider]
+      : undefined;
+    if (!providerConfig) {
+      throw new Error(
+        `Unsupported Cloudflare AI Gateway provider: "${underlyingProvider}". ` +
+          `Supported providers: ${Object.keys(PROVIDER_CONFIGS).join(', ')}`,
+      );
+    }
+    invariant(
+      underlyingProvider !== 'anthropic',
+      'Use CloudflareGatewayAnthropicProvider for the Anthropic Messages route.',
+    );
+
     const accountId = getAccountId(providerOptions.config, providerOptions.env);
     const gatewayId = getGatewayId(providerOptions.config, providerOptions.env);
     const gatewayUrl = buildGatewayUrl(
@@ -280,8 +285,6 @@ export class CloudflareGatewayOpenAiProvider extends OpenAiChatCompletionProvide
       providerOptions.config,
     );
     const passthrough = getPassthroughConfig(providerOptions.config);
-
-    const providerConfig = PROVIDER_CONFIGS[underlyingProvider];
 
     // Build headers, adding cf-aig-authorization if token is provided
     const cfAigToken = getCfAigToken(providerOptions.config, providerOptions.env);
@@ -313,7 +316,7 @@ export class CloudflareGatewayOpenAiProvider extends OpenAiChatCompletionProvide
       finalGatewayUrl = `${gatewayUrl}?api-version=${apiVersion}`;
     } else {
       // For non-Azure providers, use standard Bearer auth
-      apiKeyEnvar = providerOptions.config?.apiKeyEnvar || providerConfig?.apiKeyEnvar;
+      apiKeyEnvar = providerOptions.config?.apiKeyEnvar || providerConfig.apiKeyEnvar;
     }
 
     const config: OpenAiCompletionOptions = {
@@ -490,14 +493,6 @@ export function createCloudflareGatewayProvider(
   const modelName = splits.slice(2).join(':');
 
   invariant(modelName, 'Model name is required for cloudflare-gateway provider');
-
-  const providerConfig = PROVIDER_CONFIGS[underlyingProvider];
-  if (!providerConfig) {
-    throw new Error(
-      `Unsupported Cloudflare AI Gateway provider: "${underlyingProvider}". ` +
-        `Supported providers: ${Object.keys(PROVIDER_CONFIGS).join(', ')}`,
-    );
-  }
 
   // Route to appropriate provider class based on API type
   if (underlyingProvider === 'anthropic') {
