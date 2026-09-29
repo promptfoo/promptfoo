@@ -48,7 +48,7 @@ import type { EvaluateOptions, EvaluateTestSuite } from '../types';
  * const evalRecord = await evaluate(
  *   {
  *     prompts: ['prompts.txt'],
- *     providers: ['openai:gpt-4', 'anthropic:claude-3-opus'],
+ *     providers: ['openai:gpt-5.6', 'anthropic:claude-opus-5'],
  *     tests: testCases
  *   },
  *   {
