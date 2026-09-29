@@ -1955,6 +1955,8 @@ export class HttpProvider implements ApiProvider {
 
       if (httpsAgent) {
         fetchOptions.dispatcher = httpsAgent;
+      } else if (this.config.tls?.rejectUnauthorized !== undefined) {
+        fetchOptions.rejectUnauthorized = this.config.tls.rejectUnauthorized;
       }
 
       const response = await fetchWithCache(
@@ -2280,6 +2282,8 @@ export class HttpProvider implements ApiProvider {
 
     if (httpsAgent) {
       fetchOptions.dispatcher = httpsAgent;
+    } else if (this.config.tls?.rejectUnauthorized !== undefined) {
+      fetchOptions.rejectUnauthorized = this.config.tls.rejectUnauthorized;
     }
 
     const response = await fetchWithCache(
@@ -2323,6 +2327,15 @@ export class HttpProvider implements ApiProvider {
 
   private async getHttpsAgent(): Promise<Dispatcher | undefined> {
     if (!this.config.tls) {
+      return undefined;
+    }
+
+    if (
+      this.config.tls.rejectUnauthorized !== undefined &&
+      Object.entries(this.config.tls).every(
+        ([key, value]) => key === 'rejectUnauthorized' || value === undefined,
+      )
+    ) {
       return undefined;
     }
 
@@ -2673,6 +2686,8 @@ export class HttpProvider implements ApiProvider {
     if (httpsAgent) {
       fetchOptions.dispatcher = httpsAgent;
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
+    } else if (this.config.tls?.rejectUnauthorized !== undefined) {
+      fetchOptions.rejectUnauthorized = this.config.tls.rejectUnauthorized;
     }
 
     let data,
@@ -2915,6 +2930,8 @@ export class HttpProvider implements ApiProvider {
     if (httpsAgent) {
       fetchOptions.dispatcher = httpsAgent;
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
+    } else if (this.config.tls?.rejectUnauthorized !== undefined) {
+      fetchOptions.rejectUnauthorized = this.config.tls.rejectUnauthorized;
     }
 
     let data,

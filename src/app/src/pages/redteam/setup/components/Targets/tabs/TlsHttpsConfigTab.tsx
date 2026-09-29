@@ -98,15 +98,15 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
               : tls?.cert || tls?.certPath || tls?.key || tls?.keyPath
                 ? 'pem'
                 : undefined));
-  const caInputType = tls?.caInputType ?? (tls?.caPath ? 'path' : tls?.ca ? 'inline' : undefined);
+  const caInputType = tls?.caInputType ?? (tls?.ca ? 'inline' : tls?.caPath ? 'path' : undefined);
   const certInputType =
-    tls?.certInputType ?? (tls?.certPath ? 'path' : tls?.cert ? 'inline' : undefined);
+    tls?.certInputType ?? (tls?.cert ? 'inline' : tls?.certPath ? 'path' : undefined);
   const keyInputType =
-    tls?.keyInputType ?? (tls?.keyPath ? 'path' : tls?.key ? 'inline' : undefined);
+    tls?.keyInputType ?? (tls?.key ? 'inline' : tls?.keyPath ? 'path' : undefined);
   const jksInputType =
-    tls?.jksInputType ?? (tls?.jksPath ? 'path' : tls?.jksContent ? 'upload' : undefined);
+    tls?.jksInputType ?? (tls?.jksContent ? 'upload' : tls?.jksPath ? 'path' : undefined);
   const pfxInputType =
-    tls?.pfxInputType ?? (tls?.pfxPath ? 'path' : tls?.pfx ? 'base64' : undefined);
+    tls?.pfxInputType ?? (tls?.pfx ? 'base64' : tls?.pfxPath ? 'path' : undefined);
 
   useEffect(() => {
     // Export the same verification setting that the form displays.

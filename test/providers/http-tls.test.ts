@@ -102,6 +102,82 @@ describe('HttpProvider with TLS Configuration', () => {
       });
     });
 
+    it.each([true, false])(
+      'uses shared transport with explicit certificate verification %s',
+      async (rejectUnauthorized) => {
+        const { Agent } = await import('undici');
+        const provider = new HttpProvider('https://api.example.com', {
+          config: { method: 'GET', tls: { rejectUnauthorized } },
+        });
+
+        await provider.callApi('Hello');
+
+        expect(Agent).not.toHaveBeenCalled();
+        const options = mockFetchWithCache.mock.calls[0][1];
+        expect(options).toHaveProperty('rejectUnauthorized', rejectUnauthorized);
+        expect(options).not.toHaveProperty('dispatcher');
+      },
+    );
+
+    it('keeps explicit verification for raw HTTP requests', async () => {
+      const provider = new HttpProvider('https://api.example.com', {
+        config: {
+          request: 'GET /hello HTTP/1.1\nHost: api.example.com\n\n',
+          useHttps: true,
+          tls: { rejectUnauthorized: true },
+        },
+      });
+
+      await provider.callApi('Hello');
+
+      expect(mockFetchWithCache.mock.calls[0][1]).toMatchObject({ rejectUnauthorized: true });
+      expect(mockFetchWithCache.mock.calls[0][1]).not.toHaveProperty('dispatcher');
+    });
+
+    it('keeps verification enabled for OAuth, session, and main requests', async () => {
+      mockFetchWithCache.mockImplementation(async (url) => ({
+        data: JSON.stringify(
+          String(url).endsWith('/token')
+            ? { access_token: 'fixture-token', expires_in: 3600 }
+            : { sessionId: 'fixture-session', result: 'Hello' },
+        ),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      }));
+      const provider = new HttpProvider('https://api.example.com/hello', {
+        config: {
+          method: 'GET',
+          tls: { rejectUnauthorized: true },
+          auth: {
+            type: 'oauth',
+            grantType: 'client_credentials',
+            tokenUrl: 'https://auth.example.com/token',
+            clientId: 'tls-fixture',
+            clientSecret: 'fixture-only',
+          },
+          session: {
+            url: 'https://api.example.com/session',
+            responseParser: 'data.body.sessionId',
+          },
+        },
+      });
+
+      const result = await provider.callApi('Hello');
+
+      expect(result.error).toBeUndefined();
+      expect(mockFetchWithCache.mock.calls.map(([url]) => url)).toEqual([
+        'https://auth.example.com/token',
+        'https://api.example.com/session',
+        'https://api.example.com/hello',
+      ]);
+      for (const [, options] of mockFetchWithCache.mock.calls) {
+        expect(options).toHaveProperty('rejectUnauthorized', true);
+        expect(options).not.toHaveProperty('dispatcher');
+      }
+    });
+
     it('should create HTTPS agent when TLS config is provided', async () => {
       // Mock file reads before creating provider
       (fs.readFileSync as Mock)
@@ -478,7 +554,7 @@ describe('HttpProvider with TLS Configuration', () => {
       const provider = new HttpProvider('https://api.example.com', {
         config: {
           method: 'GET',
-          tls: { rejectUnauthorized: false },
+          tls: { rejectUnauthorized: false, ca: 'fixture-ca' },
         },
       });
 

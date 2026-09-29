@@ -294,6 +294,35 @@ describe('TlsHttpsConfigTab', () => {
       expect(screen.getByText('PEM Certificate Configuration')).toBeInTheDocument();
     });
 
+    it('shows inline certificate values when imported paths are also present', () => {
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={{
+            id: 'http',
+            config: {
+              tls: {
+                rejectUnauthorized: true,
+                ca: 'inline-ca',
+                caPath: '/unused/ca.pem',
+                cert: 'inline-cert',
+                certPath: '/unused/cert.pem',
+                key: 'inline-key',
+                keyPath: '/unused/key.pem',
+              },
+            },
+          }}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      for (const value of ['inline-ca', 'inline-cert', 'inline-key']) {
+        expect(screen.getByDisplayValue(value)).toBeInTheDocument();
+      }
+      for (const value of ['/unused/ca.pem', '/unused/cert.pem', '/unused/key.pem']) {
+        expect(screen.queryByDisplayValue(value)).not.toBeInTheDocument();
+      }
+    });
+
     it('should infer PEM client certificates from imported backend fields', () => {
       const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
@@ -340,6 +369,26 @@ describe('TlsHttpsConfigTab', () => {
       expect(screen.getByText('JKS (Java KeyStore) Certificate')).toBeInTheDocument();
       expect(screen.getByDisplayValue('/etc/ssl/client.jks')).toBeInTheDocument();
       expect(screen.getByDisplayValue('client')).toBeInTheDocument();
+    });
+
+    it.each([
+      { jksContent: 'inline-jks', jksPath: '/unused/client.jks' },
+      { pfx: 'inline-pfx', pfxPath: '/unused/client.pfx' },
+    ])('uses imported inline client material before file paths: %j', (tls) => {
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={{ id: 'http', config: { tls: { rejectUnauthorized: true, ...tls } } }}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      if (tls.jksContent) {
+        expect(screen.getByText(/JKS file loaded:/)).toBeInTheDocument();
+        expect(screen.queryByDisplayValue(tls.jksPath)).not.toBeInTheDocument();
+      } else {
+        expect(screen.getByDisplayValue(tls.pfx!)).toBeInTheDocument();
+        expect(screen.queryByDisplayValue(tls.pfxPath!)).not.toBeInTheDocument();
+      }
     });
 
     it('should re-sync collapsed sections when switching targets', () => {

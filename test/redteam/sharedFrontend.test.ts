@@ -404,7 +404,7 @@ describe('getUnifiedConfig', () => {
       expect(tls.rejectUnauthorized).toBe(false);
       expect(tls.cert).toBe('my-cert');
       expect(tls.certPath).toBe('/path/to/cert');
-      expect(tls.jksContent).toBe('base64-jks');
+      expect(tls.jksContent).toBeUndefined();
 
       // UI-only fields stripped
       expect(tls.enabled).toBeUndefined();
@@ -417,6 +417,32 @@ describe('getUnifiedConfig', () => {
       expect(tls.jksExtractConfigured).toBeUndefined();
       expect(tls.certificateType).toBeUndefined();
     });
+
+    it.each(['none', 'pem', 'pfx', 'pkcs12'])(
+      'removes stale JKS credentials when the saved certificate selection is %s',
+      (certificateType) => {
+        const tls = {
+          certificateType,
+          rejectUnauthorized: true,
+          jksContent: 'old-upload',
+          jksPath: '/old/client.jks',
+          keyAlias: 'old-client',
+          cert: 'active-pem-cert',
+          pfx: 'active-pfx',
+        };
+        const result = getUnifiedConfig({
+          ...baseConfig,
+          target: { ...baseConfig.target, config: { tls } },
+        });
+
+        expect(getFirstTargetConfig(result).tls).toEqual({
+          rejectUnauthorized: true,
+          cert: 'active-pem-cert',
+          pfx: 'active-pfx',
+        });
+        expect(tls.jksContent).toBe('old-upload');
+      },
+    );
 
     it('should preserve backend-specific fields like keyAlias and jksPath', () => {
       const configWithTls: SavedRedteamConfig = {

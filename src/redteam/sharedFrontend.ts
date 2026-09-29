@@ -46,6 +46,11 @@ export function getUnifiedConfig(
   // Keep certificate data while removing the setup form's input state.
   if (target.config.tls) {
     const tls = { ...target.config.tls };
+    if (tls.certificateType !== undefined && tls.certificateType !== 'jks') {
+      delete tls.jksContent;
+      delete tls.jksPath;
+      delete tls.keyAlias;
+    }
     delete tls.enabled;
     delete tls.certInputType;
     delete tls.keyInputType;
