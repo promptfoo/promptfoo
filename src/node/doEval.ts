@@ -4,11 +4,10 @@ import * as path from 'path';
 import chalk from 'chalk';
 import chokidar from 'chokidar';
 import dedent from 'dedent';
-import { globSync } from 'glob';
 import ora from 'ora';
 import { z } from 'zod';
 import { disableCache } from '../cache';
-import cliState, { withGradingProviderTracker } from '../cliState';
+import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
@@ -22,8 +21,6 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
-import { loadApiProvider } from '../providers/index';
-import { providerRegistry } from '../providers/providerRegistry';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
@@ -31,13 +28,13 @@ import telemetry from '../telemetry';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
 import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
+import { isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
   ConfigResolutionError,
   logConfigResolutionError,
-  maybeReadConfig,
   renderConfigEnvTemplates,
   resolveConfigs,
 } from '../util/config/load';
@@ -70,13 +67,13 @@ import type { Command } from 'commander';
 
 import type {
   CommandLineOptions,
+  EnvOverrides,
   EvalRuntimeOptions,
   Scenario,
   TestSuite,
   UnifiedConfig,
 } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
-import type { ApiProvider } from '../types/providers';
 import type { FilterOptions } from '../util/eval/filterTests';
 
 export const EvalCommandSchema = CommandLineOptionsSchema.extend({
@@ -109,7 +106,6 @@ function runtimeTagsForEval(
 async function resolveReplayConfigs(
   evalRecord: Eval,
   action: 'resuming' | 'retrying errors for',
-  trackProvider?: (provider: ApiProvider) => void,
 ): Promise<Awaited<ReturnType<typeof resolveConfigs>>> {
   const providerFilterOptions = getPersistedProviderFilterOptions(
     evalRecord.runtimeOptions?.providerFilter,
@@ -136,12 +132,7 @@ async function resolveReplayConfigs(
     };
   }
 
-  const configs = await resolveConfigs(
-    providerFilterOptions,
-    replayConfig,
-    undefined,
-    trackProvider,
-  );
+  const configs = await resolveConfigs(providerFilterOptions, replayConfig);
   // The original run filtered twice: raw configs in resolveConfigs, then instantiated
   // providers by live id()/label below in doEval. Replay both stages so the resumed
   // provider set matches the original even when an instantiated id or label diverges
@@ -282,26 +273,26 @@ export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   }
 }
 
-/**
- * Whether a config file can be read without executing it.
- *
- * readConfig() only routes through importModule() for JavaScript and TypeScript. Its
- * YAML and JSON branch reads the file, dereferences `$ref`, and renders environment
- * templates, none of which execute user code. Restricting the re-read to those formats
- * therefore keeps the normalisation while guaranteeing a config is never run twice.
- */
-function isDeclarativeConfig(configPath: string): boolean {
-  return ['.yaml', '.yml', '.json'].includes(path.extname(configPath).toLowerCase());
-}
-
 export async function doEval(
   cmdObj: Partial<CommandLineOptions & Command>,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: InternalEvaluateOptions,
 ): Promise<Eval> {
-  // Phase 1: Load environment from CLI args (preserves existing behavior)
-  setupEnv(cmdObj.envPath);
+  const envFileOverrides = isCliEventSource(evaluateOptions) ? undefined : {};
+  setupEnv(cmdObj.envPath, { processEnv: envFileOverrides });
+  return cliState.withEnvFileOverrides(envFileOverrides, () =>
+    doEvalWithEnv(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, envFileOverrides),
+  );
+}
+
+async function doEvalWithEnv(
+  cmdObj: Partial<CommandLineOptions & Command>,
+  defaultConfig: Partial<UnifiedConfig>,
+  defaultConfigPath: string | undefined,
+  evaluateOptions: InternalEvaluateOptions,
+  envFileOverrides: EnvOverrides | undefined,
+): Promise<Eval> {
   const isCliInvocation = isCliEventSource(evaluateOptions);
 
   let config: Partial<UnifiedConfig> | undefined = undefined;
@@ -347,11 +338,9 @@ export async function doEval(
   // not shut down underneath the watcher.
   let watchTermination: Promise<void> | undefined;
 
-  const runEvaluationBody = async (
-    initialization?: boolean,
-    trackProvider?: (provider: ApiProvider) => void,
-  ) => {
+  const runEvaluationWithEnv = async (runEnv: EnvOverrides, initialization?: boolean) => {
     const startTime = Date.now();
+    let testSources: Awaited<ReturnType<typeof resolveConfigs>>['testSources'];
     telemetry.record('command_used', {
       name: 'eval - started',
       watch: Boolean(cmdObj.watch),
@@ -462,7 +451,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveReplayConfigs(resumeEval, 'resuming', trackProvider));
+      } = await resolveReplayConfigs(resumeEval, 'resuming'));
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
         testSuite.prompts = resumeEval.prompts.map(
@@ -519,7 +508,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveReplayConfigs(resumeEval, 'retrying errors for', trackProvider));
+      } = await resolveReplayConfigs(resumeEval, 'retrying errors for'));
 
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
@@ -538,8 +527,13 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveConfigs(cmdObj, defaultConfig, undefined, trackProvider));
+        testSources,
+      } = await resolveConfigs(cmdObj, defaultConfig));
     }
+
+    // Fill the active scope in place; replacing runEnv would leave it empty.
+    Object.assign(runEnv, testSuite.env);
+    cliState.basePath = _basePath;
 
     const describeReplayAction = (isRetryErrors: boolean | undefined) =>
       isRetryErrors ? 'retrying errors for' : 'resuming';
@@ -571,7 +565,7 @@ export async function doEval(
     // Phase 2: Load environment from config files if not already set via CLI
     if ((!cmdObj.envPath || cmdObj.envPath.length === 0) && commandLineOptions?.envPath) {
       logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
-      setupEnv(commandLineOptions.envPath);
+      setupEnv(commandLineOptions.envPath, { processEnv: envFileOverrides });
     }
 
     warnIfRedteamConfigHasNoTests(config, testSuite);
@@ -801,10 +795,7 @@ export async function doEval(
       }
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.options = testSuite.defaultTest.options || {};
-      testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader, {
-        basePath: cliState.basePath,
-      });
-      trackProvider?.(testSuite.defaultTest.options.provider);
+      testSuite.defaultTest.options.provider = cmdObj.grader;
       // Also update cliState.config so redteam providers can access the grader
       if (cliState.config) {
         // Normalize string shorthand to object
@@ -1207,7 +1198,7 @@ export async function doEval(
             cliFallback: ret,
           });
         }
-        const basePath = path.dirname(configPaths[0]);
+        const basePath = config.basePath ?? path.dirname(configPaths[0]);
         const promptPaths = Array.isArray(config.prompts)
           ? (config.prompts
               .map((p) => {
@@ -1236,34 +1227,11 @@ export async function doEval(
         if (cliTests) {
           // resolveConfigs loads `--tests` with no base path, so it resolves against the
           // working directory rather than the directory holding the config file.
-          // `--vars` keeps the config's base path.
-          varPaths.push(
-            ...resolveTestsWatchPaths(cliTests, cmdObj.tests ? process.cwd() : basePath),
-          );
+          varPaths.push(...resolveTestsWatchPaths(cliTests, process.cwd()));
         } else {
-          // The array form survives combineConfigs() untouched, so inline test cases and
-          // their `vars` file references are still readable from the resolved config.
           varPaths.push(...resolveTestsWatchPaths(config.tests, basePath));
-          // A scalar reference (`tests: file://cases.yaml`) and a generator object are
-          // expanded into concrete test cases by combineConfigs(), so by this point the
-          // reference they came from is gone. Recover it by reading the config again.
-          for (const configPathPattern of configPaths) {
-            // --config accepts globs, which combineConfigs() expands, so expand here too
-            // rather than handing a literal wildcard to the reader.
-            const resolvedConfigPaths = globSync(path.resolve(process.cwd(), configPathPattern), {
-              windowsPathsNoEscape: true,
-            });
-            for (const resolvedConfigPath of resolvedConfigPaths) {
-              if (!isDeclarativeConfig(resolvedConfigPath)) {
-                continue;
-              }
-              const rawConfig = await maybeReadConfig(resolvedConfigPath);
-              if (rawConfig?.tests != null && !Array.isArray(rawConfig.tests)) {
-                varPaths.push(
-                  ...resolveTestsWatchPaths(rawConfig.tests, path.dirname(resolvedConfigPath)),
-                );
-              }
-            }
+          for (const source of testSources ?? []) {
+            varPaths.push(...resolveTestsWatchPaths(source.tests, source.basePath));
           }
         }
         const watchPaths = Array.from(
@@ -1320,38 +1288,29 @@ export async function doEval(
       showRedteamProviderLabelMissingWarning(testSuite);
     }
 
+    // Clean up any WebSocket connections
+    if (testSuite.providers.length > 0) {
+      for (const provider of testSuite.providers) {
+        if (isApiProvider(provider)) {
+          const cleanup = provider?.cleanup?.();
+          if (cleanup instanceof Promise) {
+            await cleanup;
+          }
+        }
+      }
+    }
+
     return ret;
   };
 
-  const runEvaluation = async (initialization?: boolean) => {
-    const ownedProviders = new Set<ApiProvider>();
-    const trackOwnedProvider = (provider: ApiProvider) => {
-      if (!providerRegistry.has(provider)) {
-        ownedProviders.add(provider);
-      }
-    };
-    let evaluationError: unknown;
-    try {
-      return await withGradingProviderTracker(trackOwnedProvider, () =>
-        runEvaluationBody(initialization, trackOwnedProvider),
-      );
-    } catch (error) {
-      evaluationError = error;
-      throw error;
-    } finally {
-      const results = await Promise.allSettled(
-        [...ownedProviders]
-          .filter((provider) => !providerRegistry.has(provider))
-          .map(async (provider) => provider.cleanup?.()),
-      );
-      const cleanupError = results.find((result) => result.status === 'rejected')?.reason;
-      if (cleanupError && evaluationError === undefined && process.exitCode === undefined) {
-        throw cleanupError;
-      }
-      if (cleanupError) {
-        logger.warn('Provider cleanup failed after evaluation error', { error: cleanupError });
-      }
-    }
+  const runEvaluation = (initialization?: boolean) => {
+    // Each watch run starts clean and retains its resolved env through output and cleanup.
+    const runEnv: EnvOverrides = {};
+    return cliState.withConfig(undefined, () =>
+      cliState.withBasePath(undefined, () =>
+        cliState.withEnv(runEnv, () => runEvaluationWithEnv(runEnv, initialization)),
+      ),
+    );
   };
 
   const result = await runEvaluation(true /* initialization */);

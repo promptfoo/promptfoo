@@ -10,15 +10,13 @@ interface PackResult {
 }
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const npmCli =
-  process.env.npm_execpath ??
-  path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+const npmCli = process.env.npm_execpath;
 
 function main(): void {
   const destinationArgumentIndex = process.argv.indexOf('--destination');
   const destination =
     destinationArgumentIndex === -1 ? undefined : process.argv[destinationArgumentIndex + 1];
-  if (!destination) {
+  if (!destination || destination.startsWith('--')) {
     throw new Error('--destination requires a package artifact directory.');
   }
 
@@ -28,16 +26,10 @@ function main(): void {
   };
   const artifactDirectory = path.resolve(ROOT, destination);
   fs.mkdirSync(artifactDirectory, { recursive: true });
+  assert(npmCli, 'Expected npm_execpath when packing a package artifact');
   const output = execFileSync(
-    process.platform === 'win32' ? process.execPath : 'npm',
-    [
-      ...(process.platform === 'win32' ? [npmCli] : []),
-      'pack',
-      '--ignore-scripts',
-      '--json',
-      '--pack-destination',
-      artifactDirectory,
-    ],
+    process.execPath,
+    [npmCli, 'pack', '--ignore-scripts', '--json', '--pack-destination', artifactDirectory],
     {
       cwd: ROOT,
       encoding: 'utf8',

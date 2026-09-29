@@ -28,10 +28,6 @@ class ProviderRegistry {
     this.providers.delete(provider);
   }
 
-  has(provider: unknown): boolean {
-    return this.providers.has(provider as CleanupProvider);
-  }
-
   private registerShutdownHandlers(): void {
     let shuttingDown = false;
 

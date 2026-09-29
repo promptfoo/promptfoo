@@ -74,6 +74,7 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
+          ref: ${{ needs.release-please.outputs.release_created == 'true' && needs.release-please.outputs.tag_name || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
@@ -85,7 +86,12 @@ jobs:
       - run: npm test
       - name: Build package
         if: needs.release-please.outputs.release_created == 'true'
-        run: npm run build
+        run: |
+          if [[ -z "$PROMPTFOO_POSTHOG_KEY" ]]; then
+            echo "::error::PROMPTFOO_POSTHOG_KEY must be set for release builds"
+            exit 1
+          fi
+          npm run build
         env:
           PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
       - name: Pack package
@@ -94,6 +100,12 @@ jobs:
         run: |
           tarball="$(npm run --silent package:pack -- --destination "$RUNNER_TEMP/promptfoo-package")"
           echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+      - name: Test package artifact
+        if: needs.release-please.outputs.release_created == 'true'
+        env:
+          PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
+          PROMPTFOO_DISABLE_TELEMETRY: 1
+        run: npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL"
       - name: Upload package artifact
         if: needs.release-please.outputs.release_created == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -102,12 +114,6 @@ jobs:
           path: ${{ steps.package-artifact.outputs.tarball }}
           if-no-files-found: error
           retention-days: 7
-      - name: Test package artifact
-        if: needs.release-please.outputs.release_created == 'true'
-        env:
-          PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
-          PROMPTFOO_DISABLE_TELEMETRY: 1
-        run: npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL"
 
   publish-npm:
     if: >-
@@ -189,9 +195,13 @@ jobs:
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
       - run: npm install -g npm@11.11.0
       - run: npm ci
-      - run: npm test
       - name: Build package
-        run: npm run build
+        run: |
+          if [[ -z "$PROMPTFOO_POSTHOG_KEY" ]]; then
+            echo "::error::PROMPTFOO_POSTHOG_KEY must be set for release builds"
+            exit 1
+          fi
+          npm run build
         env:
           PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
       - name: Pack package
@@ -202,13 +212,6 @@ jobs:
           pack_json="$(npm pack --ignore-scripts --json --pack-destination "$artifact_dir")"
           filename="$(printf '%s' "$pack_json" | EXPECTED_VERSION="$TAG_NAME" node -e "const results = JSON.parse(require('node:fs').readFileSync(0, 'utf8')); if (!Array.isArray(results) || results.length !== 1) { throw new Error('Expected exactly one package artifact'); } const [result] = results; if (result.name !== 'promptfoo' || result.version !== process.env.EXPECTED_VERSION || typeof result.filename !== 'string') { throw new Error('Packed artifact metadata does not match the requested release'); } process.stdout.write(result.filename);")"
           echo "tarball=$artifact_dir/$filename" >> "$GITHUB_OUTPUT"
-      - name: Upload package artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: promptfoo-npm-backfill-package
-          path: ${{ steps.package-artifact.outputs.tarball }}
-          if-no-files-found: error
-          retention-days: 7
       - name: Test package artifact
         env:
           PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
@@ -229,6 +232,13 @@ jobs:
             fi
             PROMPTFOO_CONFIG_DIR="$RUNNER_TEMP/promptfoo-backfill-config" PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=true node "$consumer_dir/node_modules/promptfoo/dist/src/entrypoint.js" --version
           fi
+      - name: Upload package artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: promptfoo-npm-backfill-package
+          path: ${{ steps.package-artifact.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 7
 
   publish-npm-backfill:
     # npm trusted publishing is bound to this workflow filename on npmjs.com,

@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { withGradingProviderTracker } from '../../src/cliState';
 
 import type { ApiProvider, ProviderResponse } from '../../src/types/index';
 
@@ -77,23 +76,6 @@ describe('matchesSearchRubric', () => {
         reason: 'web search ok',
       }),
     );
-  });
-
-  it('tracks a constructed web-search fallback', async () => {
-    const { matchesSearchRubric } = await import('../../src/matchers/search');
-    mocks.getDefaultProviders.mockResolvedValue({
-      webSearchProvider: null,
-      llmRubricProvider: null,
-      gradingProvider: null,
-    });
-    mocks.loadApiProvider.mockResolvedValue(mocks.webSearchProvider);
-    const track = vi.fn();
-
-    await withGradingProviderTracker(track, () =>
-      matchesSearchRubric('Confirm current facts', 'output', {}),
-    );
-
-    expect(track).toHaveBeenCalledWith(mocks.webSearchProvider);
   });
 
   it('keeps reserved output and rubric vars ahead of user vars', async () => {
@@ -189,23 +171,53 @@ describe('matchesSearchRubric', () => {
         pass: false,
         score: 0,
         reason: 'Search rubric evaluation failed: search unavailable',
+        // Tagged so inverse-aware callers propagate the failure verbatim
+        // instead of flipping a transport error into a spurious pass.
+        metadata: { graderError: true },
       }),
     );
   });
 
-  it('falls back to simple pass parsing when JSON extraction fails', async () => {
+  it.each([
+    'service unavailable',
+    'verdict includes "pass": true',
+    '{}',
+    '{"score": 0}',
+    '{"pass": "false"}',
+    '{"pass": null}',
+  ])('tags an unusable search verdict as a grader failure: %s', async (output) => {
     const { matchesSearchRubric } = await import('../../src/matchers/search');
     mocks.webSearchProvider.callApi = vi.fn(
       async (): Promise<ProviderResponse> => ({
-        output: 'verdict includes "pass": true',
+        output,
+        tokenUsage: { total: 5, prompt: 3, completion: 2 },
       }),
     ) as ApiProvider['callApi'];
 
     await expect(matchesSearchRubric('Confirm current facts', 'output', {})).resolves.toEqual(
       expect.objectContaining({
-        pass: true,
-        score: 1,
-        reason: 'verdict includes "pass": true',
+        pass: false,
+        score: 0,
+        reason:
+          'Search rubric evaluation failed: Expected a JSON object with a boolean "pass" field',
+        metadata: { graderError: true },
+        tokensUsed: { total: 5, prompt: 3, completion: 2 },
+      }),
+    );
+  });
+
+  it('accepts a valid negative verdict inside surrounding text', async () => {
+    const { matchesSearchRubric } = await import('../../src/matchers/search');
+    vi.mocked(mocks.webSearchProvider.callApi).mockResolvedValue({
+      output: 'Search complete.\n```json\n{"pass": false, "reason": "Fact is incorrect"}\n```',
+    });
+
+    await expect(matchesSearchRubric('Confirm current facts', 'output', {})).resolves.toEqual(
+      expect.objectContaining({
+        pass: false,
+        score: 0,
+        reason: 'Fact is incorrect',
+        metadata: { searchResults: [], searchProvider: mocks.webSearchProvider.id() },
       }),
     );
   });
@@ -220,7 +232,7 @@ describe('matchesSearchRubric', () => {
     mocks.loadApiProvider.mockResolvedValue(null);
 
     await expect(matchesSearchRubric('Confirm current facts', 'output', {})).rejects.toThrow(
-      'anthropic:messages:claude-sonnet-4-6',
+      'anthropic:messages:claude-sonnet-5',
     );
   });
 });

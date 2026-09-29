@@ -11,7 +11,6 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const MAX_COMMIT_BATCH_SIZE = 25;
 const MAX_RELEASE_HISTORY_SEARCH_COMMITS = 500;
 const MIN_RELEASE_HISTORY_HEADROOM = 100;
-const MIN_RELEASE_PLEASE_MAJOR = 5;
 const RELEASE_PLEASE_ACTION = 'googleapis/release-please-action';
 
 type ReleasePleaseConfig = {
@@ -20,9 +19,23 @@ type ReleasePleaseConfig = {
   'last-release-sha'?: unknown;
 };
 
-type WorkflowStep = { uses?: unknown };
+type WorkflowStep = {
+  name?: string;
+  uses?: string;
+  run?: string;
+  with?: Record<string, unknown>;
+  env?: Record<string, unknown>;
+};
 type ReleasePleaseWorkflow = {
-  jobs?: { 'release-please'?: { steps?: WorkflowStep[] } };
+  jobs?: Record<
+    string,
+    {
+      steps?: WorkflowStep[];
+      permissions?: Record<string, string>;
+      needs?: string | string[];
+      if?: string;
+    }
+  >;
 };
 type ReleaseDriftWorkflow = {
   jobs?: {
@@ -92,7 +105,7 @@ describe('release-please automation', () => {
     expect(Number(driftStep.env?.MAX_DRIFT)).toBe(searchDepth - MIN_RELEASE_HISTORY_HEADROOM);
   });
 
-  it('pins the release-please job action to a SHA on the v5+ family', () => {
+  it('pins the release-please job action to an immutable commit that Renovate can track', () => {
     const workflowYaml = readRepoFile('.github/workflows/release-please.yml');
     const workflow = yaml.load(workflowYaml) as ReleasePleaseWorkflow;
 
@@ -107,18 +120,51 @@ describe('release-please automation', () => {
     );
 
     expect(releaseStep.uses).toMatch(new RegExp(`^${RELEASE_PLEASE_ACTION}@[0-9a-f]{40}$`));
-
-    // Major comes from the `# vN.x.x` comment Renovate maintains alongside the
-    // SHA pin — SHAs alone are opaque, so the comment is the only stable signal.
     const usesLine = workflowYaml
       .split('\n')
       .find((line) => line.includes(`uses: ${releaseStep.uses}`));
-    assert(usesLine, 'release-please-action `uses:` line missing in raw YAML');
-    const versionMatch = usesLine.match(/#\s*v(\d+)/);
-    assert(
-      versionMatch !== null,
-      'release-please-action `uses:` must carry a `# vN` version comment',
-    );
-    expect(Number.parseInt(versionMatch[1], 10)).toBeGreaterThanOrEqual(MIN_RELEASE_PLEASE_MAJOR);
+    expect(usesLine).toMatch(/#\s+v\d+(?:\.\d+){0,2}(?:[-+][\w.-]+)?\s*$/);
   });
+});
+
+describe('npm artifact publication', () => {
+  const workflow = yaml.load(
+    readRepoFile('.github/workflows/release-please.yml'),
+  ) as ReleasePleaseWorkflow;
+
+  it.each([
+    ['build', 'publish-npm'],
+    ['build-npm-backfill', 'publish-npm-backfill'],
+  ])('keeps %s separate from publish credentials', (buildName, publishName) => {
+    const build = workflow.jobs?.[buildName];
+    const publish = workflow.jobs?.[publishName];
+    expect(build?.permissions?.['id-token']).toBeUndefined();
+    const checkout = build?.steps?.find((step) => step.uses?.startsWith('actions/checkout@'));
+    expect(checkout?.with?.['persist-credentials']).toBe(false);
+    expect(publish?.permissions?.['id-token']).toBe('write');
+    expect([publish?.needs].flat()).toContain(buildName);
+    expect(publish?.if).toContain(`needs.${buildName}.result == 'success'`);
+    expect(publish?.steps?.some((step) => step.uses?.startsWith('actions/checkout@'))).toBe(false);
+    expect(publish?.steps?.some((step) => /npm (?:ci|install)/.test(step.run ?? ''))).toBe(false);
+    const command = publish?.steps?.find((step) => step.run?.includes('npm publish'));
+    expect(command?.env?.NODE_AUTH_TOKEN).toBe('');
+    expect(command?.run).toContain('npm publish "${tarballs[0]}" --ignore-scripts');
+  });
+
+  it.each(['build', 'build-npm-backfill'])(
+    'uploads %s artifacts only after verification',
+    (buildName) => {
+      const steps = workflow.jobs?.[buildName]?.steps ?? [];
+      const testIndex = steps.findIndex((step) => step.name === 'Test package artifact');
+      const uploadIndex = steps.findIndex((step) =>
+        step.uses?.startsWith('actions/upload-artifact@'),
+      );
+      expect(testIndex).toBeGreaterThan(-1);
+      expect(uploadIndex).toBeGreaterThan(testIndex);
+      expect(steps[testIndex].env?.PACKAGE_TARBALL).toBe(
+        '${{ steps.package-artifact.outputs.tarball }}',
+      );
+      expect(steps[uploadIndex].with?.path).toBe('${{ steps.package-artifact.outputs.tarball }}');
+    },
+  );
 });

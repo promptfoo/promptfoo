@@ -2,19 +2,11 @@ import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createServer } from 'node:http';
-import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 
-import { satisfies } from 'semver';
-import {
-  computePackageArtifactReadinessReport,
-  findPackageCandidateExportViolations,
-  getPackageCandidateSpecifier,
-  readPackageCandidateConfig,
-  resolvePackageArtifactPath,
-} from './packageReadiness';
+import { API } from 'typescript/unstable/sync';
 import { shouldCopyDrizzlePath } from './postbuild';
 
 type PackFile = {
@@ -44,22 +36,12 @@ type ArtifactEvalOutput = {
 };
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const npmCli =
-  process.env.npm_execpath ??
-  path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
 const drizzleDir = path.join(ROOT, 'drizzle');
-// The August 2026 undici advisories were fixed in 6.28.0, 7.29.0 and 8.9.0. Keep this in sync
-// with PATCHED_UNDICI_RANGE in test/package-manifests.test.ts.
-const PATCHED_UNDICI_RANGE = '^6.28.0 || ^7.29.0 || >=8.9.0';
 const requiredPackagedPaths = [
   'dist/drizzle/meta/_journal.json',
   'dist/src/app/index.html',
   'dist/src/entrypoint.js',
   'dist/src/golang/wrapper.go',
-  'dist/src/assertions/pure.js',
-  'dist/src/assertions/pure.cjs',
-  'dist/src/assertions/pure.d.ts',
-  'dist/src/assertions/pure.d.cts',
   'dist/src/contracts.cjs',
   'dist/src/contracts.d.cts',
   'dist/src/contracts.d.ts',
@@ -69,10 +51,6 @@ const requiredPackagedPaths = [
   'dist/src/index.js',
   'dist/src/main.js',
   'dist/src/package.json',
-  'dist/src/provider-plugin.cjs',
-  'dist/src/provider-plugin.d.cts',
-  'dist/src/provider-plugin.d.ts',
-  'dist/src/provider-plugin.js',
   'dist/src/python/persistent_wrapper.py',
   'dist/src/python/wrapper.py',
   'dist/src/ruby/wrapper.rb',
@@ -181,12 +159,8 @@ async function runAsync(
 }
 
 function runNpm(args: string[], cwd: string, envOverrides: NodeJS.ProcessEnv = {}): string {
-  return run(
-    process.platform === 'win32' ? process.execPath : 'npm',
-    process.platform === 'win32' ? [npmCli, ...args] : args,
-    cwd,
-    envOverrides,
-  );
+  assert(process.env.npm_execpath, 'Expected npm_execpath when running package artifact test');
+  return run(process.execPath, [process.env.npm_execpath, ...args], cwd, envOverrides);
 }
 
 function assertPackagedFiles(packResult: PackResult): void {
@@ -216,16 +190,16 @@ function assertPackagedFiles(packResult: PackResult): void {
     'Source maps should be excluded from the package',
   );
   assert(
+    packResult.files.every((file) => !file.path.endsWith('.tsbuildinfo')),
+    'Incremental compiler state should be excluded from the package',
+  );
+  assert(
     packResult.files.every((file) => !file.path.startsWith('dist/test/')),
     'Compiled tests should be excluded from the package',
   );
   assert(
     packResult.files.every((file) => !file.path.startsWith('dist/src/__mocks__/')),
     'Compiled mocks should be excluded from the package',
-  );
-  assert(
-    packResult.files.every((file) => file.path !== 'dist/tsconfig.tsbuildinfo'),
-    'TypeScript incremental build metadata should be excluded from the package',
   );
 
   for (const executablePath of ['dist/src/entrypoint.js', 'dist/src/main.js']) {
@@ -262,28 +236,6 @@ function assertInstalledWebApp(installedPackageDir: string): void {
     missingAssets,
     [],
     `Missing packaged web app assets: ${missingAssets.join(', ')}`,
-  );
-}
-
-/**
- * The ref parser fetches remote `$ref`s through its own nested undici, and consumers install
- * from the published tarball rather than this repo's lockfile — so the version they actually
- * resolve is only observable here. Asserting it against the parser's declared range would be a
- * tautology (npm cannot install outside it); the patched floor per undici major is the check
- * that can fail.
- */
-function assertInstalledRefParserTransport(installedPackageDir: string): void {
-  const packageRequire = createRequire(path.join(installedPackageDir, 'package.json'));
-  const parserRequire = createRequire(
-    packageRequire.resolve('@apidevtools/json-schema-ref-parser/package.json'),
-  );
-  const transportManifest = JSON.parse(
-    fs.readFileSync(parserRequire.resolve('undici/package.json'), 'utf8'),
-  ) as { version: string };
-
-  assert(
-    satisfies(transportManifest.version, PATCHED_UNDICI_RANGE),
-    `Installed ref parser resolved vulnerable undici ${transportManifest.version}`,
   );
 }
 
@@ -363,149 +315,127 @@ function runInstalledBinVersion(consumerDir: string, configDir: string, binName:
   return run(binPath, ['--version'], consumerDir, envOverrides);
 }
 
-function writeAssertionConsumerScripts(consumerDir: string): void {
-  fs.writeFileSync(
-    path.join(consumerDir, 'pure-assertions.mjs'),
-    `
-import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import { createRequire, registerHooks } from 'node:module';
-import { runInNewContext } from 'node:vm';
-const require = createRequire(import.meta.url);
-const packageRoot = new URL('./node_modules/promptfoo/', import.meta.url).href;
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const resolved = nextResolve(specifier, context);
-    assert.ok(resolved.url.startsWith(packageRoot), 'Pure assertions imported ' + resolved.url);
-    return resolved;
-  },
-});
-for (const api of [await import('promptfoo/assertions/pure'), require('promptfoo/assertions/pure')]) {
-  const result = await api.runPureAssertion({
-    assertion: { type: 'not-contains', value: 'missing' },
-    providerResponse: { output: 'expected output' },
-  });
-  assert.equal(result.pass, true);
-  assert.equal(result.score, 1);
-  await assert.rejects(api.runPureAssertion({
-    assertion: { type: 'latency', threshold: 100 },
-    providerResponse: { output: 'expected output' },
-  }), /latency/i);
-}
-// The standalone CJS bundle must also run without Node globals or a module loader.
-const module = { exports: {} };
-runInNewContext(fs.readFileSync(require.resolve('promptfoo/assertions/pure'), 'utf8'), { module, exports: module.exports });
-const result = await module.exports.runPureAssertion({
-  assertion: { type: 'contains', value: 'portable' },
-  providerResponse: { output: 'portable runtime' },
-});
-assert.equal(result.pass, true);
-`,
-  );
-  const pureConsumer = `
-const result: Promise<pure.PureGradingResult> = pure.runPureAssertion({
-  assertion: { type: 'contains', value: 'expected' },
-  providerResponse: { output: 'expected' },
-});
-void result;
-// @ts-expect-error Model graders are not available in the pure runner.
-pure.runPureAssertion({ assertion: { type: 'llm-rubric' }, providerResponse: { output: 'expected' } });
-`;
-  fs.writeFileSync(
-    path.join(consumerDir, 'import-pure.mts'),
-    "import * as pure from 'promptfoo/assertions/pure';\n" + pureConsumer,
-  );
-  fs.writeFileSync(
-    path.join(consumerDir, 'require-pure.cts'),
-    "import pure = require('promptfoo/assertions/pure');\n" + pureConsumer,
-  );
-  // The full host entry still exposes upstream Drizzle declarations that need skipLibCheck.
-  // Keep the dependency-light contracts/pure consumers above on strict declaration checks.
-  fs.writeFileSync(
-    path.join(consumerDir, 'tsconfig.host.json'),
-    JSON.stringify({
-      compilerOptions: {
-        module: 'NodeNext',
-        moduleResolution: 'NodeNext',
-        noEmit: true,
-        strict: true,
-        skipLibCheck: true,
-      },
-      include: [
-        'import-assertions.mts',
-        'require-assertions.cts',
-        'import-provider-plugin.mts',
-        'require-provider-plugin.cts',
-      ],
-    }),
-  );
-  const customAssertionConsumer = `
-type CustomType = 'custom-check' | 'not-custom-check';
-const registry = new promptfoo.AssertionRegistry<promptfoo.AssertionParams<CustomType>, promptfoo.GradingResult<CustomType>>([
-  { name: 'custom', handlers: {
-    'custom-check': ({ assertion, outputString, renderedValue, inverse }) => {
-      const pass = (outputString === renderedValue) !== inverse;
-      return { pass, score: pass ? 1 : 0, reason: 'custom comparison', assertion };
-    },
-  } },
-]);
-const result: Promise<promptfoo.GradingResult<CustomType>> = promptfoo.assertions.runAssertion({
-  assertion: { type: 'custom-check', value: '{{ expected }}' },
-  registry,
-  providerResponse: { output: 'expected' },
-  test: { vars: { expected: 'expected' } },
-});
-void result;
-// @ts-expect-error Custom assertion names need a registry.
-promptfoo.assertions.runAssertion({ assertion: { type: 'custom-check' }, test: {}, providerResponse: { output: 'expected' } });
-pure.runPureAssertion({ assertion: { type: 'contains', value: 'expected' }, providerResponse: { output: 'expected' } });
-// @ts-expect-error Model graders are not available in the pure runner.
-pure.runPureAssertion({ assertion: { type: 'llm-rubric' }, providerResponse: { output: 'expected' } });
-`;
-  fs.writeFileSync(
-    path.join(consumerDir, 'import-assertions.mts'),
-    "import * as promptfoo from 'promptfoo';\nimport * as pure from 'promptfoo/assertions/pure';\n" +
-      customAssertionConsumer,
-  );
-  fs.writeFileSync(
-    path.join(consumerDir, 'require-assertions.cts'),
-    "import promptfoo = require('promptfoo');\nimport pure = require('promptfoo/assertions/pure');\n" +
-      customAssertionConsumer,
-  );
+function assertProviderTypeDocumentation(installedPackageDir: string): void {
+  const api = new API();
+  try {
+    for (const declaration of ['contracts.d.ts', 'contracts.d.cts']) {
+      const declarationPath = path.join(installedPackageDir, 'dist', 'src', declaration);
+      const snapshot = api.updateSnapshot({ openFiles: [declarationPath] });
+      const project = snapshot.getDefaultProjectForFile(declarationPath);
+      assert(project, `Missing declaration project: ${declaration}`);
+      const checker = project.checker;
+      const source = project.program.getSourceFile(declarationPath);
+      assert(source, `Missing declaration source: ${declaration}`);
+      const moduleSymbol = checker.getSymbolAtLocation(source);
+      assert(moduleSymbol, `Missing declaration module: ${declaration}`);
+      const exports = checker.getExportsOfModule(moduleSymbol);
+
+      for (const name of [
+        'McpConfigInput',
+        'McpConfig',
+        'McpConfigParsed',
+        'HttpProviderConfigInput',
+      ]) {
+        const symbol = exports.find((entry) => entry.name === name);
+        assert(symbol, `Missing ${name} in ${declaration}`);
+        const configType = checker.getDeclaredTypeOfSymbol(symbol);
+        const properties =
+          name === 'HttpProviderConfigInput'
+            ? ['tools', 'tool_choice', 'transformToolsFormat', 'session']
+            : ['timeout', 'resetTimeoutOnProgress', 'maxTotalTimeout', 'pingOnConnect'];
+        for (const property of properties) {
+          const member = checker.getPropertyOfType(configType, property);
+          assert(member, `Missing ${name}.${property} in ${declaration}`);
+          const documentation = checker.getDocumentationCommentOfSymbol(member);
+          assert(
+            documentation.length > 0,
+            `Missing JSDoc for ${name}.${property} in ${declaration}`,
+          );
+          if (property === 'timeout') {
+            assert.match(documentation, /60000 \(60 seconds\)/);
+            assert.match(documentation, /MCP_REQUEST_TIMEOUT_MS/);
+          }
+        }
+        const responseParser = checker.getPropertyOfType(configType, 'responseParser');
+        assert(responseParser, `Missing ${name}.responseParser in ${declaration}`);
+        const deprecated = checker.getJsDocTagsOfSymbol(responseParser);
+        assert(
+          deprecated?.some(
+            (tag) => tag.name === 'deprecated' && tag.text?.includes('transformResponse'),
+          ),
+          `Missing responseParser deprecation in ${name} in ${declaration}`,
+        );
+      }
+      snapshot.dispose();
+    }
+  } finally {
+    api.close();
+  }
 }
 
-function writeConsumerScripts(consumerDir: string, candidateSpecifiers: string[]): void {
-  const pluginConsumer = `
-const registry = new plugin.ProviderPluginRegistry();
-const manifest: plugin.ProviderPluginManifest = {
-  apiVersion: plugin.PROVIDER_PLUGIN_API_VERSION,
-  name: 'consumer',
-  canHandle: (providerPath) => providerPath.startsWith('consumer:'),
-  load: async () => [{
-    test: (providerPath) => providerPath.startsWith('consumer:'),
-    create: async (providerPath, options, context) => ({
-      id: () => options.id ?? providerPath,
-      callApi: async () => ({ output: context.basePath ?? 'consumer output' }),
-    }),
-  }],
-};
-registry.register(manifest);
-`;
-  fs.writeFileSync(
-    path.join(consumerDir, 'import-provider-plugin.mts'),
-    "import * as plugin from 'promptfoo/provider-plugin';\n" + pluginConsumer,
-  );
-  fs.writeFileSync(
-    path.join(consumerDir, 'require-provider-plugin.cts'),
-    "import plugin = require('promptfoo/provider-plugin');\n" + pluginConsumer,
-  );
-
+function writeConsumerScripts(consumerDir: string): void {
+  const authAssertions = [
+    "const httpInput = { method: 'GET', auth: { type: 'api_key', value: '{{ KEY }}', placement: 'header', keyName: 'X-Key' }, tls: {} };",
+    "if ('rejectUnauthorized' in HttpProviderConfigInputSchema.parse(httpInput).tls) {",
+    "  throw new Error('HTTP authoring schema inserted runtime defaults');",
+    '}',
+    "for (const invalid of [{method: 'POST'}, {body: {}, signatureAuth: {type: 'pem'}}, {method: 'GET', typo: true}]) {",
+    '  if (HttpProviderConfigInputSchema.safeParse(invalid).success) {',
+    "    throw new Error('HTTP authoring schema accepted invalid input');",
+    '  }',
+    '}',
+    "if (HttpAuthInputSchema.safeParse({ type: 'api_key', value: 'key' }).success) {",
+    "  throw new Error('HTTP auth lost its placement/name requirements');",
+    '}',
+    "if (HttpProviderConfigInputJsonSchema.$schema !== 'http://json-schema.org/draft-07/schema#') {",
+    "  throw new Error('Missing HTTP config JSON Schema export');",
+    '}',
+    "const extensionConfig = { server: { command: 'node', extension: true }, extension: true };",
+    'if (McpConfigInputSchema.safeParse(extensionConfig).success) {',
+    "  throw new Error('MCP authoring config accepted extension fields');",
+    '}',
+    'const compatibleConfig = McpConfigSchema.parse(extensionConfig);',
+    'if (compatibleConfig.extension !== true || compatibleConfig.server.extension !== true) {',
+    "  throw new Error('MCP runtime config lost extension fields');",
+    '}',
+    "if (McpAuthInputSchema.safeParse({ type: 'bearer', token: 'key', typo: true }).success) {",
+    "  throw new Error('MCP authoring auth accepted an unknown field');",
+    '}',
+    "const mcpInput = { servers: [{ url: 'https://mcp.example.test', auth: { type: 'api_key', api_key: 'key' } }] };",
+    "if ('enabled' in McpConfigInputSchema.parse(mcpInput)) {",
+    "  throw new Error('MCP config input parsing inserted defaults');",
+    '}',
+    'if (McpConfigSchema.parse(mcpInput).enabled !== true) {',
+    "  throw new Error('MCP config runtime default is missing');",
+    '}',
+    "if (McpConfigInputSchema.safeParse({ server: { url: 'https://mcp.example.test', auth: { type: 'api_key' } } }).success) {",
+    "  throw new Error('MCP config accepted invalid nested auth');",
+    '}',
+    "if (McpConfigInputJsonSchema.$schema !== 'http://json-schema.org/draft-07/schema#') {",
+    "  throw new Error('Missing MCP config JSON Schema export');",
+    '}',
+    "const authInput = { type: 'oauth', clientId: 'client', clientSecret: 'secret' };",
+    "if ('grantType' in McpAuthInputSchema.parse(authInput)) {",
+    "  throw new Error('MCP auth input parsing inserted a runtime default');",
+    '}',
+    "if (McpAuthSchema.parse(authInput)?.grantType !== 'client_credentials') {",
+    "  throw new Error('MCP runtime auth parsing lost its default');",
+    '}',
+    "if (McpAuthInputSchema.safeParse({ type: 'api_key' }).success) {",
+    "  throw new Error('MCP API-key auth accepted missing credentials');",
+    '}',
+    "if (McpAuthInputJsonSchema.$schema !== 'http://json-schema.org/draft-07/schema#') {",
+    "  throw new Error('Missing MCP auth JSON Schema export');",
+    '}',
+  ];
   fs.writeFileSync(
     path.join(consumerDir, 'import-package.mjs'),
     [
       "import { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } from 'promptfoo';",
       "import { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } from 'promptfoo/contracts';",
-      "import { PROVIDER_PLUGIN_API_VERSION, ProviderPluginRegistry } from 'promptfoo/provider-plugin';",
+      "import { McpAuthInputJsonSchema, McpAuthInputSchema, McpAuthSchema } from 'promptfoo/contracts';",
+      "import { McpConfigInputJsonSchema, McpConfigInputSchema, McpConfigSchema } from 'promptfoo/contracts';",
+      "import { HttpAuthInputSchema, HttpProviderConfigInputSchema, HttpProviderConfigInputJsonSchema } from 'promptfoo/contracts';",
       '',
       'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
       "  if (!value || typeof value.safeParse !== 'function') {",
@@ -515,9 +445,7 @@ registry.register(manifest);
       'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
       "  throw new Error('Missing expected ESM provider capability export');",
       '}',
-      'if (PROVIDER_PLUGIN_API_VERSION !== 1 || typeof ProviderPluginRegistry !== "function") {',
-      "  throw new Error('Missing expected ESM provider plugin export');",
-      '}',
+      ...authAssertions,
       '',
     ].join('\n'),
   );
@@ -526,7 +454,9 @@ registry.register(manifest);
     [
       "const { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } = require('promptfoo');",
       "const { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } = require('promptfoo/contracts');",
-      "const { PROVIDER_PLUGIN_API_VERSION, ProviderPluginRegistry } = require('promptfoo/provider-plugin');",
+      "const { McpAuthInputJsonSchema, McpAuthInputSchema, McpAuthSchema } = require('promptfoo/contracts');",
+      "const { McpConfigInputJsonSchema, McpConfigInputSchema, McpConfigSchema } = require('promptfoo/contracts');",
+      "const { HttpAuthInputSchema, HttpProviderConfigInputSchema, HttpProviderConfigInputJsonSchema } = require('promptfoo/contracts');",
       '',
       'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
       "  if (!value || typeof value.safeParse !== 'function') {",
@@ -536,70 +466,7 @@ registry.register(manifest);
       'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
       "  throw new Error('Missing expected CJS provider capability export');",
       '}',
-      'if (PROVIDER_PLUGIN_API_VERSION !== 1 || typeof ProviderPluginRegistry !== "function") {',
-      "  throw new Error('Missing expected CJS provider plugin export');",
-      '}',
-      '',
-    ].join('\n'),
-  );
-  fs.writeFileSync(
-    path.join(consumerDir, 'mixed-provider-plugin.mjs'),
-    [
-      "import { createRequire } from 'node:module';",
-      "import { loadApiProvider } from 'promptfoo';",
-      "import { MissingProviderPackageError as EsmMissingProviderPackageError, ProviderPluginLoadError as EsmProviderPluginLoadError, ProviderPluginRegistry as EsmProviderPluginRegistry } from 'promptfoo/provider-plugin';",
-      '',
-      'const require = createRequire(import.meta.url);',
-      "const cjsPromptfoo = require('promptfoo');",
-      "const { MissingProviderPackageError: CjsMissingProviderPackageError, PROVIDER_PLUGIN_API_VERSION, ProviderPluginLoadError: CjsProviderPluginLoadError, ProviderPluginRegistry: CjsProviderPluginRegistry, registerProviderPlugin } = require('promptfoo/provider-plugin');",
-      "if (typeof cjsPromptfoo.loadApiProvider !== 'function') {",
-      "  throw new Error('CommonJS root entrypoint failed to load beside the ESM root');",
-      '}',
-      'const dispose = registerProviderPlugin({',
-      '  apiVersion: PROVIDER_PLUGIN_API_VERSION,',
-      "  name: 'artifact-mixed-format',",
-      "  canHandle: (providerPath) => providerPath.startsWith('artifact-mixed:'),",
-      '  load: async () => [{',
-      "    test: (providerPath) => providerPath.startsWith('artifact-mixed:'),",
-      '    create: async () => ({',
-      "      id: () => 'artifact-mixed-format',",
-      "      callApi: async () => ({ output: 'mixed-format-ok' }),",
-      '    }),',
-      '  }],',
-      '});',
-      '',
-      'try {',
-      "  const provider = await loadApiProvider('artifact-mixed:model');",
-      "  if (provider.id() !== 'artifact-mixed-format') {",
-      "    throw new Error('CommonJS plugin registration was invisible to the ESM host');",
-      '  }',
-      '} finally {',
-      '  dispose();',
-      '}',
-      '',
-      "const missingCause = Object.assign(new Error(\"Cannot find package '@example/provider-missing' imported from /tmp/artifact-plugin.js\"), { code: 'ERR_MODULE_NOT_FOUND' });",
-      'const createMissingManifest = (name) => ({',
-      '  apiVersion: PROVIDER_PLUGIN_API_VERSION,',
-      '  name,',
-      "  packageName: '@example/provider-missing',",
-      '  canHandle: (providerPath) => providerPath.startsWith(`${name}:`),',
-      '  load: async () => { throw missingCause; },',
-      '});',
-      'const captureError = async (registry, providerPath) => {',
-      '  try {',
-      '    await registry.getFactories(providerPath, []);',
-      '  } catch (error) {',
-      '    return error;',
-      '  }',
-      "  throw new Error('Expected provider plugin load to fail');",
-      '};',
-      "const esmError = await captureError(new EsmProviderPluginRegistry([createMissingManifest('artifact-esm-missing')]), 'artifact-esm-missing:model');",
-      "const cjsError = await captureError(new CjsProviderPluginRegistry([createMissingManifest('artifact-cjs-missing')]), 'artifact-cjs-missing:model');",
-      'for (const error of [esmError, cjsError]) {',
-      '  if (!(error instanceof EsmMissingProviderPackageError) || !(error instanceof CjsMissingProviderPackageError) || !(error instanceof EsmProviderPluginLoadError) || !(error instanceof CjsProviderPluginLoadError)) {',
-      "    throw new Error('Provider plugin errors were not recognizable across ESM/CommonJS');",
-      '  }',
-      '}',
+      ...authAssertions,
       '',
     ].join('\n'),
   );
@@ -608,6 +475,10 @@ registry.register(manifest);
     [
       "import { GetUserResponseSchema, PromptSchema, hasFunctionToolCallValidator, isTransformFunction } from 'promptfoo/contracts';",
       "import type { BlobRef, FunctionToolCallValidator, GetUserResponse, Prompt, ProviderResponse, TransformFunction } from 'promptfoo/contracts';",
+      "import { McpAuthInputSchema, McpAuthSchema } from 'promptfoo/contracts';",
+      "import type { McpAuthInput, McpAuthParsed } from 'promptfoo/contracts';",
+      "import { McpConfigSchema, type McpConfigInput, type McpConfigParsed } from 'promptfoo/contracts';",
+      "import { HttpProviderConfigInputSchema, type HttpProviderConfigInput } from 'promptfoo/contracts';",
       '',
       "const prompt: Prompt = { label: 'Greeting', raw: 'Hello, world!' };",
       'const transform: TransformFunction<string, string> = (output) => output;',
@@ -615,6 +486,18 @@ registry.register(manifest);
       'const validator: FunctionToolCallValidator = { validateFunctionToolCall() {} };',
       "const blobRef: BlobRef = { hash: 'abc123', mimeType: 'image/png', provider: 'filesystem', sizeBytes: 3, uri: 'promptfoo://blob/abc123' };",
       "const response: ProviderResponse = { images: [{ blobRef }], output: 'ok' };",
+      "const authInput: McpAuthInput = { type: 'oauth', clientId: 'client', clientSecret: 'secret', scopes: 'read write' };",
+      'const auth: McpAuthParsed = McpAuthSchema.parse(McpAuthInputSchema.parse(authInput));',
+      "const mcpInput: McpConfigInput = { servers: [{ url: 'https://mcp.example.test', auth: authInput }] };",
+      'const mcp: McpConfigParsed = McpConfigSchema.parse(mcpInput);',
+      'const enabled: boolean = mcp.enabled;',
+      'void enabled;',
+      "const httpInput: HttpProviderConfigInput = { body: { prompt: '{{ prompt }}' }, auth: { type: 'bearer', token: 'key' } };",
+      'HttpProviderConfigInputSchema.parse(httpInput);',
+      "if (auth?.type === 'oauth') {",
+      "  const grant: 'client_credentials' | 'password' = auth.grantType;",
+      '  void grant;',
+      '}',
       '',
       'GetUserResponseSchema.parse(user);',
       'PromptSchema.parse(prompt);',
@@ -634,7 +517,7 @@ registry.register(manifest);
         noEmit: true,
         strict: true,
       },
-      include: ['import-contracts.ts', 'import-pure.mts'],
+      include: ['import-contracts.ts'],
     }),
   );
   fs.writeFileSync(
@@ -647,6 +530,18 @@ registry.register(manifest);
       'const validator: contracts.FunctionToolCallValidator = { validateFunctionToolCall() {} };',
       "const blobRef: contracts.BlobRef = { hash: 'abc123', mimeType: 'image/png', provider: 'filesystem', sizeBytes: 3, uri: 'promptfoo://blob/abc123' };",
       "const response: contracts.ProviderResponse = { images: [{ blobRef }], output: 'ok' };",
+      "const authInput: contracts.McpAuthInput = { type: 'oauth', clientId: 'client', clientSecret: 'secret', scopes: 'read write' };",
+      'const auth: contracts.McpAuthParsed = contracts.McpAuthSchema.parse(contracts.McpAuthInputSchema.parse(authInput));',
+      "const mcpInput: contracts.McpConfigInput = { servers: [{ url: 'https://mcp.example.test', auth: authInput }] };",
+      'const mcp: contracts.McpConfigParsed = contracts.McpConfigSchema.parse(mcpInput);',
+      'const enabled: boolean = mcp.enabled;',
+      'void enabled;',
+      "const httpInput: contracts.HttpProviderConfigInput = { body: { prompt: '{{ prompt }}' }, auth: { type: 'bearer', token: 'key' } };",
+      'contracts.HttpProviderConfigInputSchema.parse(httpInput);',
+      "if (auth?.type === 'oauth') {",
+      "  const grant: 'client_credentials' | 'password' = auth.grantType;",
+      '  void grant;',
+      '}',
       'contracts.GetUserResponseSchema.parse(user);',
       'contracts.PromptSchema.parse(prompt);',
       'void response;',
@@ -665,83 +560,7 @@ registry.register(manifest);
         noEmit: true,
         strict: true,
       },
-      include: ['require-contracts.cts', 'require-pure.cts'],
-    }),
-  );
-  fs.writeFileSync(
-    path.join(consumerDir, 'candidate-entrypoints.mjs'),
-    [
-      `const specifiers = ${JSON.stringify(candidateSpecifiers)};`,
-      'for (const specifier of specifiers) {',
-      '  const candidate = await import(specifier);',
-      '  if (Object.keys(candidate).length === 0) {',
-      "    throw new Error(`Candidate entrypoint '${specifier}' has no ESM exports`);",
-      '  }',
-      '}',
-      '',
-    ].join('\n'),
-  );
-  fs.writeFileSync(
-    path.join(consumerDir, 'candidate-entrypoints.cjs'),
-    [
-      `const specifiers = ${JSON.stringify(candidateSpecifiers)};`,
-      'for (const specifier of specifiers) {',
-      '  const candidate = require(specifier);',
-      '  if (Object.keys(candidate).length === 0) {',
-      "    throw new Error(`Candidate entrypoint '${specifier}' has no CommonJS exports`);",
-      '  }',
-      '}',
-      '',
-    ].join('\n'),
-  );
-  fs.writeFileSync(
-    path.join(consumerDir, 'candidate-entrypoints.ts'),
-    [
-      ...candidateSpecifiers.map(
-        (specifier, index) => `import * as candidate${index} from '${specifier}';`,
-      ),
-      '',
-      ...candidateSpecifiers.map((_specifier, index) => `void candidate${index};`),
-      '',
-    ].join('\n'),
-  );
-  fs.writeFileSync(
-    path.join(consumerDir, 'candidate-entrypoints.cts'),
-    [
-      ...candidateSpecifiers.map(
-        (specifier, index) => `import candidate${index} = require('${specifier}');`,
-      ),
-      '',
-      ...candidateSpecifiers.map((_specifier, index) => `void candidate${index};`),
-      '',
-    ].join('\n'),
-  );
-  fs.writeFileSync(
-    path.join(consumerDir, 'tsconfig.candidates.json'),
-    JSON.stringify({
-      compilerOptions: {
-        module: 'NodeNext',
-        moduleResolution: 'NodeNext',
-        noEmit: true,
-        strict: true,
-        // Some candidates still expose host declarations; portable consumers are checked above.
-        skipLibCheck: true,
-      },
-      include: ['candidate-entrypoints.ts'],
-    }),
-  );
-  fs.writeFileSync(
-    path.join(consumerDir, 'tsconfig.candidates-cjs.json'),
-    JSON.stringify({
-      compilerOptions: {
-        module: 'Node16',
-        moduleResolution: 'Node16',
-        noEmit: true,
-        strict: true,
-        // Some candidates still expose host declarations; portable consumers are checked above.
-        skipLibCheck: true,
-      },
-      include: ['candidate-entrypoints.cts'],
+      include: ['require-contracts.cts'],
     }),
   );
 }
@@ -883,25 +702,24 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
 }
 
 async function main(): Promise<void> {
+  const tarballArgumentIndex = process.argv.indexOf('--tarball');
+  const tarballArgument =
+    tarballArgumentIndex === -1 ? undefined : process.argv[tarballArgumentIndex + 1];
+  if (tarballArgumentIndex !== -1 && (!tarballArgument || tarballArgument.startsWith('--'))) {
+    throw new Error('--tarball requires a path to an existing package artifact.');
+  }
+  const explicitTarball = tarballArgument ? path.resolve(ROOT, tarballArgument) : undefined;
+  if (explicitTarball) {
+    assert(
+      fs.statSync(explicitTarball).isFile(),
+      `Not a package artifact file: ${explicitTarball}`,
+    );
+  }
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-'));
   const artifactsDir = path.join(tempDir, 'artifacts');
   const configDir = path.join(tempDir, 'config');
   const consumerDir = path.join(tempDir, 'consumer');
   const consumerNpmrc = path.join(tempDir, 'consumer.npmrc');
-  const tarballArgumentIndex = process.argv.indexOf('--tarball');
-  const explicitTarball =
-    tarballArgumentIndex === -1 ? undefined : process.argv[tarballArgumentIndex + 1];
-  if (tarballArgumentIndex !== -1 && !explicitTarball) {
-    throw new Error('--tarball requires a path to an existing package artifact.');
-  }
-  const explicitTarballPath = explicitTarball
-    ? resolvePackageArtifactPath(ROOT, explicitTarball)
-    : undefined;
-  const candidateConfig = readPackageCandidateConfig(ROOT);
-  const candidateSpecifiers = candidateConfig.candidates.flatMap((candidate) => {
-    const specifier = getPackageCandidateSpecifier(candidate);
-    return specifier ? [specifier] : [];
-  });
 
   try {
     fs.mkdirSync(artifactsDir);
@@ -909,8 +727,8 @@ async function main(): Promise<void> {
     fs.mkdirSync(consumerDir);
     fs.writeFileSync(consumerNpmrc, '');
 
-    const packOutput = explicitTarballPath
-      ? runNpm(['pack', '--ignore-scripts', '--dry-run', '--json', explicitTarballPath], ROOT)
+    const packOutput = explicitTarball
+      ? runNpm(['pack', '--ignore-scripts', '--dry-run', '--json', explicitTarball], ROOT)
       : runNpm(['pack', '--ignore-scripts', '--json', '--pack-destination', artifactsDir], ROOT);
     let packResults: PackResult[];
     try {
@@ -924,7 +742,7 @@ async function main(): Promise<void> {
     assert.equal(packResult.name, 'promptfoo');
     assertPackagedFiles(packResult);
 
-    const tarballPath = explicitTarballPath ?? path.join(artifactsDir, packResult.filename);
+    const tarballPath = explicitTarball ?? path.join(artifactsDir, packResult.filename);
     assert(fs.existsSync(tarballPath), `Missing tarball: ${tarballPath}`);
 
     fs.writeFileSync(
@@ -962,43 +780,13 @@ async function main(): Promise<void> {
     };
     assert.equal(installedPackageJson.version, packResult.version);
     assertExportsResolve(installedPackageDir, installedPackageJson);
-    const exportViolations = findPackageCandidateExportViolations(
-      installedPackageJson.exports,
-      candidateConfig.candidates,
-    );
-    assert.deepEqual(
-      exportViolations,
-      [],
-      `Installed package candidate exports failed:\n${exportViolations.join('\n')}`,
-    );
-    const artifactReadiness = computePackageArtifactReadinessReport(
-      installedPackageDir,
-      candidateConfig.candidates,
-    );
-    assert.deepEqual(
-      artifactReadiness.violations,
-      [],
-      `Installed package candidate budgets failed:\n${artifactReadiness.violations.join('\n')}`,
-    );
+    assertProviderTypeDocumentation(installedPackageDir);
 
-    assertInstalledRefParserTransport(installedPackageDir);
-
-    writeConsumerScripts(consumerDir, candidateSpecifiers);
-    writeAssertionConsumerScripts(consumerDir);
-    run(process.execPath, ['pure-assertions.mjs'], consumerDir);
+    writeConsumerScripts(consumerDir);
     run(process.execPath, ['import-package.mjs'], consumerDir);
     run(process.execPath, ['require-package.cjs'], consumerDir);
-    run(process.execPath, ['mixed-provider-plugin.mjs'], consumerDir);
-    run(process.execPath, ['candidate-entrypoints.mjs'], consumerDir);
-    run(process.execPath, ['candidate-entrypoints.cjs'], consumerDir);
     const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
-    for (const tsconfig of [
-      'tsconfig.json',
-      'tsconfig.host.json',
-      'tsconfig.node16-cjs.json',
-      'tsconfig.candidates.json',
-      'tsconfig.candidates-cjs.json',
-    ]) {
+    for (const tsconfig of ['tsconfig.json', 'tsconfig.node16-cjs.json']) {
       run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
     }
     assertInstalledWebApp(installedPackageDir);
@@ -1011,7 +799,7 @@ async function main(): Promise<void> {
     }
     await runInstalledCompressionEval(consumerDir, configDir);
 
-    console.log(`Verified installed package artifact: ${path.basename(tarballPath)}`);
+    console.log(`Verified installed package artifact: ${packResult.filename}`);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

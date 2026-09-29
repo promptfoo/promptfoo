@@ -1,3 +1,4 @@
+import { isCacheEnabled } from '../../../cache';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
 import { ElevenLabsCache } from '../cache';
@@ -187,7 +188,7 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       seed: this.config.seed,
     });
 
-    const cached = await this.cache.get<TTSResponse>(cacheKey);
+    const cached = isCacheEnabled() ? await this.cache.get<TTSResponse>(cacheKey) : null;
     if (cached) {
       logger.debug('[ElevenLabs TTS] Cache hit');
       return this.buildResponse(cached, true, prompt.length, Date.now() - startTime);
@@ -252,7 +253,9 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       };
 
       // Cache response
-      await this.cache.set(cacheKey, ttsResponse, audioData.sizeBytes);
+      if (isCacheEnabled()) {
+        await this.cache.set(cacheKey, ttsResponse);
+      }
 
       // Save to file if configured
       if (this.config.saveAudio && this.config.audioOutputPath) {
@@ -414,11 +417,12 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       // Create WebSocket connection
       const wsClient = await createStreamingConnection(apiKey, this.config.voiceId, streamConfig);
 
-      // Handle streaming
-      const session = await handleStreamingTTS(wsClient, prompt, undefined, startTime);
-
-      // Close connection
-      wsClient.close();
+      let session: Awaited<ReturnType<typeof handleStreamingTTS>>;
+      try {
+        session = await handleStreamingTTS(wsClient, prompt, undefined, startTime);
+      } finally {
+        wsClient.close();
+      }
 
       // Combine chunks into single audio buffer
       const combinedAudio = combineStreamingChunks(session.chunks);
