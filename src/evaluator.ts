@@ -1330,6 +1330,7 @@ async function applyRunEvalResponseOutcome({
   rateLimitRegistry,
   renderedPrompt,
   response,
+  reportedTokenUsage,
   ret,
   test,
   testIdx,
@@ -1349,6 +1350,7 @@ async function applyRunEvalResponseOutcome({
   rateLimitRegistry?: RateLimitRegistryRef;
   renderedPrompt: string;
   response: ProviderResponse;
+  reportedTokenUsage: ProviderResponse['tokenUsage'] | null;
   ret: EvaluateResult;
   test: AtomicTestCase;
   testIdx: number;
@@ -1380,6 +1382,7 @@ async function applyRunEvalResponseOutcome({
     rateLimitRegistry,
     renderedPrompt,
     response,
+    reportedTokenUsage,
     ret,
     test,
     testIdx,
@@ -1411,6 +1414,7 @@ async function gradeRunEvalResponse({
   rateLimitRegistry,
   renderedPrompt,
   response,
+  reportedTokenUsage,
   ret,
   test,
   testIdx,
@@ -1429,6 +1433,7 @@ async function gradeRunEvalResponse({
   rateLimitRegistry?: RateLimitRegistryRef;
   renderedPrompt: string;
   response: ProviderResponse;
+  reportedTokenUsage: ProviderResponse['tokenUsage'] | null;
   ret: EvaluateResult;
   test: AtomicTestCase;
   testIdx: number;
@@ -1473,6 +1478,7 @@ async function gradeRunEvalResponse({
           prompt: renderedPrompt,
           provider,
           providerResponse: assertionProviderResponse,
+          reportedTokenUsage,
           test,
           vars,
           latencyMs: response.latencyMs ?? latencyMs,
@@ -1493,6 +1499,7 @@ async function gradeRunEvalResponse({
         prompt: renderedPrompt,
         provider,
         providerResponse: assertionProviderResponse,
+        reportedTokenUsage,
         test,
         vars,
         latencyMs: response.latencyMs ?? latencyMs,
@@ -1796,6 +1803,7 @@ async function runEvalInternal({
             rateLimitRegistry,
             renderedPrompt: rendered.renderedPrompt,
             response,
+            reportedTokenUsage: providerCall.response.tokenUsage ?? null,
             ret,
             test,
             testIdx: testIndex,

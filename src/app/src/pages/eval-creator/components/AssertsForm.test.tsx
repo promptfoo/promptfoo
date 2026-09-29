@@ -28,6 +28,10 @@ describe('AssertsForm', () => {
   it.each([
     { type: 'tokens-used', initial: { max: 100 }, next: { min: 0, max: 50 } },
     { type: 'trajectory:tool-set', initial: ['lookup'], next: [] },
+    { type: 'contains-any', initial: ['foo', 'bar'], next: ['word, with comma', 'quote\"'] },
+    { type: 'contains-all', initial: ['foo', 'bar'], next: ['baz', 'qux'] },
+    { type: 'not-contains-any', initial: ['foo'], next: ['bar'] },
+    { type: 'not-contains-all', initial: ['foo'], next: ['bar'] },
   ] as const)('edits structured values for $type', async ({ type, initial, next }) => {
     const user = userEvent.setup();
     renderComponent(

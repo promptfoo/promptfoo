@@ -762,6 +762,7 @@ export async function runAssertions({
   prompt,
   provider,
   providerResponse,
+  reportedTokenUsage,
   test,
   vars,
   traceId,
@@ -771,6 +772,8 @@ export async function runAssertions({
   prompt?: string;
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
+  // null means the provider reported no usage; omitted preserves direct-call behavior.
+  reportedTokenUsage?: ProviderResponse['tokenUsage'] | null;
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   traceId?: string;
@@ -860,7 +863,10 @@ export async function runAssertions({
     const result = await runAssertion({
       prompt,
       provider,
-      providerResponse,
+      providerResponse:
+        reportedTokenUsage !== undefined && getAssertionBaseType(assertion) === 'tokens-used'
+          ? { ...providerResponse, tokenUsage: reportedTokenUsage ?? undefined }
+          : providerResponse,
       assertion,
       test,
       vars,

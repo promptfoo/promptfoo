@@ -105,6 +105,11 @@ const ARRAY_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'not-contains-all',
 ]);
 
+const usesStructuredValue = (type: AssertionType) =>
+  ARRAY_VALUE_ASSERTION_TYPES.has(type) ||
+  type.endsWith('tokens-used') ||
+  type.endsWith('trajectory:tool-set');
+
 // Assertion types that require an LLM
 const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'similar',
@@ -212,18 +217,21 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                         ? assert.value
                         : typeof assert.value === 'number'
                           ? String(assert.value)
-                          : assert.value === undefined
-                            ? ''
-                            : JSON.stringify(assert.value, null, 2)
+                          : assert.value !== undefined && usesStructuredValue(assert.type)
+                            ? JSON.stringify(assert.value, null, 2)
+                            : ''
                     }
                     onChange={(e) => {
                       let newValue: Assertion['value'] = e.target.value;
-                      if (
-                        assert.type.endsWith('tokens-used') ||
-                        assert.type.endsWith('trajectory:tool-set')
-                      ) {
+                      if (usesStructuredValue(assert.type)) {
                         try {
-                          newValue = JSON.parse(e.target.value);
+                          const parsed: unknown = JSON.parse(e.target.value);
+                          if (
+                            !ARRAY_VALUE_ASSERTION_TYPES.has(assert.type) ||
+                            Array.isArray(parsed)
+                          ) {
+                            newValue = parsed as Assertion['value'];
+                          }
                         } catch {
                           // Keep incomplete input visible until it is valid JSON.
                         }
