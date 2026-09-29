@@ -16,13 +16,13 @@ export type ErrorCategory =
 
 /**
  * HTTP status code patterns for error categorization.
- * Uses word boundaries to avoid false positives (e.g., "401k" shouldn't match auth errors).
+ * Require HTTP/status context instead of matching arbitrary numbers.
  */
 const HTTP_STATUS_PATTERNS = {
-  timeout: /\b(?:408|504)\b/,
-  rate_limit: /\b429\b/,
-  auth: /\b40[13]\b/, // 401 or 403
-  server_error: /\b50[0-3]\b/, // 500, 501, 502, 503
+  timeout: /\b(?:http(?: error| status)?|api error|status(?: code)?)\s*[:=]?\s*(?:408|504)\b/i,
+  rate_limit: /\b(?:http(?: error| status)?|api error|status(?: code)?)\s*[:=]?\s*429\b/i,
+  auth: /\b(?:http(?: error| status)?|api error|status(?: code)?)\s*[:=]?\s*40[13]\b/i, // 401 or 403
+  server_error: /\b(?:http(?: error| status)?|api error|status(?: code)?)\s*[:=]?\s*50[0-3]\b/i, // 500, 501, 502, 503
 };
 
 /**
@@ -36,31 +36,26 @@ const ERROR_KEYWORDS = {
   network: ['network', 'econnrefused', 'enotfound', 'econnreset', 'socket hang up', 'dns'],
 };
 
-/**
- * Categorizes an error message into a known category.
- *
- * Uses a combination of HTTP status code patterns and keyword matching.
- * Status codes are matched with word boundaries to avoid false positives
- * (e.g., "401k" won't match as an auth error).
- *
- * @param errorMessage - The error message to categorize
- * @returns The error category
- */
+/** Classify provider/grader messages without interpreting stack frames as HTTP statuses. */
 export function categorizeError(errorMessage: string): ErrorCategory {
-  const errorLower = errorMessage.toLowerCase();
+  const message = errorMessage
+    .split('\n')
+    .filter((line) => !/^\s*at\s/.test(line))
+    .join('\n');
+  const errorLower = message.toLowerCase();
 
   // Check timeout first (highest priority for user-facing issues)
   if (ERROR_KEYWORDS.timeout.some((kw) => errorLower.includes(kw))) {
     return 'timeout';
   }
 
-  if (HTTP_STATUS_PATTERNS.timeout.test(errorMessage)) {
+  if (HTTP_STATUS_PATTERNS.timeout.test(message)) {
     return 'timeout';
   }
 
   // Check rate limiting
   if (
-    HTTP_STATUS_PATTERNS.rate_limit.test(errorMessage) ||
+    HTTP_STATUS_PATTERNS.rate_limit.test(message) ||
     ERROR_KEYWORDS.rate_limit.some((kw) => errorLower.includes(kw))
   ) {
     return 'rate_limit';
@@ -68,7 +63,7 @@ export function categorizeError(errorMessage: string): ErrorCategory {
 
   // Check auth errors
   if (
-    HTTP_STATUS_PATTERNS.auth.test(errorMessage) ||
+    HTTP_STATUS_PATTERNS.auth.test(message) ||
     ERROR_KEYWORDS.auth.some((kw) => errorLower.includes(kw))
   ) {
     return 'auth';
@@ -76,7 +71,7 @@ export function categorizeError(errorMessage: string): ErrorCategory {
 
   // Check server errors
   if (
-    HTTP_STATUS_PATTERNS.server_error.test(errorMessage) ||
+    HTTP_STATUS_PATTERNS.server_error.test(message) ||
     ERROR_KEYWORDS.server_error.some((kw) => errorLower.includes(kw))
   ) {
     return 'server_error';

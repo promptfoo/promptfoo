@@ -1,25 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { computeRunStats, computeRunStatsBatched } from '../../src/runStats/index';
-import { type ApiProvider, type EvaluateStats, ResultFailureReason } from '../../src/types/index';
+import { type ApiProvider, ResultFailureReason } from '../../src/types/index';
 
 import type { StatableResult } from '../../src/runStats/types';
 
 describe('computeRunStats', () => {
-  const createStats = (overrides?: Partial<EvaluateStats>): EvaluateStats =>
-    ({
-      successes: 0,
-      failures: 0,
-      errors: 0,
-      tokenUsage: {
-        total: 0,
-        prompt: 0,
-        completion: 0,
-        cached: 0,
-        numRequests: 0,
-      },
-      ...overrides,
-    }) as EvaluateStats;
-
   const createProvider = (id: string): ApiProvider =>
     ({
       id: () => id,
@@ -33,7 +18,7 @@ describe('computeRunStats', () => {
         provider: { id: 'openai:fixture' },
         response: { output: 'hello', tokenUsage: { total: numRequests * 10, numRequests } },
       })),
-      stats: createStats(),
+
       providers: [],
     });
     expect(runStats.providers[0]).toMatchObject({
@@ -42,39 +27,6 @@ describe('computeRunStats', () => {
       successRate: 1,
       avgLatencyMs: 100,
       tokensPerRequest: 10,
-    });
-  });
-
-  it('normalizes fresh grading requests and includes response-side judge usage', () => {
-    const runStats = computeRunStats({
-      results: [
-        {
-          success: true,
-          latencyMs: 1,
-          response: {
-            output: 'hello',
-            tokenUsage: {
-              assertions: {
-                total: 20,
-                prompt: 12,
-                completion: 8,
-                numRequests: 2,
-                completionDetails: { reasoning: 3 },
-              },
-            },
-          },
-          gradingResult: { tokensUsed: { total: 10, prompt: 8, completion: 2, numRequests: 0 } },
-        },
-      ],
-      stats: createStats(),
-      providers: [],
-    });
-    expect(runStats.assertions.tokenUsage).toMatchObject({
-      totalTokens: 30,
-      promptTokens: 20,
-      completionTokens: 10,
-      numRequests: 3,
-      reasoningTokens: 3,
     });
   });
 
@@ -99,7 +51,7 @@ describe('computeRunStats', () => {
           },
         },
       ],
-      stats: createStats(),
+
       providers: [],
     });
     expect(runStats.assertions.breakdown).toEqual([
@@ -110,81 +62,10 @@ describe('computeRunStats', () => {
     expect(JSON.stringify(runStats)).not.toContain('private-project');
   });
 
-  it.each([undefined, 1])(
-    'deduplicates comparison calls across component positions with aggregate requests=%s',
-    (numRequests) => {
-      const comparison = {
-        pass: true,
-        score: 1,
-        reason: '',
-        assertion: { type: 'select-best' as const, value: 'choose a greeting' },
-        tokensUsed: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
-      };
-      const ordinary = {
-        pass: true,
-        score: 1,
-        reason: '',
-        assertion: { type: 'contains' as const, value: 'hello' },
-      };
-      const runStats = computeRunStats({
-        results: [0, 1].map((promptIdx) => ({
-          testIdx: 0,
-          promptIdx,
-          success: true,
-          latencyMs: 1,
-          gradingResult: {
-            tokensUsed: { total: 50, prompt: 30, completion: 20, numRequests },
-            componentResults: promptIdx === 0 ? [comparison] : [ordinary, comparison],
-          },
-        })),
-        stats: createStats(),
-        providers: [],
-      });
-      expect(runStats.assertions.tokenUsage).toMatchObject({ totalTokens: 50, numRequests: 1 });
-    },
-  );
-
-  it.each([undefined, 1])(
-    'does not recount custom grading children with aggregate requests=%s',
-    (numRequests) => {
-      const tokensUsed = { total: 10, prompt: 8, completion: 2, numRequests: 1 };
-      const child = {
-        pass: true,
-        score: 1,
-        reason: '',
-        assertion: { type: 'llm-rubric' as const },
-        tokensUsed,
-      };
-      const parent = {
-        pass: true,
-        score: 1,
-        reason: '',
-        assertion: { type: 'javascript' as const },
-        tokensUsed,
-        componentResults: [child],
-      };
-      const runStats = computeRunStats({
-        results: [
-          {
-            success: true,
-            latencyMs: 1,
-            gradingResult: {
-              tokensUsed: { ...tokensUsed, numRequests },
-              componentResults: [parent, child],
-            },
-          },
-        ],
-        stats: createStats(),
-        providers: [],
-      });
-      expect(runStats.assertions.tokenUsage).toMatchObject({ totalTokens: 10, numRequests: 1 });
-    },
-  );
-
   it('should compute all stats for empty input', () => {
     const runStats = computeRunStats({
       results: [],
-      stats: createStats(),
+
       providers: [],
     });
 
@@ -210,14 +91,6 @@ describe('computeRunStats', () => {
         passRate: 0,
         modelGraded: 0,
         breakdown: [],
-        tokenUsage: {
-          totalTokens: 0,
-          promptTokens: 0,
-          completionTokens: 0,
-          cachedTokens: 0,
-          numRequests: 0,
-          reasoningTokens: 0,
-        },
       },
       models: { ids: [], isComparison: false, hasCustom: false },
     });
@@ -254,22 +127,9 @@ describe('computeRunStats', () => {
       },
     ];
 
-    const stats = createStats({
-      successes: 2,
-      failures: 1,
-      errors: 0,
-      tokenUsage: {
-        total: 1000,
-        prompt: 800,
-        completion: 200,
-        cached: 100,
-        numRequests: 3,
-      },
-    } as any);
-
     const providers = [createProvider('openai:gpt-4')];
 
-    const runStats = computeRunStats({ results, stats, providers });
+    const runStats = computeRunStats({ results, providers });
 
     // Verify all stat categories are present
     expect(runStats.latency).toBeDefined();
@@ -301,7 +161,7 @@ describe('computeRunStats', () => {
 
     const runStats = computeRunStats({
       results,
-      stats: createStats(),
+
       providers,
     });
 
@@ -312,7 +172,7 @@ describe('computeRunStats', () => {
   it('should derive model information from result providers when available', () => {
     const runStats = computeRunStats({
       results: [{ success: true, latencyMs: 100, provider: { id: 'openai:gpt-4' } }],
-      stats: createStats(),
+
       providers: [createProvider('anthropic:claude-3'), createProvider('openai:gpt-4')],
     });
 
@@ -333,7 +193,7 @@ describe('computeRunStats', () => {
 
     const runStats = computeRunStats({
       results,
-      stats: createStats(),
+
       providers,
     });
 
@@ -359,7 +219,7 @@ describe('computeRunStats', () => {
 
     const runStats = computeRunStats({
       results,
-      stats: createStats(),
+
       providers,
     });
 
@@ -378,7 +238,7 @@ describe('computeRunStats', () => {
         { success: true, latencyMs: 100, provider: { id: 'provider-z' } },
         { success: true, latencyMs: 100, provider: { id: 'provider-a' } },
       ],
-      stats: createStats(),
+
       providers: [],
     });
 
@@ -400,7 +260,7 @@ describe('computeRunStats', () => {
           response: { tokenUsage: { total: 10, prompt: 5, completion: 5 } },
         },
       ],
-      stats: createStats(),
+
       providers: [createProvider('openai:gpt-4')],
     });
 
@@ -421,227 +281,11 @@ describe('computeRunStats', () => {
 
     const runStats = computeRunStats({
       results,
-      stats: createStats(),
+
       providers,
     });
 
     expect(runStats.models.hasCustom).toBe(true);
-  });
-
-  it('should extract assertion token usage from stats', () => {
-    const evalStats = createStats({
-      tokenUsage: {
-        total: 1000,
-        prompt: 800,
-        completion: 200,
-        cached: 100,
-        numRequests: 5,
-        assertions: {
-          total: 300,
-          prompt: 200,
-          completion: 100,
-          cached: 25,
-          numRequests: 2,
-          completionDetails: {
-            reasoning: 10,
-          },
-        },
-      },
-    } as any);
-
-    const runStats = computeRunStats({
-      results: [],
-      stats: evalStats,
-      providers: [],
-    });
-
-    expect(runStats.assertions.tokenUsage).toEqual({
-      totalTokens: 300,
-      promptTokens: 200,
-      completionTokens: 100,
-      cachedTokens: 25,
-      numRequests: 2,
-      reasoningTokens: 10,
-    });
-  });
-
-  it('should derive assertion token usage from persisted result rows when invocation stats are partial', async () => {
-    const results: StatableResult[] = [
-      {
-        success: true,
-        latencyMs: 100,
-        gradingResult: {
-          tokensUsed: {
-            total: 300,
-            prompt: 220,
-            completion: 80,
-            cached: 25,
-            numRequests: 2,
-            completionDetails: {
-              reasoning: 7,
-            },
-          },
-          componentResults: [
-            {
-              pass: true,
-              score: 1,
-              reason: '',
-              assertion: { type: 'llm-rubric' },
-              tokensUsed: {
-                total: 300,
-                prompt: 220,
-                completion: 80,
-                cached: 25,
-                numRequests: 2,
-                completionDetails: {
-                  reasoning: 7,
-                },
-              },
-            },
-          ],
-        },
-      },
-    ];
-
-    async function* resultBatches() {
-      yield results;
-    }
-
-    const { runStats } = await computeRunStatsBatched({
-      resultBatches: resultBatches(),
-      stats: createStats(),
-      providers: [],
-    });
-
-    expect(runStats.assertions.tokenUsage).toEqual({
-      totalTokens: 300,
-      promptTokens: 220,
-      completionTokens: 80,
-      cachedTokens: 25,
-      numRequests: 2,
-      reasoningTokens: 7,
-    });
-  });
-
-  it('should count comparison assertion requests without double-counting merged token totals', () => {
-    const runStats = computeRunStats({
-      results: [
-        {
-          success: true,
-          latencyMs: 100,
-          gradingResult: {
-            // Comparison tokens are merged into the row-level grading result,
-            // but the historical merge path did not preserve numRequests here.
-            tokensUsed: {
-              total: 50,
-              prompt: 30,
-              completion: 20,
-            },
-            componentResults: [
-              {
-                pass: true,
-                score: 1,
-                reason: '',
-                assertion: { type: 'select-best' },
-                tokensUsed: {
-                  total: 50,
-                  prompt: 30,
-                  completion: 20,
-                  numRequests: 1,
-                },
-              },
-            ],
-          },
-        },
-      ],
-      stats: createStats(),
-      providers: [],
-    });
-
-    expect(runStats.assertions.tokenUsage).toEqual({
-      totalTokens: 50,
-      promptTokens: 30,
-      completionTokens: 20,
-      cachedTokens: 0,
-      numRequests: 1,
-      reasoningTokens: 0,
-    });
-  });
-
-  it('should count one select-best grader call copied across compared output rows only once', () => {
-    const comparisonResult = {
-      pass: true,
-      score: 1,
-      reason: '',
-      assertion: { type: 'select-best' as const, value: 'Choose the best response' },
-      tokensUsed: {
-        total: 50,
-        prompt: 30,
-        completion: 20,
-        numRequests: 1,
-      },
-    };
-    const runStats = computeRunStats({
-      results: [0, 1].map((promptIdx) => ({
-        testIdx: 7,
-        promptIdx,
-        success: promptIdx === 0,
-        latencyMs: 100,
-        gradingResult: {
-          tokensUsed: comparisonResult.tokensUsed,
-          componentResults: [comparisonResult],
-        },
-      })),
-      stats: createStats(),
-      providers: [],
-    });
-
-    expect(runStats.assertions.tokenUsage).toEqual({
-      totalTokens: 50,
-      promptTokens: 30,
-      completionTokens: 20,
-      cachedTokens: 0,
-      numRequests: 1,
-      reasoningTokens: 0,
-    });
-  });
-
-  it('should retain row-specific grader requests while deduplicating select-best requests', () => {
-    const selectBest = {
-      pass: true,
-      score: 1,
-      reason: '',
-      assertion: { type: 'select-best' as const, value: 'Choose the best response' },
-      tokensUsed: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
-    };
-    const rubric = {
-      pass: true,
-      score: 1,
-      reason: '',
-      assertion: { type: 'llm-rubric' as const, value: 'Be correct' },
-      tokensUsed: { total: 10, prompt: 8, completion: 2, numRequests: 1 },
-    };
-    const runStats = computeRunStats({
-      results: [0, 1].map((promptIdx) => ({
-        testIdx: 8,
-        promptIdx,
-        success: true,
-        latencyMs: 100,
-        gradingResult: {
-          tokensUsed: { total: 60, prompt: 38, completion: 22, numRequests: 2 },
-          componentResults: [rubric, selectBest],
-        },
-      })),
-      stats: createStats(),
-      providers: [],
-    });
-
-    expect(runStats.assertions.tokenUsage).toMatchObject({
-      totalTokens: 70,
-      promptTokens: 46,
-      completionTokens: 24,
-      numRequests: 3,
-    });
   });
 
   it('should ignore flattened assert-set aggregate parents in aggregate assertion stats', () => {
@@ -694,7 +338,7 @@ describe('computeRunStats', () => {
           },
         },
       ],
-      stats: createStats(),
+
       providers: [],
     });
 
@@ -705,56 +349,6 @@ describe('computeRunStats', () => {
         { type: 'contains', pass: 0, fail: 1, total: 1, passRate: 0 },
         { type: 'equals', pass: 1, fail: 0, total: 1, passRate: 1 },
       ],
-      tokenUsage: {
-        totalTokens: 22,
-        promptTokens: 15,
-        completionTokens: 7,
-        cachedTokens: 0,
-        numRequests: 2,
-        reasoningTokens: 0,
-      },
-    });
-  });
-
-  it('should preserve row-level assertion request counts for model-graded assertions', () => {
-    const runStats = computeRunStats({
-      results: [
-        {
-          success: true,
-          latencyMs: 100,
-          gradingResult: {
-            tokensUsed: {
-              total: 42,
-              prompt: 32,
-              completion: 10,
-              numRequests: 2,
-            },
-            componentResults: [
-              {
-                pass: true,
-                score: 1,
-                reason: '',
-                assertion: { type: 'llm-rubric' },
-                tokensUsed: {
-                  total: 42,
-                  prompt: 32,
-                  completion: 10,
-                  numRequests: 2,
-                },
-              },
-            ],
-          },
-        },
-      ],
-      stats: createStats(),
-      providers: [],
-    });
-
-    expect(runStats.assertions.tokenUsage).toMatchObject({
-      totalTokens: 42,
-      promptTokens: 32,
-      completionTokens: 10,
-      numRequests: 2,
     });
   });
 
@@ -776,7 +370,7 @@ describe('computeRunStats', () => {
 
     const runStats = computeRunStats({
       results,
-      stats: createStats(),
+
       providers: [createProvider('openai:gpt-4')],
     });
 
@@ -809,7 +403,7 @@ describe('computeRunStats', () => {
           response: { cached: false },
         },
       ],
-      stats: createStats(),
+
       providers: [createProvider('openai:gpt-4')],
     });
 
@@ -845,7 +439,7 @@ describe('computeRunStats', () => {
         },
       },
     ];
-    const stats = createStats();
+
     const providers = [createProvider('openai:gpt-4')];
 
     async function* resultBatches() {
@@ -855,11 +449,11 @@ describe('computeRunStats', () => {
 
     const batched = await computeRunStatsBatched({
       resultBatches: resultBatches(),
-      stats,
+
       providers,
     });
 
-    expect(batched.runStats).toEqual(computeRunStats({ results, stats, providers }));
+    expect(batched.runStats).toEqual(computeRunStats({ results, providers }));
     expect(batched.allProviderStats).toEqual(batched.runStats.providers);
     expect(batched.resultCount).toBe(2);
     expect(batched.hasTimedOutResult).toBe(true);

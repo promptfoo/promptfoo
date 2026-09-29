@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { computeAssertionBreakdown, computeAssertionStats } from './helpers';
 
 import type { StatableResult } from '../../src/runStats/types';
-import type { EvaluateStats } from '../../src/types/index';
 
 describe('computeAssertionBreakdown', () => {
   it('should return empty array for empty results', () => {
@@ -194,37 +193,14 @@ describe('computeAssertionBreakdown', () => {
 });
 
 describe('computeAssertionStats', () => {
-  const createStats = (overrides?: Partial<EvaluateStats>): EvaluateStats =>
-    ({
-      successes: 0,
-      failures: 0,
-      errors: 0,
-      tokenUsage: {
-        total: 0,
-        prompt: 0,
-        completion: 0,
-        cached: 0,
-        numRequests: 0,
-      },
-      ...overrides,
-    }) as EvaluateStats;
-
   it('should return zeros for empty results', () => {
-    const stats = computeAssertionStats([], createStats());
+    const stats = computeAssertionStats([]);
     expect(stats).toEqual({
       total: 0,
       passed: 0,
       passRate: 0,
       modelGraded: 0,
       breakdown: [],
-      tokenUsage: {
-        totalTokens: 0,
-        promptTokens: 0,
-        completionTokens: 0,
-        cachedTokens: 0,
-        numRequests: 0,
-        reasoningTokens: 0,
-      },
     });
   });
 
@@ -242,7 +218,7 @@ describe('computeAssertionStats', () => {
         },
       },
     ];
-    const stats = computeAssertionStats(results, createStats());
+    const stats = computeAssertionStats(results);
     expect(stats.total).toBe(3);
     expect(stats.passed).toBe(2);
     expect(stats.passRate).toBeCloseTo(2 / 3);
@@ -280,7 +256,7 @@ describe('computeAssertionStats', () => {
       },
     ];
 
-    const stats = computeAssertionStats(results, createStats());
+    const stats = computeAssertionStats(results);
 
     expect(stats.total).toBe(2);
     expect(stats.passed).toBe(1);
@@ -303,7 +279,7 @@ describe('computeAssertionStats', () => {
         },
       },
     ];
-    const stats = computeAssertionStats(results, createStats());
+    const stats = computeAssertionStats(results);
     // Should count unique model-graded types: llm-rubric, factuality = 2
     expect(stats.modelGraded).toBe(2);
   });
@@ -337,102 +313,8 @@ describe('computeAssertionStats', () => {
         },
       },
     ];
-    const stats = computeAssertionStats(results, createStats());
+    const stats = computeAssertionStats(results);
     expect(stats.modelGraded).toBe(modelGradedTypes.length);
-  });
-
-  it('should extract token usage from stats', () => {
-    const evalStats = createStats({
-      tokenUsage: {
-        total: 1000,
-        prompt: 800,
-        completion: 200,
-        cached: 100,
-        numRequests: 5,
-        assertions: {
-          total: 500,
-          prompt: 400,
-          completion: 100,
-          cached: 50,
-          numRequests: 3,
-          completionDetails: {
-            reasoning: 25,
-          },
-        },
-      },
-    } as any);
-    const stats = computeAssertionStats([], evalStats);
-    expect(stats.tokenUsage).toEqual({
-      totalTokens: 500,
-      promptTokens: 400,
-      completionTokens: 100,
-      cachedTokens: 50,
-      numRequests: 3,
-      reasoningTokens: 25,
-    });
-  });
-
-  it('should prefer result assertion token usage when available', () => {
-    const results: StatableResult[] = [
-      {
-        success: true,
-        latencyMs: 100,
-        gradingResult: {
-          tokensUsed: {
-            total: 60,
-            prompt: 45,
-            completion: 15,
-            numRequests: 1,
-          },
-          componentResults: [
-            {
-              pass: true,
-              score: 1,
-              reason: '',
-              assertion: { type: 'llm-rubric' },
-            },
-          ],
-        },
-      },
-    ];
-    const evalStats = createStats({
-      tokenUsage: {
-        total: 1000,
-        prompt: 800,
-        completion: 200,
-        cached: 100,
-        numRequests: 5,
-        assertions: {
-          total: 500,
-          prompt: 400,
-          completion: 100,
-          cached: 50,
-          numRequests: 3,
-        },
-      },
-    } as any);
-
-    const stats = computeAssertionStats(results, evalStats);
-
-    expect(stats.tokenUsage).toMatchObject({
-      totalTokens: 60,
-      promptTokens: 45,
-      completionTokens: 15,
-      numRequests: 1,
-    });
-  });
-
-  it('should handle missing assertion token usage gracefully', () => {
-    const evalStats = createStats();
-    const stats = computeAssertionStats([], evalStats);
-    expect(stats.tokenUsage).toEqual({
-      totalTokens: 0,
-      promptTokens: 0,
-      completionTokens: 0,
-      cachedTokens: 0,
-      numRequests: 0,
-      reasoningTokens: 0,
-    });
   });
 
   it('should handle null gradingResult', () => {
@@ -440,7 +322,7 @@ describe('computeAssertionStats', () => {
       { success: true, latencyMs: 100, gradingResult: null },
       { success: true, latencyMs: 200 },
     ];
-    const stats = computeAssertionStats(results, createStats());
+    const stats = computeAssertionStats(results);
     expect(stats.total).toBe(0);
     expect(stats.passed).toBe(0);
   });

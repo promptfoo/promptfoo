@@ -12,6 +12,7 @@ import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { EchoProvider } from '../../src/providers/echo';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { computeRunStats } from '../../src/runStats/index';
 import {
   type ApiProvider,
   type ProviderResponse,
@@ -1131,7 +1132,7 @@ describeEvaluator('evaluator execution control', () => {
         await waitForTarget(40, options?.abortSignal);
         return {
           output: `Target output for ${prompt}`,
-          tokenUsage: createEmptyTokenUsage(),
+          tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 },
         };
       }),
     };
@@ -1193,5 +1194,10 @@ describeEvaluator('evaluator execution control', () => {
     );
     expect(resultByTopic.get('alpha')?.error).toBeUndefined();
     expect(resultByTopic.get('gamma')?.error).toContain('Evaluation exceeded max duration');
+    expect(resultByTopic.get('gamma')?.response?.tokenUsage?.numRequests).toBe(0);
+    expect(provider.callApi).toHaveBeenCalledTimes(2);
+    expect(computeRunStats({ results, providers: [provider] }).providers).toEqual([
+      expect.objectContaining({ requests: 2 }),
+    ]);
   });
 });

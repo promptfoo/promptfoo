@@ -3,16 +3,9 @@ import {
   type ApiProvider,
   type AssertionType,
   BaseAssertionTypesSchema,
-  type EvaluateStats,
   SpecialAssertionTypesSchema,
 } from '../types/index';
 import { getCountableAssertionComponents } from './assertionComponents';
-import {
-  accumulateResultAssertionTokenUsage,
-  createAssertionTokenAccumulator,
-  getStatsAssertionTokenUsage,
-  toAssertionTokenUsage,
-} from './assertionTokens';
 import { categorizeError, type ErrorCategory, isOperationalError } from './errors';
 import { getPercentile } from './latency';
 import { computeModelInfo, computeModelInfoFromIds } from './providers';
@@ -64,8 +57,6 @@ export class RunStatsAccumulator {
   private readonly errors = createEmptyErrorBreakdown();
   private readonly providers = new Map<string, ProviderAccumulator>();
   private readonly assertions = new Map<string, AssertionAccumulator>();
-  private readonly assertionTokenUsage = createAssertionTokenAccumulator();
-  private readonly seenComparisonAssertionTokenUsage = new Set<string>();
   private readonly assertionTypes = new Set<string>();
   private readonly modelProviderIds = new Set<string>();
   private cacheHits = 0;
@@ -75,7 +66,6 @@ export class RunStatsAccumulator {
   private assertionPassCount = 0;
   private processedResultCount = 0;
   private foundTimedOutResult = false;
-  private foundAssertionTokenUsage = false;
 
   addResults(results: Iterable<StatableResult>): void {
     for (const result of results) {
@@ -91,17 +81,13 @@ export class RunStatsAccumulator {
     return this.foundTimedOutResult;
   }
 
-  toRunStats(stats: EvaluateStats, providers: ApiProvider[]): EvalRunStats {
+  toRunStats(providers: ApiProvider[]): EvalRunStats {
     const sortedLatencies = [...this.latencies].sort((a, b) => a - b);
     const totalLatency = sortedLatencies.reduce((sum, latency) => sum + latency, 0);
     const cacheTotal = this.cacheHits + this.cacheMisses;
     const errorTypes = (Object.keys(this.errors) as ErrorCategory[])
       .filter((category) => this.errors[category] > 0)
       .sort();
-    const assertionTokenUsage = this.foundAssertionTokenUsage
-      ? this.assertionTokenUsage
-      : getStatsAssertionTokenUsage(stats);
-
     const modelInfo =
       this.modelProviderIds.size > 0
         ? computeModelInfoFromIds(Array.from(this.modelProviderIds))
@@ -133,7 +119,6 @@ export class RunStatsAccumulator {
           MODEL_GRADED_ASSERTION_TYPES.has(type as AssertionType),
         ).length,
         breakdown: this.getAssertionBreakdown(),
-        tokenUsage: toAssertionTokenUsage(assertionTokenUsage),
       },
       models: modelInfo,
     };
@@ -192,13 +177,6 @@ export class RunStatsAccumulator {
     if (!result.gradingOnly) {
       this.addProviderResult(result);
     }
-    this.foundAssertionTokenUsage =
-      accumulateResultAssertionTokenUsage(
-        this.assertionTokenUsage,
-        result,
-        this.seenComparisonAssertionTokenUsage,
-      ) || this.foundAssertionTokenUsage;
-
     for (const componentResult of getCountableAssertionComponents(result)) {
       this.assertionCount++;
       if (componentResult.pass) {

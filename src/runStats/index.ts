@@ -1,17 +1,15 @@
 import { RunStatsAccumulator } from './accumulator';
 
-import type { ApiProvider, EvaluateStats } from '../types/index';
+import type { ApiProvider } from '../types/index';
 import type { EvalRunStats, ProviderStats, StatableResult } from './types';
 
 export interface ComputeRunStatsInput {
   results: StatableResult[];
-  stats: EvaluateStats;
   providers: ApiProvider[];
 }
 
 export interface ComputeRunStatsBatchedInput {
   resultBatches: AsyncIterable<StatableResult[]>;
-  stats: EvaluateStats;
   providers: ApiProvider[];
 }
 
@@ -23,17 +21,17 @@ export interface ComputeRunStatsBatchedResult {
 }
 
 export function computeRunStats(input: ComputeRunStatsInput): EvalRunStats {
-  const { results, stats, providers } = input;
+  const { results, providers } = input;
   const accumulator = new RunStatsAccumulator();
   accumulator.addResults(results);
 
-  return accumulator.toRunStats(stats, providers);
+  return accumulator.toRunStats(providers);
 }
 
 export async function computeRunStatsBatched(
   input: ComputeRunStatsBatchedInput,
 ): Promise<ComputeRunStatsBatchedResult> {
-  const { resultBatches, stats, providers } = input;
+  const { resultBatches, providers } = input;
   const accumulator = new RunStatsAccumulator();
 
   for await (const batch of resultBatches) {
@@ -41,7 +39,7 @@ export async function computeRunStatsBatched(
   }
 
   return {
-    runStats: accumulator.toRunStats(stats, providers),
+    runStats: accumulator.toRunStats(providers),
     allProviderStats: accumulator.getProviderStats(),
     resultCount: accumulator.resultCount,
     hasTimedOutResult: accumulator.hasTimedOutResult,

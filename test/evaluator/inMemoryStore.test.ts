@@ -201,14 +201,6 @@ describe('InMemoryEvaluationStore', () => {
         passRate: 0,
         modelGraded: 0,
         breakdown: [],
-        tokenUsage: {
-          totalTokens: 0,
-          promptTokens: 0,
-          completionTokens: 0,
-          cachedTokens: 0,
-          numRequests: 0,
-          reasoningTokens: 0,
-        },
       },
       models: { ids: [], isComparison: false, hasCustom: false },
     });

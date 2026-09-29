@@ -1085,6 +1085,8 @@ describeEvaluator('select-best runtime grading configuration', () => {
       cacheHits: 0,
       cacheMisses: 0,
       errorTypes: ['other'],
+      models: [],
+      isModelComparison: false,
     });
     expect(JSON.parse((event as any).errorBreakdown)).toMatchObject({ other: 2 });
     expect(JSON.parse((event as any).providerBreakdown)).toEqual([]);
@@ -1107,10 +1109,14 @@ describeEvaluator('select-best runtime grading configuration', () => {
     expect(grader.callApi).toHaveBeenCalledTimes(2);
     expect(seenKeys).toEqual([secret, secret]);
     const event = recordTelemetry.mock.calls.filter(([name]) => name === 'eval_ran').at(-1)?.[1];
-    expect(event).toMatchObject({ numResults: 0, numAssertions: 2, cacheHits: 0, cacheMisses: 0 });
-    expect(JSON.parse((event as any).assertionTokenUsage)).toMatchObject({
-      totalTokens: 50,
-      numRequests: 1,
+    expect(event).toMatchObject({
+      numResults: 0,
+      numAssertions: 2,
+      cacheHits: 0,
+      cacheMisses: 0,
+      models: [],
+      isModelComparison: false,
     });
+    expect(event).not.toHaveProperty('assertionTokenUsage');
   });
 });

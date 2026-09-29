@@ -65,6 +65,29 @@ describe('categorizeError', () => {
     expect(categorizeError('NETWORK ERROR')).toBe('network');
   });
 
+  it.each([408, 429, 401, 500])('does not treat stack line %s as an HTTP status', (line) => {
+    expect(
+      categorizeError(`Error: fixture failure\n    at provider (/fixture/network.ts:${line}:1)`),
+    ).toBe('other');
+    expect(categorizeError(`Error: fixture failure at /fixture/provider.ts:${line}:1`)).toBe(
+      'other',
+    );
+  });
+
+  it.each([
+    ['HTTP 408', 'timeout'],
+    ['status: 429', 'rate_limit'],
+    ['status code 401', 'auth'],
+    ['HTTP 500', 'server_error'],
+    ['API error: 429', 'rate_limit'],
+    ['HTTP error 408', 'timeout'],
+    ['HTTP status 500', 'server_error'],
+  ])('classifies %s with a stack frame', (message, expected) => {
+    expect(categorizeError(`${message}\n    at provider (/fixture/provider.ts:408:1)`)).toBe(
+      expected,
+    );
+  });
+
   it('should prioritize first matching category', () => {
     // If an error contains multiple keywords, first match wins
     // 'timeout' is checked before 'rate_limit'

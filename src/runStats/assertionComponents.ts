@@ -6,7 +6,7 @@ import type { StatableResult } from './types';
  * rows. The aggregate parent has nested componentResults but no concrete
  * assertion, so counting it as "unknown" double-counts the user's assertions.
  */
-export function isAggregateAssertionComponent(componentResult: GradingResult): boolean {
+function isAggregateAssertionComponent(componentResult: GradingResult): boolean {
   return (
     !componentResult.assertion &&
     Array.isArray(componentResult.componentResults) &&

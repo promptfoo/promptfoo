@@ -258,7 +258,6 @@ describeEvaluator('evaluator metrics and scoring', () => {
     const providerBreakdown = JSON.parse(String(properties?.providerBreakdown));
     const assertionBreakdown = JSON.parse(String(properties?.assertionBreakdown));
     const errorBreakdown = JSON.parse(String(properties?.errorBreakdown));
-    const assertionTokenUsage = JSON.parse(String(properties?.assertionTokenUsage));
 
     expect(JSON.stringify(providerBreakdown)).not.toContain('/Users/acme/private');
     expect(providerBreakdown).toEqual([
@@ -285,15 +284,7 @@ describeEvaluator('evaluator metrics and scoring', () => {
       network: 0,
       other: 0,
     });
-    expect(assertionTokenUsage).toEqual(
-      expect.objectContaining({
-        totalTokens: 0,
-        promptTokens: 0,
-        completionTokens: 0,
-        cachedTokens: 0,
-        numRequests: 0,
-      }),
-    );
+    expect(properties).not.toHaveProperty('assertionTokenUsage');
   });
 
   it('excludes stale retry-error rows from persisted run statistics', async () => {

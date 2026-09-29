@@ -3517,6 +3517,7 @@ function createMaxDurationTimeoutResult(
     },
     vars: evalStep.test.vars || {},
     error: `Evaluation exceeded max duration of ${maxEvalTimeMs}ms`,
+    response: { tokenUsage: { numRequests: 0 } },
     success: false,
     failureReason: ResultFailureReason.ERROR,
     score: 0,
@@ -4848,14 +4849,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
   private recordResumedComparison(
     result: TResult,
-    contribution: Omit<StatableResult, 'gradingOnly' | 'testIdx' | 'promptIdx'>,
+    contribution: Omit<StatableResult, 'gradingOnly'>,
   ) {
     if (cliState.resume && !this.currentResultKeys.has(getResultIndexKey(result))) {
       this.invocationComparisonResults.push({
         ...contribution,
         gradingOnly: true,
-        testIdx: result.testIdx,
-        promptIdx: result.promptIdx,
       });
     }
   }
@@ -4880,7 +4879,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     this.recordResumedComparison(result, {
       success: gradingResult.pass,
       latencyMs: 0,
-      gradingResult: { tokensUsed: gradingResult.tokensUsed, componentResults: [gradingResult] },
+      gradingResult: { componentResults: [gradingResult] },
     });
     this.updateComparisonStats(
       result,
@@ -5192,7 +5191,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     const completeRunStats = await computeRunStatsBatched({
       resultBatches: this.getCompleteRunStatsResultBatches(),
-      stats: this.stats,
       providers: testSuite.providers,
     });
     this.store.setRunStats(completeRunStats.runStats);
@@ -5203,8 +5201,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       this.store.persisted && cliState.resume
         ? await computeRunStatsBatched({
             resultBatches: this.getInvocationTelemetryResultBatches(),
-            stats: this.stats,
-            providers: testSuite.providers,
+            providers: [],
           })
         : completeRunStats;
     const { runStats, resultCount, hasTimedOutResult } = telemetryRunStats;
@@ -5253,7 +5250,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       passedAssertions: runStats.assertions.passed,
       modelGradedAssertions: runStats.assertions.modelGraded,
       assertionPassRate: runStats.assertions.passRate,
-      assertionTokenUsage: JSON.stringify(runStats.assertions.tokenUsage),
       assertionBreakdown: JSON.stringify(runStats.assertions.breakdown),
       providerBreakdown: JSON.stringify(
         sanitizeTelemetryProviderBreakdown(telemetryRunStats.allProviderStats),

@@ -1,21 +1,19 @@
 import { RunStatsAccumulator } from '../../src/runStats/accumulator';
 import { computeRunStats } from '../../src/runStats/index';
-import { createEvaluateStats } from '../factories/eval';
 
 import type { StatableResult } from '../../src/runStats/types';
-import type { EvaluateStats } from '../../src/types/index';
 
 export function computeCacheStats(results: StatableResult[]) {
-  return computeRunStats({ results, stats: createEvaluateStats(), providers: [] }).cache;
+  return computeRunStats({ results, providers: [] }).cache;
 }
 export function computeLatencyStats(results: StatableResult[]) {
-  return computeRunStats({ results, stats: createEvaluateStats(), providers: [] }).latency;
+  return computeRunStats({ results, providers: [] }).latency;
 }
 export function computeErrorStats(results: StatableResult[]) {
-  return computeRunStats({ results, stats: createEvaluateStats(), providers: [] }).errors;
+  return computeRunStats({ results, providers: [] }).errors;
 }
-export function computeAssertionStats(results: StatableResult[], stats: EvaluateStats) {
-  return computeRunStats({ results, stats, providers: [] }).assertions;
+export function computeAssertionStats(results: StatableResult[]) {
+  return computeRunStats({ results, providers: [] }).assertions;
 }
 export function computeAssertionBreakdown(results: StatableResult[], maxTypes = 20) {
   const accumulator = new RunStatsAccumulator();

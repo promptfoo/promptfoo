@@ -8,15 +8,13 @@ import type { GradingResult, ProviderResponse, ResultFailureReason } from '../ty
  */
 export interface StatableResult {
   gradingOnly?: boolean;
-  testIdx?: number;
-  promptIdx?: number;
   success: boolean;
   latencyMs: number;
   error?: string | null;
   failureReason?: ResultFailureReason;
   response?: Pick<ProviderResponse, 'cached' | 'tokenUsage' | 'output' | 'error'>;
   provider?: { id?: string };
-  gradingResult?: Pick<GradingResult, 'componentResults' | 'tokensUsed' | 'metadata'> | null;
+  gradingResult?: Pick<GradingResult, 'componentResults'> | null;
 }
 
 /**
@@ -105,24 +103,6 @@ export interface AssertionTypeStats {
 }
 
 /**
- * Token usage for assertions (model-graded).
- */
-export interface AssertionTokenUsage {
-  /** Total tokens used for assertions */
-  totalTokens: number;
-  /** Prompt tokens used for assertions */
-  promptTokens: number;
-  /** Completion tokens used for assertions */
-  completionTokens: number;
-  /** Cached tokens used for assertions */
-  cachedTokens: number;
-  /** Number of assertion API requests */
-  numRequests: number;
-  /** Reasoning tokens (for models with extended thinking) */
-  reasoningTokens: number;
-}
-
-/**
  * Statistics exposed on the returned Eval instance; not persisted.
  */
 export interface EvalRunStats {
@@ -157,8 +137,6 @@ export interface EvalRunStats {
     modelGraded: number;
     /** Breakdown by assertion type (sorted by volume, top 20) */
     breakdown: AssertionTypeStats[];
-    /** Token usage for model-graded assertions */
-    tokenUsage: AssertionTokenUsage;
   };
 
   /** Model/provider identification */
