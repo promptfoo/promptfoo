@@ -47,11 +47,16 @@ To route requests through your local Helicone AI Gateway:
 ```yaml
 providers:
   - helicone:openai/gpt-5-mini
-  - helicone:anthropic/claude-3-5-sonnet
+  - id: helicone:anthropic/claude-sonnet-5
+    config:
+      omitDefaults: true
   - helicone:groq/llama-3.1-8b-instant
 ```
 
 The model format is `provider/model` as supported by the Helicone AI Gateway.
+
+For Claude 5, `omitDefaults: true` omits Promptfoo's default `temperature: 0`.
+Leave sampling parameters unset in your config and environment; explicit values still apply.
 
 ### Custom Configuration
 
@@ -94,7 +99,7 @@ The Helicone provider uses the format: `helicone:provider/model`
 Examples:
 
 - `helicone:openai/gpt-4o`
-- `helicone:anthropic/claude-3-5-sonnet`
+- `helicone:anthropic/claude-sonnet-5`
 - `helicone:groq/llama-3.1-8b-instant`
 
 ### Supported Models
@@ -104,7 +109,7 @@ The Helicone AI Gateway supports 100+ models from various providers. Some popula
 | Provider  | Example Models                                                    |
 | --------- | ----------------------------------------------------------------- |
 | OpenAI    | `openai/gpt-4o`, `openai/gpt-5-mini`                              |
-| Anthropic | `anthropic/claude-3-5-sonnet`, `anthropic/claude-3-haiku`         |
+| Anthropic | `anthropic/claude-sonnet-5`, `anthropic/claude-haiku-4-5`         |
 | Groq      | `groq/llama-3.1-8b-instant`, `groq/llama-3.1-70b-versatile`       |
 | Meta      | `meta-llama/Llama-3-8b-chat-hf`, `meta-llama/Llama-3-70b-chat-hf` |
 | Google    | `google/gemma-7b-it`, `google/gemma-2b-it`                        |
@@ -161,11 +166,12 @@ providers:
       properties:
         model_family: 'gpt-4'
 
-  - id: helicone:anthropic/claude-3-5-sonnet-20241022
+  - id: helicone:anthropic/claude-sonnet-5
     config:
+      omitDefaults: true
       tags: ['anthropic', 'claude']
       properties:
-        model_family: 'claude-3'
+        model_family: 'claude-5'
 
 prompts:
   - 'Write a creative story about {{topic}}'
