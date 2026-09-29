@@ -1,8 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
-import { getCloudUserEmail, getUserEmail, setUserEmail } from '../../globalConfig/accounts';
-import { cloudConfig } from '../../globalConfig/cloud';
+import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
@@ -145,6 +144,7 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
     evaluateOptions,
     sourceEvalId,
     providers: _validatedProviders,
+    basePath: _basePath,
     ...restData
   } = result.data;
   let testSuite = {
@@ -157,7 +157,10 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
     try {
       const sourceEval = await Eval.findById(sourceEvalId);
       if (sourceEval) {
-        testSuite = restoreAzureBlobSasTokens(testSuite, sourceEval.config);
+        testSuite = {
+          ...restoreAzureBlobSasTokens(testSuite, sourceEval.config),
+          ...(sourceEval.config.basePath !== undefined && { basePath: sourceEval.config.basePath }),
+        };
       }
     } catch (error) {
       sendError(res, 500, 'Failed to prepare eval job', error);
@@ -290,40 +293,17 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    const isCloudEnabled = cloudConfig.isEnabled() === true;
-    if (isCloudEnabled) {
-      if (eval_.author) {
-        res.status(403).json({ error: 'Cloud eval authors cannot be changed once assigned' });
-        return;
-      }
+    eval_.author = author || null;
+    await eval_.save();
 
-      const currentUserEmail = await getCloudUserEmail();
-      if (author !== currentUserEmail) {
-        res.status(403).json({ error: 'Cloud evals can only be claimed by the current user' });
-        return;
-      }
-    }
-
-    const authorUpdated = await Eval.updateAuthor(id, author || null, {
-      onlyIfUnassigned: isCloudEnabled,
-    });
-    if (!authorUpdated) {
-      res.status(isCloudEnabled ? 403 : 404).json({
-        error: isCloudEnabled
-          ? 'Cloud eval authors cannot be changed once assigned'
-          : 'Eval not found',
-      });
-      return;
-    }
-
-    // NOTE: Side effect. If user email is not set, set it to the author's email
+    // Use a supplied author as the account email only when none is configured.
     if (author && !getUserEmail()) {
       setUserEmail(author);
     }
 
     res.json(
       EvalSchemas.UpdateAuthor.Response.parse({
-        message: author ? 'Author updated successfully' : 'Author cleared successfully',
+        message: 'Author updated successfully',
       }),
     );
   } catch (error) {

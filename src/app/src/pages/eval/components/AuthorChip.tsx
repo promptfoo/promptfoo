@@ -1,15 +1,6 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 
-import { Button } from '@app/components/ui/button';
 import { Chip } from '@app/components/ui/chip';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@app/components/ui/dialog';
 import { Input } from '@app/components/ui/input';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
@@ -21,7 +12,6 @@ interface AuthorChipProps {
   onEditAuthor: (newAuthor: string) => Promise<void>;
   currentUserEmail: string | null;
   editable: boolean;
-  isCloudEnabled?: boolean;
 }
 
 export const AuthorChip = ({
@@ -29,16 +19,12 @@ export const AuthorChip = ({
   onEditAuthor,
   currentUserEmail,
   editable,
-  isCloudEnabled = false,
 }: AuthorChipProps) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [isClaimDialogOpen, setIsClaimDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [claimError, setClaimError] = useState<string | null>(null);
   const [email, setEmail] = useState(author || '');
   const inputRef = useRef<HTMLInputElement>(null);
   const { showToast } = useToast();
-  const canStartAuthorAction = editable && (!isCloudEnabled || !author);
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -48,18 +34,10 @@ export const AuthorChip = ({
   }, [isEditing]);
 
   const handleStartEdit = () => {
-    if (!canStartAuthorAction) {
-      return;
+    if (editable) {
+      setEmail(author || currentUserEmail || '');
+      setIsEditing(true);
     }
-
-    if (isCloudEnabled) {
-      setClaimError(null);
-      setIsClaimDialogOpen(true);
-      return;
-    }
-
-    setEmail(author || currentUserEmail || '');
-    setIsEditing(true);
   };
 
   const handleCancel = () => {
@@ -78,24 +56,6 @@ export const AuthorChip = ({
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save';
       showToast(message, 'error');
-      setEmail(author || '');
-      setIsEditing(false);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleClaim = async () => {
-    if (isLoading || !currentUserEmail) {
-      return;
-    }
-    setIsLoading(true);
-    setClaimError(null);
-    try {
-      await onEditAuthor(currentUserEmail);
-      setIsClaimDialogOpen(false);
-    } catch (err) {
-      setClaimError(err instanceof Error ? err.message : 'An unknown error occurred');
     } finally {
       setIsLoading(false);
     }
@@ -108,24 +68,6 @@ export const AuthorChip = ({
       handleCancel();
     }
   };
-
-  const tooltipContent = (() => {
-    if (!canStartAuthorAction) {
-      if (isCloudEnabled && author && currentUserEmail && author !== currentUserEmail) {
-        return `This eval belongs to ${author}`;
-      }
-      if (isCloudEnabled && author === currentUserEmail) {
-        return 'Eval author';
-      }
-      return 'Author';
-    }
-
-    if (isCloudEnabled) {
-      return 'Click to claim this eval';
-    }
-
-    return author ? 'Click to edit author' : 'Click to set author';
-  })();
 
   if (isEditing) {
     return (
@@ -166,56 +108,23 @@ export const AuthorChip = ({
   }
 
   return (
-    <>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Chip
-            label="AUTHOR"
-            onClick={canStartAuthorAction ? handleStartEdit : undefined}
-            aria-disabled={!canStartAuthorAction}
-            interactive={canStartAuthorAction}
-            trailingIcon={
-              canStartAuthorAction ? (
-                <Pencil className="size-3.5 text-muted-foreground" />
-              ) : undefined
-            }
-          >
-            {author || 'Unknown'}
-          </Chip>
-        </TooltipTrigger>
-        <TooltipContent>{tooltipContent}</TooltipContent>
-      </Tooltip>
-      <Dialog open={isClaimDialogOpen} onOpenChange={setIsClaimDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Claim eval</DialogTitle>
-            <DialogDescription>
-              This eval has no author assigned. Cloud authorship cannot be changed after you claim
-              it.
-            </DialogDescription>
-          </DialogHeader>
-          {claimError && <p className="text-sm text-destructive">{claimError}</p>}
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsClaimDialogOpen(false)}
-              disabled={isLoading}
-            >
-              Cancel
-            </Button>
-            <Button type="button" onClick={handleClaim} disabled={isLoading || !currentUserEmail}>
-              {isLoading ? (
-                <Spinner className="mr-2 size-4" />
-              ) : currentUserEmail ? (
-                `Claim as mine (${currentUserEmail})`
-              ) : (
-                'Loading...'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Chip
+          label="AUTHOR"
+          onClick={handleStartEdit}
+          disabled={!editable}
+          interactive={editable}
+          trailingIcon={
+            editable ? <Pencil className="size-3.5 text-muted-foreground" /> : undefined
+          }
+        >
+          {author || 'Unknown'}
+        </Chip>
+      </TooltipTrigger>
+      <TooltipContent>
+        {editable ? (author ? 'Click to edit author' : 'Click to set author') : 'Author'}
+      </TooltipContent>
+    </Tooltip>
   );
 };

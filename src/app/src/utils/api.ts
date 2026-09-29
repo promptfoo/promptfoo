@@ -2,8 +2,7 @@ import useApiConfig from '@app/stores/apiConfig';
 import type { GetUserIdResponse, GetUserResponse } from '@promptfoo/contracts';
 import type { UpdateEvalAuthorResponse } from '@promptfoo/types/api/eval';
 
-export function getApiBaseUrl(): string {
-  const { apiBaseUrl } = useApiConfig.getState();
+export function getApiBaseUrl(apiBaseUrl = useApiConfig.getState().apiBaseUrl): string {
   if (apiBaseUrl) {
     return apiBaseUrl.replace(/\/$/, '');
   }
@@ -11,8 +10,12 @@ export function getApiBaseUrl(): string {
   return import.meta.env.VITE_PUBLIC_BASENAME || '';
 }
 
-export async function callApi(path: string, options: RequestInit = {}): Promise<Response> {
-  return fetch(`${getApiBaseUrl()}/api${path}`, options);
+export async function callApi(
+  path: string,
+  options: RequestInit = {},
+  apiBaseUrl = getApiBaseUrl(),
+): Promise<Response> {
+  return fetch(`${apiBaseUrl}/api${path}`, options);
 }
 
 export async function fetchUserEmail(): Promise<string | null> {
@@ -64,16 +67,7 @@ export async function updateEvalAuthor(
   });
 
   if (!response.ok) {
-    let errorMessage: string | undefined;
-    try {
-      const data = await response.json();
-      if (typeof data?.error === 'string') {
-        errorMessage = data.error;
-      }
-    } catch {
-      // Non-JSON error responses still use the generic message below.
-    }
-    throw new Error(errorMessage || 'Failed to update eval author');
+    throw new Error('Failed to update eval author');
   }
 
   return response.json();

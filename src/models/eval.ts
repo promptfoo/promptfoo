@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, or, type SQL, sql } from 'drizzle-orm';
+import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
@@ -12,7 +12,6 @@ import {
   promptsTable,
   tagsTable,
 } from '../database/tables';
-import { getEnvBool } from '../envars';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
@@ -22,6 +21,7 @@ import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import { getTraceStore } from '../tracing/store';
 import {
   type CompletedPrompt,
+  type EvalRuntimeOptions,
   type EvalSummary,
   type EvaluateResult,
   type EvaluateStats,
@@ -40,9 +40,17 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
-import { sanitizeRuntimeOptions } from '../util/sanitizer';
+import {
+  sanitizeConfigForOutput,
+  sanitizeRuntimeOptions,
+  sanitizeTracingConfigForPersistence,
+} from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  accumulateGenerationTokenUsage,
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+} from '../util/tokenUsageUtils';
 import {
   invalidateEvaluationCache,
   notifyEvaluationChanged,
@@ -55,8 +63,11 @@ import {
 } from './evalPerformance';
 import EvalResult, {
   getResultIndexKey,
+  getStripFlags,
   PROMPTFOO_METADATA_KEY,
   persistTraceMetadata,
+  projectPrompt,
+  projectTracesForOutput,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
 
@@ -145,7 +156,10 @@ export function combineFilterConditions(
     if (idx === 0) {
       return cond;
     }
-    return logicOperator === 'OR' ? sql`${acc} OR ${cond}` : sql`${acc} AND ${cond}`;
+    // Filters arrive as unvalidated JSON from the query string, and the UI sends
+    // lowercase 'or'/'and'. Anything that isn't a recognized OR falls back to AND.
+    const isOr = typeof logicOperator === 'string' && logicOperator.toUpperCase() === 'OR';
+    return isOr ? sql`${acc} OR ${cond}` : sql`${acc} AND ${cond}`;
   }, filterConditions[0].condition);
 }
 
@@ -314,7 +328,7 @@ export default class Eval {
   persisted: boolean;
   vars: string[];
   _resultsLoaded: boolean = false;
-  runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+  runtimeOptions?: EvalRuntimeOptions;
   _shared: boolean = false;
   resultPersistenceFailed: boolean = false;
   private failedResults = new Map<string, EvaluateResult>();
@@ -422,25 +436,6 @@ export default class Eval {
     return evalInstance;
   }
 
-  static async updateAuthor(
-    id: string,
-    author: string | null,
-    options: { onlyIfUnassigned?: boolean } = {},
-  ): Promise<boolean> {
-    const db = await getDb();
-    const condition = options.onlyIfUnassigned
-      ? and(eq(evalsTable.id, id), or(isNull(evalsTable.author), eq(evalsTable.author, '')))
-      : eq(evalsTable.id, id);
-    const result = await db.update(evalsTable).set({ author }).where(condition).run();
-
-    if (result.rowsAffected > 0) {
-      notifyEvaluationChanged(id);
-      return true;
-    }
-
-    return false;
-  }
-
   static async getMany(limit: number = DEFAULT_QUERY_LIMIT): Promise<Eval[]> {
     const db = await getDb();
     const evals = await db
@@ -479,7 +474,7 @@ export default class Eval {
       // Be wary, this is EvalResult[] and not EvaluateResult[]
       results?: EvalResult[];
       vars?: string[];
-      runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      runtimeOptions?: EvalRuntimeOptions;
       completedPrompts?: CompletedPrompt[];
       durationMs?: number;
       generationDurationMs?: number;
@@ -514,7 +509,7 @@ export default class Eval {
           createdAt: createdAt.getTime(),
           author,
           description: config.description,
-          config,
+          config: sanitizeTracingConfigForPersistence(config),
           results: durationResults,
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
@@ -636,7 +631,7 @@ export default class Eval {
       datasetId?: string;
       persisted?: boolean;
       vars?: string[];
-      runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      runtimeOptions?: EvalRuntimeOptions;
       durationMs?: number;
       generationDurationMs?: number;
       evaluationDurationMs?: number;
@@ -662,7 +657,7 @@ export default class Eval {
   version() {
     /**
      * Version 3 is the denormalized version of where the table and results are stored on the eval object.
-     * Version 4 is the normalized version where the results are stored in another databse table and the table for vizualization is generated by the app.
+     * Version 4 is the normalized version where the results are stored in another database table and the table for visualization is generated by the app.
      */
     return this.oldResults && 'table' in this.oldResults ? 3 : 4;
   }
@@ -680,12 +675,11 @@ export default class Eval {
   async save() {
     const db = await getDb();
     const updateObj: Record<string, unknown> = {
-      config: this.config,
+      config: sanitizeTracingConfigForPersistence(this.config),
       isRedteam: this.config.redteam !== undefined,
       prompts: this.prompts,
       description: this.config.description,
-      // Use null explicitly to ensure Drizzle updates the column (undefined may be skipped)
-      author: this.author || null,
+      author: this.author,
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
       runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
@@ -1392,7 +1386,9 @@ export default class Eval {
   }
 
   async loadResults() {
-    this.results = await EvalResult.findManyByEvalId(this.id);
+    if (this.persisted) {
+      this.results = await EvalResult.findManyByEvalId(this.id);
+    }
     this._resultsLoaded = true;
   }
 
@@ -1430,6 +1426,11 @@ export default class Eval {
       accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
     }
 
+    accumulateGenerationTokenUsage(
+      stats.tokenUsage,
+      this.config.metadata?.generationAccounting?.tokenUsage,
+    );
+
     return stats;
   }
 
@@ -1449,20 +1450,15 @@ export default class Eval {
     }
 
     const stats = await this.getStats();
-    const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
+    const stripFlags = getStripFlags(this.config.env);
 
-    const prompts = shouldStripPromptText
-      ? this.prompts.map((p) => ({
-          ...p,
-          raw: '[prompt stripped]',
-        }))
-      : this.prompts;
+    const prompts = this.prompts.map((p) => projectPrompt(p, stripFlags.shouldStripPromptText));
 
     return {
       version: 3,
       timestamp: new Date(this.createdAt).toISOString(),
       prompts,
-      results: this.results.map((r) => r.toEvaluateResult()),
+      results: this.results.map((r) => r.toEvaluateResult(stripFlags)),
       stats,
     };
   }
@@ -1514,17 +1510,20 @@ export default class Eval {
 
   async toResultsFile(): Promise<ResultsFile> {
     const traces = await this.getTraces();
+    const stripFlags = getStripFlags(this.config.env);
 
     const results: ResultsFile = {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
       results: await this.toEvaluateSummary(),
-      config: this.config,
+      config: sanitizeConfigForOutput(this.config, stripFlags),
       author: this.author || null,
-      prompts: this.getPrompts(),
+      prompts: this.getPrompts().map((prompt) =>
+        projectPrompt(prompt, stripFlags.shouldStripPromptText),
+      ),
       ...(this.vars.length > 0 && { vars: [...this.vars] }),
       datasetId: this.datasetId || null,
-      ...(traces.length > 0 && { traces }),
+      ...(traces.length > 0 && { traces: projectTracesForOutput(traces, stripFlags) }),
     };
 
     return results;
@@ -1565,7 +1564,7 @@ export default class Eval {
     });
 
     // Deep clone to prevent mutation issues
-    const newConfig = structuredClone(this.config);
+    const newConfig = structuredClone(sanitizeTracingConfigForPersistence(this.config));
     newConfig.description = copyDescription;
 
     const newPrompts = structuredClone(this.prompts);
@@ -1585,7 +1584,7 @@ export default class Eval {
           createdAt: Date.now(),
           author,
           description: copyDescription,
-          config: newConfig,
+          config: sanitizeTracingConfigForPersistence(newConfig),
           results: {},
           prompts: newPrompts,
           vars: newVars,

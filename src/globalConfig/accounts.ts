@@ -77,22 +77,6 @@ export function getUserEmail(): string | null {
   return globalConfig?.account?.email || null;
 }
 
-export async function getCloudUserEmail(): Promise<string> {
-  const apiKey = cloudConfig.getApiKey();
-  if (!apiKey) {
-    throw new Error('Cloud API key is not configured');
-  }
-
-  const { user } = await cloudConfig.validateApiToken(apiKey, cloudConfig.getApiHost());
-  const email = z.email().parse(user.email);
-
-  if (getUserEmail() !== email) {
-    setUserEmail(email);
-  }
-
-  return email;
-}
-
 export function setUserEmail(email: string) {
   const globalConfig = readGlobalConfig();
   const account = globalConfig?.account ?? {};
@@ -235,7 +219,7 @@ export async function checkEmailStatus(options?: {
           setUserEmailValidated(false);
           setUserEmailNeedsValidation(true);
         }
-        // Tracking filtered emails via this telemetry endpoint for now to guage sensitivity of validation
+        // Tracking filtered emails via this telemetry endpoint for now to gauge sensitivity of validation
         // We should take it out once we're happy with the sensitivity
         if (
           data.status === EmailValidationStatus.RISKY_EMAIL ||
