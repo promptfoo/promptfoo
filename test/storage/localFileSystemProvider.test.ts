@@ -172,7 +172,9 @@ describe('LocalFileSystemProvider', () => {
       fs.writeFileSync(path.join(tempDir, 'hash-index.json'), JSON.stringify({ [hash]: key }));
       const provider = new LocalFileSystemProvider({ basePath: tempDir });
 
-      await provider.store(payload, { contentType: 'audio/wav', mediaType: 'audio' });
+      await expect(
+        provider.store(payload, { contentType: 'audio/wav', mediaType: 'audio' }),
+      ).resolves.toMatchObject({ deduplicated: true, ref: { key } });
 
       expect(fs.readFileSync(contentPath, 'utf8')).toBe('legacy metadata');
       await expect(provider.getStats()).resolves.toEqual({

@@ -73,31 +73,23 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
     return this.resolvePathInBase(fileRelative);
   }
 
-  private async ensureHashDir(hash: string): Promise<void> {
-    this.assertValidHash(hash);
-
-    const dirRelative = path.join(hash.slice(0, 2), hash.slice(2, 4));
-    const dirPath = this.resolvePathInBase(dirRelative);
-    await fsPromises.mkdir(dirPath, { recursive: true });
-  }
-
   private metadataPath(filePath: string): string {
     return `${filePath}.meta.json`;
   }
 
   async store(data: Buffer, mimeType: string): Promise<BlobStoreResult> {
     const hash = computeHash(data);
-    await this.ensureHashDir(hash);
     const filePath = this.getFilePath(hash);
+    await fsPromises.mkdir(path.dirname(filePath), { recursive: true });
 
     // Check if file already exists (deduplication)
     try {
       await fsPromises.access(filePath);
       const meta = await this.readMetadata(filePath);
-      if (meta) {
+      if (meta && typeof meta.mimeType === 'string' && meta.mimeType.length > 0) {
         const ref = this.buildRef(
           hash,
-          meta.mimeType ?? mimeType,
+          meta.mimeType,
           meta.sizeBytes ?? data.length,
           meta.provider ?? this.providerId,
         );
