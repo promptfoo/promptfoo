@@ -59,7 +59,7 @@ describe('AssertsForm', () => {
     await user.click(input);
     await user.paste(raw);
     await user.click(screen.getByRole('combobox', { name: 'Type' }));
-    await user.click(screen.getByRole('option', { name: type, exact: true }));
+    await user.click(screen.getByRole('option', { name: type }));
     expect(input).toHaveValue(raw);
     expect(onAdd).toHaveBeenLastCalledWith([{ type, value }]);
   });
