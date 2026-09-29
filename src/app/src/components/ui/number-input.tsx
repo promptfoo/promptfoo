@@ -39,10 +39,7 @@ export interface NumberInputProps
   endAdornment?: React.ReactNode;
 }
 
-/**
- * NumberInput handles numeric inputs with value parsing, key filtering, and scroll prevention.
- * This is a non-MUI replacement for BaseNumberInput.
- */
+/** Parses numeric values, filters keys, and prevents accidental changes from scrolling. */
 function NumberInput({
   onChange,
   value,
@@ -66,7 +63,7 @@ function NumberInput({
 }: NumberInputProps) {
   const generatedInputId = React.useId();
   const inputId = id || generatedInputId;
-  const feedbackId = React.useId();
+  const feedbackId = `${generatedInputId}-feedback`;
   const inputMode = allowDecimals ? 'decimal' : 'numeric';
   const pattern = allowDecimals ? '[0-9]*\\.?[0-9]*' : '[0-9]*';
 

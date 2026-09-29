@@ -56,6 +56,35 @@ describe('NumberInput', () => {
     );
   });
 
+  it('updates feedback while preserving external descriptions', () => {
+    const onChange = vi.fn();
+    const renderInput = (helperText?: string, error?: string) => (
+      <>
+        <p id="external-description">External guidance</p>
+        <NumberInput
+          aria-describedby="external-description"
+          helperText={helperText}
+          error={error}
+          onChange={onChange}
+        />
+      </>
+    );
+    const { rerender } = render(renderInput('Enter a count'));
+    const input = screen.getByRole('spinbutton');
+    expect(input).toHaveAccessibleDescription('External guidance Enter a count');
+
+    rerender(renderInput('Enter a count', 'Count must be positive'));
+    expect(input).toHaveAccessibleDescription('External guidance Count must be positive');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByRole('alert')).toHaveTextContent('Count must be positive');
+
+    rerender(renderInput());
+    expect(input).toHaveAttribute('aria-describedby', 'external-description');
+    expect(input).toHaveAccessibleDescription('External guidance');
+    expect(input).toHaveAttribute('aria-invalid', 'false');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('calls onChange with numeric value', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();
