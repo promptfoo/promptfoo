@@ -1,7 +1,12 @@
-import yaml from 'js-yaml';
 import { getEnvBool, getEnvInt } from '../envars';
+import { loadYaml } from '../util/yamlLoad';
 
 import type { ApiProvider } from '../types/index';
+
+/** Returns the complete model suffix after the given number of provider/type segments. */
+export function modelNameFromProviderPath(providerPath: string, segments: number): string {
+  return providerPath.split(':').slice(segments).join(':');
+}
 
 /**
  * The default timeout for API requests in milliseconds.
@@ -10,13 +15,33 @@ export function getRequestTimeoutMs(): number {
   return getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
 }
 
+/** Read a simple eval variable without evaluating template expressions. */
+export function resolveDirectTestVariable(value: unknown, vars?: Record<string, unknown>): unknown {
+  if (typeof value !== 'string' || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return value;
+  }
+  const variable = /^\{\{\s*([A-Za-z_]\w*)\s*\}\}$/.exec(value)?.[1];
+  return variable && vars && Object.prototype.hasOwnProperty.call(vars, variable)
+    ? vars[variable]
+    : value;
+}
+
+/** Match OpenAI-compatible output-limit environment precedence. */
+export function getOpenAIChatOutputLimitFromEnv(): number | undefined {
+  return getOpenAICompletionTokenLimitFromEnv() ?? getEnvInt('OPENAI_MAX_TOKENS');
+}
+
+export function getOpenAICompletionTokenLimitFromEnv(): number | undefined {
+  return getEnvInt('OPENAI_MAX_COMPLETION_TOKENS');
+}
+
 /**
  * Extended timeout for long-running models (deep research, gpt-5-pro, etc.) in milliseconds.
  * These models can take significantly longer to respond due to their complex reasoning.
  */
 export const LONG_RUNNING_MODEL_TIMEOUT_MS = 600_000; // 10 minutes
 
-export interface ModelCost {
+interface ModelCost {
   input: number;
   output: number;
   audioInput?: number;
@@ -34,46 +59,16 @@ interface ProviderModel {
 }
 
 export interface ProviderConfig {
-  cost?: number | ModelCost;
+  cost?: number;
   inputCost?: number;
   outputCost?: number;
   audioCost?: number;
   audioInputCost?: number;
   audioOutputCost?: number;
-}
-
-export function getFiniteCostValue(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
-
-export function getTokenCostOverrides(config: ProviderConfig): {
-  inputCost?: number;
-  outputCost?: number;
-} {
-  const objectCost =
-    typeof config.cost === 'object' && config.cost !== null ? config.cost : undefined;
-  const numericCost = getFiniteCostValue(config.cost);
-
-  return {
-    inputCost:
-      getFiniteCostValue(config.inputCost) ?? getFiniteCostValue(objectCost?.input) ?? numericCost,
-    outputCost:
-      getFiniteCostValue(config.outputCost) ??
-      getFiniteCostValue(objectCost?.output) ??
-      numericCost,
-  };
-}
-
-export function getTokenCostRates(
-  config: ProviderConfig,
-  defaults: { input: number; output: number },
-): { inputCost: number; outputCost: number } {
-  const overrides = getTokenCostOverrides(config);
-
-  return {
-    inputCost: overrides.inputCost ?? defaults.input,
-    outputCost: overrides.outputCost ?? defaults.output,
-  };
+  videoOutputCost?: number;
+  imageInputCost?: number;
+  service_tier?: string | null;
+  passthrough?: object;
 }
 
 /**
@@ -104,11 +99,6 @@ export function calculateCost(
 
   const model = models.find((m) => m.id === modelName);
   if (!model || !model.cost) {
-    const { inputCost, outputCost } = getTokenCostOverrides(config);
-    if (inputCost !== undefined && outputCost !== undefined) {
-      const cost = inputCost * promptTokens + outputCost * completionTokens;
-      return Number.isFinite(cost) ? cost : undefined;
-    }
     return undefined;
   }
 
@@ -116,12 +106,21 @@ export function calculateCost(
     model.cost.longContext && promptTokens > model.cost.longContext.threshold
       ? model.cost.longContext
       : undefined;
-  const { inputCost, outputCost } = getTokenCostRates(config, {
-    input: longContextCost?.input ?? model.cost.input,
-    output: longContextCost?.output ?? model.cost.output,
-  });
-  const cost = inputCost * promptTokens + outputCost * completionTokens;
-  return Number.isFinite(cost) ? cost : undefined;
+  const inputCost = config.inputCost ?? config.cost ?? longContextCost?.input ?? model.cost.input;
+  const outputCost =
+    config.outputCost ?? config.cost ?? longContextCost?.output ?? model.cost.output;
+  return inputCost * promptTokens + outputCost * completionTokens;
+}
+
+/**
+ * Clamp reported cached prompt tokens to [0, promptTokens] for cost billing.
+ *
+ * Providers occasionally report cached token counts that exceed prompt tokens
+ * (rounding) or values that are negative or non-finite; billing those raw would
+ * produce negative or NaN costs.
+ */
+export function clampCachedTokens(cachedTokens: number | undefined, promptTokens: number): number {
+  return Number.isFinite(cachedTokens) ? Math.min(Math.max(cachedTokens!, 0), promptTokens) : 0;
 }
 
 /**
@@ -175,7 +174,7 @@ export function parseChatPrompt<T>(prompt: string, defaultValue: T): T {
   if (trimmedPrompt.startsWith('- role:')) {
     try {
       // Try YAML - some legacy OpenAI prompts are YAML :(
-      return yaml.load(prompt) as T;
+      return loadYaml(prompt) as T;
     } catch (err) {
       throw new Error(`Chat Completion prompt is not a valid YAML string: ${err}\n\n${prompt}`);
     }

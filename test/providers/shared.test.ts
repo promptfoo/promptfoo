@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool, getEnvInt } from '../../src/envars';
 import {
   calculateCost,
+  clampCachedTokens,
   getRequestTimeoutMs,
   isOpenAIToolArray,
   isOpenAIToolChoice,
   isPromptfooSampleTarget,
+  modelNameFromProviderPath,
   openaiToolChoiceToAnthropic,
   openaiToolChoiceToBedrock,
   openaiToolChoiceToGoogle,
@@ -30,6 +32,35 @@ describe('Shared Provider Functions', () => {
     });
     vi.mocked(getEnvInt).mockImplementation(function (_key, defaultValue) {
       return defaultValue ?? 0;
+    });
+  });
+
+  describe('modelNameFromProviderPath', () => {
+    it('keeps colons that belong to the model id', () => {
+      expect(
+        modelNameFromProviderPath(
+          'anthropic:messages:anthropic.claude-3-5-sonnet-20241022-v2:0',
+          2,
+        ),
+      ).toBe('anthropic.claude-3-5-sonnet-20241022-v2:0');
+    });
+
+    it('reads a two segment path', () => {
+      expect(modelNameFromProviderPath('voyage:voyage-3-large', 1)).toBe('voyage-3-large');
+    });
+
+    it('keeps colons in a two segment path', () => {
+      expect(modelNameFromProviderPath('voyage:some:model:v2', 1)).toBe('some:model:v2');
+    });
+
+    it('returns an empty string when there is no model name', () => {
+      expect(modelNameFromProviderPath('anthropic:messages', 2)).toBe('');
+      expect(modelNameFromProviderPath('voyage', 1)).toBe('');
+      expect(modelNameFromProviderPath('anthropic:messages:', 2)).toBe('');
+    });
+
+    it('keeps an empty trailing segment rather than dropping it', () => {
+      expect(modelNameFromProviderPath('anthropic:messages:model:', 2)).toBe('model:');
     });
   });
 
@@ -165,17 +196,6 @@ describe('Shared Provider Functions', () => {
       expect(cost).toBe(7.5);
     });
 
-    it('should use object config cost when provided', () => {
-      const cost = calculateCost(
-        'model1',
-        { cost: { input: 0.003, output: 0.007 } },
-        1000,
-        500,
-        models,
-      );
-      expect(cost).toBe(6.5);
-    });
-
     it('should use separate config input and output costs when provided', () => {
       const cost = calculateCost(
         'model1',
@@ -190,7 +210,7 @@ describe('Shared Provider Functions', () => {
     it('should prefer separate config costs over config cost', () => {
       const cost = calculateCost(
         'model1',
-        { cost: { input: 0.005, output: 0.008 }, inputCost: 0.003, outputCost: 0.007 },
+        { cost: 0.005, inputCost: 0.003, outputCost: 0.007 },
         1000,
         500,
         models,
@@ -205,24 +225,6 @@ describe('Shared Provider Functions', () => {
       expect(calculateCost('model1', { cost: 0.005, outputCost: 0.007 }, 1000, 500, models)).toBe(
         8.5,
       );
-      expect(
-        calculateCost(
-          'model1',
-          { cost: { input: 0.005, output: 0.008 }, inputCost: 0.003 },
-          1000,
-          500,
-          models,
-        ),
-      ).toBe(7);
-      expect(
-        calculateCost(
-          'model1',
-          { cost: { input: 0.005, output: 0.008 }, outputCost: 0.007 },
-          1000,
-          500,
-          models,
-        ),
-      ).toBe(8.5);
     });
 
     it('should use long-context rates when prompt tokens exceed the model threshold', () => {
@@ -284,37 +286,6 @@ describe('Shared Provider Functions', () => {
       expect(cost).toBeUndefined();
     });
 
-    it('should still use explicit config cost when model is not found', () => {
-      expect(calculateCost('nonexistent', { cost: 0.005 }, 1000, 500, models)).toBe(7.5);
-      expect(
-        calculateCost('nonexistent', { cost: { input: 0.003, output: 0.007 } }, 1000, 500, models),
-      ).toBe(6.5);
-    });
-
-    it('should ignore non-finite override rates when model defaults are available', () => {
-      expect(
-        calculateCost(
-          'model1',
-          { cost: { input: Number.NaN, output: Number.POSITIVE_INFINITY } },
-          1000,
-          500,
-          models,
-        ),
-      ).toBe(2);
-    });
-
-    it('should not calculate unknown-model costs from incomplete explicit rates', () => {
-      expect(
-        calculateCost(
-          'nonexistent',
-          { cost: { input: Number.NaN, output: 0.007 } },
-          1000,
-          500,
-          models,
-        ),
-      ).toBeUndefined();
-    });
-
     it('should return undefined if tokens are not finite', () => {
       expect(calculateCost('model1', {}, Number.NaN, 500, models)).toBeUndefined();
       expect(calculateCost('model1', {}, 1000, Infinity, models)).toBeUndefined();
@@ -323,6 +294,28 @@ describe('Shared Provider Functions', () => {
     it('should return undefined if tokens are undefined', () => {
       expect(calculateCost('model1', {}, undefined, 500, models)).toBeUndefined();
       expect(calculateCost('model1', {}, 1000, undefined, models)).toBeUndefined();
+    });
+  });
+
+  describe('clampCachedTokens', () => {
+    it('should pass through cached tokens within [0, promptTokens]', () => {
+      expect(clampCachedTokens(300, 1000)).toBe(300);
+      expect(clampCachedTokens(0, 1000)).toBe(0);
+      expect(clampCachedTokens(1000, 1000)).toBe(1000);
+    });
+
+    it('should clamp cached tokens that exceed prompt tokens', () => {
+      expect(clampCachedTokens(1500, 1000)).toBe(1000);
+    });
+
+    it('should clamp negative cached tokens to zero', () => {
+      expect(clampCachedTokens(-500, 1000)).toBe(0);
+    });
+
+    it('should treat undefined and non-finite cached tokens as zero', () => {
+      expect(clampCachedTokens(undefined, 1000)).toBe(0);
+      expect(clampCachedTokens(Number.NaN, 1000)).toBe(0);
+      expect(clampCachedTokens(Number.POSITIVE_INFINITY, 1000)).toBe(0);
     });
   });
 

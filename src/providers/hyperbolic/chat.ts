@@ -1,7 +1,6 @@
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
-import { getTokenCostRates } from '../shared';
 
 import type { ApiProvider, ProviderOptions } from '../../types/index';
 import type { OpenAiCompletionOptions } from '../openai/types';
@@ -218,7 +217,8 @@ export function calculateHyperbolicCost(
     return undefined;
   }
 
-  const { inputCost, outputCost } = getTokenCostRates(config, model.cost);
+  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
+  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
 
   const inputCostTotal = inputCost * promptTokens;
   const outputCostTotal = outputCost * completionTokens;
@@ -290,64 +290,6 @@ export class HyperbolicProvider extends OpenAiChatCompletionProvider {
     }
 
     try {
-      if (typeof response.raw === 'string') {
-        try {
-          const rawData = JSON.parse(response.raw);
-
-          if (
-            this.isReasoningModel() &&
-            rawData?.usage?.completion_tokens_details?.reasoning_tokens
-          ) {
-            const reasoningTokens = rawData.usage.completion_tokens_details.reasoning_tokens;
-            const acceptedPredictions =
-              rawData.usage.completion_tokens_details.accepted_prediction_tokens || 0;
-            const rejectedPredictions =
-              rawData.usage.completion_tokens_details.rejected_prediction_tokens || 0;
-
-            if (response.tokenUsage) {
-              response.tokenUsage.completionDetails = {
-                reasoning: reasoningTokens,
-                acceptedPrediction: acceptedPredictions,
-                rejectedPrediction: rejectedPredictions,
-              };
-
-              logger.debug(
-                `Hyperbolic reasoning token details for ${this.modelName}: ` +
-                  `reasoning=${reasoningTokens}, accepted=${acceptedPredictions}, rejected=${rejectedPredictions}`,
-              );
-            }
-          }
-        } catch (err) {
-          logger.error(`Failed to parse raw response JSON: ${err}`);
-        }
-      } else if (typeof response.raw === 'object' && response.raw !== null) {
-        const rawData = response.raw;
-
-        if (
-          this.isReasoningModel() &&
-          rawData?.usage?.completion_tokens_details?.reasoning_tokens
-        ) {
-          const reasoningTokens = rawData.usage.completion_tokens_details.reasoning_tokens;
-          const acceptedPredictions =
-            rawData.usage.completion_tokens_details.accepted_prediction_tokens || 0;
-          const rejectedPredictions =
-            rawData.usage.completion_tokens_details.rejected_prediction_tokens || 0;
-
-          if (response.tokenUsage) {
-            response.tokenUsage.completionDetails = {
-              reasoning: reasoningTokens,
-              acceptedPrediction: acceptedPredictions,
-              rejectedPrediction: rejectedPredictions,
-            };
-
-            logger.debug(
-              `Hyperbolic reasoning token details for ${this.modelName}: ` +
-                `reasoning=${reasoningTokens}, accepted=${acceptedPredictions}, rejected=${rejectedPredictions}`,
-            );
-          }
-        }
-      }
-
       if (response.tokenUsage && !response.cached) {
         const reasoningTokens = response.tokenUsage.completionDetails?.reasoning || 0;
 

@@ -5,7 +5,7 @@ description: 'Run self-hosted OpenAI-compatible APIs locally with LocalAI for pr
 
 # Local AI
 
-LocalAI is an API wrapper for open-source LLMs that is compatible with OpenAI. You can run LocalAI for compatibility with Llama, Alpaca, Vicuna, GPT4All, RedPajama, and many other models compatible with the ggml format.
+LocalAI is an API wrapper for open-source LLMs that is compatible with OpenAI. You can run LocalAI for compatibility with Llama, Alpaca, Vicuna, GPT4All, RedPajama, and many other models, primarily in the GGUF format (with some legacy ggml support).
 
 View all compatible models [here](https://github.com/go-skynet/LocalAI#model-compatibility-table).
 
@@ -16,14 +16,17 @@ Once you have LocalAI up and running, specify one of the following based on the 
 - `localai:completion:<model name>`, which invokes models using the
   [LocalAI completion endpoint](https://localai.io/features/text-generation/#completions)
 - `localai:<model name>`, which defaults to chat-type model
-- `localai:embeddings:<model name>`, which invokes models using the
+- `localai:embeddings:<model name>` (or `localai:embedding:`), which invokes models using the
   [LocalAI embeddings endpoint](https://localai.io/features/embeddings/)
 
-The model name is typically the filename of the `.bin` file that you downloaded to set up the model in LocalAI. For example, `ggml-vic13b-uncensored-q5_1.bin`. LocalAI also has a `/models` endpoint to list models, which can be queried with `curl http://localhost:8080/v1/models`.
+The model name is typically the filename of the `.gguf` file that you downloaded to set up the model in LocalAI. For example, `vicuna-13b-v1.5-q5_k_m.gguf`. LocalAI also has a `/models` endpoint to list models, which can be queried with `curl http://localhost:8080/v1/models`.
 
 ## Configuring parameters
 
-You can set parameters like `temperature` and `apiBaseUrl` ([full list here](https://github.com/promptfoo/promptfoo/blob/main/src/providers/localai.ts#L7)). For example, using [LocalAI's lunademo](https://localai.io/docs/getting-started/models/):
+The provider accepts two config options, `temperature` and `apiBaseUrl` (see
+[`LocalAiCompletionOptions`](https://github.com/promptfoo/promptfoo/blob/main/src/providers/localai.ts)).
+Any other key under `config:` is ignored. For example, using
+[LocalAI's lunademo](https://localai.io/docs/getting-started/models/):
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -35,4 +38,11 @@ providers:
 Supported environment variables:
 
 - `LOCALAI_BASE_URL` - defaults to `http://localhost:8080/v1`
-- `REQUEST_TIMEOUT_MS` - maximum request time, in milliseconds. Defaults to 60000.
+- `LOCALAI_TEMPERATURE` - default sampling temperature. Defaults to 0.7.
+- `REQUEST_TIMEOUT_MS` - maximum request time, in milliseconds. Defaults to 300000.
+
+:::note
+The provider sends only a `Content-Type` header, so it cannot authenticate to a LocalAI instance
+that requires an API key. For a protected instance, use the
+[OpenAI provider](/docs/providers/openai/) with `apiBaseUrl` and `apiKey` instead.
+:::
