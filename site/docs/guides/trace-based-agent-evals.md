@@ -74,9 +74,11 @@ For a required trace, pair duration or error budgets with a presence check. Dura
   value: { max_count: 0 }
 ```
 
+Percentiles use matching spans from one eval row. With three retrieval spans, p95 is the slowest span.
+
 Promptfoo passes a W3C `traceparent` to custom providers. Use it as the parent for child spans so the receiver can associate them with the eval row. Stable names plus `tool.name`, `function.name`, `command`, `codex.command`, `search.query`, and OTel error status make trajectory normalization useful.
 
-Avoid recording full prompts, responses, credentials, or raw customer data. Receiver redaction is defense in depth; source redaction keeps sensitive values out of every collector.
+Avoid recording full prompts, responses, credentials, or raw customer data. Remove sensitive values before creating spans. Receiver redaction can remove additional attributes before they enter Promptfoo's store.
 
 ## Write trajectory checks
 
@@ -98,7 +100,7 @@ assert:
     value: { type: reasoning, min: 1 }
 ```
 
-The inverse tool assertion accepts a tool name, list, or an object with `name` or `pattern` and `max: 0`. It does not accept arbitrary positive count bounds.
+Use a tool name or list with `not-trajectory:tool-used` to require that those tools were never called.
 
 Use `trajectory:tool-args-match` only for stable, relevant fields such as tenant or document IDs. Redacting a stored span attribute also removes the value available to the matcher.
 
@@ -136,6 +138,9 @@ jobs:
       PROMPTFOO_CONFIG_DIR: ${{ runner.temp }}/promptfoo
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
       - name: Run trace eval
         run: npx promptfoo eval -c promptfooconfig.yaml --no-cache -o eval-output.json
 ```
@@ -157,12 +162,3 @@ tracing:
     type: sqlite
     retentionDays: 30
 ```
-
-## Practical checklist
-
-- Require a root span before latency or error budgets.
-- Use stable span names and tool identifiers.
-- Redact at the source; treat exports and shares as sensitive.
-- Prefer deterministic tool, sequence, and budget checks for CI.
-- Use a model judge only for broad success criteria.
-- Recalibrate exact counts and latency ranges as the agent changes.

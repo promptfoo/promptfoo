@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 
-import * as yaml from 'js-yaml';
+import { responseTransform, smokeAssertions } from './response-contract.mjs';
+
+import * as yaml from './vendor/js-yaml.mjs';
 
 const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete']);
 const PROMPT_FIELDS = new Set(['message', 'prompt', 'q', 'query', 'question', 'input', 'text']);
@@ -10,7 +12,7 @@ function usage(message) {
     console.error(message);
   }
   console.error(
-    'Usage: node openapi-operation-to-config.mjs --spec openapi.yaml --operation-id op --base-url-env API_BASE_URL [--token-env API_TOKEN] [--auth-header Authorization] [--auth-prefix Bearer|none|custom] [--label label] [--output promptfooconfig.yaml]',
+    'Usage: node openapi-operation-to-config.mjs --spec openapi.yaml --operation-id op --base-url-env API_BASE_URL [--token-env API_TOKEN] [--auth-header Authorization] [--auth-prefix Bearer|none|custom] [--label label] [--smoke-assert text] [--output promptfooconfig.yaml]',
   );
   process.exit(1);
 }
@@ -343,12 +345,6 @@ function responseOutputField(document, properties) {
     }
   }
   return Object.keys(responseProperties)[0];
-}
-
-function responseAccessor(base, field) {
-  return /^[A-Za-z_$][0-9A-Za-z_$]*$/.test(field)
-    ? `${base}.${field}`
-    : `${base}[${JSON.stringify(field)}]`;
 }
 
 function successResponse(document, operation) {
@@ -873,11 +869,13 @@ if (bodyFields.length > 0) {
 if (Object.keys(queryParams).length > 0) {
   providerConfig.queryParams = queryParams;
 }
-if (responseField) {
-  providerConfig.transformResponse = responseAccessor(
-    responseIsArray ? 'json[0]' : 'json',
-    responseField,
-  );
+if (responseMediaEntry) {
+  providerConfig.transformResponse = responseTransform({
+    field: responseField,
+    array: responseIsArray,
+    schema: responseField ? responseProperties[responseField] : responseSchema,
+    resolveRef: (schema) => resolveRef(document, schema),
+  });
 }
 
 const nonCredentialQueryFields = queryFields.filter((name) => !credentialParamNames.has(name));
@@ -904,32 +902,15 @@ for (const name of bodyFields) {
       : (requestExampleFields[name] ?? schemaSample(document, requestProperties[name], name));
   }
 }
-// The canned "Say exactly PONG." prompt is only meaningful when the request
-// carries a prompt field (path/query/body) — otherwise the message never reaches
-// the target and `contains: PONG` fails by construction. Fall back to a safer
-// response-shape assertion.
-const promptReachesTarget =
-  pathVars.some((name) => PROMPT_FIELDS.has(name)) ||
-  queryFields.some((name) => PROMPT_FIELDS.has(name)) ||
-  bodyFields.some((name) => PROMPT_FIELDS.has(name)) ||
-  (bodyFields.length > 0 && (requestIsText || requestBodyIsScalar));
-const responseIsJson = Boolean(responseMediaEntry);
-const smokeAssert = promptReachesTarget
-  ? [{ type: 'contains', value: 'PONG' }]
-  : responseIsJson
-    ? [{ type: 'is-json' }]
-    : [{ type: 'javascript', value: "typeof output === 'string' && output.length > 0" }];
 const config = {
   description: args.description || `Provider setup generated from ${args['operation-id']}`,
   prompts: ['{{message}}'],
   providers: [{ id: 'https', label: args.label || args['operation-id'], config: providerConfig }],
   tests: [
     {
-      description: promptReachesTarget
-        ? `${args['operation-id']} returns text`
-        : `${args['operation-id']} responds successfully`,
+      description: `${args['operation-id']} responds successfully`,
       vars,
-      assert: smokeAssert,
+      assert: smokeAssertions(Boolean(responseMediaEntry), args['smoke-assert']),
     },
   ],
 };

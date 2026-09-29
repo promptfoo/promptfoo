@@ -10,9 +10,8 @@ import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../
 
 export interface EvalConfigState {
   config: Partial<UnifiedConfig>;
-  sourceEvalId?: string;
   /** Replace the entire config */
-  setConfig: (config: Partial<UnifiedConfig>, sourceEvalId?: string) => void;
+  setConfig: (config: Partial<UnifiedConfig>) => void;
   /** Merge updates into the existing config */
   updateConfig: (updates: Partial<UnifiedConfig>) => void;
   /** Reset config to defaults */
@@ -1328,16 +1327,15 @@ export const useStore = create<EvalConfigState>()(
   persist(
     (set, get) => ({
       config: { ...DEFAULT_CONFIG },
-      sourceEvalId: undefined,
 
-      setConfig: (config, sourceEvalId) => set({ config, sourceEvalId }),
+      setConfig: (config) => set({ config }),
 
       updateConfig: (updates) =>
         set((state) => ({
           config: { ...state.config, ...updates },
         })),
 
-      reset: () => set({ config: { ...DEFAULT_CONFIG }, sourceEvalId: undefined }),
+      reset: () => set({ config: { ...DEFAULT_CONFIG } }),
 
       getTestSuite: () => {
         const { config } = get();
@@ -1364,7 +1362,6 @@ export const useStore = create<EvalConfigState>()(
       skipHydration: true,
       partialize: (state) => ({
         config: omitPersistedSensitiveValues(state.config),
-        sourceEvalId: state.sourceEvalId,
       }),
       merge: (persistedState, currentState) => {
         const persistedConfig = (persistedState as Partial<EvalConfigState> | undefined)?.config;
@@ -1380,7 +1377,7 @@ export const useStore = create<EvalConfigState>()(
       },
       onRehydrateStorage: () => (state) => {
         // Re-persist so credentials dropped during merge are also cleared from storage.
-        state?.setConfig(state.config, state.sourceEvalId);
+        state?.setConfig(state.config);
       },
     },
   ),

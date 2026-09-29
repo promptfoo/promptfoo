@@ -421,6 +421,136 @@ describe('RedteamIterativeProvider', () => {
       }
     });
 
+    it('keeps an explicit redteamProvider local when remote generation is enabled', async () => {
+      // Regression test for https://github.com/promptfoo/promptfoo/issues/10970:
+      // a configured redteamProvider must not be swapped for the cloud provider.
+      const explicitProvider = createMockProvider({ id: 'mock-explicit' });
+      const gradingProvider = createMockProvider({ id: 'mock-grader' });
+      const targetProvider = createMockProvider({ id: 'mock-target' });
+      const remoteGenerationSpy = vi
+        .spyOn(remoteGeneration, 'shouldGenerateRemote')
+        .mockReturnValue(true);
+      const attackerProviderSpy = vi
+        .spyOn(redteamProviderManager, 'getProvider')
+        .mockResolvedValue(explicitProvider);
+      const gradingProviderSpy = vi
+        .spyOn(redteamProviderManager, 'getGradingProvider')
+        .mockResolvedValue(gradingProvider);
+
+      try {
+        const provider = new RedteamIterativeTreeProvider({
+          injectVar: 'goal',
+          maxDepth: 1,
+          branchingFactor: 1,
+          redteamProvider: 'ollama:chat:llama3.1:8b',
+        });
+        await provider.callApi('test prompt', {
+          originalProvider: targetProvider,
+          vars: { goal: 'test objective' },
+          prompt: { raw: '{{goal}}', label: 'test' },
+        });
+
+        expect(attackerProviderSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ provider: 'ollama:chat:llama3.1:8b' }),
+        );
+      } finally {
+        remoteGenerationSpy.mockRestore();
+        attackerProviderSpy.mockRestore();
+        gradingProviderSpy.mockRestore();
+      }
+    });
+
+    it.each([false, true])(
+      'retains the selected earlier verdict and total usage (identical text: %s)',
+      async (identicalText) => {
+        mockRedteamProvider.callApi
+          .mockResolvedValueOnce({
+            output: JSON.stringify({ prompt: 'first attack', improvement: 'first' }),
+          })
+          .mockResolvedValueOnce({
+            output: JSON.stringify({
+              prompt: identicalText ? 'first attack' : 'second attack',
+              improvement: 'second',
+            }),
+          });
+        const gradingProvider = createMockProvider({ id: 'judge' });
+        gradingProvider.callApi
+          .mockResolvedValueOnce({
+            output: JSON.stringify({
+              currentResponse: { rating: 8 },
+              previousBestResponse: { rating: 0 },
+            }),
+          })
+          .mockResolvedValueOnce({
+            output: JSON.stringify({
+              currentResponse: { rating: 3 },
+              previousBestResponse: { rating: 8 },
+            }),
+          });
+        const targetProvider = createMockProvider({ id: 'target' });
+        targetProvider.callApi
+          .mockResolvedValueOnce({ output: 'first response' })
+          .mockResolvedValueOnce({ output: identicalText ? 'first response' : 'second response' });
+        const graders = await import('../../../src/redteam/graders');
+        const getResult = vi
+          .fn()
+          .mockResolvedValueOnce({
+            grade: {
+              pass: true,
+              score: 1,
+              reason: 'first verdict',
+              metadata: { cachedResponse: true },
+              tokensUsed: { total: 2, numRequests: 0 },
+            },
+          })
+          .mockResolvedValueOnce({
+            grade: {
+              pass: true,
+              score: 1,
+              reason: 'second verdict',
+              tokensUsed: { total: 4, numRequests: 1 },
+            },
+          });
+        vi.mocked(graders.getGraderById).mockReturnValue({ getResult } as any);
+        const remote = vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(false);
+        const attacker = vi
+          .spyOn(redteamProviderManager, 'getProvider')
+          .mockResolvedValue(mockRedteamProvider);
+        const judge = vi
+          .spyOn(redteamProviderManager, 'getGradingProvider')
+          .mockResolvedValue(gradingProvider);
+        try {
+          const provider = new RedteamIterativeTreeProvider({
+            injectVar: 'goal',
+            maxDepth: 1,
+            branchingFactor: 2,
+            maxAttempts: 2,
+          });
+          const result = await provider.callApi('', {
+            originalProvider: targetProvider,
+            vars: { goal: 'test objective' },
+            prompt: { raw: '{{goal}}', label: 'test' },
+            test: {
+              assert: [{ type: 'promptfoo:redteam:pii' }],
+              metadata: { pluginId: 'pii:social' },
+            } as AtomicTestCase,
+          });
+          expect(getResult).toHaveBeenCalledTimes(2);
+          expect(result.output).toBe('first response');
+          expect(result.metadata.storedGraderResult).toMatchObject({
+            reason: 'first verdict',
+            tokensUsed: { total: 4, cached: 2, numRequests: 1 },
+          });
+          expect(result.metadata.storedGraderResult?.metadata?.cachedResponse).not.toBe(true);
+        } finally {
+          remote.mockRestore();
+          attacker.mockRestore();
+          judge.mockRestore();
+          vi.mocked(graders.getGraderById).mockReset();
+        }
+      },
+    );
+
     it('counts the final target probe even when the target reports no token usage', async () => {
       const gradingProvider = createMockProvider({ id: 'mock-grader' });
       const targetProvider = createMockProvider({ id: 'mock-target' });

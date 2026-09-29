@@ -3,25 +3,24 @@
 // site/docs/guides/trace-based-agent-evals.md guide.
 
 const { trace, context, SpanStatusCode } = require('@opentelemetry/api');
-const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
+const { BatchSpanProcessor, NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
-const { BatchSpanProcessor } = require('@opentelemetry/sdk-trace-base'); // Use BatchSpanProcessor
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 const { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } = require('@opentelemetry/semantic-conventions');
 
-// Configure OTLP exporter. The generic endpoint is a base URL; the trace-specific
-// endpoint is already the full export URL.
-const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/+$/, '');
-const exporterUrl =
-  process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ||
-  (otlpEndpoint
-    ? otlpEndpoint.endsWith('/v1/traces')
-      ? otlpEndpoint
-      : `${otlpEndpoint}/v1/traces`
-    : 'http://127.0.0.1:4318/v1/traces');
-console.log('[Provider] Configuring OTLP exporter with URL:', exporterUrl);
+const explanations = {
+  'quantum computing':
+    'Quantum computing uses qubits, superposition, interference, and entanglement. Unlike classical bits, qubits can represent combinations of states before measurement. Quantum algorithms use these properties to solve some problems, such as simulating quantum systems, more efficiently.',
+  'machine learning':
+    'Machine learning finds patterns in training data instead of relying on explicitly programmed rules. Training adjusts a model to improve its predictions; evaluation on separate data checks whether those patterns generalize. Common applications include classification, forecasting, and recommendations.',
+};
+
+// Let the SDK handle standard OTLP endpoint variables; default to the local receiver.
 const exporter = new OTLPTraceExporter({
-  url: exporterUrl,
+  url:
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT || process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+      ? undefined
+      : 'http://127.0.0.1:4318/v1/traces',
 });
 
 // Use BatchSpanProcessor for better timing handling
@@ -42,31 +41,10 @@ const provider = new NodeTracerProvider({
 });
 provider.register();
 
-// Get a tracer
 const tracer = trace.getTracer('simple-traced-provider', '1.0.0');
 
-// Fixed helper function that properly manages span lifecycle
-async function runInSpan(spanOrName, attributesOrFn, maybeFn) {
-  let span;
-  let fn;
-  let attributes = {};
-
-  // Handle overloaded parameters
-  if (typeof spanOrName === 'string') {
-    // Called with (name, attributes, fn) or (name, fn)
-    if (typeof attributesOrFn === 'function') {
-      fn = attributesOrFn;
-    } else {
-      attributes = attributesOrFn || {};
-      fn = maybeFn;
-    }
-    span = tracer.startSpan(spanOrName, { attributes });
-  } else {
-    // Called with (span, fn) - original pattern
-    span = spanOrName;
-    fn = attributesOrFn;
-  }
-
+async function runInSpan(name, attributes, fn) {
+  const span = tracer.startSpan(name, { attributes });
   const ctx = trace.setSpan(context.active(), span);
 
   try {
@@ -85,7 +63,6 @@ async function runInSpan(spanOrName, attributesOrFn, maybeFn) {
   }
 }
 
-// Provider implementation
 class SimpleTracedProvider {
   id() {
     return 'simple-traced-provider';
@@ -130,7 +107,6 @@ class SimpleTracedProvider {
     const topic = prompt.toLowerCase().includes('quantum')
       ? 'quantum computing'
       : 'machine learning';
-    // Use the improved runInSpan for the main workflow
     const result = await runInSpan(
       'rag_agent_workflow',
       {
@@ -284,7 +260,7 @@ class SimpleTracedProvider {
             ];
 
             for (const step of reasoningSteps) {
-              await runInSpan(`reasoning_${step.step}`, async () => {
+              await runInSpan(`reasoning_${step.step}`, {}, async () => {
                 const stepSpan = trace.getSpan(context.active());
                 await new Promise((resolve) => setTimeout(resolve, step.duration));
 
@@ -325,14 +301,10 @@ class SimpleTracedProvider {
             const generationDelay = 750 + Math.random() * 200;
             await new Promise((resolve) => setTimeout(resolve, generationDelay));
 
-            const explanation =
-              topic === 'quantum computing'
-                ? 'Quantum computing uses qubits, superposition, interference, and entanglement. Unlike classical bits, qubits can represent combinations of states before measurement. Quantum algorithms use these properties to solve some problems, such as simulating quantum systems, more efficiently.'
-                : 'Machine learning finds patterns in training data instead of relying on explicitly programmed rules. Training adjusts a model to improve its predictions; evaluation on separate data checks whether those patterns generalize. Common applications include classification, forecasting, and recommendations.';
             response = {
               text:
                 `Based on my analysis of ${documents.length} technical documents, here's an explanation of ${topic}:\n\n` +
-                `${explanation}\n\n` +
+                `${explanations[topic]}\n\n` +
                 `Citations: ${documents.map((d) => d.title).join(', ')}.`,
               citations: documents.map((d) => ({
                 id: d.id,
@@ -401,7 +373,7 @@ class SimpleTracedProvider {
     return result;
   }
 
-  async _untracedCallApi(prompt, promptfooContext) {
+  async _untracedCallApi(prompt) {
     // Simple implementation without tracing
     await new Promise((resolve) => setTimeout(resolve, 100));
 
@@ -409,7 +381,7 @@ class SimpleTracedProvider {
       ? 'quantum computing'
       : 'machine learning';
     return {
-      output: `Here's a simple explanation of ${topic}: It's a fascinating field that involves...`,
+      output: explanations[topic],
       tokenUsage: {
         total: 50,
         prompt: 30,

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import { getEnvBool } from '../../src/envars';
 import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
@@ -16,7 +17,7 @@ import { resolveConfigs } from '../../src/util/config/load';
 import { writeMultipleOutputs } from '../../src/util/output';
 import { shouldShareResults } from '../../src/util/sharing';
 
-import type { TestSuite, UnifiedConfig } from '../../src/types/index';
+import type { EnvOverrides, TestSuite, UnifiedConfig } from '../../src/types/index';
 
 const dbMocks = vi.hoisted(() => {
   const errorRows: Array<{ id: string }> = [];
@@ -672,6 +673,44 @@ describe('retryCommand', () => {
     expect(retriedEval.resultPersistenceFailed).toBe(true);
     expect(dbMocks.deleteRun).not.toHaveBeenCalled();
   });
+
+  it.each([false, true])(
+    'keeps retry output redaction scoped with persistence failure=%j',
+    async (failed) => {
+      const previousConfig = cliState.config;
+      const env: EnvOverrides = { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' };
+      const originalEval = createEval({ config: { outputPath: 'results.jsonl' } as UnifiedConfig });
+      const retriedEval = createEval({ resultPersistenceFailed: failed });
+      vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+      dbMocks.errorRows.push({ id: 'error-result-1' });
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        basePath: '/workspace',
+        config: { prompts: [], env },
+        testSuite: { ...testSuite, env },
+      });
+      vi.mocked(evaluate).mockImplementation(async () => {
+        cliState.config = { env: { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'false' } };
+        return retriedEval;
+      });
+      const flags: boolean[] = [];
+      vi.mocked(writeMultipleOutputs).mockImplementation(async () => {
+        await Promise.resolve();
+        flags.push(getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false));
+      });
+      try {
+        const result = retryCommand(originalEval.id, {});
+        if (failed) {
+          await expect(result).rejects.toThrow('Retry results failed to persist');
+        } else {
+          await expect(result).resolves.toBe(retriedEval);
+        }
+        expect(flags).toEqual([true]);
+        expect(getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT')).toBe(false);
+      } finally {
+        cliState.config = previousConfig;
+      }
+    },
+  );
 
   it('warns when JSONL restoration and post-retry rewriting fail', async () => {
     const originalEval = createEval({

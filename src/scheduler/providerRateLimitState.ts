@@ -13,8 +13,11 @@ import { SlotQueue } from './slotQueue';
  * Sentinel error for rate limit exhaustion.
  * Used to short-circuit the catch block and prevent double-release/double-count.
  */
-class RateLimitExhaustedError extends Error {
-  constructor(message: string) {
+export class RateLimitExhaustedError extends Error {
+  constructor(
+    message: string,
+    readonly result: unknown,
+  ) {
     super(message);
     this.name = 'RateLimitExhaustedError';
   }
@@ -128,7 +131,6 @@ export class ProviderRateLimitState extends EventEmitter {
     requestId: string,
     callFn: () => Promise<T>,
     options: {
-      abortSignal?: AbortSignal;
       getHeaders?: (result: T) => Record<string, string> | undefined;
       isRateLimited?: (result: T | undefined, error?: Error) => boolean;
       getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
@@ -152,19 +154,21 @@ export class ProviderRateLimitState extends EventEmitter {
       // Acquire slot (may wait for rate limit window via queue)
       // Queue timeout failures are counted as failed requests
       try {
-        options.abortSignal?.throwIfAborted();
-        await this.slotQueue.acquire(`${requestId}-${attempt}`, options.abortSignal);
+        await this.slotQueue.acquire(`${requestId}-${attempt}`);
       } catch (acquireError) {
-        // Queue timeout, cancellation, or other acquire failures.
+        // Queue timeout or other acquire failures
         this.failedRequests++;
-        this.emitQueueFailure(requestId, acquireError, options.abortSignal);
+        this.emit('queue:timeout', {
+          rateLimitKey: this.rateLimitKey,
+          requestId,
+          error: String(acquireError),
+        });
         throw acquireError;
       }
 
       const startTime = Date.now();
 
       try {
-        options.abortSignal?.throwIfAborted();
         const result = await callFn();
         const latencyMs = Date.now() - startTime;
         this.latencies.push(latencyMs);
@@ -198,7 +202,7 @@ export class ProviderRateLimitState extends EventEmitter {
               reason: 'ratelimit',
             });
 
-            await this.sleep(delay, options.abortSignal);
+            await this.sleep(delay);
             continue;
           }
 
@@ -207,6 +211,7 @@ export class ProviderRateLimitState extends EventEmitter {
           this.failedRequests++;
           throw new RateLimitExhaustedError(
             `Rate limit exceeded for ${this.rateLimitKey} after ${attempt + 1} attempts`,
+            result,
           );
         }
 
@@ -227,7 +232,6 @@ export class ProviderRateLimitState extends EventEmitter {
 
         // Release slot
         this.slotQueue.release();
-        this.throwIfCallAborted(options.abortSignal);
 
         // Check if rate limited (from error, not result)
         const isRateLimited =
@@ -251,7 +255,7 @@ export class ProviderRateLimitState extends EventEmitter {
             reason: isRateLimited ? 'ratelimit' : 'error',
           });
 
-          await this.sleep(delay, options.abortSignal);
+          await this.sleep(delay);
           continue;
         }
 
@@ -367,41 +371,8 @@ export class ProviderRateLimitState extends EventEmitter {
     );
   }
 
-  private emitQueueFailure(requestId: string, error: unknown, abortSignal?: AbortSignal): void {
-    this.emit(abortSignal?.aborted ? 'queue:cancelled' : 'queue:timeout', {
-      rateLimitKey: this.rateLimitKey,
-      requestId,
-      error: String(error),
-    });
-  }
-
-  private throwIfCallAborted(abortSignal?: AbortSignal): void {
-    if (abortSignal?.aborted) {
-      this.failedRequests++;
-      abortSignal.throwIfAborted();
-    }
-  }
-
-  private sleep(ms: number, abortSignal?: AbortSignal): Promise<void> {
-    if (!abortSignal) {
-      return new Promise((resolve) => setTimeout(resolve, ms));
-    }
-    if (abortSignal.aborted) {
-      return Promise.resolve();
-    }
-
-    return new Promise((resolve) => {
-      let timeoutId: ReturnType<typeof setTimeout> | undefined;
-      const finish = () => {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-        abortSignal.removeEventListener('abort', finish);
-        resolve();
-      };
-      timeoutId = setTimeout(finish, ms);
-      abortSignal.addEventListener('abort', finish, { once: true });
-    });
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**

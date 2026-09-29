@@ -418,7 +418,7 @@ export function normalizeTrajectoryMatcher(
 
   return {
     ...matcher,
-    ...(matcher.type === undefined ? (defaultType ? { type: defaultType } : {}) : {}),
+    ...(matcher.type ? {} : defaultType ? { type: defaultType } : {}),
   };
 }
 

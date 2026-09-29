@@ -1,6 +1,6 @@
 # integration-opentelemetry/javascript (OpenTelemetry Tracing Example)
 
-This example demonstrates how to use OpenTelemetry to trace the internal operations of your LLM providers during Promptfoo evaluations.
+This example traces a simulated retrieval workflow and checks its spans with Promptfoo assertions.
 
 ## Quick Start
 
@@ -8,7 +8,7 @@ This example demonstrates how to use OpenTelemetry to trace the internal operati
 npx promptfoo@latest init --example integration-opentelemetry/javascript
 cd integration-opentelemetry/javascript
 npm install
-npx promptfoo@latest eval
+npx promptfoo@latest eval --no-cache -o output.json
 npx promptfoo@latest view
 ```
 
@@ -26,34 +26,17 @@ To run the complete trace-based agent eval guide variant, including the model-gr
 OPENAI_API_KEY="your-api-key" npx promptfoo@latest eval -c promptfooconfig.trace-guide.yaml --no-cache
 ```
 
-## Environment Variables
-
-The base tracing example requires no API keys - it uses a simulated provider that demonstrates tracing patterns. The `promptfooconfig.trace-guide.yaml` variant requires `OPENAI_API_KEY` for its `trajectory:goal-success` judge assertion.
-
-## Overview
-
-Promptfoo's OpenTelemetry integration allows you to:
-
-- Trace internal operations of your providers without a custom SDK
-- Use standard OpenTelemetry libraries in any language
-- Send traces to any OpenTelemetry-compatible backend
-- Correlate traces with specific test cases and evaluations
-
 ## How It Works
 
-1. **OTLP receiver starts automatically** - Promptfoo ensures the receiver is ready before evaluations begin
-2. **Promptfoo generates a trace context** for each test case evaluation
-3. **The trace context is passed to providers** via the `traceparent` field
-4. **Providers create child spans** using standard OpenTelemetry SDKs
-5. **Traces are sent to Promptfoo's OTLP endpoint** (port 4318 by default)
-6. **Promptfoo correlates traces** with evaluations for analysis
+Promptfoo starts the OTLP receiver and passes a trace context to each provider call. The provider uses that context to create child spans, then exports them after the root span ends. Promptfoo associates the spans with the eval row and makes them available to assertions and the trace viewer.
 
 ## Files in This Example
 
 | File                               | Description                                           |
 | ---------------------------------- | ----------------------------------------------------- |
 | `promptfooconfig.yaml`             | Evaluation config with tracing enabled and assertions |
-| `provider-simple-traced.js`        | Simulated RAG provider with comprehensive tracing     |
+| `provider-simple-traced.js`        | Simulated RAG provider with nested spans              |
+| `promptfooconfig.trajectory.yaml`  | Offline tool and step assertions                      |
 | `promptfooconfig.trace-guide.yaml` | Complete trace and trajectory assertion guide config  |
 | `trace-assertions.js`              | Custom JavaScript assertion for trace validation      |
 | `package.json`                     | OpenTelemetry dependencies (v2.x API)                 |
@@ -89,11 +72,12 @@ const exporter = new OTLPTraceExporter({
   url: 'http://127.0.0.1:4318/v1/traces',
 });
 
+const spanProcessor = new BatchSpanProcessor(exporter);
 const provider = new NodeTracerProvider({
   resource: resourceFromAttributes({
     [ATTR_SERVICE_NAME]: 'my-provider',
   }),
-  spanProcessors: [new BatchSpanProcessor(exporter)],
+  spanProcessors: [spanProcessor],
 });
 provider.register();
 
@@ -130,6 +114,7 @@ module.exports = {
             throw error;
           } finally {
             span.end();
+            await spanProcessor.forceFlush();
           }
         });
       }
@@ -142,7 +127,7 @@ module.exports = {
 
 ## Trace-Based Assertions
 
-This example demonstrates several trace assertion types:
+Use these assertions to check span counts, durations, and errors:
 
 ```yaml
 assert:
@@ -190,10 +175,10 @@ Open any test result and switch to the **Traces** tab to see the timeline showin
 
 ## Environment Variables
 
-Configure OpenTelemetry using standard environment variables:
+Configure OpenTelemetry using its [standard environment variables](https://opentelemetry.io/docs/specs/otel/protocol/exporter/#configuration-options):
 
 ```bash
-# Generic OTLP HTTP base endpoint (the provider appends /v1/traces)
+# Generic OTLP HTTP base endpoint (the SDK appends /v1/traces)
 export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"
 
 # Or override the full trace export URL directly
@@ -230,7 +215,7 @@ async callApi(prompt, promptfooContext) {
 1. Verify `tracing.enabled: true` in config
 2. Check OTLP receiver is running (look for port 4318 in logs)
 3. Ensure trace context is properly parsed from `promptfooContext.traceparent`
-4. Call `spanProcessor.forceFlush()` before returning from provider
+4. End the root span, then call `spanProcessor.forceFlush()` before returning from the provider
 
 ## Dependencies
 

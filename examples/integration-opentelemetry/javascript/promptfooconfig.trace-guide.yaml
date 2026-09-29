@@ -68,7 +68,7 @@ tests:
           max: 4
 
       - type: trajectory:goal-success
-        provider: openai:chat:gpt-5.4-mini
+        provider: openai:gpt-6-luna
         value: The agent explained {{ topic }} using retrieved context, cited multiple documents, and composed a final answer after reasoning.
 
 tracing:
