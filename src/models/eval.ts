@@ -896,20 +896,7 @@ export default class Eval {
     return await EvalResult.findManyByEvalId(this.id, { testIdx });
   }
 
-  /**
-   * CRITICAL: Builds the WHERE SQL clause for filtering results.
-   * This is the single source of truth for all filtering logic.
-   * Used by both queryTestIndices() (pagination) and getFilteredMetrics().
-   *
-   * SECURITY: This method uses Drizzle's sql template strings for parameterized queries
-   * to prevent SQL injection. All user-provided values are passed as parameters,
-   * not interpolated into the SQL string.
-   *
-   * Any changes to filter logic MUST be made here to ensure consistency
-   * between displayed rows and calculated metrics.
-   *
-   * @returns SQL fragment (without "WHERE" keyword) that can be used in queries
-   */
+  /** Shared parameterized predicate for table rows, counts, and filtered metrics. */
   private buildFilterWhereSql(opts: {
     filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
@@ -1133,8 +1120,7 @@ export default class Eval {
         sql`json_extract(grading_result, '$.reason') LIKE ${searchPattern}`,
         sql`json_extract(grading_result, '$.comment') LIKE ${searchPattern}`,
         sql`json_extract(named_scores, '$') LIKE ${searchPattern}`,
-        // Search user-visible metadata only — drop the reserved `__promptfoo` namespace
-        // (trace linkage and remote dataset markers) from result and test metadata.
+        // Hide internal trace linkage and remote dataset markers from search.
         sql`json_remove(metadata, ${`$.${PROMPTFOO_METADATA_KEY}`}) LIKE ${searchPattern}`,
         sql`json_extract(test_case, '$.vars') LIKE ${searchPattern}`,
         sql`json_extract(json_remove(test_case, ${`$.metadata.${PROMPTFOO_METADATA_KEY}`}), '$.metadata') LIKE ${searchPattern}`,
@@ -1148,12 +1134,6 @@ export default class Eval {
     return sql.join(conditions, sql` AND `);
   }
 
-  /**
-   * Private helper method to build filter conditions and query for test indices.
-   *
-   * SECURITY: Uses parameterized queries via Drizzle's sql template strings
-   * to prevent SQL injection attacks.
-   */
   private async queryTestIndices(opts: {
     offset?: number;
     limit?: number;
@@ -1165,12 +1145,7 @@ export default class Eval {
     const offset = opts.offset ?? 0;
     const limit = opts.limit ?? 50;
 
-    // CRITICAL: Use single source of truth for WHERE clause (now returns SQL fragment)
-    const whereSql = this.buildFilterWhereSql({
-      filterMode: opts.filterMode,
-      searchQuery: opts.searchQuery,
-      filters: opts.filters,
-    });
+    const whereSql = this.buildFilterWhereSql(opts);
 
     // Get filtered count using parameterized query
     const filteredCountQuery = sql`
@@ -1204,23 +1179,12 @@ export default class Eval {
     return { testIndices, filteredCount };
   }
 
-  /**
-   * CRITICAL: Calculates metrics for filtered results.
-   * Uses the SAME WHERE clause as queryTestIndices() to ensure consistency.
-   *
-   * SECURITY: Uses parameterized SQL queries to prevent SQL injection.
-   *
-   * This method is called from the API route when filters are active to provide
-   * metrics that accurately reflect the filtered dataset.
-   *
-   * @returns Array of PromptMetrics, one per prompt
-   */
+  /** Calculate metrics for matching results, grouped by prompt. */
   async getFilteredMetrics(opts: {
     filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
     filters?: string[];
   }): Promise<import('../types').PromptMetrics[]> {
-    // CRITICAL: Use the SAME WHERE clause as queryTestIndices (now returns SQL fragment)
     const whereSql = this.buildFilterWhereSql(opts);
 
     return calculateFilteredMetrics({
