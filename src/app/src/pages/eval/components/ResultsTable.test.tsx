@@ -4,10 +4,10 @@ import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/ti
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
-import { renderHook, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import ResultsTable, { useStableColumnSampleBody } from './ResultsTable';
+import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 
 vi.mock('./store', () => ({
@@ -46,13 +46,14 @@ vi.mock('@app/hooks/useShiftKey', () => {
   };
 });
 
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApi: vi.fn(() => Promise.resolve({ ok: true })),
 }));
 
 const mockNavigate = vi.fn();
-vi.mock('react-router-dom', async () => ({
-  ...(await vi.importActual('react-router-dom')),
+vi.mock('react-router', async () => ({
+  ...(await vi.importActual('react-router')),
   useNavigate: () => mockNavigate,
 }));
 
@@ -179,8 +180,40 @@ describe('ResultsTable Metrics Display', () => {
 
   it('displays total tokens with correct formatting', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
-    expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
-    expect(screen.getByText('1,000')).toBeInTheDocument();
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent(
+      'Total Tokens: 1,000',
+    );
+    expect(screen.getByText('Provider Tokens:').parentElement).toHaveTextContent(
+      'Provider Tokens: 1,000',
+    );
+    expect(screen.queryByText('Target Tokens:')).not.toBeInTheDocument();
+  });
+
+  it('labels primary token usage as target tokens for redteam scans', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: { redteam: {} },
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('Target Tokens:').parentElement).toHaveTextContent(
+      'Target Tokens: 1,000',
+    );
+    expect(screen.queryByText('Provider Tokens:')).not.toBeInTheDocument();
   });
 
   it('displays average tokens with correct calculation', () => {
@@ -3169,16 +3202,18 @@ describe('ResultsTable Filtered Metrics Display', () => {
 
     const filteredCostElement = screen.getByText('($0.6173 filtered)');
     expect(filteredCostElement).toBeInTheDocument();
-    expect(filteredCostElement).toHaveStyle('font-size: 0.9em');
+    expect(filteredCostElement.style.fontSize).toBe('0.9em');
     expect(filteredCostElement).toHaveStyle('color: #666');
     expect(filteredCostElement).toHaveStyle('margin-left: 4px');
 
     expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
-    expect(screen.getByText('1,000')).toBeInTheDocument();
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent('1,000');
 
-    const filteredTokensElement = screen.getByText('(500 filtered)');
+    const totalTokensRow = screen.getByText('Total Tokens:').parentElement;
+    expect(totalTokensRow).not.toBeNull();
+    const filteredTokensElement = within(totalTokensRow as HTMLElement).getByText('(500 filtered)');
     expect(filteredTokensElement).toBeInTheDocument();
-    expect(filteredTokensElement).toHaveStyle('font-size: 0.9em');
+    expect(filteredTokensElement.style.fontSize).toBe('0.9em');
     expect(filteredTokensElement).toHaveStyle('color: #666');
     expect(filteredTokensElement).toHaveStyle('margin-left: 4px');
 
@@ -3187,7 +3222,75 @@ describe('ResultsTable Filtered Metrics Display', () => {
     expect(screen.getByLabelText('200 ms')).toBeInTheDocument();
     const filteredLatencyElement = screen.getByText('(200ms filtered)');
     expect(filteredLatencyElement).toBeInTheDocument();
-    expect(filteredLatencyElement).toHaveStyle('font-size: 0.9em');
+    expect(filteredLatencyElement.style.fontSize).toBe('0.9em');
+  });
+
+  it('displays filtered totals separately for target, attacker, and grading tokens', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: { redteam: {} },
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: {
+        ...mockTable,
+        head: {
+          ...mockTable.head,
+          prompts: [
+            {
+              ...mockTable.head.prompts[0],
+              metrics: {
+                ...mockTable.head.prompts[0].metrics,
+                tokenUsage: {
+                  total: 1000,
+                  attacker: { total: 200 },
+                  assertions: { total: 100 },
+                },
+              },
+            },
+          ],
+        },
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 1,
+        options: { metric: [] },
+      },
+      filteredMetrics: [
+        {
+          cost: 0.61728,
+          namedScores: {},
+          testPassCount: 5,
+          testFailCount: 0,
+          tokenUsage: {
+            total: 500,
+            attacker: { total: 80 },
+            assertions: { total: 20 },
+          },
+          totalLatencyMs: 1000,
+        },
+      ],
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent(
+      'Total Tokens: 1,300(600 filtered)',
+    );
+    expect(screen.getByText('Target Tokens:').parentElement).toHaveTextContent(
+      'Target Tokens: 1,000(500 filtered)',
+    );
+    expect(screen.getByText('Attacker Tokens:').parentElement).toHaveTextContent(
+      'Attacker Tokens: 200(80 filtered)',
+    );
+    expect(screen.getByText('Grading Tokens:').parentElement).toHaveTextContent(
+      'Grading Tokens: 100(20 filtered)',
+    );
+    expect(screen.getByText('Avg Tokens:').parentElement).toHaveTextContent(
+      'Avg Tokens: 130(120 filtered)',
+    );
   });
 });
 
@@ -3266,7 +3369,7 @@ describe('ResultsTable - No Filters Applied', () => {
     expect(screen.getByText('$1.23')).toBeInTheDocument();
 
     expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
-    expect(screen.getByText('1,000')).toBeInTheDocument();
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent('1,000');
 
     expect(screen.getByText('Avg Latency:')).toBeInTheDocument();
     expect(screen.getByText('200ms')).toBeInTheDocument();
@@ -3407,6 +3510,207 @@ describe('ResultsTable Pass Rate Display', () => {
 
     renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(screen.getByText('0.00% passing')).toBeInTheDocument();
+  });
+});
+
+describe('ResultsTable Named Metric Totals', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  type ColumnMetrics = {
+    testPassCount: number;
+    testFailCount: number;
+    testErrorCount: number;
+    namedScores: Record<string, number>;
+    namedScoresCount?: Record<string, number>;
+    namedScoreWeights?: Record<string, number>;
+  };
+
+  // Provider errors do not contribute to the named metric's score or denominator.
+  const columnMetrics = (graded: number, total = 5): ColumnMetrics => ({
+    testPassCount: graded,
+    testFailCount: 0,
+    testErrorCount: total - graded,
+    namedScores: { 'has-hello': graded },
+    namedScoresCount: { 'has-hello': graded },
+  });
+
+  const mockTableStore = (
+    metricsPerColumn: ColumnMetrics[],
+    { pageSize = 5, assertionWeight = 1 } = {},
+  ) => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: Array.from({ length: pageSize }, (_, rowIndex) => ({
+          outputs: metricsPerColumn.map((metrics) => {
+            const pass = rowIndex < metrics.testPassCount;
+            return {
+              pass,
+              score: pass ? 1 : 0,
+              text: pass ? 'Hello' : 'Provider error',
+              error: pass ? undefined : 'Provider error',
+            };
+          }),
+          test: {
+            assert: [
+              { type: 'contains', value: 'Hello', metric: 'has-hello', weight: assertionWeight },
+            ],
+          },
+          testIdx: rowIndex,
+          vars: [],
+        })),
+        head: {
+          prompts: metricsPerColumn.map((metrics, idx) => ({
+            metrics,
+            provider: `provider-${idx + 1}`,
+          })),
+          vars: [],
+        },
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+  };
+
+  const metricValueTexts = () =>
+    screen.getAllByTestId('metric-value-has-hello').map((el) => el.textContent);
+
+  beforeEach(() => {
+    vi.mocked(useTableStore).mockReset();
+    vi.mocked(useResultsViewSettingsStore).mockReset();
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+    }));
+  });
+
+  afterEach(() => {
+    vi.mocked(useTableStore).mockReset();
+    vi.mocked(useResultsViewSettingsStore).mockReset();
+  });
+
+  it('uses each column’s own named metric count when the first column errored', () => {
+    mockTableStore([columnMetrics(4), columnMetrics(5), columnMetrics(5)]);
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(metricValueTexts()).toEqual([
+      '100.00% (4.00/4.00)',
+      '100.00% (5.00/5.00)',
+      '100.00% (5.00/5.00)',
+    ]);
+  });
+
+  it('uses each column’s own named metric count when a later column errored', () => {
+    mockTableStore([columnMetrics(5), columnMetrics(4)]);
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(metricValueTexts()).toEqual(['100.00% (5.00/5.00)', '100.00% (4.00/4.00)']);
+  });
+
+  it('uses each column’s own weights instead of assertion counts for weighted metrics', () => {
+    mockTableStore(
+      [
+        {
+          ...columnMetrics(4),
+          namedScores: { 'has-hello': 6 },
+          namedScoreWeights: { 'has-hello': 8 },
+        },
+        {
+          ...columnMetrics(5),
+          namedScores: { 'has-hello': 8 },
+          namedScoreWeights: { 'has-hello': 10 },
+        },
+      ],
+      { assertionWeight: 2 },
+    );
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(metricValueTexts()).toEqual(['75.00% (6.00/8.00)', '80.00% (8.00/10.00)']);
+  });
+
+  it.each([false, true])(
+    'keeps a legacy aggregate score raw across page sizes (legacy column first: %s)',
+    (legacyFirst) => {
+      const modern = columnMetrics(100, 100);
+      const legacy = { ...columnMetrics(100, 100), namedScoresCount: undefined };
+      const metrics = legacyFirst ? [legacy, modern] : [modern, legacy];
+      const expected = legacyFirst
+        ? ['100.00', '100.00% (100.00/100.00)']
+        : ['100.00% (100.00/100.00)', '100.00'];
+      mockTableStore(metrics, { pageSize: 50 });
+
+      const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      expect(metricValueTexts()).toEqual(expected);
+
+      for (const pageSize of [25, 100]) {
+        mockTableStore(metrics, { pageSize });
+        rerender(<ResultsTable {...defaultProps} />);
+
+        expect(metricValueTexts()).toEqual(expected);
+      }
+    },
+  );
+
+  it('shows raw scores when all columns lack aggregate denominators', () => {
+    mockTableStore(
+      [
+        { ...columnMetrics(100, 100), namedScoresCount: undefined },
+        {
+          ...columnMetrics(100, 100),
+          namedScores: { 'has-hello': 80 },
+          namedScoresCount: undefined,
+        },
+      ],
+      { pageSize: 50 },
+    );
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(metricValueTexts()).toEqual(['100.00', '80.00']);
+  });
+
+  it('uses a later column’s totals when the first column has no graded named metrics', () => {
+    mockTableStore([
+      {
+        ...columnMetrics(0),
+        namedScores: {},
+        namedScoresCount: {},
+        namedScoreWeights: {},
+      },
+      columnMetrics(5),
+    ]);
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(metricValueTexts()).toEqual(['100.00% (5.00/5.00)']);
   });
 });
 
@@ -4930,6 +5234,60 @@ describe('ResultsTable default column sizing', () => {
     expect(filteredWidth).toBeLessThan(initialWidth);
   });
 
+  it.each(['search', 'eval'])(
+    'waits for new rows when %s changes before a same-count response',
+    (change) => {
+      const makeTable = (value: string) => ({
+        ...mockTable,
+        body: [
+          {
+            ...mockTable.body[0],
+            test: { description: value },
+            vars: ['ok', value],
+            outputs: [
+              {
+                ...mockTable.body[0].outputs[0],
+                metadata: { transformDisplayVars: { __late: value } },
+              },
+            ],
+          },
+        ],
+      });
+      let table = makeTable('Long metadata value '.repeat(30));
+      let evalId = 'first-eval';
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId,
+        setTable: vi.fn(),
+        table,
+        version: 4,
+        fetchEvalData: vi.fn(),
+        isFetching: false,
+        filteredResultsCount: 1,
+        filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+      }));
+      const widths = () =>
+        ['large_metadata', 'Description', 'late'].map((label) =>
+          Number.parseFloat(screen.getByText(label).closest('th')!.style.width),
+        );
+      const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+      const originalWidths = widths();
+      const props = { ...defaultProps, debouncedSearchText: change === 'search' ? 'compact' : '' };
+      if (change === 'eval') {
+        evalId = 'second-eval';
+      }
+      rerender(<ResultsTable {...props} zoom={1.01} />);
+      table = makeTable('compact');
+      rerender(<ResultsTable {...props} zoom={1.02} />);
+      const freshWidths = widths();
+      freshWidths.forEach((width, index) => expect(width).toBeLessThan(originalWidths[index]));
+
+      table = makeTable('A later page with long metadata '.repeat(30));
+      rerender(<ResultsTable {...props} zoom={1.03} />);
+      expect(widths()).toEqual(freshWidths);
+    },
+  );
+
   it('resamples metadata widths when live result growth changes the visible row count', () => {
     let table = {
       ...mockTable,
@@ -5289,90 +5647,5 @@ describe('ResultsTable default column sizing', () => {
 
     const nextPageHeader = screen.getByText('late').closest('th') as HTMLElement | null;
     expect(Number.parseFloat(nextPageHeader?.style.width || '0')).toBe(transformWidth);
-  });
-});
-
-describe('useStableColumnSampleBody', () => {
-  const makeRows = (count: number) =>
-    Array.from({ length: count }, (_, i) => ({ test: {}, vars: [`row${i}`], outputs: [] })) as any;
-
-  it('keeps the first non-empty page sample stable across pagination', () => {
-    const page1 = makeRows(3);
-    const page2 = makeRows(3);
-    const { result, rerender } = renderHook(
-      ({ evalId, body }) => useStableColumnSampleBody(evalId, body),
-      { initialProps: { evalId: 'eval-a', body: page1 } },
-    );
-    expect(result.current).toBe(page1);
-
-    // Paginating to another page of the same eval must not change the sample.
-    rerender({ evalId: 'eval-a', body: page2 });
-    expect(result.current).toBe(page1);
-  });
-
-  it('captures the first non-empty page when the initial page is empty', () => {
-    const loadedPage = makeRows(2);
-    const { result, rerender } = renderHook(
-      ({ evalId, body }) => useStableColumnSampleBody(evalId, body),
-      { initialProps: { evalId: 'eval-a', body: makeRows(0) } },
-    );
-    // Nothing to sample yet — falls back to the (empty) body.
-    expect(result.current).toEqual([]);
-
-    rerender({ evalId: 'eval-a', body: loadedPage });
-    expect(result.current).toBe(loadedPage);
-  });
-
-  it('refreshes the sample when the eval changes', () => {
-    const evalA = makeRows(2);
-    const evalB = makeRows(4);
-    const { result, rerender } = renderHook(
-      ({ evalId, body }) => useStableColumnSampleBody(evalId, body),
-      { initialProps: { evalId: 'eval-a', body: evalA } },
-    );
-    expect(result.current).toBe(evalA);
-
-    rerender({ evalId: 'eval-b', body: evalB });
-    expect(result.current).toBe(evalB);
-  });
-
-  it('waits for fresh rows when the eval changes before the table body updates', () => {
-    const evalA = makeRows(2);
-    const evalBPage1 = makeRows(4);
-    const evalBPage2 = makeRows(4);
-    const { result, rerender } = renderHook(
-      ({ evalId, body }) => useStableColumnSampleBody(evalId, body),
-      { initialProps: { evalId: 'eval-a', body: evalA } },
-    );
-    expect(result.current).toBe(evalA);
-
-    rerender({ evalId: 'eval-b', body: evalA });
-    expect(result.current).toBe(evalA);
-
-    rerender({ evalId: 'eval-b', body: evalBPage1 });
-    expect(result.current).toBe(evalBPage1);
-
-    rerender({ evalId: 'eval-b', body: evalBPage2 });
-    expect(result.current).toBe(evalBPage1);
-  });
-
-  it('waits for fresh rows when filters change the result-set key', () => {
-    const unfilteredRows = makeRows(2);
-    const filteredPage1 = makeRows(1);
-    const filteredPage2 = makeRows(1);
-    const { result, rerender } = renderHook(
-      ({ resultSetKey, body }) => useStableColumnSampleBody(resultSetKey, body),
-      { initialProps: { resultSetKey: 'eval-a:all', body: unfilteredRows } },
-    );
-    expect(result.current).toBe(unfilteredRows);
-
-    rerender({ resultSetKey: 'eval-a:filtered', body: unfilteredRows });
-    expect(result.current).toBe(unfilteredRows);
-
-    rerender({ resultSetKey: 'eval-a:filtered', body: filteredPage1 });
-    expect(result.current).toBe(filteredPage1);
-
-    rerender({ resultSetKey: 'eval-a:filtered', body: filteredPage2 });
-    expect(result.current).toBe(filteredPage1);
   });
 });

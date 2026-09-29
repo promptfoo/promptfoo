@@ -11,6 +11,7 @@ providers:
 defaultTest:
   options:
     provider: file://./grader.mjs
+    rubricPrompt: '{"candidate":"{{output}}"}'
 
 tests:
   - description: Invoice output is structured and semantically approved

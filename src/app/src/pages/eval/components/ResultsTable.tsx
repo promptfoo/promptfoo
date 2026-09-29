@@ -19,6 +19,11 @@ import { callApi } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
+import {
+  getIncurredTokenAccounting,
+  getPrimaryTokenUsageLabel,
+  getTokenUsageTotal,
+} from '@app/utils/tokenUsage';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
@@ -38,7 +43,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import { ArrowLeft, ArrowRight, ExternalLink, X } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router';
 import CustomMetrics from './CustomMetrics';
 import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
@@ -56,7 +61,7 @@ import type {
   ColumnSizingState,
   Row,
   VisibilityState,
-} from '@tanstack/table-core';
+} from '@tanstack/react-table';
 
 import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
@@ -198,96 +203,39 @@ function estimateMetadataColumnSize(header: string, values: unknown[]): number {
   );
 }
 
-function getMetadataColumnSizeValues<Row>(
-  sampleRows: Row[],
-  currentRows: Row[],
-  getValue: (row: Row) => unknown,
-): unknown[] {
-  const sampleValues = sampleRows.map(getValue);
-  return sampleValues.some((value) => getLongestMetadataLineLength(value) > 0)
-    ? sampleValues
-    : currentRows.map(getValue);
-}
-
-/**
- * Returns a row sample for estimating metadata column widths that stays stable
- * as the user paginates.
- *
- * The eval results store paginates server-side, so `tableBody` only ever holds
- * the current page. Estimating column widths directly from it makes unresized
- * columns visibly jump page-to-page. This captures the first non-empty page
- * seen for a result set and reuses it until the result set changes.
- */
-export function useStableColumnSampleBody(
-  resultSetKey: string | null,
-  tableBody: ExtendedEvaluateTableRow[],
-): ExtendedEvaluateTableRow[] {
-  const previousResultSetKeyRef = useRef(resultSetKey);
-  const previousTableBodyRef = useRef(tableBody);
-  const [sample, setSample] = React.useState<{
-    resultSetKey: string | null;
-    body: ExtendedEvaluateTableRow[];
-  } | null>(() => (tableBody.length > 0 ? { resultSetKey, body: tableBody } : null));
-
-  useEffect(() => {
-    const resultSetChanged = previousResultSetKeyRef.current !== resultSetKey;
-    const tableBodyChanged = previousTableBodyRef.current !== tableBody;
-
-    previousResultSetKeyRef.current = resultSetKey;
-    previousTableBodyRef.current = tableBody;
-
-    setSample((currentSample) => {
-      if (resultSetChanged) {
-        // The result-set inputs update before the next page arrives. Wait for
-        // fresh rows instead of adopting the previous result set as this sample.
-        return tableBodyChanged && tableBody.length > 0 ? { resultSetKey, body: tableBody } : null;
-      }
-
-      if (currentSample?.resultSetKey === resultSetKey || tableBody.length === 0) {
-        return currentSample;
-      }
-
-      return { resultSetKey, body: tableBody };
-    });
-  }, [resultSetKey, tableBody]);
-
-  return sample?.resultSetKey === resultSetKey ? sample.body : tableBody;
-}
-
-function useStableDynamicColumnSizes(
-  resultSetKey: string | null,
+function useStableColumnSizes(
+  resultSetKey: string,
+  rows: ExtendedEvaluateTableRow[],
   currentSizes: Record<string, number>,
 ): Record<string, number> {
-  const [cachedSizes, setCachedSizes] = React.useState<{
-    resultSetKey: string | null;
-    sizes: Record<string, number>;
-  }>(() => ({ resultSetKey, sizes: currentSizes }));
+  const previous = useRef({ resultSetKey, rows });
+  const [cached, setCached] = React.useState<{
+    resultSetKey: string;
+    sizes: Record<string, number> | null;
+  }>(() => ({ resultSetKey, sizes: rows.length > 0 ? currentSizes : null }));
 
   useEffect(() => {
-    setCachedSizes((current) => {
-      if (current.resultSetKey !== resultSetKey) {
-        return { resultSetKey, sizes: currentSizes };
-      }
+    const keyChanged = previous.current.resultSetKey !== resultSetKey;
+    const rowsChanged = previous.current.rows !== rows;
+    previous.current = { resultSetKey, rows };
 
-      const newlyDiscoveredSizes = Object.fromEntries(
-        Object.entries(currentSizes).filter(
-          ([key]) => !Object.prototype.hasOwnProperty.call(current.sizes, key),
-        ),
-      );
-      if (Object.keys(newlyDiscoveredSizes).length === 0) {
+    setCached((current) => {
+      if (keyChanged) {
+        // Controls can change before their response arrives. Do not cache the old rows.
+        return { resultSetKey, sizes: rowsChanged && rows.length > 0 ? currentSizes : null };
+      }
+      if (rows.length === 0 || (!current.sizes && !rowsChanged)) {
         return current;
       }
-
-      return {
-        resultSetKey,
-        sizes: { ...current.sizes, ...newlyDiscoveredSizes },
-      };
+      const sizes = { ...currentSizes, ...current.sizes };
+      return current.sizes && Object.keys(sizes).length === Object.keys(current.sizes).length
+        ? current
+        : { resultSetKey, sizes };
     });
-  }, [currentSizes, resultSetKey]);
+  }, [resultSetKey, rows, currentSizes]);
 
-  return cachedSizes.resultSetKey === resultSetKey
-    ? { ...currentSizes, ...cachedSizes.sizes }
-    : currentSizes;
+  // Preserve known widths across pages; size newly discovered columns when they appear.
+  return cached.resultSetKey === resultSetKey ? { ...currentSizes, ...cached.sizes } : currentSizes;
 }
 
 function formatRowOutput(output: EvaluateTableOutput | string | null | undefined) {
@@ -793,31 +741,93 @@ function renderCostMetric({
 function renderTokenMetrics({
   metrics,
   filteredMetrics,
+  isRedteam,
   testCount,
 }: {
   metrics: PromptMetrics['total'];
   filteredMetrics: PromptMetrics['filtered'];
+  isRedteam: boolean;
   testCount?: PromptSummaryMetric;
 }): React.ReactNode {
-  if (!metrics?.tokenUsage?.total) {
+  const primaryTokens = getTokenUsageTotal(metrics?.tokenUsage);
+  const attackerTokens = getTokenUsageTotal(metrics?.tokenUsage?.attacker);
+  const gradingTokens = getTokenUsageTotal(metrics?.tokenUsage?.assertions);
+  const incurredAccounting = getIncurredTokenAccounting(metrics?.tokenUsage);
+
+  if (primaryTokens === 0 && attackerTokens === 0 && gradingTokens === 0) {
     return null;
   }
 
-  const totalTokens = metrics.tokenUsage.total;
-  const filteredTokens = filteredMetrics?.tokenUsage?.total;
+  const totalTokens = primaryTokens + attackerTokens + gradingTokens;
+  const filteredPrimaryTokens = filteredMetrics?.tokenUsage
+    ? getTokenUsageTotal(filteredMetrics.tokenUsage)
+    : undefined;
+  const filteredAttackerTokens = filteredMetrics?.tokenUsage
+    ? getTokenUsageTotal(filteredMetrics.tokenUsage.attacker)
+    : undefined;
+  const filteredGradingTokens = filteredMetrics?.tokenUsage
+    ? getTokenUsageTotal(filteredMetrics.tokenUsage.assertions)
+    : undefined;
+  const filteredTokens =
+    filteredPrimaryTokens === undefined
+      ? undefined
+      : filteredPrimaryTokens + (filteredAttackerTokens ?? 0) + (filteredGradingTokens ?? 0);
   const totalAverage = testCount?.total ? totalTokens / testCount.total : 0;
   const filteredAverage =
-    filteredTokens && testCount?.filtered ? filteredTokens / testCount.filtered : undefined;
+    filteredTokens !== undefined && testCount?.filtered
+      ? filteredTokens / testCount.filtered
+      : undefined;
 
   return (
     <>
       <div>
         <strong>Total Tokens:</strong> {formatMetricValue(totalTokens)}
-        {filteredTokens ? renderFilteredSuffix(formatMetricValue(filteredTokens)) : null}
+        {filteredTokens === undefined
+          ? null
+          : renderFilteredSuffix(formatMetricValue(filteredTokens))}
       </div>
       <div>
+        <strong>{getPrimaryTokenUsageLabel(isRedteam)} Tokens:</strong>{' '}
+        {formatMetricValue(primaryTokens)}
+        {filteredPrimaryTokens === undefined
+          ? null
+          : renderFilteredSuffix(formatMetricValue(filteredPrimaryTokens))}
+      </div>
+      {attackerTokens > 0 ? (
+        <div>
+          <strong>Attacker Tokens:</strong> {formatMetricValue(attackerTokens)}
+          {filteredAttackerTokens === undefined
+            ? null
+            : renderFilteredSuffix(formatMetricValue(filteredAttackerTokens))}
+        </div>
+      ) : null}
+      {gradingTokens > 0 ? (
+        <div>
+          <strong>Grading Tokens:</strong> {formatMetricValue(gradingTokens)}
+          {filteredGradingTokens === undefined
+            ? null
+            : renderFilteredSuffix(formatMetricValue(filteredGradingTokens))}
+        </div>
+      ) : null}
+      {incurredAccounting ? (
+        <>
+          <div>
+            <strong>Incurred Tokens:</strong> {formatMetricValue(incurredAccounting.incurredTokens)}
+          </div>
+          <div>
+            <strong>Cached Savings:</strong> {formatMetricValue(incurredAccounting.cachedSavings)}
+          </div>
+          <div>
+            <strong>Actual Target Requests:</strong>{' '}
+            {formatMetricValue(incurredAccounting.actualRequests)}
+          </div>
+        </>
+      ) : null}
+      <div>
         <strong>Avg Tokens:</strong> {formatMetricValue(totalAverage)}
-        {filteredAverage ? renderFilteredSuffix(formatMetricValue(filteredAverage)) : null}
+        {filteredAverage === undefined
+          ? null
+          : renderFilteredSuffix(formatMetricValue(filteredAverage))}
       </div>
     </>
   );
@@ -1126,6 +1136,7 @@ function renderPromptMetricDetails({
       {renderTokenMetrics({
         metrics,
         filteredMetrics,
+        isRedteam,
         testCount: testCounts[idx],
       })}
       {renderLatencyMetric({
@@ -1161,7 +1172,6 @@ function PromptColumnHeader({
   numGoodAsserts,
   testCounts,
   passingTestCounts,
-  metricTotals,
   config,
   filterMode,
   headPromptCount,
@@ -1181,7 +1191,6 @@ function PromptColumnHeader({
   numGoodAsserts: number[];
   testCounts: PromptSummaryMetric[];
   passingTestCounts: PromptSummaryMetric[];
-  metricTotals: Record<string, number>;
   config: ReturnType<typeof useTableStore.getState>['config'];
   filterMode: EvalResultsFilterMode;
   headPromptCount: number;
@@ -1243,8 +1252,7 @@ function PromptColumnHeader({
           <div className="collapse-hidden">
             <CustomMetrics
               lookup={metrics.namedScores}
-              counts={getNamedMetricTotals(metrics)}
-              metricTotals={metricTotals}
+              metricTotals={getNamedMetricTotals(metrics)}
               onShowMore={() => setCustomMetricsDialogOpen(true)}
             />
           </div>
@@ -1848,31 +1856,25 @@ function ResultsTable({
 
   const injectVarName = config?.redteam?.injectVar || 'prompt';
 
-  // Create a stable representation of the applied filters for result-set changes.
+  // Use the same applied filters for fetches and width-cache resets.
   const appliedFiltersString = React.useMemo(() => {
     const appliedFilters = Object.values(filters.values)
       .filter((filter) => {
-        // For metadata filters with exists operator, only field is required
         if (filter.type === 'metadata' && filter.operator === 'exists') {
           return Boolean(filter.field);
         }
-        // For other metadata operators, both field and value are required
         if (filter.type === 'metadata') {
           return Boolean(filter.value && filter.field);
         }
-        // For metric filters with is_defined operator, only field is required
         if (filter.type === 'metric' && filter.operator === 'is_defined') {
           return Boolean(filter.field);
         }
-        // For metric filters with comparison operators, both field and value are required
         if (filter.type === 'metric') {
           return Boolean(filter.value && filter.field);
         }
-        // For non-metadata/non-metric filters, value is required
         return Boolean(filter.value);
       })
-      .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
-    // Create a stable string representation of applied filters
+      .sort((a, b) => a.sortIndex - b.sortIndex);
     return JSON.stringify(
       appliedFilters.map((f) => ({
         type: f.type,
@@ -1880,14 +1882,13 @@ function ResultsTable({
         value: f.value,
         field: f.field,
         logicOperator: f.logicOperator,
-        sortIndex: f.sortIndex, // Include sortIndex for complete representation
+        sortIndex: f.sortIndex,
       })),
     );
   }, [filters.values]);
 
-  // Estimate metadata column widths from a page sample that is stable across
-  // pagination, so unresized columns do not jump as the user pages.
-  const columnSizeSampleKey = React.useMemo(
+  // Reset default widths for new result sets, while keeping page changes stable.
+  const columnSizingKey = React.useMemo(
     () =>
       JSON.stringify({
         evalId,
@@ -1910,71 +1911,57 @@ function ResultsTable({
       tableRefreshVersion,
     ],
   );
-  const columnSizeSampleBody = useStableColumnSampleBody(columnSizeSampleKey, tableBody);
-
-  const variableColumnSizes = React.useMemo(
-    () =>
-      head.vars.map((varName, idx) =>
-        estimateMetadataColumnSize(
-          varName,
-          columnSizeSampleBody.map((row) =>
-            getVariableCellValue({
-              row,
-              varName,
-              injectVarName,
-              fallbackValue: row.vars[idx],
-            }),
-          ),
-        ),
-      ),
-    [head.vars, injectVarName, columnSizeSampleBody],
-  );
-
-  const currentDynamicColumnSizes = React.useMemo(() => {
-    const sizes = Object.fromEntries(
-      transformDisplayVarKeys.map((varName) => [
-        `transform:${varName}`,
-        estimateMetadataColumnSize(
-          varName.replace(/^__/, ''),
-          getMetadataColumnSizeValues(columnSizeSampleBody, tableBody, (row) => {
-            const transformVars = row.outputs?.[0]?.metadata?.transformDisplayVars as
-              | Record<string, string>
-              | undefined;
-            return transformVars?.[varName] || '';
+  const currentColumnSizes = React.useMemo(() => {
+    const sizes: Record<string, number> = {};
+    for (const [idx, varName] of head.vars.entries()) {
+      sizes[`variable:${varName}`] = estimateMetadataColumnSize(
+        varName,
+        tableBody.map((row) =>
+          getVariableCellValue({
+            row,
+            varName,
+            injectVarName,
+            fallbackValue: row.vars[idx],
           }),
-        ),
-      ]),
-    ) as Record<string, number>;
-
-    if (hasDescriptionColumn) {
-      sizes.description = estimateMetadataColumnSize(
-        'Description',
-        getMetadataColumnSizeValues(
-          columnSizeSampleBody,
-          tableBody,
-          (row) => row.test.description || '',
         ),
       );
     }
-
+    for (const varName of transformDisplayVarKeys) {
+      sizes[`transform:${varName}`] = estimateMetadataColumnSize(
+        varName.replace(/^__/, ''),
+        tableBody.map((row) => {
+          const transformVars = row.outputs?.[0]?.metadata?.transformDisplayVars as
+            | Record<string, string>
+            | undefined;
+          return transformVars?.[varName] || '';
+        }),
+      );
+    }
+    if (hasDescriptionColumn) {
+      sizes.description = estimateMetadataColumnSize(
+        'Description',
+        tableBody.map((row) => row.test.description || ''),
+      );
+    }
     return sizes;
-  }, [columnSizeSampleBody, hasDescriptionColumn, tableBody, transformDisplayVarKeys]);
-  const stableDynamicColumnSizes = useStableDynamicColumnSizes(
-    columnSizeSampleKey,
-    currentDynamicColumnSizes,
+  }, [head.vars, tableBody, injectVarName, transformDisplayVarKeys, hasDescriptionColumn]);
+  const stableColumnSizes = useStableColumnSizes(columnSizingKey, tableBody, currentColumnSizes);
+  const variableColumnSizes = React.useMemo(
+    () => head.vars.map((varName) => stableColumnSizes[`variable:${varName}`]),
+    [head.vars, stableColumnSizes],
   );
   const transformDisplayVarColumnSizes = React.useMemo(
     () =>
       Object.fromEntries(
         transformDisplayVarKeys.map((varName) => [
           varName,
-          stableDynamicColumnSizes[`transform:${varName}`],
+          stableColumnSizes[`transform:${varName}`],
         ]),
-      ) as Record<string, number>,
-    [stableDynamicColumnSizes, transformDisplayVarKeys],
+      ),
+    [stableColumnSizes, transformDisplayVarKeys],
   );
   const descriptionColumnSize =
-    stableDynamicColumnSizes.description ?? estimateMetadataColumnSize('Description', []);
+    stableColumnSizes.description ?? estimateMetadataColumnSize('Description', []);
 
   const parseQueryParams = (queryString: string) => {
     return Object.fromEntries(new URLSearchParams(queryString));
@@ -2231,34 +2218,6 @@ function ResultsTable({
     [tableBody],
   );
 
-  const metricTotals = React.useMemo(() => {
-    // Use the backend's already-correct metric totals instead of recalculating
-    const firstProvider = table?.head?.prompts?.[0];
-    const backendTotals = getNamedMetricTotals(firstProvider?.metrics);
-
-    if (backendTotals) {
-      return backendTotals;
-    }
-
-    const totals: Record<string, number> = {};
-    table?.body.forEach((row) => {
-      row.test.assert?.forEach((assertion) => {
-        if (assertion.metric) {
-          totals[assertion.metric] = (totals[assertion.metric] || 0) + (assertion.weight ?? 1);
-        }
-        if ('assert' in assertion && Array.isArray(assertion.assert)) {
-          assertion.assert.forEach((subAssertion) => {
-            if ('metric' in subAssertion && subAssertion.metric) {
-              totals[subAssertion.metric] =
-                (totals[subAssertion.metric] || 0) + (subAssertion.weight ?? 1);
-            }
-          });
-        }
-      });
-    });
-    return totals;
-  }, [table?.head?.prompts, table?.body]);
-
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const promptColumns = React.useMemo(() => {
     return [
@@ -2281,7 +2240,6 @@ function ResultsTable({
                 numGoodAsserts={numGoodAsserts}
                 testCounts={testCounts}
                 passingTestCounts={passingTestCounts}
-                metricTotals={metricTotals}
                 config={config}
                 filterMode={filterMode}
                 headPromptCount={head.prompts.length}
@@ -2322,6 +2280,7 @@ function ResultsTable({
                     showDiffs={filterMode === 'different' && visiblePromptCount > 1}
                     searchText={debouncedSearchText}
                     showStats={showStats}
+                    isRedteam={isRedteam}
                     evaluationId={evalId || undefined}
                     testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
                   />
@@ -2347,8 +2306,8 @@ function ResultsTable({
     handleRating,
     head,
     head.prompts,
+    isRedteam,
     maxTextLength,
-    metricTotals,
     numAsserts,
     numGoodAsserts,
     onFailureFilterToggle,

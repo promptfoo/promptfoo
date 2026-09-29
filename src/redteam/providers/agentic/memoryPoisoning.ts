@@ -3,11 +3,16 @@ import { getUserEmail } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { fetchWithProxy } from '../../../util/fetch/index';
 import invariant from '../../../util/invariant';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../../util/tokenUsageUtils';
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../../remoteGeneration';
+import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../../shared/promptLength';
-import { messagesToRedteamHistory } from '../shared';
+import { callTargetProvider, messagesToRedteamHistory } from '../shared';
 
 import type {
   ApiProvider,
@@ -17,8 +22,21 @@ import type {
   ProviderResponse,
 } from '../../../types/providers';
 
+interface MemoryPoisoningConfig extends ProviderOptions {
+  targetId?: string;
+}
+
 export class MemoryPoisoningProvider implements ApiProvider {
-  constructor(readonly config: ProviderOptions) {}
+  constructor(readonly config: MemoryPoisoningConfig) {}
+
+  private get targetId(): string | undefined {
+    if (typeof this.config.targetId === 'string') {
+      return this.config.targetId;
+    }
+    return typeof this.config.config?.targetId === 'string'
+      ? this.config.config.targetId
+      : undefined;
+  }
 
   id() {
     return REDTEAM_MEMORY_POISONING_PLUGIN_ID;
@@ -55,6 +73,7 @@ export class MemoryPoisoningProvider implements ApiProvider {
         {
           body: JSON.stringify({
             task: 'agentic:memory-poisoning-scenario',
+            ...remoteGenerationContextPayload(this.targetId),
             purpose,
             version: VERSION,
             email: getUserEmail(),
@@ -76,20 +95,33 @@ export class MemoryPoisoningProvider implements ApiProvider {
       context!.test!.metadata['scenario'] = scenario;
 
       const totalTokenUsage = createEmptyTokenUsage();
+      if (scenario.tokenUsage) {
+        accumulateAttackerTokenUsage(totalTokenUsage, { tokenUsage: scenario.tokenUsage });
+      }
 
       // Send the memory message to the provider.
       throwIfTargetPromptExceedsMaxChars(scenario.memory);
-      const memoryResponse = await targetProvider.callApi(scenario.memory, context, options);
+      const memoryResponse = await callTargetProvider(
+        targetProvider,
+        scenario.memory,
+        context,
+        options,
+      );
       accumulateResponseTokenUsage(totalTokenUsage, memoryResponse);
 
       // Send the test case to the provider; the test case should poison the memory created in the previous step.
       throwIfTargetPromptExceedsMaxChars(prompt);
-      const testResponse = await targetProvider.callApi(prompt, context, options);
+      const testResponse = await callTargetProvider(targetProvider, prompt, context, options);
       accumulateResponseTokenUsage(totalTokenUsage, testResponse);
 
       // Send the follow up question to the provider.
       throwIfTargetPromptExceedsMaxChars(scenario.followUp);
-      const response = await targetProvider.callApi(scenario.followUp, context, options);
+      const response = await callTargetProvider(
+        targetProvider,
+        scenario.followUp,
+        context,
+        options,
+      );
       accumulateResponseTokenUsage(totalTokenUsage, response);
 
       const messages = [

@@ -95,6 +95,39 @@ describe('runtimeTransform', () => {
       expect(mockBase64Strategy.action).toHaveBeenCalledTimes(1);
     });
 
+    it('preserves auxiliary model usage without persisting internal accounting metadata', async () => {
+      const trackedStrategy: Strategy = {
+        id: 'tracked',
+        action: vi.fn(async (testCases) =>
+          testCases.map((testCase: TestCaseWithPlugin) => ({
+            ...testCase,
+            vars: { ...testCase.vars, input: 'transformed' },
+            metadata: {
+              ...testCase.metadata,
+              runtimeTokenUsage: {
+                total: 18,
+                prompt: 12,
+                completion: 6,
+                numRequests: 2,
+                completionDetails: { reasoning: 3 },
+              },
+            },
+          })),
+        ),
+      };
+
+      const result = await applyRuntimeTransforms('hello', 'input', ['tracked'], [trackedStrategy]);
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 18,
+        prompt: 12,
+        completion: 6,
+        numRequests: 2,
+        completionDetails: { reasoning: 3 },
+      });
+      expect(result.metadata).not.toHaveProperty('runtimeTokenUsage');
+    });
+
     it('should apply multiple transform layers in order', async () => {
       // First base64, then the second strategy would transform the base64 result
       // But for this test, let's just verify both are called
@@ -171,6 +204,21 @@ describe('runtimeTransform', () => {
       );
     });
 
+    it('should pass target context to per-turn layer strategies', async () => {
+      const result = await applyRuntimeTransforms('hello', 'input', ['base64'], mockStrategies, {
+        targetId: 'cloud-target-123',
+      });
+
+      expect(mockBase64Strategy.action).toHaveBeenCalledWith(
+        expect.any(Array),
+        'input',
+        expect.objectContaining({ targetId: 'cloud-target-123' }),
+      );
+
+      expect(result.prompt).toBe('aGVsbG8=');
+      expect(result.originalPrompt).toBe('hello');
+    });
+
     it('should skip unknown strategies with warning', async () => {
       const result = await applyRuntimeTransforms(
         'hello',
@@ -198,6 +246,42 @@ describe('runtimeTransform', () => {
       expect(result.error).toContain('Transform failing failed');
       expect(result.prompt).toBe('hello'); // Returns original prompt on error
       expect(result.originalPrompt).toBe('hello');
+    });
+
+    it('preserves prior model usage when a later transform fails', async () => {
+      const trackedStrategy: Strategy = {
+        id: 'tracked',
+        action: vi.fn(async (testCases) =>
+          testCases.map((testCase: TestCaseWithPlugin) => ({
+            ...testCase,
+            metadata: {
+              ...testCase.metadata,
+              runtimeTokenUsage: { total: 18, prompt: 12, completion: 6, numRequests: 1 },
+            },
+          })),
+        ),
+      };
+      const failingStrategy: Strategy = {
+        id: 'failing',
+        action: vi.fn(async () => {
+          throw new Error('Transform failed');
+        }),
+      };
+
+      const result = await applyRuntimeTransforms(
+        'hello',
+        'input',
+        ['tracked', 'failing'],
+        [trackedStrategy, failingStrategy],
+      );
+
+      expect(result.error).toContain('Transform failing failed');
+      expect(result.tokenUsage).toMatchObject({
+        total: 18,
+        prompt: 12,
+        completion: 6,
+        numRequests: 1,
+      });
     });
 
     it('should preserve pluginId in metadata during transforms', async () => {
