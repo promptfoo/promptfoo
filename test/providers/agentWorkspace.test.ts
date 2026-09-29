@@ -178,6 +178,99 @@ describe('agent workspaces', () => {
       expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
     });
 
+    it.each(['agent', 'global'])(
+      'records changes when %s configuration enables a split index',
+      async (configuration) => {
+        const source = path.join(root, 'repo');
+        makeRepository(source, { '.gitignore': '*.snap\n' });
+        const configFile = path.join(root, 'global.gitconfig');
+        write(configFile, configuration === 'global' ? '[core]\n splitIndex = true\n' : '');
+        const restoreEnv = mockProcessEnv({ GIT_CONFIG_GLOBAL: configFile });
+        try {
+          const workspace = await create(source);
+          if (configuration === 'agent') {
+            git(workspace.dir, 'update-index', '--split-index');
+          }
+          write(path.join(workspace.dir, 'README.md'), 'changed\n');
+          write(path.join(workspace.dir, 'added.snap'), 'new snapshot\n');
+          git(workspace.dir, 'add', '-f', 'added.snap');
+          expect(fs.readdirSync(path.join(workspace.dir, '.git'))).toEqual(
+            expect.arrayContaining([expect.stringMatching(/^sharedindex\.[a-f0-9]+$/)]),
+          );
+
+          const { workspaceDiff } = await workspace.metadata();
+
+          expect(workspaceDiff).toContain('+changed');
+          expect(workspaceDiff).toContain('+++ b/added.snap');
+          expect(workspaceDiff).toContain('+new snapshot');
+          expect(git(source, 'status', '--porcelain')).toBe('');
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
+    it('records changes with a SHA-256 split index', async () => {
+      const source = path.join(root, 'repo');
+      fs.mkdirSync(source);
+      git(source, 'init', '-q', '--object-format=sha256');
+      makeRepository(source);
+      const workspace = await create(source);
+      git(workspace.dir, 'update-index', '--split-index');
+      write(path.join(workspace.dir, 'README.md'), 'changed\n');
+
+      expect((await workspace.metadata()).workspaceDiff).toContain('+changed');
+    });
+
+    it.each(['link', 'fifo'])('rejects a shared index replaced with a %s', async (kind) => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const workspace = await create(source);
+      git(workspace.dir, 'update-index', '--split-index');
+      const gitDir = path.join(workspace.dir, '.git');
+      const name = fs.readdirSync(gitDir).find((file) => file.startsWith('sharedindex.'))!;
+      const sharedIndex = path.join(gitDir, name);
+      const original = path.join(root, 'original-index');
+      fs.renameSync(sharedIndex, original);
+      if (kind === 'link') {
+        fs.symlinkSync(original, sharedIndex);
+      } else {
+        execFileSync('mkfifo', [sharedIndex]);
+      }
+
+      expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+    });
+
+    it('bounds the total size of copied shared indexes', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const workspace = await create(source);
+      for (const hash of ['a', 'b']) {
+        const file = path.join(workspace.dir, '.git', `sharedindex.${hash.repeat(40)}`);
+        write(file, '');
+        fs.truncateSync(file, 33 * 1024 * 1024);
+      }
+
+      expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+    });
+
+    it('bounds the number of copied shared indexes', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const workspace = await create(source);
+      for (let index = 0; index < 65; index++) {
+        write(
+          path.join(workspace.dir, '.git', `sharedindex.${index.toString(16).padStart(40, '0')}`),
+          '',
+        );
+      }
+
+      expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+    });
+
     it.each([
       ['sha256', 'sha1'],
       ['sha1', 'sha256'],
@@ -292,6 +385,53 @@ describe('agent workspaces', () => {
       expect(workspace.strategy).toBe('copy');
       expect(fs.readFileSync(path.join(workspace.dir, 'README.md'), 'utf8')).toBe('original\r\n');
       expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+    });
+
+    it.each([
+      [0o644, 0o755],
+      [0o755, 0o644],
+    ])(
+      'preserves changed executable permissions hidden by core.filemode=false',
+      async (before, after) => {
+        if (process.platform === 'win32') {
+          return;
+        }
+        const source = path.join(root, 'repo');
+        makeRepository(source);
+        const file = path.join(source, 'run.sh');
+        write(file, '#!/bin/sh\nexit 0\n');
+        fs.chmodSync(file, before);
+        git(source, 'add', 'run.sh');
+        git(source, 'commit', '-q', '-m', 'script');
+        git(source, 'config', 'core.filemode', 'false');
+        fs.chmodSync(file, after);
+        expect(git(source, 'status', '--porcelain')).toBe('');
+
+        const workspace = await create(source);
+
+        expect(workspace.strategy).toBe('copy');
+        expect(fs.statSync(path.join(workspace.dir, 'run.sh')).mode & 0o777).toBe(after);
+        await expect(create(source, 'git')).rejects.toThrow('files all match its current commit');
+      },
+    );
+
+    it('still clones matching executable permissions with core.filemode=false', async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const file = path.join(source, 'run.sh');
+      write(file, '#!/bin/sh\nexit 0\n');
+      fs.chmodSync(file, 0o755);
+      git(source, 'add', 'run.sh');
+      git(source, 'commit', '-q', '-m', 'script');
+      git(source, 'config', 'core.filemode', 'false');
+
+      const workspace = await create(source);
+
+      expect(workspace.strategy).toBe('git');
+      expect(fs.statSync(path.join(workspace.dir, 'run.sh')).mode & 0o100).toBe(0o100);
     });
 
     it('copies LF files that attributes would convert to CRLF during checkout', async () => {

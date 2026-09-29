@@ -45,6 +45,7 @@ interface RepositoryState {
 
 const MAX_DIFF_LENGTH = 100_000;
 const MAX_GIT_BUFFER = 64 * 1024 * 1024;
+const MAX_SHARED_INDEX_FILES = 64;
 const GIT_TIMEOUT_MS = 30_000;
 // Git variables that point a git command at a particular repository, set for example when
 // promptfoo runs from a git hook. They are cleared so every command uses the repository
@@ -212,6 +213,20 @@ async function getCloneableRepository(
         "copy_working_dir: 'git' does not support tracked Git filter attributes; use 'copy' or true to preserve materialized files.",
       );
     }
+    if (process.platform !== 'win32') {
+      // core.filemode=false hides executable-bit changes from Git status.
+      const entries = await git(['ls-files', '--stage', '-z'], { cwd: source, signal });
+      for (const entry of entries.split('\0')) {
+        const mode = entry.slice(0, 6);
+        if (mode === '100644' || mode === '100755') {
+          signal?.throwIfAborted();
+          const file = path.join(source, entry.slice(entry.indexOf('\t') + 1));
+          if (Boolean((await fs.lstat(file)).mode & 0o100) !== (mode === '100755')) {
+            return undefined;
+          }
+        }
+      }
+    }
     if (!allowIgnored) {
       const endings = await git(['ls-files', '--eol', '-z'], { cwd: source, signal });
       if (
@@ -348,13 +363,13 @@ function registerExitCleanup(): void {
   });
 }
 
-async function copyWorkspaceIndex(
-  dir: string,
+async function copyIndexFile(
+  indexPath: string,
   destination: string,
+  maxBytes: number,
   signal?: AbortSignal,
-): Promise<boolean> {
+): Promise<number | undefined> {
   signal?.throwIfAborted();
-  const indexPath = path.join(dir, '.git', 'index');
   // A nonblocking open prevents a replacement FIFO from hanging between checking and reading.
   const flags =
     constants.O_RDONLY |
@@ -372,13 +387,13 @@ async function copyWorkspaceIndex(
     throw error;
   });
   if (!index) {
-    return false;
+    return undefined;
   }
   try {
     const stat = await index.stat();
-    if (!stat.isFile() || stat.size > MAX_GIT_BUFFER) {
+    if (!stat.isFile() || stat.size > maxBytes) {
       throw new Error(
-        `workspace Git index must be a regular file of at most ${MAX_GIT_BUFFER} bytes`,
+        `workspace Git indexes must be regular files totaling at most ${MAX_GIT_BUFFER} bytes`,
       );
     }
     const contents = Buffer.alloc(stat.size);
@@ -392,10 +407,50 @@ async function copyWorkspaceIndex(
       offset += bytesRead;
     }
     await fs.writeFile(destination, contents.subarray(0, offset));
-    return true;
+    return offset;
   } finally {
     await index.close();
   }
+}
+
+async function copyWorkspaceIndex(
+  dir: string,
+  destination: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const gitDir = path.join(dir, '.git');
+  const indexSize = await copyIndexFile(
+    path.join(gitDir, 'index'),
+    destination,
+    MAX_GIT_BUFFER,
+    signal,
+  );
+  if (indexSize === undefined) {
+    return false;
+  }
+  // A split index resolves its shared file beside GIT_INDEX_FILE. Keep the snapshot bounded
+  // even when the workspace contains many stale or agent-created shared indexes.
+  let remainingBytes = MAX_GIT_BUFFER - indexSize;
+  let sharedCount = 0;
+  for await (const entry of await fs.opendir(gitDir)) {
+    signal?.throwIfAborted();
+    if (!/^sharedindex\.(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(entry.name)) {
+      continue;
+    }
+    if (++sharedCount > MAX_SHARED_INDEX_FILES) {
+      throw new Error(
+        `workspace Git index snapshot exceeds ${MAX_SHARED_INDEX_FILES} shared files`,
+      );
+    }
+    remainingBytes -=
+      (await copyIndexFile(
+        path.join(gitDir, entry.name),
+        path.join(path.dirname(destination), entry.name),
+        remainingBytes,
+        signal,
+      )) ?? 0;
+  }
+  return true;
 }
 
 /**

@@ -202,11 +202,16 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
   });
 
   it('removes the workspace of a timed-out step once its call stops', async () => {
+    let signalStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      signalStarted = resolve;
+    });
     const target: ApiProvider = {
       id: () => 'slow-target',
       config: { working_dir: fixture, copy_working_dir: 'copy' },
       callApi: vi.fn<ApiProvider['callApi']>(async (_prompt, context, options) => {
         workspaces.push(context?.prompt.config?.working_dir as string);
+        signalStarted();
         // Like a real provider, stop as soon as the call is aborted, including before it starts,
         // and reject with an AbortError, which the scheduler does not retry.
         if (!options?.abortSignal?.aborted) {
@@ -222,11 +227,15 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
-    await evaluate(testSuite, evalRecord, { timeoutMs: 100 });
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    const evaluation = evaluate(testSuite, evalRecord, { timeoutMs: 100 });
+    await started;
+    expect(fs.existsSync(workspaces[0])).toBe(true);
+    await vi.advanceTimersByTimeAsync(100);
+    await evaluation;
     const summary = await evalRecord.toEvaluateSummary();
 
     expect(summary.results[0].error).toContain('timed out');
-    // The step can time out while its workspace is still being created, before the call starts.
     await vi.waitFor(
       () => {
         expect(workspaces).toHaveLength(1);
