@@ -6,13 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockProcessEnv } from '../../util/utils';
 
 const mocks = vi.hoisted(() => ({
-  existsSync: vi.fn(),
+  realpathSync: vi.fn(),
   spawn: vi.fn(),
 }));
 
 vi.mock('fs', async (importOriginal) => ({
   ...(await importOriginal<typeof import('fs')>()),
-  existsSync: mocks.existsSync,
+  realpathSync: mocks.realpathSync,
 }));
 
 vi.mock('child_process', async (importOriginal) => {
@@ -48,7 +48,7 @@ describe('filesystem MCP server management', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.resetAllMocks();
-    mocks.existsSync.mockReturnValue(true); // lets Windows find npm's npx-cli.js
+    mocks.realpathSync.mockImplementation((file) => file);
     restoreEnv = mockProcessEnv(originalEnv, { clear: true });
   });
 
@@ -155,6 +155,7 @@ describe('filesystem MCP launcher', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.spawn.mockReturnValue(createFakeProcess());
+    mocks.realpathSync.mockImplementation((file) => file);
     Object.defineProperty(process, 'platform', { value: 'win32' });
     Object.defineProperty(process, 'execPath', { value: path.join(nodeDir, 'node.exe') });
     restoreEnv = mockProcessEnv({ PATH: ['', 'relative', npmDir].join(path.delimiter) });
@@ -167,28 +168,85 @@ describe('filesystem MCP launcher', () => {
   });
 
   it('prefers the npx entrypoint installed with Node over PATH on Windows', () => {
-    mocks.existsSync.mockReturnValue(true);
-
     startFilesystemMcpServer(rootDir);
 
     expect(mocks.spawn).toHaveBeenCalledWith(
       process.execPath,
       [npxCli(nodeDir), ...npxArgs],
-      expect.objectContaining({ cwd: rootDir }),
+      expect.objectContaining({ cwd: path.dirname(npxCli(nodeDir)) }),
     );
   });
 
   it('falls back to npm on an absolute PATH entry on Windows', () => {
     // Empty and relative entries resolve against the cwd and must be skipped.
-    mocks.existsSync.mockImplementation((file) => !String(file).startsWith(nodeDir));
+    mocks.realpathSync.mockImplementation((file) => {
+      if (file === npxCli(nodeDir)) {
+        throw new Error('ENOENT');
+      }
+      return file;
+    });
 
     startFilesystemMcpServer(rootDir);
 
-    expect(mocks.spawn.mock.calls[0]?.[1]).toEqual([npxCli(npmDir), ...npxArgs]);
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      process.execPath,
+      [npxCli(npmDir), ...npxArgs],
+      expect.objectContaining({ cwd: path.dirname(npxCli(npmDir)) }),
+    );
+    expect(mocks.realpathSync.mock.calls.map(([file]) => file)).toEqual([
+      rootDir,
+      npxCli(nodeDir),
+      npxCli(npmDir),
+    ]);
+  });
+
+  it.each([
+    ['a repository PATH entry', rootDir, rootDir],
+    ['a PATH entry resolving into the repository', npmDir, rootDir],
+    ['a canonical repository alias', npmDir, path.resolve('/actual-repo')],
+  ])('rejects %s on Windows', (_name, candidateDir, canonicalRoot) => {
+    const restorePath = mockProcessEnv({ PATH: candidateDir });
+    mocks.realpathSync.mockImplementation((file) => {
+      if (file === rootDir) {
+        return canonicalRoot;
+      }
+      if (file === npxCli(candidateDir)) {
+        return npxCli(canonicalRoot);
+      }
+      throw new Error('ENOENT');
+    });
+    try {
+      expect(() => startFilesystemMcpServer(rootDir)).toThrow(
+        'npx not found outside the scanned repository',
+      );
+      expect(mocks.spawn).not.toHaveBeenCalled();
+    } finally {
+      restorePath();
+    }
+  });
+
+  it('uses canonical npm paths outside the repository while preserving the MCP root', () => {
+    const canonicalNpx = npxCli(path.resolve('/repo-sibling'));
+    mocks.realpathSync.mockImplementation((file) =>
+      file === npxCli(nodeDir) ? canonicalNpx : file,
+    );
+
+    startFilesystemMcpServer(rootDir);
+
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      process.execPath,
+      [canonicalNpx, ...npxArgs],
+      expect.objectContaining({ cwd: path.dirname(canonicalNpx) }),
+    );
   });
 
   it('fails before spawning when npm cannot be found on Windows', () => {
-    mocks.existsSync.mockReturnValue(false);
+    mocks.realpathSync.mockImplementation((file) => {
+      if (file === rootDir) {
+        return file;
+      }
+      throw new Error('ENOENT');
+    });
 
     expect(() => startFilesystemMcpServer(rootDir)).toThrow('npx not found');
     expect(mocks.spawn).not.toHaveBeenCalled();
@@ -199,6 +257,11 @@ describe('filesystem MCP launcher', () => {
 
     startFilesystemMcpServer(rootDir);
 
-    expect(mocks.spawn).toHaveBeenCalledWith('npx', npxArgs, expect.anything());
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      'npx',
+      npxArgs,
+      expect.objectContaining({ cwd: rootDir }),
+    );
+    expect(mocks.realpathSync).not.toHaveBeenCalled();
   });
 });

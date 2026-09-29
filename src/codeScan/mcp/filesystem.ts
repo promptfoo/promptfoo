@@ -5,8 +5,8 @@
  */
 
 import { type ChildProcess, spawn } from 'child_process';
-import { existsSync } from 'fs';
-import { delimiter, dirname, isAbsolute, join, resolve } from 'path';
+import { realpathSync } from 'fs';
+import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'path';
 
 import logger from '../../logger';
 import { FilesystemMcpError } from '../../types/codeScan';
@@ -32,20 +32,33 @@ function createFilesystemMcpEnv(): NodeJS.ProcessEnv {
  * npx-cli.js under this Node instead, preferring its bundled npm; a bare node.exe (such as
  * the GitHub Actions runtime) falls back to PATH.
  */
-function getNpxCommand(): string[] {
+function getNpxLaunch(rootDir: string): { command: string; args: string[]; cwd: string } {
   if (process.platform !== 'win32') {
-    return ['npx'];
+    return { command: 'npx', args: [], cwd: rootDir };
   }
-  // Skip empty and relative PATH entries: the child would resolve them against the scanned
-  // repo. Read process.env, not a copy, so the lookup stays case-insensitive on Windows.
+  const canonicalRoot = realpathSync(rootDir);
+  // Read process.env directly so PATH lookup stays case-insensitive on Windows.
   const searchDirs = (process.env.PATH ?? '').split(delimiter).filter(isAbsolute);
-  const npxCli = [dirname(process.execPath), ...searchDirs]
-    .map((dir) => join(dir, 'node_modules', 'npm', 'bin', 'npx-cli.js'))
-    .find((cli) => existsSync(cli));
-  if (!npxCli) {
-    throw new Error('npx not found: install npm alongside Node.js or on PATH');
+  for (const dir of [dirname(process.execPath), ...searchDirs]) {
+    try {
+      const npxCli = realpathSync(join(dir, 'node_modules', 'npm', 'bin', 'npx-cli.js'));
+      const relativePath = relative(canonicalRoot, npxCli);
+      if (
+        relativePath !== '..' &&
+        !relativePath.startsWith(`..${sep}`) &&
+        !isAbsolute(relativePath)
+      ) {
+        continue;
+      }
+      // npm invokes the server through a shell, so its cwd must also stay outside the repo.
+      return { command: process.execPath, args: [npxCli], cwd: dirname(npxCli) };
+    } catch {
+      // Skip missing or inaccessible npm installations.
+    }
   }
-  return [process.execPath, npxCli];
+  throw new Error(
+    'npx not found outside the scanned repository: install npm alongside Node.js or on PATH',
+  );
 }
 
 /**
@@ -68,13 +81,13 @@ export function startFilesystemMcpServer(rootDir: string): ChildProcess {
   try {
     // Spawn the filesystem MCP server
     // Using npx to run @modelcontextprotocol/server-filesystem
-    const [command, ...npxArgs] = getNpxCommand();
+    const { command, args, cwd } = getNpxLaunch(absoluteRootDir);
     const mcpProcess = spawn(
       command,
-      [...npxArgs, '-y', '@modelcontextprotocol/server-filesystem', absoluteRootDir],
+      [...args, '-y', '@modelcontextprotocol/server-filesystem', absoluteRootDir],
       {
         stdio: ['pipe', 'pipe', 'pipe'], // stdin/stdout/stderr all piped
-        cwd: absoluteRootDir,
+        cwd,
         env: createFilesystemMcpEnv(),
       },
     );
