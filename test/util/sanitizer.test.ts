@@ -544,6 +544,13 @@ describe('sanitizeObject', () => {
       expect(sanitizeObject(input, { redactStringValues: false })).toBe(input);
     });
 
+    it('preserves escaped JSON text and recognizes escaped credential keys', () => {
+      const input = '{ "text": "Quoted \\"text\\" and a backslash \\\\", "id": 1 }';
+      expect(sanitizeObject(input, { redactStringValues: false })).toBe(input);
+      const duplicate = '{ "config": { "api\\u004bey": "fixture" }, "config": {} }';
+      expect(sanitizeObject(duplicate, { redactStringValues: false })).toBe('{"config":{}}');
+    });
+
     it('preserves opaque values inside form-encoded JSON inputs', () => {
       const input = 'data=' + encodeURIComponent(JSON.stringify({ value: 'a'.repeat(64) }));
       expect(sanitizeObject(input, { redactStringValues: false })).toBe(input);

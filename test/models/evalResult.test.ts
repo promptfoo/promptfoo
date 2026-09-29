@@ -61,6 +61,47 @@ describe('EvalResult', () => {
   });
 
   it.each(['single', 'batch', 'jsonl'])(
+    'redacts serialized grading headers and preserves session correlation for %s results',
+    async (boundary) => {
+      const metadata = {
+        http: {
+          requestHeaders: {
+            toJSON: () => ({ Authorization: 'fixture-grading-credential', Accept: 'text/plain' }),
+          },
+        },
+      };
+      const input = createEvaluateResult({
+        metadata: { sessionId: 'conversation-42', headers: { label: 'ordinary metadata' } },
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Fixture',
+          metadata: { toJSON: () => metadata },
+          componentResults: [{ pass: true, score: 1, reason: 'Fixture', metadata }],
+        },
+      });
+      const result =
+        boundary === 'single'
+          ? await EvalResult.createFromEvaluateResult('metadata-fixture', input)
+          : boundary === 'batch'
+            ? (await EvalResult.createManyFromEvaluateResult([input], 'metadata-fixture'))[0]
+            : sanitizeResultForJsonlArtifact(input);
+      const saved = result instanceof EvalResult ? await EvalResult.findById(result.id) : result;
+
+      expect(saved?.metadata).toEqual(input.metadata);
+      for (const grading of [saved?.gradingResult, saved?.gradingResult?.componentResults?.[0]]) {
+        expect(grading?.metadata).toEqual({
+          http: { requestHeaders: { Authorization: '[REDACTED]', Accept: 'text/plain' } },
+        });
+      }
+      expect(JSON.stringify(saved?.gradingResult)).not.toContain('fixture-grading-credential');
+      expect(metadata.http.requestHeaders.toJSON().Authorization).toBe(
+        'fixture-grading-credential',
+      );
+    },
+  );
+
+  it.each(['single', 'batch', 'jsonl'])(
     'preserves opaque inputs while redacting grader credentials for %s results',
     async (boundary) => {
       const opaqueInput = 'abcdef0123456789'.repeat(8);

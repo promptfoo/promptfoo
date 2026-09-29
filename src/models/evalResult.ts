@@ -652,7 +652,8 @@ function sanitizeGradingResultForDb<T>(gradingResult: T, seen = new WeakSet<obje
 
     if (metadata !== undefined) {
       try {
-        next.metadata = redactHttpHeadersOnMetadata(metadata);
+        next.metadata =
+          metadata === null ? null : (redactHttpHeadersOnMetadata(sanitizeForDb(metadata)) ?? {});
       } catch {
         next.metadata = {};
       }
@@ -696,7 +697,15 @@ function sanitizeResponseForDb<T extends ProviderResponse | null | undefined>(re
 // source so a legacy top-level `metadata.headers` is redacted only where it echoes the
 // transport — leaving user-authored test metadata headers intact.
 function sanitizeMetadataForDb<T>(metadata: T, responseMetadata?: unknown): T {
-  return redactHttpHeadersOnMetadata(metadata, {
+  const sanitized = sanitizeForDbWithSecrets(metadata, false);
+  const record = asRecord(sanitized);
+  const sessionId =
+    asRecord(metadata) && Object.getOwnPropertyDescriptor(metadata, 'sessionId')?.value;
+  // This field identifies the conversation. Session credentials in headers stay redacted.
+  if (record && typeof sessionId === 'string') {
+    record.sessionId = sessionId;
+  }
+  return redactHttpHeadersOnMetadata(sanitized, {
     legacyHeadersSource: sanitizeForDb(responseMetadata),
   });
 }
@@ -816,7 +825,7 @@ function redactSensitiveResultFieldsForDb<
     // sanitizeMetadataForDb). fields.response is the raw input, so its headers are still
     // cleartext here and can be matched against an echoed result-level metadata.headers.
     metadata: sanitizeMetadataForDb(
-      sanitizeForDbWithSecrets(fields.metadata, false),
+      fields.metadata,
       (plainResponse as ProviderResponse | null | undefined)?.metadata,
     ),
   };
@@ -958,36 +967,58 @@ export function sanitizeLegacyResults(results: EvaluateSummaryV2): EvaluateSumma
     shouldStripGradingResult: false,
     shouldStripMetadata: false,
   };
-  return {
-    ...results,
-    results: results.results.map((result) => sanitizeResultForJsonlArtifact(result, stripFlags)),
-    table: {
-      ...results.table,
-      head: {
-        ...results.table.head,
-        prompts: results.table.head.prompts.map((prompt) => ({
+  const table = { ...results.table };
+  if (Array.isArray(table.head?.prompts)) {
+    table.head = {
+      ...table.head,
+      prompts: table.head.prompts.map((prompt) => {
+        if (!asRecord(prompt)) {
+          return prompt;
+        }
+        return {
           ...sanitizePromptForDb(prompt),
           provider: sanitizeObject(prompt.provider, {
             sanitizeUrls: true,
             redactStringValues: false,
           }),
-        })),
-      },
-      body: results.table.body.map((row) => ({
+        };
+      }),
+    };
+  }
+  if (Array.isArray(table.body)) {
+    table.body = table.body.map((row) => {
+      if (!asRecord(row)) {
+        return row;
+      }
+      return {
         ...row,
         test: sanitizeTestCaseForDb(row.test),
-        outputs: row.outputs.map((output) => ({
-          ...output,
-          provider: sanitizeObject(output.provider, {
-            sanitizeUrls: true,
-            redactStringValues: false,
+        ...(Array.isArray(row.outputs) && {
+          outputs: row.outputs.map((output) => {
+            if (!asRecord(output)) {
+              return output;
+            }
+            return {
+              ...output,
+              provider: sanitizeObject(output.provider, {
+                sanitizeUrls: true,
+                redactStringValues: false,
+              }),
+              testCase: sanitizeTestCaseForDb(output.testCase),
+              response: sanitizeResponseForDb(sanitizeForDb(output.response)),
+              gradingResult: sanitizeGradingResultForDb(output.gradingResult),
+            };
           }),
-          testCase: sanitizeTestCaseForDb(output.testCase),
-          response: sanitizeResponseForDb(sanitizeForDb(output.response)),
-          gradingResult: sanitizeGradingResultForDb(output.gradingResult),
-        })),
-      })),
-    },
+        }),
+      };
+    });
+  }
+  return {
+    ...results,
+    results: results.results.map((result) =>
+      asRecord(result) ? sanitizeResultForJsonlArtifact(result, stripFlags) : result,
+    ),
+    table,
   };
 }
 

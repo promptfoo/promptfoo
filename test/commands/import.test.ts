@@ -944,6 +944,36 @@ describe('importCommand', () => {
       }
     });
 
+    it.each([
+      { head: { vars: ['topic'] }, body: [] },
+      { body: [] },
+      { head: { vars: ['topic'] }, body: [{ outputs: [null, 'legacy text'] }] },
+    ])('preserves supported legacy table shapes during --force import: %j', async (table) => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sample = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+      expect(await Eval.findById(sample.evalId)).toBeDefined();
+
+      tempFilePath = path.join(__dirname, `temp-legacy-shape-${Date.now()}.json`);
+      fs.writeFileSync(
+        tempFilePath,
+        JSON.stringify({
+          id: sample.evalId,
+          config: { description: 'legacy replacement' },
+          results: { version: 2, results: [], table, stats: { successes: 0, failures: 0 } },
+        }),
+      );
+      const replacement = new Command();
+      importCommand(replacement);
+      await replacement.parseAsync(['node', 'test', 'import', '--force', tempFilePath]);
+
+      expect(process.exitCode).toBeUndefined();
+      const imported = await Eval.findById(sample.evalId);
+      expect(imported).toBeDefined();
+      expect(await imported!.toEvaluateSummary()).toMatchObject({ table });
+    });
+
     it('should import legacy table-backed eval exports', async () => {
       const evalId = 'eval-legacy-table-backed';
       const filePath = path.join(__dirname, `temp-legacy-v2-${Date.now()}.json`);

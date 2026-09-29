@@ -1048,13 +1048,26 @@ function sanitizeJsonString(
 }
 
 function hasSecretJsonKey(value: string): boolean {
-  return [...value.matchAll(/"(?:\\.|[^"\\])*"\s*:/g)].some((match) => {
-    try {
-      return isSecretEnvVarName(JSON.parse(match[0].slice(0, match[0].lastIndexOf(':')).trim()));
-    } catch {
-      return false;
+  // The input has already parsed as JSON. Scan each string once, including values,
+  // so escaped quotes never become new candidate string starts.
+  for (let index = 0; index < value.length; index++) {
+    if (value[index] !== '"') {
+      continue;
     }
-  });
+    const start = index++;
+    while (index < value.length && value[index] !== '"') {
+      index += value[index] === '\\' ? 2 : 1;
+    }
+    const end = ++index;
+    while (/\s/.test(value[index] ?? '') && index < value.length) {
+      index++;
+    }
+    if (value[index] === ':' && isSecretEnvVarName(JSON.parse(value.slice(start, end)))) {
+      return true;
+    }
+    index--;
+  }
+  return false;
 }
 
 // `key=value` where the key is a typical form-data identifier (allow brackets
