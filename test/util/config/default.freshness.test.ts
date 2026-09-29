@@ -5,6 +5,7 @@ import path from 'node:path';
 import { dump } from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadDefaultConfig } from '../../../src/util/config/default';
+import { readConfig } from '../../../src/util/config/load';
 
 describe.each(['yaml', 'yml', 'json'])('default .%s config freshness', (extension) => {
   let directory: string;
@@ -92,7 +93,7 @@ describe.each(['yaml', 'yml', 'json'])('default .%s config freshness', (extensio
   });
 });
 
-describe.each(['cjs', 'mjs', 'js'])('deleted executable .%s configs', (extension) => {
+describe.each(['cjs', 'mjs', 'js'])('executable .%s config lifecycle', (extension) => {
   let directory: string;
 
   beforeEach(async () => {
@@ -102,6 +103,23 @@ describe.each(['cjs', 'mjs', 'js'])('deleted executable .%s configs', (extension
 
   afterEach(async () => {
     await fs.rm(directory, { recursive: true, force: true });
+  });
+
+  it('matches explicit config reads after executable file edits', async () => {
+    const configPath = path.join(directory, `promptfooconfig.${extension}`);
+    const assignment = extension === 'mjs' ? 'export default' : 'module.exports =';
+    const writeConfig = (description: string) =>
+      fs.writeFile(
+        configPath,
+        `${assignment} { description: '${description}', providers: ['echo'], prompts: ['Hello'] };`,
+      );
+    await writeConfig('first');
+    expect((await loadDefaultConfig(directory)).defaultConfig.description).toBe('first');
+
+    await writeConfig('edited');
+    expect((await loadDefaultConfig(directory)).defaultConfig.description).toBe(
+      (await readConfig(configPath)).description,
+    );
   });
 
   it.each([false, true])('rediscovers config after deletion with fallback=%s', async (fallback) => {
