@@ -3558,6 +3558,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
   private readonly comparisonProviders = new Map<string, ComparisonProviders>();
+  private readonly retryErrorResultIds = new Set(
+    cliState.retryMode ? cliState._retryErrorResultIds : [],
+  );
   constructor(
     testSuite: TestSuite,
     store: EvaluationStore<TEvaluation, TResult>,
@@ -4763,9 +4766,20 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   private async getResultsToCompare(testIdx: number): Promise<TResult[]> {
-    const base = this.store.persisted
+    let base = this.store.persisted
       ? await this.store.readResultsByTestIdx(testIdx)
       : this.store.results.filter((r) => r.testIdx === testIdx);
+    // Retry keeps old errors until new results are saved. Compare only their replacements.
+    if (this.retryErrorResultIds.size > 0) {
+      base = base.filter(
+        (result) =>
+          !(
+            'id' in result &&
+            typeof result.id === 'string' &&
+            this.retryErrorResultIds.has(result.id)
+          ),
+      );
+    }
     if (!this.store.resultPersistenceFailed) {
       return base;
     }

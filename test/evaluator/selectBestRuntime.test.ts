@@ -522,6 +522,36 @@ describeEvaluator('select-best runtime grading configuration', () => {
     expect(grader.callApi).toHaveBeenCalledTimes(2);
   });
 
+  it('compares only replacement rows during an error-only retry', async () => {
+    const { grader, suite, target } = makeSuite();
+    suite.tests![0].options = { rubricPrompt: '{{ outputs | dump }}' };
+    vi.mocked(grader.callApi).mockRejectedValueOnce(new Error('temporary grader failure'));
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    const previousIds = (await record.fetchResultsByTestIdx(0)).map((row) => row.id);
+    cliState.resume = true;
+    cliState.retryMode = true;
+    cliState._retryErrorResultIds = previousIds;
+    try {
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      expect(target.callApi).toHaveBeenCalledTimes(4);
+      const calls = vi.mocked(grader.callApi).mock.calls;
+      expect(calls).toHaveLength(2);
+      expect(JSON.parse(calls[1][0])).toHaveLength(2);
+      const allRows = await record.fetchResultsByTestIdx(0);
+      const replacements = allRows.filter((row) => !previousIds.includes(row.id));
+      expect(replacements).toHaveLength(2);
+      expect(replacements.filter((row) => row.success)).toHaveLength(1);
+      expect(
+        allRows
+          .filter((row) => previousIds.includes(row.id))
+          .every((row) => row.failureReason === ResultFailureReason.ERROR),
+      ).toBe(true);
+    } finally {
+      delete cliState._retryErrorResultIds;
+    }
+  });
+
   it.each(['target unavailable', 'Error grading select-best: target unavailable'])(
     'preserves the target error %s when the comparison recovers',
     async (targetMessage) => {
