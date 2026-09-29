@@ -50,8 +50,8 @@ providers:
 Here's a complete example using the OpenAI API:
 
 ```go
-// Package main implements a promptfoo provider that uses OpenAI's API.
-package main
+// Package provider implements a promptfoo provider that uses OpenAI's API.
+package provider
 
 import (
     "fmt"
@@ -94,6 +94,12 @@ func CallApi(prompt string, options map[string]interface{}, ctx map[string]inter
     }, nil
 }
 ```
+
+Use a named, importable package as shown above when the provider lives in a regular Go module.
+Promptfoo builds its generated entry point separately and imports the package through the module
+path from `go.mod`, so repository-wide commands such as `go build ./...` continue to work. The
+`CallApi` symbol must be exported. Existing `package main` providers remain supported, but a provider
+without its own `main` function cannot also be built as a standalone command.
 
 ## Using the Provider
 

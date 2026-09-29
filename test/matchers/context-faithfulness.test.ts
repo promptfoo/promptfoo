@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_RAG_ASSERTION_THRESHOLD } from '../../src/assertions/ragDefaults';
 import { matchesContextFaithfulness } from '../../src/matchers/rag';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
@@ -107,6 +108,47 @@ describe('matchesContextFaithfulness', () => {
     });
   });
 
+  it('should tag grading provider errors so inverse assertions preserve them', async () => {
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockResolvedValue({ error: 'grading provider failed' });
+
+    await expect(
+      matchesContextFaithfulness(
+        'Query text',
+        'Output text',
+        'Context text',
+        DEFAULT_RAG_ASSERTION_THRESHOLD,
+      ),
+    ).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'grading provider failed',
+      metadata: { graderError: true },
+    });
+  });
+
+  it('should tag empty statement extraction so inverse assertions preserve it', async () => {
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockResolvedValue({ output: '   ' });
+
+    await expect(
+      matchesContextFaithfulness(
+        'Query text',
+        'Output text',
+        'Context text',
+        DEFAULT_RAG_ASSERTION_THRESHOLD,
+      ),
+    ).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Could not extract context-faithfulness statements',
+      metadata: { graderError: true },
+    });
+    expect(callApiSpy).toHaveBeenCalledOnce();
+  });
+
   it('tracks token usage for multiple API calls', async () => {
     const query = 'Query text';
     const output = 'Output text';
@@ -122,6 +164,68 @@ describe('matchesContextFaithfulness', () => {
       cached: 0,
       completionDetails: expect.any(Object),
       numRequests: 0,
+    });
+  });
+
+  it('should keep reserved faithfulness vars ahead of user vars', async () => {
+    const mockCallApi = vi
+      .fn()
+      .mockResolvedValueOnce({
+        output: 'Statement from answer.',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      })
+      .mockResolvedValueOnce({
+        output: 'Final verdict for each statement in order: Yes.',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockImplementation(mockCallApi);
+
+    await matchesContextFaithfulness(
+      'question from assertion',
+      'answer from provider',
+      'context from contextTransform',
+      0,
+      {
+        rubricPrompt: [
+          'question={{ question }}\nanswer={{ answer }}\nextra={{ extra }}',
+          'context={{ context }}\nstatements={{ statements }}\nextra={{ extra }}',
+        ],
+      },
+      {
+        question: 'vars question sentinel',
+        answer: 'vars answer sentinel',
+        context: 'vars context sentinel',
+        statements: 'vars statements sentinel',
+        extra: 'kept user var',
+      },
+    );
+
+    const [longformPrompt, longformCallApiContext] = mockCallApi.mock.calls[0];
+    const [nliPrompt, nliCallApiContext] = mockCallApi.mock.calls[1];
+
+    expect(longformPrompt).toContain('question=question from assertion');
+    expect(longformPrompt).toContain('answer=answer from provider');
+    expect(longformPrompt).toContain('extra=kept user var');
+    expect(longformPrompt).not.toContain('vars question sentinel');
+    expect(longformPrompt).not.toContain('vars answer sentinel');
+    expect(longformCallApiContext.vars).toMatchObject({
+      question: 'question from assertion',
+      answer: 'answer from provider',
+      extra: 'kept user var',
+    });
+
+    expect(nliPrompt).toContain('context=context from contextTransform');
+    expect(nliPrompt).toContain('statements=Statement from answer.');
+    expect(nliPrompt).toContain('extra=kept user var');
+    expect(nliPrompt).not.toContain('vars context sentinel');
+    expect(nliPrompt).not.toContain('vars statements sentinel');
+    expect(nliCallApiContext.vars).toMatchObject({
+      context: 'context from contextTransform',
+      statements: ['Statement from answer.'],
+      extra: 'kept user var',
     });
   });
 
@@ -153,8 +257,111 @@ describe('matchesContextFaithfulness', () => {
 
     await expect(matchesContextFaithfulness(query, output, context, threshold)).resolves.toEqual({
       pass: false,
-      reason: 'Faithfulness 0.00 is < 0.5',
+      reason: 'Could not parse context-faithfulness verdicts',
       score: 0,
+      metadata: { graderError: true },
+      tokensUsed: {
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+        cached: expect.any(Number),
+        completionDetails: expect.any(Object),
+        numRequests: 0,
+      },
+    });
+  });
+
+  it('should reject malformed verdicts after the final-answer header', async () => {
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockResolvedValueOnce({ output: 'Statement 1' }).mockResolvedValueOnce({
+      output: 'Final verdict for each statement in order: Unable to determine.',
+    });
+
+    await expect(
+      matchesContextFaithfulness(
+        'Query text',
+        'Output text',
+        'Context text',
+        DEFAULT_RAG_ASSERTION_THRESHOLD,
+      ),
+    ).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Could not parse context-faithfulness verdicts',
+      metadata: { graderError: true },
+    });
+  });
+
+  it('should count missing final-answer verdicts as unsupported', async () => {
+    const query = 'Query text';
+    const output = 'Output text';
+    const context = 'Context text';
+    const threshold = 0.5;
+
+    const mockCallApi = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Statement 1\nStatement 2\nStatement 3',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      })
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Final verdict for each statement in order: Yes.',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      });
+
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockImplementation(mockCallApi);
+
+    await expect(matchesContextFaithfulness(query, output, context, threshold)).resolves.toEqual({
+      pass: false,
+      reason: 'Faithfulness 0.33 is < 0.5',
+      score: expect.closeTo(0.33, 0.01),
+      tokensUsed: {
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+        cached: expect.any(Number),
+        completionDetails: expect.any(Object),
+        numRequests: 0,
+      },
+    });
+  });
+
+  it('should count missing line-by-line verdicts as unsupported', async () => {
+    const query = 'Query text';
+    const output = 'Output text';
+    const context = 'Context text';
+    const threshold = 0.5;
+
+    const mockCallApi = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Statement 1\nStatement 2\nStatement 3',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      })
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Statement 1\nverdict: yes',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      });
+
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockImplementation(mockCallApi);
+
+    await expect(matchesContextFaithfulness(query, output, context, threshold)).resolves.toEqual({
+      pass: false,
+      reason: 'Faithfulness 0.33 is < 0.5',
+      score: expect.closeTo(0.33, 0.01),
       tokensUsed: {
         total: expect.any(Number),
         prompt: expect.any(Number),
@@ -204,6 +411,39 @@ describe('matchesContextFaithfulness', () => {
         numRequests: 0,
       },
     });
+  });
+
+  it('should prefer the resolved context over vars.context in the grader prompt', async () => {
+    const rawContext = 'RAW_CONTEXT_ALPHA';
+    const transformedContext = 'TRANSFORMED_CONTEXT_BETA';
+
+    const mockCallApi = vi
+      .fn()
+      .mockResolvedValueOnce({
+        output: 'Statement 1',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      })
+      .mockResolvedValueOnce({
+        output: 'Final verdict for each statement in order: Yes.',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockImplementation(mockCallApi);
+
+    await matchesContextFaithfulness(
+      'Query text',
+      'Output text',
+      transformedContext,
+      0.5,
+      undefined,
+      { context: rawContext },
+    );
+
+    const graderPrompt = String(mockCallApi.mock.calls[1][0]);
+    expect(graderPrompt).toContain(transformedContext);
+    expect(graderPrompt).not.toContain(rawContext);
   });
 
   describe('Array Context Support', () => {

@@ -267,8 +267,8 @@ describe('AzureVideoProvider', () => {
   });
 
   describe('callApi - successful flow', () => {
-    it('should create and poll video job successfully', async () => {
-      const provider = new AzureVideoProvider('sora', {
+    it('should create and poll video job using the configured deployment', async () => {
+      const provider = new AzureVideoProvider('my-video-deployment', {
         config: {
           apiBaseUrl: 'https://test.cognitiveservices.azure.com',
           apiKey: 'test-key',
@@ -313,6 +313,9 @@ describe('AzureVideoProvider', () => {
 
       const result = await provider.callApi('A cat playing piano');
 
+      expect(JSON.parse(mockFetchWithProxy.mock.calls[0][1].body).model).toBe(
+        'my-video-deployment',
+      );
       expect(result.error).toBeUndefined();
       expect(result.output).toContain('[Video:');
       expect(result.video).toBeDefined();

@@ -5,7 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -293,6 +293,64 @@ class TestInitTracing(unittest.TestCase):
         self.assertEqual(stderr_capture.getvalue(), "")
 
 
+class TestTracedCall(unittest.TestCase):
+    """Tests standardized OpenTelemetry attributes on traced Python provider calls."""
+
+    def test_uses_current_provider_and_usage_attribute_names(self) -> None:
+        span = MagicMock()
+        tracer = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__.return_value = span
+
+        propagate_module = ModuleType("opentelemetry.propagate")
+        propagate_module.extract = MagicMock(return_value=object())
+        trace_module = ModuleType("opentelemetry.trace")
+        trace_module.SpanKind = SimpleNamespace(CLIENT="client")
+        trace_module.Status = MagicMock()
+        trace_module.StatusCode = SimpleNamespace(OK="ok", ERROR="error")
+
+        with patch.dict(
+            sys.modules,
+            {
+                "opentelemetry.propagate": propagate_module,
+                "opentelemetry.trace": trace_module,
+            },
+        ):
+            with patch.object(persistent_wrapper, "_tracer", tracer):
+                with patch.object(persistent_wrapper, "_tracing_enabled", True):
+                    result = persistent_wrapper._traced_call(
+                        lambda *_args: {
+                            "output": "done",
+                            "tokenUsage": {
+                                "prompt": 10,
+                                "completion": 5,
+                                "total": 15,
+                            },
+                        },
+                        [
+                            "prompt",
+                            {"config": {"model": "customer-model"}},
+                            {
+                                "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+                            },
+                        ],
+                        "call_api",
+                    )
+
+        self.assertEqual(result["output"], "done")
+        span.set_attribute.assert_any_call("promptfoo.provider.type", "python")
+        span.set_attribute.assert_any_call("promptfoo.provider.function", "call_api")
+        span.set_attribute.assert_any_call("promptfoo.provider.model", "customer-model")
+        span.set_attribute.assert_any_call("gen_ai.usage.input_tokens", 10)
+        span.set_attribute.assert_any_call("gen_ai.usage.output_tokens", 5)
+        span.set_attribute.assert_any_call("promptfoo.usage.total_tokens", 15)
+        attribute_names = [call.args[0] for call in span.set_attribute.call_args_list]
+        self.assertNotIn("gen_ai.system", attribute_names)
+        self.assertNotIn("gen_ai.operation.name", attribute_names)
+        self.assertNotIn("gen_ai.provider.name", attribute_names)
+        self.assertNotIn("gen_ai.request.model", attribute_names)
+        self.assertNotIn("gen_ai.usage.total_tokens", attribute_names)
+
+
 class TestMain(unittest.TestCase):
     """Tests for main function."""
 
@@ -336,6 +394,30 @@ class TestMain(unittest.TestCase):
 
             output = stdout_capture.getvalue()
             self.assertIn("READY", output)
+        finally:
+            os.unlink(script_path)
+
+    def test_ready_signal_survives_partial_stdout_during_import(self) -> None:
+        """Regression (#10097): a user module that leaves stdout mid-line at
+        import time must not clobber the READY marker - Node matches it as a
+        whole line."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write('import sys\nsys.stdout.write("loading")\ndef test_func(): pass\n')
+            f.flush()
+            script_path = f.name
+
+        try:
+            stdout_capture = io.StringIO()
+            stdin_mock = io.StringIO("SHUTDOWN\n")
+
+            with patch.object(
+                sys, "argv", ["persistent_wrapper.py", script_path, "test_func"]
+            ):
+                with patch("sys.stdin", stdin_mock):
+                    with patch("sys.stdout", stdout_capture):
+                        persistent_wrapper.main()
+
+            self.assertIn("READY", stdout_capture.getvalue().splitlines())
         finally:
             os.unlink(script_path)
 
@@ -451,6 +533,33 @@ class TestHandleCall(unittest.TestCase):
             response = json.load(f)
         self.assertEqual(response["type"], "result")
         self.assertEqual(response["data"], 5)
+
+    def test_done_marker_starts_own_line_after_partial_stdout(self) -> None:
+        """Regression (#10097): user code that leaves stdout mid-line must not
+        clobber the DONE| marker - Node matches it line-anchored."""
+
+        def partial_stdout_func():
+            sys.stdout.write("partial provider output")
+            return {"ok": True}
+
+        self.mock_module.partial_stdout_func = partial_stdout_func
+        with open(self.request_file, "w") as f:
+            json.dump([], f)
+
+        stdout_capture = io.StringIO()
+        with patch("sys.stdout", stdout_capture):
+            persistent_wrapper.handle_call(
+                f"CALL|partial_stdout_func|{self.request_file}|{self.response_file}",
+                self.mock_module,
+                "default_func",
+            )
+
+        done_lines = [
+            line
+            for line in stdout_capture.getvalue().splitlines()
+            if line.startswith("DONE|")
+        ]
+        self.assertEqual(done_lines, [f"DONE|{self.response_file}"])
 
     def test_legacy_format_success(self) -> None:
         """Tests successful CALL with legacy 3-part format."""
