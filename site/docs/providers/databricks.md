@@ -5,7 +5,7 @@ description: Configure Databricks Foundation Model APIs with Llama-3, Claude, an
 
 # Databricks Foundation Model APIs
 
-The Databricks provider integrates with Databricks' Foundation Model APIs, offering access to state-of-the-art models through a unified OpenAI-compatible interface. It supports multiple deployment modes to match your specific use case and performance requirements.
+The `databricks:` provider sends chat requests through Databricks' OpenAI-compatible Foundation Model APIs. It supports pay-per-token, provisioned, and external chat endpoints. Use the exact serving endpoint name as the provider suffix; custom endpoint names are workspace-specific identities.
 
 ## Overview
 
@@ -42,12 +42,14 @@ providers:
       workspaceUrl: https://your-workspace.cloud.databricks.com
 ```
 
-Available pay-per-token models include:
+Example pay-per-token chat endpoints include:
 
-- `databricks-meta-llama-3-3-70b-instruct` - Meta's latest Llama model
-- `databricks-claude-3-7-sonnet` - Anthropic Claude with reasoning capabilities
-- `databricks-gte-large-en` - Text embeddings model
-- `databricks-dbrx-instruct` - Databricks' own foundation model
+- `databricks-meta-llama-3-3-70b-instruct` - Meta Llama 3.3 70B Instruct
+- `databricks-claude-sonnet-4-6` - Anthropic Claude Sonnet 4.6
+
+Check the [current model catalog](https://docs.databricks.com/aws/en/machine-learning/foundation-model-apis/supported-models) and [retirement policy](https://docs.databricks.com/aws/en/machine-learning/retired-models-policy) for availability. The pay-per-token offerings for Claude 3.7 Sonnet and DBRX have retired; this does not rename custom endpoints in your workspace.
+
+Databricks also offers embedding models such as `databricks-gte-large-en`, but the `databricks:` provider is chat-only. Embedding requests require a separate integration with the [Databricks embeddings API](https://docs.databricks.com/aws/en/machine-learning/foundation-model-apis/api-reference#embeddings-api).
 
 ### Provisioned Throughput Endpoints
 
@@ -88,7 +90,7 @@ The Databricks provider extends the [OpenAI configuration options](/docs/provide
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: databricks:databricks-claude-3-7-sonnet
+  - id: databricks:databricks-claude-sonnet-4-6
     config:
       isPayPerToken: true
       workspaceUrl: https://your-workspace.cloud.databricks.com
@@ -96,7 +98,6 @@ providers:
       # Standard OpenAI parameters
       temperature: 0.7
       max_tokens: 2000
-      top_p: 0.9
 
       # Usage tracking for cost attribution
       usageContext:
@@ -127,7 +128,7 @@ prompts:
   - file://vision-prompt.json
 
 providers:
-  - id: databricks:databricks-claude-3-7-sonnet
+  - id: databricks:databricks-claude-sonnet-4-6
     config:
       isPayPerToken: true
 

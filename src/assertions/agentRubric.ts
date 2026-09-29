@@ -1,5 +1,6 @@
 import { matchesAgentRubric } from '../matchers/agent';
 import { isGraderFailure } from '../matchers/llmGrading';
+import { invertScore } from '../matchers/shared';
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -37,9 +38,7 @@ export const handleAgentRubric = async ({
     return { ...resp, assertion };
   }
 
-  const score = inverse
-    ? Math.min(1, Math.max(0, 1 - (Number.isFinite(resp.score) ? resp.score : 0)))
-    : resp.score;
+  const score = inverse ? invertScore(resp.score) : resp.score;
   return {
     ...resp,
     pass: resp.pass !== inverse,

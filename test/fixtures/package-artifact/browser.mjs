@@ -7,9 +7,8 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
-// Copy beside the installed consumer's package.json. The default profile requires
-// a caller-owned Chromium installation via --browsers-path; this fixture never downloads.
-// Enable that profile only after production browser/stealth dependencies are present.
+// Copy beside the installed consumer's package.json. Pass --browsers-path for
+// the harness's Chromium installation; this fixture never downloads browsers.
 const fixturePath = fileURLToPath(import.meta.url);
 
 async function checkBrowser(stateDir, profile) {
@@ -86,9 +85,7 @@ async function checkBrowser(stateDir, profile) {
     },
     { cache: false, maxConcurrency: 1 },
   );
-  const summaryPath = path.join(stateDir, 'browser-results.json');
-  fs.writeFileSync(summaryPath, JSON.stringify(await record.toEvaluateSummary()));
-  const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+  const summary = await record.toEvaluateSummary();
   assert.equal(summary.results.length, 3);
   for (const [index, result] of summary.results.entries()) {
     assert.equal(result.provider.id, 'browser-provider');

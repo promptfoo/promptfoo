@@ -96,15 +96,13 @@ npm run test:package-artifact -- --browser
 npm run test:package-artifact -- --profile omit-optional --browser
 ```
 
-The default gate requires production browser and stealth dependencies. It uses
-the consumer's Playwright CLI to download matching Chromium into a temporary
-directory owned by the harness. It never installs missing capability packages or
-uses a shared browser cache. Local HTML tests check Unicode input, clicking,
-extraction, stealth at launch, a missing-selector error, and recovery. Exported
-results must have scores 1/0/1 and exactly one deliberate error. The omitted gate
-downloads nothing and verifies the public provider's actionable missing-module
-error.
+The default profile uses the installed package's Playwright CLI to download matching
+Chromium into a temporary directory. It checks Unicode input, clicking, extraction,
+stealth at launch, a missing-selector error, and recovery against local HTML. Results
+must have scores 1/0/1 and exactly one deliberate error.
 
-CI enables this gate for Linux Node 24 default and optional-omitted consumers.
-Release/backfill and native platform jobs retain their existing coverage; browser
-downloads are only performed when this flag is selected.
+The optional-omitted profile downloads nothing and checks the provider's missing-module
+error. Neither profile installs missing browser packages or uses a shared browser cache.
+
+CI runs both profiles on Linux Node 24. Release, backfill, and other platform jobs
+run browser checks only when `--browser` is selected.

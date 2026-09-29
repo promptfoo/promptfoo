@@ -168,7 +168,7 @@ describe('standalone artifact tooling', () => {
       'node_modules/typescript',
       'node_modules/semver',
       'node_modules/esbuild',
-      'node_modules/tsx/node_modules/fsevents',
+      'node_modules/fsevents',
       ...nativePackages,
     ];
     expect(Object.keys(toolingLock.packages).sort()).toEqual(['', ...expectedPackages].sort());
