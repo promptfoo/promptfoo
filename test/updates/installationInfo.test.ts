@@ -19,7 +19,11 @@ beforeEach(() => {
   vi.mocked(existsSync).mockReset().mockReturnValue(false);
   vi.mocked(realpathSync)
     .mockReset()
-    .mockReturnValue('/usr/local/lib/node_modules/promptfoo/dist/src/main.js');
+    .mockImplementation((value) =>
+      value === process.argv[1]
+        ? '/usr/local/lib/node_modules/promptfoo/dist/src/main.js'
+        : String(value),
+    );
   vi.mocked(execFileSync).mockReset().mockReturnValue('/usr/local/lib/node_modules\n');
 });
 afterEach(() => {
@@ -42,8 +46,20 @@ describe('global npm verification', () => {
     '/workspace/node_modules/promptfoo/dist/main.js',
     '/usr/local/lib/node_modules/promptfoo-extra/dist/main.js',
   ])('rejects a different package root: %s', (cliPath) => {
-    vi.mocked(realpathSync).mockReturnValue(cliPath);
+    vi.mocked(realpathSync).mockImplementation((value) =>
+      value === process.argv[1] ? cliPath : String(value),
+    );
     expect(getInstallationInfo('/workspace', { TMPDIR: directory }).canUpdate).toBe(false);
+  });
+
+  it('compares canonical package paths when the global npm prefix is symlinked', () => {
+    vi.mocked(execFileSync).mockReturnValue('/linked/lib/node_modules\n');
+    vi.mocked(realpathSync).mockImplementation((value) =>
+      value === process.argv[1]
+        ? '/real/lib/node_modules/promptfoo/dist/src/main.js'
+        : '/real/lib/node_modules/promptfoo',
+    );
+    expect(getInstallationInfo('/workspace', { TMPDIR: directory }).canUpdate).toBe(true);
   });
 
   it('fails closed when npm cannot confirm the root', () => {
@@ -71,7 +87,9 @@ describe('manual installation guidance', () => {
     ['/home/user/.bun/install/global/node_modules/promptfoo/dist/main.js', 'package manager'],
     ['/workspace/promptfoo/dist/src/main.js', 'source checkout'],
   ])('does not probe a global npm root for %s', (cliPath, message) => {
-    vi.mocked(realpathSync).mockReturnValue(cliPath);
+    vi.mocked(realpathSync).mockImplementation((value) =>
+      value === process.argv[1] ? cliPath : String(value),
+    );
     expect(
       getInstallationInfo('/workspace', {
         TMPDIR: directory,

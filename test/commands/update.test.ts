@@ -29,7 +29,7 @@ beforeEach(() => {
     .mockReset()
     .mockReturnValue({ canUpdate: true, message: 'Global npm' });
   vi.mocked(checkForUpdates).mockReset().mockResolvedValue(info);
-  vi.mocked(runNpmUpdate).mockReset().mockResolvedValue('complete');
+  vi.mocked(runNpmUpdate).mockReset().mockResolvedValue(undefined);
   vi.clearAllMocks();
 });
 afterEach(() => {

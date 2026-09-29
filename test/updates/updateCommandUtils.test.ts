@@ -42,6 +42,9 @@ describe('update execution context', () => {
         HOME: '/home/fixture',
         npm_config_userconfig: 'user.npmrc',
         npm_config_prefix: '/opt/prefix',
+        npm_config_registry: 'https://registry.fixture.invalid',
+        NPM_CONFIG_IGNORE_SCRIPTS: 'true',
+        NODE_AUTH_TOKEN: 'fixture-only',
         NODE_OPTIONS: '--trace-warnings',
         FIXTURE_API_KEY: 'unused',
       },
@@ -58,11 +61,27 @@ describe('update execution context', () => {
         HOME: '/home/fixture',
         npm_config_userconfig: '/workspace/user.npmrc',
         npm_config_prefix: '/opt/prefix',
+        npm_config_registry: 'https://registry.fixture.invalid',
+        NPM_CONFIG_IGNORE_SCRIPTS: 'true',
+        NODE_AUTH_TOKEN: 'fixture-only',
       });
     } finally {
       context.cleanup();
     }
     expect(existsSync(context.cwd)).toBe(false);
+  });
+
+  it('preserves the active Node runtime bin when launched from its home directory', () => {
+    const runtimeBin = path.dirname(process.execPath);
+    const context = createUpdateContext(
+      { TMPDIR: directory, PATH: runtimeBin },
+      path.dirname(runtimeBin),
+    );
+    try {
+      expect(context.env.PATH).toBe(runtimeBin);
+    } finally {
+      context.cleanup();
+    }
   });
 
   it('does not use an empty search path after filtering local entries', () => {
@@ -86,7 +105,7 @@ describe('npm update lifecycle', () => {
     expect(args).toEqual(['install', '--global', 'promptfoo@1.2.3']);
     expect(options).toMatchObject({ shell: false, detached: false, stdio: 'inherit' });
     child.emit('close', 0, null);
-    await expect(result).resolves.toBe('complete');
+    await expect(result).resolves.toBeUndefined();
     expect(readdirSync(directory)).toEqual([]);
   });
 
@@ -118,19 +137,6 @@ describe('npm update lifecycle', () => {
     await expect(runNpmUpdate('latest', { TMPDIR: directory }, '/workspace')).rejects.toThrow(
       'spawn failed',
     );
-    expect(readdirSync(directory)).toEqual([]);
-  });
-
-  it('leaves an unfinished installer running and retains its cwd until close', async () => {
-    vi.useFakeTimers();
-    const result = runNpmUpdate('1.2.3', { TMPDIR: directory }, '/workspace', 60_000);
-    const options = vi.mocked(spawn).mock.calls[0][2];
-    expect(options).toMatchObject({ detached: true, stdio: 'ignore' });
-    await vi.advanceTimersByTimeAsync(60_000);
-    await expect(result).resolves.toBe('background');
-    expect(child.unref).toHaveBeenCalledOnce();
-    expect(readdirSync(directory)).toHaveLength(1);
-    child.emit('close', 0, null);
     expect(readdirSync(directory)).toEqual([]);
   });
 

@@ -130,10 +130,6 @@ export function isUpdateCommandRequested(argv: string[] = process.argv.slice(2))
   return getRequestedCommand(argv) === 'update';
 }
 
-export function isSuccessfulExitCode(exitCode: number | string | null | undefined): boolean {
-  return exitCode === undefined || exitCode === 0;
-}
-
 export function isMainModule(importMetaUrl: string, processArgv1: string | undefined): boolean {
   if (!processArgv1) {
     return false;
@@ -212,12 +208,7 @@ export function addCommonOptionsRecursively(command: Command) {
   });
 }
 
-const CLEANUP_OP_TIMEOUT_MS = 1000;
-
-export const shutdownGracefully = async (
-  afterResourcesReleased?: () => Promise<void>,
-  afterResourcesReleasedTimeoutMs = CLEANUP_OP_TIMEOUT_MS,
-): Promise<void> => {
+export const shutdownGracefully = async (): Promise<void> => {
   const FORCE_EXIT_TIMEOUT_MS = 3000;
   const forceExitTimeout = setTimeout(() => {
     // eslint-disable-next-line no-console
@@ -228,18 +219,16 @@ export const shutdownGracefully = async (
 
   logger.debug('Shutting down gracefully...');
 
-  const withTimeout = async <T>(
-    promise: Promise<T>,
-    name: string,
-    timeoutMs = CLEANUP_OP_TIMEOUT_MS,
-  ): Promise<T | undefined> => {
+  const CLEANUP_OP_TIMEOUT_MS = 1000;
+
+  const withTimeout = async <T>(promise: Promise<T>, name: string): Promise<T | undefined> => {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<undefined>((resolveTimeout) => {
       timeoutId = setTimeout(() => {
         // eslint-disable-next-line no-console
         console.warn(`${name} timed out during shutdown`);
         resolveTimeout(undefined);
-      }, timeoutMs);
+      }, CLEANUP_OP_TIMEOUT_MS);
       timeoutId.unref();
     });
 
@@ -262,16 +251,12 @@ export const shutdownGracefully = async (
 
   const dbClosePromise = closeDbIfOpen();
   await withTimeout(dbClosePromise, 'closeDbIfOpen()');
+
   clearAgentCache();
 
-  let dispatcherReleased = false;
   try {
     const dispatcher = getGlobalDispatcher();
-    dispatcherReleased =
-      (await withTimeout(
-        dispatcher.destroy().then(() => true),
-        'dispatcher.destroy()',
-      )) ?? false;
+    await withTimeout(dispatcher.destroy(), 'dispatcher.destroy()');
   } catch {
     // Silently handle dispatcher destroy errors.
   }
@@ -279,27 +264,14 @@ export const shutdownGracefully = async (
   // Keep logging available until the database cleanup settles.
   await dbClosePromise;
 
-  clearTimeout(forceExitTimeout);
-
+  logger.debug('Closing logger file transports');
   try {
-    if (afterResourcesReleased && dispatcherReleased) {
-      await withTimeout(
-        afterResourcesReleased(),
-        'afterResourcesReleased()',
-        afterResourcesReleasedTimeoutMs,
-      );
-    } else if (afterResourcesReleased) {
-      logger.warn('Update skipped because network cleanup did not finish.');
-    }
-  } finally {
-    logger.debug('Closing logger file transports');
-
-    try {
-      await withTimeout(closeLogger(), 'closeLogger()');
-    } catch {
-      // Can't log since logger might be closed.
-    }
+    await withTimeout(closeLogger(), 'closeLogger()');
+  } catch {
+    // Can't log since logger might be closed.
   }
+
+  clearTimeout(forceExitTimeout);
 
   const NATURAL_EXIT_TIMEOUT_MS = 100;
   setTimeout(() => {

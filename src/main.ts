@@ -28,13 +28,11 @@ import { showCommand } from './commands/show';
 import { updateCommand } from './commands/update';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
-import { getEnvBool, parseEnvBool } from './envars';
 import { EmailValidationError } from './globalConfig/accounts';
 import logger, { initializeRunLogging } from './logger';
 import {
   addCommonOptionsRecursively,
   isMainModule,
-  isSuccessfulExitCode,
   isUpdateCommandRequested,
   setupEnvFilesFromArgv,
   shouldSkipDefaultConfigLoading,
@@ -47,31 +45,17 @@ import { redteamGenerateCommand } from './redteam/commands/generate';
 import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plugins';
 import { redteamRunCommand } from './redteam/commands/run';
 import { ServerError } from './server/errors';
-import {
-  AUTO_UPDATE_TIMEOUT_MS,
-  handleAutoUpdate,
-  isAutoUpdateEnabled,
-  trackUpdateInterruptions,
-} from './updates/handleAutoUpdate';
+import { checkForUpdates } from './updates';
 import { getInitialProcessEnvironment } from './updates/initialProcessEnvironment';
-import { checkForUpdates, getUpdateInstructions } from './updates/updateCheck';
 import { loadDefaultConfig } from './util/config/default';
 import { ConfigResolutionError, logConfigResolutionError } from './util/config/load';
 import { printErrorInformation } from './util/errors/index';
 import { formatLibsqlBindingErrorMessage } from './util/libsqlBindingErrors';
 import { VERSION } from './version';
 
-import type { UpdateObject } from './updates/updateCheck';
-
-interface PendingAutoUpdate {
-  info: UpdateObject;
-  projectRoot: string;
-  sourceEnvironment: NodeJS.ProcessEnv;
-}
-
-async function main(startupEnvironment: NodeJS.ProcessEnv): Promise<PendingAutoUpdate | undefined> {
+async function main() {
+  const startupEnvironment = getInitialProcessEnvironment();
   const argv = process.argv.slice(2);
-  const projectRoot = process.cwd();
   setupEnvFilesFromArgv(argv);
   initializeRunLogging();
 
@@ -80,37 +64,12 @@ async function main(startupEnvironment: NodeJS.ProcessEnv): Promise<PendingAutoU
     Object.assign(process.env, { PROMPTFOO_DISABLE_UPDATE: 'true' });
   }
 
-  const disableUpdateNag =
-    parseEnvBool(startupEnvironment.PROMPTFOO_DISABLE_UPDATE) ||
-    getEnvBool('PROMPTFOO_DISABLE_UPDATE');
-  const enableAutoUpdate = isAutoUpdateEnabled(startupEnvironment);
-  const updateCommandRequested = isUpdateCommandRequested(argv);
-
-  let pendingAutoUpdate: UpdateObject | undefined;
-  let updateCheckPromise: Promise<void> | undefined;
-  if (!disableUpdateNag && !updateCommandRequested) {
-    updateCheckPromise = checkForUpdates()
-      .then((info) => {
-        if (info) {
-          logger.info(info.message);
-          logger.info(getUpdateInstructions());
-
-          // Defer replacement until shutdown has released resources used by this invocation.
-          if (enableAutoUpdate) {
-            pendingAutoUpdate = info;
-          }
-        }
-      })
-      .catch((err) => {
-        logger.debug(`Failed to check for updates: ${err}`);
-      });
-  }
-
-  const skipDefaultConfigLoading = shouldSkipDefaultConfigLoading(argv);
-  if (!updateCommandRequested) {
+  if (!isUpdateCommandRequested(argv)) {
+    await checkForUpdates();
     await runDbMigrations({ suppressBindingErrorLogging: true });
   }
 
+  const skipDefaultConfigLoading = shouldSkipDefaultConfigLoading(argv);
   const { defaultConfig, defaultConfigPath } = skipDefaultConfigLoading
     ? { defaultConfig: {}, defaultConfigPath: undefined }
     : await loadDefaultConfig();
@@ -193,14 +152,6 @@ async function main(startupEnvironment: NodeJS.ProcessEnv): Promise<PendingAutoU
   });
 
   await program.parseAsync();
-  await updateCheckPromise;
-  if (pendingAutoUpdate && isSuccessfulExitCode(process.exitCode)) {
-    return {
-      info: pendingAutoUpdate,
-      projectRoot,
-      sourceEnvironment: startupEnvironment,
-    };
-  }
 }
 
 // ESM replacement for require.main === module check
@@ -214,15 +165,10 @@ try {
 }
 
 if (isMain) {
-  const startupEnvironment = getInitialProcessEnvironment();
-  const interruptions = parseEnvBool(startupEnvironment.PROMPTFOO_ENABLE_AUTO_UPDATE)
-    ? trackUpdateInterruptions()
-    : undefined;
   let mainError: unknown;
   let libsqlBindingErrorMessage: string | undefined;
-  let pendingAutoUpdate: PendingAutoUpdate | undefined;
   try {
-    pendingAutoUpdate = await main(startupEnvironment);
+    await main();
   } catch (error) {
     mainError = error;
     if (error instanceof ConfigResolutionError) {
@@ -239,22 +185,8 @@ if (isMain) {
     // callers and CLI wrappers see the same outcome.
     process.exitCode = error instanceof EvalRunError ? error.exitCode : 1;
   } finally {
-    const autoUpdateToRun = pendingAutoUpdate;
     try {
-      await shutdownGracefully(
-        autoUpdateToRun
-          ? async () => {
-              if (!interruptions?.wasInterrupted() && isSuccessfulExitCode(process.exitCode)) {
-                await handleAutoUpdate(
-                  autoUpdateToRun.info,
-                  autoUpdateToRun.projectRoot,
-                  autoUpdateToRun.sourceEnvironment,
-                );
-              }
-            }
-          : undefined,
-        autoUpdateToRun ? AUTO_UPDATE_TIMEOUT_MS + 1_000 : undefined,
-      );
+      await shutdownGracefully();
     } catch (shutdownError) {
       // Log shutdown error but preserve the original main error if it exists
       logger.error(
@@ -265,8 +197,6 @@ if (isMain) {
   // ConfigResolutionError / EmailValidationError / ServerError / EvalRunError
   // already rendered a user-facing message before reaching this boundary;
   // everything else is unexpected and bubbles up.
-  interruptions?.dispose();
-
   if (mainError) {
     if (
       mainError instanceof ConfigResolutionError ||

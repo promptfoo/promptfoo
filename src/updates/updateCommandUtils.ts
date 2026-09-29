@@ -6,6 +6,8 @@ import semver from 'semver';
 
 const UPDATE_ENV_KEYS = [
   'PATH',
+  'NPM_TOKEN',
+  'NODE_AUTH_TOKEN',
   'HOME',
   'TMPDIR',
   'TMP',
@@ -36,6 +38,12 @@ export function createUpdateContext(sourceEnvironment: NodeJS.ProcessEnv, projec
       env[key] = value;
     }
   }
+  for (const [key, value] of Object.entries(sourceEnvironment)) {
+    if (/^npm_config_/i.test(key) && value !== undefined) {
+      env[key] = value;
+    }
+  }
+  const runtimeBin = path.dirname(process.execPath);
   env.PATH =
     (env.PATH ?? '/usr/bin:/bin')
       .split(path.delimiter)
@@ -44,8 +52,7 @@ export function createUpdateContext(sourceEnvironment: NodeJS.ProcessEnv, projec
       .filter(
         (entry) =>
           !entry.includes('/node_modules/.bin') &&
-          entry !== projectRoot &&
-          !entry.startsWith(`${projectRoot}/`),
+          (entry === runtimeBin || (entry !== projectRoot && !entry.startsWith(`${projectRoot}/`))),
       )
       .join(path.delimiter) || '/usr/bin:/bin';
   for (const key of [
@@ -75,68 +82,36 @@ export async function runNpmUpdate(
   version: string,
   sourceEnvironment: NodeJS.ProcessEnv,
   projectRoot: string,
-  backgroundAfterMs?: number,
-): Promise<'complete' | 'background'> {
+): Promise<void> {
   if (version !== 'latest' && !semver.valid(version)) {
     throw new Error('Invalid update version');
   }
   const context = createUpdateContext(sourceEnvironment, projectRoot);
   try {
-    return await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const child = spawn('npm', ['install', '--global', `promptfoo@${version}`], {
         cwd: context.cwd,
         env: context.env,
-        stdio: backgroundAfterMs === undefined ? 'inherit' : 'ignore',
+        stdio: 'inherit',
         shell: false,
-        detached: backgroundAfterMs !== undefined,
+        detached: false,
       });
-      let settled = false;
-      let finished = false;
-      const timeout =
-        backgroundAfterMs === undefined
-          ? undefined
-          : setTimeout(() => {
-              settled = true;
-              child.unref();
-              // Keep the cwd while npm is running. A parent exit can leave this empty directory behind.
-              resolve('background');
-            }, backgroundAfterMs);
-      const finish = (error?: Error) => {
-        if (finished) {
-          return;
-        }
-        finished = true;
-        clearTimeout(timeout);
-        try {
-          context.cleanup();
-        } catch (cleanupError) {
-          error ??= cleanupError instanceof Error ? cleanupError : new Error(String(cleanupError));
-        }
-        if (settled) {
-          return;
-        }
-        settled = true;
-        if (error) {
-          reject(error);
+      child.once('error', reject);
+      child.once('close', (code, signal) => {
+        if (code === 0) {
+          resolve();
         } else {
-          resolve('complete');
+          reject(
+            new Error(
+              signal
+                ? `Update stopped by ${signal}`
+                : `Update exited with code ${code ?? 'unknown'}`,
+            ),
+          );
         }
-      };
-      child.once('error', finish);
-      child.once('close', (code, signal) =>
-        finish(
-          code === 0
-            ? undefined
-            : new Error(
-                signal
-                  ? `Update stopped by ${signal}`
-                  : `Update exited with code ${code ?? 'unknown'}`,
-              ),
-        ),
-      );
+      });
     });
-  } catch (error) {
+  } finally {
     context.cleanup();
-    throw error;
   }
 }

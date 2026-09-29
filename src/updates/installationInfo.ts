@@ -67,15 +67,18 @@ export function getInstallationInfo(
         stdio: ['ignore', 'pipe', 'ignore'],
         timeout: 1000,
       }).trim();
-      const packageRoot = path.join(globalRoot, 'promptfoo');
-      if (path.isAbsolute(globalRoot) && cliPath.startsWith(`${packageRoot}/`)) {
+      if (!path.isAbsolute(globalRoot)) {
+        return manual(MANUAL_UPDATE);
+      }
+      const packageRoot = realpathSync(path.join(globalRoot, 'promptfoo'));
+      if (cliPath.startsWith(`${packageRoot}/`)) {
         return { canUpdate: true, message: 'Global npm installation confirmed.' };
       }
     } finally {
       context.cleanup();
     }
   } catch {
-    // An unverified installation receives instructions, never an automatic replacement.
+    // Leave unverified installations to their package manager.
   }
   return manual(MANUAL_UPDATE);
 }

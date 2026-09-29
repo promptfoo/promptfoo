@@ -38,24 +38,10 @@ PROMPTFOO_DISABLE_TELEMETRY=1
 
 ## Updates
 
-The CLI checks for a newer Promptfoo release when it starts and prints update instructions. To disable those requests and notifications, set:
+The CLI checks NPM's package registry for updates. If there is a newer version available, it will display a banner to the user.
+
+To disable, set:
 
 ```sh
-export PROMPTFOO_DISABLE_UPDATE=1
+PROMPTFOO_DISABLE_UPDATE=1
 ```
-
-`promptfoo update --force` explicitly overrides this setting and reinstalls the latest package. `promptfoo update --check` never installs a package and continues to respect the setting.
-
-## Automatic Updates
-
-Automatic installation is disabled by default. To opt in, set this variable in the shell or parent process that launches Promptfoo:
-
-```sh
-export PROMPTFOO_ENABLE_AUTO_UPDATE=1
-```
-
-Only verified global npm installations on macOS and Linux support installation through the CLI. Other installation methods receive manual instructions. A project `.env`, `--env-file`, or configuration override cannot enable automatic installation. A launch-time `PROMPTFOO_DISABLE_UPDATE=1` remains a veto even if later configuration clears it; later configuration can also disable updates.
-
-An automatic update starts after a successful, uninterrupted command releases its resources. It uses launch-time package-manager settings, a filtered executable search path, and a private working directory. The CLI waits up to 60 seconds. If installation is still running, it reports that result and leaves npm running in the background. Wait for installation to finish before running Promptfoo again. A background install may leave its empty temporary working directory behind when the CLI exits.
-
-To stop automatic installation, unset `PROMPTFOO_ENABLE_AUTO_UPDATE` or set it to `0`. To check for updates without installing, run `promptfoo update --check`.

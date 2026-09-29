@@ -283,26 +283,6 @@ describe('envars', () => {
     });
   });
 
-  describe('getInitialProcessEnvironment', () => {
-    it('captures process values before dotenv loads project values', async () => {
-      mockProcessEnv({ PROMPTFOO_ENABLE_AUTO_UPDATE: undefined });
-      vi.doMock('../src/util/envFile', () => ({
-        loadEnvFiles: vi.fn(() => {
-          vi.stubEnv('PROMPTFOO_ENABLE_AUTO_UPDATE', '1');
-        }),
-      }));
-
-      await import('../src/envars');
-      const { getInitialProcessEnvironment } = await import(
-        '../src/updates/initialProcessEnvironment'
-      );
-
-      expect(process.env.PROMPTFOO_ENABLE_AUTO_UPDATE).toBe('1');
-      expect(getInitialProcessEnvironment().PROMPTFOO_ENABLE_AUTO_UPDATE).toBeUndefined();
-      vi.doUnmock('../src/util/envFile');
-    });
-  });
-
   describe('getEnvInt', () => {
     it('should return the integer value of an existing environment variable', () => {
       mockProcessEnv({ PROMPTFOO_CACHE_MAX_FILE_COUNT: '42' });

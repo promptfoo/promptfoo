@@ -1,6 +1,5 @@
 import compression from 'compression';
 import cors from 'cors';
-import '../updates/initialProcessEnvironment';
 import { loadEnvFiles } from '../util/envFile';
 
 loadEnvFiles();
