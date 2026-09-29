@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import * as path from 'path';
 
 import chalk from 'chalk';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';

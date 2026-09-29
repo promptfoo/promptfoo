@@ -24,7 +24,9 @@ const AGENTIC_PROVIDER_IDS = [
   'openai:codex',
   'openai:codex-app-server',
   'openai:codex-desktop',
+  'openai:codex-security',
   'openai:codex-sdk',
+  'openinterpreter',
   'opencode',
   'opencode:sdk',
   'pi',
@@ -50,6 +52,18 @@ export function isAgenticProvider(provider: ApiProvider | null | undefined): boo
   return AGENTIC_PROVIDER_IDS.some(
     (agenticId) => providerId === agenticId || providerId.startsWith(`${agenticId}:`),
   );
+}
+
+/**
+ * Security scanners run agentic workflows but cannot return rubric grading verdicts.
+ */
+export function isAgenticGradingProvider(provider: ApiProvider | null | undefined): boolean {
+  if (!provider || !isAgenticProvider(provider)) {
+    return false;
+  }
+
+  const providerId = provider.id();
+  return providerId !== 'openai:codex-security' && !providerId.startsWith('openai:codex-security:');
 }
 
 /**
