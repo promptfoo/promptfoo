@@ -1156,7 +1156,19 @@ describe('agent workspaces', () => {
       const main = path.join(root, 'main');
       makeRepository(main);
       const linked = path.join(root, 'linked');
-      git(main, 'worktree', 'add', '-q', linked, '-b', 'feature');
+      git(
+        main,
+        '-c',
+        'core.autocrlf=false',
+        '-c',
+        'core.eol=lf',
+        'worktree',
+        'add',
+        '-q',
+        linked,
+        '-b',
+        'feature',
+      );
       write(path.join(linked, 'README.md'), 'feature\n');
       git(linked, 'commit', '-q', '-am', 'feature commit');
       const linkedHead = git(linked, 'rev-parse', 'HEAD');
@@ -1248,7 +1260,19 @@ describe('agent workspaces', () => {
       if (hasConfig) {
         const nestedSource = path.join(root, 'module');
         makeRepository(nestedSource);
-        git(source, '-c', 'protocol.file.allow=always', 'submodule', 'add', nestedSource, 'lib');
+        git(
+          source,
+          '-c',
+          'core.autocrlf=false',
+          '-c',
+          'core.eol=lf',
+          '-c',
+          'protocol.file.allow=always',
+          'submodule',
+          'add',
+          nestedSource,
+          'lib',
+        );
       } else {
         makeRepository(path.join(source, 'lib'));
         git(source, 'add', 'lib');
@@ -1422,7 +1446,16 @@ describe('agent workspaces', () => {
       write(path.join(source, 'README.md'), 'uncommitted\n');
 
       const workspace = await create(source);
-      git(workspace.dir, 'checkout', '--', 'README.md');
+      git(
+        workspace.dir,
+        '-c',
+        'core.autocrlf=false',
+        '-c',
+        'core.eol=lf',
+        'checkout',
+        '--',
+        'README.md',
+      );
 
       expect(fs.readFileSync(path.join(workspace.dir, 'README.md'), 'utf8')).toBe('original\n');
       expect(fs.readFileSync(path.join(source, 'README.md'), 'utf8')).toBe('uncommitted\n');
