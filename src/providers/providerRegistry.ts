@@ -538,6 +538,9 @@ export class ProviderRegistry {
         if (state.cleanup === cleanup) {
           state.cleanup = undefined;
         }
+        if (state.users.size === 0 && state.activeCalls === 0) {
+          state.cleanupRequested = false;
+        }
         if (!state.cleanupRequested) {
           this.ownedProviders.delete(state);
         }

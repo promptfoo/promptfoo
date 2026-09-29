@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PromptfooChatCompletionProvider } from '../../../src/providers/promptfoo';
 import { getGradingInputHash } from '../../../src/redteam/grading/storedResult';
 import RedteamIterativeProvider, {
   runRedteamConversation,
@@ -145,6 +146,27 @@ describe('RedteamIterativeProvider', () => {
       } finally {
         restoreEnv();
       }
+    });
+
+    it('keeps an explicit redteamProvider local when remote generation is enabled', () => {
+      // Regression test for https://github.com/promptfoo/promptfoo/issues/10970:
+      // a configured redteamProvider must not be swapped for the cloud provider.
+      // This suite mocks isLoggedIntoCloud() = true, so remote generation is on.
+      const provider = new RedteamIterativeProvider({
+        injectVar: 'goal',
+        redteamProvider: 'ollama:chat:llama3.1:8b',
+      });
+
+      expect(provider['redteamProvider']).toBe('ollama:chat:llama3.1:8b');
+      expect(provider['gradingProvider']).toBeUndefined();
+      expect(provider['attackerUsesRemoteProvider']).toBe(false);
+    });
+
+    it('uses the remote task provider only when no redteamProvider is configured', () => {
+      const provider = new RedteamIterativeProvider({ injectVar: 'goal' });
+
+      expect(provider['attackerUsesRemoteProvider']).toBe(true);
+      expect(provider['redteamProvider']).toBeInstanceOf(PromptfooChatCompletionProvider);
     });
   });
 

@@ -1,5 +1,3 @@
-import fs from 'fs/promises';
-
 import { parse } from 'csv-parse/sync';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
@@ -10,14 +8,8 @@ import type { Assertion, TestCase } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:donotanswer';
 
-const PRODUCTION_DATASET_URL =
+const DATASET_URL =
   'https://raw.githubusercontent.com/promptfoo/promptfoo/refs/heads/main/examples/redteam-donotanswer/dataset/do_not_answer_data.csv';
-
-// Development URL - for local testing
-// const DEV_DATASET_URL =
-//   '/path/to/do_not_answer_data.csv';
-
-const DATASET_URL = PRODUCTION_DATASET_URL;
 
 interface DoNotAnswerRow {
   id: string;
@@ -51,24 +43,11 @@ export async function fetchDataset(limit: number): Promise<DoNotAnswerTestCase[]
   try {
     logger.debug(`[DoNotAnswer] Fetching dataset from ${DATASET_URL}`);
 
-    let csvData: string;
-
-    // Check if we're using a local file path or a URL
-    if (DATASET_URL.startsWith('http')) {
-      // Fetch from URL
-      const response = await fetchWithTimeout(DATASET_URL, {}, getRequestTimeoutMs());
-      if (!response.ok) {
-        throw new Error(`[DoNotAnswer] HTTP status: ${response.status} ${response.statusText}`);
-      }
-      csvData = await response.text();
-    } else {
-      // Read from local file
-      try {
-        csvData = await fs.readFile(DATASET_URL, 'utf8');
-      } catch (error) {
-        throw new Error(`[DoNotAnswer] Error reading local file: ${error}`);
-      }
+    const response = await fetchWithTimeout(DATASET_URL, {}, getRequestTimeoutMs());
+    if (!response.ok) {
+      throw new Error(`[DoNotAnswer] HTTP status: ${response.status} ${response.statusText}`);
     }
+    const csvData = await response.text();
 
     logger.debug(`[DoNotAnswer] Got ${csvData.length} bytes of CSV data`);
 
