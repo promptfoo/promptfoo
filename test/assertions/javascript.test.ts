@@ -1347,6 +1347,16 @@ describe('JavaScript file references', () => {
 
   const inverseStringAssertionCases: [string, Assertion, boolean, number, string][] = [
     [
+      'empty-reason GradingResult results for not-javascript assertions',
+      {
+        type: 'not-javascript',
+        value: "({ pass: true, score: 1, reason: '' })",
+      },
+      false,
+      1,
+      'Custom function returned true',
+    ],
+    [
       'boolean results for not-javascript assertions',
       {
         type: 'not-javascript',

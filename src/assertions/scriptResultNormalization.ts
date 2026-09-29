@@ -59,7 +59,7 @@ export function normalizeScriptAssertionResult(
     reason: inverse
       ? pass
         ? 'Assertion passed'
-        : result.reason || getFailureReason(true)
+        : result.reason || `${labels.code} returned true`
       : result.reason,
     assertion: result.assertion ?? assertion,
   };
