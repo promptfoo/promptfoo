@@ -16,9 +16,8 @@ export function shouldBustProviderCache(
 }
 
 /**
- * Attach response-cache provenance after normalizing a fetch or SDK response.
- * Preserve reported usage and pricing; the evaluator derives incurred usage/cost
- * from the cache marker. Missing token counts remain unknown, including on replay.
+ * Mark cached responses without changing reported usage or cost. The evaluator
+ * uses the cache marker to calculate incurred usage; missing counts stay unknown.
  */
 export function withResponseCacheMetadata<T extends ProviderResponse | ProviderEmbeddingResponse>(
   response: T,

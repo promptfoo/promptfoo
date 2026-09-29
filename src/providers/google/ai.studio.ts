@@ -517,7 +517,6 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           tokenUsage,
           cost,
           raw: data,
-          cached,
           ...(guardrails && { guardrails }),
           metadata: {
             ...grounding,
