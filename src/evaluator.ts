@@ -4653,11 +4653,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         throw error;
       }
       const graderId = comparisonProviderId(assertion.provider ?? savedTest.options?.provider);
-      // Raw URLs may contain whitespace, so a token boundary can expose a credential suffix.
-      const message = (error instanceof Error ? error.message : String(error)).replace(
-        /\b[a-z][a-z0-9+.-]*:\/\/[\s\S]*/i,
-        REDACTED,
-      );
+      // Provider errors can contain credentials or config source snippets.
+      const message =
+        'Check the grader configuration and credentials. Supply a grader configuration matching the saved result to resume, or rerun the evaluation.';
       const reason = `${COMPARISON_ERROR_PREFIX}${graderId ? ` (${graderId})` : ''}: ${message}`;
       gradingResults = [];
       for (const result of resultsToCompare) {

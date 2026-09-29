@@ -1,7 +1,7 @@
 import './setup';
 
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -504,7 +504,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
     expect(failed).toHaveLength(2);
     for (const row of failed) {
       expect(row.failureReason).toBe(ResultFailureReason.ERROR);
-      expect(row.error).toContain('temporary grader failure');
+      expect(row.error).toContain('Check the grader configuration and credentials');
       expect(row.gradingResult?.pass).toBe(true);
       expect(row.gradingResult?.componentResults).toEqual([]);
     }
@@ -527,6 +527,57 @@ describeEvaluator('select-best runtime grading configuration', () => {
     expect(target.callApi).toHaveBeenCalledTimes(2);
     expect(grader.callApi).toHaveBeenCalledTimes(2);
   });
+
+  it.each(['malformed YAML', 'Error', 'string'])(
+    'keeps secrets in a grader %s out of persisted errors and recovers on resume',
+    async (failure) => {
+      const { grader, suite, target } = makeSuite();
+      const errorSecret = 'fixture-non-url-grader-secret';
+      const directory = await mkdtemp(path.join(tmpdir(), 'comparison-error-'));
+      const outputPath = path.join(directory, 'results.jsonl');
+      const graderPath = path.join(directory, 'grader.yaml');
+      const call = vi.spyOn(EchoProvider.prototype, 'callApi').mockResolvedValue({ output: '0' });
+      try {
+        if (failure === 'malformed YAML') {
+          await writeFile(graderPath, `id: echo\nconfig:\n  apiKey: ${errorSecret}: invalid\n`);
+          (suite.tests![0].assert![0] as Assertion).provider = `file://${graderPath}`;
+        } else {
+          vi.mocked(grader.callApi).mockRejectedValueOnce(
+            failure === 'Error' ? new Error(errorSecret) : errorSecret,
+          );
+        }
+        const record = await Eval.create({ outputPath }, suite.prompts, { id: randomUUID() });
+        await evaluate(suite, record, { maxConcurrency: 1 });
+        const rows = await record.fetchResultsByTestIdx(0);
+        expect(rows).toHaveLength(2);
+        for (const serialized of [
+          JSON.stringify(rows),
+          JSON.stringify(await record.toResultsFile()),
+          await readFile(outputPath, 'utf8'),
+        ]) {
+          expect(serialized).not.toContain(errorSecret);
+        }
+        for (const row of rows) {
+          expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+          expect(row.error).toContain('Check the grader configuration and credentials');
+          expect(row.error).toContain(failure === 'malformed YAML' ? graderPath : grader.id());
+        }
+        expect(record.getStats()).toMatchObject({ successes: 0, failures: 0, errors: 2 });
+
+        await writeFile(graderPath, 'id: echo\n');
+        cliState.resume = true;
+        await evaluate(suite, record, { maxConcurrency: 1 });
+        expect(record.getStats()).toMatchObject({ successes: 1, failures: 1, errors: 0 });
+        expect(
+          (await record.fetchResultsByTestIdx(0)).find((row) => row.success)?.error,
+        ).toBeNull();
+        expect(target.callApi).toHaveBeenCalledTimes(2);
+      } finally {
+        call.mockRestore();
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('compares only replacement rows during an error-only retry', async () => {
     const { grader, suite, target } = makeSuite();
@@ -822,7 +873,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
       );
       await evaluate(suite, record, { maxConcurrency: 1 });
       for (const row of await expectRedacted()) {
-        expect(row.error).toContain('Request failed for');
+        expect(row.error).toContain('Check the grader configuration and credentials');
       }
       expect(target.callApi).toHaveBeenCalledTimes(2);
     } finally {
@@ -945,7 +996,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
     for (const row of await record.fetchResultsByTestIdx(0)) {
       expect(row.success).toBe(false);
       expect(row.failureReason).toBe(ResultFailureReason.ERROR);
-      expect(row.error).toContain('grader unavailable');
+      expect(row.error).toContain('Check the grader configuration and credentials');
     }
     expect(record.getStats()).toMatchObject({ successes: 0, failures: 0, errors: 2 });
 
