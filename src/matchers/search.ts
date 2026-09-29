@@ -92,15 +92,14 @@ export async function matchesSearchRubric(
   );
 
   if (resp.error || !resp.output) {
-    // Transport/provider failure: fail closed with a grader-error tag so
-    // fallback chains and inverse-aware callers do not mask the outage.
+    // A provider that errored gave no verdict to invert on; `graderFail` tags it
+    // so not-search-rubric never flips a transport failure into a pass.
     return {
-      pass: false,
-      score: 0,
-      reason: `Search rubric evaluation failed: ${resp.error || 'No output'}`,
-      tokensUsed: resp.tokenUsage,
+      ...graderFail(
+        `Search rubric evaluation failed: ${resp.error || 'No output'}`,
+        resp.tokenUsage,
+      ),
       assertion,
-      metadata: { graderError: true },
     };
   }
 
@@ -127,7 +126,7 @@ export async function matchesSearchRubric(
     }
 
     // Apply threshold if specified
-    let pass = result.pass ?? false;
+    let pass = result.pass;
     const score = typeof result.score === 'number' ? result.score : pass ? 1 : 0;
 
     if (assertion?.threshold !== undefined) {
@@ -145,32 +144,16 @@ export async function matchesSearchRubric(
         searchProvider: searchProvider.id(),
       },
     };
-  } catch (err) {
-    if (output.includes('{')) {
-      return {
-        ...graderFail('Search rubric grader produced malformed JSON', resp.tokenUsage),
-        assertion,
-      };
-    }
-    // JSON extraction failed - fall back to naive substring matching
-    logger.warn(
-      `[search-rubric] Could not parse structured JSON from provider response, falling back to substring matching: ${(err as Error).message}`,
-    );
-    const verdict = output.toLowerCase().match(/"pass"\s*:\s*(true|false)/)?.[1];
-    if (!verdict) {
-      return {
-        ...graderFail('Search rubric grader produced no verdict', resp.tokenUsage),
-        assertion,
-      };
-    }
-    const pass = verdict === 'true';
+  } catch {
+    logger.warn('[search-rubric] Could not parse a grading verdict from provider response');
 
     return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: resp.output as string,
+      pass: false,
+      score: 0,
+      reason: 'Search rubric evaluation failed: Expected a JSON object with a boolean "pass" field',
       tokensUsed: resp.tokenUsage,
       assertion,
+      metadata: { graderError: true },
     };
   }
 }

@@ -611,6 +611,9 @@ function getPassFailCounts(output: EvaluateTableOutput): {
   const componentResults = output.gradingResult?.componentResults;
   if (componentResults?.length) {
     componentResults.forEach((result) => {
+      if (result?.metadata?.fallbackIntermediate === true) {
+        return;
+      }
       if (result?.pass) {
         passCount++;
       } else {

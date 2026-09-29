@@ -21,7 +21,6 @@ import type { Assertion, GradingConfig } from '../../src/types/index';
 vi.mock('../../src/esm', () => ({
   importModule: vi.fn(),
 }));
-vi.mock('../../src/cliState');
 vi.mock('../../src/remoteGrading', () => ({
   doRemoteGrading: vi.fn(),
 }));
@@ -1977,7 +1976,7 @@ describe('matchesLlmRubric', () => {
     );
   });
 
-  it('should handle missing or invalid scores when threshold is present', async () => {
+  it('defaults a missing score but rejects an invalid score', async () => {
     const rubricPrompt = 'Rubric prompt';
     const output = 'Sample output';
     const assertion: Assertion = {
@@ -2008,7 +2007,6 @@ describe('matchesLlmRubric', () => {
       }),
     );
 
-    // Invalid score type should be handled gracefully
     const invalidScoreResult = { score: 'high', reason: 'Invalid score type', pass: true };
     const invalidScoreOptions: GradingConfig = {
       rubricPrompt,
@@ -2023,10 +2021,10 @@ describe('matchesLlmRubric', () => {
       matchesLlmRubric(rubricPrompt, output, invalidScoreOptions, {}, assertion),
     ).resolves.toEqual(
       expect.objectContaining({
-        assertion,
-        score: 1.0,
-        pass: true,
-        reason: 'Invalid score type',
+        score: 0,
+        pass: false,
+        metadata: { graderError: true },
+        reason: expect.stringContaining('invalid grading score'),
       }),
     );
   });

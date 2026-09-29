@@ -240,6 +240,51 @@ describe('matchesFactuality', () => {
     });
   });
 
+  it('should tag a grading provider error as a grader failure', async () => {
+    const mockCallApi = vi.fn().mockResolvedValue({ error: 'Grader provider unavailable' });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    await expect(
+      matchesFactuality('Input text', 'Expected output', 'Sample output', {}),
+    ).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason: 'Grader provider unavailable',
+      tokensUsed: expect.objectContaining({
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+      }),
+      metadata: { graderError: true },
+    });
+  });
+
+  it('should tag an uninterpretable grader response as a grader failure', async () => {
+    // Neither the JSON format nor the legacy "(A) ..." pattern: the grader
+    // answered in prose. That is a grader failure, and inverse-aware callers
+    // must not flip it into a pass for `not-model-graded-factuality`.
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: 'I am not able to grade this submission.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    await expect(
+      matchesFactuality('Input text', 'Expected output', 'Sample output', {}),
+    ).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason:
+        'Factuality checker output did not match expected format: I am not able to grade this submission.',
+      tokensUsed: expect.objectContaining({
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+      }),
+      metadata: { graderError: true },
+    });
+  });
+
   it('should use custom prompt override when provided', async () => {
     const input = 'Input text';
     const expected = 'Expected output';

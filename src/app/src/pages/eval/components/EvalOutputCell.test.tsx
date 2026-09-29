@@ -370,6 +370,31 @@ describe('EvalOutputCell', () => {
     expect(statusElement).toBeInTheDocument();
   });
 
+  it('counts terminal fallback results while retaining intermediate details', async () => {
+    const user = userEvent.setup();
+    const gradingResult = {
+      pass: true,
+      score: 1,
+      reason: 'Fallback passed',
+      componentResults: [
+        {
+          pass: false,
+          score: 0,
+          reason: 'Primary failed',
+          metadata: { fallbackIntermediate: true },
+        },
+        { pass: true, score: 1, reason: 'Fallback passed' },
+      ],
+    };
+    renderWithProviders(
+      <EvalOutputCell {...defaultProps} output={{ ...defaultProps.output, gradingResult }} />,
+    );
+    expect(screen.getByText('PASS')).toBeInTheDocument();
+    expect(screen.queryByText('1 FAIL 1 PASS')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+    expect(screen.getByTestId('dialog-component')).toBeInTheDocument();
+  });
+
   it('combines assertion contexts in comment dialog', async () => {
     const user = userEvent.setup();
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
@@ -951,10 +976,18 @@ describe('EvalOutputCell', () => {
       await clipboard.writeText.mock.results[0]?.value;
     });
 
+    // Flush query notifications without advancing the three-second link feedback timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(1);
 
     unmount();
 
+    // The shared cloud query removes unused entries on its zero-delay GC timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(0);
   });
 
@@ -984,6 +1017,10 @@ describe('EvalOutputCell', () => {
       await writeTextPromise;
     });
 
+    // The shared cloud query removes unused entries on its zero-delay GC timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(0);
   });
 

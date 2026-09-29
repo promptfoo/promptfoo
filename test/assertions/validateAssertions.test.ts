@@ -305,6 +305,23 @@ describe('validateAssertions', () => {
       ).not.toThrow();
     });
 
+    it('validates default assertions together with scenario assertions', () => {
+      expect(() =>
+        validateAssertions(
+          [],
+          { assert: [{ type: 'equals', value: 'primary', fallback: 'next' }] },
+          [{ config: [{}], tests: [{ assert: [{ type: 'contains', value: 'target' }] }] }],
+        ),
+      ).not.toThrow();
+      expect(() =>
+        validateAssertions(
+          [],
+          { assert: [{ type: 'equals', value: 'primary', fallback: 'next' }] },
+          [{ config: [{}], tests: [{}] }],
+        ),
+      ).toThrow(/mergedAssert.*no next assertion/);
+    });
+
     it('inherits disabled default assertions in scenario tests', () => {
       expect(() =>
         validateAssertions(

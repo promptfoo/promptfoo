@@ -22,11 +22,7 @@ function isAssertionSet(assertion: AssertionOrSet): assertion is AssertionSet {
 }
 
 function isRedteamGuardrail(assertion: Assertion): boolean {
-  // Handle both the base spelling (`guardrails`) and the inverse spelling
-  // (`not-guardrails`), case-insensitively, so an inverse redteam guardrail is
-  // treated as terminal (fail closed) exactly like its base form. Otherwise a
-  // slipped-through safety check on `not-guardrails` could be masked by a
-  // passing fallback.
+  // Inverting a guardrail must not allow fallback to hide its failure.
   const normalizedType = assertion.type.toLowerCase();
   const baseType = normalizedType.startsWith('not-') ? normalizedType.slice(4) : normalizedType;
   return baseType === 'guardrails' && assertion.config?.purpose === 'redteam';
@@ -40,14 +36,7 @@ export function isAssertionExecutionFailure(result: GradingResult): boolean {
   return result.metadata?.assertionError === true;
 }
 
-/**
- * Validates that fallback-bearing assertions are configured correctly.
- *
- * Runs before assertion-set flattening so that fallback chains cannot bridge
- * across an assert-set boundary. The `path` argument carries dotted-index
- * breadcrumbs (e.g. `assert[2].assert[0]`) into recursive calls so users with
- * nested assert-sets can localize a validation failure.
- */
+/** Validate chains before flattening so they cannot cross assertion-set boundaries. */
 export function validateFallbackChains(assertions: AssertionOrSet[], path = 'assert'): void {
   for (let i = 0; i < assertions.length; i++) {
     const assertion = assertions[i];
@@ -216,6 +205,28 @@ function validateFallbackChainsForConfig(assertions: AssertionOrSet[], context: 
   }
 }
 
+function parseAssertionList(
+  input: unknown,
+  path: string,
+): { assertions: AssertionOrSet[]; count: number } {
+  if (input === undefined) {
+    return { assertions: [], count: 0 };
+  }
+  if (!Array.isArray(input)) {
+    throw new AssertValidationError(`${path} must be an array`);
+  }
+  if (input.length > MAX_ASSERTIONS_PER_TEST) {
+    throw new AssertValidationError(
+      `${path} has ${input.length} assertions, exceeding maximum of ${MAX_ASSERTIONS_PER_TEST}`,
+    );
+  }
+  const count = countAssertions(input, path);
+  return {
+    assertions: input.map((assertion, index) => parseAssertion(assertion, `${path}[${index}]`)),
+    count,
+  };
+}
+
 /**
  * Validate assertions in test cases and defaultTest.
  * Uses Zod schema validation for type safety and helpful error messages.
@@ -230,26 +241,10 @@ export function validateAssertions(
   defaultTest?: Partial<TestCase>,
   scenarios?: Scenario[],
 ): void {
-  const parsedDefaultAssertions: AssertionOrSet[] = [];
-  let defaultAssertionCount = 0;
-
-  // Validate defaultTest assertions
-  if (defaultTest?.assert) {
-    if (!Array.isArray(defaultTest.assert)) {
-      throw new AssertValidationError('defaultTest.assert must be an array');
-    }
-    if (defaultTest.assert.length > MAX_ASSERTIONS_PER_TEST) {
-      throw new AssertValidationError(
-        `defaultTest.assert has ${defaultTest.assert.length} assertions, exceeding maximum of ${MAX_ASSERTIONS_PER_TEST}`,
-      );
-    }
-    defaultAssertionCount = countAssertions(defaultTest.assert, 'defaultTest.assert');
-    for (let i = 0; i < defaultTest.assert.length; i++) {
-      parsedDefaultAssertions.push(
-        parseAssertion(defaultTest.assert[i], `defaultTest.assert[${i}]`),
-      );
-    }
-  }
+  const { assertions: parsedDefaultAssertions, count: defaultAssertionCount } = parseAssertionList(
+    defaultTest?.assert,
+    'defaultTest.assert',
+  );
 
   // Validate tests array
   if (!Array.isArray(tests)) {
@@ -275,22 +270,10 @@ export function validateAssertions(
   // Validate test case assertions
   for (let testIdx = 0; testIdx < validationTests.length; testIdx++) {
     const { test, path } = validationTests[testIdx];
-    const parsedAssertions: AssertionOrSet[] = [];
-    let testAssertionCount = 0;
-    if (test.assert !== undefined) {
-      if (!Array.isArray(test.assert)) {
-        throw new AssertValidationError(`${path}.assert must be an array`);
-      }
-      if (test.assert.length > MAX_ASSERTIONS_PER_TEST) {
-        throw new AssertValidationError(
-          `${path}.assert has ${test.assert.length} assertions, exceeding maximum of ${MAX_ASSERTIONS_PER_TEST}`,
-        );
-      }
-      testAssertionCount = countAssertions(test.assert, `${path}.assert`);
-      for (let i = 0; i < test.assert.length; i++) {
-        parsedAssertions.push(parseAssertion(test.assert[i], `${path}.assert[${i}]`));
-      }
-    }
+    const { assertions: parsedAssertions, count: testAssertionCount } = parseAssertionList(
+      test.assert,
+      `${path}.assert`,
+    );
 
     const includeDefaultAssertions = test.options?.disableDefaultAsserts !== true;
     const effectiveAssertions = includeDefaultAssertions

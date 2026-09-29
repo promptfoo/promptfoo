@@ -43,6 +43,63 @@ const createTestCase = (
 });
 
 describe('Fallback grading contracts', () => {
+  it.each([
+    { pass: true, score: 'bad' },
+    { pass: false, score: null },
+    { pass: true, score: '' },
+    { pass: true, score: Infinity },
+    { pass: 'unclear' },
+    { reason: 'No verdict' },
+    { pass: true, reason: {} },
+  ])('stops after a malformed rubric verdict: %j', async (verdict) => {
+    const grader: ApiProvider = {
+      id: () => 'malformed-rubric',
+      callApi: vi.fn().mockResolvedValue({ output: verdict }),
+    };
+    const result = await runAssertions({
+      test: createTestCase(
+        [
+          { type: 'llm-rubric', value: 'Check output', fallback: 'next' },
+          { type: 'contains', value: 'test' },
+        ],
+        { provider: grader },
+      ),
+      providerResponse: mockProviderResponse,
+    });
+    expect(result).toMatchObject({ pass: false, score: 0 });
+    expect(result.componentResults).toHaveLength(1);
+    expect(result.componentResults?.[0].metadata?.graderError).toBe(true);
+  });
+
+  it.each(['similar', 'answer-relevance'] as const)(
+    '%s rejects malformed embeddings',
+    async (type) => {
+      for (const embedding of [[], [NaN, 1], [1], [Infinity, 1]]) {
+        const grader = {
+          id: () => 'malformed-embedding',
+          callApi: vi.fn().mockResolvedValue({ output: 'Candidate question?' }),
+          callEmbeddingApi: vi
+            .fn()
+            .mockResolvedValueOnce({ embedding: [1, 1] })
+            .mockResolvedValue({ embedding }),
+        };
+        const result = await runAssertions({
+          prompt: 'Question?',
+          test: createTestCase(
+            [
+              { type, value: 'Expected output', fallback: 'next' },
+              { type: 'contains', value: 'test' },
+            ],
+            { provider: grader },
+          ),
+          providerResponse: mockProviderResponse,
+        });
+        expect(result).toMatchObject({ pass: false, score: 0 });
+        expect(result.componentResults).toHaveLength(1);
+        expect(result.componentResults?.[0].metadata?.graderError).toBe(true);
+      }
+    },
+  );
   it('stops after a context-recall response without attribution verdicts', async () => {
     const grader: ApiProvider = {
       id: () => 'malformed-recall',

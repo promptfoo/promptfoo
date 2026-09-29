@@ -14,6 +14,7 @@ import {
   euclideanDistance,
   fail,
   graderFail,
+  hasValidEmbeddingPair,
   normalizeMatcherTokenUsage,
 } from './shared';
 
@@ -172,6 +173,10 @@ async function calculateProviderSimilarity(
     return graderFail('Embedding not found', tokensUsed);
   }
 
+  if (!hasValidEmbeddingPair(expectedEmbedding.embedding, outputEmbedding.embedding)) {
+    return graderFail('Embeddings must be nonempty, finite vectors of equal length', tokensUsed);
+  }
+
   return calculateSimilarityScore(
     expectedEmbedding.embedding,
     outputEmbedding.embedding,
@@ -228,5 +233,8 @@ export async function matchesSimilarity(
     return similarity;
   }
 
+  if (!Number.isFinite(similarity)) {
+    return graderFail('Embedding similarity is not finite', tokensUsed);
+  }
   return buildSimilarityResult(similarity, threshold, inverse, metric, tokensUsed);
 }

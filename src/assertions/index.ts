@@ -132,7 +132,7 @@ import type {
   ScoringFunction,
 } from '../types/index';
 
-const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
+const DEFAULT_ASSERTIONS_MAX_CONCURRENCY = 3;
 const DEFAULT_TRACE_FETCH_MAX_ATTEMPTS = 6;
 const DEFAULT_TRACE_FETCH_RETRY_DELAY_MS = 250;
 const DEFAULT_TRACE_FETCH_STABLE_POLLS = 2;
@@ -443,6 +443,7 @@ async function runAssertionInternal({
   providerResponse,
   traceId,
   traceData,
+  claimStoredGradingUsage,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -454,6 +455,7 @@ async function runAssertionInternal({
   assertIndex?: number;
   traceId?: string;
   traceData?: TraceData | null;
+  claimStoredGradingUsage?: () => boolean;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
@@ -677,7 +679,7 @@ async function runAssertionInternal({
 
   // Check for redteam assertions first
   if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
-    return handleRedteam(assertionParams);
+    return handleRedteam(assertionParams, claimStoredGradingUsage);
   }
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
@@ -695,12 +697,7 @@ async function runAssertionInternal({
       result.metadata.renderedAssertionValue = renderedValue;
     }
 
-    // If weight is 0, treat this as a metric-only assertion that can't fail —
-    // UNLESS the handler hard-errored. A grader outage (`graderError`) or a
-    // validator that could not execute (`assertionError`, e.g. a thrown
-    // javascript/python/ruby assertion) must fail closed so it is not masked by
-    // the weight-zero pass coercion and remains eligible to terminate a
-    // fallback chain.
+    // Metric-only assertions cannot fail, but execution errors must still stop fallback.
     const isHardError =
       result.metadata?.assertionError === true || result.metadata?.graderError === true;
     if (assertion.weight === 0 && !isHardError) {
@@ -789,6 +786,7 @@ async function executeFallbackChain(
     latencyMs?: number;
     traceId?: string;
     getTraceData: () => Promise<TraceData | null>;
+    claimStoredGradingUsage: () => boolean;
   },
 ): Promise<{
   result: GradingResult;
@@ -802,8 +800,7 @@ async function executeFallbackChain(
     const { assertion, index } = asserts[currentIndex];
     const assertionHasFallback = hasFallback(assertion);
 
-    // Only a reached assertion that actually needs trace context triggers the
-    // (memoized) trace-store fetch — an unreached fallback target never does.
+    // Skipped fallbacks must not trigger trace polling.
     const traceData =
       context.traceId && assertionMayNeedTraceContext(assertion)
         ? await context.getTraceData()
@@ -820,6 +817,7 @@ async function executeFallbackChain(
       assertIndex: index,
       traceId: context.traceId,
       traceData,
+      claimStoredGradingUsage: context.claimStoredGradingUsage,
     });
 
     if (
@@ -976,11 +974,7 @@ export async function runAssertions({
   // Categorize assertions into independent and fallback chains
   const categorized = categorizeAssertions(asserts);
 
-  // Load trace data lazily and at most once. Only an assertion that is actually
-  // reached and needs trace context triggers the trace-store fetch: a passing
-  // fallback primary can leave its trace-aware fallback target unreached, and
-  // that unreached target must not incur the (potentially multi-second) trace
-  // polling.
+  // Fetch once, only if a reached assertion needs trace data.
   let traceDataPromise: Promise<TraceData | null> | undefined;
   const getTraceData = (): Promise<TraceData | null> => {
     if (!traceId) {
@@ -995,19 +989,31 @@ export async function runAssertions({
     return traceDataPromise;
   };
 
-  // Preserve judge grouping and keep active grader spans out of trace snapshots.
+  // Serialize trace snapshots and grouped judge calls; read concurrency after config env loads.
   const concurrency =
     getProviderCallExecutionContext()?.providerCallQueue ||
     (traceId && hasTraceAwareAssertions(test.assert))
       ? 1
-      : ASSERTIONS_MAX_CONCURRENCY;
+      : Math.max(
+          1,
+          getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', DEFAULT_ASSERTIONS_MAX_CONCURRENCY),
+        );
+
+  // Stored strategy usage belongs to the first reached assertion in this run.
+  let storedGradingUsageClaimed = false;
+  const claimStoredGradingUsage = () => {
+    if (storedGradingUsageClaimed) {
+      return false;
+    }
+    storedGradingUsageClaimed = true;
+    return true;
+  };
 
   const chainStartIndexes = new Set(categorized.primaryInChains);
   const assertionJobs = [...categorized.independent, ...categorized.primaryInChains].sort(
     (a, b) => a - b,
   );
-
-  await async.forEachOfLimit(assertionJobs, concurrency, async (assertionIndex) => {
+  const runAndRecordAssertion = async (assertionIndex: number) => {
     const { assertion, assertResult, index } = asserts[assertionIndex];
     if (isSpecialCompareAssertion(assertion)) {
       // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
@@ -1024,6 +1030,7 @@ export async function runAssertions({
         latencyMs,
         traceId,
         getTraceData,
+        claimStoredGradingUsage,
       });
 
       const finalAssert = asserts[chainResult.finalIndex];
@@ -1060,6 +1067,7 @@ export async function runAssertions({
       assertIndex: index,
       traceId,
       traceData,
+      claimStoredGradingUsage,
     });
 
     assertResult.addResult({
@@ -1068,7 +1076,23 @@ export async function runAssertions({
       metric: renderMetricName(assertion.metric, vars || test.vars || {}),
       weight: assertion.weight,
     });
-  });
+  };
+
+  const activeAssertions = new Set<Promise<void>>();
+  try {
+    await async.forEachOfLimit(assertionJobs, concurrency, async (entry) => {
+      const pending = runAndRecordAssertion(entry);
+      activeAssertions.add(pending);
+      try {
+        await pending;
+      } finally {
+        activeAssertions.delete(pending);
+      }
+    });
+  } finally {
+    // async stops scheduling on the first error, but active graders still need their workspace.
+    await Promise.allSettled(activeAssertions);
+  }
 
   await async.forEach(subAssertResults, async (subAssertResult) => {
     const result = await subAssertResult.testResult();
@@ -1095,7 +1119,9 @@ export async function runCompareAssertion(
   context?: CallApiContextParams,
 ): Promise<GradingResult[]> {
   invariant(typeof assertion.value === 'string', 'select-best must have a string value');
-  test = getFinalTest(test, assertion);
+  // The matcher needs options and vars, not the assertion list. A runtime assertion can
+  // contain a provider with a circular SDK client, which getFinalTest cannot deep-clone.
+  test = getFinalTest({ ...test, assert: undefined }, assertion);
   const comparisonResults = await matchesSelectBest(
     assertion.value,
     outputs,
@@ -1103,9 +1129,17 @@ export async function runCompareAssertion(
     test.vars,
     context,
   );
+  // The runtime assertion may contain a live grader and secrets. Results only need
+  // the comparison criteria and scoring labels, so keep provider config out of memory.
+  const safeAssertion: Assertion = {
+    type: assertion.type,
+    value: assertion.value,
+    metric: assertion.metric,
+    weight: assertion.weight,
+  };
   return comparisonResults.map((result) => ({
     ...result,
-    assertion,
+    assertion: safeAssertion,
   }));
 }
 

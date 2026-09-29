@@ -355,8 +355,6 @@ export async function matchesFactuality(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    // Transport/provider failure: fail closed with a grader-error tag so
-    // fallback chains and inverse-aware callers do not mask the outage.
     return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
 
@@ -415,8 +413,6 @@ export async function matchesClosedQa(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    // Transport/provider failure: fail closed with a grader-error tag so
-    // fallback chains and inverse-aware callers do not mask the outage.
     return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
 

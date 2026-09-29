@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_RAG_ASSERTION_THRESHOLD } from '../../src/assertions/ragDefaults';
 import { matchesContextFaithfulness } from '../../src/matchers/rag';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
@@ -105,6 +106,47 @@ describe('matchesContextFaithfulness', () => {
         numRequests: 0,
       },
     });
+  });
+
+  it('should tag grading provider errors so inverse assertions preserve them', async () => {
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockResolvedValue({ error: 'grading provider failed' });
+
+    await expect(
+      matchesContextFaithfulness(
+        'Query text',
+        'Output text',
+        'Context text',
+        DEFAULT_RAG_ASSERTION_THRESHOLD,
+      ),
+    ).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'grading provider failed',
+      metadata: { graderError: true },
+    });
+  });
+
+  it('should tag empty statement extraction so inverse assertions preserve it', async () => {
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockResolvedValue({ output: '   ' });
+
+    await expect(
+      matchesContextFaithfulness(
+        'Query text',
+        'Output text',
+        'Context text',
+        DEFAULT_RAG_ASSERTION_THRESHOLD,
+      ),
+    ).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Could not extract context-faithfulness statements',
+      metadata: { graderError: true },
+    });
+    expect(callApiSpy).toHaveBeenCalledOnce();
   });
 
   it('tracks token usage for multiple API calls', async () => {
@@ -215,7 +257,7 @@ describe('matchesContextFaithfulness', () => {
 
     await expect(matchesContextFaithfulness(query, output, context, threshold)).resolves.toEqual({
       pass: false,
-      reason: 'Context faithfulness grader produced no verdicts',
+      reason: 'Could not parse context-faithfulness verdicts',
       score: 0,
       metadata: { graderError: true },
       tokensUsed: {
@@ -229,20 +271,26 @@ describe('matchesContextFaithfulness', () => {
     });
   });
 
-  it('should fail before the verdict call when no statements are returned', async () => {
+  it('should reject malformed verdicts after the final-answer header', async () => {
     const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
     callApiSpy.mockReset();
-    callApiSpy.mockResolvedValueOnce({ output: '   ' });
+    callApiSpy.mockResolvedValueOnce({ output: 'Statement 1' }).mockResolvedValueOnce({
+      output: 'Final verdict for each statement in order: Unable to determine.',
+    });
 
     await expect(
-      matchesContextFaithfulness('Query text', 'Output text', 'Context text', 0.5),
+      matchesContextFaithfulness(
+        'Query text',
+        'Output text',
+        'Context text',
+        DEFAULT_RAG_ASSERTION_THRESHOLD,
+      ),
     ).resolves.toMatchObject({
       pass: false,
       score: 0,
-      reason: 'Context faithfulness grader produced no statements',
+      reason: 'Could not parse context-faithfulness verdicts',
       metadata: { graderError: true },
     });
-    expect(callApiSpy).toHaveBeenCalledTimes(1);
   });
 
   it('should count missing final-answer verdicts as unsupported', async () => {

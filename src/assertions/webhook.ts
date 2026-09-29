@@ -36,24 +36,22 @@ export async function handleWebhook({
     }
 
     const jsonResponse = await response.json();
-    if (typeof jsonResponse?.pass !== 'boolean') {
-      throw new Error('Webhook response is missing a boolean pass verdict');
-    }
-    if (
-      jsonResponse.score !== undefined &&
-      (typeof jsonResponse.score !== 'number' || !Number.isFinite(jsonResponse.score))
-    ) {
-      throw new Error('Webhook response score must be a finite number');
-    }
+    invariant(
+      typeof jsonResponse?.pass === 'boolean',
+      'Webhook response must be a JSON object with a boolean "pass" property',
+    );
+    const webhookScore = jsonResponse.score;
+    invariant(
+      webhookScore === undefined ||
+        (typeof webhookScore === 'number' && webhookScore >= 0 && webhookScore <= 1),
+      'Webhook response "score" must be a finite number between 0 and 1',
+    );
+    invariant(
+      jsonResponse.reason === undefined || typeof jsonResponse.reason === 'string',
+      'Webhook response "reason" must be a string',
+    );
     const pass = jsonResponse.pass !== inverse;
-    const score =
-      typeof jsonResponse.score === 'undefined'
-        ? pass
-          ? 1
-          : 0
-        : inverse
-          ? 1 - jsonResponse.score
-          : jsonResponse.score;
+    const score = webhookScore ?? (jsonResponse.pass ? 1 : 0);
 
     const reason =
       jsonResponse.reason ||
@@ -61,7 +59,7 @@ export async function handleWebhook({
 
     return {
       pass,
-      score,
+      score: inverse ? 1 - score : score,
       reason,
       assertion,
     };

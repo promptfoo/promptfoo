@@ -362,7 +362,7 @@ ChatKit workflows require browser automation because they don't expose a direct 
 
 ## Security Testing
 
-OpenAI recommends [running evals](https://platform.openai.com/docs/guides/safety-building-agents) as a key safety practice when building agents. Use promptfoo to test your ChatKit workflows for vulnerabilities.
+OpenAI recommends [running evals](https://platform.openai.com/docs/guides/safety-best-practices) as a key safety practice when building agents. Use promptfoo to test your ChatKit workflows for vulnerabilities.
 
 ### Prompt Injection
 
@@ -405,4 +405,4 @@ ChatKit exposes the visible assistant response, not guardrail-node result metada
 - [OpenAI Agents](/docs/providers/openai-agents) - OpenAI Agents SDK
 - [OpenAI Codex SDK](/docs/providers/openai-codex-sdk) - Code generation
 - [ChatKit Documentation](https://platform.openai.com/docs/guides/chatkit) - Official OpenAI docs
-- [OpenAI Agent Safety Guide](https://platform.openai.com/docs/guides/safety-building-agents) - Best practices for building agents safely
+- [OpenAI Safety Best Practices](https://platform.openai.com/docs/guides/safety-best-practices) - Best practices for building agents safely

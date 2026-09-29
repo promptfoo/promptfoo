@@ -1,11 +1,11 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Fallback assertion example - fast check with LLM fallback'
+description: Fast checks with model-graded fallbacks
 
 prompts:
   - 'Answer the following question concisely: {{question}}'
 
 providers:
-  - openai:chat:gpt-5.4-mini
+  - openai:gpt-6-sol
 
 tests:
   - vars:
@@ -18,7 +18,7 @@ tests:
         fallback: next
 
       - type: llm-rubric
-        provider: openai:chat:gpt-5.4-mini
+        provider: openai:gpt-6-sol
         value: 'The response correctly identifies Paris as the capital of France'
 
   - vars:
@@ -33,7 +33,7 @@ tests:
         fallback: next
 
       - type: llm-rubric
-        provider: openai:chat:gpt-5.4-mini
+        provider: openai:gpt-6-sol
         value: |
           The response demonstrates understanding of photosynthesis,
           mentioning key concepts like light energy, plants, and glucose production.
@@ -50,7 +50,7 @@ tests:
         fallback: next
 
       - type: llm-rubric
-        provider: openai:chat:gpt-5.4-mini
+        provider: openai:gpt-6-sol
         value: 'The response correctly states that 2+2=4'
 
       - type: not-contains

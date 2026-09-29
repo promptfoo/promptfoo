@@ -31,15 +31,18 @@ export async function matchesClassification(
   if (!resp.classification) {
     return graderFail(resp.error || 'Unknown error fetching classification');
   }
-  if (Object.values(resp.classification).some((score) => !Number.isFinite(score))) {
+  const scores = Object.values(resp.classification);
+  if (scores.length === 0) {
+    // No scores means there is no verdict, even when a specific label was requested.
+    return graderFail('No classification scores returned');
+  }
+
+  if (scores.some((score) => !Number.isFinite(score))) {
     return graderFail('Invalid classification scores returned');
   }
+
   let score: number;
   if (expected === undefined) {
-    const scores = Object.values(resp.classification);
-    if (scores.length === 0) {
-      return graderFail('No classification scores returned');
-    }
     score = Math.max(...scores);
   } else {
     score = resp.classification[expected] || 0;
