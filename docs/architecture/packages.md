@@ -39,12 +39,12 @@ npm run architecture:check
 ## First Leaf Layer
 
 `packages/contracts/src` owns the implementation, with compatibility re-exports in
-`src/contracts` and the `src/contracts.ts` public entrypoint. They are the first intentionally
-leaf-safe surface. The private `@promptfoo-internal/contracts` workspace builds
+`src/contracts` and the `src/contracts.ts` public entrypoint. The private `@promptfoo-internal/contracts` workspace builds
 independently with Zod as its only runtime dependency. The published `promptfoo`
 facade bundles its implementation and declarations. It owns this portable subset:
 
 - shared token/input contracts
+- portable HTTP and MCP provider configuration schemas
 - browser-safe common and user API DTOs
 - portable blob references and provider-neutral capability/result contracts
 - provider environment override schema
@@ -162,15 +162,29 @@ npm run tsc
 
 The dependency report groups root runtime dependencies by the private layer that
 currently uses them. Source files beneath a separate `package.json` belong to
-that package and are excluded from the root report:
+that package and are excluded from the root summary:
 
 ```bash
 npm run deps:ownership
 ```
 
-The report is intentionally descriptive for now. It gives us the evidence needed
-to move dependencies into future packages without guessing at ownership.
-
 It includes direct, optional, and peer dependency declarations. Peers marked
 optional in `peerDependenciesMeta` appear as `optional-peer`; other peers appear
 as `peer`. These labels describe the package contract, not what is installed.
+
+The report also checks each workspace and the standalone code-scan action against
+its own manifest. It records source, build, test, and type references, including
+any declarations already emitted into `dist`. Run a build first when auditing
+those generated declarations.
+
+```bash
+npm run deps:ownership -- --json
+npm run deps:ownership -- --check
+```
+
+`--json` includes file and line references, scan coverage, and annotations from
+`architecture/dependency-ownership.json`. `--check` fails on undeclared imports,
+root runtime imports declared only for development, or packages without an
+assigned owner. Invalid annotations fail either mode. Keep annotations tied to
+specific files that explain computed imports, build-only usage, or installed
+assets; an unreferenced declaration alone is not evidence that it can be removed.

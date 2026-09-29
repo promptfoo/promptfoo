@@ -44,3 +44,4 @@ the repository, installs its declared dependencies, builds both formats, and
 installs its tarball in a second consumer. That consumer checks ESM/CommonJS
 runtime behavior and mode-specific TypeScript declarations without repository
 aliases or hoisted dependencies. The full-package artifact test checks that the public facade remains installable.
+Moving these files does not reduce the full package install size.
