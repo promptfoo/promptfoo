@@ -15,10 +15,11 @@ import time
 import unittest
 import urllib.error
 import urllib.request
+from typing import Any, ClassVar
 
 
 class ModelFixture(http.server.BaseHTTPRequestHandler):
-    requests = []
+    requests: ClassVar[list[dict[str, Any]]] = []
     accepted = True
 
     def do_POST(self):
