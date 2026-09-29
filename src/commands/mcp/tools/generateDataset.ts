@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import { synthesizeFromTestSuite } from '../../../testCase/synthesis';
-import { validateMcpFilePath, validateProviderId } from '../lib/security';
+import { validateFilePath, validateProviderId } from '../lib/security';
 import { createToolResponse, DEFAULT_TOOL_TIMEOUT_MS, withTimeout } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -43,7 +43,7 @@ export function registerGenerateDatasetTool(server: McpServer) {
         .describe(
           dedent`
             AI provider to use for generation.
-            Examples: "openai:gpt-4o", "anthropic:claude-sonnet-4-6"
+            Examples: "openai:gpt-5.6", "anthropic:claude-sonnet-5"
             Defaults to configured default provider.
           `,
         ),
@@ -59,7 +59,7 @@ export function registerGenerateDatasetTool(server: McpServer) {
       try {
         // Validate security constraints
         if (outputPath) {
-          validateMcpFilePath(outputPath);
+          validateFilePath(outputPath);
         }
 
         if (provider) {

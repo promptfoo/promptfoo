@@ -10,7 +10,6 @@ import {
   isSharingEnabled,
 } from '../../../share';
 import { loadDefaultConfig } from '../../../util/config/default';
-import { validateDefaultMcpConfigFile } from '../lib/security';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -101,7 +100,6 @@ export function registerShareEvaluationTool(server: McpServer) {
 
         // Apply sharing configuration from default config if available
         try {
-          validateDefaultMcpConfigFile();
           const { defaultConfig } = await loadDefaultConfig();
           if (defaultConfig && defaultConfig.sharing) {
             evalRecord.config.sharing = defaultConfig.sharing;

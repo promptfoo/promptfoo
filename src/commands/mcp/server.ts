@@ -22,13 +22,7 @@ import { registerValidatePromptfooConfigTool } from './tools/validatePromptfooCo
 import type { NextFunction, Request, Response } from 'express';
 
 export const DEFAULT_MCP_HTTP_HOST = '127.0.0.1';
-const ALLOWED_MCP_HTTP_HOSTS = new Set([
-  '127.0.0.1',
-  'localhost',
-  'local.promptfoo.app',
-  '[::1]',
-  '::1',
-]);
+const ALLOWED_MCP_HTTP_HOSTS = new Set(['127.0.0.1', 'localhost', 'local.promptfoo.app', '[::1]']);
 
 function getHostnameFromHostHeader(host: string): string | undefined {
   const bracketedIpv6 = host.match(/^(\[[^\]]+\])(?::\d+)?$/);
@@ -44,10 +38,13 @@ export function mcpHostProtection(req: Request, res: Response, next: NextFunctio
   const hostname = req.headers.host ? getHostnameFromHostHeader(req.headers.host) : undefined;
   const origin = req.headers.origin;
   let localOrigin = false;
-  if (origin) {
+  if (origin !== undefined) {
     try {
       const url = new URL(origin);
-      localOrigin = /^https?:$/.test(url.protocol) && ALLOWED_MCP_HTTP_HOSTS.has(url.hostname);
+      localOrigin =
+        /^https?:$/.test(url.protocol) &&
+        url.origin === origin &&
+        ALLOWED_MCP_HTTP_HOSTS.has(url.hostname);
     } catch {
       // Invalid browser origins cannot authorize a local MCP request.
     }
@@ -55,7 +52,7 @@ export function mcpHostProtection(req: Request, res: Response, next: NextFunctio
   if (
     hostname &&
     ALLOWED_MCP_HTTP_HOSTS.has(hostname) &&
-    (origin ? localOrigin : req.headers['sec-fetch-site'] !== 'cross-site')
+    (origin === undefined ? req.headers['sec-fetch-site'] !== 'cross-site' : localOrigin)
   ) {
     next();
     return;
@@ -67,10 +64,6 @@ export function mcpHostProtection(req: Request, res: Response, next: NextFunctio
     path: req.path,
   });
   res.status(403).json({ error: 'MCP HTTP requests require a local Host header' });
-}
-
-function formatHttpHostForUrl(host: string): string {
-  return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
 }
 
 function setMcpTransport(transport: 'http' | 'stdio'): void {
@@ -223,11 +216,10 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   // This keeps long-running commands running until SIGINT/SIGTERM
   return new Promise<void>((resolve) => {
     const host = DEFAULT_MCP_HTTP_HOST;
-    const urlHost = formatHttpHostForUrl(host);
     const httpServer = app.listen(port, host, () => {
-      logger.info(`Promptfoo MCP server running at http://${urlHost}:${port}`);
-      logger.info(`MCP endpoint: http://${urlHost}:${port}/mcp`);
-      logger.info(`SSE endpoint: http://${urlHost}:${port}/mcp/sse`);
+      logger.info(`Promptfoo MCP server running at http://${host}:${port}`);
+      logger.info(`MCP endpoint: http://${host}:${port}/mcp`);
+      logger.info(`SSE endpoint: http://${host}:${port}/mcp/sse`);
 
       // Track server start
       telemetry.record('feature_used', {

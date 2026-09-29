@@ -20,7 +20,7 @@ export function createToolResponse<T = unknown>(
     timestamp: new Date().toISOString(),
   };
 
-  if (data !== undefined) {
+  if (success && data !== undefined) {
     response.data = data;
   }
 
@@ -124,20 +124,6 @@ export function assertNotNull<T>(value: T | null | undefined, message?: string):
  */
 export function filterNonNull<T>(array: (T | null | undefined)[]): T[] {
   return array.filter((item): item is T => item != null);
-}
-
-/**
- * Debounce function for rate limiting
- */
-export function debounce<T extends unknown[]>(
-  func: (...args: T) => void,
-  wait: number,
-): (...args: T) => void {
-  let timeout: NodeJS.Timeout;
-  return (...args: T) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
 }
 
 /**

@@ -20,8 +20,6 @@ vi.mock('../../../src/telemetry', () => ({
 }));
 
 vi.mock('../../../src/commands/mcp/server', () => ({
-  DEFAULT_MCP_HTTP_HOST: '127.0.0.1',
-  MCP_AUTH_TOKEN_ENV_VAR: 'PROMPTFOO_MCP_AUTH_TOKEN',
   startHttpMcpServer: vi.fn(),
   startStdioMcpServer: vi.fn(),
   createMcpServer: vi.fn(),
@@ -63,8 +61,8 @@ describe('mcp command', () => {
     });
   });
 
-  describe('http containment', () => {
-    it('should start HTTP transport on loopback by default', async () => {
+  describe('http transport', () => {
+    it('starts HTTP transport on the default port', async () => {
       const mcpCmd = program.commands.find((cmd) => cmd.name() === 'mcp');
       expect(mcpCmd).toBeDefined();
 

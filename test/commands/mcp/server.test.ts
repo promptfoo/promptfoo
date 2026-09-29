@@ -389,6 +389,22 @@ describe('MCP Server', () => {
       expect(next).toHaveBeenCalledTimes(3);
     });
 
+    it.each(['', 'null', 'not-an-origin', 'file://localhost', 'http://localhost/path'])(
+      'rejects malformed or unsupported Origin %j',
+      async (origin) => {
+        const { mcpHostProtection } = await import('../../../src/commands/mcp/server');
+        const response = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+        const next = vi.fn();
+        mcpHostProtection(
+          { headers: { host: 'localhost:3100', origin }, method: 'GET', path: '/health' } as any,
+          response as any,
+          next,
+        );
+        expect(response.status).toHaveBeenCalledWith(403);
+        expect(next).not.toHaveBeenCalled();
+      },
+    );
+
     it('should reject DNS-rebinding Host headers', async () => {
       const { startHttpMcpServer } = await import('../../../src/commands/mcp/server');
 

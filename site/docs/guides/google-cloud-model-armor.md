@@ -260,7 +260,7 @@ For floor settings to actually block content (not just log violations), set enfo
 
 Floor settings apply to supported calls only after Vertex AI is added as an integrated service and enforcement is configured. They are separate from the explicit `modelArmor` template paths in a provider request.
 
-For more details, see the [Model Armor floor settings documentation](https://cloud.google.com/security-command-center/docs/set-up-model-armor-floor-settings).
+For more details, see the [Model Armor floor settings documentation](https://docs.cloud.google.com/model-armor/configure-floor-settings).
 
 <details>
 <summary>Advanced: Direct Sanitization API</summary>

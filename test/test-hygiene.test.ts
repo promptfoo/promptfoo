@@ -100,8 +100,22 @@ const allowedSkippedTests: AllowedSkip[] = [
   {
     file: 'commands/mcp/lib/security.test.ts',
     kind: 'skipIf',
+    linePattern:
+      /^it\.skipIf\(process\.platform === 'win32'\)\('should reject paths to system directories'/,
+    reason: 'Unix system-directory assertions are platform-specific',
+  },
+  {
+    file: 'commands/mcp/lib/security.test.ts',
+    kind: 'skipIf',
+    linePattern:
+      /^it\.skipIf\(process\.platform !== 'win32'\)\('should reject Windows system directories'/,
+    reason: 'Windows system-directory assertions are platform-specific',
+  },
+  {
+    file: 'commands/mcp/lib/security.test.ts',
+    kind: 'skipIf',
     linePattern: /^it\.skipIf\(process\.platform === 'win32'\)\($/,
-    reason: 'Unix symlink fixtures are platform-specific',
+    reason: 'Unix absolute-path assertions are platform-specific',
   },
   {
     file: 'smoke/regression-0120.test.ts',
@@ -187,7 +201,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'providers/google/gemini-mcp-integration.test.ts',
   'providers/google/image.test.ts',
   'providers/google/live.test.ts',
-  'providers/google/provider.test.ts',
   'providers/google/util.test.ts',
   'providers/google/vertex.test.ts',
   'providers/google/video.test.ts',
@@ -214,7 +227,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'redteam/plugins/index.test.ts',
   'redteam/plugins/intent.test.ts',
   'redteam/plugins/pliny.test.ts',
-  'redteam/plugins/unsafebench.test.ts',
   'redteam/providers/authoritativeMarkupInjection.test.ts',
   'redteam/providers/bestOfN.test.ts',
   'redteam/providers/crescendo/index.test.ts',

@@ -3,16 +3,17 @@ import { z } from 'zod';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../../../types/index';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { ConfigResolutionError, resolveConfigs } from '../../../util/config/load';
-import { validateDefaultMcpConfigFile, validateMcpConfigFile } from '../lib/security';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-import type { TestCase, UnifiedConfig } from '../../../types/index';
+import type { TestCase, TestSuite, UnifiedConfig } from '../../../types/index';
 
 interface ValidationResults {
   isValid: boolean;
   errors: string[];
   warnings: string[];
+  config?: Partial<UnifiedConfig>;
+  testSuite?: Partial<TestSuite>;
 }
 
 /**
@@ -37,10 +38,6 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
       const { configPaths } = args;
 
       try {
-        validateDefaultMcpConfigFile();
-        const configPathsArray =
-          configPaths || (process.cwd() ? ['promptfooconfig.yaml'] : undefined);
-        configPathsArray?.forEach((configPath) => validateMcpConfigFile(configPath));
         // Load default configuration
         let defaultConfig;
         try {
@@ -59,6 +56,9 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
         }
 
         // Use the same logic as the validate command
+        const configPathsArray =
+          configPaths || (process.cwd() ? ['promptfooconfig.yaml'] : undefined);
+
         const { config, testSuite } = await resolveConfigs(
           { config: configPathsArray },
           defaultConfig,
@@ -72,7 +72,9 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
 
         // Validate config schema
         const configParse = UnifiedConfigSchema.safeParse(config);
-        if (!configParse.success) {
+        if (configParse.success) {
+          validationResults.config = config;
+        } else {
           const formattedError = z.prettifyError(configParse.error);
           validationResults.errors.push(`Configuration validation error: ${formattedError}`);
           validationResults.isValid = false;
@@ -80,7 +82,9 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
 
         // Validate test suite schema
         const suiteParse = TestSuiteSchema.safeParse(testSuite);
-        if (!suiteParse.success) {
+        if (suiteParse.success) {
+          validationResults.testSuite = testSuite;
+        } else {
           const formattedError = z.prettifyError(suiteParse.error);
           validationResults.errors.push(`Test suite validation error: ${formattedError}`);
           validationResults.isValid = false;

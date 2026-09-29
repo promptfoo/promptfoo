@@ -12,12 +12,6 @@ import {
 } from '../../../redteam/constants';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { RedteamGenerateOptionsSchema } from '../../../validators/redteam';
-import {
-  validateDefaultMcpConfigFile,
-  validateMcpConfigFile,
-  validateMcpFilePath,
-  validateProviderId,
-} from '../lib/security';
 import { createToolResponse, DEFAULT_TOOL_TIMEOUT_MS, withTimeout } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -179,25 +173,6 @@ export function registerRedteamGenerateTool(server: McpServer) {
           progressBar = true,
         } = args;
 
-        validateDefaultMcpConfigFile();
-        if (configPath) {
-          validateMcpConfigFile(configPath);
-        }
-
-        const outputPath = output || (write ? undefined : 'redteam.yaml');
-        if (outputPath) {
-          validateMcpFilePath(outputPath);
-        }
-
-        if (provider) {
-          validateProviderId(provider);
-        }
-        for (const entry of [...(plugins ?? []), ...(strategies ?? [])]) {
-          if (entry.startsWith('file://')) {
-            validateMcpFilePath(entry.slice('file://'.length));
-          }
-        }
-
         // Load default config
         let defaultConfig;
         let defaultConfigPath;
@@ -217,7 +192,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
         // Prepare generation options
         const options: Partial<RedteamCliGenerateOptions> = {
           config: configPath,
-          output: outputPath,
+          output: output || (write ? undefined : 'redteam.yaml'),
           purpose,
           plugins: plugins?.map((p) => ({ id: p })),
           strategies,
@@ -275,7 +250,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
             duration: endTime - startTime,
             timestamp: new Date().toISOString(),
             configPath: configPath || 'promptfooconfig.yaml',
-            outputPath: outputPath || 'written to config',
+            outputPath: output || (write ? 'written to config' : 'redteam.yaml'),
           },
           configuration: {
             purpose:
@@ -340,10 +315,10 @@ export function registerRedteamGenerateTool(server: McpServer) {
           nextSteps: {
             runEvaluation: write
               ? 'Run "redteam_run" to execute the generated tests'
-              : `Run "redteam_run" with output: "${outputPath}" to execute the tests`,
+              : `Run "redteam_run" with output: "${output || 'redteam.yaml'}" to execute the tests`,
             viewConfig: write
               ? `Generated tests were added to your config file: ${configPath || 'promptfooconfig.yaml'}`
-              : `Generated tests were written to: ${outputPath}`,
+              : `Generated tests were written to: ${output || 'redteam.yaml'}`,
           },
         };
 
@@ -404,12 +379,7 @@ export function registerRedteamGenerateTool(server: McpServer) {
           },
         };
 
-        return createToolResponse(
-          'redteam_generate',
-          false,
-          errorData,
-          `Failed to generate redteam tests: ${errorMessage}`,
-        );
+        return createToolResponse('redteam_generate', false, errorData);
       }
     },
   );

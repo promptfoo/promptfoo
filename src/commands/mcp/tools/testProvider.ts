@@ -1,7 +1,6 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import { loadApiProvider, loadApiProviders } from '../../../providers/index';
-import { validateMcpProviderPrompt, validateProviderReference } from '../lib/security';
 import { createToolResponse, withTimeout } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -48,8 +47,8 @@ export function registerTestProviderTool(server: McpServer) {
         .describe(
           dedent`
             Provider to test. Examples:
-            - "openai:gpt-4o"
-            - "anthropic:claude-sonnet-4-6"
+            - "openai:gpt-5.6"
+            - "anthropic:claude-sonnet-5"
             - {"id": "custom-provider", "config": {...}}
             - path to custom provider file
           `,
@@ -106,7 +105,6 @@ export function registerTestProviderTool(server: McpServer) {
 
         // Load the provider
         const apiProvider = await loadProvider(provider);
-        validateMcpProviderPrompt(apiProvider, defaultPrompt, _providerId);
 
         // Test the provider with timeout and detailed metrics
         const startTime = Date.now();
@@ -194,8 +192,8 @@ export function registerTestProviderTool(server: McpServer) {
             {
               providerId,
               suggestion:
-                'Use format like "openai:gpt-4" or check available providers with "promptfoo providers"',
-              examples: ['openai:gpt-4o', 'anthropic:claude-sonnet-4-6', 'azure:deployment-name'],
+                'Use format like "openai:gpt-5.6" or check available providers with "promptfoo providers"',
+              examples: ['openai:gpt-5.6', 'anthropic:claude-sonnet-5', 'azure:deployment-name'],
             },
             `Provider "${providerId}" not found. Check the provider ID format.`,
           );
@@ -214,10 +212,8 @@ export function registerTestProviderTool(server: McpServer) {
 
 async function loadProvider(provider: string | { id: string; config?: Record<string, unknown> }) {
   if (typeof provider === 'string') {
-    validateProviderReference(provider);
     return await loadApiProvider(provider);
   } else {
-    validateProviderReference(provider);
     const providers = await loadApiProviders([provider]);
     if (!providers[0]) {
       throw new Error(`Failed to load provider configuration`);

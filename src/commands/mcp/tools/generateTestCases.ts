@@ -1,7 +1,6 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import { synthesizeFromTestSuite } from '../../../testCase/synthesis';
-import { validateMcpFilePath, validateProviderId } from '../lib/security';
 import { createToolResponse, DEFAULT_TOOL_TIMEOUT_MS, withTimeout } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -74,7 +73,7 @@ export function registerGenerateTestCasesTool(server: McpServer) {
         .describe(
           dedent`
             AI provider to use for generation.
-            Examples: "openai:gpt-4o", "anthropic:claude-sonnet-4-6"
+            Examples: "openai:gpt-5.6", "anthropic:claude-sonnet-5"
             Defaults to configured default provider.
           `,
         ),
@@ -88,15 +87,6 @@ export function registerGenerateTestCasesTool(server: McpServer) {
       const { prompt, instructions, numTestCases = 5, assertionTypes, provider, outputPath } = args;
 
       try {
-        // Validate security constraints before generation or file writes
-        if (outputPath) {
-          validateMcpFilePath(outputPath);
-        }
-
-        if (provider) {
-          validateProviderId(provider);
-        }
-
         // Extract variables from the prompt
         const variableMatches = prompt.match(/\{\{(\w+)\}\}/g);
         const variables = variableMatches

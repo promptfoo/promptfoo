@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   assertNotNull,
   createToolResponse,
-  debounce,
   filterNonNull,
   formatDuration,
   getProperty,
@@ -41,22 +40,6 @@ describe('MCP Utility Functions', () => {
       expect(parsedContent.success).toBe(false);
       expect(parsedContent.error).toBe('Something went wrong');
       expect(parsedContent.data).toBeUndefined();
-    });
-
-    it('should include provided data in error tool responses', () => {
-      const response = createToolResponse(
-        'test_tool',
-        false,
-        { suggestion: 'Check the config path' },
-        'Something went wrong',
-      );
-
-      expect(response.isError).toBe(true);
-
-      const parsedContent = JSON.parse(response.content[0].text);
-      expect(parsedContent.success).toBe(false);
-      expect(parsedContent.error).toBe('Something went wrong');
-      expect(parsedContent.data).toEqual({ suggestion: 'Check the config path' });
     });
 
     it('should create response without data or error', () => {
@@ -261,50 +244,6 @@ describe('MCP Utility Functions', () => {
       const result = filterNonNull(array);
 
       expect(result).toEqual(['a', 'b', 'c']);
-    });
-  });
-
-  describe('debounce', () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
-    it('should debounce function calls', () => {
-      const mockFn = vi.fn();
-      const debouncedFn = debounce(mockFn, 100);
-
-      debouncedFn('arg1');
-      debouncedFn('arg2');
-      debouncedFn('arg3');
-
-      expect(mockFn).not.toHaveBeenCalled();
-
-      vi.advanceTimersByTime(100);
-
-      expect(mockFn).toHaveBeenCalledTimes(1);
-      expect(mockFn).toHaveBeenCalledWith('arg3');
-    });
-
-    it('should reset timer on subsequent calls', () => {
-      const mockFn = vi.fn();
-      const debouncedFn = debounce(mockFn, 100);
-
-      debouncedFn('arg1');
-      vi.advanceTimersByTime(50);
-
-      debouncedFn('arg2');
-      vi.advanceTimersByTime(50);
-
-      expect(mockFn).not.toHaveBeenCalled();
-
-      vi.advanceTimersByTime(50);
-
-      expect(mockFn).toHaveBeenCalledTimes(1);
-      expect(mockFn).toHaveBeenCalledWith('arg2');
     });
   });
 

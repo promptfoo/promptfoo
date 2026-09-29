@@ -1,5 +1,4 @@
 import { loadDefaultConfig } from '../../util/config/default';
-import { validateDefaultMcpConfigFile } from './lib/security';
 import { initializeToolRegistry, toolRegistry } from './lib/toolRegistry';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -13,7 +12,6 @@ export function registerResources(server: McpServer) {
   // Resources with proper namespacing
   server.resource('promptfoo-config', 'promptfoo://config/default', async () => {
     try {
-      validateDefaultMcpConfigFile();
       const { defaultConfig } = await loadDefaultConfig();
       return {
         contents: [
