@@ -177,6 +177,68 @@ describe('Azure Provider Tests', () => {
         expect(provider.getApiBaseUrl()).toBeUndefined();
       });
     });
+
+    describe('getAuthHeaders', () => {
+      let restoreEnv: () => void;
+
+      beforeEach(() => {
+        restoreEnv = mockProcessEnv({
+          AZURE_API_KEY: undefined,
+          AZURE_OPENAI_API_KEY: undefined,
+        });
+      });
+
+      afterEach(() => {
+        restoreEnv();
+        vi.restoreAllMocks();
+      });
+
+      it('should throw a specific error for tenant mismatch (AADSTS900023)', async () => {
+        const provider = new AzureGenericProvider('test-deployment', {
+          config: { azureTenantId: 'wrong-tenant-id' },
+        });
+        vi.spyOn(provider as any, 'getAccessToken').mockRejectedValue(
+          new Error(
+            'AADSTS900023: Specified tenant identifier "wrong-tenant-id" is neither a valid DNS name nor a valid external domain.',
+          ),
+        );
+
+        await expect(provider.getAuthHeaders()).rejects.toThrow(/tenant mismatch/);
+        await expect(provider.getAuthHeaders()).rejects.toThrow(/wrong-tenant-id/);
+      });
+
+      it('should throw a specific error for tenant mismatch (tenant identifier)', async () => {
+        const provider = new AzureGenericProvider('test-deployment', {
+          config: { azureTenantId: 'my-tenant' },
+        });
+        vi.spyOn(provider as any, 'getAccessToken').mockRejectedValue(
+          new Error('Invalid tenant identifier provided'),
+        );
+
+        await expect(provider.getAuthHeaders()).rejects.toThrow(/tenant mismatch/);
+      });
+
+      it('should throw a generic error for non-tenant-mismatch auth failures', async () => {
+        const provider = new AzureGenericProvider('test-deployment', {});
+        vi.spyOn(provider as any, 'getAccessToken').mockRejectedValue(
+          new Error('Invalid client secret provided'),
+        );
+
+        await expect(provider.getAuthHeaders()).rejects.toThrow(/Azure Authentication failed/);
+        await expect(provider.getAuthHeaders()).rejects.not.toThrow(/tenant mismatch/);
+      });
+
+      it('should include the tenant ID in the error message when available', async () => {
+        const provider = new AzureGenericProvider('test-deployment', {
+          config: { azureTenantId: 'specific-tenant-123' },
+        });
+        vi.spyOn(provider as any, 'getAccessToken').mockRejectedValue(
+          new Error('AADSTS900023: Specified tenant identifier is invalid'),
+        );
+
+        await expect(provider.getAuthHeaders()).rejects.toThrow(/specific-tenant-123/);
+      });
+    });
   });
 
   describe('AzureOpenAiChatCompletionProvider', () => {

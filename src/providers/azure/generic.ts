@@ -211,6 +211,20 @@ export class AzureGenericProvider implements ApiProvider {
         return { Authorization: 'Bearer ' + token };
       } catch (err) {
         logger.info(`Azure Authentication failed. Please check your credentials: ${err}`);
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        if (this.isTenantMismatchError(errorMessage)) {
+          const tenantId =
+            this.config?.azureTenantId ||
+            this.env?.AZURE_TENANT_ID ||
+            getEnvString('AZURE_TENANT_ID');
+          throw new Error(
+            `Azure Authentication failed due to a tenant mismatch. The provided tenant ID "${tenantId}" does not match the tenant where the service principal is registered.
+Please verify your AZURE_TENANT_ID is correct. You can find the correct tenant ID by running:
+  az account show --query tenantId -o ts
+Or use "common" as the tenant ID if your service principal is registered in multiple tenants.
+See https://www.promptfoo.dev/docs/providers/azure/ for more information.`,
+          );
+        }
         throw new Error(`Azure Authentication failed. 
 Please choose one of the following options:
   1. Set an API key via the AZURE_API_KEY environment variable.
@@ -219,6 +233,17 @@ Please choose one of the following options:
     `);
       }
     }
+  }
+
+  private isTenantMismatchError(errorMessage: string): boolean {
+    const lower = errorMessage.toLowerCase();
+    return (
+      lower.includes('aadsts900023') ||
+      lower.includes('tenant identifier') ||
+      lower.includes('tenant mismatch') ||
+      lower.includes('specified tenant') ||
+      (lower.includes('invalid') && lower.includes('tenant'))
+    );
   }
 
   getApiBaseUrl(): string | undefined {
