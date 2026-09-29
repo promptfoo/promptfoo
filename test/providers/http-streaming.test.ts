@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HttpProvider } from '../../src/providers/http';
 import * as fetchModule from '../../src/util/fetch';
+import * as monkeyPatchFetchModule from '../../src/util/fetch/monkeyPatchFetch';
 
 async function settlePendingTimers<T>(promise: Promise<T>): Promise<T> {
   await vi.runAllTimersAsync();
@@ -11,14 +12,15 @@ describe('HttpProvider streaming integration', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
+    vi.unstubAllEnvs();
   });
 
   it.each(['timeout', 'caller'])(
     'aborts a pending streaming body on %s cancellation',
     async (source) => {
-      const timeout = new AbortController();
+      vi.useFakeTimers();
+      vi.stubEnv('REQUEST_TIMEOUT_MS', '1000');
       const caller = new AbortController();
-      vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeout.signal);
       vi.spyOn(fetchModule, 'fetchWithRetries').mockImplementation(
         async (_url, options) =>
           new Response(
@@ -39,10 +41,62 @@ describe('HttpProvider streaming integration', () => {
       const result = provider.callApi('Hello', undefined, { abortSignal: caller.signal });
       const rejection = expect(result).rejects.toThrow('stream interrupted');
       await vi.waitFor(() => expect(fetchModule.fetchWithRetries).toHaveBeenCalledOnce());
-      (source === 'timeout' ? timeout : caller).abort();
+      if (source === 'timeout') {
+        await vi.advanceTimersByTimeAsync(1000);
+      } else {
+        caller.abort();
+      }
       await rejection;
     },
   );
+
+  it('keeps retry backoff outside the per-attempt and body timeouts', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('REQUEST_TIMEOUT_MS', '1000');
+    vi.stubEnv('PROMPTFOO_REQUEST_BACKOFF_MS', '2000');
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const fetch = vi
+      .spyOn(monkeyPatchFetchModule, 'monkeyPatchFetch')
+      .mockRejectedValueOnce(new Error('temporary transport failure'))
+      .mockResolvedValueOnce(new Response('Hello'));
+    const provider = new HttpProvider('https://example.com/stream', {
+      config: { method: 'POST', body: { stream: true }, maxRetries: 1 },
+    });
+
+    const result = await settlePendingTimers(provider.callApi('Hello'));
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(result.output).toBe('Hello');
+    expect(result.streamingMetrics?.timeToFirstToken).toBe(2000);
+  });
+
+  it('aborts the transport and logging clone when parsing stops early', async () => {
+    let signal: AbortSignal | null | undefined;
+    let loggedBody: Promise<string>;
+    vi.spyOn(fetchModule, 'fetchWithRetries').mockImplementation(async (_url, options) => {
+      signal = options?.signal;
+      const response = new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('data: ' + ' '.repeat(64 * 1024)));
+            signal?.addEventListener('abort', () => controller.error(signal?.reason), {
+              once: true,
+            });
+          },
+        }),
+      );
+      loggedBody = response.clone().text();
+      void loggedBody.catch(() => {});
+      return response;
+    });
+    const provider = new HttpProvider('https://example.com/stream', {
+      config: { method: 'POST', body: { stream: true }, streamFormat: 'openai-chat' },
+    });
+
+    await expect(provider.callApi('Hello')).rejects.toThrow('exceeds 64 KiB');
+    expect(signal?.aborted).toBe(true);
+    await expect(loggedBody!).rejects.toThrow('exceeds 64 KiB');
+  });
 
   it.each([{ stream: true }, '{"stream":true}', '{{prompt}}'])(
     'detects streaming in the rendered JSON body: %j',

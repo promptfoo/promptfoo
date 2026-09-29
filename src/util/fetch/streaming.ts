@@ -156,8 +156,8 @@ export async function processStreamingResponse(
       firstTokenTime = lastByteTime - requestStartTime;
     }
   } catch (error) {
-    // Release the network body when parsing stops before EOF; preserve the original error.
-    await reader.cancel().catch(() => {});
+    // A cloned body waits for both branches to cancel; let the caller abort its transport.
+    void reader.cancel().catch(() => {});
     throw error;
   } finally {
     reader.releaseLock();

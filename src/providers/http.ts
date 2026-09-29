@@ -1852,33 +1852,46 @@ export class HttpProvider implements ApiProvider {
     if (isStreaming) {
       const requestStartTime = Date.now();
       const timeoutMs = getRequestTimeoutMs();
-      const timeoutSignal = AbortSignal.timeout(timeoutMs);
+      const controller = new AbortController();
       const signal = fetchOptions.signal
-        ? AbortSignal.any([fetchOptions.signal, timeoutSignal])
-        : timeoutSignal;
+        ? AbortSignal.any([fetchOptions.signal, controller.signal])
+        : controller.signal;
       const rawResponse = await fetchWithRetries(
         url,
         { ...fetchOptions, signal },
         timeoutMs,
         this.config.maxRetries,
       );
-      const { text, streamingMetrics } = await processStreamingResponse(
-        rawResponse,
-        requestStartTime,
-        { streamFormat: this.config.streamFormat },
+      // Fetch retains its per-attempt timeout; body consumption has its own deadline.
+      const bodyTimeout = setTimeout(
+        () => controller.abort(new Error(`Streaming response timed out after ${timeoutMs} ms`)),
+        timeoutMs,
       );
-
-      const response: FetchWithCacheResult<string> = {
-        data: text,
-        cached: false,
-        status: rawResponse.status,
-        statusText: rawResponse.statusText,
-        headers: Object.fromEntries(rawResponse.headers.entries()),
-        latencyMs: Date.now() - requestStartTime,
-        deleteFromCache: async () => {},
-      };
-
-      return { response, streamingMetrics };
+      try {
+        const { text, streamingMetrics } = await processStreamingResponse(
+          rawResponse,
+          requestStartTime,
+          { streamFormat: this.config.streamFormat },
+        );
+        return {
+          response: {
+            data: text,
+            cached: false,
+            status: rawResponse.status,
+            statusText: rawResponse.statusText,
+            headers: Object.fromEntries(rawResponse.headers.entries()),
+            latencyMs: Date.now() - requestStartTime,
+            deleteFromCache: async () => {},
+          },
+          streamingMetrics,
+        };
+      } catch (error) {
+        // Abort every response branch, including the fetch logger's clone.
+        controller.abort(error);
+        throw error;
+      } finally {
+        clearTimeout(bodyTimeout);
+      }
     }
 
     const response = await fetchWithCache<string>(
