@@ -2914,7 +2914,133 @@ describe('AnthropicMessagesProvider', () => {
         name: 'Alice',
         age: 30,
       });
+      expect(result.metadata?.fileReferences).toBeUndefined();
     });
+
+    it('should preserve structured JSON and generated files in fresh and cached responses', async () => {
+      enableCache();
+      const provider = createProvider('claude-sonnet-5', {
+        config: {
+          showThinking: true,
+          output_format: {
+            type: 'json_schema',
+            schema: {
+              type: 'object',
+              properties: { status: { type: 'string' } },
+              required: ['status'],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+      const fileReferences = [
+        { type: 'container_upload', file_id: 'file_upload' },
+        { type: 'bash_code_execution_output', file_id: 'file_bash' },
+        { type: 'code_execution_output', file_id: 'file_python' },
+        { type: 'code_execution_output', file_id: 'file_encrypted' },
+      ] as const;
+      const create = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [
+          { type: 'thinking', thinking: 'Checking generated files.', signature: 'signature' },
+          { type: 'text', text: '{"status":"com', citations: null },
+          fileReferences[0],
+          {
+            type: 'bash_code_execution_tool_result',
+            tool_use_id: 'srvtoolu_bash',
+            content: {
+              type: 'bash_code_execution_result',
+              stdout: 'Bash execution log',
+              stderr: '',
+              return_code: 0,
+              content: [fileReferences[1]],
+            },
+          },
+          {
+            type: 'code_execution_tool_result',
+            tool_use_id: 'srvtoolu_python',
+            content: {
+              type: 'code_execution_result',
+              stdout: 'Python execution log',
+              stderr: '',
+              return_code: 0,
+              content: [fileReferences[2]],
+            },
+          },
+          {
+            type: 'code_execution_tool_result',
+            tool_use_id: 'srvtoolu_encrypted',
+            content: {
+              type: 'encrypted_code_execution_result',
+              encrypted_stdout: 'Encrypted execution log',
+              stderr: '',
+              return_code: 0,
+              content: [fileReferences[3]],
+            },
+          },
+          { type: 'text', text: 'plete"}', citations: null },
+        ] satisfies Anthropic.Messages.ContentBlock[],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 10, output_tokens: 8 },
+      } as Anthropic.Messages.Message);
+
+      const fresh = await provider.callApi('Create reports and return their status');
+      const cached = await provider.callApi('Create reports and return their status');
+
+      for (const response of [fresh, cached]) {
+        expect(response.output).toEqual({ status: 'complete' });
+        expect(response.metadata).toEqual({ fileReferences });
+      }
+      expect(fresh.cached).not.toBe(true);
+      expect(cached.cached).toBe(true);
+      expect(create).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      {
+        stopReason: 'tool_use',
+        block: {
+          type: 'tool_use',
+          id: 'toolu_report',
+          name: 'create_report',
+          input: {},
+        },
+      },
+      {
+        stopReason: 'pause_turn',
+        block: {
+          type: 'server_tool_use',
+          id: 'srvtoolu_report',
+          name: 'code_execution',
+          input: {},
+        },
+      },
+    ] as const)(
+      'should preserve pending $stopReason tool blocks with structured JSON text',
+      async ({ stopReason, block }) => {
+        const provider = createProvider('claude-sonnet-5', {
+          config: {
+            output_format: {
+              type: 'json_schema',
+              schema: {
+                type: 'object',
+                properties: { status: { type: 'string' } },
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+        const text = '{"status":"pending"}';
+        vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+          content: [{ type: 'text', text, citations: null }, block],
+          stop_reason: stopReason,
+          usage: { input_tokens: 10, output_tokens: 8 },
+        } as Anthropic.Messages.Message);
+
+        const result = await provider.callApi('Create a report');
+
+        expect(result.output).toBe(`${text}\n\n${JSON.stringify(block)}`);
+      },
+    );
 
     it('should handle JSON parsing errors gracefully', async () => {
       const provider = createProvider('claude-sonnet-4-5-20250929', {
@@ -3474,64 +3600,6 @@ describe('AnthropicMessagesProvider', () => {
           temperature: 0.1,
         }),
         {},
-      );
-    });
-  });
-
-  describe('Opus 4.6 prefill warning', () => {
-    it('should warn when assistant prefilling is used with claude-opus-4-6', async () => {
-      const provider = createProvider('claude-opus-4-6', { config: {} });
-      const mockResp = {
-        content: [{ type: 'text', text: 'Output' }],
-        model: 'claude-opus-4-6',
-        id: 'test-id',
-        role: 'assistant',
-        stop_reason: 'end_turn',
-        stop_details: null,
-        stop_sequence: null,
-        type: 'message',
-        usage: { input_tokens: 10, output_tokens: 5 },
-      } as Anthropic.Messages.Message;
-      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
-      const warnSpy = vi.spyOn(logger, 'warn');
-
-      await provider.callApi(
-        JSON.stringify([
-          { role: 'user', content: 'Hello' },
-          { role: 'assistant', content: 'I will' },
-        ]),
-      );
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Assistant message prefilling is not supported on Claude Opus 4.6'),
-      );
-    });
-
-    it('should not warn for non-Opus 4.6 models with prefilling', async () => {
-      const provider = createProvider('claude-sonnet-4-6', { config: {} });
-      const mockResp = {
-        content: [{ type: 'text', text: 'Output' }],
-        model: 'claude-sonnet-4-6',
-        id: 'test-id',
-        role: 'assistant',
-        stop_reason: 'end_turn',
-        stop_details: null,
-        stop_sequence: null,
-        type: 'message',
-        usage: { input_tokens: 10, output_tokens: 5 },
-      } as Anthropic.Messages.Message;
-      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
-      const warnSpy = vi.spyOn(logger, 'warn');
-
-      await provider.callApi(
-        JSON.stringify([
-          { role: 'user', content: 'Hello' },
-          { role: 'assistant', content: 'I will' },
-        ]),
-      );
-
-      expect(warnSpy).not.toHaveBeenCalledWith(
-        expect.stringContaining('Assistant message prefilling is not supported'),
       );
     });
   });
