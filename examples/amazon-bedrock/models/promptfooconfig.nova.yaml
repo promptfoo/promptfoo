@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Includes legacy Nova Premier: Bedrock end of life is September 14, 2026.
+# https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html
 description: 'Bedrock Nova Models Comparison'
 
 prompts:

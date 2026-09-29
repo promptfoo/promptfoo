@@ -1,3 +1,4 @@
+import { isCacheEnabled } from '../../../cache';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
 import { ElevenLabsCache } from '../cache';
@@ -177,15 +178,17 @@ export class ElevenLabsTTSProvider implements ApiProvider {
 
     // Check cache first
     const cacheKey = this.cache.generateKey('tts', {
+      requestVersion: 3,
       text: prompt,
       voiceId: this.config.voiceId,
       modelId: this.config.modelId,
       voiceSettings: this.config.voiceSettings,
       outputFormat: this.config.outputFormat,
+      optimizeStreamingLatency: this.config.optimizeStreamingLatency,
       seed: this.config.seed,
     });
 
-    const cached = await this.cache.get<TTSResponse>(cacheKey);
+    const cached = isCacheEnabled() ? await this.cache.get<TTSResponse>(cacheKey) : null;
     if (cached) {
       logger.debug('[ElevenLabs TTS] Cache hit');
       return this.buildResponse(cached, true, prompt.length, Date.now() - startTime);
@@ -215,15 +218,17 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       if (this.config.voiceSettings) {
         requestBody.voice_settings = this.config.voiceSettings;
       }
-      if (this.config.outputFormat) {
-        requestBody.output_format = this.config.outputFormat;
-      }
       if (this.config.seed !== undefined) {
         requestBody.seed = this.config.seed;
       }
-      if (this.config.optimizeStreamingLatency !== undefined) {
-        requestBody.optimize_streaming_latency = this.config.optimizeStreamingLatency;
+      const queryParams = new URLSearchParams();
+      if (this.config.outputFormat) {
+        queryParams.set('output_format', this.config.outputFormat);
       }
+      if (this.config.optimizeStreamingLatency !== undefined) {
+        queryParams.set('optimize_streaming_latency', String(this.config.optimizeStreamingLatency));
+      }
+      const endpoint = `/text-to-speech/${this.config.voiceId}?${queryParams}`;
 
       logger.debug('[ElevenLabs TTS] API request', {
         endpoint: `/text-to-speech/${this.config.voiceId}`,
@@ -231,13 +236,9 @@ export class ElevenLabsTTSProvider implements ApiProvider {
         modelId: this.config.modelId,
       });
 
-      const response = await this.client.post<ArrayBuffer>(
-        `/text-to-speech/${this.config.voiceId}`,
-        requestBody,
-        {
-          headers,
-        },
-      );
+      const response = await this.client.post<ArrayBuffer>(endpoint, requestBody, {
+        headers,
+      });
 
       // Process audio
       const audioData = await encodeAudio(
@@ -252,7 +253,9 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       };
 
       // Cache response
-      await this.cache.set(cacheKey, ttsResponse, audioData.sizeBytes);
+      if (isCacheEnabled()) {
+        await this.cache.set(cacheKey, ttsResponse);
+      }
 
       // Save to file if configured
       if (this.config.saveAudio && this.config.audioOutputPath) {
@@ -402,6 +405,8 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       // Create streaming configuration
       const streamConfig: TTSStreamConfig = {
         modelId: this.config.modelId,
+        outputFormat: this.config.outputFormat,
+        seed: this.config.seed,
         voiceSettings: this.config.voiceSettings,
         baseUrl: this.config.baseUrl?.replace('https:', 'wss:').replace('http:', 'ws:'),
         pronunciationDictionaryLocators: this.config.pronunciationDictionaryId
@@ -412,11 +417,12 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       // Create WebSocket connection
       const wsClient = await createStreamingConnection(apiKey, this.config.voiceId, streamConfig);
 
-      // Handle streaming
-      const session = await handleStreamingTTS(wsClient, prompt, undefined, startTime);
-
-      // Close connection
-      wsClient.close();
+      let session: Awaited<ReturnType<typeof handleStreamingTTS>>;
+      try {
+        session = await handleStreamingTTS(wsClient, prompt, undefined, startTime);
+      } finally {
+        wsClient.close();
+      }
 
       // Combine chunks into single audio buffer
       const combinedAudio = combineStreamingChunks(session.chunks);

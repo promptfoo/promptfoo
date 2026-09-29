@@ -6,7 +6,8 @@ import { sha256 } from '../../util/createHash';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
 import { AwsBedrockGenericProvider } from './base';
-import { createBedrockRequestHandler, hasProxyEnv } from './util';
+import { assertBedrockModelIsAvailable } from './index';
+import { createBedrockRequestHandler, hasProxyEnv, INFERENCE_PROFILE_PREFIX } from './util';
 import type {
   BedrockAgentRuntimeClient,
   RetrieveAndGenerateCommandInput,
@@ -81,6 +82,7 @@ export class AwsBedrockKnowledgeBaseProvider
     options: { config?: BedrockKnowledgeBaseOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     super(modelName, options);
+    assertBedrockModelIsAvailable(options.config?.modelArn || modelName);
 
     // Ensure we have a knowledgeBaseId
     if (!options.config?.knowledgeBaseId) {
@@ -183,7 +185,7 @@ export class AwsBedrockKnowledgeBaseProvider
     if (!modelArn) {
       if (/^arn:aws(?:-[^:]+)?:bedrock:/.test(this.modelName)) {
         modelArn = this.modelName; // Already has full ARN format
-      } else if (/^(?:us|eu|apac|global|jp|au)\./.test(this.modelName)) {
+      } else if (INFERENCE_PROFILE_PREFIX.test(this.modelName)) {
         // Preserve system-defined inference profile IDs instead of wrapping them
         // in a foundation-model ARN.
         modelArn = this.modelName;
@@ -193,10 +195,11 @@ export class AwsBedrockKnowledgeBaseProvider
       }
     }
 
+    const generationConfiguration = this.buildGenerationConfiguration(modelArn);
     const knowledgeBaseConfiguration: any = {
       knowledgeBaseId: this.kbConfig.knowledgeBaseId,
       modelArn,
-      generationConfiguration: this.buildGenerationConfiguration(modelArn),
+      ...(generationConfiguration && { generationConfiguration }),
     };
 
     // Only add retrieval configuration when numberOfResults is explicitly configured
