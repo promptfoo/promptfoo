@@ -990,6 +990,8 @@ tests:
         value: Provides information about recent AI news
 ```
 
+#### Voice Pricing
+
 <a id="pricing-2"></a>
 
 [Grok Voice 2.0 pricing](https://docs.x.ai/developers/models/speech-to-speech) is

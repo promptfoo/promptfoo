@@ -20,7 +20,7 @@ const usage = {
   input_tokens: 100,
   output_tokens: 20,
   total_tokens: 120,
-  input_tokens_details: { cached_tokens: 40 },
+  input_tokens_details: { cached_tokens: 40, cache_write_tokens: 0 },
   output_tokens_details: { reasoning_tokens: 5 },
 };
 const usageCountFields = [

@@ -694,7 +694,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   }
 
   generateEventId(): string {
-    return `event_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+    return `event_${crypto.randomUUID()}`;
   }
 
   async webSocketRequest(

@@ -170,11 +170,8 @@ export interface XAIFunctionCallOutput {
 // Utility Functions
 // ============================================================================
 
-/**
- * Generate a unique event ID
- */
 function generateEventId(): string {
-  return `evt_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+  return `evt_${crypto.randomUUID()}`;
 }
 
 function normalizeXAIVoice(voice: XAIVoice | undefined): XAIVoice | undefined {

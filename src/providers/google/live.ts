@@ -63,29 +63,6 @@ const ROBOTICS_API_VERSION_ERROR =
 const ROBOTICS_SUPPORTED_TOOL_FIELDS = new Set(['functionDeclarations', 'googleSearch']);
 const LIVE_TRANSLATE_SILENCE_PEAK_THRESHOLD = 32;
 
-function getRoboticsResponseModalityError(
-  isRoboticsStreamingModel: boolean,
-  responseModalities: string[] | undefined,
-): string | undefined {
-  if (!isRoboticsStreamingModel || responseModalities === undefined) {
-    return undefined;
-  }
-  return responseModalities.length === 1 && responseModalities[0] === 'TEXT'
-    ? undefined
-    : ROBOTICS_TEXT_MODALITY_ERROR;
-}
-
-function getLiveTranslateResponseModalityError(
-  responseModalities: string[] | undefined,
-): string | undefined {
-  if (responseModalities === undefined) {
-    return undefined;
-  }
-  return responseModalities.length === 1 && responseModalities[0] === 'AUDIO'
-    ? undefined
-    : LIVE_TRANSLATE_AUDIO_MODALITY_ERROR;
-}
-
 function hasStructuredOutputConfiguration(config: CompletionOptions): boolean {
   const generationConfig = config.generationConfig as
     | (NonNullable<CompletionOptions['generationConfig']> & {
@@ -100,15 +77,6 @@ function hasStructuredOutputConfiguration(config: CompletionOptions): boolean {
     generationConfig?.responseSchema !== undefined ||
     generationConfig?.responseMimeType !== undefined
   );
-}
-
-function getRoboticsStructuredOutputError(
-  isRoboticsStreamingModel: boolean,
-  config: CompletionOptions,
-): string | undefined {
-  return isRoboticsStreamingModel && hasStructuredOutputConfiguration(config)
-    ? ROBOTICS_STRUCTURED_OUTPUT_ERROR
-    : undefined;
 }
 
 function hasCodeExecutionTool(tools: Tool[]): boolean {
@@ -162,12 +130,26 @@ function hasUnsupportedRoboticsTool(tools: Tool[]): boolean {
   });
 }
 
-function getRoboticsToolError(
+function getRoboticsConfigError(
   isRoboticsStreamingModel: boolean,
+  config: CompletionOptions,
+  responseModalities: string[] | undefined,
   tools: Tool[],
 ): string | undefined {
   if (!isRoboticsStreamingModel) {
     return undefined;
+  }
+  if (config.apiVersion && config.apiVersion !== 'v1beta') {
+    return ROBOTICS_API_VERSION_ERROR;
+  }
+  if (
+    responseModalities !== undefined &&
+    (responseModalities.length !== 1 || responseModalities[0] !== 'TEXT')
+  ) {
+    return ROBOTICS_TEXT_MODALITY_ERROR;
+  }
+  if (hasStructuredOutputConfiguration(config)) {
+    return ROBOTICS_STRUCTURED_OUTPUT_ERROR;
   }
   if (hasCodeExecutionTool(tools)) {
     return ROBOTICS_CODE_EXECUTION_ERROR;
@@ -179,22 +161,6 @@ function getRoboticsToolError(
     return ROBOTICS_GROUNDING_ERROR;
   }
   return hasUnsupportedRoboticsTool(tools) ? ROBOTICS_UNSUPPORTED_TOOL_ERROR : undefined;
-}
-
-function getRoboticsConfigError(
-  isRoboticsStreamingModel: boolean,
-  config: CompletionOptions,
-  responseModalities: string[] | undefined,
-  tools: Tool[],
-): string | undefined {
-  return (
-    (isRoboticsStreamingModel && config.apiVersion && config.apiVersion !== 'v1beta'
-      ? ROBOTICS_API_VERSION_ERROR
-      : undefined) ??
-    getRoboticsResponseModalityError(isRoboticsStreamingModel, responseModalities) ??
-    getRoboticsStructuredOutputError(isRoboticsStreamingModel, config) ??
-    getRoboticsToolError(isRoboticsStreamingModel, tools)
-  );
 }
 
 function hasUnsupportedLiveTranslateToolsOrInstructions(
@@ -242,10 +208,6 @@ function getEffectiveLiveTranslateServiceTier(
   return promptServiceTier ?? providerServiceTier;
 }
 
-function hasUnsupportedLiveTranslateServiceTier(serviceTier: unknown): boolean {
-  return serviceTier !== undefined && serviceTier !== 'standard';
-}
-
 function hasMeaningfulPcm(audio: Buffer): boolean {
   // Live Translate returns signed 16-bit little-endian PCM. A small noise floor
   // prevents near-zero trailing samples from keeping a finite request alive.
@@ -263,15 +225,20 @@ function getUnsupportedLiveTranslateConfigurationError(
   responseModalities: string[] | undefined,
   serviceTier: unknown,
 ): string | undefined {
+  if (
+    responseModalities !== undefined &&
+    (responseModalities.length !== 1 || responseModalities[0] !== 'AUDIO')
+  ) {
+    return LIVE_TRANSLATE_AUDIO_MODALITY_ERROR;
+  }
   return (
-    getLiveTranslateResponseModalityError(responseModalities) ??
     (hasUnsupportedLiveTranslateToolsOrInstructions(config, systemInstruction)
       ? 'Gemini 3.5 Live Translate does not support tools or instructions.'
       : undefined) ??
     (hasStructuredOutputConfiguration(config)
       ? LIVE_TRANSLATE_STRUCTURED_OUTPUT_ERROR
       : undefined) ??
-    (hasUnsupportedLiveTranslateServiceTier(serviceTier)
+    (serviceTier !== undefined && serviceTier !== 'standard'
       ? 'Gemini 3.5 Live Translate does not support flex, priority, batch, or other non-standard inference tiers; remove service_tier/serviceTier or set it to standard.'
       : undefined)
   );
