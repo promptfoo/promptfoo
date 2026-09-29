@@ -164,6 +164,29 @@ describe('coverage ratchets', () => {
     expect(result.checkedFiles[0].file).toBe(file);
   });
 
+  it('excludes browser tests without excluding production browser helpers', () => {
+    const helper = 'src/app/src/components/model.browserHelpers.tsx';
+    const result = evaluateCoverageRatchets({
+      changedFiles: [
+        { path: 'src/app/src/components/model.browser.ts', status: 'A' },
+        { path: 'src/app/src/components/model.browser.tsx', status: 'A' },
+        { path: helper, status: 'A' },
+      ],
+      coverageMap: {},
+      repoRoot,
+      report: frontendReport,
+    });
+
+    expect(result.failures).toEqual([
+      {
+        file: helper,
+        reason: 'new source file',
+        message: `No coverage entry found for ${helper}`,
+      },
+    ]);
+    expect(result.checkedFiles).toEqual([]);
+  });
+
   it('parses added, modified, and renamed files from git name-status output', () => {
     expect(
       parseChangedFileList(

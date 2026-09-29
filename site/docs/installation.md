@@ -32,19 +32,14 @@ Install promptfoo using [npm](https://nodejs.org/en/download), [npx](https://nod
 </Tabs>
 
 :::note
-npm and npx require [Node.js](https://nodejs.org/en/download) `^20.20.0` or `>=22.22.0`.
+npm and npx require [Node.js](https://nodejs.org/en/download) `>=22.22.0`.
 :::
 
 ## Node.js runtime support
 
-:::warning Node.js 20 support ends July 30, 2026 at 00:00 UTC
+Promptfoo requires Node.js `22.22.0` or newer. Node.js 24 LTS is recommended.
 
-Node.js 20 has reached upstream end-of-life. Promptfoo releases after the support cutoff will
-require Node.js `22.22.0` or newer. Node.js 24 LTS is recommended.
-
-:::
-
-Upgrade Node.js before updating promptfoo.
+If you are on an older release, upgrade Node.js before installing or updating promptfoo.
 
 <Tabs groupId="node-version-manager">
   <TabItem value="nvm" label="nvm" default>
@@ -69,14 +64,9 @@ Upgrade Node.js before updating promptfoo.
   </TabItem>
 </Tabs>
 
-For CI, update the configured Node.js version to `24`. For a custom Docker image, use a current
+For CI, set the configured Node.js version to `24`. For a custom Docker image, use a current
 Node.js base image such as `node:24`. After switching runtimes, verify the active version with
-`node --version`, then update promptfoo.
-
-To suppress standalone runtime compatibility reminders in both the CLI and Web UI, set
-`PROMPTFOO_DISABLE_RUNTIME_WARNINGS=true`. Update checks remain independent and may still explain
-when the active Node.js version cannot install an available package update. Use
-`PROMPTFOO_DISABLE_UPDATE=true` separately to disable those checks.
+`node --version`, then install or update promptfoo.
 
 To use promptfoo as a library in your project, run `npm install promptfoo --save`.
 
