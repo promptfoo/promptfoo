@@ -108,13 +108,25 @@ export class OpenAiGenericProvider implements ApiProvider {
     return 'https://api.openai.com/v1';
   }
 
+  /**
+   * Ensure the base URL ends with `/v1` so that endpoint paths like
+   * `chat/completions` resolve correctly.
+   */
+  private ensureV1BaseUrl(apiBaseUrl: string): string {
+    const trimmed = apiBaseUrl.replace(/\/+$/, '');
+    if (/\/v1$/.test(trimmed)) {
+      return trimmed;
+    }
+    return `${trimmed}/v1`;
+  }
+
   /** Pass a prompt-merged config to resolve that call's endpoint. */
   getApiUrl(config: OpenAiSharedOptions = this.config): string {
     if (config.apiHost) {
       return `https://${config.apiHost}/v1`;
     }
     if (config.apiBaseUrl) {
-      return config.apiBaseUrl;
+      return this.ensureV1BaseUrl(config.apiBaseUrl);
     }
     const envApiHost = this.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
     if (envApiHost) {

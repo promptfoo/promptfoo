@@ -30,11 +30,32 @@ describe('OpenAI Provider', () => {
       expect(customProvider.getApiUrl()).toBe('https://custom.openai.com/v1');
     });
 
-    it('should use custom API base URL', () => {
+    it('should use custom API base URL and append /v1 when missing', () => {
       const customProvider = new OpenAiGenericProvider('test-model', {
         config: { apiBaseUrl: 'https://custom.api.com/openai' },
       });
-      expect(customProvider.getApiUrl()).toBe('https://custom.api.com/openai');
+      expect(customProvider.getApiUrl()).toBe('https://custom.api.com/openai/v1');
+    });
+
+    it('should not double-append /v1 when apiBaseUrl already ends with /v1', () => {
+      const customProvider = new OpenAiGenericProvider('test-model', {
+        config: { apiBaseUrl: 'https://custom.api.com/openai/v1' },
+      });
+      expect(customProvider.getApiUrl()).toBe('https://custom.api.com/openai/v1');
+    });
+
+    it('should normalize trailing slash when apiBaseUrl ends with /v1/', () => {
+      const customProvider = new OpenAiGenericProvider('test-model', {
+        config: { apiBaseUrl: 'https://custom.api.com/openai/v1/' },
+      });
+      expect(customProvider.getApiUrl()).toBe('https://custom.api.com/openai/v1');
+    });
+
+    it('should append /v1 to apiBaseUrl with nested path', () => {
+      const customProvider = new OpenAiGenericProvider('test-model', {
+        config: { apiBaseUrl: 'http://localhost:15500/proxy/openai' },
+      });
+      expect(customProvider.getApiUrl()).toBe('http://localhost:15500/proxy/openai/v1');
     });
 
     it('should prefer an explicit API base URL over an environment API host', () => {
