@@ -62,6 +62,35 @@ describe('AssertsForm', () => {
     expect(onAdd).toHaveBeenLastCalledWith([{ type, value }]);
   });
 
+  it.each([
+    { from: 'contains-any', value: 'foo', to: 'contains', expected: 'foo' },
+    { from: 'contains-all', value: 'foo', to: 'contains', expected: 'foo' },
+    {
+      from: 'trajectory:tool-set',
+      value: ['lookup'],
+      to: 'trajectory:tool-used',
+      expected: ['lookup'],
+    },
+    {
+      from: 'trajectory:tool-set',
+      value: ['lookup'],
+      to: 'trajectory:tool-sequence',
+      expected: ['lookup'],
+    },
+  ])(
+    'preserves saved values when switching $from to $to',
+    async ({ from, value, to, expected }) => {
+      const onAdd = vi.fn();
+      const user = userEvent.setup();
+      renderComponent(
+        <AssertsForm onAdd={onAdd} initialValues={[{ type: from as AssertionType, value }]} />,
+      );
+      await user.click(screen.getByRole('combobox', { name: 'Type' }));
+      await user.click(screen.getByRole('option', { name: to }));
+      expect(onAdd).toHaveBeenLastCalledWith([{ type: to, value: expected }]);
+    },
+  );
+
   it('keeps raw text when switching structured values to text and back', async () => {
     const user = userEvent.setup();
     renderComponent(

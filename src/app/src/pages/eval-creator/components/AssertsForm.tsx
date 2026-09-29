@@ -104,7 +104,10 @@ const ARRAY_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
 ]);
 
 const usesStructuredValue = (type: AssertionType) =>
-  ARRAY_VALUE_ASSERTION_TYPES.has(type) || type.endsWith('trajectory:tool-set');
+  ARRAY_VALUE_ASSERTION_TYPES.has(type) ||
+  ['trajectory:tool-set', 'trajectory:tool-used', 'trajectory:tool-sequence'].some((value) =>
+    type.endsWith(value),
+  );
 
 function parseAssertionValue(type: AssertionType, value: Assertion['value']): Assertion['value'] {
   if (typeof value === 'string' && usesStructuredValue(type)) {
@@ -201,7 +204,10 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                             value: usesStructuredValue(newValue as AssertionType)
                               ? parseAssertionValue(newValue as AssertionType, a.value)
                               : usesStructuredValue(a.type)
-                                ? (rawValues[index] ?? JSON.stringify(a.value, null, 2))
+                                ? (rawValues[index] ??
+                                  (typeof a.value === 'string'
+                                    ? a.value
+                                    : JSON.stringify(a.value, null, 2)))
                                 : a.value,
                           }
                         : a,
@@ -241,7 +247,9 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                         ? assert.value
                         : typeof assert.value === 'number'
                           ? String(assert.value)
-                          : assert.value !== undefined && usesStructuredValue(assert.type)
+                          : assert.value !== undefined &&
+                              typeof assert.value !== 'string' &&
+                              usesStructuredValue(assert.type)
                             ? JSON.stringify(assert.value, null, 2)
                             : '')
                     }
