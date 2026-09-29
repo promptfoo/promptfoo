@@ -246,10 +246,37 @@ function withMergedAnthropicUsage(
   return usage ? { ...response, usage } : response;
 }
 
+/** The fields that price one Messages API request. */
+type BilledCall = Pick<Anthropic.Messages.Message, 'stop_details' | 'stop_reason' | 'usage'>;
+
+/**
+ * A cached turn that took several requests (a resumed `pause_turn`) keeps each request's
+ * billing fields, so a cache hit prices it request by request like the fresh call did. Pricing
+ * the merged usage instead would bill a final refusal that the API doesn't charge for.
+ */
+type CachedAnthropicMessage = Anthropic.Messages.Message & { billedCalls?: BilledCall[] };
+
+function toCachedMessage(
+  message: Anthropic.Messages.Message,
+  responses: Anthropic.Messages.Message[],
+): CachedAnthropicMessage {
+  if (responses.length === 1) {
+    return message;
+  }
+  return {
+    ...message,
+    billedCalls: responses.map(({ stop_details, stop_reason, usage }) => ({
+      stop_details,
+      stop_reason,
+      usage,
+    })),
+  };
+}
+
 function getAnthropicCostFromMessage(
   modelName: string,
   config: AnthropicMessageOptions,
-  message: Anthropic.Messages.Message,
+  message: BilledCall,
 ): number | undefined {
   // Since September 24, 2026, only these categories bill refusals before any output.
   if (
@@ -267,6 +294,17 @@ function getAnthropicCostFromMessage(
     message.usage?.cache_read_input_tokens ?? undefined,
     message.usage?.cache_creation_input_tokens ?? undefined,
   );
+}
+
+function getAnthropicCostFromCalls(
+  modelName: string,
+  config: AnthropicMessageOptions,
+  calls: BilledCall[],
+): number | undefined {
+  return calls.reduce<number | undefined>((total, call) => {
+    const callCost = getAnthropicCostFromMessage(modelName, config, call);
+    return total != null && callCost != null ? total + callCost : undefined;
+  }, 0);
 }
 
 export class AnthropicMessagesProvider extends AnthropicGenericProvider {
@@ -766,12 +804,14 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
    * warning is suppressed (it was already logged when the response was first fetched), and
    * the `cached` marker is set. Keeping one builder is what stops the two paths drifting —
    * they have diverged before, which is why the cached-refusal regression test exists.
+   * `billedCalls` are the requests the turn took, each priced on its own.
    */
   private buildMessageResponse(
     message: Anthropic.Messages.Message,
     config: AnthropicMessageOptions,
     processedOutputFormat: { type?: string } | undefined,
     cached: boolean,
+    billedCalls: BilledCall[] = [message],
   ): ProviderResponse {
     const finishReason = normalizeFinishReason(message.stop_reason);
     let output = outputFromMessage(message, config.showThinking ?? true);
@@ -795,7 +835,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       tokenUsage: getTokenUsage(message, cached),
       ...(finishReason && { finishReason }),
       ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
-      cost: getAnthropicCostFromMessage(this.modelName, config, message),
+      cost: getAnthropicCostFromCalls(this.modelName, config, billedCalls),
       ...(cached && { cached: true }),
     };
   }
@@ -1099,11 +1139,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         try {
           // Stays inside this try: the catch below is the legacy plain-string cache fallback,
           // and it must keep covering parse/format failures from the whole build.
+          const cachedMessage = JSON.parse(cachedResponse) as CachedAnthropicMessage;
           return this.buildMessageResponse(
-            JSON.parse(cachedResponse) as Anthropic.Messages.Message,
+            cachedMessage,
             config,
             processedOutputFormat,
             true,
+            cachedMessage.billedCalls,
           );
         } catch {
           // Could be an old cache item, which was just the text content from TextBlock.
@@ -1132,10 +1174,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         responses,
         shouldStream,
       });
-      const cost = responses.reduce<number | undefined>((total, message) => {
-        const messageCost = getAnthropicCostFromMessage(this.modelName, config, message);
-        return total != null && messageCost != null ? total + messageCost : undefined;
-      }, 0);
+      const cost = getAnthropicCostFromCalls(this.modelName, config, responses);
 
       // Only attach the key when a tool actually ran: an always-present empty array
       // would break downstream filters that test `metadata?.toolCalls?.length > 0`.
@@ -1161,17 +1200,20 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
             ephemeralCacheKey,
             cacheClearGeneration,
             getCacheTtlMs(),
-            JSON.stringify(resolvedMessage),
+            JSON.stringify(toCachedMessage(resolvedMessage, responses)),
           );
         } catch (err) {
           logger.error(`Failed to cache response: ${String(err)}`);
         }
       }
 
-      const response = {
-        ...this.buildMessageResponse(resolvedMessage, config, processedOutputFormat, false),
-        cost,
-      };
+      const response = this.buildMessageResponse(
+        resolvedMessage,
+        config,
+        processedOutputFormat,
+        false,
+        responses,
+      );
       return mcpMetadata
         ? { ...response, metadata: { ...response.metadata, ...mcpMetadata } }
         : response;

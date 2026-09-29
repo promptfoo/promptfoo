@@ -2719,6 +2719,29 @@ describe('AnthropicMessagesProvider', () => {
       expect(warnSpy).toHaveBeenCalledTimes(1);
     });
 
+    it('prices a cached resumed turn per request, like the fresh call', async () => {
+      provider = createProvider('claude-opus-5-5');
+      const create = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce(pausedTurn)
+        .mockResolvedValueOnce({
+          content: [],
+          model: 'claude-opus-5-5',
+          stop_reason: 'refusal',
+          stop_details: { type: 'refusal', category: 'cyber', explanation: null },
+          usage: { input_tokens: 2000, output_tokens: 0 },
+        } as unknown as Anthropic.Messages.Message);
+
+      const fresh = await provider.callApi('Research the exploit');
+      const cached = await provider.callApi('Research the exploit');
+
+      expect(create).toHaveBeenCalledTimes(2);
+      expect(cached.cached).toBe(true);
+      // Only the paused request is billed: the API doesn't charge a cyber refusal before output.
+      expect(fresh.cost).toBeCloseTo(0.006, 10);
+      expect(cached.cost).toBeCloseTo(0.006, 10);
+    });
+
     it('resumes a paused turn through the streaming path', async () => {
       provider = createProvider('claude-sonnet-4-6', { config: { stream: true } });
       const stream = vi
