@@ -429,7 +429,7 @@ async function pollBackgroundResponse(
     throw error;
   }
 
-  return { data, status, statusText, headers: responseHeaders };
+  return { data, status, statusText, headers: responseHeaders, cacheHit: false };
 }
 
 async function createBackgroundResponseWithCancellation(
@@ -598,7 +598,6 @@ async function resolveBackgroundResponse(
         cancelOnStop,
       )),
       retried: true,
-      cacheHit: retried.cached,
     };
   }
 
@@ -769,6 +768,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-6-astra',
     'gpt-6-sol',
     'gpt-6-luna',
+    'gpt-6.1-sol',
     // GPT-5.6 models
     'gpt-5.6',
     'gpt-5.6-sol',
@@ -894,7 +894,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     );
     const variant = getGpt6Variant(billingModelName);
     if (
-      (variant === 'sol' || variant === 'luna') &&
+      (variant === 'sol' || variant === 'luna' || variant === '6.1-sol') &&
       usesAzureOpenAiBilling(config, this.getApiUrl(), this.getGenAISystem())
     ) {
       const { cost: _existingCost, ...unbilled } = result;

@@ -5,6 +5,7 @@ import { HuggingfaceTextGenerationProvider } from '../../src/providers/huggingfa
 import { LocalAiChatProvider, LocalAiCompletionProvider } from '../../src/providers/localai';
 import { OllamaChatProvider, OllamaCompletionProvider } from '../../src/providers/ollama';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
+import { OpenAiTtsProvider } from '../../src/providers/openai/tts';
 import { ReplicateImageProvider, ReplicateProvider } from '../../src/providers/replicate';
 import { ResultFailureReason } from '../../src/types/index';
 import { fetchWithRetries } from '../../src/util/fetch/index';
@@ -155,6 +156,64 @@ describe('latency assertions with real provider caching', () => {
       expect(fetchWithRetries).toHaveBeenCalledTimes(3);
     },
   );
+
+  it('grades a live poll after replaying an unfinished background job', async () => {
+    vi.mocked(fetchWithRetries)
+      .mockResolvedValueOnce(Response.json({ id: 'resp_pending', status: 'queued', output: [] }))
+      .mockResolvedValueOnce(Response.json({ error: { message: 'Unavailable' } }, { status: 503 }))
+      .mockResolvedValueOnce(
+        Response.json({
+          id: 'resp_pending',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: output }],
+            },
+          ],
+        }),
+      );
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'fixture-key',
+        background: true,
+        headers: { 'OpenAI-Project': 'fixture-project' },
+      },
+    });
+    expect((await provider.callApi('hello')).error).toContain('Unavailable');
+
+    const [fresh] = await evaluateLatency(provider);
+    expect(fresh.success).toBe(true);
+    expect(fresh.response).toMatchObject({ output, cacheHit: false });
+    expect(fetchWithRetries).toHaveBeenCalledTimes(3);
+
+    const [replay] = await evaluateLatency(provider);
+    expect(replay.failureReason).toBe(ResultFailureReason.ERROR);
+    expect(replay.error).toContain('does not support cached results');
+    expect(fetchWithRetries).toHaveBeenCalledTimes(3);
+  });
+
+  it('grades live speech subscribers and rejects a later stored replay', async () => {
+    const audio = createDeferred<Response>();
+    vi.mocked(fetchWithRetries).mockImplementation(() => audio.promise);
+    const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'fixture-key' } });
+    const calls = [evaluateLatency(provider), evaluateLatency(provider)];
+    await vi.advanceTimersByTimeAsync(25);
+    expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+    audio.resolve(new Response(new Uint8Array([1, 2, 3]), { status: 200 }));
+    const results = (await Promise.all(calls)).flat();
+
+    expect(results.map((result) => result.response?.cached).sort()).toEqual([false, true]);
+    for (const result of results) {
+      expect(result.failureReason).not.toBe(ResultFailureReason.ERROR);
+      expect(result.error).toContain('threshold 10ms');
+    }
+    const [replay] = await evaluateLatency(provider);
+    expect(replay.failureReason).toBe(ResultFailureReason.ERROR);
+    expect(replay.error).toContain('does not support cached results');
+    expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+  });
 
   it('grades a fresh replacement after discarding an expired cached background job', async () => {
     vi.mocked(fetchWithRetries)
