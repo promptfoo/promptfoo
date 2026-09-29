@@ -177,6 +177,16 @@ describe('artifact projection compatibility', () => {
     expect(trace).toEqual(original);
   });
 
+  it.each([undefined, null, 0])('preserves a legacy span name of %s', (name) => {
+    const trace = { spans: [{ name, attributes: { operation: 'provider-call' } }] };
+    const [projected] = projectTracesForOutput(
+      [trace as unknown as TraceData],
+      flags({ shouldStripResponseOutput: true }),
+    );
+    expect(projected.spans[0].name).toBe(name);
+    expect(projected.spans[0].attributes).toEqual({ operation: 'provider-call' });
+  });
+
   it('removes agent tool payloads and duplicated audio only with response-output stripping', () => {
     const metadata = {
       toolCalls: [{ input: 'tool input', output: 'tool output' }],

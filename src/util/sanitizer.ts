@@ -719,6 +719,24 @@ function stripConfigProviderPrompts(provider: unknown): unknown {
   );
 }
 
+// Assertion sets nest through `assert`; other assertion values remain opaque.
+export function stripAssertionPrompts<T>(assertion: T, depth = 0): T {
+  if (!Array.isArray(assertion) && !isRecord(assertion)) {
+    return assertion;
+  }
+  if (depth > OUTPUT_SANITIZE_MAX_DEPTH) {
+    return REDACTED as T;
+  }
+  if (Array.isArray(assertion)) {
+    return assertion.map((item) => stripAssertionPrompts(item, depth + 1)) as T;
+  }
+  const { rubricPrompt: _rubricPrompt, ...projected } = assertion as Record<string, unknown>;
+  if (Array.isArray(projected.assert)) {
+    projected.assert = stripAssertionPrompts(projected.assert, depth + 1);
+  }
+  return projected as T;
+}
+
 /** Sanitize exported/shared configuration while preserving safe tracing env references. */
 export function sanitizeConfigForOutput(
   config: Partial<UnifiedConfig>,
@@ -801,12 +819,16 @@ export function sanitizeConfigForOutput(
       continue;
     }
     if (options.shouldStripPromptText) {
+      if (Array.isArray(test.assert)) {
+        test.assert = stripAssertionPrompts(test.assert);
+      }
       if ('prompts' in test) {
         test.prompts = stripConfigPromptSelectors(test.prompts);
       }
       if (isRecord(test.options)) {
         delete test.options.prefix;
         delete test.options.suffix;
+        delete test.options.rubricPrompt;
       }
     }
     if (stripVars) {
