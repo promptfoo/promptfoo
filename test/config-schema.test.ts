@@ -4,6 +4,8 @@ import * as path from 'path';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { UnifiedConfigSchema } from '../src/types';
+import { normalizeConfigDraft, UnifiedConfigDraftSchema } from '../src/types/configDraft';
 
 describe('config-schema.json', () => {
   let schema: any;
@@ -184,6 +186,39 @@ describe('config-schema.json', () => {
       expect(redteamConfig.properties).toHaveProperty('strategies');
     });
 
+    it('documents only supported external trace backends and their required endpoint', () => {
+      const tracingConfig = resolveRef(
+        schema.definitions?.PromptfooConfigSchema?.properties?.tracing,
+      );
+      const provider = resolveRef(tracingConfig.properties.provider);
+      const providers = provider.oneOf;
+      const tempo = providers.find(
+        (option: { properties: { id: { const: string } } }) =>
+          option.properties.id.const === 'tempo',
+      );
+      const braintrust = providers.find(
+        (option: { properties: { id: { const: string } } }) =>
+          option.properties.id.const === 'braintrust',
+      );
+      const langfuse = providers.find(
+        (option: { properties: { id: { const: string } } }) =>
+          option.properties.id.const === 'langfuse',
+      );
+
+      expect(providers).toHaveLength(3);
+      expect(tempo.required).toEqual(expect.arrayContaining(['id', 'endpoint']));
+      expect(tempo.properties.timeout.exclusiveMinimum).toBe(0);
+      expect(braintrust.required).toEqual(
+        expect.arrayContaining(['id', 'endpoint', 'projectId', 'auth']),
+      );
+      expect(braintrust.properties.auth.required).toContain('token');
+      expect(langfuse.required).toEqual(expect.arrayContaining(['id', 'endpoint', 'auth']));
+      expect(langfuse.properties.auth.required).toEqual(
+        expect.arrayContaining(['username', 'password']),
+      );
+      expect(tracingConfig.properties.queryDelay.minimum).toBe(0);
+    });
+
     it('should validate that plugin patterns are properly escaped', () => {
       const findPatterns = (obj: any): string[] => {
         const patterns: string[] = [];
@@ -244,6 +279,159 @@ describe('config-schema.json', () => {
       expect(properties).toHaveProperty('redteam');
       expect(properties).toHaveProperty('scenarios');
       expect(properties).toHaveProperty('defaultTest');
+    });
+  });
+
+  describe('runtime input parity', () => {
+    const baseConfig = { prompts: ['hello'], providers: ['echo'] };
+
+    it.each([
+      ['providers', { providers: ['echo'] }, true],
+      ['targets', { targets: ['echo'] }, true],
+      ['both spellings', { providers: ['echo'], targets: ['echo'] }, false],
+    ] as const)('agrees on %s for provider selection', (_name, selection, expected) => {
+      const config = { prompts: ['hello'], ...selection };
+      const validate = ajv.compile(schema);
+
+      expect(UnifiedConfigSchema.safeParse(config).success).toBe(expected);
+      expect(validate(config), JSON.stringify(validate.errors)).toBe(expected);
+    });
+
+    it('leaves provider selection optional for authoring but required for a complete evaluation', () => {
+      const config = { prompts: ['hello'] };
+      const validate = ajv.compile(schema);
+
+      expect(validate(config), JSON.stringify(validate.errors)).toBe(true);
+      expect(UnifiedConfigSchema.safeParse(config).success).toBe(false);
+    });
+
+    it.each([
+      ['defaulted nested lists may be omitted', {}, true],
+      ['boolean tracing settings', { tracing: { enabled: true, maxDepth: 2 } }, true],
+      [
+        'recursive tracing settings',
+        {
+          tracing: {
+            enabled: false,
+            strategies: {
+              fixture: { enabled: true, strategies: { nested: { enabled: false, maxDepth: 2 } } },
+            },
+          },
+        },
+        true,
+      ],
+      ['string tracing settings', { tracing: { enabled: 'yes' } }, false],
+      [
+        'string tracing settings in a recursive override',
+        { tracing: { strategies: { fixture: { enabled: 'yes' } } } },
+        false,
+      ],
+      [
+        'invalid constraints in a recursive override',
+        { tracing: { strategies: { fixture: { maxDepth: 0 } } } },
+        false,
+      ],
+    ] as const)('agrees on %s', (name, redteam, expected) => {
+      const config = {
+        ...baseConfig,
+        redteam:
+          name === 'defaulted nested lists may be omitted'
+            ? redteam
+            : { plugins: [], strategies: [], ...redteam },
+      };
+      const validate = ajv.compile(schema);
+
+      expect(UnifiedConfigSchema.safeParse(config).success).toBe(expected);
+      expect(validate(config), JSON.stringify(validate.errors)).toBe(expected);
+    });
+
+    it.each([
+      ['defaulted top-level tracing settings', { tracing: { otlp: { http: {} } } }],
+      ['scalar environment inputs before normalization', { env: { CUSTOM_RETRIES: 2 } }],
+      ['nullable extensions before normalization', { extensions: null }],
+    ] as const)('accepts %s in both validators', (_name, partialConfig) => {
+      const config = { ...baseConfig, ...partialConfig };
+      const validate = ajv.compile(schema);
+
+      expect(UnifiedConfigSchema.safeParse(config).success).toBe(true);
+      expect(validate(config), JSON.stringify(validate.errors)).toBe(true);
+    });
+  });
+
+  describe('runtime field contract for incomplete drafts', () => {
+    it('allows missing top-level evaluation inputs while preserving nested field validation', () => {
+      const draft = { description: 'Unfinished evaluation' };
+      expect(UnifiedConfigDraftSchema.safeParse(draft).success).toBe(true);
+      expect(UnifiedConfigDraftSchema.safeParse({}).success).toBe(true);
+      expect(UnifiedConfigSchema.safeParse(draft).success).toBe(false);
+      expect(UnifiedConfigDraftSchema.safeParse({ tracing: { otlp: { http: {} } } }).success).toBe(
+        true,
+      );
+
+      const invalid = UnifiedConfigDraftSchema.safeParse({ tracing: { enabled: 'yes' } });
+      expect(invalid.success).toBe(false);
+      if (!invalid.success) {
+        expect(invalid.error.issues[0].path).toEqual(['tracing', 'enabled']);
+      }
+    });
+
+    it('rejects basePath only in web drafts while retaining it in the file and runtime contracts', () => {
+      const config = { prompts: ['hello'], providers: ['echo'], basePath: '/work/config' };
+      expect(UnifiedConfigSchema.safeParse(config).success).toBe(true);
+      expect(ajv.compile(schema)(config)).toBe(true);
+
+      const webDraft = UnifiedConfigDraftSchema.safeParse(config);
+      expect(webDraft.success).toBe(false);
+      if (!webDraft.success) {
+        expect(webDraft.error.issues).toEqual([
+          expect.objectContaining({ path: ['basePath'], message: expect.stringContaining('CLI') }),
+        ]);
+      }
+    });
+
+    it('accepts either provider input but identifies conflicting aliases in a draft', () => {
+      for (const selection of [{ providers: ['echo'] }, { targets: ['echo'] }]) {
+        expect(UnifiedConfigDraftSchema.safeParse(selection).success).toBe(true);
+        expect(UnifiedConfigSchema.safeParse({ prompts: ['hello'], ...selection }).success).toBe(
+          true,
+        );
+      }
+
+      const invalid = UnifiedConfigDraftSchema.safeParse({
+        providers: ['echo'],
+        targets: ['echo'],
+      });
+      expect(invalid.success).toBe(false);
+      if (!invalid.success) {
+        expect(invalid.error.issues).toEqual([
+          expect.objectContaining({
+            path: ['providers'],
+            message: expect.stringContaining('both'),
+          }),
+        ]);
+      }
+    });
+
+    it('normalizes targets for consumers without mutating the authored draft or adding defaults', () => {
+      const draft = {
+        description: 'Authoring draft',
+        targets: ['echo'],
+        customEditorSetting: { retained: true },
+      };
+      const normalized = normalizeConfigDraft(draft);
+
+      expect(normalized).toEqual({
+        description: 'Authoring draft',
+        providers: ['echo'],
+        customEditorSetting: { retained: true },
+      });
+      expect(draft).toHaveProperty('targets', ['echo']);
+      expect(draft).not.toHaveProperty('providers');
+
+      const canonical = { providers: ['echo'] };
+      expect(normalizeConfigDraft(canonical)).toBe(canonical);
+      const partial = { description: 'No provider yet' };
+      expect(normalizeConfigDraft(partial)).toBe(partial);
     });
   });
 

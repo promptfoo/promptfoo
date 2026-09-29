@@ -72,6 +72,40 @@ describe('HttpProvider', () => {
     await expect(provider.callApi('test prompt')).rejects.toThrow('Network error');
   });
 
+  it('preserves original provider token usage when a response transform returns only text', async () => {
+    provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        body: { prompt: '{{ prompt }}' },
+        transformResponse: (data: any) => data.output,
+      },
+    });
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({
+        output: 'response text',
+        tokenUsage: {
+          prompt: 12,
+          completion: 7,
+          total: 19,
+          completionDetails: { reasoning: 3 },
+        },
+      }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+
+    await expect(provider.callApi('test prompt')).resolves.toMatchObject({
+      output: 'response text',
+      tokenUsage: {
+        prompt: 12,
+        completion: 7,
+        total: 19,
+        completionDetails: { reasoning: 3 },
+      },
+    });
+  });
+
   it('should use custom method/headers/queryParams', async () => {
     provider = new HttpProvider(mockUrl, {
       config: {

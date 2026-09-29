@@ -96,29 +96,27 @@ describe('SettingsPanel', () => {
       setter: 'setWordBreak' as const,
       expectedNewValue: 'break-all',
     },
-  ])('should update the $setter setting when the "$name" toggle is clicked', async ({
-    name,
-    initialState,
-    setter,
-    expectedNewValue,
-  }) => {
-    const user = userEvent.setup();
-    renderWithProviders(<SettingsPanel {...defaultProps} />);
+  ])(
+    'should update the $setter setting when the "$name" toggle is clicked',
+    async ({ name, initialState, setter, expectedNewValue }) => {
+      const user = userEvent.setup();
+      renderWithProviders(<SettingsPanel {...defaultProps} />);
 
-    const toggle = screen.getByRole('checkbox', { name });
-    expect(toggle).toBeInTheDocument();
+      const toggle = screen.getByRole('checkbox', { name });
+      expect(toggle).toBeInTheDocument();
 
-    if (initialState) {
-      expect(toggle).toBeChecked();
-    } else {
-      expect(toggle).not.toBeChecked();
-    }
+      if (initialState) {
+        expect(toggle).toBeChecked();
+      } else {
+        expect(toggle).not.toBeChecked();
+      }
 
-    await user.click(toggle);
+      await user.click(toggle);
 
-    expect(mockStore[setter]).toHaveBeenCalledTimes(1);
-    expect(mockStore[setter]).toHaveBeenCalledWith(expectedNewValue);
-  });
+      expect(mockStore[setter]).toHaveBeenCalledTimes(1);
+      expect(mockStore[setter]).toHaveBeenCalledWith(expectedNewValue);
+    },
+  );
 
   it('should call setMaxTextLength when slider value is committed via keyboard', async () => {
     const user = userEvent.setup();

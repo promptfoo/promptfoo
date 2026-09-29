@@ -14,6 +14,10 @@ Follow these rules as defense in depth. Code Scan is a best-effort analysis tool
 - Keep filesystem MCP roots absolute and normalized. Do not widen the root beyond the
   repository being scanned, and always stop child processes on success, failure, or
   abort.
+- On Windows, run npm's JS entrypoint with `process.execPath` (see `mcp/filesystem.ts`):
+  `.cmd` shims need a shell, and bare command names are looked up in the cwd first.
+  Keep canonical npm entrypoints and the npm cwd outside the scanned repository, prefer
+  the running Node on PATH, and terminate the npm process tree during cleanup.
 - Preserve npm/npx environment sanitization when spawning tool installers or MCP
   servers. When adding install paths, make the registry/cwd/env explicit and cover
   PR-controlled npm config in tests.

@@ -17,6 +17,12 @@ While Script Providers are particularly useful for evaluating chains, they can g
 
 To use a script provider, you need to create an executable that takes a prompt as its first argument and returns the result of the API call. The script should be able to be invoked from the command line.
 
+:::note Structured provider responses
+
+An `exec:` provider treats standard output as the response `output`, even when the script prints JSON. It cannot populate top-level fields such as `guardrails`. Use the [Python](/docs/providers/python#implementing-guardrails), [Ruby](/docs/providers/ruby#implementing-guardrails), [JavaScript](/docs/providers/custom-api#guardrail-responses), or [HTTP](/docs/providers/http#guardrails-support) provider when an assertion needs a normalized guardrail response.
+
+:::
+
 Your script receives three arguments:
 
 1. **prompt** - The rendered prompt string
