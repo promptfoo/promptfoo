@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
+import { getEnvString } from '../../../src/envars';
 import {
   cleanAssistantResponse,
   generateChatKitHTML,
@@ -353,6 +354,48 @@ describe('OpenAiChatKitProvider', () => {
         }
       },
     );
+
+    it('keeps concurrent provider transport settings separate from the suite', async () => {
+      const observed: Array<{ verification: boolean | undefined; ca: string | undefined }> = [];
+      const fetchSpy = vi
+        .spyOn(fetchModule, 'fetchWithRetries')
+        .mockImplementation(async (_url, options) => {
+          await Promise.resolve();
+          observed.push({
+            verification: options?.rejectUnauthorized,
+            ca: getEnvString('PROMPTFOO_CA_CERT_PATH'),
+          });
+          return new Response(JSON.stringify({ client_secret: 'fixture-session' }));
+        });
+      const verified = new OpenAiChatKitProvider('wf_fixture', {
+        config: { apiKey: 'fixture-key' },
+        env: { PROMPTFOO_INSECURE_SSL: 'false', PROMPTFOO_CA_CERT_PATH: 'provider-a.pem' },
+      });
+      const insecure = new OpenAiChatKitProvider('wf_fixture', {
+        config: { apiKey: 'fixture-key' },
+        env: { PROMPTFOO_INSECURE_SSL: 'true', PROMPTFOO_CA_CERT_PATH: 'provider-b.pem' },
+      });
+      try {
+        await cliState.withEnv(
+          { PROMPTFOO_INSECURE_SSL: 'true', PROMPTFOO_CA_CERT_PATH: 'suite.pem' },
+          async () => {
+            await Promise.all([
+              (verified as any).createChatKitClientSecret(),
+              (insecure as any).createChatKitClientSecret(),
+            ]);
+            expect(getEnvString('PROMPTFOO_CA_CERT_PATH')).toBe('suite.pem');
+          },
+        );
+        expect(observed).toEqual(
+          expect.arrayContaining([
+            { verification: true, ca: 'provider-a.pem' },
+            { verification: false, ca: 'provider-b.pem' },
+          ]),
+        );
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
 
     it('uses provider configuration and keeps sessions out of the response cache', async () => {
       const fetchSpy = vi.spyOn(fetchModule, 'fetchWithRetries').mockImplementation(

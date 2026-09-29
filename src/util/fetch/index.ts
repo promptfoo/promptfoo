@@ -756,7 +756,8 @@ export async function fetchWithRetries(
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
       }
 
-      if (response && isRateLimited(response)) {
+      // A completed request can exhaust the quota for the next request.
+      if ((response.status < 200 || response.status >= 300) && isRateLimited(response)) {
         await handleRateLimitedResponse(response, url, i, maxRetries, signal);
         continue;
       }

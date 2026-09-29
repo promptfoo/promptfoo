@@ -790,23 +790,25 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     for (const [name, value] of Object.entries(this.getOpenAiRequestHeaders())) {
       headers.set(name, value);
     }
-    const response = await fetchWithRetries(
-      appendOpenAiApiPath(this.getApiUrl(), 'chatkit/sessions'),
-      {
-        method: 'POST',
-        signal,
-        rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
-        headers,
-        body: JSON.stringify({
-          workflow: {
-            id: workflowId,
-            ...(this.chatKitConfig.version ? { version: this.chatKitConfig.version } : {}),
-          },
-          user: userId,
-        }),
-      },
-      getRequestTimeoutMs(),
-      this.config.maxRetries ?? 0,
+    const response = await cliState.withEnv({ ...cliState.env, ...this.env }, () =>
+      fetchWithRetries(
+        appendOpenAiApiPath(this.getApiUrl(), 'chatkit/sessions'),
+        {
+          method: 'POST',
+          signal,
+          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
+          headers,
+          body: JSON.stringify({
+            workflow: {
+              id: workflowId,
+              ...(this.chatKitConfig.version ? { version: this.chatKitConfig.version } : {}),
+            },
+            user: userId,
+          }),
+        },
+        getRequestTimeoutMs(),
+        this.config.maxRetries ?? 0,
+      ),
     );
     if (!response.ok) {
       throw new Error(`ChatKit session request failed: ${response.status} ${response.statusText}`);
@@ -1203,6 +1205,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       this.getApiUrl(),
       this.getApiKey(),
       this.getOpenAiRequestHeaders(),
+      this.env,
       cliState.env,
       cliState.envFileOverrides,
       cliState.basePath,

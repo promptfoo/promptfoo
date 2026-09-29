@@ -1550,6 +1550,26 @@ describe('computeRateLimitWaitMs', () => {
 });
 
 describe('fetchWithRetries', () => {
+  it.each([
+    'X-RateLimit-Remaining',
+    'x-ratelimit-remaining-requests',
+    'x-ratelimit-remaining-tokens',
+  ])('returns a successful session once when %s reaches zero', async (header) => {
+    const response = new Response(JSON.stringify({ client_secret: 'fixture-session' }), {
+      status: 200,
+      headers: { [header]: '0' },
+    });
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(response);
+    const result = await fetchWithRetries(
+      'https://example.com/session',
+      { method: 'POST' },
+      1000,
+      2,
+    );
+    expect(await result.json()).toEqual({ client_secret: 'fixture-session' });
+    expect(fetchSpy).toHaveBeenCalledOnce();
+  });
+
   beforeEach(() => {
     vi.mocked(sleep).mockClear();
     vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
