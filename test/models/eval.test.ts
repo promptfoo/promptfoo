@@ -246,7 +246,7 @@ describe('evaluator', () => {
       { name: 'metadata', enabled: [4] },
       { name: 'all', enabled: [0, 1, 2, 3, 4] },
     ])(
-      'projects direct V2 APIs with scoped $name flags without changing stored rows',
+      'projects V2 artifacts with scoped $name flags without changing stored rows',
       async ({ enabled }) => {
         const env = Object.fromEntries(
           flagNames.map((name, i) => [name, String(enabled.includes(i))]),
@@ -262,8 +262,10 @@ describe('evaluator', () => {
           original.results[0].metadata = { note: 'legacy-result-metadata' };
           original.table.body[0].outputs[0].metadata = { note: 'legacy-cell-metadata' };
           const before = structuredClone(original);
-          const summary = await evaluation.toEvaluateSummary();
+          const internalSummary = await evaluation.toEvaluateSummary();
+          expect(internalSummary.results).toBe(original.results);
           const file = await evaluation.toResultsFile();
+          const summary = file.results;
           if (!('table' in summary) || !('table' in file.results)) {
             throw new Error('Expected legacy V2 summaries');
           }
@@ -342,9 +344,7 @@ describe('evaluator', () => {
           expect(original).toEqual(before);
           expect(evaluation.config.env).toEqual(env);
           expect(file.config.prompts).toEqual(
-            enabled.includes(0)
-              ? ['[prompt stripped]', '[prompt stripped]']
-              : evaluation.config.prompts,
+            enabled.includes(0) ? undefined : evaluation.config.prompts,
           );
           const configTest = (file.config.tests as { vars?: unknown }[])[0];
           expect(configTest.vars).toEqual(
@@ -367,8 +367,8 @@ describe('evaluator', () => {
         const evaluation = (await Eval.findById(stored.id))!;
         evaluation.config.env = { PROMPTFOO_STRIP_PROMPT_TEXT: String(strip) };
         evaluation.oldResults!.results[0].prompt = 'legacy primitive prompt' as unknown as Prompt;
-        const summary = await evaluation.toEvaluateSummary();
         const file = await evaluation.toResultsFile();
+        const summary = file.results;
         expect(summary.results[0].prompt).toBe(
           strip ? '[prompt stripped]' : 'legacy primitive prompt',
         );
@@ -422,7 +422,7 @@ describe('evaluator', () => {
         const stored = await EvalFactory.createOldResult();
         const evaluation = (await Eval.findById(stored.id))!;
         evaluation.config.env = { PROMPTFOO_STRIP_PROMPT_TEXT: 'false' };
-        const summary = await evaluation.toEvaluateSummary();
+        const summary = (await evaluation.toResultsFile()).results;
         expect(summary.results[0].prompt).toEqual(evaluation.oldResults!.results[0].prompt);
         expect(summary.results[0].response?.output).toBe('[output stripped]');
       } finally {
@@ -1815,7 +1815,7 @@ describe('evaluator', () => {
         }
         expect(result.results.prompts).toEqual(result.prompts);
         expect(result.prompts![0].label).toBe(prompt ? '[prompt stripped]' : 'scoped-label');
-        expect(result.config.prompts).toEqual([prompt ? '[prompt stripped]' : 'scoped-prompt']);
+        expect(result.config.prompts).toEqual(prompt ? undefined : ['scoped-prompt']);
         const defaultTest = result.config.defaultTest;
         if (!defaultTest || typeof defaultTest === 'string') {
           throw new Error('Expected exported default test object');
@@ -1878,13 +1878,26 @@ describe('evaluator', () => {
         expect(file.prompts![0].raw).toBe('[prompt stripped]');
         expect(file.results.results[0].prompt.raw).toBe('[prompt stripped]');
         expect(file.results.results[0].response?.output).toBe('[output stripped]');
-        expect(file.config.prompts).toEqual(['[prompt stripped]']);
+        expect(file.config.prompts).toBeUndefined();
         expect(evaluation.results[0].response?.output).toBe('snapshot-output');
       } finally {
         traceRead.mockRestore();
         restoreChangedEnv?.();
         restoreEnv();
       }
+    });
+
+    it('redacts gateway URL credentials from result files while preserving the live config', async () => {
+      const gateway = 'https://gateway.example/v1?googleAccessToken=short-private-value';
+      const evaluation = new Eval({
+        providers: [{ id: 'openai:chat:test', config: { apiBaseUrl: gateway } }],
+        metadata: { documentationUrl: 'HTTPS://Docs.Example?version=2' },
+      });
+      const result = await evaluation.toResultsFile();
+      expect(JSON.stringify(result.config)).not.toContain('short-private-value');
+      expect(JSON.stringify(result.config)).toContain('%5BREDACTED%5D');
+      expect(result.config.metadata?.documentationUrl).toBe('HTTPS://Docs.Example?version=2');
+      expect(JSON.stringify(evaluation.config)).toContain(gateway);
     });
 
     it('drops malformed trace-provider headers when exporting older evaluations', async () => {
@@ -2278,7 +2291,7 @@ describe('evaluator', () => {
           success, score, metadata
         ) VALUES
         ('promptfoo-ns-1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0,
-          '{"userKey": "shown", "__promptfoo": {"traceLinkage": {"traceId": "abc"}}}')`,
+          '{"userKey": "shown", "__promptfoo": {"remote": true, "traceLinkage": {"traceId": "abc"}}}')`,
       );
 
       const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);

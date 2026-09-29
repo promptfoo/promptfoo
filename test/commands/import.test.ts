@@ -3,6 +3,7 @@ import path from 'path';
 
 import { createClient } from '@libsql/client/node';
 import { Command } from 'commander';
+import { parse as parseCsv } from 'csv-parse/sync';
 import { sql } from 'drizzle-orm';
 import express from 'express';
 import request from 'supertest';
@@ -34,6 +35,7 @@ import {
   createEvaluateResult,
   createPromptMetrics,
 } from '../factories/eval';
+import EvalFactory from '../factories/evalFactory';
 import { createTempDir, mockProcessEnv, removeTempDir } from '../util/utils';
 
 vi.mock('../../src/logger', () => ({
@@ -1188,6 +1190,46 @@ describe('importCommand', () => {
         }
       },
     );
+
+    it('exports stored V2 rows to CSV and JSONL with scoped stripping', async () => {
+      const stored = await EvalFactory.createOldResult();
+      const evaluation = (await Eval.findById(stored.id))!;
+      evaluation.config.env = {
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+      };
+      const before = structuredClone(evaluation.oldResults!);
+      const dir = createTempDir();
+      try {
+        const jsonl = path.join(dir, 'legacy.jsonl');
+        const csv = path.join(dir, 'legacy.csv');
+        await writeOutput(jsonl, evaluation, null);
+        await writeOutput(csv, evaluation, null);
+        const rows = fs
+          .readFileSync(jsonl, 'utf8')
+          .trim()
+          .split('\n')
+          .map((line) => JSON.parse(line));
+        expect(rows).toHaveLength(before.results.length);
+        expect(rows.map((row) => row.score)).toEqual(before.results.map((row) => row.score));
+        expect(rows.map((row) => row.success)).toEqual(before.results.map((row) => row.success));
+        for (const row of rows) {
+          expect(row.response.output).toBe('[output stripped]');
+          expect(row.vars).toEqual({});
+        }
+        const cells = parseCsv(fs.readFileSync(csv, 'utf8')) as string[][];
+        expect(cells).toHaveLength(before.table.body.length + 1);
+        expect(cells[0].join(' ')).toContain('[prompt stripped]');
+        expect(cells[1].join(' ')).toContain('[output stripped]');
+        expect(cells[1].slice(0, before.table.head.vars.length)).toEqual(
+          before.table.head.vars.map(() => ''),
+        );
+        expect(evaluation.oldResults).toEqual(before);
+      } finally {
+        removeTempDir(dir);
+      }
+    });
 
     it('should import legacy table-backed eval exports', async () => {
       const evalId = 'eval-legacy-table-backed';

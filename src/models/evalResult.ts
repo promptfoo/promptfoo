@@ -1,19 +1,27 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
+import { extractBlobHashesFromValue } from '../blobs/blobRefs';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
-import { getEnvBool } from '../envars';
+import { type EnvVarKey, getEnvBool, parseEnvBool } from '../envars';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { ProviderConfig } from '../providers/shared';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
 import {
+  COMMAND_ATTRIBUTE_KEYS,
+  SEARCH_ATTRIBUTE_KEYS,
+  TOOL_ARGUMENT_ATTRIBUTE_KEYS,
+} from '../tracing/toolAttributes';
+import {
   type ApiProvider,
   type AtomicTestCase,
   type EnvOverrides,
   type EvaluateResult,
+  type EvaluateSummaryV2,
+  type EvaluateSummaryV3,
   type EvaluateTable,
   type EvaluateTableOutput,
   type GradingResult,
@@ -26,7 +34,12 @@ import {
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
-import { isSecretField, REDACTED, sanitizeObject } from '../util/sanitizer';
+import {
+  isSecretField,
+  OUTPUT_SANITIZE_MAX_DEPTH,
+  REDACTED,
+  sanitizeObject,
+} from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGradingTokenUsage,
@@ -39,9 +52,52 @@ import { clearCountCache } from './evalPerformance';
 function sanitizeProviderConfig(config: ProviderConfig, throwOnError = false): ProviderConfig {
   return sanitizeObject(JSON.parse(safeJsonStringify(config) as string), {
     context: 'provider config',
+    sanitizeUrls: true,
     throwOnError,
-    maxDepth: Number.POSITIVE_INFINITY,
+    maxDepth: throwOnError ? OUTPUT_SANITIZE_MAX_DEPTH : Number.POSITIVE_INFINITY,
   }) as ProviderConfig;
+}
+
+function stripMediaReferences(value: unknown): unknown {
+  if (
+    extractBlobHashesFromValue(value).length > 0 ||
+    (typeof value === 'string' && /^data:[^,]*,/i.test(value))
+  ) {
+    return '[output stripped]';
+  }
+  if (Array.isArray(value)) {
+    return value.map(stripMediaReferences);
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, stripMediaReferences(item)]),
+    );
+  }
+  return value;
+}
+
+function projectOutputMetadata<T>(
+  metadata: T,
+  stripOutput: boolean,
+  responseMetadata: ProviderResponse['metadata'],
+  testMetadata?: AtomicTestCase['metadata'],
+): T {
+  if (!stripOutput || !metadata || !responseMetadata || typeof metadata !== 'object') {
+    return metadata;
+  }
+  return Object.fromEntries(
+    Object.entries(metadata).flatMap(([key, value]) => {
+      if (
+        !Object.prototype.hasOwnProperty.call(responseMetadata, key) ||
+        (testMetadata && isDeepStrictEqual(value, testMetadata[key]))
+      ) {
+        return [[key, value]];
+      }
+      return key === 'audio' || key === 'blobUris'
+        ? []
+        : [[key, stripMediaReferences(sanitizeForDb(value))]];
+    }),
+  ) as T;
 }
 
 function projectProviderResponse(
@@ -54,8 +110,8 @@ function projectProviderResponse(
     stripGrading: boolean;
   },
 ): ProviderResponse | undefined {
-  if (!response) {
-    return response;
+  if (!response || !asRecord(response)) {
+    return options.stripOutput && response != null ? { output: '[output stripped]' } : response;
   }
 
   if (
@@ -92,7 +148,14 @@ function projectProviderResponse(
   }
 
   if (projectedResponse.metadata) {
-    projectedResponse.metadata = projectTranscriptMetadata(projectedResponse.metadata, options);
+    projectedResponse.metadata = projectTranscriptMetadata(
+      projectOutputMetadata(
+        projectedResponse.metadata,
+        options.stripOutput,
+        projectedResponse.metadata,
+      ),
+      options,
+    );
   }
 
   return projectedResponse;
@@ -120,7 +183,16 @@ function projectTranscriptMetadata<T>(
     delete projected.redteamFinalPrompt;
   }
   if (options.stripOutput) {
-    delete projected.blobUris;
+    for (const key of [
+      'blobUris',
+      'toolCalls',
+      'skillCalls',
+      'structuredOutput',
+      'permissionDenials',
+      'audio',
+    ]) {
+      delete projected[key];
+    }
   }
   if (options.stripVars) {
     delete projected.transformDisplayVars;
@@ -238,10 +310,13 @@ function projectTranscriptMetadata<T>(
 }
 
 // Metadata stripping follows the grading schema, not arbitrary assertion/output objects.
-function projectGradingResult<T>(gradingResult: T, stripMetadata: boolean): T {
+function projectGradingResult<T>(gradingResult: T, stripMetadata: boolean, depth = 0): T {
   const record = asRecord(gradingResult);
   if (!stripMetadata || !record) {
     return gradingResult;
+  }
+  if (depth > OUTPUT_SANITIZE_MAX_DEPTH) {
+    return REDACTED as T;
   }
   const { metadata, ...projected } = record;
   const tokensUsed = record.tokensUsed as GradingResult['tokensUsed'];
@@ -256,13 +331,13 @@ function projectGradingResult<T>(gradingResult: T, stripMetadata: boolean): T {
   }
   if (Array.isArray(record.componentResults)) {
     projected.componentResults = record.componentResults.map((component) =>
-      projectGradingResult(component, stripMetadata),
+      projectGradingResult(component, stripMetadata, depth + 1),
     );
   }
   return projected as T;
 }
 
-function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: boolean): T {
+export function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: boolean): T {
   if (!stripPromptText) {
     return prompt;
   }
@@ -285,6 +360,14 @@ export function sanitizePromptForArtifact<T extends Prompt>(
     return (typeof prompt === 'string' && stripPromptText ? '[prompt stripped]' : prompt) as T;
   }
   const sanitized = sanitizeForDbWithSecrets(prompt, true);
+  const id = Object.getOwnPropertyDescriptor(prompt, 'id')?.value;
+  const generatedId = typeof id === 'string' && /^[a-f0-9]{64}$/i.test(id) ? id : undefined;
+  if (!asRecord(sanitized)) {
+    return projectPrompt(
+      { raw: REDACTED, label: REDACTED, ...(generatedId && { id: generatedId }) } as T,
+      stripPromptText,
+    );
+  }
   const metrics = asRecord(asRecord(prompt)?.metrics);
   const sanitizedMetrics = asRecord(asRecord(sanitized)?.metrics);
   if (metrics && sanitizedMetrics) {
@@ -306,21 +389,29 @@ export function sanitizePromptForArtifact<T extends Prompt>(
   }
   // Generated prompt identities are SHA-256 hashes, which otherwise match the
   // generic secret-value heuristic. Other IDs still undergo normal redaction.
-  if (typeof prompt.id === 'string' && /^[a-f0-9]{64}$/i.test(prompt.id)) {
-    sanitized.id = prompt.id;
+  if (generatedId) {
+    sanitized.id = generatedId;
   }
   return projectPrompt(sanitized, stripPromptText);
 }
 
 function projectTestCase(
   testCase: AtomicTestCase,
-  options: { stripMetadata: boolean; stripVars: boolean; stripPrompt: boolean },
+  options: {
+    stripMetadata: boolean;
+    stripVars: boolean;
+    stripPrompt: boolean;
+    stripOutput: boolean;
+  },
 ): AtomicTestCase {
-  if (!options.stripMetadata && !options.stripVars && !options.stripPrompt) {
+  if (
+    !asRecord(testCase) ||
+    (!options.stripMetadata && !options.stripVars && !options.stripPrompt && !options.stripOutput)
+  ) {
     return testCase;
   }
 
-  const projectedTestCase = options.stripMetadata
+  const projectedTestCase: AtomicTestCase = options.stripMetadata
     ? (({ metadata: _metadata, ...rest }) => rest)(testCase)
     : { ...testCase };
 
@@ -337,6 +428,12 @@ function projectTestCase(
     projectedTestCase.options = rest;
   }
 
+  if (options.stripOutput) {
+    delete projectedTestCase.providerOutput;
+  }
+  if (options.stripMetadata && testCase.metadata?.__promptfoo?.remote === true) {
+    projectedTestCase.metadata = { __promptfoo: { remote: true } };
+  }
   return projectedTestCase;
 }
 
@@ -378,9 +475,9 @@ export function sanitizeProvider(
         }),
       };
     }
-  } catch (error) {
+  } catch {
     if (throwOnError) {
-      throw error;
+      return { id: '[provider unavailable]' };
     }
   }
   return JSON.parse(safeJsonStringify(provider) as string);
@@ -430,17 +527,19 @@ function sanitizeForDb<T>(obj: T): T {
  * the judge provider end up in the Eval results both in the DB and in the
  * polling response served by `/api/eval/job/:id`.
  */
-function sanitizeForDbWithSecrets<T>(obj: T, throwOnError = false): T {
+function sanitizeForDbWithSecrets<T>(obj: T, artifact = false): T {
   if (obj === null || obj === undefined) {
     return obj;
   }
-  return sanitizeObject(obj, {
-    context: 'evalResult field',
-    throwOnError,
-    // Nested provider configs can be deeper than the default maxDepth (4);
-    // match the behavior of `sanitizeConfigForOutput` in `src/util/output.ts`.
-    maxDepth: Number.POSITIVE_INFINITY,
-  }) as T;
+  try {
+    return sanitizeObject(obj, {
+      context: 'evalResult field',
+      throwOnError: artifact,
+      maxDepth: artifact ? OUTPUT_SANITIZE_MAX_DEPTH : Number.POSITIVE_INFINITY,
+    }) as T;
+  } catch {
+    return REDACTED as T;
+  }
 }
 
 // Headers that may carry credentials, session state, or PII / org-level identifiers
@@ -622,7 +721,7 @@ function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
 }
 
 function sanitizeResponseForDb<T extends ProviderResponse | null | undefined>(response: T): T {
-  if (!response) {
+  if (!asRecord(response)) {
     return response;
   }
 
@@ -644,8 +743,51 @@ function sanitizeMetadataForDb<T>(metadata: T, responseMetadata?: unknown): T {
   });
 }
 
-function sanitizeGradingResultForDb<T>(gradingResult: T): T {
-  return redactHttpHeadersOnGradingResult(gradingResult);
+function sanitizeGradingResultAssertions<T>(
+  gradingResult: T,
+  maxDepth = Number.POSITIVE_INFINITY,
+  depth = 0,
+): T {
+  if (!gradingResult || typeof gradingResult !== 'object' || Array.isArray(gradingResult)) {
+    return gradingResult;
+  }
+
+  if (depth > maxDepth) {
+    return REDACTED as T;
+  }
+  const gr = gradingResult as Record<string, unknown>;
+  const assertion = asRecord(gr.assertion);
+  const sanitizedAssertion = assertion && { ...assertion };
+  if (sanitizedAssertion) {
+    for (const field of ['provider', 'config']) {
+      if (Object.prototype.hasOwnProperty.call(sanitizedAssertion, field)) {
+        sanitizedAssertion[field] = sanitizeObject(sanitizedAssertion[field], {
+          context: 'grading assertion',
+          maxDepth: maxDepth - depth,
+          sanitizeUrls: true,
+          throwOnError: true,
+        });
+      }
+    }
+  }
+  return {
+    ...gr,
+    ...(sanitizedAssertion && { assertion: sanitizedAssertion }),
+    ...(Array.isArray(gr.componentResults) && {
+      componentResults: gr.componentResults.map((component) =>
+        sanitizeGradingResultAssertions(component, maxDepth, depth + 1),
+      ),
+    }),
+  } as T;
+}
+
+function sanitizeGradingResultForDb<T>(gradingResult: T, artifact = false): T {
+  return redactHttpHeadersOnGradingResult(
+    sanitizeGradingResultAssertions(
+      gradingResult,
+      artifact ? OUTPUT_SANITIZE_MAX_DEPTH : Number.POSITIVE_INFINITY,
+    ),
+  );
 }
 
 // `__promptfoo` is reserved at the metadata top level for promptfoo-internal namespaced data
@@ -746,22 +888,21 @@ function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefin
 // field, shared by DB persistence (`createFromEvaluateResult` / `createManyFromEvaluateResult`)
 // and the JSONL artifact boundary (`sanitizeResultForJsonlArtifact`) so a newly added sensitive
 // field can't be redacted on one path while leaking from another.
-function redactSensitiveResultFieldsForDb<
-  R extends ProviderResponse | null | undefined,
-  G,
-  M,
->(fields: {
-  response: R;
-  gradingResult: G;
-  metadata: M;
-}): {
+function redactSensitiveResultFieldsForDb<R extends ProviderResponse | null | undefined, G, M>(
+  fields: {
+    response: R;
+    gradingResult: G;
+    metadata: M;
+  },
+  artifact = false,
+): {
   response: R;
   gradingResult: G;
   metadata: M;
 } {
   return {
     response: sanitizeResponseForDb(fields.response),
-    gradingResult: sanitizeGradingResultForDb(fields.gradingResult),
+    gradingResult: sanitizeGradingResultForDb(fields.gradingResult, artifact),
     // Pass the response metadata as the legacy-header provenance source (see
     // sanitizeMetadataForDb). fields.response is the raw input, so its headers are still
     // cleartext here and can be matched against an echoed result-level metadata.headers.
@@ -775,22 +916,38 @@ function redactSensitiveResultFieldsForDb<
 // Read the `PROMPTFOO_STRIP_*` output-projection flags. Shared by the JSONL-artifact
 // sanitizer and the EvalResult -> EvaluateResult projection so both honor the same env.
 export function getStripFlags(env?: EnvOverrides) {
-  const readFlag = (name: string) => {
-    const value = env?.[name];
-    return value === undefined
-      ? getEnvBool(name, false)
-      : ['1', 'true', 'yes', 'yup', 'yeppers'].includes(value.toLowerCase());
+  const getFlag = (key: EnvVarKey) => {
+    const value = env?.[key];
+    return value === undefined ? getEnvBool(key, false) : parseEnvBool(String(value), false);
   };
   return {
-    shouldStripPromptText: readFlag('PROMPTFOO_STRIP_PROMPT_TEXT'),
-    shouldStripResponseOutput: readFlag('PROMPTFOO_STRIP_RESPONSE_OUTPUT'),
-    shouldStripTestVars: readFlag('PROMPTFOO_STRIP_TEST_VARS'),
-    shouldStripGradingResult: readFlag('PROMPTFOO_STRIP_GRADING_RESULT'),
-    shouldStripMetadata: readFlag('PROMPTFOO_STRIP_METADATA'),
+    shouldStripPromptText: getFlag('PROMPTFOO_STRIP_PROMPT_TEXT'),
+    shouldStripResponseOutput: getFlag('PROMPTFOO_STRIP_RESPONSE_OUTPUT'),
+    shouldStripTestVars: getFlag('PROMPTFOO_STRIP_TEST_VARS'),
+    shouldStripGradingResult: getFlag('PROMPTFOO_STRIP_GRADING_RESULT'),
+    shouldStripMetadata: getFlag('PROMPTFOO_STRIP_METADATA'),
   };
 }
 
 export type OutputStripFlags = ReturnType<typeof getStripFlags>;
+
+const TRACE_OUTPUT_ATTRIBUTE_KEYS = [
+  PromptfooAttributes.RESPONSE_BODY,
+  ...TOOL_ARGUMENT_ATTRIBUTE_KEYS,
+  ...COMMAND_ATTRIBUTE_KEYS,
+  ...SEARCH_ATTRIBUTE_KEYS,
+  'tool.output',
+  'tool.result',
+  'ai.toolCall.result',
+  'codex.output',
+  'codex.command.output',
+  'codex.message',
+  'codex.message.text',
+  'codex.reasoning',
+  'codex.reasoning.text',
+  'codex.reasoning.summary',
+  'otel.log.body',
+] as const;
 
 export function projectTracesForOutput(traces: TraceData[], stripFlags = getStripFlags()) {
   const {
@@ -814,7 +971,7 @@ export function projectTracesForOutput(traces: TraceData[], stripFlags = getStri
     if (shouldStripMetadata) {
       const { metadata: _metadata, ...traceWithoutMetadata } = trace;
       projectedTrace = traceWithoutMetadata;
-    } else if (shouldStripTestVars && trace.metadata && 'vars' in trace.metadata) {
+    } else if (shouldStripTestVars && asRecord(trace.metadata) && 'vars' in trace.metadata!) {
       const { metadata: traceMetadata, ...traceWithoutMetadata } = trace;
       const { vars: _vars, ...metadata } = traceMetadata;
       projectedTrace = {
@@ -830,30 +987,80 @@ export function projectTracesForOutput(traces: TraceData[], stripFlags = getStri
     return {
       ...projectedTrace,
       spans: projectedTrace.spans.map((span) => {
-        if (!span.attributes) {
-          return span;
+        const projectAttributes = (attributes: Record<string, unknown> | undefined) => {
+          if (!asRecord(attributes)) {
+            return attributes;
+          }
+          const projected = { ...attributes };
+          if (shouldStripPromptText) {
+            delete projected[PromptfooAttributes.REQUEST_BODY];
+            delete projected[PromptfooAttributes.PROMPT_LABEL];
+          }
+          if (shouldStripResponseOutput) {
+            for (const key of TRACE_OUTPUT_ATTRIBUTE_KEYS) {
+              delete projected[key];
+            }
+          }
+          return Object.keys(projected).length ? projected : undefined;
+        };
+        let name = span.name;
+        if (shouldStripResponseOutput && span.attributes) {
+          if (
+            COMMAND_ATTRIBUTE_KEYS.some((key) => key in span.attributes!) &&
+            name.startsWith('exec ')
+          ) {
+            name = 'exec [output stripped]';
+          } else if (
+            SEARCH_ATTRIBUTE_KEYS.some((key) => key in span.attributes!) &&
+            name.startsWith('search "')
+          ) {
+            name = 'search "[output stripped]"';
+          } else if (name === span.attributes['otel.log.body']) {
+            name = '[output stripped]';
+          }
         }
-
-        const projectedAttributes = { ...span.attributes };
-        if (shouldStripPromptText) {
-          delete projectedAttributes[PromptfooAttributes.REQUEST_BODY];
-          delete projectedAttributes[PromptfooAttributes.PROMPT_LABEL];
-        }
-        if (shouldStripResponseOutput) {
-          delete projectedAttributes[PromptfooAttributes.RESPONSE_BODY];
-          delete projectedAttributes['codex.reasoning.summary'];
-        }
-
-        const { attributes: _attributes, ...projectedSpan } = span;
+        const events = asRecord(span)?.events;
         return {
-          ...projectedSpan,
-          ...(Object.keys(projectedAttributes).length > 0 && {
-            attributes: projectedAttributes,
+          ...span,
+          name,
+          attributes: projectAttributes(span.attributes),
+          ...(Array.isArray(events) && {
+            events: events.map((event) => {
+              const record = asRecord(event);
+              return record
+                ? { ...record, attributes: projectAttributes(asRecord(record.attributes)) }
+                : event;
+            }),
           }),
         };
       }),
     };
   });
+}
+
+// Project a summary before it is serialized to a file artifact (json/yaml/txt/html/xml). For
+// non-persisted evals the in-memory results are not redacted at the DB / JSONL boundary, and
+// legacy V2 summaries also carry a denormalized table with its own copies of result data.
+export function sanitizeSummaryForArtifact<T extends EvaluateSummaryV2 | EvaluateSummaryV3>(
+  summary: T,
+  stripFlags: OutputStripFlags,
+): T {
+  return {
+    ...summary,
+    ...(Array.isArray(summary.results) && {
+      results: summary.results.map((result) => sanitizeResultForJsonlArtifact(result, stripFlags)),
+    }),
+    ...('prompts' in summary &&
+      Array.isArray(summary.prompts) && {
+        prompts: summary.prompts.map((prompt) =>
+          sanitizePromptForArtifact(prompt, stripFlags.shouldStripPromptText),
+        ),
+      }),
+    ...('table' in summary &&
+      summary.table && {
+        table: sanitizeTableForArtifact(summary.table, stripFlags),
+      }),
+  };
 }
 
 /**
@@ -880,11 +1087,14 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
   } = stripFlags;
 
   const artifactResult = result as T & Record<string, unknown>;
-  const redacted = redactSensitiveResultFieldsForDb({
-    response: sanitizeForDb(artifactResult.response as ProviderResponse | null | undefined),
-    gradingResult: sanitizeForDb(artifactResult.gradingResult),
-    metadata: sanitizeForDb(artifactResult.metadata),
-  });
+  const redacted = redactSensitiveResultFieldsForDb(
+    {
+      response: sanitizeForDb(artifactResult.response as ProviderResponse | null | undefined),
+      gradingResult: sanitizeForDb(artifactResult.gradingResult),
+      metadata: sanitizeForDb(artifactResult.metadata),
+    },
+    true,
+  );
   const response = projectProviderResponse(redacted.response ?? undefined, {
     stripMetadata: shouldStripMetadata,
     stripOutput: shouldStripResponseOutput,
@@ -903,6 +1113,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
               stripMetadata: shouldStripMetadata,
               stripVars: shouldStripTestVars,
               stripPrompt: shouldStripPromptText,
+              stripOutput: shouldStripResponseOutput,
             },
           ),
         }
@@ -932,12 +1143,20 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
     namedScores: sanitizeForDb(artifactResult.namedScores),
     metadata: shouldStripMetadata
       ? {}
-      : projectTranscriptMetadata(redacted.metadata, {
-          stripPrompt: shouldStripPromptText,
-          stripOutput: shouldStripResponseOutput,
-          stripVars: shouldStripTestVars,
-          stripGrading: shouldStripGradingResult,
-        }),
+      : projectTranscriptMetadata(
+          projectOutputMetadata(
+            redacted.metadata,
+            shouldStripResponseOutput,
+            redacted.response?.metadata,
+            (artifactResult.testCase as AtomicTestCase | undefined)?.metadata,
+          ),
+          {
+            stripPrompt: shouldStripPromptText,
+            stripOutput: shouldStripResponseOutput,
+            stripVars: shouldStripTestVars,
+            stripGrading: shouldStripGradingResult,
+          },
+        ),
   } as T;
 }
 
@@ -980,6 +1199,7 @@ export function sanitizeTableForArtifact(
           stripMetadata: shouldStripMetadata,
           stripVars: shouldStripTestVars,
           stripPrompt: shouldStripPromptText,
+          stripOutput: shouldStripResponseOutput,
         })
       : testCase;
 
@@ -1020,11 +1240,14 @@ export function sanitizeTableForArtifact(
       delete projectedOutput.images;
       delete projectedOutput.video;
     }
-    const redacted = redactSensitiveResultFieldsForDb({
-      response: sanitizeForDb(output.response),
-      gradingResult: sanitizeForDb(output.gradingResult),
-      metadata: sanitizeForDb(output.metadata),
-    });
+    const redacted = redactSensitiveResultFieldsForDb(
+      {
+        response: sanitizeForDb(output.response),
+        gradingResult: sanitizeForDb(output.gradingResult),
+        metadata: sanitizeForDb(output.metadata),
+      },
+      true,
+    );
     return {
       ...projectedOutput,
       ...(artifactOutput.vars === undefined
@@ -1046,12 +1269,20 @@ export function sanitizeTableForArtifact(
         : projectGradingResult(redacted.gradingResult, shouldStripMetadata),
       metadata: shouldStripMetadata
         ? {}
-        : projectTranscriptMetadata(redacted.metadata, {
-            stripPrompt: shouldStripPromptText,
-            stripOutput: shouldStripResponseOutput,
-            stripVars: shouldStripTestVars,
-            stripGrading: shouldStripGradingResult,
-          }),
+        : projectTranscriptMetadata(
+            projectOutputMetadata(
+              redacted.metadata,
+              shouldStripResponseOutput,
+              redacted.response?.metadata,
+              output.testCase?.metadata,
+            ),
+            {
+              stripPrompt: shouldStripPromptText,
+              stripOutput: shouldStripResponseOutput,
+              stripVars: shouldStripTestVars,
+              stripGrading: shouldStripGradingResult,
+            },
+          ),
       testCase: sanitizeTestCase(output.testCase) as AtomicTestCase,
     } as EvaluateTableOutput;
   };
@@ -1430,6 +1661,8 @@ export default class EvalResult {
     const { traceId: _traceId, evaluationId: _evaluationId, pluginId: _pluginId, ...rest } = this;
     const persistedValues = {
       ...rest,
+      error: this.error ?? null,
+      gradingResult: sanitizeGradingResultForDb(this.gradingResult),
       metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
     };
     //check if this exists in the db
@@ -1470,6 +1703,7 @@ export default class EvalResult {
       stripMetadata: shouldStripMetadata,
       stripVars: shouldStripTestVars,
       stripPrompt: shouldStripPromptText,
+      stripOutput: shouldStripResponseOutput,
     });
     // Mirror the live accounting in the evaluator: a response counts as one provider
     // request even when it reports no token usage, and a grading result counts as one
@@ -1512,12 +1746,20 @@ export default class EvalResult {
       vars: shouldStripTestVars ? {} : this.testCase.vars || {},
       metadata: shouldStripMetadata
         ? {}
-        : projectTranscriptMetadata(this.metadata, {
-            stripPrompt: shouldStripPromptText,
-            stripOutput: shouldStripResponseOutput,
-            stripVars: shouldStripTestVars,
-            stripGrading: shouldStripGradingResult,
-          }),
+        : projectTranscriptMetadata(
+            projectOutputMetadata(
+              this.metadata,
+              shouldStripResponseOutput,
+              this.response?.metadata,
+              this.testCase?.metadata,
+            ),
+            {
+              stripPrompt: shouldStripPromptText,
+              stripOutput: shouldStripResponseOutput,
+              stripVars: shouldStripTestVars,
+              stripGrading: shouldStripGradingResult,
+            },
+          ),
       failureReason: this.failureReason,
     };
   }

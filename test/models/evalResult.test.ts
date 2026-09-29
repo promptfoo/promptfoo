@@ -8,11 +8,15 @@ import { importCommand } from '../../src/commands/import';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
-import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
+import EvalResult, {
+  sanitizeProvider,
+  sanitizeResultForJsonlArtifact,
+} from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
 import { WebSocketProvider } from '../../src/providers/websocket';
 import {
   type ApiProvider,
+  type Assertion,
   type AtomicTestCase,
   type EvaluateResult,
   type Prompt,
@@ -21,7 +25,6 @@ import {
 } from '../../src/types/index';
 import { calculateFilteredMetrics } from '../../src/util/calculateFilteredMetrics';
 import { writeOutput } from '../../src/util/output';
-import { sanitizeObject } from '../../src/util/sanitizer';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -244,6 +247,80 @@ describe('EvalResult', () => {
   });
 
   describe('createFromEvaluateResult', () => {
+    it.each<Assertion>([
+      {
+        type: 'is-json',
+        value: {
+          type: 'object',
+          properties: { token: { type: 'string' }, password: { type: 'string' } },
+          required: ['token'],
+        },
+      },
+      { type: 'equals', value: '{ "token": "test input",  "number": 1 }' },
+    ])('preserves $type assertion values while redacting grader settings', async (assertion) => {
+      const credential = 'fixture-grader-credential';
+      const gradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'ok',
+        assertion,
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'ok',
+            assertion: {
+              ...assertion,
+              provider: {
+                id: `https://grader.example/check?api_key=${credential}`,
+                config: { apiKey: credential },
+              },
+              config: { headers: { Authorization: credential } },
+            },
+          },
+        ],
+      };
+      const input = { ...mockEvaluateResult, gradingResult };
+      const artifact = sanitizeResultForJsonlArtifact(input);
+      const result = await EvalResult.createFromEvaluateResult(
+        `assertion-values-${assertion.type}`,
+        input,
+        { persist: true },
+      );
+
+      for (const saved of [artifact, result, await EvalResult.findById(result.id)]) {
+        expect(saved?.gradingResult?.assertion?.value).toEqual(assertion.value);
+        expect(saved?.gradingResult?.componentResults?.[0].assertion?.value).toEqual(
+          assertion.value,
+        );
+        expect(JSON.stringify(saved?.gradingResult)).not.toContain(credential);
+      }
+
+      result.gradingResult = gradingResult;
+      await result.save();
+      const updated = await EvalResult.findById(result.id);
+      expect(updated?.gradingResult?.assertion?.value).toEqual(assertion.value);
+      expect(updated?.gradingResult?.componentResults?.[0].assertion?.value).toEqual(
+        assertion.value,
+      );
+      expect(JSON.stringify(updated?.gradingResult)).not.toContain(credential);
+      expect(gradingResult.componentResults[0].assertion.provider.config.apiKey).toBe(credential);
+    });
+
+    it('preserves URL test inputs while redacting provider URL credentials', async () => {
+      const url = 'https://cdn.example/image?X-Amz-Signature=short-secret&q=hello world';
+      const vars = { image: url, imageUrl: url };
+      const provider: ProviderOptions = { id: 'test-provider', config: { apiBaseUrl: url } };
+      const result = await EvalResult.createFromEvaluateResult('url-inputs', {
+        ...mockEvaluateResult,
+        testCase: { ...mockTestCase, vars },
+        provider,
+      });
+      const saved = await EvalResult.findById(result.id);
+      expect(saved?.testCase.vars).toEqual(vars);
+      expect(saved?.provider.config?.apiBaseUrl).not.toContain('short-secret');
+    });
+
     it('should create and persist an EvalResult', async () => {
       const evalId = 'test-eval-id';
       const result = await EvalResult.createFromEvaluateResult(evalId, mockEvaluateResult);
@@ -562,47 +639,6 @@ describe('EvalResult', () => {
     // Regression context (PR #8688): provider credentials such as apiKey/token
     // were leaking into persisted eval results and API-visible response payloads.
     describe('credential redaction (regression for PR #8688 review)', () => {
-      it.each(['single', 'batch'] as const)(
-        'keeps sibling credentials redacted after nested JSON failure in %s persistence',
-        async (mode) => {
-          // A shallow outer object avoids failing its initial JSON copy. On the
-          // supported runtime, recursion into this valid string exceeds the stack.
-          const payload = '{"child":'.repeat(6000) + '{}' + '}'.repeat(6000);
-          expect(() => JSON.parse(payload)).not.toThrow();
-          expect(() =>
-            sanitizeObject({ payload }, { maxDepth: Infinity, throwOnError: true }),
-          ).toThrow(RangeError);
-          const testCase = {
-            options: {
-              provider: { id: 'echo', config: { apiKey: 'fixture-before', temperature: 0.2 } },
-            },
-            vars: { payload },
-            metadata: { provider: { config: { token: 'fixture-after', temperature: 0.3 } } },
-          };
-          const input = { ...mockEvaluateResult, testCase };
-          const original = structuredClone(input);
-          const evalId = 'nested-json-persistence-' + mode;
-          const [result] =
-            mode === 'single'
-              ? [await EvalResult.createFromEvaluateResult(evalId, input, { persist: true })]
-              : await EvalResult.createManyFromEvaluateResult([input], evalId);
-          const retrieved = await EvalResult.findById(result.id);
-          expect(retrieved).not.toBeNull();
-          for (const stored of [result, retrieved!]) {
-            expect(stored.testCase.options?.provider).toEqual({
-              id: 'echo',
-              config: { apiKey: '[REDACTED]', temperature: 0.2 },
-            });
-            expect(stored.testCase.metadata?.provider).toEqual({
-              config: { token: '[REDACTED]', temperature: 0.3 },
-            });
-            expect(stored.testCase.vars?.payload).toBe(payload);
-          }
-          expect(input).toEqual(original);
-          expect(input.testCase).toBe(testCase);
-        },
-      );
-
       it('redacts apiKey in testCase.options.provider.config', async () => {
         const evalId = 'test-eval-redact-options-provider';
         const result = await EvalResult.createFromEvaluateResult(

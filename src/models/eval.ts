@@ -40,8 +40,11 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
-import { sanitizeConfigForOutput } from '../util/outputConfig';
-import { sanitizeRuntimeOptions, sanitizeTracingConfigForPersistence } from '../util/sanitizer';
+import {
+  sanitizeConfigForOutput,
+  sanitizeRuntimeOptions,
+  sanitizeTracingConfigForPersistence,
+} from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGenerationTokenUsage,
@@ -65,8 +68,7 @@ import EvalResult, {
   persistTraceMetadata,
   projectTracesForOutput,
   sanitizePromptForArtifact,
-  sanitizeResultForJsonlArtifact,
-  sanitizeTableForArtifact,
+  sanitizeSummaryForArtifact,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
 
@@ -1441,12 +1443,8 @@ export default class Eval {
       return {
         version: 2,
         timestamp: new Date(this.createdAt).toISOString(),
-        results: Array.isArray(this.oldResults.results)
-          ? this.oldResults.results.map((result) =>
-              sanitizeResultForJsonlArtifact(result, stripFlags),
-            )
-          : this.oldResults.results,
-        table: sanitizeTableForArtifact(this.oldResults.table, stripFlags),
+        results: this.oldResults.results,
+        table: this.oldResults.table,
         stats: this.oldResults.stats,
       };
     }
@@ -1520,7 +1518,7 @@ export default class Eval {
     const results: ResultsFile = {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
-      results: await this.toEvaluateSummary(stripFlags),
+      results: sanitizeSummaryForArtifact(await this.toEvaluateSummary(stripFlags), stripFlags),
       config: sanitizeConfigForOutput(this.config, stripFlags),
       author: this.author || null,
       prompts: Array.isArray(prompts)

@@ -14,7 +14,6 @@ import { EchoProvider } from '../../src/providers/echo';
 import { getTraceStore } from '../../src/tracing/store';
 import { evalTableToCsv, streamEvalCsv } from '../../src/util/eval/evalTableUtils';
 import { writeOutput } from '../../src/util/index';
-import { sanitizeObject } from '../../src/util/sanitizer';
 import {
   createCompletedPrompt,
   createEvaluateResult,
@@ -430,21 +429,7 @@ describe('JSON export with improved error handling', () => {
     });
   });
 
-  describe('deep credential sanitation failures', () => {
-    it('retains the explicit non-throwing sanitizer policy outside artifact exports', () => {
-      const input = '{"child":'.repeat(4000) + '{"apiKey":"fixture credential"}' + '}'.repeat(4000);
-      const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
-      try {
-        expect(sanitizeObject(input, { maxDepth: Infinity, throwOnError: false })).toBe(input);
-        expect(errorLog).toHaveBeenCalledWith(
-          expect.stringContaining('Error sanitizing'),
-          expect.any(RangeError),
-        );
-      } finally {
-        errorLog.mockRestore();
-      }
-    });
-
+  describe('bounded artifact sanitation', () => {
     it.each([
       [
         'object JSON',
@@ -490,10 +475,8 @@ describe('JSON export with improved error handling', () => {
       'prompt config',
       'aggregate prompt config',
       'provider config',
-    ])('never writes unsanitized serializable %s when recursive sanitation fails', async (slot) => {
-      const depth = 4000;
-      // Build JSON without recursively stringifying the fixture: that can overflow
-      // Node's stack on Windows before the real export sanitizer is exercised.
+    ])('omits %s beyond the artifact depth budget without changing the source', async (slot) => {
+      const depth = 80;
       const original =
         '{"child":'.repeat(depth) +
         '{"apiKey":"deep-credential-must-not-be-exported"}' +
@@ -524,18 +507,10 @@ describe('JSON export with improved error handling', () => {
         results: [row],
         stats: { successes: 1, failures: 0, errors: 0, tokenUsage: {} },
       });
-      let writeError: unknown;
-      try {
-        await writeOutput(tempFilePath, mockEval, null);
-      } catch (error) {
-        writeError = error;
-      }
-      if (writeError) {
-        expect(fs.existsSync(tempFilePath)).toBe(false);
-      } else {
-        const content = fs.readFileSync(tempFilePath, 'utf8');
-        expect(content.includes('deep-credential-must-not-be-exported')).toBe(false);
-      }
+      await writeOutput(tempFilePath, mockEval, null);
+      const content = fs.readFileSync(tempFilePath, 'utf8');
+      expect(content).not.toContain('deep-credential-must-not-be-exported');
+      expect(content).toContain('[...]');
       let leaf = nested;
       for (let i = 0; i < depth; i++) {
         expect(Object.keys(leaf)).toEqual(['child']);

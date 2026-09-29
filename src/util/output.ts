@@ -18,8 +18,8 @@ import {
   getStripFlags,
   type OutputStripFlags,
   projectTracesForOutput,
-  sanitizePromptForArtifact,
   sanitizeResultForJsonlArtifact,
+  sanitizeSummaryForArtifact,
   sanitizeTableForArtifact,
 } from '../models/evalResult';
 import {
@@ -31,18 +31,12 @@ import {
 import { streamEvalCsv } from './eval/evalTableUtils';
 import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
-import { sanitizeConfigForOutput } from './outputConfig';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
-import { sanitizeRuntimeOptions } from './sanitizer';
+import { sanitizeConfigForOutput, sanitizeRuntimeOptions } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
-import type {
-  EvaluateResult,
-  EvaluateSummaryV2,
-  EvaluateSummaryV3,
-  EvaluateTableOutput,
-} from '../types';
+import type { EvaluateResult, EvaluateTableOutput } from '../types';
 
 export interface OutputOptions {
   includeMedia?: boolean;
@@ -199,6 +193,20 @@ async function appendJsonlResults(
 ): Promise<void> {
   if (recoveredResults) {
     await appendJsonlResultBatch(outputPath, recoveredResults, stripFlags);
+    return;
+  }
+
+  if (evalRecord.useOldResults?.()) {
+    const summary = await evalRecord.toEvaluateSummary(stripFlags);
+    if (Array.isArray(summary.results)) {
+      for (let offset = 0; offset < summary.results.length; offset += 100) {
+        await appendJsonlResultBatch(
+          outputPath,
+          summary.results.slice(offset, offset + 100),
+          stripFlags,
+        );
+      }
+    }
     return;
   }
 
@@ -427,31 +435,6 @@ export function createOutputMetadata(evalRecord: Eval) {
     exportedAt: new Date().toISOString(),
     evaluationCreatedAt,
     author: evalRecord.author ?? undefined,
-  };
-}
-
-// Project a summary before it is serialized to a file artifact (json/yaml/txt/html/xml). For
-// non-persisted evals the in-memory results are not redacted at the DB / JSONL boundary, and
-// legacy V2 summaries also carry a denormalized table with its own copies of result data.
-function sanitizeSummaryForArtifact<T extends EvaluateSummaryV2 | EvaluateSummaryV3>(
-  summary: T,
-  stripFlags: OutputStripFlags,
-): T {
-  return {
-    ...summary,
-    ...(Array.isArray(summary.results) && {
-      results: summary.results.map((result) => sanitizeResultForJsonlArtifact(result, stripFlags)),
-    }),
-    ...('prompts' in summary &&
-      Array.isArray(summary.prompts) && {
-        prompts: summary.prompts.map((prompt) =>
-          sanitizePromptForArtifact(prompt, stripFlags.shouldStripPromptText),
-        ),
-      }),
-    ...('table' in summary &&
-      summary.table && {
-        table: sanitizeTableForArtifact(summary.table, stripFlags),
-      }),
   };
 }
 

@@ -767,6 +767,11 @@ export interface StreamCsvOptions {
 export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Promise<void> {
   const { isRedteam = false, write, projectTable } = options;
   const env = eval_.config?.env;
+  if (eval_.useOldResults?.()) {
+    const table = await eval_.getTable();
+    await write(evalTableToCsv(projectTable ? projectTable(table) : table, { env, isRedteam }));
+    return;
+  }
   const varNames = eval_.vars;
   const prompts = eval_.prompts;
   const numPrompts = prompts.length;
