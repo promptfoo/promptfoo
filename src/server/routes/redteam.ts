@@ -33,9 +33,11 @@ import type { Request, Response } from 'express';
 
 export const redteamRouter = Router();
 
-/**
- * Generates a test case for a given plugin/strategy combination.
- */
+// Keep lazy provider credential and endpoint lookups isolated through plugin and strategy calls.
+redteamRouter.use('/generate-test', (_req, _res, next) => {
+  cliState.withConfig(undefined, () => cliState.withEnv({}, next));
+});
+
 redteamRouter.post('/generate-test', async (req: Request, res: Response): Promise<void> => {
   try {
     const parsedBody = RedteamSchemas.GenerateTest.Request.safeParse(req.body);
