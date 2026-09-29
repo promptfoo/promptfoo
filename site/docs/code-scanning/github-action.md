@@ -215,7 +215,7 @@ To enable scanning of fork PRs by default, add `enable-fork-prs: true` to your w
 
 **Write SARIF output for GitHub Code Scanning:**
 
-The action sets `sarif-path` only when a scan actually completes, so keep the upload step conditional. Intentionally skipped scans do not publish a clean Code Scanning result.
+The action sets `sarif-path` only for a complete scan, so keep the upload step conditional. If changed files were skipped, it withholds SARIF and fails when `sarif-output-path` was requested. Available findings can still be posted as PR comments.
 
 ```yaml
 - name: Run Promptfoo Code Scan

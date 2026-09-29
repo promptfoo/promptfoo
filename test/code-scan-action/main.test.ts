@@ -552,9 +552,11 @@ describe('code-scan-action main', () => {
         process.platform === 'win32' ? 'C:\\Program Files\\Git\\cmd\\git.exe' : '/usr/bin/git',
       );
       expect(fetchCall?.[2]?.env).toMatchObject({
-        GIT_CONFIG_COUNT: '1',
+        GIT_CONFIG_COUNT: '2',
         GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
         GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${Buffer.from('x-access-token:fake-token').toString('base64')}`,
+        GIT_CONFIG_KEY_1: 'core.hooksPath',
+        GIT_CONFIG_VALUE_1: '/dev/null',
       });
     });
 
@@ -1359,7 +1361,7 @@ describe('code-scan-action main', () => {
       });
       expect(mocks.core.setOutput).toHaveBeenCalledWith(
         'sarif-path',
-        '/test/workspace/reports/promptfoo-code-scan.sarif',
+        path.resolve('/test/workspace', 'reports/promptfoo-code-scan.sarif'),
       );
       expect(mocks.core.setFailed).not.toHaveBeenCalled();
     });

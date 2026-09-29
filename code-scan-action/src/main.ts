@@ -336,9 +336,11 @@ async function fetchBaseBranch(baseBranch: string, githubToken: string): Promise
     await exec.exec(gitPath, ['fetch', 'origin', `${baseBranch}:${baseBranch}`], {
       env: {
         ...process.env,
-        GIT_CONFIG_COUNT: '1',
+        GIT_CONFIG_COUNT: '2',
         GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
         GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${basicAuth}`,
+        GIT_CONFIG_KEY_1: 'core.hooksPath',
+        GIT_CONFIG_VALUE_1: '/dev/null',
       },
     });
     core.info(`✅ Base branch ${baseBranch} fetched successfully`);
@@ -816,15 +818,12 @@ async function postFallbackComments(
     if (error instanceof Error && error.name === 'StalePullRequestHeadError') {
       throw error;
     }
-    // If the diff can't be fetched/validated, treat every prepared line comment as a
-    // general comment so no finding is dropped over a location-validation failure.
+    // Preserve findings as general comments when their locations cannot be validated.
     core.warning(`Failed to validate comment locations against the PR diff: ${formatError(error)}`);
     lineComments = [];
     invalidLineComments = preparedLineComments;
   }
 
-  // Comments that are always general (file-only, fileless) plus line comments whose exact
-  // location is not in the reviewed diff.
   const generalCommentsToPost = [...generalComments, ...invalidLineComments];
 
   // A rejected review must not discard the findings that can still be posted separately.
@@ -846,7 +845,7 @@ async function postFallbackComments(
   }
 
   try {
-    // Preserve the review summary too when the review write failed, so it is not lost.
+    // Preserve the summary when GitHub rejects the review.
     if (reviewFailed && reviewBody) {
       try {
         await octokit.rest.issues.createComment({
@@ -864,8 +863,7 @@ async function postFallbackComments(
     }
     await postGeneralComments(octokit, context, generalCommentsToPost);
   } catch (error) {
-    // The general-comment fallback is the last channel for these findings. If it also
-    // fails, fail the Action rather than reporting a green scan with findings absent.
+    // Fail if findings could not be posted through either channel.
     core.error(`Failed to post comments: ${formatError(error)}`);
     core.setFailed(
       `Code scan found findings but they could not be posted to the PR: ${formatError(error)}`,
@@ -1023,10 +1021,7 @@ async function handleScanResponse(
   const { comments, commentsPosted, review, skipReason, skippedFiles } = scanResponse;
   const hasPrFindings = hasPrPostableFindings(comments);
 
-  // A skipped scan is not a clean scan. SARIF is withheld entirely for any response
-  // carrying a skipReason (see below), so a skip is only worth processing when a finding
-  // can still be surfaced through PR comments. Bail out otherwise so we never imply that
-  // authorization-gated work ran.
+  // Skipped scans can still have findings to post, but cannot produce a complete SARIF run.
   if (skipReason && !hasPrFindings) {
     core.info(`🔀 Scan skipped: ${skipReason}`);
     return;
@@ -1043,10 +1038,7 @@ async function handleScanResponse(
 
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
 
-  // Withhold SARIF for ANY response carrying a skipReason. A partial SARIF run (even one
-  // location-backed finding) uploaded under the same Code Scanning category can be treated
-  // as authoritative and silently close prior real alerts that are merely absent from this
-  // incomplete scan. Surviving findings are still surfaced through PR comments below.
+  // Uploading a partial SARIF run could close prior alerts absent from this incomplete scan.
   if (!skipReason && (skippedFiles ?? 0) === 0) {
     emitConfiguredSarifOutput(scanResponse, inputs);
   } else if ((skippedFiles ?? 0) > 0) {
