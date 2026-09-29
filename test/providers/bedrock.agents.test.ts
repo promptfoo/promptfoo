@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockAgentsProvider } from '../../src/providers/bedrock/agents';
-import { mockProcessEnv } from '../util/utils';
+import { mockProcessEnv, PROXY_ENV_KEYS } from '../util/utils';
 
 // Hoisted mocks for AWS SDK
 const mockSend = vi.hoisted(() => vi.fn());
@@ -56,27 +56,18 @@ vi.mock('../../src/cache', async (importOriginal) => {
   };
 });
 
-const ORIGINAL_HTTP_PROXY = process.env.HTTP_PROXY;
-const ORIGINAL_HTTPS_PROXY = process.env.HTTPS_PROXY;
+let restoreProxyEnv = () => {};
 
 describe('AwsBedrockAgentsProvider', () => {
   beforeEach(() => {
+    restoreProxyEnv = mockProcessEnv(
+      Object.fromEntries(PROXY_ENV_KEYS.map((key) => [key, undefined])),
+    );
     vi.clearAllMocks();
-    mockProcessEnv({ HTTP_PROXY: '' });
-    mockProcessEnv({ HTTPS_PROXY: '' });
   });
 
   afterEach(() => {
-    if (ORIGINAL_HTTP_PROXY === undefined) {
-      mockProcessEnv({ HTTP_PROXY: undefined });
-    } else {
-      mockProcessEnv({ HTTP_PROXY: ORIGINAL_HTTP_PROXY });
-    }
-    if (ORIGINAL_HTTPS_PROXY === undefined) {
-      mockProcessEnv({ HTTPS_PROXY: undefined });
-    } else {
-      mockProcessEnv({ HTTPS_PROXY: ORIGINAL_HTTPS_PROXY });
-    }
+    restoreProxyEnv();
   });
 
   describe('constructor', () => {
@@ -165,6 +156,7 @@ describe('AwsBedrockAgentsProvider', () => {
 
       expect(ProxyAgentMock).toHaveBeenCalled();
       expect(NodeHttpHandlerMock).toHaveBeenCalledWith({
+        httpAgent: expect.any(Object),
         httpsAgent: expect.any(Object),
         requestTimeout: 300000,
       });

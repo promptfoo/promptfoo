@@ -2492,6 +2492,36 @@
             },
             "AZURE_STORAGE_CONNECTION_STRING": {
               "type": "string"
+            },
+            "PROMPTFOO_FETCH_CONNECTIONS": {
+              "type": "string"
+            },
+            "REQUEST_TIMEOUT_MS": {
+              "type": "string"
+            },
+            "ALL_PROXY": {
+              "type": "string"
+            },
+            "all_proxy": {
+              "type": "string"
+            },
+            "HTTP_PROXY": {
+              "type": "string"
+            },
+            "http_proxy": {
+              "type": "string"
+            },
+            "HTTPS_PROXY": {
+              "type": "string"
+            },
+            "https_proxy": {
+              "type": "string"
+            },
+            "NO_PROXY": {
+              "type": "string"
+            },
+            "no_proxy": {
+              "type": "string"
             }
           }
         },

@@ -51,8 +51,7 @@ function getSafeUrlForConnectionLog(url: string | URL | Request): string {
   return sanitizeUrl(getRequestUrlString(url));
 }
 
-function getSafeProxyForConnectionLog(): string {
-  const proxyUrl = process.env.HTTP_PROXY || process.env.HTTPS_PROXY;
+function getSafeProxyForConnectionLog(proxyUrl?: string): string {
   return proxyUrl ? `or Proxy: ${sanitizeUrl(proxyUrl)}` : '';
 }
 
@@ -212,6 +211,7 @@ export function preserveCloudAuthRedirects(
 export async function monkeyPatchFetch(
   url: string | URL | Request,
   options?: FetchOptions,
+  proxyUrl?: string,
 ): Promise<Response> {
   const NO_LOG_URLS = [R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
   const urlString = getRequestUrlString(url);
@@ -291,7 +291,7 @@ export async function monkeyPatchFetch(
       });
       if (isConnectionError(e as Error)) {
         logger.debug(
-          `Connection error, please check your network connectivity to the host: ${getSafeUrlForConnectionLog(url)} ${getSafeProxyForConnectionLog()}`,
+          `Connection error, please check your network connectivity to the host: ${getSafeUrlForConnectionLog(url)} ${getSafeProxyForConnectionLog(proxyUrl)}`,
         );
         throw e;
       }

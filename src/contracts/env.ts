@@ -176,6 +176,16 @@ export const ProviderEnvOverridesSchema = z.object({
 // These settings apply to the whole evaluation, not an individual provider.
 export const EnvOverridesSchema = ProviderEnvOverridesSchema.extend({
   AZURE_STORAGE_CONNECTION_STRING: z.string().optional(),
+  PROMPTFOO_FETCH_CONNECTIONS: z.string().optional(),
+  REQUEST_TIMEOUT_MS: z.string().optional(),
+  ALL_PROXY: z.string().optional(),
+  all_proxy: z.string().optional(),
+  HTTP_PROXY: z.string().optional(),
+  http_proxy: z.string().optional(),
+  HTTPS_PROXY: z.string().optional(),
+  https_proxy: z.string().optional(),
+  NO_PROXY: z.string().optional(),
+  no_proxy: z.string().optional(),
 });
 
 // The runtime schema silently strips unknown keys at parse time (zod's default
