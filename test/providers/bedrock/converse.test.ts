@@ -489,6 +489,61 @@ describe('AwsBedrockConverseProvider', () => {
       expect(parsed.input).toEqual({ expression: '2+2' });
     });
 
+    it.each(['mcp', 'callback', 'fallback'] as const)(
+      'preserves between-tool progress and structured %s results according to showThinking',
+      async (dispatch) => {
+        for (const showThinking of [undefined, false]) {
+          const callback = vi.fn().mockResolvedValue('{"answer":4}');
+          const name = dispatch === 'mcp' ? 'list_resources' : 'calculator';
+          const input = { expression: '2+2' };
+          const provider = new AwsBedrockConverseProvider('anthropic.claude-sonnet-5-5', {
+            config: {
+              region: 'us-east-1',
+              thinking: { type: 'between_tools' },
+              showThinking,
+              ...(dispatch === 'mcp'
+                ? {
+                    mcp: {
+                      enabled: true,
+                      server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+                    },
+                  }
+                : {}),
+              ...(dispatch === 'callback' ? { functionToolCallbacks: { [name]: callback } } : {}),
+            },
+          });
+          mockSend.mockResolvedValueOnce(
+            createMockConverseResponse('', {
+              reasoningContent: 'Checking the tool.',
+              toolUse: { id: 'tool-123', name, input },
+              stopReason: 'tool_use',
+            }),
+          );
+
+          const result = await provider.callApi('Use the tool');
+          const toolOutput =
+            dispatch === 'mcp'
+              ? 'MCP Tool Result (list_resources): Available resources: [docs, tickets]'
+              : dispatch === 'callback'
+                ? '{"answer":4}'
+                : JSON.stringify({ type: 'tool_use', id: 'tool-123', name, input });
+          const progress =
+            showThinking === false
+              ? ''
+              : '<thinking>\nChecking the tool.\n</thinking>\n\nSignature: test-signature\n';
+
+          expect(result.output).toBe(progress + toolOutput);
+          if (dispatch === 'callback') {
+            expect(callback).toHaveBeenCalledExactlyOnceWith(JSON.stringify(input));
+          }
+          if (showThinking === false && dispatch !== 'mcp') {
+            expect(JSON.parse(result.output as string)).toEqual(JSON.parse(toolOutput));
+          }
+          await provider.cleanup();
+        }
+      },
+    );
+
     it('should execute functionToolCallbacks when defined', async () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
@@ -952,6 +1007,7 @@ describe('AwsBedrockConverseProvider', () => {
           message: {
             role: 'assistant',
             content: [
+              { text: 'Using the resource and calculator tools.' },
               {
                 toolUse: { toolUseId: 't1', name: 'list_resources', input: {} },
               },
@@ -970,8 +1026,10 @@ describe('AwsBedrockConverseProvider', () => {
       expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', {});
       expect(localCallback).toHaveBeenCalledWith('{"expression":"2+2"}');
       // Both outputs are present in the combined response.
+      expect(result.output).toContain('Using the resource and calculator tools.');
       expect(result.output).toContain('MCP Tool Result (list_resources)');
       expect(result.output).toContain('local result');
+      expect(result.output).not.toContain('"type":"tool_use"');
     });
 
     it('should register with providerRegistry before awaiting MCP init', async () => {

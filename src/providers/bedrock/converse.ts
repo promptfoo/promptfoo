@@ -1576,6 +1576,13 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
 
     if (dispatchResults.length > 0) {
+      const nonToolOutput = extractTextFromContentBlocks(
+        content.filter((block) => !block.toolUse),
+        showThinking,
+      );
+      if (nonToolOutput) {
+        dispatchResults.unshift(nonToolOutput);
+      }
       // Surface MCP failures via the response `error` field so downstream
       // consumers (assertions, exit codes, redteam grader) treat broken MCP
       // calls as failures rather than greenlighting them on the strength of an
