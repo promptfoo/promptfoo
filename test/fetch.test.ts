@@ -2053,6 +2053,24 @@ describe('fetchWithRetries', () => {
       expect(sleep).not.toHaveBeenCalled();
     });
 
+    it('fails fast on OpenRouter gateway billing metadata without an error type', async () => {
+      const quotaResponse = rateLimitedJsonResponse({
+        body: {
+          error: {
+            message: 'Insufficient credits',
+            metadata: { provider_code: 'credit_balance_exhausted' },
+          },
+        },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(quotaResponse);
+
+      const error = await fetchWithRetries('https://example.com', {}, 1000, 4).catch((err) => err);
+      expect(error).toBeInstanceOf(HttpRateLimitError);
+      expect(error).toMatchObject({ kind: 'quota', code: 'credit_balance_exhausted' });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(sleep).not.toHaveBeenCalled();
+    });
+
     it('fails fast when only error.type names a hard quota next to an unknown code', async () => {
       const quotaResponse = rateLimitedJsonResponse({
         body: { error: { code: 'new_billing_code', type: 'insufficient_quota' } },
