@@ -448,6 +448,46 @@ describe('SageMaker ownership of reusable SDK credentials', () => {
     },
   );
 
+  it('refreshes retained explicit-profile credentials after an unrelated profile-file edit', async () => {
+    const profile = '[profile retained]\nregion = us-east-1\n';
+    await writeFile(configFile, profile);
+    await writeFile(
+      path.join(directory, 'credentials'),
+      '[retained]\naws_access_key_id = FIXTURE\naws_secret_access_key = synthetic-secret\n',
+    );
+    provider = new SageMakerCompletionProvider('endpoint', {
+      config: { modelType: 'custom', profile: 'retained', region: 'us-east-1' },
+    });
+    let refreshes = 0;
+    const resolve = vi.fn(async () => ({
+      accessKeyId: `FIXTURE_${++refreshes}`,
+      secretAccessKey: 'synthetic-secret',
+      expiration: new Date(Date.now() + hour),
+    }));
+    vi.spyOn(provider, 'getCredentials').mockResolvedValue(resolve);
+    const first = await provider.getSageMakerRuntimeInstance();
+    expect(await first.config.credentials()).toMatchObject({ accessKeyId: 'FIXTURE_1' });
+    provider.cleanupAfterEvaluation({ reason: 'evaluation-complete' });
+
+    await writeFile(
+      configFile,
+      `${profile}\n# unrelated edit\n[profile other]\nregion = eu-west-1\n`,
+    );
+    const next = await provider.getSageMakerRuntimeInstance();
+    expect(await next.config.credentials()).toMatchObject({ accessKeyId: 'FIXTURE_1' });
+    expect(resolve).toHaveBeenCalledOnce();
+    expect(await next.config.credentials({ forceRefresh: true })).toMatchObject({
+      accessKeyId: 'FIXTURE_2',
+    });
+    expect(resolve).toHaveBeenCalledTimes(2);
+    provider.cleanupAfterEvaluation({ reason: 'evaluation-complete' });
+
+    vi.setSystemTime(startTime.getTime() + 70 * 60_000);
+    const expired = await provider.getSageMakerRuntimeInstance();
+    expect(await expired.config.credentials()).toMatchObject({ accessKeyId: 'FIXTURE_3' });
+    expect(resolve).toHaveBeenCalledTimes(3);
+  });
+
   it('retains the selected east SSO credentials after west initialization, a pool hit, and idle cleanup', async () => {
     await writeFile(
       configFile,

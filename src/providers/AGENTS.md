@@ -13,14 +13,15 @@ Each provider:
 
 ## Provider Lifecycle & Cleanup
 
-Evaluations run inside `providerRegistry.withEvaluation()` (`src/providers/providerRegistry.ts`). A provider or registered resource stays open until its last evaluation and any standalone calls using it finish. Independent evaluations keep running; a new caller of the same provider waits for its preceding cleanup to settle. Nested evaluation entry points share one ownership scope.
+Evaluations use `providerRegistry.withEvaluation()` (`src/providers/providerRegistry.ts`). Providers and registered resources stay open until their last evaluation and any active calls finish. A new caller waits for cleanup of the same provider; unrelated evaluations continue. Nested entry points share one scope.
 
 **If your provider allocates resources** (Python workers, connections, child processes):
 
-- Implement a `cleanup()` method; it is called without arguments. If the provider also registers itself, the registry calls its `shutdown()` instead; that method can delegate to `cleanup()`. Providers that distinguish idle evaluation cleanup from explicit shutdown can implement `cleanupAfterEvaluation({ reason: 'evaluation-complete' })`, which is used instead for automatic cleanup.
-- Register with `providerRegistry` for automatic cleanup. Registration on the provider instance is restored when another evaluation reuses it. An idle cleanup hook can leave the provider registered for process shutdown. Shared singleton transports must await `useResource()` on every access and recheck `throwIfResourceUseAborted()` before starting work after asynchronous acquisition. Both use the current provider call's cancellation signal; direct callers can pass a signal explicitly.
-- Pass the request signal to `withProvider()` and use the provider that owns cleanup when calling through a temporary adapter. Cancelled calls waiting for older cleanup never start; calls already in progress retain their resources until they settle.
-- A resource is released after its last using evaluation, or immediately on process shutdown. The CLI also invokes cleanup for its own targets on process exit, even when they do not register a resource; caller-supplied graders remain borrowed. Register a resource before asynchronous initialization starts creating child processes or connections so shutdown can close partially initialized resources too.
+- Implement `cleanup()` without required arguments. For a provider that registers itself, the registry calls `shutdown()` instead; it can delegate to `cleanup()`. Use `cleanupAfterEvaluation({ reason: 'evaluation-complete' })` when automatic cleanup must differ from explicit shutdown.
+- Register resources before asynchronous initialization creates processes or connections. Registration of a provider instance is restored when an evaluation reuses it. An idle cleanup hook may leave the provider registered for process shutdown.
+- For shared singleton transports, await `useResource()` on every access and call `throwIfResourceUseAborted()` after asynchronous acquisition. Both use the current provider call's signal; direct callers can supply one.
+- Pass the request signal to `withProvider()`. When using a temporary adapter, retain ownership on the provider that performs cleanup. Cancelled calls waiting for cleanup never start; active calls retain resources until they settle.
+- Process shutdown closes registered resources immediately. The CLI also cleans up its own targets, including targets without registered resources. Caller-supplied graders remain borrowed.
 
 **Reference implementations:**
 

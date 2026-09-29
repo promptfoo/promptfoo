@@ -20,7 +20,6 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
-import { withGradingUsage } from '../grading/storedResult';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -56,6 +55,7 @@ import {
   getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
+  resolveStoredGraderResult,
   runRedteamGrader,
   type TargetResponse,
 } from './shared';
@@ -139,6 +139,7 @@ export async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration,
   perTurnLayers = [],
   inputs,
+  attackerUsesRemoteProvider,
   targetId,
 }: {
   context?: CallApiContextParams;
@@ -155,6 +156,10 @@ export async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   perTurnLayers?: LayerConfig[];
   inputs?: Inputs;
+  /** Whether the attacker is the remote task provider. Callers that resolved
+   * an explicit redteamProvider pass false so multi-input materialization
+   * stays on the local path even when remote generation is enabled. */
+  attackerUsesRemoteProvider?: boolean;
   targetId?: string;
 }): Promise<{
   output: string;
@@ -221,7 +226,7 @@ export async function runRedteamConversation({
   const sessionIds: string[] = [];
 
   const totalTokenUsage = createEmptyTokenUsage();
-  const usingRemoteRedteamProvider = shouldGenerateRemote();
+  const usingRemoteRedteamProvider = attackerUsesRemoteProvider ?? shouldGenerateRemote();
 
   const previousOutputs: {
     prompt: string;
@@ -869,9 +874,7 @@ export async function runRedteamConversation({
       highestScore,
       redteamHistory: previousOutputs,
       redteamFinalPrompt: bestInjectVar ?? lastInjectVar,
-      storedGraderResult: bestGraderResult
-        ? withGradingUsage(bestGraderResult, storedGraderResult?.tokensUsed)
-        : storedGraderResult,
+      storedGraderResult: resolveStoredGraderResult(bestGraderResult, storedGraderResult),
       stopReason: stopReason,
       sessionIds,
       traceSnapshots:
@@ -890,6 +893,7 @@ class RedteamIterativeProvider implements ApiProvider {
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly gradingProvider: RedteamFileConfig['provider'];
   private readonly perTurnLayers: LayerConfig[];
+  private readonly attackerUsesRemoteProvider: boolean;
   readonly inputs?: Inputs;
 
   constructor(readonly config: Record<string, VarValue>) {
@@ -909,9 +913,12 @@ class RedteamIterativeProvider implements ApiProvider {
     );
     this.perTurnLayers = (config._perTurnLayers as LayerConfig[]) ?? [];
 
-    // Redteam provider can be set from the config.
+    // Redteam provider can be set from the config. Remote task handlers only
+    // know the built-in default, so an explicit redteamProvider must stay
+    // local even when remote generation is enabled.
+    this.attackerUsesRemoteProvider = shouldGenerateRemote() && !config.redteamProvider;
 
-    if (shouldGenerateRemote()) {
+    if (this.attackerUsesRemoteProvider) {
       this.gradingProvider = new PromptfooChatCompletionProvider({
         task: 'judge',
         jsonOnly: true,
@@ -978,6 +985,7 @@ class RedteamIterativeProvider implements ApiProvider {
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
       inputs: this.inputs,
+      attackerUsesRemoteProvider: this.attackerUsesRemoteProvider,
       targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
     });
   }

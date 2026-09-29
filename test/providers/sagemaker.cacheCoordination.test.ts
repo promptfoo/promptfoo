@@ -65,6 +65,60 @@ afterEach(() => {
 });
 
 describe('SageMaker cache coordination across clears', () => {
+  it('keeps a cancelled publication quarantined when rollback and a later clear both fail', async () => {
+    const namespace = 'sagemaker-failed-rollback-and-clear';
+    const cache = await scopedCache(namespace);
+    const backing = getCache();
+    const key = `${namespace}:entry`;
+    const probe = new CacheProbe();
+    const controller = new AbortController();
+    const reason = new Error('cancel the publication');
+    const nextController = new AbortController();
+    await cache.set('entry', 'previous');
+    const set = backing.set.bind(backing);
+    const publication = vi
+      .spyOn(backing, 'set')
+      .mockImplementation(async <T>(cacheKey: string, value: T, ttl?: number): Promise<T> => {
+        if (cacheKey === key && value === 'previous') {
+          throw new Error('rollback failed');
+        }
+        const result = await set(cacheKey, value, ttl);
+        if (cacheKey === key && value === 'cancelled') {
+          controller.abort(reason);
+        }
+        if (cacheKey === key && value === 'cancelled-again') {
+          nextController.abort(reason);
+        }
+        return result;
+      });
+    await expect(probe.write(cache, 'entry', 'cancelled', controller.signal)).rejects.toBe(reason);
+    expect(await cache.get('entry')).toBe('cancelled');
+    expect(await probe.read(cache, 'entry')).toBe('previous');
+
+    const store = backing.stores[0];
+    const iterator = store.iterator?.bind(store);
+    if (!iterator) {
+      throw new Error('Expected the cache test store to support namespace iteration');
+    }
+    const clear = vi.spyOn(store, 'iterator').mockImplementation(async function* (storeNamespace) {
+      yield* iterator(storeNamespace);
+      throw new Error('clear failed');
+    });
+    await expect(cache.clear()).rejects.toThrow('clear failed');
+    expect(await cache.get('entry')).toBe('cancelled');
+    expect(await probe.read(cache, 'entry')).toBeUndefined();
+
+    clear.mockRestore();
+    await expect(
+      probe.write(cache, 'entry', 'cancelled-again', nextController.signal),
+    ).rejects.toBe(reason);
+    expect(await cache.get('entry')).toBeUndefined();
+    expect(await probe.read(cache, 'entry')).toBeUndefined();
+    publication.mockRestore();
+    await probe.write(cache, 'entry', 'fresh');
+    expect(await probe.read(cache, 'entry')).toBe('fresh');
+  });
+
   it.each(['global', 'parent namespace'] as const)(
     'discards writes submitted after an active %s clear has scanned their storage',
     async (scope) => {

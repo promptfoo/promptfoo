@@ -291,7 +291,7 @@ providers:
 
 To stop embedding grading when an eval is cancelled, set `supportsEmbeddingCancellation` to `true` and pass the third argument's `abortSignal` to your request. Without this flag, promptfoo calls `callEmbeddingApi` with only the input.
 
-```javascript title="embeddingProvider.js"
+```javascript
 supportsEmbeddingCancellation = true;
 
 async callEmbeddingApi(text, _context, { abortSignal } = {}) {

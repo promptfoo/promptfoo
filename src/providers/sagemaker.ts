@@ -32,11 +32,6 @@ import type {
 } from '../types/index';
 import type { TransformContext, TransformFunction } from '../types/transform';
 
-/**
- * Sleep utility function for implementing delays
- * @param ms Milliseconds to sleep
- * @returns Promise that resolves after the specified delay or rejects on cancellation
- */
 const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
   new Promise((resolve, reject) => {
     signal.throwIfAborted();
@@ -1069,7 +1064,7 @@ abstract class SageMakerGenericProvider {
       }
       entry.generation = generation;
       entry.initialized = false;
-      entry.untrusted = false;
+      // A failed clear cannot make a cancelled publication safe to read.
       entry.value = undefined;
       return true;
     };
@@ -1130,7 +1125,7 @@ abstract class SageMakerGenericProvider {
       if (queuedClear) {
         return;
       }
-      if (!state.initialized) {
+      if (!state.initialized && !state.untrusted) {
         const previous = (await cache.get<string>(key)) ?? undefined;
         signal.throwIfAborted();
         if (refresh()) {
@@ -1461,7 +1456,18 @@ abstract class SageMakerGenericProvider {
             const callerClientConfig = { region: async () => runtimeRegion };
             const isolated: RuntimeConfigAwsCredentialIdentityProvider = (options) =>
               chain({ ...options, callerClientConfig });
-            credentials = isolated;
+            if (scope.profile) {
+              const { memoizeIdentityProvider, isIdentityExpired, doesIdentityRequireRefresh } =
+                await import('@smithy/core').catch(importError);
+              // Retain the resolver's cache, not an earlier request's file-snapshot guard.
+              credentials = memoizeIdentityProvider(
+                isolated,
+                isIdentityExpired,
+                doesIdentityRequireRefresh,
+              );
+            } else {
+              credentials = isolated;
+            }
           }
           const credentialProvider = typeof credentials === 'function' ? credentials : undefined;
           const credentialState = credentialProvider
@@ -1582,10 +1588,6 @@ abstract class SageMakerGenericProvider {
           }
           if (client.config?.retryStrategy) {
             retryState.provider = client.config.retryStrategy;
-          }
-          if (credentialState && scope.profile) {
-            // Explicit profiles need the SDK memoizer; default chains retain their own refresh.
-            credentialState.provider = retainedCredentials ?? client.config.credentials;
           }
           this.runtimeClients.add(client);
           logger.debug(`SageMaker client initialized for region ${runtimeRegion}`);
@@ -2616,14 +2618,7 @@ export class SageMakerEmbeddingProvider
             };
 
             // Cache the result if caching is enabled
-            await this.cacheEmbeddingResult(
-              result,
-              getCacheKey,
-              abortSignal,
-              context,
-              isTransformed,
-              isTransformed ? text : undefined,
-            );
+            await this.cacheEmbeddingResult(result, getCacheKey, abortSignal, context);
 
             return result;
           } else {
@@ -2663,14 +2658,7 @@ export class SageMakerEmbeddingProvider
       };
 
       // Cache the result if caching is enabled
-      await this.cacheEmbeddingResult(
-        result,
-        getCacheKey,
-        abortSignal,
-        context,
-        isTransformed,
-        isTransformed ? text : undefined,
-      );
+      await this.cacheEmbeddingResult(result, getCacheKey, abortSignal, context);
 
       return result;
     } catch (error: any) {
@@ -2690,8 +2678,6 @@ export class SageMakerEmbeddingProvider
     getCacheKey: () => Promise<string | undefined>,
     abortSignal: AbortSignal,
     context?: CallApiContextParams,
-    isTransformed: boolean = false,
-    originalText?: string,
   ): Promise<void> {
     const { isCacheEnabled, getCache } = await import('../cache');
     const bustCache = context?.debug === true;
@@ -2703,17 +2689,6 @@ export class SageMakerEmbeddingProvider
         : undefined;
     if (cacheKey) {
       const cache = getCache();
-
-      // Add metadata about transformation
-      if (isTransformed && originalText && !result.metadata) {
-        result.metadata = {
-          transformed: true,
-          originalText,
-        };
-      } else if (isTransformed && originalText && result.metadata) {
-        result.metadata.transformed = true;
-        result.metadata.originalText = originalText;
-      }
 
       const resultToCache = JSON.stringify(result);
 

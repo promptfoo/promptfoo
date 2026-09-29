@@ -95,6 +95,16 @@ describe('callApi', () => {
     expect(mockFetch).toHaveBeenCalledWith('https://api.example.com/api/users', options);
   });
 
+  it('uses an explicitly captured endpoint after global settings change', async () => {
+    const captured = getApiBaseUrl('https://original.example/proxy/');
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://changed.example'));
+    await callApi('/user/cloud-config', {}, captured);
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://original.example/proxy/api/user/cloud-config',
+      {},
+    );
+  });
+
   it('returns the fetch response', async () => {
     const mockResponse = new Response(JSON.stringify({ id: '123' }), { status: 200 });
     mockFetch.mockResolvedValue(mockResponse);
