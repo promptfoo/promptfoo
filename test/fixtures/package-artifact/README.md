@@ -53,7 +53,7 @@ migration idempotency after reopening.
 Fixtures run in supervised child processes. Temporary state is removed after the
 children exit and retained if process-tree termination fails.
 
-Select interpreter checks explicitly; missing interpreters fail the selected gate:
+Select the interpreter checks to run. Each selected interpreter must be installed:
 
 ```sh
 npm run test:package-artifact -- --runtime-assets python-go
@@ -62,9 +62,9 @@ npm run test:package-artifact -- --profile omit-optional --runtime-assets all
 
 `python-go` tests Python and Go; `all` additionally requires Ruby. Each provider
 runs success, deliberate error, and recovery cases with scores 1/0/1. The Python
-fixture uses both the prompt wrapper and a persistent provider worker. The same
-gate roundtrips a nonempty trace using the installed protobuf definitions and
-rejects malformed bytes; it does not start an OTLP receiver.
+fixture uses both the prompt wrapper and a persistent provider worker. The protobuf
+check roundtrips a nonempty trace using the installed definitions and rejects malformed
+bytes. It does not start an OTLP receiver.
 
 | CI consumer                  | Install layout                        | Additional checks                                            |
 | ---------------------------- | ------------------------------------- | ------------------------------------------------------------ |
@@ -78,7 +78,8 @@ the acceptance scripts/fixtures into a temporary tool package. Its two tools
 and their complete dependency graph are copied from the repository lockfile,
 including integrity hashes and optional native packages, then installed with `npm ci`.
 The Promptfoo consumer resolves dependencies independently. These jobs need no
-repository dependency install or build.
+repository dependency install or build. TypeScript incremental state is excluded
+from the archive.
 
 ## Browser capability
 
