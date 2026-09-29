@@ -227,12 +227,15 @@ describe('release-please automation', () => {
           'user.name=Test',
           '-c',
           'user.email=test@example.com',
+          '-c',
+          'commit.gpgsign=false',
           'commit',
           '--allow-empty',
           '-m',
           'initial',
         ],
         ['branch', 'origin/main'],
+        ['config', 'core.hooksPath', path.join(cwd, '.git/hooks')],
       ]) {
         expect(spawnSync('git', args, { cwd, encoding: 'utf8' }).status).toBe(0);
       }
@@ -241,13 +244,26 @@ describe('release-please automation', () => {
         '#!/bin/sh\nprintf hook-ran > "$HOOK_MARKER"\n',
         { mode: 0o755 },
       );
-      const checkout = spawnSync('bash', ['-e', '-c', switchCommand], {
-        cwd,
-        encoding: 'utf8',
-        env: { ...process.env, branch: 'release/test', HOOK_MARKER: marker },
-      });
+      const [command, ...args] = switchCommand.trim().split(/\s+/);
+      expect(command).toBe('git');
+      const checkout = spawnSync(
+        command,
+        args.map((arg) => (arg === '"$branch"' ? 'release/test' : arg)),
+        {
+          cwd,
+          encoding: 'utf8',
+          env: { ...process.env, HOOK_MARKER: marker },
+        },
+      );
       expect(checkout.status, checkout.stderr).toBe(0);
       expect(fs.existsSync(marker)).toBe(false);
+      const controlCheckout = spawnSync('git', ['switch', 'main'], {
+        cwd,
+        encoding: 'utf8',
+        env: { ...process.env, HOOK_MARKER: marker },
+      });
+      expect(controlCheckout.status, controlCheckout.stderr).toBe(0);
+      expect(fs.existsSync(marker)).toBe(true);
     } finally {
       fs.rmSync(cwd, { recursive: true, force: true });
     }
