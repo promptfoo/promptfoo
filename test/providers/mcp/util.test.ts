@@ -1,21 +1,102 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import {
   applyQueryParams,
   discoverTokenEndpoint,
   getAuthHeaders,
   getAuthQueryParams,
   getMcpErrorMessage,
+  getOAuthTokenWithExpiry,
   isMcpErrorResult,
   isMcpToolNameFilter,
+  normalizeMcpToolContent,
+  renderAuthVars,
 } from '../../../src/providers/mcp/util';
 
-import type { MCPServerConfig } from '../../../src/providers/mcp/types';
+import type {
+  MCPOAuthClientCredentialsAuth,
+  MCPServerConfig,
+} from '../../../src/providers/mcp/types';
 
 // Mock fetchWithProxy for discovery tests
 const mockFetch = vi.fn();
-vi.mock('../../../src/util/fetch', () => ({
+
+it('resolves MCP auth from file defaults unless explicit vars replace them', () => {
+  const server: MCPServerConfig = { auth: { type: 'bearer', token: '{{MCP_TOKEN}}' } };
+  cliState.withEnvFileOverrides({ MCP_TOKEN: 'file-token' }, () => {
+    expect(renderAuthVars(server).auth).toEqual({ type: 'bearer', token: 'file-token' });
+    expect(renderAuthVars(server, { MCP_TOKEN: 'explicit-token' }).auth).toEqual({
+      type: 'bearer',
+      token: 'explicit-token',
+    });
+  });
+});
+vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetch(...args),
 }));
+
+describe('normalizeMcpToolContent', () => {
+  it.each([
+    { name: 'null', content: null, expected: '' },
+    { name: 'undefined', content: undefined, expected: '' },
+    { name: 'literal text', content: '{{secret}}', expected: '{{secret}}' },
+    { name: 'number', content: 42, expected: '42' },
+    { name: 'object', content: { text: 'whole object' }, expected: '{"text":"whole object"}' },
+    { name: 'empty array', content: [], expected: '' },
+    {
+      name: 'mixed blocks and property precedence',
+      content: [
+        'literal',
+        { text: 0, json: 'ignored', data: 'ignored' },
+        { text: false },
+        { text: '', data: 'ignored' },
+        { text: null, json: { count: 2 }, data: 'ignored' },
+        { data: ['value'] },
+        { resource: { uri: 'file:///literal.txt' } },
+        null,
+        undefined,
+      ],
+      expected:
+        'literal\n0\nfalse\n\n{"count":2}\n["value"]\n{"resource":{"uri":"file:///literal.txt"}}\nnull\nundefined',
+    },
+    {
+      name: 'undefined property values and sparse entries',
+      content: [{ json: undefined, data: 'ignored' }, , { data: undefined }],
+      expected: '\n\n',
+    },
+  ])('renders $name without changing content semantics', ({ content, expected }) => {
+    expect(normalizeMcpToolContent(content)).toBe(expected);
+  });
+
+  it('only reports unknown object blocks, before serializing each block', () => {
+    const events: string[] = [];
+    const unknown = {
+      toJSON: () => {
+        events.push('serialize');
+        return 'serialized';
+      },
+    };
+    const onUnknownContent = vi.fn(() => {
+      events.push('diagnostic');
+    });
+
+    expect(
+      normalizeMcpToolContent(
+        [{ text: 'known' }, { json: 1 }, { data: 2 }, unknown, 'plain', 3],
+        onUnknownContent,
+      ),
+    ).toBe('known\n1\n2\n"serialized"\nplain\n3');
+    expect(onUnknownContent).toHaveBeenCalledExactlyOnceWith(unknown);
+    expect(events).toEqual(['diagnostic', 'serialize']);
+  });
+
+  it('preserves serialization failures for the provider error handler', () => {
+    const cyclic: { self?: unknown } = {};
+    cyclic.self = cyclic;
+    expect(() => normalizeMcpToolContent([{ json: cyclic }])).toThrow(TypeError);
+    expect(() => normalizeMcpToolContent([{ data: 1n }])).toThrow(TypeError);
+  });
+});
 
 describe('isMcpToolNameFilter', () => {
   it('identifies plain tool names as MCP filters', () => {
@@ -355,5 +436,90 @@ describe('discoverTokenEndpoint', () => {
     await expect(discoverTokenEndpoint('https://example.com')).rejects.toThrow(
       /Failed to discover OAuth token endpoint/,
     );
+  });
+});
+
+describe('getOAuthTokenWithExpiry', () => {
+  it('normalizes string scopes for the request and cache key', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: 'scope-token', expires_in: 3600 }),
+    });
+    const auth: MCPOAuthClientCredentialsAuth = {
+      type: 'oauth',
+      grantType: 'client_credentials',
+      clientId: 'scope-client',
+      clientSecret: 'secret',
+      tokenUrl: 'https://scope-auth.example.com/token',
+      scopes: ' read  write ',
+    };
+
+    const token = await getOAuthTokenWithExpiry(auth);
+    const cached = await getOAuthTokenWithExpiry({ ...auth, scopes: ['read', 'write'] });
+
+    expect(token.accessToken).toBe('scope-token');
+    expect(cached).toEqual(token);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const request = mockFetch.mock.calls[0][1];
+    expect(new URLSearchParams(request.body).get('scope')).toBe('read write');
+  });
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('scopes cached tokens by the discovered token endpoint', async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.pathname.endsWith('/.well-known/oauth-authorization-server')) {
+        return {
+          ok: true,
+          json: async () => ({
+            token_endpoint:
+              parsedUrl.hostname === 'agent-a.example.com'
+                ? 'https://auth-a.example.com/oauth/token'
+                : 'https://auth-b.example.com/oauth/token',
+          }),
+        };
+      }
+
+      if (url === 'https://auth-a.example.com/oauth/token') {
+        return {
+          ok: true,
+          json: async () => ({ access_token: 'token-a', expires_in: 3600 }),
+        };
+      }
+
+      if (url === 'https://auth-b.example.com/oauth/token') {
+        return {
+          ok: true,
+          json: async () => ({ access_token: 'token-b', expires_in: 3600 }),
+        };
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    const auth: MCPOAuthClientCredentialsAuth = {
+      type: 'oauth',
+      grantType: 'client_credentials',
+      clientId: 'shared-client',
+      clientSecret: 'secret',
+    };
+
+    const firstToken = await getOAuthTokenWithExpiry(auth, 'https://agent-a.example.com/a2a');
+    const secondToken = await getOAuthTokenWithExpiry(auth, 'https://agent-b.example.com/a2a');
+
+    expect(firstToken.accessToken).toBe('token-a');
+    expect(secondToken.accessToken).toBe('token-b');
+    expect(
+      mockFetch.mock.calls
+        .map(([url]) => String(url))
+        .filter((url) => url.includes('/oauth/token')),
+    ).toEqual(['https://auth-a.example.com/oauth/token', 'https://auth-b.example.com/oauth/token']);
   });
 });

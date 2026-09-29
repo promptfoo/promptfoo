@@ -31,6 +31,10 @@ function mockRemoteGeneration(responseBody: unknown, rejectWith?: Error) {
   }));
   vi.doMock('../../../src/redteam/remoteGeneration', async () => ({
     getRemoteGenerationUrl: vi.fn().mockReturnValue(await getExpectedRemoteGenerationUrl()),
+    getRemoteGenerationHeaders: vi.fn((extra) => ({
+      'Content-Type': 'application/json',
+      ...extra,
+    })),
     neverGenerateRemote: vi.fn().mockReturnValue(false),
   }));
   vi.doMock('../../../src/providers/shared', () => ({
@@ -130,6 +134,16 @@ describe('redteamTestCaseGenerationService', () => {
       await generatePromptForStrategy('jailbreak:hydra');
 
       await expectTaskRequest(fetchWithRetries, 'hydra-decision');
+    });
+
+    it('should call fetchWithRetries with correct parameters for Goblin strategy', async () => {
+      const fetchWithRetries = mockRemoteGeneration({
+        result: { prompt: 'test prompt' },
+      });
+
+      await generatePromptForStrategy('jailbreak:goblin');
+
+      await expectTaskRequest(fetchWithRetries, 'goblin-decision');
     });
 
     it('should call fetchWithRetries with correct parameters for Mischievous User strategy', async () => {

@@ -101,9 +101,9 @@ if (cachedResponse) {
 
 **Reference implementations:**
 
-- `bedrock/converse.ts:985` - Sets cached flag correctly
-- `pythonCompletion.ts:194` - Example with spread operator
-- `google/vertex.ts:268` - Multiple cache points handled correctly
+- `bedrock/converse.ts:1276` - Sets cached flag correctly
+- `pythonCompletion.ts:62` - Sets the flag on the parsed result
+- `google/vertex.ts:371` - Multiple cache points handled correctly
 
 ## Testing Requirements
 
@@ -118,10 +118,12 @@ Every provider needs tests in `test/providers/`:
 
 ## Adding a Provider
 
+The eligibility bar in `site/docs/contributing.md` ("Provider eligibility") applies only to dedicated provider prefixes. Before adding one, confirm authorized model access, accountable ownership, durability, clear data handling, and provider-specific value beyond what `openai` + `apiBaseUrl` can express. A service that needs only a base URL and API-key environment variable should use the generic `openai` path and contribute docs or an example instead.
+
 **All seven items are required** before a provider is complete:
 
 1. Implement `ApiProvider` interface
-2. Add env vars to `src/types/env.ts` (`ProviderEnvOverridesSchema`)
+2. Add env vars to `ProviderEnvOverridesSchema` in `src/contracts/env.ts` (re-exported via `src/types/env.ts`)
 3. Add env vars to `src/envars.ts` (if documenting in CLI help)
 4. Add tests in `test/providers/`
 5. Add docs in `site/docs/providers/<provider>.md`
@@ -135,7 +137,7 @@ After updating env schema, regenerate JSON schema: `npm run jsonSchema:generate`
 ```bash
 # Check all pieces exist
 ls src/providers/myprovider.ts
-grep -q "MYPROVIDER_API_KEY" src/types/env.ts && echo "env.ts updated"
+grep -q "MYPROVIDER_API_KEY" src/contracts/env.ts && echo "env schema updated"
 ls test/providers/myprovider.test.ts
 ls site/docs/providers/myprovider.md
 grep -q "myprovider" site/docs/providers/index.md && echo "index.md updated"

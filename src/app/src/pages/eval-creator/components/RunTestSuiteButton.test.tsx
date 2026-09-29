@@ -9,17 +9,21 @@ import {
 import { type TestTimers, useTestTimers } from '@app/tests/timers';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import * as yaml from 'js-yaml';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RunTestSuiteButton from './RunTestSuiteButton';
+import { validateYamlConfigDraft } from './yamlConfigValidation';
 
 const renderWithProvider = (ui: React.ReactElement) => {
   return render(<EvalHistoryProvider>{ui}</EvalHistoryProvider>);
 };
 
 const mockShowToast = vi.fn();
+let sourceEvalId: string | undefined;
 
-vi.mock('react-router-dom', () => ({
+vi.mock('react-router', () => ({
   useNavigate: () => vi.fn(),
+  useLocation: () => ({ state: sourceEvalId ? { sourceEvalId } : null }),
 }));
 
 vi.mock('@app/utils/api', () => ({
@@ -39,6 +43,7 @@ describe('RunTestSuiteButton', () => {
     useStore.getState().reset();
     resetCallApiMock();
     mockShowToast.mockReset();
+    sourceEvalId = undefined;
     timers = useTestTimers();
   });
 
@@ -110,6 +115,44 @@ describe('RunTestSuiteButton', () => {
     });
   });
 
+  it('retains YAML column defaults in saved config, exported YAML, and the eval job', async () => {
+    const loaded = validateYamlConfigDraft(
+      yaml.load(`
+providers: [echo]
+prompts: ['{{question}}']
+tests:
+  - vars: {question: hello}
+defaultColumnVisibility:
+  variables: hidden
+  showColumns: ['var:question']
+`),
+    );
+    expect(loaded.success).toBe(true);
+    if (!loaded.success) {
+      throw new Error(loaded.error);
+    }
+    const expected = loaded.config.defaultColumnVisibility;
+    useStore.getState().setConfig(loaded.config);
+    const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+    useStore.getState().setConfig(persisted);
+    expect(useStore.getState().getTestSuite().defaultColumnVisibility).toEqual(expected);
+    expect(yaml.load(yaml.dump(useStore.getState().config))).toMatchObject({
+      defaultColumnVisibility: expected,
+    });
+
+    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    renderWithProvider(<RunTestSuiteButton />);
+    await act(async () => {
+      screen
+        .getByRole('button', { name: 'Run Eval' })
+        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const [, requestInit] = getCallApiMock().mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(requestInit.body as string).defaultColumnVisibility).toEqual(expected);
+  });
+
   it('should serialize legacy prompt maps into prompt objects before submitting eval jobs', async () => {
     mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
     useStore.getState().updateConfig({
@@ -132,6 +175,62 @@ describe('RunTestSuiteButton', () => {
       prompts: [{ raw: 'file://prompt.txt', label: 'Prompt label' }],
       providers: 'openai:gpt-4',
       tests: 'file://tests.csv',
+    });
+  });
+
+  it('includes trace-provider settings and runtime credentials in submitted eval jobs', async () => {
+    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    const tracing = {
+      enabled: true,
+      queryDelay: 3000,
+      provider: {
+        id: 'tempo' as const,
+        endpoint: 'https://tempo.example.com/team-west',
+        auth: { token: 'browser-runtime-secret' },
+        headers: { 'X-Scope-OrgID': 'tenant-a' },
+      },
+    };
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['echo'],
+      tests: [{ vars: { prompt: 'hello' } }],
+      tracing,
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+    await act(async () => {
+      screen
+        .getByRole('button', { name: 'Run Eval' })
+        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const [, requestInit] = getCallApiMock().mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(requestInit.body as string)).toMatchObject({ tracing });
+    expect(localStorage.getItem('promptfoo')).not.toContain('browser-runtime-secret');
+  });
+
+  it('should include the source eval id when rerunning a loaded evaluation', async () => {
+    sourceEvalId = 'source-eval-id';
+    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['echo'],
+      tests: 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D',
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+    await act(async () => {
+      screen
+        .getByRole('button', { name: 'Run Eval' })
+        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const [, requestInit] = getCallApiMock().mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(requestInit.body as string)).toMatchObject({
+      sourceEvalId: 'source-eval-id',
+      tests: 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D',
     });
   });
 

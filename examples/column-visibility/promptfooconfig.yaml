@@ -10,15 +10,15 @@ prompts:
     Question: {{question}}
 
 providers:
-  - openai:gpt-4o-mini
+  - echo
 
 # Hide verbose columns by default in the web viewer
 defaultColumnVisibility:
   variables: visible
   prompts: visible
   hideColumns:
-    - context
-    - system_prompt
+    - var:context
+    - var:system_prompt
 
 tests:
   - vars:

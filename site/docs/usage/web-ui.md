@@ -143,13 +143,13 @@ defaultColumnVisibility:
   variables: hidden
   prompts: visible
   showColumns:
-    - question
+    - var:question
   hideColumns:
-    - context
-    - system_prompt
+    - var:context
+    - var:system_prompt
 ```
 
-Omitted `variables` or `prompts` settings default to visible; `showColumns` overrides `hideColumns` for a specifically named column. Use variable names such as `context` for variable columns, and display IDs such as `Prompt 1` or `description` for non-variable columns. Saved browser preferences take priority over config defaults. Use **Show All** to make every variable column visible for the current variable schema.
+Omitted `variables` or `prompts` settings default to visible; `showColumns` overrides `hideColumns` for a specifically named column. Use `var:context` for the variable named `context`, and `Prompt 1` or `description` for standard columns. The `var:` prefix distinguishes variables even when their names match a standard column ID. Saved browser preferences take priority over config defaults. Use **Show All** to make every variable column visible for the current variable schema.
 
 ## URL Parameters
 

@@ -8,7 +8,7 @@ import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useToast } from '@app/hooks/useToast';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import {
   countTests,
   normalizePrompts,
@@ -19,11 +19,13 @@ import type { CreateJobResponse, GetJobResponse } from '@promptfoo/types/api/eva
 
 const RunTestSuiteButton = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { config } = useStore();
   const { signalEvalCompleted } = useEvalHistoryRefresh();
   const { showToast } = useToast();
   const {
     defaultTest,
+    defaultColumnVisibility,
     derivedMetrics,
     description,
     env,
@@ -32,6 +34,7 @@ const RunTestSuiteButton = () => {
     providers,
     scenarios,
     tests,
+    tracing,
     extensions,
   } = config;
   const [isRunning, setIsRunning] = useState(false);
@@ -72,8 +75,16 @@ const RunTestSuiteButton = () => {
     setRunError(null);
     setProgressPercent(0);
 
+    const sourceEvalId =
+      location.state &&
+      typeof location.state === 'object' &&
+      'sourceEvalId' in location.state &&
+      typeof location.state.sourceEvalId === 'string'
+        ? location.state.sourceEvalId
+        : undefined;
     const testSuite = {
       defaultTest,
+      defaultColumnVisibility,
       derivedMetrics,
       description,
       env,
@@ -82,7 +93,9 @@ const RunTestSuiteButton = () => {
       providers,
       scenarios,
       tests, // Note: This is 'tests' in the API, not 'testCases'
+      tracing,
       extensions,
+      ...(sourceEvalId && { sourceEvalId }),
     };
 
     const handleRunError = (error: unknown) => {
