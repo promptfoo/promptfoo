@@ -1144,6 +1144,8 @@ providers:
 
 With SDK 0.3.257 and newer, reported thinking tokens appear in `tokenUsage.completionDetails.reasoning`. They are already included in completion and total token counts. Sessions resumed from older SDK versions may report only a partial thinking-token count.
 
+For resumed, continued, or forked sessions, `cost`, `tokenUsage`, and `metadata.modelUsage` cover only the current call, including subagents. Cumulative SDK totals remain in `raw`, `metadata.sessionCost`, and `metadata.sessionModelUsage`. Promptfoo captures a pre-prompt baseline using the SDK's experimental usage API. If that API is unavailable, times out, or a local command bypasses the prompt hook, the output is preserved but per-call accounting is omitted with a warning and `metadata.usageAccounting: 'unavailable'`; cost assertions then fail rather than treating unknown cost as zero.
+
 ## Error Diagnostics
 
 When the SDK reports a model-call failure, the provider surfaces it in two places so assertions can branch on the underlying cause instead of the generic terminal subtype:
