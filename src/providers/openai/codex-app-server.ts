@@ -854,14 +854,12 @@ function resolveCodexLaunch(
   if (!resolved?.toLowerCase().endsWith('.cmd')) {
     return { command, args };
   }
-  const entrypoint = path.join(
-    path.dirname(resolved),
-    'node_modules',
-    '@openai',
-    'codex',
-    'bin',
-    'codex.js',
-  );
+  const binDirectory = path.dirname(resolved);
+  const nodeModulesDirectory =
+    path.basename(binDirectory) === '.bin'
+      ? path.dirname(binDirectory)
+      : path.join(binDirectory, 'node_modules');
+  const entrypoint = path.join(nodeModulesDirectory, '@openai', 'codex', 'bin', 'codex.js');
   return fs.existsSync(entrypoint)
     ? { command: process.execPath, args: [entrypoint, ...args] }
     : { command, args };
