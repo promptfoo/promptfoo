@@ -1194,6 +1194,19 @@ describe('file utilities', () => {
       expect(result[0].function.description).toBe('one,two');
     });
 
+    it.each(['{{literal}}', 'file://literal.json'])(
+      'rejects string elements in inserted tool lists without interpreting them: %s',
+      async (text) => {
+        const sharedTools = [{ type: 'function', function: { name: 'example' } }, text];
+        for (const tools of ['{{ sharedTools }}', ['{{ sharedTools }}'], [['{{ sharedTools }}']]]) {
+          await expect(
+            maybeLoadToolsFromExternalFile(tools, { sharedTools, literal: 'replacement' }),
+          ).rejects.toThrow('A substituted tool list must contain tool objects');
+        }
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      },
+    );
+
     it('flattens a substituted tool list alongside an inline tool', async () => {
       const sharedTools = [{ type: 'function', function: { name: 'shared' } }];
       const inlineTool = { type: 'function', function: { name: 'inline' } };
@@ -2171,17 +2184,18 @@ describe('file utilities', () => {
       ).toEqual(schema);
     });
 
-    it('renders schema files with generic extensions once', () => {
-      vi.mocked(fs.readFileSync).mockReturnValue('{"type":"string","enum":["{{ choice }}"]}');
-      expect(
-        JSON.parse(
+    it.each(['{{literal}}', 'a "quoted" value', 'two\nlines'])(
+      'parses schema files before rendering values: %s',
+      (choice) => {
+        vi.mocked(fs.readFileSync).mockReturnValue('{"type":"string","enum":["{{ choice }}"]}');
+        expect(
           maybeLoadResponseSchemaFromExternalFileWithVars('file://schema.txt', {
-            choice: '{{literal}}',
+            choice,
             literal: 'replacement',
           }),
-        ),
-      ).toEqual({ type: 'string', enum: ['{{literal}}'] });
-    });
+        ).toEqual({ type: 'string', enum: [choice] });
+      },
+    );
 
     it('should render variables in schemas loaded from files', () => {
       vi.mocked(fs.readFileSync).mockReturnValue(

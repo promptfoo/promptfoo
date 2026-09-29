@@ -1856,8 +1856,9 @@ export function validateFunctionCall(
     );
   }
 
+  const loadedFunctions = maybeLoadStructuredConfigFromExternalFileWithVars(functions, vars);
   const interpolatedFunctions = loadFile(
-    maybeLoadStructuredConfigFromExternalFileWithVars(functions, vars),
+    Array.isArray(loadedFunctions) ? loadedFunctions.flat(Infinity) : loadedFunctions,
     undefined,
   ) as Tool[];
 

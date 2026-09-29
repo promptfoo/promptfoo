@@ -290,6 +290,33 @@ describe('util', () => {
       ).toThrow('does not match schema');
     });
 
+    it('validates shared tool lists alongside inline declarations', () => {
+      const sharedTools = [
+        {
+          functionDeclarations: [
+            {
+              name: 'shared',
+              parameters: { type: 'object', properties: { value: { type: 'string' } } },
+            },
+          ],
+        },
+      ];
+      const tools = [
+        '{{ sharedTools }}',
+        { functionDeclarations: [{ name: 'inline' }] },
+      ] as unknown as Tool[];
+      expect(() =>
+        validateFunctionCall(
+          [
+            { functionCall: { name: 'shared', args: { value: 'fixture' } } },
+            { functionCall: { name: 'inline', args: {} } },
+          ],
+          tools,
+          { sharedTools },
+        ),
+      ).not.toThrow();
+    });
+
     it('should validate Vertex/AIS format function call', () => {
       const output = [
         {

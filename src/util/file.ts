@@ -501,7 +501,7 @@ export function maybeLoadResponseSchemaFromExternalFileWithVars(
 
   // Render file contents once; inserted variable values must stay literal.
   if (typeof rendered === 'string' && rendered.startsWith('file://')) {
-    return renderStructuredConfig(loaded, vars);
+    return renderStructuredConfig(typeof loaded === 'string' ? JSON.parse(loaded) : loaded, vars);
   }
 
   return loaded;
@@ -583,7 +583,20 @@ export async function maybeLoadToolsFromExternalFile(
   tools: any,
   vars?: Record<string, VarValue>,
 ): Promise<any> {
-  const rendered = renderStructuredConfig(tools, vars);
+  const insertedValues = new WeakSet<object>();
+  return loadRenderedTools(
+    renderStructuredConfig(tools, vars, true, insertedValues),
+    insertedValues,
+  );
+}
+
+async function loadRenderedTools(rendered: any, insertedValues: WeakSet<object>): Promise<any> {
+  if (Array.isArray(rendered) && insertedValues.has(rendered)) {
+    if (rendered.some((tool) => !tool || typeof tool !== 'object' || Array.isArray(tool))) {
+      throw new Error('A substituted tool list must contain tool objects');
+    }
+    return rendered;
+  }
 
   // Check if this is a Python/JS file reference with function name
   // These need special handling to execute the function and get the result
@@ -675,9 +688,7 @@ export async function maybeLoadToolsFromExternalFile(
   // Handle arrays by recursively processing each item
   if (Array.isArray(rendered)) {
     const results = await Promise.all(
-      rendered.map((item) =>
-        maybeLoadToolsFromExternalFile(item, typeof item === 'string' ? vars : undefined),
-      ),
+      rendered.map((item) => loadRenderedTools(item, insertedValues)),
     );
     return results.flat();
   }
