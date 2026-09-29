@@ -179,9 +179,13 @@ export function resolveImageSource(
       : undefined;
   }
   const base64 = data.replace(/[\t\n\r ]/g, '');
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+  const contentLength = base64.length - padding;
   if (
-    base64 &&
-    /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}(?:==)?|[A-Za-z0-9+/]{3}=?)?$/.test(base64)
+    contentLength > 0 &&
+    contentLength % 4 !== 1 &&
+    (padding === 0 || base64.length % 4 === 0) &&
+    /^[A-Za-z0-9+/]+={0,2}$/.test(base64)
   ) {
     return `data:image/${image?.format || 'png'};base64,${base64}`;
   }

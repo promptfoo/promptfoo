@@ -745,6 +745,15 @@ async function createPinnedExternalImageDispatcher(
         }),
       );
   return pinnedAgent.compose(
+    // DNS pinning rotates address families on another request. Retry route failures
+    // that the DNS interceptor does not handle itself, using the same validated set.
+    interceptors.retry({
+      maxRetries: 1,
+      minTimeout: 0,
+      maxTimeout: 0,
+      errorCodes: ['ENETUNREACH', 'EHOSTUNREACH', 'UND_ERR_CONNECT_TIMEOUT'],
+      statusCodes: [],
+    }),
     interceptors.decompress({ skipErrorResponses: false, maxSize: BLOB_MAX_SIZE }),
   );
 }

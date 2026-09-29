@@ -793,9 +793,24 @@ describe('resolveImageSource security', () => {
     expect(resolveImageSource(wrapped)).toBeUndefined();
   });
 
-  it.each(['A', 'AAAA=', 'AA=A', 'not base64!'])('rejects malformed raw image data: %s', (data) => {
-    expect(resolveImageSource({ data })).toBeUndefined();
+  it.each(['AA', 'AAA', 'AAAA', 'AA==', 'AAA='])(
+    'accepts complete or unpadded base64: %s',
+    (data) => {
+      expect(resolveImageSource({ data })).toBe(`data:image/png;base64,${data}`);
+    },
+  );
+
+  it('resolves a raw image buffer', () => {
+    const data = 'QUJD'.repeat(4096);
+    expect(resolveImageSource({ data, format: 'jpeg' })).toBe(`data:image/jpeg;base64,${data}`);
   });
+
+  it.each(['A', 'AAAA=', 'AA=A', 'AA=', 'AAA==', '====', 'AAAA====', 'AA-_', 'not base64!'])(
+    'rejects malformed raw image data: %s',
+    (data) => {
+      expect(resolveImageSource({ data })).toBeUndefined();
+    },
+  );
 
   it('should return undefined for short strings that could be session IDs', () => {
     expect(resolveImageSource('abc123')).toBeUndefined();
