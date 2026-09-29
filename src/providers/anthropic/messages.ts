@@ -266,9 +266,8 @@ function toCachedMessage(
   return {
     ...message,
     fileReferences: responses.flatMap((response) => response.content.flatMap(getFileReferences)),
-    finalText: responses
-      .at(-1)!
-      .content.filter((block) => block.type === 'text')
+    finalText: responses[responses.length - 1].content
+      .filter((block) => block.type === 'text')
       .map((block) => block.text)
       .join(''),
     billedCalls: responses.map(({ stop_details, stop_reason, usage }) => ({
@@ -1209,7 +1208,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         const errorDetails = err.error as { error: { message: string; type: string } };
         error = `API call error: ${errorDetails.error.message}, status ${err.status}, type ${errorDetails.error.type}`;
       }
-      const lastResponse = responses.at(-1);
+      const lastResponse = responses[responses.length - 1];
       return {
         error,
         ...(lastResponse
