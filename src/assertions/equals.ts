@@ -5,7 +5,7 @@ import type { AssertionParams, GradingResult } from '../types/index';
 function getComparisonKeys(value: object): string[] {
   const array = Array.isArray(value);
   const prototype = Object.getPrototypeOf(value);
-  if (!array && prototype !== Object.prototype && prototype !== null) {
+  if (!array && prototype !== Object.prototype) {
     throw new Error('Comparison is not JSON');
   }
   const keys = Object.keys(value);
