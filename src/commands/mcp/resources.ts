@@ -6,7 +6,6 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
  * Register MCP resources with the server
  */
 export function registerResources(server: McpServer) {
-  // Resources with proper namespacing
   server.resource('promptfoo-config', 'promptfoo://config/default', async () => {
     try {
       const { defaultConfig } = await loadDefaultConfig();
@@ -37,14 +36,11 @@ export function registerResources(server: McpServer) {
   });
 
   server.resource('promptfoo-docs', 'promptfoo://docs/tools', async () => {
-    // Generate documentation from the static tool definitions
-    const toolDocs = generateToolDocs();
-
     return {
       contents: [
         {
           uri: 'promptfoo://docs/tools',
-          text: JSON.stringify(toolDocs, null, 2),
+          text: JSON.stringify(generateToolDocs(), null, 2),
         },
       ],
     };

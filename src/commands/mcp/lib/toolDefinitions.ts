@@ -1,7 +1,4 @@
-/**
- * Tool annotation hints per MCP spec 2025-03-26
- * These help AI agents understand tool behavior for better decision making
- */
+/** Hints included in tool documentation. */
 export interface ToolAnnotations {
   /**
    * If true, the tool does not modify any state (read-only operation)
@@ -21,9 +18,7 @@ export interface ToolAnnotations {
   longRunningHint?: boolean;
 }
 
-/**
- * Tool metadata for documentation generation
- */
+/** Metadata included in the tool documentation resource. */
 export interface ToolMetadata {
   name: string;
   description: string;
@@ -32,10 +27,7 @@ export interface ToolMetadata {
   category: 'evaluation' | 'generation' | 'redteam' | 'configuration' | 'debugging';
 }
 
-/**
- * Tool definitions with metadata for all MCP tools
- * This is the single source of truth for tool documentation
- */
+/** Static definitions for the tool documentation resource. */
 export const TOOL_DEFINITIONS: ToolMetadata[] = [
   // Core Evaluation Tools
   {
@@ -158,9 +150,7 @@ export const TOOL_DEFINITIONS: ToolMetadata[] = [
   },
 ];
 
-/**
- * Generate the documentation payload from the static tool definitions.
- */
+/** Generate the tool documentation payload. */
 export function generateToolDocs() {
   const tools = TOOL_DEFINITIONS.map((tool) => ({
     name: tool.name,
