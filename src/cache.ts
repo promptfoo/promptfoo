@@ -35,7 +35,19 @@ let cacheClearGeneration = 0;
 const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
 const cacheEnabledStorage = new AsyncLocalStorage<{ enabled: boolean }>();
 
-let enabled = getEnvBool('PROMPTFOO_CACHE_ENABLED', true);
+const CACHE_ENABLED_GLOBAL_KEY = 'promptfoo.cache.enabled';
+
+function getEnabled(): boolean {
+  return (globalThis as Record<string, unknown>)[CACHE_ENABLED_GLOBAL_KEY] as boolean;
+}
+
+function setEnabled(value: boolean): void {
+  (globalThis as Record<string, unknown>)[CACHE_ENABLED_GLOBAL_KEY] = value;
+}
+
+if (getEnabled() === undefined) {
+  setEnabled(getEnvBool('PROMPTFOO_CACHE_ENABLED', true));
+}
 
 const cacheType =
   getEnvString('PROMPTFOO_CACHE_TYPE') || (getEnvString('NODE_ENV') === 'test' ? 'memory' : 'disk');
@@ -77,7 +89,7 @@ function getCacheInstance() {
     let cachePath = '';
     const stores = [];
 
-    if (cacheType === 'disk' && enabled) {
+    if (cacheType === 'disk' && getEnabled()) {
       cachePath =
         getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
 
@@ -284,7 +296,7 @@ export function withCacheEnabled<T>(enabledOverride: boolean | undefined, fn: ()
 }
 
 function getEffectiveCacheEnabled() {
-  return cacheEnabledStorage.getStore()?.enabled ?? enabled;
+  return cacheEnabledStorage.getStore()?.enabled ?? getEnabled();
 }
 
 export type FetchWithCacheResult<T> = {
@@ -954,7 +966,7 @@ export async function fetchWithCache<T = unknown>(
  * ```
  */
 export function enableCache() {
-  enabled = true;
+  setEnabled(true);
 }
 
 /**
@@ -972,7 +984,7 @@ export function enableCache() {
  * ```
  */
 export function disableCache() {
-  enabled = false;
+  setEnabled(false);
 }
 
 /**
