@@ -542,7 +542,7 @@ console.log(result.data); // the fetched data
 ```
 
 **Configuration:**
-Set cache location and TTL via environment variables:
+Set cache location and TTL through environment variables or the eval's top-level `env` field:
 
 Without `PROMPTFOO_CACHE_PATH`, the cache uses `<PROMPTFOO_CONFIG_DIR>/cache` (normally `~/.promptfoo/cache`). An eval's scoped `PROMPTFOO_CONFIG_DIR` changes its cache location; the database keeps its startup directory.
 
