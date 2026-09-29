@@ -9,7 +9,7 @@ export interface HeliconeGatewayOptions extends OpenAiCompletionOptions {
   baseUrl?: string;
   /** Router name for custom routing (optional, uses /ai endpoint if not specified) */
   router?: string;
-  /** Model name in provider/model format (e.g., openai/gpt-4o, anthropic/claude-3-5-sonnet) */
+  /** Model name in provider/model format (e.g., openai/gpt-4o, anthropic/claude-sonnet-5) */
   model?: string;
 }
 
@@ -45,8 +45,6 @@ export class HeliconeGatewayProvider extends OpenAiChatCompletionProvider {
     const openAiConfig: OpenAiCompletionOptions = {
       ...config,
       apiBaseUrl,
-      // Use placeholder API key since Helicone Gateway handles authentication
-      apiKey: config.apiKey || getEnvString('HELICONE_API_KEY') || 'placeholder-api-key',
     };
 
     // Call parent constructor with the model and modified config
@@ -57,6 +55,15 @@ export class HeliconeGatewayProvider extends OpenAiChatCompletionProvider {
 
     // Store the original Helicone config after super() call
     this.heliconeConfig = config;
+  }
+
+  getApiKey(): string | undefined {
+    return (
+      this.config.apiKey ||
+      this.env?.HELICONE_API_KEY ||
+      getEnvString('HELICONE_API_KEY') ||
+      'placeholder-api-key'
+    );
   }
 
   id(): string {

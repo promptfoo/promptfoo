@@ -7,13 +7,8 @@ npx promptfoo@latest init --example provider-golang
 cd provider-golang
 ```
 
-This example demonstrates how to structure a Go-based provider for promptfoo. For detailed documentation, see [Go Provider](https://www.promptfoo.dev/docs/providers/go/) documentation.
-
-To get started with this example:
-
-```sh
-promptfoo init --example provider-golang
-```
+This example compares two Go providers that share an OpenAI client. See the
+[Go provider docs](https://www.promptfoo.dev/docs/providers/go/) for the provider interface.
 
 ## Directory Structure
 
@@ -38,8 +33,7 @@ The structure demonstrates how to:
 2. Implement the same provider interface in different ways
 3. Compare multiple implementations in one config
 
-Both providers use named, importable packages rather than `package main`, so the module stays a
-normal Go module:
+Both providers use named packages and support standard Go builds:
 
 ```sh
 go build ./...
@@ -47,11 +41,11 @@ go build ./...
 
 ## Prerequisites
 
-1. Go installed (1.16 or later)
+1. Go installed (1.23.6 or later)
 2. OpenAI Go client library:
 
    ```sh
-   go get github.com/sashabaranov/go-openai@v1.37.0
+   go get github.com/sashabaranov/go-openai@v1.42.1
    ```
 
 3. Set your API key:

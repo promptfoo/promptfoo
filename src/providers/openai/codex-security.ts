@@ -39,7 +39,7 @@ export const CODEX_SECURITY_OPERATIONS = [
   'validation',
 ] as const;
 
-const MINIMUM_CODEX_SECURITY_SDK_VERSION = '0.1.18';
+const MINIMUM_CODEX_SECURITY_SDK_VERSION = '0.1.31';
 
 const ReasoningEffortSchema = z.enum(['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
 
@@ -166,7 +166,7 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
       if (!semverSatisfies(version, `>=${MINIMUM_CODEX_SECURITY_SDK_VERSION}`)) {
         incompatibleVersions.add(version);
         logger.warn(
-          `[CodexSecurity] Ignoring @openai/codex-security ${version}; version ${MINIMUM_CODEX_SECURITY_SDK_VERSION} or newer is required for complete security operations and deep-scan usage accounting.`,
+          `[CodexSecurity] Ignoring @openai/codex-security ${version}; version ${MINIMUM_CODEX_SECURITY_SDK_VERSION} or newer is required for updated plugin archive extraction, finding validation, and deep-scan usage accounting.`,
         );
         continue;
       }
@@ -194,7 +194,7 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
     throw new Error(
       dedent`The installed @openai/codex-security package is incompatible (${Array.from(incompatibleVersions).join(', ')}).
 
-      Version ${MINIMUM_CODEX_SECURITY_SDK_VERSION} or newer is required for finding validation and accurate deep-worker cost tracking.
+      Version ${MINIMUM_CODEX_SECURITY_SDK_VERSION} or newer is required for updated plugin archive extraction, finding validation, and accurate deep-worker cost tracking.
       Install the compatible SDK alongside Promptfoo with:
         npm install promptfoo @openai/codex-security@^${MINIMUM_CODEX_SECURITY_SDK_VERSION}
 
@@ -218,7 +218,7 @@ function resolveConfigPath(value: string | undefined, configBasePath?: string): 
 }
 
 function getTokenUsage(result?: ScanResult, observedCost?: ScanCost): TokenUsage | undefined {
-  const usage = result?.turnResult.usage;
+  const usage = result?.turnResult?.usage;
   const values = usage && typeof usage === 'object' ? (usage as Record<string, unknown>) : {};
   const cost = result?.cost ?? observedCost;
   const inputTokens =
@@ -537,12 +537,13 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     const cost = result.cost ?? observers.cost;
     const tokenUsage = getTokenUsage(result, observers.cost);
     const findings = Array.isArray(result.findings?.findings) ? result.findings.findings : [];
-    const model = result.turnResult.model ?? cost?.model ?? config.model;
+    const model = result.turnResult?.model ?? cost?.model ?? config.model;
+    const raw = result.toJSON();
 
     return {
-      output: JSON.stringify(result.toJSON()),
+      output: JSON.stringify(raw),
       format: 'json',
-      raw: result.toJSON(),
+      raw,
       cached: false,
       sessionId: result.threadId,
       ...(cost ? { cost: cost.estimatedUsd } : {}),
@@ -587,6 +588,8 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         !Array.isArray(findingVariable))
         ? findingVariable
         : undefined;
+    // Finding precedence is config.finding, then context.vars.finding, then prompt.
+    // finding_file overrides all three when it is configured.
     let finding: string | object = config.finding ?? contextualFinding ?? prompt;
     if (config.finding_file) {
       const findingContents = await fs.readFile(

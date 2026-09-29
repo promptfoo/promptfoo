@@ -29,11 +29,10 @@ The function should:
 - Return a map containing an "output" key with the response
 - Return an error if the operation fails
 
-The exported function must be named `CallApi`. Promptfoo's generated entry point resolves that
-symbol and no other, so a provider id such as `file://provider.go:MyProvider` will not work.
+Export the function as `CallApi`. Provider ids can omit the function suffix or use
+`:CallApi` or `:call_api`; other names are rejected.
 
-Your provider must live inside a Go module: promptfoo walks up from the script looking for a
-`go.mod` and fails if it does not find one.
+Place the provider inside a Go module with a `go.mod` in its directory or an ancestor.
 
 ## Configuration
 
@@ -68,8 +67,6 @@ var client = openai.NewClient(os.Getenv("OPENAI_API_KEY"))
 
 // CallApi processes prompts with configurable options.
 func CallApi(prompt string, options map[string]interface{}, ctx map[string]interface{}) (map[string]interface{}, error) {
-    // Extract configuration. Check the "config" key separately: a single-value type
-    // assertion panics when the provider is used without a config block.
     temp := 0.7
     if config, ok := options["config"].(map[string]interface{}); ok {
         if val, ok := config["temperature"].(float64); ok {
@@ -104,23 +101,13 @@ func CallApi(prompt string, options map[string]interface{}, ctx map[string]inter
 
 ## Package layout
 
-Prefer a named, importable package as shown above. Promptfoo detects the package with `go list`,
-generates its entry point in a separate directory, and imports your provider through the module
-path from `go.mod`. Because your source is never compiled next to a generated `main` package,
-repository-wide commands such as `go build ./...` keep working.
+Use a named, importable package for providers in a regular Go module. Promptfoo builds a
+separate entry point and imports the whole package, including helpers in sibling files.
+The module remains buildable with `go build ./...`.
 
-Named packages are also compiled as a whole package, so the provider can call helpers defined in
-sibling files in the same directory.
-
-`package main` providers remain supported for backward compatibility, with two caveats:
-
-- Only the provider file itself is compiled, so helpers in sibling files are not visible and fail
-  with `undefined: <helper>`. Move them into the same file, or switch to a named package. This is
-  deliberate: it lets several `package main` providers share a directory, each exporting its own
-  `CallApi`, which a directory-wide build would reject as `CallApi redeclared in this block`.
-- The provider cannot declare its own `func main()`; it would collide with the generated entry
-  point. This is why a `package main` provider breaks `go build ./...` — the package has no `main`
-  function of its own.
+Legacy `package main` providers compile only the selected file alongside promptfoo's
+entry point. Keep helpers in that file and omit `func main()`. This lets several providers
+with their own `CallApi` share a directory, but those files cannot form a standalone Go command.
 
 ## Using the Provider
 

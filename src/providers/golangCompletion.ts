@@ -5,6 +5,7 @@ import path from 'path';
 import util from 'util';
 
 import { getCache, isCacheEnabled } from '../cache';
+import { getProcessEnv } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
@@ -26,28 +27,10 @@ const execFileAsync = util.promisify(execFile);
 /** Entry point supplied by promptfoo; compiled alongside the provider. */
 const WRAPPER_FILE = 'wrapper.go';
 
-/**
- * Generated shim that lets `wrapper.go` reach a provider living in a named
- * package. Deliberately distinctive so Go compiler errors are never mistaken
- * for the user's own source file.
- */
+// Give generated-file errors a name distinct from common provider filenames.
 const ADAPTER_FILE = 'promptfoo_adapter.go';
 
-/**
- * Directory holding the generated entry point for named-package providers. It
- * lives inside the throwaway module copy, so it never reaches the user's own
- * tree; the leading dot additionally keeps it out of any `./...` run against
- * that copy.
- */
-const WRAPPER_DIR = '.promptfoo-wrapper';
-
-/**
- * Function names accepted in a provider id. Both resolve to the single `CallApi`
- * symbol -- `call_api` is an alias, not a second Go function.
- *
- * Keep in sync with the dispatch switch in `src/golang/wrapper.go`;
- * `test/providers/golangCompletion.test.ts` asserts the two agree.
- */
+// Both names resolve to CallApi in src/golang/wrapper.go.
 const SUPPORTED_FUNCTION_NAMES = new Set(['CallApi', 'call_api']);
 
 interface GolangProviderConfig {
@@ -66,10 +49,10 @@ export class GolangProvider implements ApiProvider {
     private options?: ProviderOptions,
   ) {
     const { filePath: providerPath, functionName } = parsePathOrGlob(
-      options?.config.basePath || '',
+      options?.config?.basePath || '',
       runPath,
     );
-    this.scriptPath = path.relative(options?.config.basePath || '', providerPath);
+    this.scriptPath = path.relative(options?.config?.basePath || '', providerPath);
     this.functionName = functionName || null;
     this.id = () => options?.id ?? `golang:${this.scriptPath}:${this.functionName || 'default'}`;
     this.label = options?.label;
@@ -91,34 +74,24 @@ export class GolangProvider implements ApiProvider {
     throw new Error('Could not find go.mod file in any parent directory');
   }
 
-  /**
-   * Works out how to compile the provider.
-   *
-   * A `package main` provider is compiled directly alongside `wrapper.go`, which
-   * is the historical behavior. A named package cannot be: Go refuses to compile
-   * two different packages in one directory. For those we build the entry point
-   * in its own directory and have it import the provider through the module path
-   * reported by `go list`, which keeps the provider importable and leaves
-   * repository-wide commands such as `go build ./...` working.
-   *
-   * The `package main` branch deliberately builds an explicit file list rather
-   * than the whole directory: two `package main` providers can sit side by side,
-   * each exporting `CallApi`, and a directory-wide build would fail with
-   * `CallApi redeclared in this block`. The file list isolates them.
-   */
+  // Named packages need a separate entry point; legacy main packages use an explicit
+  // file list so multiple providers can share a directory without duplicate symbols.
   private async prepareBuild({
     goExecutable,
     tempDir,
     scriptDir,
     scriptFile,
+    env,
   }: {
     goExecutable: string;
     tempDir: string;
     scriptDir: string;
     scriptFile: string;
+    env: NodeJS.ProcessEnv;
   }): Promise<{ buildDir: string; buildFiles: string[] }> {
     const { stdout } = await execFileAsync(goExecutable, ['list', '-json', '.'], {
       cwd: scriptDir,
+      env,
     });
 
     let packageInfo: { ImportPath?: string; Name?: string };
@@ -136,11 +109,10 @@ export class GolangProvider implements ApiProvider {
       throw new Error('Could not determine Go provider import path');
     }
 
-    const buildDir = path.join(tempDir, WRAPPER_DIR);
-    await fs.mkdir(buildDir, { recursive: true });
+    const buildDir = await fs.mkdtemp(path.join(tempDir, '.promptfoo-wrapper-'));
     await fs.writeFile(
       path.join(buildDir, ADAPTER_FILE),
-      `package main\n\nimport provider ${JSON.stringify(packageInfo.ImportPath)}\n\nvar CallApi ApiFunc = provider.CallApi\n`,
+      `package main\n\nimport provider ${JSON.stringify(packageInfo.ImportPath)}\n\nvar CallApi = ApiFunc(provider.CallApi)\n`,
     );
     return { buildDir, buildFiles: [WRAPPER_FILE, ADAPTER_FILE] };
   }
@@ -150,9 +122,7 @@ export class GolangProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
   ): Promise<any> {
-    // `wrapper.go` only dispatches to `CallApi`, so a custom name in the provider id
-    // can never resolve. This is a static config error, so it is checked before any
-    // cache lookup: a cache hit must never be able to mask it.
+    // Validate before caching so a previous response cannot hide a configuration error.
     if (this.functionName && !SUPPORTED_FUNCTION_NAMES.has(this.functionName)) {
       throw new Error(
         `Go providers must export a function named 'CallApi', but '${this.scriptPath}' requested '${this.functionName}'. ` +
@@ -160,7 +130,7 @@ export class GolangProvider implements ApiProvider {
       );
     }
 
-    const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
+    const absPath = path.resolve(path.join(this.options?.config?.basePath || '', this.scriptPath));
     const moduleRoot = await this.findModuleRoot(path.dirname(absPath));
     logger.debug(`Found module root at ${moduleRoot}`);
     logger.debug(`Computing file hash for script ${absPath}`);
@@ -226,11 +196,13 @@ export class GolangProvider implements ApiProvider {
         const tempScriptPath = path.join(tempDir, relativeScriptPath);
         const goExecutable = this.config.goExecutable || 'go';
 
+        const env = getProcessEnv();
         const { buildDir, buildFiles } = await this.prepareBuild({
           goExecutable,
           tempDir,
           scriptDir,
           scriptFile: path.basename(relativeScriptPath),
+          env,
         });
 
         await fs.copyFile(
@@ -240,17 +212,18 @@ export class GolangProvider implements ApiProvider {
 
         await execFileAsync(goExecutable, ['build', '-o', executablePath, ...buildFiles], {
           cwd: buildDir,
+          env,
         });
 
         const jsonArgs = safeJsonStringify(args) || '[]';
         logger.debug(`Running Go executable: ${executablePath}`);
 
         // Execute compiled binary with args (no shell escaping needed)
-        const { stdout, stderr } = await execFileAsync(executablePath, [
-          tempScriptPath,
-          functionName,
-          jsonArgs,
-        ]);
+        const { stdout, stderr } = await execFileAsync(
+          executablePath,
+          [tempScriptPath, functionName, jsonArgs],
+          { env },
+        );
         if (stderr) {
           logger.error(`Golang script stderr: ${stderr}`);
         }
@@ -264,7 +237,7 @@ export class GolangProvider implements ApiProvider {
         return result;
       } catch (error) {
         logger.error(`Error running Golang script: ${(error as Error).message}`);
-        logger.error(`Full error object: ${JSON.stringify(error)}`);
+        logger.error('Full error object', { error });
         throw new Error(`Error running Golang script: ${(error as Error).message}`);
       } finally {
         // Clean up temporary directory

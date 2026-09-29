@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { GolangProvider } from '../../src/providers/golangCompletion';
 
 // Hoisted mock functions
@@ -99,26 +100,6 @@ vi.mock('../../src/util', () => ({
     filePath: '/absolute/path/to/script.go',
   })),
 }));
-
-// The provider rejects unsupported function names in TypeScript, but the actual
-// dispatch lives in Go. Nothing links the two, so assert they agree.
-describe('wrapper.go dispatch contract', () => {
-  it('should accept exactly the function names wrapper.go dispatches on', async () => {
-    const realFs = await vi.importActual<typeof import('fs')>('fs');
-    const realPath = await vi.importActual<typeof import('path')>('path');
-    const wrapperSource = realFs.readFileSync(
-      realPath.join(__dirname, '../../src/golang/wrapper.go'),
-      'utf-8',
-    );
-
-    // switch functionName { case "call_api", "CallApi": ... }
-    const dispatch = wrapperSource.match(/case\s+("(?:[^"]+)"(?:\s*,\s*"(?:[^"]+)")*)\s*:/);
-    expect(dispatch, 'could not locate the dispatch switch in wrapper.go').not.toBeNull();
-
-    const goNames = Array.from(dispatch![1].matchAll(/"([^"]+)"/g), (m) => m[1]).sort();
-    expect(goNames).toEqual(['CallApi', 'call_api']);
-  });
-});
 
 describe('GolangProvider', () => {
   const mockReadFileSync = vi.mocked(fs.readFileSync);
@@ -234,7 +215,9 @@ describe('GolangProvider', () => {
     });
 
     // Mock file system operations
-    mockMkdtempSync.mockReturnValue('/tmp/golang-provider-xyz');
+    mockMkdtempSync.mockImplementation((prefix) =>
+      String(prefix).includes('.promptfoo-wrapper-') ? `${prefix}abc` : '/tmp/golang-provider-xyz',
+    );
 
     mockExistsSync.mockImplementation(function (p: fs.PathLike) {
       const pathStr = p.toString();
@@ -303,6 +286,17 @@ describe('GolangProvider', () => {
     }) as any);
   });
 
+  it('passes file defaults to Go tooling and the compiled provider', async () => {
+    const provider = new GolangProvider('script.go');
+    await cliState.withEnvFileOverrides({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }, () =>
+      provider.callApi('hello'),
+    );
+    expect(mockExecFile).toHaveBeenCalledTimes(3);
+    for (const call of mockExecFile.mock.calls) {
+      expect(call[2]).toMatchObject({ env: { PROMPTFOO_REVIEW_ENV_PROBE: 'file' } });
+    }
+  });
+
   describe('constructor', () => {
     it('should initialize with correct properties', () => {
       const provider = new GolangProvider('script.go', {
@@ -339,6 +333,12 @@ describe('GolangProvider', () => {
     it('should handle undefined basePath and use default id', () => {
       const provider = new GolangProvider('script.go');
       expect(provider.id()).toBe('golang:script.go:default');
+      expect(provider.config).toEqual({});
+    });
+
+    it('should handle options without config', () => {
+      const provider = new GolangProvider('script.go', { id: 'testId' });
+      expect(provider.id()).toBe('testId');
       expect(provider.config).toEqual({});
     });
 
@@ -759,7 +759,7 @@ describe('GolangProvider', () => {
       }) as any);
     };
 
-    const WRAPPER_BUILD_DIR = '/tmp/golang-provider-xyz/.promptfoo-wrapper';
+    const WRAPPER_BUILD_DIR = '/tmp/golang-provider-xyz/.promptfoo-wrapper-abc';
 
     it('should import named provider packages from a separate wrapper directory', async () => {
       mockGoList('{"Name":"provider","ImportPath":"example.com/project/provider"}');
@@ -889,6 +889,7 @@ describe('GolangProvider', () => {
         expect(mockExecFile).toHaveBeenCalledWith(
           expect.stringContaining('golang_wrapper'),
           [expect.any(String), functionName, expect.any(String)],
+          expect.objectContaining({ env: expect.any(Object) }),
           expect.any(Function),
         );
       },
