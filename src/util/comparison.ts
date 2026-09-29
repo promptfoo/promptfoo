@@ -118,6 +118,12 @@ export function resultIsForTestCase(
   testCase: TestCase,
   currentProviderIds?: readonly string[],
 ): boolean {
+  // Filter out runtime variables like _conversation and sessionId when matching.
+  // These are added by multi-turn providers during evaluation but shouldn't affect test matching.
+  const resultVars = filterRuntimeVars(result.vars);
+  const testVars = filterRuntimeVars(testCase.vars);
+  const doVarsMatch = varsMatch(testVars, resultVars);
+
   const testProviderId = testCase.provider ? providerToIdentifier(testCase.provider) : undefined;
   const resultProviderId = providerToIdentifier(result.provider);
 
@@ -127,7 +133,7 @@ export function resultIsForTestCase(
   //    e.g., agentic providers store target provider, or cloud results may not include provider)
   // 3. If both have providers, they must match
   let providersMatch = !testProviderId || !resultProviderId || testProviderId === resultProviderId;
-  if (!providersMatch && testProviderId && resultProviderId) {
+  if (doVarsMatch && !providersMatch && testProviderId && resultProviderId) {
     const storedId = sanitizeProviderIdForLog(testProviderId);
     if (storedId === resultProviderId) {
       const candidates = new Set(
@@ -142,11 +148,6 @@ export function resultIsForTestCase(
     }
   }
 
-  // Filter out runtime variables like _conversation and sessionId when matching.
-  // These are added by multi-turn providers during evaluation but shouldn't affect test matching.
-  const resultVars = filterRuntimeVars(result.vars);
-  const testVars = filterRuntimeVars(testCase.vars);
-  const doVarsMatch = varsMatch(testVars, resultVars);
   const isMatch = doVarsMatch && providersMatch;
 
   // Log matching details at debug level for troubleshooting filter issues

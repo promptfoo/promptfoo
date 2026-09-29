@@ -23,7 +23,7 @@ import {
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
-import { createEvaluateResult } from '../factories/eval';
+import { createCompletedPrompt, createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
@@ -123,6 +123,40 @@ describe('evaluator', () => {
   afterEach(() => {
     vi.resetAllMocks();
   });
+
+  it.each(['create', 'addPrompts', 'save', 'copy'])(
+    'redacts completed-prompt provider IDs at the %s boundary without changing runtime prompts',
+    async (method) => {
+      const prompt = createCompletedPrompt('literal prompt', {
+        provider: 'https://example.test/eval?api_key=fixture-header-id',
+      });
+      const evaluation = await Eval.create({}, [], {
+        completedPrompts: method === 'create' ? [prompt] : [],
+      });
+      let savedId = evaluation.id;
+      if (method === 'addPrompts') {
+        await evaluation.addPrompts([prompt]);
+      } else if (method === 'save' || method === 'copy') {
+        evaluation.prompts = [prompt];
+        if (method === 'save') {
+          await evaluation.save();
+        } else {
+          savedId = (await evaluation.copy()).id;
+        }
+      }
+      const saved = await Eval.findById(savedId);
+      expect(saved?.prompts[0]).toEqual({
+        ...prompt,
+        provider: 'https://example.test/eval?api_key=%5BREDACTED%5D',
+      });
+      const summary = await (method === 'create' ? saved! : evaluation).toEvaluateSummary();
+      expect('prompts' in summary && summary.prompts[0].provider).toBe(
+        'https://example.test/eval?api_key=%5BREDACTED%5D',
+      );
+      expect(evaluation.prompts).toEqual(method === 'create' ? [] : [prompt]);
+      expect(prompt.provider).toContain('fixture-header-id');
+    },
+  );
 
   describe('addPrompts', () => {
     it('should notify watchers when persisted prompt metadata changes', async () => {

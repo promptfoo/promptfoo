@@ -104,11 +104,17 @@ export async function filterTestsByResults(
   // When a match is found, we restore runtime variables (like _conversation, sessionId)
   // from the result into the test so they're available during re-evaluation.
   const matchedTests: Tests = [];
-  const providerIds = [...testSuite.providers, ...testSuite.tests.map((test) => test.provider)]
+  const suiteProviderIds = testSuite.providers
     .map(providerToIdentifier)
     .filter((id): id is string => id !== undefined);
-  const matchesResult = (result: EvaluateResult, test: TestCase) =>
-    resultIsForTestCase(result, test, providerIds);
+  const matchesResult = (result: EvaluateResult, test: TestCase) => {
+    const testProviderId = providerToIdentifier(test.provider);
+    return resultIsForTestCase(
+      result,
+      test,
+      testProviderId ? [...suiteProviderIds, testProviderId] : suiteProviderIds,
+    );
+  };
 
   for (const test of testSuite.tests) {
     const testWithDefaults = mergeDefaultVars(test, testSuite.defaultTest);

@@ -132,13 +132,22 @@ function projectProviderResponse(
 }
 
 export function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: boolean): T {
+  const projected =
+    prompt &&
+    typeof prompt === 'object' &&
+    'provider' in prompt &&
+    typeof prompt.provider === 'string'
+      ? {
+          ...prompt,
+          provider: sanitizeObject(prompt.provider, {
+            sanitizeUrls: true,
+            redactStringValues: false,
+          }),
+        }
+      : prompt;
   return stripPromptText
-    ? {
-        ...prompt,
-        raw: '[prompt stripped]',
-        template: undefined,
-      }
-    : prompt;
+    ? { ...projected, raw: '[prompt stripped]', template: undefined }
+    : projected;
 }
 
 export function projectTracesForOutput(
@@ -308,7 +317,11 @@ function sanitizeProviderReference(provider: unknown, active = new WeakSet<objec
             !(
               descriptor.value &&
               typeof descriptor.value === 'object' &&
-              Object.hasOwn(descriptor.value, 'config')
+              !Array.isArray(descriptor.value) &&
+              (Object.keys(descriptor.value).length === 0 ||
+                ['id', 'label', 'config', 'prompts', 'transform', 'delay', 'env', 'inputs'].some(
+                  (option) => Object.prototype.hasOwnProperty.call(descriptor.value, option),
+                ))
             )
               ? REDACTED
               : sanitizeForDbWithSecrets(sanitizeProviderReference(descriptor.value, active)),
@@ -709,14 +722,18 @@ function sanitizeResponseForDb<T extends ProviderResponse | null | undefined>(re
 // source so a legacy top-level `metadata.headers` is redacted only where it echoes the
 // transport — leaving user-authored test metadata headers intact.
 function sanitizeMetadataForDb<T>(metadata: T, responseMetadata?: unknown): T {
-  // Root serializers can move transport credentials outside their known header slots.
-  if (metadata && typeof metadata === 'object' && 'toJSON' in metadata) {
+  try {
+    // Root serializers can move transport credentials outside their known header slots.
+    if (metadata && typeof metadata === 'object' && 'toJSON' in metadata) {
+      return REDACTED as T;
+    }
+    // Preserve literal transcripts and redact only known transport header slots.
+    return redactHttpHeadersOnMetadata(sanitizeForDb(metadata), {
+      legacyHeadersSource: sanitizeForDb(responseMetadata),
+    });
+  } catch {
     return REDACTED as T;
   }
-  // Preserve literal transcripts and redact only known transport header slots.
-  return redactHttpHeadersOnMetadata(sanitizeForDb(metadata), {
-    legacyHeadersSource: sanitizeForDb(responseMetadata),
-  });
 }
 
 // `__promptfoo` is reserved at the metadata top level for promptfoo-internal namespaced data
@@ -1016,8 +1033,11 @@ export function sanitizeLegacyResults(results: EvaluateSummaryV2): EvaluateSumma
                 redactStringValues: false,
               }),
               testCase: sanitizeTestCaseForDb(output.testCase),
-              response: sanitizeResponseForDb(sanitizeForDb(output.response)),
-              gradingResult: sanitizeGradingResultForDb(output.gradingResult),
+              ...redactSensitiveResultFieldsForDb({
+                response: output.response,
+                gradingResult: output.gradingResult,
+                metadata: output.metadata,
+              }),
             };
           }),
         }),

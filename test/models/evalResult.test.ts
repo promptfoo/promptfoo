@@ -345,6 +345,40 @@ describe('EvalResult', () => {
     });
   });
 
+  it('preserves provider option leaves that omit config', () => {
+    const providers = {
+      auth: { prompts: ['judge'] },
+      token: { delay: 1 },
+      secret: {},
+      bearer: { transform: 'output' },
+    };
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: { options: { provider: providers } },
+    });
+    expect(result.testCase.options.provider).toEqual(providers);
+  });
+
+  it('contains unreadable metadata without losing the result', () => {
+    const metadata = new Proxy(
+      {},
+      {
+        has() {
+          throw new Error('unreadable fixture');
+        },
+      },
+    );
+    const result = sanitizeResultForJsonlArtifact({
+      metadata,
+      response: { output: 'hello' },
+      success: true,
+      score: 1,
+    });
+    expect(result.metadata).toBe('[REDACTED]');
+    expect(result.response?.output).toBe('hello');
+    expect(result.success).toBe(true);
+    expect(result.score).toBe(1);
+  });
+
   it('does not let result metadata serializers rename headers', () => {
     const metadata = {
       headers: { authorization: 'short-fixture' },

@@ -1270,7 +1270,7 @@ function sanitizePlainObject(
         depth + 1,
         maxDepth,
         sanitizeUrls,
-        isEnvMap || key === 'env',
+        key === 'env',
         redactStringValues,
       );
       sanitized[key] =

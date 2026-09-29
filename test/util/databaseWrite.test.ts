@@ -55,11 +55,22 @@ describe('writeResultsToDatabase', () => {
     results.table.body[0].test.options = { provider };
     results.table.body[0].outputs[0].testCase.options = { provider };
     results.table.head.prompts[0].config = { provider };
+    results.table.body[0].outputs[0].metadata = {
+      http: { requestHeaders: { Authorization: 'fixture-table-header' } },
+      note: 'ordinary metadata',
+    };
     await writeResultsToDatabase(results, {});
     const db = await getDb();
     const saved = await db.select({ results: evalsTable.results }).from(evalsTable).get();
     expect(JSON.stringify(saved?.results)).not.toContain('fixture-only');
     const savedResults = saved?.results as typeof results;
+    expect(savedResults.table.body[0].outputs[0].metadata).toEqual({
+      http: { requestHeaders: { Authorization: '[REDACTED]' } },
+      note: 'ordinary metadata',
+    });
+    expect(results.table.body[0].outputs[0].metadata?.http.requestHeaders.Authorization).toBe(
+      'fixture-table-header',
+    );
     expect(savedResults.results[0].response?.output).toEqual(results.results[0].response?.output);
     expect(savedResults.table.body[0].outputs[0].text).toBe(results.table.body[0].outputs[0].text);
     expect(provider.config.apiKey).toBe('fixture-only');

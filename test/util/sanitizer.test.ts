@@ -606,6 +606,13 @@ describe('sanitizeObject', () => {
       expect(serialize).not.toHaveBeenCalled();
     });
 
+    it('uses ordinary field semantics inside JSON environment values', () => {
+      const config = JSON.stringify({ nextToken: 'page-2', apiKey: 'fixture-only' });
+      const result = sanitizeObject({ env: { CONFIG: config, OPENAI_API_KEY: 'fixture-only' } });
+      expect(JSON.parse(result.env.CONFIG)).toEqual({ nextToken: 'page-2', apiKey: '[REDACTED]' });
+      expect(result.env.OPENAI_API_KEY).toBe('[REDACTED]');
+    });
+
     it('does not widen redaction outside env maps', () => {
       const result = sanitizeObject({
         maxTokens: 4096,

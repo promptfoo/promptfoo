@@ -71,6 +71,18 @@ describe('resultIsForTestCase', () => {
     ).toThrow('unique provider labels');
   });
 
+  it('ignores unrelated vars before resolving redacted provider identities', () => {
+    const first = 'https://example.test/eval?api_key=fixture-one';
+    const second = 'https://example.test/eval?api_key=fixture-two';
+    const stored = createEvaluateResult({
+      provider: { id: sanitizeProviderIdForLog(first) },
+      vars: { key: 'different' },
+    });
+    expect(resultIsForTestCase(stored, { ...testCase, provider: first }, [first, second])).toBe(
+      false,
+    );
+  });
+
   it('is false if provider is different', async () => {
     const nonMatchTestCase: TestCase = {
       provider: 'different',

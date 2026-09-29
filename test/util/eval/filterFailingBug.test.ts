@@ -57,6 +57,26 @@ describe('filterTests - vars mutation bug', () => {
     expect(await filterTests(suite, { failing: 'eval-fixture' })).toEqual([test]);
   });
 
+  it('resolves redacted provider IDs using only the current test override', async () => {
+    const tests = ['one', 'two'].map((name) => ({
+      provider: { id: `https://example.test/eval?api_key=fixture-${name}` },
+      vars: { name },
+      assert: [{ type: 'equals' as const, value: name }],
+    }));
+    const suite: TestSuite = { prompts: [], providers: [], tests };
+    vi.mocked(Eval.findById).mockResolvedValue({
+      toEvaluateSummary: async () => ({
+        results: tests.map((test) => ({
+          success: false,
+          vars: test.vars,
+          provider: { id: sanitizeProviderIdForLog(test.provider.id) },
+          testCase: { vars: test.vars, assert: [{ type: 'equals', value: 'old' }] },
+        })),
+      }),
+    } as any);
+    expect(await filterTests(suite, { failing: 'eval-fixture' })).toEqual(tests);
+  });
+
   it('should match tests even when stored results have additional runtime vars', async () => {
     // Simulate a test suite as it would be loaded from config
     const mockTestSuite: TestSuite = {
