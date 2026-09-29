@@ -24,6 +24,7 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
+import { withProviderCleanup } from '../providers/lifecycle';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
@@ -31,7 +32,6 @@ import telemetry from '../telemetry';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
 import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
-import { isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
@@ -354,11 +354,7 @@ async function doEvalWithEnv(
   // not shut down underneath the watcher.
   let watchTermination: Promise<void> | undefined;
 
-  const runEvaluationWithEnv = async (
-    runEnv: EnvOverrides,
-    ownedProviders: TestSuite['providers'],
-    initialization?: boolean,
-  ) => {
+  const runEvaluationWithEnv = async (runEnv: EnvOverrides, initialization?: boolean) => {
     const startTime = Date.now();
     let testSources: Awaited<ReturnType<typeof resolveConfigs>>['testSources'];
     telemetry.record('command_used', {
@@ -550,19 +546,6 @@ async function doEvalWithEnv(
         testSources,
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
-
-    // Resolution may open connections before evaluation starts. Retain ownership even
-    // when application selection removes a provider or a later preflight rejects.
-    ownedProviders.push(
-      ...testSuite.providers,
-      ...[
-        testSuite.defaultTest,
-        ...(testSuite.tests ?? []),
-        ...(testSuite.scenarios?.flatMap((scenario) => scenario.tests) ?? []),
-      ].flatMap((test) =>
-        typeof test === 'object' && isApiProvider(test.provider) ? [test.provider] : [],
-      ),
-    );
 
     // Fill the active scope in place; replacing runEnv would leave it empty.
     Object.assign(runEnv, testSuite.env);
@@ -824,7 +807,17 @@ async function doEvalWithEnv(
       });
     }
 
-    await checkCloudPermissions(config as UnifiedConfig);
+    await checkCloudPermissions(
+      prepareTestSuite
+        ? {
+            ...config,
+            // Keep cloud target identity without sending resolved credentials.
+            providers: testSuite.providers.map((provider) => ({
+              id: provider.config?.linkedTargetId ?? provider.id(),
+            })),
+          }
+        : config,
+    );
 
     const providerFilter = resumeEval ? persistedProviderFilter : cliProviderFilter;
 
@@ -1360,31 +1353,12 @@ async function doEvalWithEnv(
     const runEnv: EnvOverrides = {};
     return cliState.withConfig(undefined, () =>
       cliState.withBasePath(undefined, () =>
-        cliState.withEnv(runEnv, async () => {
-          const ownedProviders: TestSuite['providers'] = [];
-          let completed = false;
-          try {
-            const result = await runEvaluationWithEnv(runEnv, ownedProviders, initialization);
-            completed = true;
-            return result;
-          } finally {
-            const cleanupErrors: unknown[] = [];
-            for (const provider of new Set(ownedProviders)) {
-              if (isApiProvider(provider)) {
-                try {
-                  await provider.cleanup?.();
-                } catch (error) {
-                  cleanupErrors.push(error);
-                  logger.warn('Provider cleanup failed', { error });
-                }
-              }
-            }
-            // Keep the evaluation error when both evaluation and cleanup fail.
-            if (completed && cleanupErrors.length > 0) {
-              throw cleanupErrors[0];
-            }
-          }
-        }),
+        cliState.withEnv(runEnv, () =>
+          withProviderCleanup(
+            () => runEvaluationWithEnv(runEnv, initialization),
+            () => isCliInvocation && process.exitCode !== undefined,
+          ),
+        ),
       ),
     );
   };

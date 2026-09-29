@@ -13,6 +13,79 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { TestSuite } from '../../../types/index';
 import type { InternalEvaluateOptions } from '../../../types/internal';
 
+type TestCaseSelection = number | number[] | { start: number; end: number };
+
+function selectProviders(providers: TestSuite['providers'], filter: string | string[]) {
+  if (providers.length === 0) {
+    throw new Error('No providers defined in configuration. Add providers to filter.');
+  }
+  const filters = Array.isArray(filter) ? filter : [filter];
+  const pattern = new RegExp(filters.map(escapeRegExp).join('|'), 'i');
+  const selected = providers.filter((provider) => {
+    const id = typeof provider.id === 'function' ? provider.id() : provider.id;
+    return pattern.test(provider.label || id || '') || pattern.test(id || '');
+  });
+  if (selected.length === 0) {
+    throw new Error(
+      `No providers matched filter: ${filters.join(', ')}. Available providers: ${providers.map((provider) => (typeof provider.id === 'function' ? provider.id() : provider.id)).join(', ')}`,
+    );
+  }
+  return selected;
+}
+
+function selectPrompts(prompts: TestSuite['prompts'], filter: string | string[]) {
+  const filters = Array.isArray(filter) ? filter : [filter];
+  const hasNumeric = filters.some((value) => /^\d+$/.test(value));
+  const allNumeric = filters.every((value) => /^\d+$/.test(value));
+  if (hasNumeric && !allNumeric) {
+    throw new Error(
+      'Cannot mix numeric indices and regex patterns in promptFilter. Use either all numeric indices (e.g., ["0", "2"]) or all regex patterns (e.g., ["morning.*", "evening.*"]), but not both.',
+    );
+  }
+  if (allNumeric) {
+    const indices = filters.map(Number);
+    const invalid = indices.filter((index) => index >= prompts.length);
+    if (invalid.length > 0) {
+      throw new Error(
+        `Invalid prompt indices: ${invalid.join(', ')}. Available indices: 0-${prompts.length - 1}`,
+      );
+    }
+    return indices.map((index) => prompts[index]);
+  }
+  const selected = filterPrompts(prompts, filters.join('|'));
+  if (selected.length === 0) {
+    throw new Error(`No prompts found after applying filter: ${filters.join(', ')}`);
+  }
+  return selected;
+}
+
+function selectTestCases(tests: NonNullable<TestSuite['tests']>, indices: TestCaseSelection) {
+  if (typeof indices === 'number') {
+    if (indices < 0 || indices >= tests.length) {
+      throw new Error(
+        `Test case index ${indices} is out of range. Available indices: 0-${tests.length - 1}`,
+      );
+    }
+    return [tests[indices]];
+  }
+  if (Array.isArray(indices)) {
+    const invalid = indices.filter((index) => index < 0 || index >= tests.length);
+    if (invalid.length > 0) {
+      throw new Error(
+        `Invalid test case indices: ${invalid.join(', ')}. Available indices: 0-${tests.length - 1}`,
+      );
+    }
+    return indices.map((index) => tests[index]);
+  }
+  const { start, end } = indices;
+  if (start < 0 || end > tests.length || start >= end) {
+    throw new Error(
+      `Invalid range: start=${start}, end=${end}. Available indices: 0-${tests.length - 1}`,
+    );
+  }
+  return tests.slice(start, end);
+}
+
 /** Run a config through the evaluation pipeline with optional test, prompt, and provider filters. */
 export function registerRunEvaluationTool(server: McpServer) {
   server.tool(
@@ -134,132 +207,22 @@ export function registerRunEvaluationTool(server: McpServer) {
           );
         }
 
-        // Check if promptFilter contains numeric indices (backwards compatibility)
-        const promptFilters = promptFilter
-          ? Array.isArray(promptFilter)
-            ? promptFilter
-            : [promptFilter]
-          : null;
-
-        // Validate mixed input: error if both numeric and non-numeric filters are present
-        if (promptFilters && promptFilters.length > 1) {
-          const hasNumeric = promptFilters.some((f) => /^\d+$/.test(f));
-          const hasNonNumeric = promptFilters.some((f) => !/^\d+$/.test(f));
-
-          if (hasNumeric && hasNonNumeric) {
-            return createToolResponse(
-              'run_evaluation',
-              false,
-              undefined,
-              'Cannot mix numeric indices and regex patterns in promptFilter. Use either all numeric indices (e.g., ["0", "2"]) or all regex patterns (e.g., ["morning.*", "evening.*"]), but not both.',
-            );
-          }
-        }
-
-        const hasNumericPromptFilter = promptFilters && promptFilters.every((f) => /^\d+$/.test(f));
-
         let selection: { original: TestSuite; filtered: TestSuite } | undefined;
         const prepareTestSuite =
           testCaseIndices !== undefined || promptFilter || providerFilter
             ? (testSuite: TestSuite): TestSuite => {
-                const filteredTestSuite = { ...testSuite };
-
+                const filtered = { ...testSuite };
                 if (providerFilter) {
-                  const filters = Array.isArray(providerFilter) ? providerFilter : [providerFilter];
-                  const filterPattern = new RegExp(filters.map(escapeRegExp).join('|'), 'i');
-
-                  const providers = filteredTestSuite.providers || [];
-                  if (providers.length === 0) {
-                    throw new Error(
-                      'No providers defined in configuration. Add providers to filter.',
-                    );
-                  }
-
-                  const filteredProviders = providers.filter((provider) => {
-                    const providerId =
-                      typeof provider.id === 'function' ? provider.id() : provider.id;
-                    const label = provider.label || providerId || '';
-                    return filterPattern.test(label) || filterPattern.test(providerId || '');
-                  });
-
-                  if (filteredProviders.length === 0) {
-                    throw new Error(
-                      `No providers matched filter: ${filters.join(', ')}. Available providers: ${providers.map((p) => (typeof p.id === 'function' ? p.id() : p.id)).join(', ')}`,
-                    );
-                  }
-
-                  filteredTestSuite.providers = filteredProviders;
+                  filtered.providers = selectProviders(testSuite.providers, providerFilter);
                 }
-
                 if (promptFilter) {
-                  if (hasNumericPromptFilter && promptFilters) {
-                    const indices = promptFilters.map((f) => parseInt(f, 10));
-                    const prompts = testSuite.prompts || [];
-
-                    const invalidIndices = indices.filter((i) => i < 0 || i >= prompts.length);
-                    if (invalidIndices.length > 0) {
-                      throw new Error(
-                        `Invalid prompt indices: ${invalidIndices.join(', ')}. Available indices: 0-${prompts.length - 1}`,
-                      );
-                    }
-
-                    filteredTestSuite.prompts = indices.map((i) => prompts[i]);
-                  } else {
-                    const filterPattern = Array.isArray(promptFilter)
-                      ? promptFilter.join('|')
-                      : promptFilter;
-
-                    try {
-                      filteredTestSuite.prompts = filterPrompts(testSuite.prompts, filterPattern);
-                    } catch (error) {
-                      throw new Error(
-                        error instanceof Error ? error.message : 'Failed to filter prompts',
-                      );
-                    }
-
-                    if (filteredTestSuite.prompts.length === 0) {
-                      throw new Error(
-                        `No prompts found after applying filter: ${Array.isArray(promptFilter) ? promptFilter.join(', ') : promptFilter}`,
-                      );
-                    }
-                  }
+                  filtered.prompts = selectPrompts(testSuite.prompts, promptFilter);
                 }
-
-                if (testCaseIndices !== undefined && filteredTestSuite.tests) {
-                  let filteredTests = filteredTestSuite.tests;
-
-                  if (typeof testCaseIndices === 'number') {
-                    if (testCaseIndices < 0 || testCaseIndices >= filteredTests.length) {
-                      throw new Error(
-                        `Test case index ${testCaseIndices} is out of range. Available indices: 0-${filteredTests.length - 1}`,
-                      );
-                    }
-                    filteredTests = [filteredTests[testCaseIndices]];
-                  } else if (Array.isArray(testCaseIndices)) {
-                    const invalidIndices = testCaseIndices.filter(
-                      (i) => i < 0 || i >= filteredTests.length,
-                    );
-                    if (invalidIndices.length > 0) {
-                      throw new Error(
-                        `Invalid test case indices: ${invalidIndices.join(', ')}. Available indices: 0-${filteredTests.length - 1}`,
-                      );
-                    }
-                    filteredTests = testCaseIndices.map((i) => filteredTests[i]);
-                  } else {
-                    const { start, end } = testCaseIndices;
-                    if (start < 0 || end > filteredTests.length || start >= end) {
-                      throw new Error(
-                        `Invalid range: start=${start}, end=${end}. Available indices: 0-${filteredTests.length - 1}`,
-                      );
-                    }
-                    filteredTests = filteredTests.slice(start, end);
-                  }
-
-                  filteredTestSuite.tests = filteredTests;
+                if (testCaseIndices !== undefined && testSuite.tests) {
+                  filtered.tests = selectTestCases(testSuite.tests, testCaseIndices);
                 }
-
-                selection = { original: testSuite, filtered: filteredTestSuite };
-                return filteredTestSuite;
+                selection = { original: testSuite, filtered };
+                return filtered;
               }
             : undefined;
 

@@ -38,6 +38,7 @@ import {
 } from '../../src/node/retry';
 import { ClaudeCodeSDKProvider } from '../../src/providers/claude-agent-sdk';
 import { loadApiProvider } from '../../src/providers/index';
+import { trackProvider } from '../../src/providers/lifecycle';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { generateTable } from '../../src/table';
 import {
@@ -680,19 +681,25 @@ describe('evalCommand', () => {
       } as UnifiedConfig;
       vi.mocked(resolveConfigs)
         .mockReset()
-        .mockResolvedValueOnce({
-          config,
-          basePath: watchBase,
-          testSuite: {
-            prompts: [],
-            providers: [providers[0]],
-            env: { PROMPTFOO_STRIP_PROMPT_TEXT: 'true' } as EnvOverrides,
-          },
+        .mockImplementationOnce(async () => {
+          trackProvider(providers[0]);
+          return {
+            config,
+            basePath: watchBase,
+            testSuite: {
+              prompts: [],
+              providers: [providers[0]],
+              env: { PROMPTFOO_STRIP_PROMPT_TEXT: 'true' } as EnvOverrides,
+            },
+          };
         })
-        .mockResolvedValueOnce({
-          config,
-          basePath: watchBase,
-          testSuite: { prompts: [], providers: [providers[1]] },
+        .mockImplementationOnce(async () => {
+          trackProvider(providers[1]);
+          return {
+            config,
+            basePath: watchBase,
+            testSuite: { prompts: [], providers: [providers[1]] },
+          };
         });
       vi.mocked(evaluate).mockImplementation(async (_suite, record) => record as Eval);
       vi.mocked(writeMultipleOutputs).mockImplementation(async () => {
@@ -2176,13 +2183,16 @@ describe('evalCommand', () => {
       callApi: async () => ({ output: 'ok' }),
       cleanup,
     } as ApiProvider;
-    vi.mocked(resolveConfigs).mockResolvedValueOnce({
-      config: {} as UnifiedConfig,
-      testSuite: {
-        prompts: [],
-        providers: [provider],
-      },
-      basePath: path.resolve('/'),
+    vi.mocked(resolveConfigs).mockImplementationOnce(async () => {
+      trackProvider(provider);
+      return {
+        config: {} as UnifiedConfig,
+        testSuite: {
+          prompts: [],
+          providers: [provider],
+        },
+        basePath: path.resolve('/'),
+      };
     });
     vi.mocked(evaluate).mockImplementationOnce(
       async (_testSuite, evalRecord) => evalRecord as Eval,
@@ -2191,6 +2201,63 @@ describe('evalCommand', () => {
     await doEval({}, defaultConfig, defaultConfigPath, {});
 
     expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('cleans constructed providers after evaluation fails', async () => {
+    const cleanup = vi.fn();
+    const provider = {
+      id: () => 'cleanup-provider',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup,
+    };
+    vi.mocked(evaluate).mockImplementationOnce(async () => {
+      trackProvider(provider);
+      throw new Error('evaluation failed');
+    });
+    await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toThrow(
+      'evaluation failed',
+    );
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('leaves reusable caller-owned providers open', async () => {
+    const cleanup = vi.fn();
+    const provider = {
+      id: () => 'caller-provider',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup,
+    };
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: {},
+      testSuite: { prompts: [], providers: [provider] },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => record as Eval);
+    await doEval({}, defaultConfig, defaultConfigPath, {});
+    expect(cleanup).not.toHaveBeenCalled();
+  });
+
+  it('preserves configured failure exit codes when cleanup rejects', async () => {
+    const previousExitCode = process.exitCode;
+    const provider = {
+      id: () => 'cleanup-provider',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup: vi.fn().mockRejectedValue(new Error('cleanup failed')),
+    };
+    vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => {
+      trackProvider(provider);
+      process.exitCode = 42;
+      return record as Eval;
+    });
+    try {
+      await expect(
+        doEval({}, defaultConfig, defaultConfigPath, { eventSource: 'cli' }),
+      ).resolves.toBeDefined();
+      expect(process.exitCode).toBe(42);
+      expect(provider.cleanup).toHaveBeenCalledOnce();
+    } finally {
+      process.exitCode = previousExitCode;
+    }
   });
 
   it('should handle redteam config', async () => {

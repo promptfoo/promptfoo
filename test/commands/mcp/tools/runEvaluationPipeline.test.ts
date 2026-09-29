@@ -28,6 +28,7 @@ import { PythonWorker } from '../../../../src/python/worker';
 import { createShareableUrl, isSharingEnabled } from '../../../../src/share';
 import * as suggestions from '../../../../src/suggestions';
 import { BAD_EMAIL_RESULT, EMAIL_OK_STATUS } from '../../../../src/types/email';
+import * as cloud from '../../../../src/util/cloud';
 import * as readline from '../../../../src/util/readline';
 import { mockProcessEnv } from '../../../util/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -498,6 +499,90 @@ describe('MCP evaluation execution contract', () => {
     },
   );
 
+  it('checks only selected cloud provider identities without resolved credentials', async () => {
+    const allowed = 'promptfoo://provider/11111111-1111-4111-8111-111111111111';
+    const excluded = 'promptfoo://provider/22222222-2222-4222-8222-222222222222';
+    vi.spyOn(cloud, 'getProviderFromCloud').mockImplementation(async (id) => ({
+      id: 'echo',
+      label: id.startsWith('1111') ? 'Allowed target' : 'Excluded target',
+      config: { apiKey: 'resolved-fixture-secret' },
+    }));
+    const permissions = vi
+      .spyOn(cloud, 'checkCloudPermissions')
+      .mockImplementation(async (config) => {
+        if (JSON.stringify(config.providers).includes(excluded)) {
+          throw new Error('Excluded target denied');
+        }
+      });
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        providers: [allowed, excluded],
+        prompts: ['Hello'],
+        tests: [{ vars: {} }],
+        metadata: { teamId: 'fixture-team' },
+      }),
+    );
+
+    const response = await run({ providerFilter: 'Allowed target', write: false });
+    expect(response.success, response.error).toBe(true);
+    expect(permissions).toHaveBeenCalledOnce();
+    const checked = permissions.mock.calls[0][0];
+    expect(checked.providers).toEqual([{ id: allowed }]);
+    expect(checked.metadata).toEqual({ teamId: 'fixture-team' });
+    expect(JSON.stringify(checked.providers)).not.toContain('resolved-fixture-secret');
+  });
+
+  it('checks the linked cloud identity of a selected local provider', async () => {
+    const target = 'promptfoo://provider/33333333-3333-4333-8333-333333333333';
+    vi.spyOn(cloud, 'validateLinkedTargetId').mockResolvedValue();
+    const permissions = vi.spyOn(cloud, 'checkCloudPermissions').mockResolvedValue();
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        providers: [
+          {
+            id: 'echo',
+            label: 'Selected',
+            config: { linkedTargetId: target, apiKey: 'fixture-secret' },
+          },
+          { id: 'echo', label: 'Excluded' },
+        ],
+        prompts: ['Hello'],
+        tests: [{ vars: {} }],
+      }),
+    );
+    const response = await run({ providerFilter: 'Selected', write: false });
+    expect(response.success, response.error).toBe(true);
+    expect(permissions).toHaveBeenCalledOnce();
+    expect(permissions.mock.calls[0][0].providers).toEqual([{ id: target }]);
+  });
+
+  it('preserves permission rejection for a selected provider', async () => {
+    vi.spyOn(cloud, 'checkCloudPermissions').mockRejectedValue(new Error('Selected target denied'));
+    const call = vi.spyOn(EchoProvider.prototype, 'callApi');
+    const response = await run({ providerFilter: 'echo', write: false });
+    expect(response.success).toBe(false);
+    expect(response.error).toContain('Selected target denied');
+    expect(call).not.toHaveBeenCalled();
+  });
+
+  it('cleans constructed providers when a later test source fails to resolve', async () => {
+    const cleanup = vi.spyOn(AwsBedrockConverseProvider.prototype, 'cleanup').mockResolvedValue();
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        providers: ['bedrock:converse:anthropic.claude-3-5-sonnet-20240620-v1:0'],
+        prompts: ['Hello'],
+        tests: 'file://missing-tests.json',
+      }),
+    );
+    const response = await run({ testCaseIndices: 0, write: false });
+    expect(response.success).toBe(false);
+    expect(response.error).toContain('missing-tests.json');
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
   it.each([false, true])(
     'cleans providers removed by selection after suggestions=%s',
     async (generateSuggestions) => {
@@ -572,23 +657,32 @@ describe('MCP evaluation execution contract', () => {
     expect(cleanup).toHaveBeenCalledTimes(2);
   });
 
-  it('reports cleanup failures after a successful run', async () => {
-    const cleanup = vi
-      .spyOn(AwsBedrockConverseProvider.prototype, 'cleanup')
-      .mockRejectedValue(new Error('Owned cleanup failure'));
-    await writeFile(
-      configPath,
-      JSON.stringify({
-        providers: ['echo', 'bedrock:converse:anthropic.claude-3-5-sonnet-20240620-v1:0'],
-        prompts: ['Hello'],
-        tests: [{ vars: {} }],
-      }),
-    );
-    const response = await run({ providerFilter: 'echo', write: false });
-    expect(response.success).toBe(false);
-    expect(response.error).toContain('Owned cleanup failure');
-    expect(cleanup).toHaveBeenCalledOnce();
-  });
+  it.each([undefined, 42])(
+    'reports MCP cleanup failure with ambient exit code %s',
+    async (exitCode) => {
+      const previousExitCode = process.exitCode;
+      process.exitCode = exitCode;
+      try {
+        const cleanup = vi
+          .spyOn(AwsBedrockConverseProvider.prototype, 'cleanup')
+          .mockRejectedValue(new Error('Owned cleanup failure'));
+        await writeFile(
+          configPath,
+          JSON.stringify({
+            providers: ['echo', 'bedrock:converse:anthropic.claude-3-5-sonnet-20240620-v1:0'],
+            prompts: ['Hello'],
+            tests: [{ vars: {} }],
+          }),
+        );
+        const response = await run({ providerFilter: 'echo', write: false });
+        expect(response.success).toBe(false);
+        expect(response.error).toContain('Owned cleanup failure');
+        expect(cleanup).toHaveBeenCalledOnce();
+      } finally {
+        process.exitCode = previousExitCode;
+      }
+    },
+  );
 
   describe.each([
     { id: 'google:gemini-3.1-flash-image', prototype: GeminiImageProvider.prototype },
