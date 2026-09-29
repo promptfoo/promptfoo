@@ -21,6 +21,7 @@ import { HttpTlsFieldsSchema } from '../contracts/providerConfig/httpTls';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
+import { isTransientConnectionError } from '../util/fetch/errors';
 import { fetchWithRetries } from '../util/fetch/index';
 import {
   estimateStreamingTokensPerSecond,
@@ -48,6 +49,7 @@ import {
   sanitizeUrlEncodedString,
 } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
+import { sleep, sleepWithAbort } from '../util/time';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import {
   HttpMultipartConfigSchema,
@@ -1852,45 +1854,61 @@ export class HttpProvider implements ApiProvider {
     if (isStreaming) {
       const requestStartTime = Date.now();
       const timeoutMs = getRequestTimeoutMs();
-      const controller = new AbortController();
-      const signal = fetchOptions.signal
-        ? AbortSignal.any([fetchOptions.signal, controller.signal])
-        : controller.signal;
-      const rawResponse = await fetchWithRetries(
-        url,
-        { ...fetchOptions, signal },
-        timeoutMs,
-        this.config.maxRetries,
-      );
-      // Fetch retains its per-attempt timeout; body consumption has its own deadline.
-      const bodyTimeout = setTimeout(
-        () => controller.abort(new Error(`Streaming response timed out after ${timeoutMs} ms`)),
-        timeoutMs,
-      );
-      try {
-        const { text, streamingMetrics } = await processStreamingResponse(
-          rawResponse,
-          requestStartTime,
-          { streamFormat: this.config.streamFormat },
+      const method = (fetchOptions.method ?? 'GET').toUpperCase();
+      const maxBodyRetries = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method) ? 2 : 0;
+      for (let bodyAttempt = 0; ; bodyAttempt++) {
+        const controller = new AbortController();
+        const signal = fetchOptions.signal
+          ? AbortSignal.any([fetchOptions.signal, controller.signal])
+          : controller.signal;
+        const rawResponse = await fetchWithRetries(
+          url,
+          { ...fetchOptions, signal },
+          timeoutMs,
+          this.config.maxRetries,
         );
-        return {
-          response: {
-            data: text,
-            cached: false,
-            status: rawResponse.status,
-            statusText: rawResponse.statusText,
-            headers: Object.fromEntries(rawResponse.headers.entries()),
-            latencyMs: Date.now() - requestStartTime,
-            deleteFromCache: async () => {},
-          },
-          streamingMetrics,
-        };
-      } catch (error) {
-        // Abort every response branch, including the fetch logger's clone.
-        controller.abort(error);
-        throw error;
-      } finally {
-        clearTimeout(bodyTimeout);
+        // Fetch retains its per-attempt timeout; body consumption has its own deadline.
+        const bodyTimeout = setTimeout(
+          () => controller.abort(new Error(`Streaming response timed out after ${timeoutMs} ms`)),
+          timeoutMs,
+        );
+        try {
+          const { text, streamingMetrics } = await processStreamingResponse(
+            rawResponse,
+            requestStartTime,
+            { streamFormat: this.config.streamFormat },
+          );
+          return {
+            response: {
+              data: text,
+              cached: false,
+              status: rawResponse.status,
+              statusText: rawResponse.statusText,
+              headers: Object.fromEntries(rawResponse.headers.entries()),
+              latencyMs: Date.now() - requestStartTime,
+              deleteFromCache: async () => {},
+            },
+            streamingMetrics,
+          };
+        } catch (error) {
+          // Abort every response branch, including the fetch logger's clone.
+          controller.abort(error);
+          if (
+            fetchOptions.signal?.aborted ||
+            bodyAttempt >= maxBodyRetries ||
+            !isTransientConnectionError(error as Error)
+          ) {
+            throw error;
+          }
+        } finally {
+          clearTimeout(bodyTimeout);
+        }
+        const backoffMs = 2 ** bodyAttempt * 1000;
+        if (fetchOptions.signal) {
+          await sleepWithAbort(backoffMs, fetchOptions.signal);
+        } else {
+          await sleep(backoffMs);
+        }
       }
     }
 

@@ -70,6 +70,58 @@ describe('HttpProvider streaming integration', () => {
     expect(result.streamingMetrics?.timeToFirstToken).toBe(2000);
   });
 
+  it('retries transient PUT body reads twice before returning the successful metrics', async () => {
+    vi.useFakeTimers();
+    const fetch = vi.spyOn(fetchModule, 'fetchWithRetries');
+    for (let i = 0; i < 2; i++) {
+      fetch.mockResolvedValueOnce(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(new Error('ECONNRESET during body read'));
+            },
+          }),
+        ),
+      );
+    }
+    fetch.mockResolvedValueOnce(new Response('Complete output'));
+    const provider = new HttpProvider('https://example.com/stream', {
+      config: { method: 'PUT', body: { stream: true } },
+    });
+
+    const result = await settlePendingTimers(provider.callApi('Hello'));
+
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(result.output).toBe('Complete output');
+    expect(result.streamingMetrics?.timeToFirstToken).toBe(3000);
+  });
+
+  it.each([
+    ['PUT', 'ECONNRESET during body read', 3],
+    ['PUT', 'invalid stream', 1],
+    ['POST', 'ECONNRESET during body read', 1],
+    ['PATCH', 'ECONNRESET during body read', 1],
+  ] as const)('limits %s body retries for %s to %s attempts', async (method, message, attempts) => {
+    vi.useFakeTimers();
+    const fetch = vi.spyOn(fetchModule, 'fetchWithRetries').mockImplementation(
+      async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(new Error(message));
+            },
+          }),
+        ),
+    );
+    const provider = new HttpProvider('https://example.com/stream', {
+      config: { method, body: { stream: true } },
+    });
+    const rejection = expect(provider.callApi('Hello')).rejects.toThrow(message);
+    await vi.runAllTimersAsync();
+    await rejection;
+    expect(fetch).toHaveBeenCalledTimes(attempts);
+  });
+
   it('aborts the transport and logging clone when parsing stops early', async () => {
     let signal: AbortSignal | null | undefined;
     let loggedBody: Promise<string>;
