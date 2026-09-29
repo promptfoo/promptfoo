@@ -7,9 +7,9 @@ description: 'Evaluate OpenAI realtime voice-agent prompts with simulated caller
 
 # Simulated Voice User
 
-This provider uses OpenAI Realtime for both endpoints and requires `OPENAI_API_KEY`. You can also set `targetApiKey` and `simulatedUserApiKey` separately in provider configuration.
+`promptfoo:simulated-voice-user` connects two OpenAI Realtime sessions: an agent using your prompt and a caller following the test instructions. Both endpoints stream audio. Assertions grade the transcript; an optional stereo WAV records the agent on the left channel and the caller on the right.
 
-This provider starts a voice conversation between an agent using your prompt and a simulated caller following the test instructions. Both endpoints stream audio. Assertions evaluate the resulting transcript, and an optional stereo WAV records the agent on the left channel and caller on the right.
+Set `OPENAI_API_KEY`, or configure `targetApiKey` and `simulatedUserApiKey` separately.
 
 For text conversations, use [Simulated User](/docs/providers/simulated-user/).
 
