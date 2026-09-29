@@ -113,6 +113,9 @@ export default function ScalarApiReference({
     return () => {
       script.removeEventListener('load', handleLoad);
       script.removeEventListener('error', handleError);
+      if (script.dataset.status === 'loading') {
+        script.remove();
+      }
       destroyReference();
     };
   }, [showTestRequestButton, specUrl]);

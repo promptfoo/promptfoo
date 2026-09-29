@@ -144,6 +144,21 @@ describe('ScalarApiReference', () => {
     expect(createApiReference).not.toHaveBeenCalled();
   });
 
+  it('retries when the script fails after the page unmounts', () => {
+    const { unmount } = render(<ScalarApiReference {...props} />);
+    const pendingScript = getScript();
+    unmount();
+    act(() => pendingScript.dispatchEvent(new Event('error')));
+
+    render(<ScalarApiReference {...props} />);
+    expect(getScript()).not.toBe(pendingScript);
+    const createApiReference = vi.fn().mockReturnValue({});
+    loadScript(createApiReference);
+
+    expect(createApiReference).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('tracks theme changes and disconnects its observer on unmount', async () => {
     const disconnect = vi.spyOn(MutationObserver.prototype, 'disconnect');
     const { unmount } = render(<ScalarApiReference {...props} />);
