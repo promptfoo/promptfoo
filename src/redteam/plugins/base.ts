@@ -542,6 +542,7 @@ export abstract class RedteamGraderBase {
     const imagesForGrading = imageOutputs ?? gradingProviderResponse?.images;
     const audioForGrading =
       test.metadata?.isSafe === true ? gradingProviderResponse?.audio : undefined;
+    const hasAudioForGrading = Boolean(audioForGrading?.data || audioForGrading?.blobRef);
 
     if (
       !skipRefusalCheck &&
@@ -565,7 +566,7 @@ export abstract class RedteamGraderBase {
       ...test.options,
       provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
     };
-    if (audioForGrading?.data || audioForGrading?.blobRef) {
+    if (hasAudioForGrading) {
       invariant(
         grading.provider.getAudioInputFormat?.() === 'openai',
         'Safe-control audio grading requires a configured grader that supports audio input.',
@@ -578,7 +579,7 @@ export abstract class RedteamGraderBase {
       logger.debug('[Redteam] No configured grading provider detected, preferring remote grading');
     }
     const grade = (
-      imagesForGrading?.length || audioForGrading?.data || audioForGrading?.blobRef
+      imagesForGrading?.length || hasAudioForGrading
         ? await matchesLlmRubric(finalRubric, llmOutput, grading, undefined, undefined, {
             providerResponse: {
               output: llmOutput,
