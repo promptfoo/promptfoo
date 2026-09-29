@@ -2,7 +2,7 @@ import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../src/cache';
 import cliState from '../../../src/cliState';
-import { getEnvOverrides, withEnvOverrides } from '../../../src/envOverrides';
+import { getEnvOverrides } from '../../../src/envars';
 import { MistralChatCompletionProvider } from '../../../src/providers/mistral';
 import { createApp } from '../../../src/server/server';
 import { mockProcessEnv } from '../../util/utils';
@@ -179,7 +179,7 @@ describe('Redteam Routes', () => {
           env: {},
         });
         mockedRedteamProviderManager.getProviderSelection.mockImplementation(async () =>
-          withEnvOverrides({}, () => ({ provider: previewProvider, source: 'default' })),
+          cliState.withEnv({}, () => ({ provider: previewProvider, source: 'default' })),
         );
         const fetchSpy = vi.spyOn(cache, 'fetchWithCache').mockResolvedValue({
           cached: false,
@@ -233,7 +233,7 @@ describe('Redteam Routes', () => {
             });
           }
           expect(previewProvider.env).toEqual({});
-          expect(getEnvOverrides()?.MISTRAL_API_KEY).toBe('fixture-other-key');
+          expect(getEnvOverrides()?.MISTRAL_API_KEY).toBe('fixture-stale-key');
         } finally {
           cliState.config = previousConfig;
           restoreEnv();
@@ -978,6 +978,17 @@ describe('Redteam Routes', () => {
       expect(runArgs.liveRedteamConfig).toEqual({ purpose: 'test' });
       expect(runArgs).not.toHaveProperty('delay');
       expect(runArgs).not.toHaveProperty('maxConcurrency');
+    });
+
+    it('should ignore a request-supplied filesystem base path', async () => {
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'test', basePath: '../private' } });
+
+      expect(response.status).toBe(200);
+      expect(mockedDoRedteamRun.mock.calls[0][0].liveRedteamConfig).toEqual({
+        purpose: 'test',
+      });
     });
 
     it('should return 400 when config is missing', async () => {

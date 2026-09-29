@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import cliState from '../../cliState';
-import { getRequestEnvOverrides, withEnvOverrides } from '../../envOverrides';
 import logger from '../../logger';
 import {
   DATASET_EXEMPT_PLUGINS,
@@ -34,12 +33,9 @@ import type { Request, Response } from 'express';
 
 export const redteamRouter = Router();
 
-/**
- * Generates a test case for a given plugin/strategy combination.
- */
 // Keep lazy provider credential and endpoint lookups isolated through plugin and strategy calls.
 redteamRouter.use('/generate-test', (_req, _res, next) => {
-  withEnvOverrides(getRequestEnvOverrides() ?? {}, next);
+  cliState.withConfig(undefined, () => cliState.withEnv({}, next));
 });
 
 redteamRouter.post('/generate-test', async (req: Request, res: Response): Promise<void> => {
@@ -267,6 +263,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   }
 
   const { config, force, verbose, delay, maxConcurrency } = bodyResult.data;
+  const { basePath: _basePath, ...localConfig } = config;
   const id = crypto.randomUUID();
   currentJobId = id;
   currentAbortController = new AbortController();
@@ -278,7 +275,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
 
   // Run redteam in background
   doRedteamRun({
-    liveRedteamConfig: config,
+    liveRedteamConfig: localConfig,
     force,
     verbose,
     ...(delay === undefined ? {} : { delay }),

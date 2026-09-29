@@ -3,7 +3,11 @@ import { fetchWithCache, isCacheEnabled } from '../../src/cache';
 import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
-import { ReplicateImageProvider, ReplicateProvider } from '../../src/providers/replicate';
+import {
+  ReplicateImageProvider,
+  ReplicateModerationProvider,
+  ReplicateProvider,
+} from '../../src/providers/replicate';
 import { ResultFailureReason } from '../../src/types/index';
 
 import type { TestSuite } from '../../src/types/index';
@@ -34,6 +38,45 @@ afterEach(() => {
 });
 
 describe('Replicate evaluation cancellation', () => {
+  it('stops moderation assertion polling when the evaluation times out', async () => {
+    const moderation = new ReplicateModerationProvider('owner/model', {
+      config: { apiKey: 'fixture' },
+    });
+    const evalRecord = new Eval({});
+    const result = evaluate(
+      {
+        providers: [{ id: () => 'fixture-target', callApi: async () => ({ output: 'A reply' }) }],
+        prompts: [{ raw: 'fixture prompt', label: 'fixture prompt' }],
+        tests: [{ assert: [{ type: 'moderation' }], options: { provider: moderation } }],
+      },
+      evalRecord,
+      { timeoutMs: 100, maxConcurrency: 1 },
+    );
+
+    await vi.advanceTimersByTimeAsync(0);
+    const pollingSignal = vi.mocked(fetchWithCache).mock.calls[1]?.[1]?.signal;
+    await vi.advanceTimersByTimeAsync(100);
+    await result;
+    // Let an incorrectly uncancelled poll finish so a failed regression leaves no work behind.
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { id: 'fixture-prediction', status: 'succeeded', output: 'safe' },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    await vi.advanceTimersByTimeAsync(2000);
+
+    expect(pollingSignal).toBeInstanceOf(AbortSignal);
+    expect(pollingSignal?.aborted).toBe(true);
+    expect(fetchWithCache).toHaveBeenCalledTimes(2);
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.results[0]).toMatchObject({
+      error: expect.stringContaining('Evaluation timed out after 100ms'),
+      failureReason: ResultFailureReason.ERROR,
+      success: false,
+    });
+  });
+
   it.each(['text', 'image'])(
     'stops %s creation/polling after the actual evaluation timeout',
     async (mode) => {

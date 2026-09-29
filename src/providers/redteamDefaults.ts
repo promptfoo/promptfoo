@@ -1,7 +1,7 @@
-import { getEnvString } from '../envars';
-import { getEnvOverrides, withEnvOverrides } from '../envOverrides';
+import cliState from '../cliState';
+import { getEnvOverrides, getEnvString } from '../envars';
 
-import type { EnvOverrides } from '../types/env';
+import type { EnvOverrides } from '../contracts/env';
 import type { ApiProvider } from '../types/providers';
 
 /** Bind a fresh automatic provider's lazy environment reads for its entire call. */
@@ -10,8 +10,12 @@ export function bindRedteamProviderEnvironment<T extends ApiProvider>(
   env?: EnvOverrides,
 ): T {
   const snapshot = { ...(env ?? getEnvOverrides()) };
+  const fileEnv = { ...getEnvOverrides('file') };
   const callApi = provider.callApi.bind(provider);
-  provider.callApi = (...args) => withEnvOverrides(snapshot, () => callApi(...args));
+  provider.callApi = (...args) =>
+    cliState.withEnvFileOverrides(fileEnv, () =>
+      cliState.withEnv(snapshot, () => callApi(...args)),
+    );
   return provider;
 }
 

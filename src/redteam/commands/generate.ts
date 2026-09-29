@@ -9,7 +9,6 @@ import { z } from 'zod';
 import { withCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX, DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
-import { withEnvOverrides } from '../../envOverrides';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -279,7 +278,11 @@ export async function doGenerateRedteam(
     logger.info('Cache is disabled');
   }
 
-  return withCacheEnabled(cacheOverride, () => doGenerateRedteamInternal(options));
+  return cliState.withConfig(undefined, () =>
+    cliState.withBasePath(undefined, () =>
+      withCacheEnabled(cacheOverride, () => doGenerateRedteamInternal(options)),
+    ),
+  );
 }
 
 async function doGenerateRedteamInternal(
@@ -676,7 +679,7 @@ async function doGenerateRedteamInternal(
 
   const generateForPurpose = (purpose: string | undefined) =>
     withGenerationConcurrency(config.maxConcurrency, config.delay, () =>
-      withEnvOverrides(generationEnv, () =>
+      cliState.withEnv(generationEnv, () =>
         synthesize({
           ...parsedConfig.data,
           requestScoped: true,

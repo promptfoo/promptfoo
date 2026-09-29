@@ -3,8 +3,7 @@ import { randomUUID } from 'crypto';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../../blobs/extractor';
 import { shouldAttemptRemoteBlobUpload } from '../../blobs/remoteUpload';
 import cliState from '../../cliState';
-import { getEnvBool } from '../../envars';
-import { getEnvOverrides, getRequestEnvOverrides, withEnvOverrides } from '../../envOverrides';
+import { getEnvBool, getEnvOverrides } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -41,6 +40,11 @@ import {
   accumulateTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../../util/transform';
+import {
+  getGradingAssertionHash,
+  getGradingInputHash,
+  withGradingUsage,
+} from '../grading/storedResult';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL } from './constants';
@@ -151,7 +155,7 @@ async function loadRedteamProvider({
 
   const env = { ...getEnvOverrides() };
   const { getDefaultProviders } = await import('../../providers/defaults');
-  const defaults = await withEnvOverrides(env, () => getDefaultProviders(env));
+  const defaults = await cliState.withEnv(env, () => getDefaultProviders(env));
   const configuredDefault = jsonOnly
     ? (defaults.redteamJsonProvider ?? defaults.redteamProvider)
     : defaults.redteamProvider;
@@ -370,7 +374,7 @@ class RedteamProviderManager {
     });
     return {
       provider: await (ignoreCliState
-        ? withEnvOverrides(getRequestEnvOverrides() ?? {}, () =>
+        ? cliState.withConfig(undefined, () =>
             this.loadProviderCandidate(candidate, { jsonOnly, preferSmallModel }),
           )
         : this.loadProviderCandidate(candidate, { jsonOnly, preferSmallModel })),
@@ -390,7 +394,7 @@ class RedteamProviderManager {
     jsonOnly?: boolean;
     preferSmallModel?: boolean;
   } = {}): Promise<ApiProvider> {
-    const provider = await withEnvOverrides(getRequestEnvOverrides() ?? {}, () =>
+    const provider = await cliState.withConfig(undefined, () =>
       loadRedteamProvider({ jsonOnly, preferSmallModel }),
     );
     return this.wrapProvider(provider);
@@ -702,7 +706,30 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
 export function accumulateGraderResult(
   previous: GradingResult | undefined,
   current: GradingResult,
+  input?: {
+    prompt: string;
+    output: string;
+    messages?: unknown;
+    pluginId?: string;
+    assertion?: AssertionOrSet;
+  },
 ): GradingResult {
+  if (input) {
+    current = {
+      ...current,
+      metadata: {
+        ...current.metadata,
+        redteamGradingAssertionHash: getGradingAssertionHash(input.assertion),
+        redteamGradingInputHash: getGradingInputHash(
+          input.prompt,
+          input.output,
+          input.messages,
+          input.pluginId,
+        ),
+      },
+    };
+  }
+
   const normalizeGradingTaskUsage = (result: GradingResult): TokenUsage | undefined => {
     if (!result.tokensUsed) {
       return undefined;
@@ -721,7 +748,7 @@ export function accumulateGraderResult(
         total: 0,
         prompt: 0,
         completion: 0,
-        cached: cachedTokens || reportedTotal,
+        cached: Math.max(cachedTokens, reportedTotal),
         numRequests: 0,
       };
     }
@@ -738,10 +765,7 @@ export function accumulateGraderResult(
       return current;
     }
 
-    return {
-      ...current,
-      tokensUsed,
-    };
+    return withGradingUsage(current, tokensUsed);
   }
 
   // The latest verdict can be cached even when the accumulated usage already
@@ -767,7 +791,37 @@ export function accumulateGraderResult(
     accumulateTokenUsage(tokensUsed, currentTokensUsed);
   }
 
-  return { ...current, tokensUsed };
+  return withGradingUsage(current, tokensUsed);
+}
+
+export interface FlaggedTurn {
+  graderResult: GradingResult;
+  output: string;
+  prompt: string | undefined;
+  messages: Message[];
+  guardrails?: ProviderResponse['guardrails'];
+  transformDisplayVars?: Record<string, string>;
+}
+
+/** Keep the verdict and its inputs together; grader errors do not identify vulnerabilities. */
+export function captureFlaggedTurn(
+  graderResult: GradingResult,
+  turn: Omit<FlaggedTurn, 'graderResult'>,
+): FlaggedTurn | undefined {
+  if (graderResult.pass || graderResult.metadata?.graderError === true) {
+    return undefined;
+  }
+  return { graderResult, ...turn, messages: [...turn.messages] };
+}
+
+/** Preserve the flagged verdict with grading usage from all turns. */
+export function resolveStoredGraderResult(
+  flaggedResult: GradingResult | undefined,
+  storedGraderResult: GradingResult | undefined,
+): GradingResult | undefined {
+  return flaggedResult
+    ? withGradingUsage(flaggedResult, storedGraderResult?.tokensUsed)
+    : storedGraderResult;
 }
 
 export interface Message {

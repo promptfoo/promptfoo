@@ -10,7 +10,11 @@ import { type CompletedPrompt, type Prompt, ResultFailureReason } from '../../sr
 import {
   clearStandaloneEvalCache,
   deleteEval,
+  getDatasetFromHash,
+  getPrompts,
+  getPromptsForTestCasesHash,
   getStandaloneEvals,
+  getTestCases,
   updateResult,
 } from '../../src/util/database';
 import {
@@ -87,6 +91,25 @@ describe('getStandaloneEvals', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it.each([false, true])('keeps dataset identities when output stripping is %s', async (strip) => {
+    vi.stubEnv('PROMPTFOO_STRIP_TEST_VARS', String(strip));
+    const tests = [{ vars: { doc: 'https://cdn.example/doc?X-Amz-Signature=short-secret' } }];
+    const created = await createEvalWithPrompts({ tests });
+    const persisted = await Eval.findById(created.id);
+    const datasetId = persisted!.datasetId!;
+
+    expect(datasetId).toBeTruthy();
+    const datasets = await getTestCases();
+    expect(datasets).toHaveLength(1);
+    expect(datasets[0].id).toBe(datasetId);
+    expect(JSON.stringify(datasets[0].testCases)).not.toContain('short-secret');
+    expect((await getDatasetFromHash(datasetId))?.id).toBe(datasetId);
+    expect((await getPrompts())[0].evals[0].datasetId).toBe(datasetId);
+    expect(await getPromptsForTestCasesHash(datasetId)).toHaveLength(1);
+    expect(persisted!.config.tests).toEqual(tests);
   });
 
   it('returns isRedteam from the materialized column, not raw JSON inspection', async () => {

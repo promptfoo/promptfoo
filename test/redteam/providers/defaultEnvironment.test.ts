@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
-import { getEnvOverrides, withEnvOverrides } from '../../../src/envOverrides';
-import { resetDefaultProviders, setDefaultRedteamProviders } from '../../../src/providers/defaults';
+import { getEnvOverrides } from '../../../src/envars';
+import { hasGoogleDefaultCredentials } from '../../../src/providers/google/util';
 import { MistralChatCompletionProvider } from '../../../src/providers/mistral';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import { hasCodexDefaultCredentials } from '../../../src/providers/openai/codexDefaults';
 import RedteamIterativeProvider from '../../../src/redteam/providers/iterative';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { clearAgentCache } from '../../../src/util/fetch';
@@ -12,12 +13,12 @@ import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/providers/google/util', async (importOriginal) => ({
   ...(await importOriginal()),
-  hasGoogleDefaultCredentials: vi.fn().mockResolvedValue(false),
+  hasGoogleDefaultCredentials: vi.fn(),
 }));
 
 vi.mock('../../../src/providers/openai/codexDefaults', async (importOriginal) => ({
   ...(await importOriginal()),
-  hasCodexDefaultCredentials: vi.fn().mockReturnValue(false),
+  hasCodexDefaultCredentials: vi.fn(),
 }));
 
 describe('automatic redteam provider call environment', () => {
@@ -26,6 +27,8 @@ describe('automatic redteam provider call environment', () => {
   const requests: { url: string; authorization: string | null; body: any }[] = [];
 
   beforeEach(() => {
+    vi.mocked(hasGoogleDefaultCredentials).mockReset().mockResolvedValue(false);
+    vi.mocked(hasCodexDefaultCredentials).mockReset().mockReturnValue(false);
     mockProcessEnv(
       {
         PATH: originalEnv.PATH,
@@ -39,7 +42,6 @@ describe('automatic redteam provider call environment', () => {
     );
     cliState.config = {};
     redteamProviderManager.clearProvider();
-    resetDefaultProviders();
     requests.length = 0;
     vi.stubGlobal(
       'fetch',
@@ -64,7 +66,6 @@ describe('automatic redteam provider call environment', () => {
     clearAgentCache();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
-    resetDefaultProviders();
     redteamProviderManager.clearProvider();
     cliState.config = originalConfig;
     mockProcessEnv(originalEnv, { clear: true });
@@ -105,10 +106,10 @@ describe('automatic redteam provider call environment', () => {
 
   it('retains a captured endpoint and process fallback across another request scope', async () => {
     mockProcessEnv({ OPENAI_API_BASE_URL: 'https://process-fixture.invalid/v1' });
-    const first = await withEnvOverrides({ OPENAI_API_KEY: 'fixture-a' }, () =>
+    const first = await cliState.withEnv({ OPENAI_API_KEY: 'fixture-a' }, () =>
       redteamProviderManager.getProvider({ ignoreCliState: true }),
     );
-    const second = await withEnvOverrides(
+    const second = await cliState.withEnv(
       {
         OPENAI_API_KEY: 'fixture-b',
         OPENAI_API_BASE_URL: 'https://captured-fixture.invalid/v1',
@@ -116,7 +117,7 @@ describe('automatic redteam provider call environment', () => {
       () => redteamProviderManager.getProvider({ ignoreCliState: true }),
     );
 
-    await withEnvOverrides({ OPENAI_API_BASE_URL: 'https://later.invalid/v1' }, async () => {
+    await cliState.withEnv({ OPENAI_API_BASE_URL: 'https://later.invalid/v1' }, async () => {
       await Promise.all([first.callApi('first'), second.callApi('second')]);
       expect(getEnvOverrides()?.OPENAI_API_BASE_URL).toBe('https://later.invalid/v1');
     });
@@ -154,13 +155,16 @@ describe('automatic redteam provider call environment', () => {
     });
   });
 
+  it('keeps automatic generation non-agentic when only Codex login is available', async () => {
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
+    const provider = await redteamProviderManager.getProvider({});
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.id()).not.toContain('codex-sdk');
+  });
+
   it('preserves explicit and cached provider instances and their call methods', async () => {
     const provider = createMockProvider();
     const callApi = provider.callApi;
-    await setDefaultRedteamProviders(provider);
-    expect(await redteamProviderManager.getProvider({})).toBe(provider);
-    expect(provider.callApi).toBe(callApi);
-    resetDefaultProviders();
     expect(await redteamProviderManager.getProvider({ provider })).toBe(provider);
     await redteamProviderManager.setProvider(provider);
     expect(await redteamProviderManager.getProvider({})).toBe(provider);

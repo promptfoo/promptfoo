@@ -4,8 +4,8 @@ import { AnthropicMessagesProvider } from './messages';
 import type { EnvOverrides } from '../../types/env';
 import type { DefaultProviders, ProviderResponse } from '../../types/index';
 
-// Default model to use for all default providers
-export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-6';
+// Must support the rubric grader's forced tool_choice.
+export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-5';
 
 /**
  * Helper function to create a lazy-loaded provider. This allows the .env file to be
@@ -67,6 +67,8 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
           },
         ],
         ...config,
+        // Keep the tool-use JSON parseable even if the caller enables thinking display.
+        showThinking: false,
       },
     });
   }
@@ -117,10 +119,10 @@ const webSearchProviderFactory = createLazyProvider(
       config: {
         tools: [
           {
-            type: 'web_search_20250305',
+            type: 'web_search_20260209',
             name: 'web_search',
             max_uses: 5,
-          } as any,
+          },
         ],
       },
     }),

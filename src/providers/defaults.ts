@@ -52,11 +52,8 @@ const COMPLETION_PROVIDERS: (keyof DefaultProviders)[] = [
 
 const EMBEDDING_PROVIDERS: (keyof DefaultProviders)[] = ['embeddingProvider'];
 
-const REDTEAM_PROVIDERS: (keyof DefaultProviders)[] = ['redteamProvider', 'redteamJsonProvider'];
-
-let defaultCompletionProvider: ApiProvider | undefined;
-let defaultEmbeddingProvider: ApiProvider | undefined;
-let defaultRedteamProvider: ApiProvider | undefined;
+let defaultCompletionProvider: ApiProvider;
+let defaultEmbeddingProvider: ApiProvider;
 
 async function getEmbeddingProviderForAzureDefaults(env?: EnvOverrides): Promise<ApiProvider> {
   if (defaultEmbeddingProvider) {
@@ -183,16 +180,6 @@ export async function setDefaultEmbeddingProviders(provider: ApiProvider) {
   defaultEmbeddingProvider = provider;
 }
 
-export async function setDefaultRedteamProviders(provider: ApiProvider) {
-  defaultRedteamProvider = provider;
-}
-
-export function resetDefaultProviders() {
-  defaultCompletionProvider = undefined;
-  defaultEmbeddingProvider = undefined;
-  defaultRedteamProvider = undefined;
-}
-
 export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
   const {
     preferAnthropic,
@@ -211,7 +198,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     logger.debug('Using Azure OpenAI default providers');
     const deploymentName = getAzureDeploymentName(env);
     if (!deploymentName) {
-      throw new Error('AZURE_DEPLOYMENT_NAME must be set when using Azure OpenAI');
+      throw new Error('An Azure OpenAI deployment name must be set');
     }
 
     const azureProvider = new AzureChatCompletionProvider(deploymentName, { env });
@@ -384,14 +371,6 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   if (embeddingOverride) {
     EMBEDDING_PROVIDERS.forEach((provider) => {
       providers[provider] = embeddingOverride;
-    });
-  }
-
-  const redteamOverride = defaultRedteamProvider;
-  if (redteamOverride) {
-    logger.debug(`Overriding default redteam provider: ${redteamOverride.id()}`);
-    REDTEAM_PROVIDERS.forEach((provider) => {
-      providers[provider] = redteamOverride;
     });
   }
 

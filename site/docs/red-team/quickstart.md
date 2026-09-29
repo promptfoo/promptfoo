@@ -1,8 +1,7 @@
 ---
-title: Red Team Getting Started
 sidebar_position: 2
 sidebar_label: Getting started
-description: 'Start red teaming LLMs in minutes with Promptfoo: scan 50+ vulnerability types including jailbreaks, prompt injection, data exfiltration, and compliance risks'
+description: Set up Promptfoo to test an LLM application with red team plugins and strategies.
 ---
 
 import CodeBlock from '@theme/CodeBlock';
@@ -19,7 +18,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
   - <a href="/docs/red-team/llm-vulnerability-types/" className={styles.badge}>Compliance & ethics</a>: harmful & biased content, content filter validation, OWASP/NIST/EU compliance, etc.
   - <a href="/docs/red-team/configuration/#custom-policies" className={styles.badge}>Custom policies</a>: enforce organizational guidelines.
 - Generates **dynamic attack probes** tailored to your application using specialized uncensored models.
-- Implements state-of-the-art **adversarial ML research** from [Microsoft](/docs/red-team/strategies/multi-turn/), [Meta](/docs/red-team/strategies/goat/), and others.
+- Includes **adversarial testing strategies** from [Microsoft](/docs/red-team/strategies/multi-turn/), [Meta](/docs/red-team/strategies/goat/), and others.
 - Integrates with [CI/CD](/docs/integrations/ci-cd/).
 - Tests via [HTTP API](#attacking-an-api-endpoint), [browser](/docs/providers/browser/), or [direct model access](#alternative-test-specific-prompts-and-models).
 
@@ -30,7 +29,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 ## Prerequisites
 
 - Install [Node.js](https://nodejs.org/en/download/package-manager/) `>=22.22.0`
-- Optional but recommended: Configure credentials for a supported LLM provider, such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, or `MISTRAL_API_KEY`. Local attack generation will select a strong model from that provider automatically.
+- For local generation, configure credentials for a supported LLM provider, such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, or `MISTRAL_API_KEY`. Promptfoo selects a default model from the configured credentials.
 
 ## Initialize the project
 

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getEnvString } from '../../src/envars';
-import { getEnvOverrides, withEnvOverrides } from '../../src/envOverrides';
+import cliState from '../../src/cliState';
+import { getEnvOverrides, getEnvString } from '../../src/envars';
 import { bindRedteamProviderEnvironment } from '../../src/providers/redteamDefaults';
 import { createDeferred } from '../util/utils';
 
@@ -46,13 +46,13 @@ describe('bindRedteamProviderEnvironment', () => {
     const env = { OPENAI_API_BASE_URL: 'a' };
     expect(bindRedteamProviderEnvironment(first, env)).toBe(first);
     env.OPENAI_API_BASE_URL = 'mutated-after-construction';
-    const second = withEnvOverrides({ OPENAI_API_BASE_URL: 'b' }, () =>
+    const second = cliState.withEnv({ OPENAI_API_BASE_URL: 'b' }, () =>
       bindRedteamProviderEnvironment(new FixtureProvider()),
     );
     expect(first).toBeInstanceOf(FixtureProvider);
     expect(first.config).toBe(config);
 
-    await withEnvOverrides({ OPENAI_API_BASE_URL: 'caller' }, async () => {
+    await cliState.withEnv({ OPENAI_API_BASE_URL: 'caller' }, async () => {
       const pending = [
         first.callApi('one', context, options),
         second.callApi('two', context, options),
@@ -64,6 +64,27 @@ describe('bindRedteamProviderEnvironment', () => {
       ]);
       expect(getEnvOverrides()?.OPENAI_API_BASE_URL).toBe('caller');
     });
+  });
+
+  it('retains file defaults beneath suite overrides after leaving the creation scope', async () => {
+    const provider = cliState.withEnvFileOverrides(
+      { OPENAI_API_BASE_URL: 'file-endpoint', OPENAI_API_KEY: 'file-key' },
+      () =>
+        bindRedteamProviderEnvironment(
+          {
+            id: () => 'fixture',
+            callApi: async () => ({
+              output: `${getEnvString('OPENAI_API_BASE_URL')}:${getEnvString('OPENAI_API_KEY')}`,
+            }),
+          },
+          { OPENAI_API_KEY: 'suite-key' },
+        ),
+    );
+    const result = await cliState.withEnvFileOverrides(
+      { OPENAI_API_BASE_URL: 'other-file', OPENAI_API_KEY: 'other-key' },
+      () => provider.callApi(),
+    );
+    expect(result.output).toBe('file-endpoint:suite-key');
   });
 
   it.each([false, true])(
@@ -86,7 +107,7 @@ describe('bindRedteamProviderEnvironment', () => {
         },
         { OPENAI_API_KEY: 'fixture-provider' },
       );
-      await withEnvOverrides({ OPENAI_API_KEY: 'fixture-caller' }, async () => {
+      await cliState.withEnv({ OPENAI_API_KEY: 'fixture-caller' }, async () => {
         await expect(Promise.resolve().then(() => provider.callApi())).rejects.toBe(failure);
         expect(getEnvString('OPENAI_API_KEY')).toBe('fixture-caller');
       });

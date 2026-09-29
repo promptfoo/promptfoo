@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cacheModule from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../../../src/constants';
-import { getEnvOverrides } from '../../../src/envOverrides';
+import { getEnvOverrides } from '../../../src/envars';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,

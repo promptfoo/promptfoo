@@ -1,10 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
-import {
-  getEnvOverrides,
-  setEnvOverridesProvider,
-  withEnvOverrides,
-} from '../../../src/envOverrides';
+import { getEnvOverrides } from '../../../src/envars';
 import { PromptfooChatCompletionProvider } from '../../../src/providers/promptfoo';
 import {
   ATTACKER_MODEL,
@@ -89,16 +85,6 @@ const MockOpenAiChatCompletionProvider = vi.hoisted(() => {
 });
 
 vi.mock('../../../src/util/time');
-vi.mock('../../../src/cliState', () => ({
-  __esModule: true,
-  default: {
-    config: {
-      redteam: {
-        provider: undefined,
-      },
-    },
-  },
-}));
 vi.mock('../../../src/providers/openai/chat', () => ({
   OpenAiChatCompletionProvider: MockOpenAiChatCompletionProvider,
 }));
@@ -173,7 +159,6 @@ describe('shared redteam provider utilities', () => {
   });
 
   afterEach(() => {
-    setEnvOverridesProvider(undefined);
     resetRedteamProviderLoader();
     vi.resetAllMocks();
   });
@@ -205,7 +190,6 @@ describe('shared redteam provider utilities', () => {
         provider: undefined,
       },
     });
-    setEnvOverridesProvider(() => cliState.config?.env);
   });
 
   describe('RedteamProviderManager', () => {
@@ -725,11 +709,11 @@ describe('shared redteam provider utilities', () => {
           observed.push(id);
           return { redteamProvider: createMockProvider({ id }) };
         });
-        const first = withEnvOverrides({ ANTHROPIC_API_KEY: 'fixture-a' }, () =>
+        const first = cliState.withEnv({ ANTHROPIC_API_KEY: 'fixture-a' }, () =>
           redteamProviderManager.getProvider({ ignoreCliState: true }),
         );
         await firstEntered;
-        const second = await withEnvOverrides({ OPENAI_API_KEY: 'fixture-b' }, () =>
+        const second = await cliState.withEnv({ OPENAI_API_KEY: 'fixture-b' }, () =>
           redteamProviderManager.getProvider({ ignoreCliState: true }),
         );
         setCliStateConfig({ env: { OPENAI_API_KEY: 'unrelated-global-key' } });
@@ -1895,6 +1879,26 @@ describe('shared redteam provider utilities', () => {
       });
     });
 
+    it.each([
+      { total: 35, prompt: 20, completion: 15, cached: 10 },
+      { prompt: 20, completion: 15, cached: 10 },
+      { total: 20, cached: 35 },
+      { total: 0, cached: 35 },
+    ])(
+      'counts all replayed tokens when cached only reports the prompt-cache portion: %j',
+      (tokensUsed) => {
+        expect(
+          accumulateGraderResult(undefined, {
+            pass: true,
+            score: 1,
+            reason: 'Cached verdict',
+            metadata: { cachedResponse: true },
+            tokensUsed: { ...tokensUsed, numRequests: 1 },
+          }).tokensUsed,
+        ).toEqual({ total: 0, prompt: 0, completion: 0, cached: 35, numRequests: 0 });
+      },
+    );
+
     it('preserves fresh grading usage before and after a cached middle turn', () => {
       const first = {
         pass: true,
@@ -1916,7 +1920,9 @@ describe('shared redteam provider utilities', () => {
         tokensUsed: { total: 20, prompt: 15, completion: 5, numRequests: 1 },
       };
 
-      const result = accumulateGraderResult(accumulateGraderResult(first, cached), last);
+      const cachedAfterFresh = accumulateGraderResult(first, cached);
+      expect(cachedAfterFresh.metadata?.cachedResponse).not.toBe(true);
+      const result = accumulateGraderResult(cachedAfterFresh, last);
 
       expect(result.tokensUsed).toMatchObject({
         total: 60,

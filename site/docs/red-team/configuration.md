@@ -1,8 +1,7 @@
 ---
-title: Red Team Configuration
 sidebar_position: 3
 sidebar_label: Configuration
-description: Red team your LLM configuration settings with automated vulnerability scans that detect misconfigurations and prevent unauthorized access to AI parameters
+description: Configure red team targets, test generation providers, plugins, and strategies.
 ---
 
 import React from 'react';
@@ -831,18 +830,17 @@ The `redteam.provider` field allows you to specify a provider configuration for 
 
 ### Automatic Provider Selection
 
-For local attack generation, if `redteam.provider` is not set and Promptfoo detects credentials for a supported provider, it uses a default model from that provider. Automatically selected attack providers keep their configuration environment throughout generation and eval-time calls, including when another configuration loads concurrently. Strategies that require JSON output remain on the selected provider instead of requiring an OpenAI key.
+When `redteam.provider` is unset, local generation selects a model using the configured credentials. Each selected provider retains its environment for later calls, including when another configuration loads concurrently. The same vendor handles generation that requires JSON output.
 
 | Credential or environment variable                 | Vendor           | Default red team model     |
 | :------------------------------------------------- | :--------------- | :------------------------- |
 | `OPENAI_API_KEY`                                   | OpenAI           | `gpt-5.5-2026-04-23`       |
-| `ANTHROPIC_API_KEY`                                | Anthropic        | `claude-sonnet-4-6`        |
+| `ANTHROPIC_API_KEY`                                | Anthropic        | `claude-sonnet-5`          |
 | `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `PALM_API_KEY` | Google AI Studio | `gemini-2.5-pro`           |
 | Google Cloud application default credentials       | Google Vertex AI | `gemini-2.5-pro`           |
 | `MISTRAL_API_KEY`                                  | Mistral          | `mistral-large-latest`     |
 | `XAI_API_KEY`                                      | xAI              | `grok-4.3`                 |
 | Azure OpenAI credentials and deployment variables  | Azure OpenAI     | Your configured deployment |
-| Codex login or `CODEX_API_KEY`                     | OpenAI Codex SDK | Codex default provider     |
 
 ### Overriding the Provider
 
@@ -853,7 +851,7 @@ A common use case is to use an alternative platform like [Azure](/docs/providers
 You can also use a [custom HTTP endpoint](/docs/providers/http/), local models via [Ollama](/docs/providers/ollama/), or [a custom Python implementation](/docs/providers/python/). See the full list of available providers [here](/docs/providers/).
 
 :::warning
-Your choice of attack provider is critical to the quality of your red team tests. We recommend using a state-of-the-art model such as GPT-5.5 or Claude Sonnet 4.6.
+Check a sample of generated tests when choosing a model. Refusals or invalid output can reduce test coverage.
 :::
 
 ### How attacks are generated
@@ -862,7 +860,7 @@ Where remote generation is supported and enabled, Promptfoo can use its hosted g
 
 The `redteam.provider` configuration controls both attack generation and grading. For details on configuring grading behavior, see [Configuring the Grader](/docs/red-team/troubleshooting/grading-results/).
 
-You can force 100% local generation by setting `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`. Local generation requires usable credentials or an explicit `redteam.provider`, and its quality depends greatly on the model that you configure.
+You can force 100% local generation by setting `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`. Local generation requires usable API credentials or an explicit `redteam.provider`. Codex login does not enable automatic red team generation; providers with local tools require explicit configuration.
 
 ### Changing the model
 
@@ -907,7 +905,7 @@ Some providers, such as Anthropic, may restrict accounts that generate harmful t
 
 ### Remote Generation
 
-By default, Promptfoo uses a remote service for generating adversarial inputs. This service is optimized for high-quality, diverse test cases. However, you can disable this feature and fall back to local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`.
+By default, Promptfoo uses a remote service to generate adversarial inputs. Set `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true` to use local generation.
 
 :::info Cloud Users
 If you're logged into Promptfoo Cloud, remote generation is preferred by default to ensure you benefit from cloud features and the latest improvements. You can still opt-out by setting `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`.

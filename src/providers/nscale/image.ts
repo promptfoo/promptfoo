@@ -61,35 +61,21 @@ export class NscaleImageProvider extends OpenAiImageProvider {
     });
   }
 
-  /**
-   * Retrieves the API key for authentication with Nscale API.
-   * Prefers service tokens over API keys as API keys are deprecated as of Oct 30, 2025.
-   *
-   * @param options - Configuration and environment options
-   * @returns The API key or service token, or undefined if not found
-   */
-  private static getApiKey(options: {
-    config?: NscaleImageOptions;
-    env?: EnvOverrides;
-  }): string | undefined {
-    const config = options.config || {};
-    // Prefer service tokens over API keys (API keys deprecated Oct 30, 2025)
+  getApiKey(): string | undefined {
+    if (this.config.apiKey) {
+      return this.config.apiKey;
+    }
+    if (this.config.apiKeyEnvar) {
+      return this.env?.[this.config.apiKeyEnvar] || getEnvString(this.config.apiKeyEnvar);
+    }
+
+    // Native Nscale credentials prefer service tokens over legacy API keys.
     return (
-      config.apiKey ||
-      options.env?.NSCALE_SERVICE_TOKEN ||
+      this.env?.NSCALE_SERVICE_TOKEN ||
       getEnvString('NSCALE_SERVICE_TOKEN') ||
-      options.env?.NSCALE_API_KEY ||
+      this.env?.NSCALE_API_KEY ||
       getEnvString('NSCALE_API_KEY')
     );
-  }
-
-  /**
-   * Gets the API key for this provider instance.
-   *
-   * @returns The API key or service token, or undefined if not found
-   */
-  getApiKey(): string | undefined {
-    return NscaleImageProvider.getApiKey({ config: this.config, env: this.env });
   }
 
   /**
@@ -148,9 +134,10 @@ export class NscaleImageProvider extends OpenAiImageProvider {
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (!this.getApiKey()) {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
       throw new Error(
-        'Nscale service token is not set. Set the NSCALE_SERVICE_TOKEN environment variable or add `apiKey` to the provider config.',
+        `Nscale service token is not set. Set the ${this.config.apiKeyEnvar || 'NSCALE_SERVICE_TOKEN'} environment variable or add \`apiKey\` to the provider config.`,
       );
     }
 
@@ -179,7 +166,7 @@ export class NscaleImageProvider extends OpenAiImageProvider {
 
     const headers = {
       'Content-Type': 'application/json',
-      ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
+      Authorization: `Bearer ${apiKey}`,
       ...config.headers,
     } as Record<string, string>;
 

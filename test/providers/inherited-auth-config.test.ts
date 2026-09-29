@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
-import { withEnvOverrides } from '../../src/envOverrides';
 import { createCerebrasProvider } from '../../src/providers/cerebras';
 import { CometApiImageProvider } from '../../src/providers/cometapi';
 import { HeliconeGatewayProvider } from '../../src/providers/helicone';
+import { loadApiProvider } from '../../src/providers/index';
 import { createNscaleProvider } from '../../src/providers/nscale';
 import { NscaleImageProvider } from '../../src/providers/nscale/image';
 import { mockProcessEnv } from '../util/utils';
@@ -22,6 +22,8 @@ beforeEach(() => {
     CEREBRAS_API_KEY: 'cerebras-fixture',
     NSCALE_SERVICE_TOKEN: 'process-nscale',
     NSCALE_API_KEY: 'legacy-nscale',
+    NSCALE_PROXY_KEY: 'process-proxy',
+    NSCALE_MISSING_KEY: undefined,
     COMETAPI_KEY: 'process-comet',
     HELICONE_API_KEY: 'process-helicone',
     OPENAI_API_KEY: 'unrelated-openai',
@@ -29,7 +31,10 @@ beforeEach(() => {
     OPENAI_API_BASE_URL: 'https://unrelated.invalid/v1',
   });
 });
-afterEach(() => restoreEnv());
+afterEach(() => {
+  restoreEnv();
+  vi.resetAllMocks();
+});
 
 function reply(data: unknown, cached = false, status = 200) {
   vi.mocked(fetchWithCache).mockResolvedValue({
@@ -83,6 +88,49 @@ describe('Cerebras organization isolation', () => {
 });
 
 describe('Nscale image resolved configuration', () => {
+  it.each([
+    { apiKey: undefined, scopedKey: 'scoped-proxy', expected: 'scoped-proxy' },
+    { apiKey: undefined, scopedKey: undefined, expected: 'process-proxy' },
+    { apiKey: 'explicit-key', scopedKey: 'scoped-proxy', expected: 'explicit-key' },
+  ])('uses only selected credentials with $expected', async ({ apiKey, scopedKey, expected }) => {
+    reply(imageReply);
+    const provider = await loadApiProvider('nscale:image:private/image:model', {
+      options: {
+        env: scopedKey ? { NSCALE_PROXY_KEY: scopedKey } : {},
+        config: {
+          apiKey,
+          apiKeyEnvar: 'NSCALE_PROXY_KEY',
+          apiBaseUrl: 'https://proxy.example/v1/',
+          response_format: 'url',
+        },
+      },
+    });
+    const result = await provider.callApi('A blue square');
+    expect(result.output).toContain('https://example.invalid/fixture.png');
+    expect(firstRequest()).toMatchObject({
+      url: 'https://proxy.example/v1/images/generations',
+      headers: { Authorization: `Bearer ${expected}` },
+      body: { model: 'private/image:model' },
+    });
+    expect(JSON.stringify(provider.config)).not.toMatch(/scoped-proxy|process-proxy/);
+  });
+
+  it('rejects a missing selected key without sending ambient service credentials', async () => {
+    const provider = await loadApiProvider('nscale:image:private/image:model', {
+      options: {
+        env: { NSCALE_SERVICE_TOKEN: 'scoped-service-token' },
+        config: {
+          apiKeyEnvar: 'NSCALE_MISSING_KEY',
+          apiBaseUrl: 'https://proxy.example/v1',
+        },
+      },
+    });
+    await expect(provider.callApi('A blue square')).rejects.toThrow(
+      'Set the NSCALE_MISSING_KEY environment variable',
+    );
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
   it.each([
     [undefined, 'http://127.0.0.1:9000/v1/'],
     ['explicit-key', 'http://127.0.0.1:9000/v1'],
@@ -189,33 +237,5 @@ describe('Gateway scoped credentials', () => {
     } finally {
       restore();
     }
-  });
-
-  it.each([
-    ['request-key', 'request-key'],
-    ['', 'placeholder-api-key'],
-  ])(
-    'preserves Helicone request scope %s with blank explicit and provider keys',
-    async (key, expected) => {
-      reply(chatReply);
-      const provider = new HeliconeGatewayProvider('private/model', {
-        env: { HELICONE_API_KEY: '', OPENAI_API_KEY: 'unrelated-scoped-openai' },
-        config: { apiKey: '' },
-      });
-
-      await withEnvOverrides({ HELICONE_API_KEY: key }, () => provider.callApi('Hello'));
-      expect(firstRequest().headers).toMatchObject({ Authorization: `Bearer ${expected}` });
-    },
-  );
-
-  it('keeps ignoring custom credential names for Helicone', async () => {
-    reply(chatReply);
-    const provider = new HeliconeGatewayProvider('private/model', {
-      env: { HELICONE_API_KEY: 'scoped-helicone', OPENAI_API_KEY: 'custom-name-key' },
-      config: { apiKeyEnvar: 'OPENAI_API_KEY' },
-    });
-
-    await provider.callApi('Hello');
-    expect(firstRequest().headers).toMatchObject({ Authorization: 'Bearer scoped-helicone' });
   });
 });

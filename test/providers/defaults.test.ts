@@ -4,10 +4,8 @@ import { AzureEmbeddingProvider } from '../../src/providers/azure/embedding';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
 import {
   getDefaultProviders,
-  resetDefaultProviders,
   setDefaultCompletionProviders,
   setDefaultEmbeddingProviders,
-  setDefaultRedteamProviders,
 } from '../../src/providers/defaults';
 import {
   AIStudioChatProvider,
@@ -83,9 +81,10 @@ describe('Provider override tests', () => {
 
   beforeEach(() => {
     mockProcessEnv({ ...originalEnv }, { clear: true });
-    resetDefaultProviders();
-    vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(false);
-    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(false);
+    void setDefaultCompletionProviders(undefined as any);
+    void setDefaultEmbeddingProviders(undefined as any);
+    vi.mocked(hasGoogleDefaultCredentials).mockReset().mockResolvedValue(false);
+    vi.mocked(hasCodexDefaultCredentials).mockReset().mockReturnValue(false);
     clearCodexDefaultProvidersForTesting();
     mockProcessEnv({
       OPENAI_API_KEY: undefined,
@@ -172,16 +171,6 @@ describe('Provider override tests', () => {
     expect(providers.synthesizeProvider.id()).toBe('test-completion-provider');
 
     expect(providers.embeddingProvider.id()).toBe('test-embedding-provider');
-  });
-
-  it('should override redteam provider when setDefaultRedteamProviders is called', async () => {
-    const mockProvider = new MockProvider('test-redteam-provider');
-    await setDefaultRedteamProviders(mockProvider);
-
-    const providers = await getDefaultProviders();
-
-    expect(providers.redteamProvider?.id()).toBe('test-redteam-provider');
-    expect(providers.redteamJsonProvider?.id()).toBe('test-redteam-provider');
   });
 
   it('should include redteam provider for Anthropic when credentials are set', async () => {
@@ -488,8 +477,8 @@ describe('Provider override tests', () => {
     expect(providers.llmRubricProvider?.id()).toBe('openai:codex-sdk');
     expect(providers.suggestionsProvider.id()).toBe('openai:codex-sdk');
     expect(providers.synthesizeProvider.id()).toBe('openai:codex-sdk');
-    expect(providers.redteamProvider?.id()).toBe('openai:codex-sdk');
-    expect(providers.redteamJsonProvider?.id()).toBe('openai:codex-sdk');
+    expect(providers.redteamProvider).toBeUndefined();
+    expect(providers.redteamJsonProvider).toBeUndefined();
     expect(providers.redteamJsonProvider).toBe(providers.redteamProvider);
     expect(providers.webSearchProvider?.id()).toBe('openai:codex-sdk');
     expect(providers.webSearchProvider?.config?.web_search_mode).toBe('live');
@@ -532,7 +521,7 @@ describe('Provider override tests', () => {
   });
 
   it('should probe Google default credentials once per provider resolution', async () => {
-    vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(false);
+    vi.mocked(hasGoogleDefaultCredentials).mockReset().mockResolvedValue(false);
 
     await getDefaultProviders();
 
