@@ -110,6 +110,20 @@ const usesStructuredValue = (type: AssertionType) =>
   type.endsWith('tokens-used') ||
   type.endsWith('trajectory:tool-set');
 
+function parseAssertionValue(type: AssertionType, value: Assertion['value']): Assertion['value'] {
+  if (typeof value === 'string' && usesStructuredValue(type)) {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (!ARRAY_VALUE_ASSERTION_TYPES.has(type) || Array.isArray(parsed)) {
+        return parsed as Assertion['value'];
+      }
+    } catch {
+      // Preserve incomplete input while it is being edited.
+    }
+  }
+  return value;
+}
+
 // Assertion types that require an LLM
 const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'similar',
@@ -184,7 +198,13 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                   value={assert.type}
                   onValueChange={(newValue) => {
                     const newAsserts = asserts.map((a, i) =>
-                      i === index ? { ...a, type: newValue as AssertionType } : a,
+                      i === index
+                        ? {
+                            ...a,
+                            type: newValue as AssertionType,
+                            value: parseAssertionValue(newValue as AssertionType, a.value),
+                          }
+                        : a,
                     );
                     setAsserts(newAsserts);
                     onAdd(newAsserts);
@@ -232,20 +252,7 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                       setRawValues((values) =>
                         values.map((value, i) => (i === index ? rawValue : value)),
                       );
-                      let newValue: Assertion['value'] = rawValue;
-                      if (usesStructuredValue(assert.type)) {
-                        try {
-                          const parsed: unknown = JSON.parse(e.target.value);
-                          if (
-                            !ARRAY_VALUE_ASSERTION_TYPES.has(assert.type) ||
-                            Array.isArray(parsed)
-                          ) {
-                            newValue = parsed as Assertion['value'];
-                          }
-                        } catch {
-                          // Keep incomplete input visible until it is valid JSON.
-                        }
-                      }
+                      const newValue = parseAssertionValue(assert.type, rawValue);
                       const newAsserts = asserts.map((a, i) =>
                         i === index ? { ...a, value: newValue } : a,
                       );

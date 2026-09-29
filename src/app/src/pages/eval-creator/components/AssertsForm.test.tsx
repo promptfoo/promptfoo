@@ -48,6 +48,22 @@ describe('AssertsForm', () => {
     expect(value).toHaveValue('{');
   });
 
+  it.each([
+    { type: 'tokens-used', raw: '{"max":100}', value: { max: 100 } },
+    { type: 'trajectory:tool-set', raw: '["lookup"]', value: ['lookup'] },
+    { type: 'contains-any', raw: '["foo","bar"]', value: ['foo', 'bar'] },
+  ] as const)('parses existing JSON when selecting $type', async ({ type, raw, value }) => {
+    const user = userEvent.setup();
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={[{ type: 'equals', value: '' }]} />);
+    const input = screen.getByRole('textbox', { name: 'Value' });
+    await user.click(input);
+    await user.paste(raw);
+    await user.click(screen.getByRole('combobox', { name: 'Type' }));
+    await user.click(screen.getByRole('option', { name: type, exact: true }));
+    expect(input).toHaveValue(raw);
+    expect(onAdd).toHaveBeenLastCalledWith([{ type, value }]);
+  });
+
   it('preserves the caret and raw JSON while editing a structured value', async () => {
     const user = userEvent.setup();
     renderComponent(
