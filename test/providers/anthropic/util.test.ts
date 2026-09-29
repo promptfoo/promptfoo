@@ -8,11 +8,13 @@ import {
   getRefusalDetails,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
+  isBetweenToolsLowestThinkingClaudeModel,
   isClaudeFableOrMythos5Model,
   isClaudeOpus5Model,
   isClaudeOpus55Model,
   isClaudeRegionalPremiumModel,
   isClaudeSonnet5Model,
+  isClaudeSonnet55Model,
   isDisabledThinkingRejectedAtEffort,
   isForcedToolChoiceUnsupportedClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
@@ -485,6 +487,7 @@ describe('Anthropic utilities', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -513,6 +516,7 @@ describe('Anthropic utilities', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -544,6 +548,7 @@ describe('Anthropic utilities', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -587,6 +592,7 @@ describe('Anthropic utilities', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -627,6 +633,7 @@ describe('Anthropic utilities', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -673,6 +680,7 @@ describe('Anthropic utilities', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -709,6 +717,7 @@ describe('Anthropic utilities', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -758,6 +767,7 @@ describe('Anthropic utilities', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -793,6 +803,7 @@ describe('Anthropic utilities', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -828,6 +839,7 @@ describe('Anthropic utilities', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 0,
           output_tokens: 0,
@@ -2513,6 +2525,113 @@ describe('Anthropic utilities', () => {
         0.014,
         10,
       );
+    });
+  });
+
+  describe('Claude Sonnet 5.5', () => {
+    const SONNET_55_IDS = [
+      'claude-sonnet-5-5',
+      'anthropic:messages:claude-sonnet-5-5',
+      'anthropic.claude-sonnet-5-5',
+      'global.anthropic.claude-sonnet-5-5',
+      'us.anthropic.claude-sonnet-5-5',
+      'claude-sonnet-5-5-20260928',
+    ];
+
+    it('detects Sonnet 5.5 across provider naming schemes without matching Sonnet 5', () => {
+      for (const id of SONNET_55_IDS) {
+        expect(isClaudeSonnet55Model(id)).toBe(true);
+        // The Sonnet 5 matcher accepted any `-` suffix, so Sonnet 5.5 inherited Sonnet 5's
+        // row, which accepts `disabled` thinking and forced tool use (both 400 on Sonnet 5.5).
+        expect(isClaudeSonnet5Model(id)).toBe(false);
+      }
+      expect(isClaudeSonnet55Model('claude-sonnet-5')).toBe(false);
+      expect(isClaudeSonnet55Model('claude-sonnet-5-50')).toBe(false);
+      expect(isClaudeSonnet5Model('claude-sonnet-5-20260630')).toBe(true);
+    });
+
+    it('has the thinking, sampling, and tool_choice rules verified live', () => {
+      for (const id of SONNET_55_IDS) {
+        expect(isSamplingParamsDeprecatedClaudeModel(id, { allowGenerationFallback: false })).toBe(
+          true,
+        );
+        expect(isThinkingOnByDefaultClaudeModel(id)).toBe(true);
+        expect(isAlwaysOnAdaptiveThinkingClaudeModel(id)).toBe(false);
+        expect(isBetweenToolsLowestThinkingClaudeModel(id)).toBe(true);
+        expect(isForcedToolChoiceUnsupportedClaudeModel(id)).toBe(true);
+        expect(isClaudeRegionalPremiumModel(id)).toBe(true);
+        expect(claudeThinkingConsumesTokens(id, undefined)).toBe(true);
+        expect(claudeThinkingConsumesTokens(id, { type: 'between_tools' })).toBe(false);
+      }
+      expect(isBetweenToolsLowestThinkingClaudeModel('claude-sonnet-5')).toBe(false);
+      expect(isForcedToolChoiceUnsupportedClaudeModel('claude-sonnet-5')).toBe(false);
+      expect(getClaudeModelWarningName('claude-sonnet-5-5')).toBe('Claude Sonnet 5.5');
+      expect(getClaudeModelWarningName('claude-sonnet-5')).toBe('Claude Sonnet 5');
+    });
+
+    it('sends disabled thinking as between_tools up to high effort and omits it above', () => {
+      for (const effort of [undefined, 'low', 'medium', 'high'] as const) {
+        expect(
+          normalizeClaudeThinkingConfig('claude-sonnet-5-5', { type: 'disabled' }, effort),
+        ).toEqual({ type: 'between_tools' });
+        expect(isDisabledThinkingRejectedAtEffort('claude-sonnet-5-5', effort)).toBe(false);
+      }
+      // `between_tools` at xhigh/max is a 400, and so is `disabled`, so adaptive runs instead.
+      for (const effort of ['xhigh', 'max'] as const) {
+        expect(
+          normalizeClaudeThinkingConfig('claude-sonnet-5-5', { type: 'disabled' }, effort),
+        ).toBeUndefined();
+        expect(isDisabledThinkingRejectedAtEffort('claude-sonnet-5-5', effort)).toBe(true);
+      }
+      // Sonnet 5 still accepts `disabled` as-is.
+      expect(normalizeClaudeThinkingConfig('claude-sonnet-5', { type: 'disabled' }, 'max')).toEqual(
+        {
+          type: 'disabled',
+        },
+      );
+    });
+
+    it('passes explicit between_tools and adaptive through and converts manual budgets', () => {
+      expect(
+        normalizeClaudeThinkingConfig('claude-sonnet-5-5', { type: 'between_tools' }, 'high'),
+      ).toEqual({ type: 'between_tools' });
+      expect(
+        normalizeClaudeThinkingConfig(
+          'claude-sonnet-5-5',
+          { type: 'adaptive', display: 'summarized' },
+          'max',
+        ),
+      ).toEqual({ type: 'adaptive', display: 'summarized' });
+      expect(
+        normalizeClaudeThinkingConfig(
+          'global.anthropic.claude-sonnet-5-5',
+          { type: 'enabled', budget_tokens: 4096 } as any,
+          undefined,
+        ),
+      ).toEqual({ type: 'adaptive' });
+    });
+
+    it('bills $2/$10 with 0.1x cache reads and a flat 1M context', () => {
+      // 1000 * 2e-6 + 500 * 10e-6 = 0.007
+      expect(calculateAnthropicCost('claude-sonnet-5-5', {}, 1000, 500)).toBeCloseTo(0.007, 10);
+      // + 200 cache reads * 0.2e-6 + 100 cache writes * 2.5e-6 = 0.00004 + 0.00025
+      expect(calculateAnthropicCost('claude-sonnet-5-5', {}, 1000, 500, 200, 100)).toBeCloseTo(
+        0.00729,
+        10,
+      );
+      // No >200K surcharge: 300,000 * 2e-6 + 20,000 * 10e-6 = 0.8
+      expect(calculateAnthropicCost('claude-sonnet-5-5', {}, 300_000, 20_000)).toBeCloseTo(0.8, 10);
+    });
+
+    it('applies the regional premium on Bedrock regional IDs but not on global', () => {
+      // AWS lists Sonnet 5.5 at $2.20/$11 regional and $2/$10 global.
+      expect(calculateAnthropicCost('anthropic.claude-sonnet-5-5', {}, 1000, 500)).toBeCloseTo(
+        0.0077,
+        10,
+      );
+      expect(
+        calculateAnthropicCost('global.anthropic.claude-sonnet-5-5', {}, 1000, 500),
+      ).toBeCloseTo(0.007, 10);
     });
   });
 });

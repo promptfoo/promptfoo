@@ -24,6 +24,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import {
   getClaudeModelWarningName,
   isAlwaysOnAdaptiveThinkingClaudeModel,
+  isForcedToolChoiceUnsupportedClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeClaudeThinkingConfig,
 } from '../anthropic/util';
@@ -934,13 +935,17 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const requestedToolChoice = configToolChoice
       ? convertToolChoiceToConverseFormat(configToolChoice)
       : undefined;
+    const modelRejectsForcedToolChoice = isForcedToolChoiceUnsupportedClaudeModel(this.modelName);
     const dropForcedToolChoice =
-      isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName) &&
+      (modelRejectsForcedToolChoice || isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName)) &&
       requestedToolChoice !== undefined &&
       ('any' in requestedToolChoice || 'tool' in requestedToolChoice);
     if (dropForcedToolChoice && !this.forcedToolChoiceRemovalWarned) {
+      const modelName = getClaudeModelWarningName(this.modelName) ?? 'this Claude model';
       logger.warn(
-        `Forced tool choice (any/tool) is incompatible with the always-on adaptive thinking of ${getClaudeModelWarningName(this.modelName) ?? 'this Claude model'} and has been omitted. The model decides when to call tools; remove toolChoice to silence this warning.`,
+        modelRejectsForcedToolChoice
+          ? `Forced tool choice (any/tool) is not supported on ${modelName} and has been omitted. The model decides when to call tools; remove toolChoice to silence this warning.`
+          : `Forced tool choice (any/tool) is incompatible with the always-on adaptive thinking of ${modelName} and has been omitted. The model decides when to call tools; remove toolChoice to silence this warning.`,
       );
       this.forcedToolChoiceRemovalWarned = true;
     }
@@ -984,10 +989,14 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const fields: Record<string, unknown> = {
       ...(this.config.additionalModelRequestFields || {}),
     };
+    // Converse has no typed effort option, but `output_config.effort` is a supported escape
+    // hatch through these raw fields, so read it back out for the effort-capped thinking rules
+    // (turning thinking off at `xhigh`/`max` is a 400 on Opus 5 and Sonnet 5.5).
+    const effort = (fields.output_config as { effort?: ClaudeEffort } | undefined)?.effort;
     // Raw additional fields must not bypass the model's sampling/thinking constraints. Every
-    // sampling-deprecated Claude model (Fable/Mythos 5, Sonnet 5, Opus 4.7/4.8) rejects
-    // temperature/top_p/top_k, so strip them from the raw fields too; normalizeClaudeThinkingConfig
-    // then converts enabled -> adaptive and drops disabled only on the always-on Fable/Mythos models.
+    // sampling-deprecated Claude model (Claude 5, Opus 4.7/4.8) rejects temperature/top_p/top_k,
+    // so strip them from the raw fields too; normalizeClaudeThinkingConfig then converts enabled
+    // -> adaptive and applies the model's rules for `disabled` (dropped, or `between_tools`).
     if (isSamplingParamsDeprecatedClaudeModel(this.modelName)) {
       delete fields.temperature;
       delete fields.top_p;
@@ -995,11 +1004,6 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       const additionalThinking = fields.thinking as
         | { type: string; display?: 'summarized' | 'omitted' }
         | undefined;
-      // Converse has no typed effort option, but `output_config.effort` is a supported
-      // escape hatch through these raw fields — so read it back out and feed it to the
-      // normalizer, otherwise the effort-capped rule (disabled + xhigh/max is a 400)
-      // cannot fire on this path.
-      const effort = (fields.output_config as { effort?: ClaudeEffort } | undefined)?.effort;
       const normalizedThinking = normalizeClaudeThinkingConfig(
         this.modelName,
         additionalThinking,
@@ -1017,9 +1021,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       const normalizedThinking = normalizeClaudeThinkingConfig(
         this.modelName,
         this.config.thinking,
-        // Converse takes effort only via additionalModelRequestFields, which this path
-        // does not inspect, so the effort-capped rules cannot be evaluated here.
-        undefined,
+        effort,
       );
       if (normalizedThinking !== undefined) {
         fields.thinking = normalizedThinking;

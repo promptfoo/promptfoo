@@ -38,6 +38,7 @@ import {
   getRefusalDetails,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
+  isBetweenToolsLowestThinkingClaudeModel,
   isDisabledThinkingRejectedAtEffort,
   isForcedToolChoiceUnsupportedClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
@@ -648,6 +649,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         this.manualThinkingConversionWarned = true;
       }
     } else if (requested?.type === 'disabled' && !this.disabledThinkingRemovalWarned) {
+      const betweenTools = isBetweenToolsLowestThinkingClaudeModel(this.modelName);
       if (alwaysOnAdaptiveThinking) {
         logger.warn(
           `Adaptive thinking is always on for ${modelWarningName}. thinking.type "disabled" has been omitted.`,
@@ -655,7 +657,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         this.disabledThinkingRemovalWarned = true;
       } else if (isDisabledThinkingRejectedAtEffort(this.modelName, effort)) {
         logger.warn(
-          `${modelWarningName} only accepts thinking.type "disabled" at effort "high" or below (got "${effort}"), so thinking.type "disabled" has been omitted. Lower effort to "high" if you need thinking off.`,
+          `${modelWarningName} only accepts thinking.type "${betweenTools ? 'between_tools' : 'disabled'}" at effort "high" or below (got "${effort}"), so thinking.type "disabled" has been omitted. Lower effort to "high" if you need thinking off.`,
+        );
+        this.disabledThinkingRemovalWarned = true;
+      } else if (betweenTools) {
+        logger.warn(
+          `${modelWarningName} does not accept thinking.type "disabled", so it has been sent as "between_tools", the model's lowest setting, which turns off up-front thinking. Set thinking.type "between_tools" to silence this warning.`,
         );
         this.disabledThinkingRemovalWarned = true;
       }

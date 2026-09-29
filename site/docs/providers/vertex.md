@@ -77,7 +77,7 @@ Anthropic's Claude models are available with the following versions:
 - `vertex:claude-fable-5` - Claude Fable 5 with a 1M-token context window and always-on adaptive thinking
 
 Promptfoo omits unsupported `temperature`, `top_p`, and `top_k` values for the adaptive-only
-Claude models — Fable 5, Mythos 5, Opus 5.5, Opus 5, Sonnet 5, and Opus 4.7/4.8 (see their entries below).
+Claude models — Fable 5, Mythos 5, Opus 5.5, Sonnet 5.5, Opus 5, Sonnet 5, and Opus 4.7/4.8 (see their entries below).
 Regional and multi-region Vertex endpoints carry a
 [10% price premium](https://cloud.google.com/blog/products/ai-machine-learning/global-endpoint-for-claude-models-generally-available-on-vertex-ai)
 over the global endpoint for Claude 4.5 and later models (Sonnet 4.5+, Haiku 4.5,
@@ -110,6 +110,10 @@ and the model ID because Google does not publish one in its public model catalog
 **Claude Opus 5:**
 
 - `vertex:claude-opus-5` - Claude Opus 5, the Opus-tier Claude 5 model for complex agentic coding and long-horizon work, with a 1M-token context window and the full `low`–`max` effort ladder. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Like Opus 4.7/4.8, promptfoo automatically omits `temperature`, `top_p`, and `top_k` (deprecated for this model). Thinking is on by default, and `thinking: { type: 'disabled' }` is only accepted at `effort` `high` or below.
+
+**Claude Sonnet 5.5:**
+
+- `vertex:claude-sonnet-5-5` - Claude Sonnet 5.5, priced at $2 / $10 per million input / output tokens, with a 1M-token context window. Use `config.region: global` for the global endpoint. Thinking is on by default and `thinking: { type: 'disabled' }` is rejected, so promptfoo sends `thinking: { type: 'between_tools' }` instead (no up-front thinking, accepted at `effort` `high` or below) and turns manual thinking budgets into adaptive thinking.
 
 **Claude Sonnet 5:**
 

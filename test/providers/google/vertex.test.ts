@@ -3179,6 +3179,62 @@ describe('VertexChatProvider.callClaudeApi', () => {
     },
   );
 
+  it.each([
+    // `disabled` is rejected at every effort; `between_tools` is the lowest setting up to high.
+    {
+      thinking: { type: 'disabled' as const },
+      effort: undefined,
+      expected: { type: 'between_tools' },
+      maxTokens: 512,
+    },
+    {
+      thinking: { type: 'disabled' as const },
+      effort: 'high' as const,
+      expected: { type: 'between_tools' },
+      maxTokens: 512,
+    },
+    // Above high, `between_tools` is a 400 too, so adaptive thinking runs.
+    {
+      thinking: { type: 'disabled' as const },
+      effort: 'max' as const,
+      expected: undefined,
+      maxTokens: 2048,
+    },
+    {
+      thinking: { type: 'enabled' as const, budget_tokens: 1024 },
+      effort: 'high' as const,
+      expected: { type: 'adaptive' },
+      maxTokens: 2048,
+    },
+  ])(
+    'Claude Sonnet 5.5 on Vertex sends thinking %j as the API accepts it',
+    async ({ thinking, effort, expected, maxTokens }) => {
+      const model = 'claude-sonnet-5-5';
+      provider = new VertexChatProvider(model, {
+        config: { temperature: 0.5, top_p: 0.9, top_k: 40, thinking, effort },
+      });
+      const mockRequest = mockVertexRequest({
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 5, output_tokens: 1 },
+      });
+
+      await provider.callClaudeApi('test prompt');
+
+      const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+      expect(sentBody.temperature).toBeUndefined();
+      expect(sentBody.top_p).toBeUndefined();
+      expect(sentBody.top_k).toBeUndefined();
+      expect(sentBody.thinking).toEqual(expected);
+      expect(sentBody.max_tokens).toBe(maxTokens);
+    },
+  );
+
   it('omits temperature for Claude Opus 4.7 on Vertex', async () => {
     provider = new VertexChatProvider('claude-opus-4-7', {
       config: { max_tokens: 32, temperature: 0.5 },

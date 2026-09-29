@@ -2006,7 +2006,7 @@ Third line`;
       ).mock.calls.at(-1)?.[0] as { toolConfig?: Record<string, unknown> };
       expect(request.toolConfig).not.toHaveProperty('toolChoice');
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('always-on adaptive thinking of Claude Opus 5.5'),
+        expect.stringContaining('not supported on Claude Opus 5.5'),
       );
       warnSpy.mockRestore();
     });
@@ -2367,6 +2367,79 @@ Third line`;
           additionalModelRequestFields: { thinking: { type: 'disabled' } },
         }),
       );
+    });
+
+    it('sends disabled thinking as between_tools for Claude Sonnet 5.5', async () => {
+      // Sonnet 5.5 rejects `disabled` at every effort; `between_tools` is its lowest setting.
+      const provider = new AwsBedrockConverseProvider('global.anthropic.claude-sonnet-5-5', {
+        config: { region: 'us-east-1', thinking: { type: 'disabled' } },
+      });
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: { thinking: { type: 'between_tools' } },
+        }),
+      );
+    });
+
+    it.each(['global.anthropic.claude-sonnet-5-5', 'anthropic.claude-opus-5'])(
+      'drops config thinking "disabled" for %s when raw fields carry a capped effort',
+      async (model) => {
+        // Turning thinking off at xhigh/max is a 400 on both models, and the raw
+        // `output_config.effort` applies to `config.thinking` as well as raw thinking fields.
+        const provider = new AwsBedrockConverseProvider(model, {
+          config: {
+            region: 'us-east-1',
+            thinking: { type: 'disabled' },
+            additionalModelRequestFields: { output_config: { effort: 'max' } },
+          },
+        });
+        mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+        await provider.callApi('Test');
+
+        const { ConverseCommand } = (await import(
+          '@aws-sdk/client-bedrock-runtime'
+        )) as unknown as MockBedrockModule;
+        expect(ConverseCommand).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            additionalModelRequestFields: { output_config: { effort: 'max' } },
+          }),
+        );
+      },
+    );
+
+    it('drops forced tool choice for Claude Sonnet 5.5 and names the model in the warning', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const provider = new AwsBedrockConverseProvider('global.anthropic.claude-sonnet-5-5', {
+        config: {
+          region: 'us-east-1',
+          tools: [{ name: 'test_tool', description: 'Test' }],
+          toolChoice: 'any' as any,
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      const request = (
+        ConverseCommand as unknown as { mock: { calls: unknown[][] } }
+      ).mock.calls.at(-1)?.[0] as { toolConfig?: Record<string, unknown> };
+      expect(request.toolConfig).toHaveProperty('tools');
+      expect(request.toolConfig).not.toHaveProperty('toolChoice');
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Forced tool choice (any/tool) is not supported on Claude Sonnet 5.5 and has been omitted. The model decides when to call tools; remove toolChoice to silence this warning.',
+      );
+      warnSpy.mockRestore();
     });
 
     it('should normalize unsupported thinking controls for Claude Fable 5', async () => {

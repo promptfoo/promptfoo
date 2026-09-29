@@ -317,7 +317,7 @@
     "sharp": "^0.35.4"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.127.0",
+    "@anthropic-ai/sdk": "0.129.0",
     "@apidevtools/json-schema-ref-parser": "^16.0.2",
     "@hono/node-server": "2.1.1",
     "@inquirer/checkbox": "^5.1.0",

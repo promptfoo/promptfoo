@@ -9,6 +9,7 @@ import {
   clampMaxTokensForThinkingBudget,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
+  isForcedToolChoiceUnsupportedClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   isThinkingOnByDefaultClaudeModel,
   normalizeClaudeThinkingConfig,
@@ -1624,7 +1625,8 @@ export const BEDROCK_MODEL = {
         alwaysOnAdaptiveThinking ||
         (!!modelName &&
           isThinkingOnByDefaultClaudeModel(modelName) &&
-          config?.thinking?.type !== 'disabled');
+          config?.thinking?.type !== 'disabled' &&
+          config?.thinking?.type !== 'between_tools');
       addConfigParam(
         params,
         'max_tokens',
@@ -1656,7 +1658,8 @@ export const BEDROCK_MODEL = {
       // disabled-thinking drops below normalize silently — the Converse and
       // Anthropic Messages providers surface the one-time warnings.
       const toolChoice =
-        alwaysOnAdaptiveThinking &&
+        (alwaysOnAdaptiveThinking ||
+          (!!modelName && isForcedToolChoiceUnsupportedClaudeModel(modelName))) &&
         (config?.tool_choice?.type === 'any' || config?.tool_choice?.type === 'tool')
           ? undefined
           : config?.tool_choice;
@@ -2361,6 +2364,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-opus-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-sonnet-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2582,6 +2586,10 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   // Claude Sonnet 5 uses the global endpoint like the other Claude 5-generation
   // models (Fable 5, Opus 4.7/4.8) rather than the older `apac.` prefix.
   'global.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  // Claude Sonnet 5.5 launched with only the global profile. Verified via
+  // `aws bedrock list-inference-profiles` in all 17 regions that serve it (2026-09-29); geo
+  // prefixes AWS adds later still resolve through the `anthropic.claude` catch-all.
+  'global.anthropic.claude-sonnet-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html

@@ -2859,6 +2859,7 @@ describe('AnthropicMessagesProvider', () => {
         stop_sequence: null,
         type: 'message',
         container: null,
+        diagnostics: null,
         usage: {
           input_tokens: 10,
           output_tokens: 5,
@@ -4293,7 +4294,7 @@ describe('AnthropicMessagesProvider', () => {
     });
   });
 
-  describe.each(['claude-fable-5-1', 'claude-mythos-5-1', 'claude-opus-5-5'])(
+  describe.each(['claude-fable-5-1', 'claude-mythos-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5'])(
     '%s tool choice',
     (model) => {
       it.each([
@@ -4336,6 +4337,100 @@ describe('AnthropicMessagesProvider', () => {
       });
     },
   );
+
+  describe('claude-sonnet-5-5 thinking', () => {
+    const mockResponse = () =>
+      ({
+        content: [{ type: 'text', text: 'Response' }],
+        model: 'claude-sonnet-5-5',
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_details: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }) as Anthropic.Messages.Message;
+
+    const callWith = async (config: Record<string, unknown>) => {
+      const provider = createProvider('claude-sonnet-5-5', { config });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue(mockResponse());
+      await provider.callApi('Test prompt');
+      return createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+    };
+
+    it('sends disabled thinking as between_tools, the lowest setting the API accepts', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      const params = await callWith({ thinking: { type: 'disabled' } });
+
+      expect(params.thinking).toEqual({ type: 'between_tools' });
+      // No up-front thinking, so no thinking headroom in the default max_tokens.
+      expect(params.max_tokens).toBe(1024);
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Claude Sonnet 5.5 does not accept thinking.type "disabled", so it has been sent as "between_tools", the model\'s lowest setting, which turns off up-front thinking. Set thinking.type "between_tools" to silence this warning.',
+      );
+    });
+
+    it('omits disabled thinking above high effort, where between_tools is also rejected', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      const params = await callWith({ thinking: { type: 'disabled' }, effort: 'max' });
+
+      expect(params).not.toHaveProperty('thinking');
+      expect(params.output_config).toEqual({ effort: 'max' });
+      expect(params.max_tokens).toBe(2048);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Claude Sonnet 5.5 only accepts thinking.type "between_tools" at effort "high" or below (got "max")',
+        ),
+      );
+    });
+
+    it('passes explicit between_tools through without a warning', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      const params = await callWith({ thinking: { type: 'between_tools' }, effort: 'high' });
+
+      expect(params.thinking).toEqual({ type: 'between_tools' });
+      expect(params.max_tokens).toBe(1024);
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('leaves thinking to the API default and reserves headroom for it', async () => {
+      const params = await callWith({});
+
+      expect(params).not.toHaveProperty('thinking');
+      expect(params).not.toHaveProperty('temperature');
+      expect(params.max_tokens).toBe(2048);
+    });
+
+    it('converts manual budgets to adaptive thinking and drops sampling params', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      const params = await callWith({
+        thinking: { type: 'enabled', budget_tokens: 2048 },
+        temperature: 0.5,
+        top_p: 0.9,
+        top_k: 40,
+      });
+
+      expect(params.thinking).toEqual({ type: 'adaptive' });
+      expect(params).not.toHaveProperty('temperature');
+      expect(params).not.toHaveProperty('top_p');
+      expect(params).not.toHaveProperty('top_k');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('not supported on Claude Sonnet 5.5 and has been converted'),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'temperature is deprecated on Claude Sonnet 5.5 and will be omitted',
+        ),
+      );
+    });
+  });
 
   describe('Claude Code OAuth authentication', () => {
     const validCredential = () => ({

@@ -552,6 +552,11 @@ describe('calculateAzureCost', () => {
     expect(calculateAzureCost('claude-opus-5-5', {}, 1000, 500, 500)).toBeCloseTo(0.0121, 8);
   });
 
+  it('prices claude-sonnet-5-5 at Anthropic rates with $0.20 cache reads', () => {
+    // 500 uncached * $2 + 500 cached * $0.20 + 500 output * $10, per 1e6
+    expect(calculateAzureCost('claude-sonnet-5-5', {}, 1000, 500, 500)).toBeCloseTo(0.0061, 8);
+  });
+
   it('returns undefined for unknown model', () => {
     const cost = calculateAzureCost('unknown-model', {}, 100, 50);
     expect(cost).toBeUndefined();

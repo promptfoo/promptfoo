@@ -61,6 +61,7 @@ These models currently resolve on the Anthropic Messages API:
 | `anthropic:messages:claude-fable-5`                                 | Claude Fable 5    |
 | `anthropic:messages:claude-mythos-5`                                | Claude Mythos 5   |
 | `anthropic:messages:claude-opus-5-5`                                | Claude Opus 5.5   |
+| `anthropic:messages:claude-sonnet-5-5`                              | Claude Sonnet 5.5 |
 | `anthropic:messages:claude-opus-5`                                  | Claude Opus 5     |
 | `anthropic:messages:claude-opus-4-8`                                | Claude 4.8 Opus   |
 | `anthropic:messages:claude-opus-4-7`                                | Claude 4.7 Opus   |
@@ -122,6 +123,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | Claude Fable 5    | claude-fable-5                                 | claude-fable-5                                                        | anthropic.claude-fable-5                          | claude-fable-5                                 |
 | Claude Mythos 5   | claude-mythos-5                                | Not available                                                         | anthropic.claude-mythos-5 (limited)               | Limited availability; ID not public            |
 | Claude Opus 5.5   | claude-opus-5-5                                | claude-opus-5-5                                                       | anthropic.claude-opus-5-5                         | claude-opus-5-5                                |
+| Claude Sonnet 5.5 | claude-sonnet-5-5                              | claude-sonnet-5-5                                                     | global.anthropic.claude-sonnet-5-5                | claude-sonnet-5-5                              |
 | Claude Opus 5     | claude-opus-5                                  | claude-opus-5                                                         | anthropic.claude-opus-5                           | claude-opus-5                                  |
 | Claude 4.8 Opus   | claude-opus-4-8                                | claude-opus-4-8                                                       | anthropic.claude-opus-4-8                         | claude-opus-4-8                                |
 | Claude 4.7 Opus   | claude-opus-4-7                                | claude-opus-4-7                                                       | anthropic.claude-opus-4-7                         | claude-opus-4-7                                |
@@ -160,7 +162,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | tool_choice     | -                     | An object specifying the tool to call                                                                                                                                                 |
 | effort          | -                     | Output effort level: `low`, `medium`, `high`, `xhigh`, or `max`                                                                                                                       |
 | output_format   | -                     | JSON schema configuration for structured outputs                                                                                                                                      |
-| thinking        | -                     | Configuration for Claude's extended thinking (`enabled`, `adaptive`, or `disabled`)                                                                                                   |
+| thinking        | -                     | Configuration for Claude's extended thinking (`enabled`, `adaptive`, `disabled`, or `between_tools`)                                                                                  |
 | showThinking    | -                     | Whether to include thinking content in the output (default: true)                                                                                                                     |
 | cache_control   | -                     | Auto-apply cache_control to the last cacheable block in the request                                                                                                                   |
 | metadata        | -                     | Request metadata such as `user_id` for tracking purposes                                                                                                                              |
@@ -693,6 +695,40 @@ providers:
       max_tokens: 8192
 ```
 
+### Claude Sonnet 5.5 notes
+
+Sonnet 5.5 has Sonnet 5's price, context window, maximum output (128K tokens), and tokenizer,
+and Anthropic reports it is faster. Promptfoo adjusts requests to its rules:
+
+- **Thinking is on by default, and `disabled` is rejected.** Sonnet 5.5's lowest thinking
+  setting is `thinking: { type: 'between_tools' }`, which turns off up-front thinking.
+  Promptfoo sends `between_tools` in place of `disabled` and logs a warning once.
+  `between_tools` is only accepted at `effort` `high` or below, so with `xhigh` or `max`
+  promptfoo omits `disabled` instead and the model thinks adaptively.
+- **`effort` defaults to `high`.** Anthropic recalibrated the levels, so re-run an effort
+  sweep rather than reusing Sonnet 5's setting.
+- **Forced tool use is rejected.** Promptfoo omits `tool_choice` values of type `any` or
+  `tool`. Use `auto` or `none`, and say in the prompt when a tool applies.
+- **Sampling controls and manual budgets are rejected**, as on Sonnet 5. Promptfoo omits
+  `temperature`, `top_p`, and `top_k`, and converts
+  `thinking: { type: 'enabled', budget_tokens: N }` to `thinking: { type: 'adaptive' }`.
+- **Text between tool calls comes back in `thinking` blocks.** With the default
+  `display: 'omitted'` those blocks are empty. Set `thinking: { type: 'adaptive', display: 'summarized' }`
+  or use `between_tools` to keep that text in the output.
+
+Sonnet 5.5 costs **$2 per million input tokens and $10 per million output tokens** across its
+1M-token context window, with cache reads at $0.20 per million tokens.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-sonnet-5-5
+    config:
+      effort: medium
+      thinking:
+        type: between_tools # no up-front thinking; accepted at effort high or below
+      max_tokens: 4096
+```
+
 ### Claude Sonnet 5 notes
 
 Sonnet 5 is the most agentic Sonnet model, with a 1M-token context window and support
@@ -780,6 +816,13 @@ thinking:
   type: 'disabled'
 ```
 
+4. Between tools (Claude Sonnet 5.5 only), its lowest setting in place of `disabled`, with no up-front thinking:
+
+```yaml
+thinking:
+  type: 'between_tools'
+```
+
 The `display` field controls how thinking content is returned:
 
 - `'summarized'` (default) - thinking content is included in the response
@@ -802,7 +845,7 @@ When thinking is enabled or adaptive:
 - Previous turn thinking blocks are ignored and not counted as input tokens
 - `temperature` and `top_k` are incompatible with thinking and will be omitted with a warning
 - `top_p` is clamped to the range [0.95, 1.0] when thinking is enabled
-- Forced tool use (`tool_choice` type `any` or `tool`) is incompatible with `thinking: { type: 'enabled' }` (a manual budget) and with Claude Fable 5.1, Mythos 5.1, and Opus 5.5; in those cases it is omitted with a warning, so use `auto` instead. Adaptive thinking on other models accepts a forced `tool_choice`.
+- Forced tool use (`tool_choice` type `any` or `tool`) is incompatible with `thinking: { type: 'enabled' }` (a manual budget) and with Claude Fable 5.1, Mythos 5.1, Opus 5.5, and Sonnet 5.5; in those cases it is omitted with a warning, so use `auto` instead. Adaptive thinking on other models accepts a forced `tool_choice`.
 
 Example response with thinking enabled:
 

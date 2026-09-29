@@ -44,6 +44,15 @@ export const ANTHROPIC_MODELS = [
       output: 25 / 1e6, // $25 / MTok
     },
   })),
+  // Claude Sonnet 5.5 — same list pricing as Sonnet 5 ($2/$10) and the same 1M context
+  // window, billed at this flat rate. Cache reads are the usual 0.1x ($0.20).
+  ...['claude-sonnet-5-5'].map((model) => ({
+    id: model,
+    cost: {
+      input: 2 / 1e6, // $2 / MTok
+      output: 10 / 1e6, // $10 / MTok
+    },
+  })),
   // Claude Sonnet 5 — the most agentic Sonnet, with a 1M context window and effort
   // levels. The launch pricing ($2/$10) became permanent on August 10, 2026;
   // Anthropic canceled the previously announced September price increase. The full 1M
@@ -203,7 +212,9 @@ const CLAUDE_OPUS_55_PATTERN = /(^|[^a-z0-9])claude-opus-5-5(?![a-z0-9])/i;
 // `claude-opus-5-5` must not read as Opus 5: a single-digit `-N` suffix is a point release, not
 // a dated snapshot, so it is excluded while `claude-opus-5-20260801`-style suffixes still match.
 const CLAUDE_OPUS_5_PATTERN = /(^|[^a-z0-9])claude-opus-5(?!-[0-9](?![0-9]))(?![a-z0-9])/i;
-const CLAUDE_SONNET_5_PATTERN = /(^|[^a-z0-9])claude-sonnet-5(?![a-z0-9])/i;
+const CLAUDE_SONNET_55_PATTERN = /(^|[^a-z0-9])claude-sonnet-5-5(?![a-z0-9])/i;
+// Like Opus 5: `claude-sonnet-5-5` is a point release, not a Sonnet 5 dated snapshot.
+const CLAUDE_SONNET_5_PATTERN = /(^|[^a-z0-9])claude-sonnet-5(?!-[0-9](?![0-9]))(?![a-z0-9])/i;
 const CLAUDE_OPUS_48_PATTERN = /(^|[^a-z0-9])claude-opus-4-8(?![0-9])/i;
 const CLAUDE_OPUS_47_PATTERN = /(^|[^a-z0-9])claude-opus-4-7(?![0-9])/i;
 // Anthropic deprecates non-default sampling controls on models released after Opus 4.6. Keep a
@@ -237,11 +248,17 @@ interface ClaudeModelFamily {
    */
   thinkingOnByDefault?: boolean;
   /**
-   * `thinking: { type: 'disabled' }` is only accepted at effort `high` or below — pairing it
-   * with `xhigh`/`max` returns 400. Unlike `alwaysOnAdaptiveThinking`, disabling thinking is
-   * still possible, just effort-gated.
+   * The lowest thinking setting (`disabled`, or `between_tools` on models where it replaces
+   * `disabled`) is only accepted at effort `high` or below — pairing it with `xhigh`/`max`
+   * returns 400. Unlike `alwaysOnAdaptiveThinking`, turning thinking off is still possible,
+   * just effort-gated.
    */
   disabledThinkingEffortCapped?: boolean;
+  /**
+   * `thinking: { type: 'disabled' }` is rejected at every effort; the lowest setting is
+   * `between_tools`, which turns off up-front thinking (Sonnet 5.5).
+   */
+  betweenToolsReplacesDisabledThinking?: boolean;
   /** 10% premium on Bedrock regional / Vertex regional+multi-region endpoints vs global. */
   regionalPremium?: boolean;
   /** Cache-read price as a fraction of the input rate, when it differs from the usual 0.1. */
@@ -292,6 +309,20 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     samplingParamsDeprecated: true,
     thinkingOnByDefault: true,
     disabledThinkingEffortCapped: true,
+    regionalPremium: true,
+  },
+  // Sonnet 5.5 thinks by default like Sonnet 5, but rejects `thinking: { type: 'disabled' }`
+  // at every effort: its lowest setting is `between_tools` (no up-front thinking), accepted
+  // only at effort `high` or below. Manual budgets and forced `tool_choice` are rejected too
+  // (all verified live).
+  {
+    match: CLAUDE_SONNET_55_PATTERN,
+    warningName: 'Claude Sonnet 5.5',
+    samplingParamsDeprecated: true,
+    thinkingOnByDefault: true,
+    disabledThinkingEffortCapped: true,
+    betweenToolsReplacesDisabledThinking: true,
+    forcedToolChoiceUnsupported: true,
     regionalPremium: true,
   },
   // Sonnet 5, like Opus 5, thinks by default: a request that omits `thinking` still returns
@@ -348,7 +379,12 @@ export function isClaudeFableOrMythos5Model(modelId: string): boolean {
   return CLAUDE_FABLE_MYTHOS_5_PATTERN.test(modelId);
 }
 
-/** Matches Claude Sonnet 5 model IDs (not `claude-sonnet-4-5`, not `claude-sonnet-50`). */
+/** Matches Claude Sonnet 5.5 model IDs. */
+export function isClaudeSonnet55Model(modelId: string): boolean {
+  return CLAUDE_SONNET_55_PATTERN.test(modelId);
+}
+
+/** Matches Claude Sonnet 5 model IDs (not `claude-sonnet-4-5`, `-5-5`, or `-50`). */
 export function isClaudeSonnet5Model(modelId: string): boolean {
   return CLAUDE_SONNET_5_PATTERN.test(modelId);
 }
@@ -376,6 +412,11 @@ export function isClaudeRegionalPremiumModel(modelId: string): boolean {
 
 export function isAlwaysOnAdaptiveThinkingClaudeModel(modelId: string): boolean {
   return hasClaudeCapability(modelId, 'alwaysOnAdaptiveThinking');
+}
+
+/** True when `between_tools`, not `disabled`, is the model's lowest thinking setting. */
+export function isBetweenToolsLowestThinkingClaudeModel(modelId: string): boolean {
+  return hasClaudeCapability(modelId, 'betweenToolsReplacesDisabledThinking');
 }
 
 /**
@@ -412,10 +453,10 @@ export function claudeThinkingConsumesTokens(
 }
 
 /**
- * True when `thinking: { type: 'disabled' }` would be rejected for this model at this effort
- * level. Claude Opus 5 thinks by default and only accepts `disabled` at effort `high` or below,
- * so `disabled` + `xhigh`/`max` is a 400. An unset effort uses the API default (`high`), which
- * is within the cap.
+ * True when the request cannot turn thinking off at this effort level. Claude Opus 5 only
+ * accepts `disabled` at effort `high` or below, and Claude Sonnet 5.5 its `between_tools`
+ * replacement, so either with `xhigh`/`max` is a 400. An unset effort uses the API default
+ * (`high`), which is within the cap.
  */
 export function isDisabledThinkingRejectedAtEffort(
   modelId: string,
@@ -498,10 +539,11 @@ export function isSamplingParamsDeprecatedClaudeModel(
  * budget-based thinking: an `enabled` budget converts to adaptive thinking
  * (preserving `display`), and `disabled` is omitted on always-on adaptive
  * thinking models (Fable 5 / Mythos 5), which reject it. `disabled` is also
- * omitted on effort-capped models (Opus 5) when `effort` is high enough that
- * the combination would 400. The Anthropic, Bedrock InvokeModel/Converse, and
- * Vertex paths all share this transform; user-facing warnings stay at the call
- * sites that surface them.
+ * omitted on effort-capped models (Opus 5, Sonnet 5.5) when `effort` is high
+ * enough that turning thinking off would 400, and otherwise becomes
+ * `between_tools` on models that use it in place of `disabled` (Sonnet 5.5).
+ * The Anthropic, Bedrock InvokeModel/Converse, and Vertex paths all share this
+ * transform; user-facing warnings stay at the call sites that surface them.
  */
 export function normalizeClaudeThinkingConfig<
   T extends { type: string; display?: 'summarized' | 'omitted' | null },
@@ -510,16 +552,24 @@ export function normalizeClaudeThinkingConfig<
   thinking: T | undefined,
   effort: ClaudeEffort | null | undefined,
   options: { allowGenerationFallback?: boolean } = {},
-): T | { type: 'adaptive'; display?: 'summarized' | 'omitted' } | undefined {
+):
+  | T
+  | { type: 'adaptive'; display?: 'summarized' | 'omitted' }
+  | { type: 'between_tools' }
+  | undefined {
   if (thinking?.type === 'enabled' && isSamplingParamsDeprecatedClaudeModel(modelId, options)) {
     return { type: 'adaptive', ...(thinking.display ? { display: thinking.display } : {}) };
   }
-  if (
-    thinking?.type === 'disabled' &&
-    (isAlwaysOnAdaptiveThinkingClaudeModel(modelId) ||
-      isDisabledThinkingRejectedAtEffort(modelId, effort))
-  ) {
-    return undefined;
+  if (thinking?.type === 'disabled') {
+    if (
+      isAlwaysOnAdaptiveThinkingClaudeModel(modelId) ||
+      isDisabledThinkingRejectedAtEffort(modelId, effort)
+    ) {
+      return undefined;
+    }
+    if (isBetweenToolsLowestThinkingClaudeModel(modelId)) {
+      return { type: 'between_tools' };
+    }
   }
   return thinking;
 }
