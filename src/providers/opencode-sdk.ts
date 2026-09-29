@@ -818,10 +818,14 @@ function addOpenCodeUrlCredentials(value: unknown, add: (value: unknown) => void
  * user-defined and command arguments can embed credentials in shell strings (`sh -c "TOKEN=x"`),
  * so every value, `name=value` part, and URL credential is treated as secret.
  */
-function addOpenCodeMcpCredentials(server: unknown, add: (value: unknown) => void): void {
+function addOpenCodeMcpCredentials(
+  server: unknown,
+  add: (value: unknown) => void,
+  addStrong: (value: unknown) => void,
+): void {
   const mcp = asRecord(server);
   if (mcp?.type === 'remote') {
-    addOpenCodeUrlCredentials(mcp.url, add);
+    addOpenCodeUrlCredentials(mcp.url, addStrong);
     add(asRecord(mcp.oauth)?.clientSecret);
     getHeadersCredentialForms(mcp.headers).forEach(add);
   } else if (mcp?.type === 'local') {
@@ -835,7 +839,7 @@ function addOpenCodeMcpCredentials(server: unknown, add: (value: unknown) => voi
       for (const part of value.split(/[\s"'`;&|()<>=]+/)) {
         add(part);
         if (part.includes('://')) {
-          addOpenCodeUrlCredentials(part, add);
+          addOpenCodeUrlCredentials(part, addStrong);
         } else {
           part.split(/[:,]/).forEach(add);
         }
@@ -1266,10 +1270,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     return '[OpenCode SDK Provider]';
   }
 
-  /**
-   * Explicit cleanup also deletes the persistent sessions created by this provider.
-   * Otherwise they stay resumable by ID after a shutdown, as documented for `persist_sessions`.
-   */
+  /** Explicit cleanup deletes owned persistent sessions; evaluation cleanup preserves them. */
   async cleanup(): Promise<void> {
     await this.clientInitialization?.catch(() => undefined);
     try {
@@ -1526,11 +1527,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
   }
 
-  /**
-   * Remember the values an OpenCode diagnostic could echo: the provider credentials, the MCP
-   * configuration, and the environment the spawned server inherits. Each value is also kept in its
-   * URL-, form-, and JSON-encoded forms.
-   */
+  /** Keep configured credentials and their encoded forms for subsequent diagnostics. */
   private rememberCredentials(config: OpenCodeSDKConfig): void {
     const add = (value: unknown) => {
       if (typeof value !== 'string' || !value.trim()) {
@@ -1555,9 +1552,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
     };
     addStrong(config.apiKey);
     addStrong(this.getApiKey(config));
-    addOpenCodeUrlCredentials(config.baseUrl, add);
+    addOpenCodeUrlCredentials(config.baseUrl, addStrong);
     for (const server of Object.values(asRecord(config.mcp) ?? {})) {
-      addOpenCodeMcpCredentials(server, add);
+      addOpenCodeMcpCredentials(server, add, addStrong);
       this.withholdMcpDiagnostics ||= hasDynamicOpenCodeMcpCommand(server);
       const mcp = asRecord(server);
       if (mcp?.type === 'local') {
@@ -1573,7 +1570,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
         if (typeof value === 'string' && isCredentialName(name)) {
           getHeaderCredentialForms(value).forEach(addStrong);
         }
-        addOpenCodeUrlCredentials(value, add);
+        addOpenCodeUrlCredentials(value, addStrong);
       }
     }
   }
@@ -2462,12 +2459,12 @@ export class OpenCodeSDKProvider implements ApiProvider {
       return run();
     }
 
-    const previous = this.sessionQueues.get(queueKey) ?? Promise.resolve();
+    const previous = (this.sessionQueues.get(queueKey) ?? Promise.resolve()).catch(() => undefined);
     let release: () => void = () => {};
     const current = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const queued = previous.catch(() => undefined).then(() => current);
+    const queued = previous.then(() => current);
     this.sessionQueues.set(queueKey, queued);
     void queued.finally(() => {
       if (this.sessionQueues.get(queueKey) === queued) {
@@ -2476,43 +2473,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
     });
 
     try {
-      await this.waitForPreviousSessionCall(previous, abortSignal);
+      await (abortSignal ? this.waitForRequest(previous, abortSignal) : previous);
       return await run();
     } finally {
       release();
-    }
-  }
-
-  private async waitForPreviousSessionCall(
-    previous: Promise<void>,
-    abortSignal: AbortSignal | undefined,
-  ): Promise<void> {
-    const previousDone = previous.catch(() => undefined);
-    if (!abortSignal) {
-      await previousDone;
-      return;
-    }
-    if (abortSignal.aborted) {
-      const error = new Error('OpenCode SDK session wait aborted');
-      error.name = 'AbortError';
-      throw error;
-    }
-
-    let onAbort: (() => void) | undefined;
-    const abortPromise = new Promise<void>((_, reject) => {
-      onAbort = () => {
-        const error = new Error('OpenCode SDK session wait aborted');
-        error.name = 'AbortError';
-        reject(error);
-      };
-      abortSignal.addEventListener('abort', onAbort, { once: true });
-    });
-    try {
-      await Promise.race([previousDone, abortPromise]);
-    } finally {
-      if (onAbort) {
-        abortSignal.removeEventListener('abort', onAbort);
-      }
     }
   }
 
@@ -2678,7 +2642,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
       return { error: 'OpenCode SDK call aborted before it started' };
     }
     const { config, inIsolatedWorkspace, isTempDir, workingDir } = this.prepareCall(context);
-    // A server started by this call keeps its configuration after later calls replace it.
+    // A running server can still report credentials from an earlier call.
     this.rememberCredentials(config);
     const remote = Boolean(config.baseUrl);
     if (remote) {
@@ -2768,9 +2732,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
             throw new Error('OpenCode SDK client is not initialized');
           }
 
-          // If the caller's abortSignal fires mid-prompt, ask the server to stop rather than
-          // letting it run to completion while we discard the result. The prompt itself is
-          // awaited, so a queued call cannot reuse the session while it is still running.
+          // Ask the server to stop on cancellation, but wait for the prompt to return
+          // before another call reuses the session.
           const abortSignal = callOptions?.abortSignal;
           const cancellation = this.setupSessionCancellation(
             client,

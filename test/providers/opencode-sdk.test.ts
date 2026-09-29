@@ -4626,6 +4626,29 @@ describe('OpenCodeSDKProvider', () => {
         });
       });
 
+      it.each([
+        { baseUrl: 'https://q7x9@example.test' },
+        { mcp: { tool: { type: 'remote' as const, url: 'https://q7x9@example.test' } } },
+      ])('redacts short configured URL credentials inside diagnostics', async (config) => {
+        await expectRedacted({
+          config,
+          message: 'upstream echoed prefix-q7x9-suffix; useful context',
+          secrets: ['q7x9'],
+          keep: ['upstream echoed', 'useful context'],
+        });
+      });
+
+      it('redacts short auth tokens and slash-escaped URLs from errors and logs', async () => {
+        await expectRedacted({
+          message:
+            'Bearer abc123; Basic dTpw; ' +
+            JSON.stringify({
+              url: 'https://synthetic-user:synthetic-pass@example.test/v1',
+            }).replaceAll('/', '\\/'),
+          secrets: ['abc123', 'dTpw', 'synthetic-user', 'synthetic-pass'],
+        });
+      });
+
       it('redacts upstream-only fields with long whitespace around their separators', async () => {
         await expectRedacted({
           message: `gateway api_key${' '.repeat(24)}=${'\t'.repeat(24)}upstream-private-value; useful context`,

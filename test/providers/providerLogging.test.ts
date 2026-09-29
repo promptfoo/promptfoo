@@ -50,6 +50,12 @@ describe('credential redaction', () => {
     ).toBe(`${REDACTED} Bearer ${REDACTED} ${REDACTED}`);
   });
 
+  it('redacts short upstream authorization tokens', () => {
+    expect(redactCredentials('Bearer abc123; Basic dTpw; Bearer z', [])).toBe(
+      `Bearer ${REDACTED}; Basic ${REDACTED}; Bearer ${REDACTED}`,
+    );
+  });
+
   it('derives the bare token, parameters, and decoded Basic parts from header values', () => {
     expect(getHeaderCredentialForms(' Bearer tok-123 ')).toEqual(['Bearer tok-123', 'tok-123']);
     expect(getHeaderCredentialForms('Digest username="u", response="r%2B1"')).toEqual(
@@ -120,6 +126,19 @@ describe('redactDiagnosticText', () => {
     const redacted = redactDiagnosticText(`${text} useful context`, []);
     expect(redacted).toContain(REDACTED);
     expect(redacted).not.toMatch(/upstream-|sk-proj-/);
+  });
+
+  it('redacts configured credentials before normalizing escaped slashes', () => {
+    const credential = 'synthetic\\/credential';
+    expect(redactDiagnosticText(`failed ${credential}`, [credential])).toBe(`failed ${REDACTED}`);
+  });
+
+  it.each([1, 2, 4])('redacts URLs with %i levels of slash escaping', (levels) => {
+    const text = 'https://synthetic-user:synthetic-pass@api.test/v1';
+    const escaped = text.replaceAll('/', '\\'.repeat(levels) + '/');
+    expect(redactDiagnosticText(`request ${escaped}; useful context`, [])).toBe(
+      'request https://***:***@api.test/v1; useful context',
+    );
   });
 
   it('keeps ordinary diagnostic context', () => {
