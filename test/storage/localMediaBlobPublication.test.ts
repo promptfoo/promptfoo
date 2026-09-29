@@ -92,7 +92,7 @@ describe('completed media blob publication', () => {
     expect((await restarted.store(data, 'video/mp4')).ref.mimeType).toBe('image/jpeg');
   });
 
-  it.each(['missing', 'malformed'] as const)(
+  it.each(['missing', 'malformed', 'incomplete'] as const)(
     'repairs %s metadata before deduplicating stored data',
     async (state) => {
       const provider = new FilesystemBlobStorageProvider({ basePath: directory });
@@ -101,9 +101,11 @@ describe('completed media blob publication', () => {
       if (state === 'missing') {
         await realFs.unlink(sidecar);
       } else {
-        await realFs.writeFile(sidecar, 'not json');
+        await realFs.writeFile(sidecar, state === 'incomplete' ? '{}' : 'not json');
       }
-      expect((await provider.getByHash(hash)).metadata.mimeType).toBe('application/octet-stream');
+      if (state !== 'incomplete') {
+        expect((await provider.getByHash(hash)).metadata.mimeType).toBe('application/octet-stream');
+      }
       expect((await provider.store(data, 'image/jpeg')).deduplicated).toBe(false);
       expect((await provider.getByHash(hash)).metadata.mimeType).toBe('image/jpeg');
     },
