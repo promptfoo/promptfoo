@@ -588,7 +588,11 @@ tests:
       shared: file://../shared/context.json
 ```
 
-Nested `file://` references inside test and vars files keep the owning config's base directory. A test's own `vars:` file path or glob, such as `vars: ../vars/*.yaml` in `tests/cases.yaml`, resolves from the directory of the tests file that declares it. With multiple configs, each config's tests use its base directory; configured providers and deferred grader references use the first config's base directory. Explicit `--tests` and `--vars` paths resolve from the working directory.
+Within a test row, `file://` vars and references to provider config files, such as `provider: file://provider.yaml`, use the owning config's directory.
+
+Rows in YAML test files, or JSON/JSONL files supplied in a `tests` array or glob, resolve bare `vars:` paths and globs from the tests file's directory. For example, `vars: ../vars/*.yaml` in `tests/cases.yaml` loads files from the adjacent `vars` directory. Row-provider `file://` references to script functions, such as `file://provider.py:call_api`, use the same directory. A single non-YAML test path, such as `tests: file://tests/cases.json`, or a `{ path, config }` source keeps row vars and provider paths relative to the config directory.
+
+With multiple configs, each config's tests use its base directory; suite-level providers and deferred grader references use the first config's base directory. Explicit `--tests` and `--vars` paths resolve from the working directory.
 
 CLI evaluations save parsed test rows, external defaults, and an absolute base directory. Resume and retry reuse those rows, including generated and remote datasets. Run a new evaluation to pick up changed test sources. An unmatched test-source glob warns and adds no rows; a missing literal test file is an error.
 
