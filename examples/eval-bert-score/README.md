@@ -38,7 +38,7 @@ npx promptfoo@latest eval --no-cache
 npx promptfoo@latest eval -c promptfooconfig-advanced.yaml --no-cache
 ```
 
-The assertion returns BERTScore F1, and Promptfoo compares it with the configured threshold. The basic example uses one reference string; the advanced example compares against several valid references in one scoring call and uses the best match:
+The assertion returns BERTScore F1 for Promptfoo to compare with the threshold. The basic example uses one reference; the advanced example scores several references together and returns the best match:
 
 ```yaml
 prompts:
@@ -60,9 +60,9 @@ tests:
         threshold: 0.75
 ```
 
-Each Python assertion runs in a separate process and loads its own scorer. The advanced example scores its references together in one call. Missing references and model/scoring failures produce failed assertions with an explanatory reason, rather than silently reporting a low similarity score.
+Each assertion starts a Python process and loads a scorer. Missing references and scoring errors return a failed assertion with a reason.
 
-Scores depend on the model and task, so calibrate thresholds against your own examples. A high similarity score is not a factual-correctness check. To use a different model, set `vars.bertScoreModel` to its Hugging Face identifier or local directory. For models outside BERTScore's supported-model list, also set `vars.bertScoreLayers` to the number of layers to use; thresholds may need recalibration.
+Calibrate thresholds against your own examples; semantic similarity does not establish factual correctness. To change models, set `vars.bertScoreModel` to a Hugging Face identifier or local directory. Models outside BERTScore's supported list also require `vars.bertScoreLayers`.
 
 Run the offline assertion checks with:
 
@@ -76,6 +76,6 @@ In a repository checkout with Node dependencies and this example's Python requir
 python examples/eval-bert-score/tests/smoke_cli.py
 ```
 
-It builds a tiny local model, runs the real scorer through both configs with an echo provider, and checks that multiple references stay together. No API credentials or model downloads are needed. This validates integration behavior, not semantic quality of the randomly initialized model.
+The smoke creates a tiny model locally and runs the real scorer through both configs with an echo provider. It checks scoring and reference handling without API credentials or model downloads. The randomly initialized model does not test semantic accuracy.
 
 [Learn more about BERTScore](https://arxiv.org/abs/1904.09675).
