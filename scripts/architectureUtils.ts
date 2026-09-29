@@ -113,7 +113,7 @@ function validateDependencies(config: LayerConfig, layerNames: Set<string>): voi
     for (const allowedDependency of layer.allowedDependencies) {
       if (typeof allowedDependency !== 'string' || !layerNames.has(allowedDependency)) {
         throw new Error(
-          `Architecture layer "${layer.name}" allows unknown dependency "${String(allowedDependency)}".`,
+          `Architecture layer "${layer.name}" allows unknown dependency "${allowedDependency}".`,
         );
       }
     }

@@ -49,13 +49,6 @@
       "evidence": ["src/commands/mcp/server.ts", "package-lock.json"]
     },
     {
-      "manifest": "site/package.json",
-      "dependency": "@swc/core",
-      "disposition": "build",
-      "reason": "Retained as a documented docs/build compatibility dependency. The current Docusaurus faster=false configuration uses Babel; this annotation does not claim SWC is the active compiler.",
-      "evidence": ["site/docusaurus.config.ts", "knip.jsonc"]
-    },
-    {
       "manifest": "package.json",
       "dependency": "langium",
       "disposition": "compatibility-pin",
