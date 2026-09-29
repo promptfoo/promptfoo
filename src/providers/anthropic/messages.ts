@@ -35,6 +35,7 @@ import {
   clampMaxTokensForThinkingBudget,
   claudeThinkingConsumesTokens,
   getClaudeModelWarningName,
+  getFileReferences,
   getRefusalDetails,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
@@ -687,11 +688,23 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   ): ProviderResponse {
     const finishReason = normalizeFinishReason(message.stop_reason);
     let output = outputFromMessage(message, config.showThinking ?? true);
+    const isStructuredOutput = processedOutputFormat?.type === 'json_schema';
+    const fileReferences = isStructuredOutput ? message.content.flatMap(getFileReferences) : [];
 
-    // Handle structured JSON output parsing
-    if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
+    if (isStructuredOutput) {
+      // Parse completed JSON text, keeping file references in metadata and unfinished
+      // tool turns in output so callers can still inspect them.
+      const hasPendingTools =
+        message.stop_reason === 'pause_turn' ||
+        message.content.some((block) => block.type === 'tool_use');
+      const text = hasPendingTools
+        ? ''
+        : message.content
+            .filter((block) => block.type === 'text')
+            .map((block) => block.text)
+            .join('');
       try {
-        output = JSON.parse(output);
+        output = JSON.parse(text || output);
       } catch (error) {
         logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
       }
@@ -704,6 +717,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
     return {
       output,
+      ...(fileReferences.length > 0 && { metadata: { fileReferences } }),
       tokenUsage: getTokenUsage(message, cached),
       ...(finishReason && { finishReason }),
       ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),

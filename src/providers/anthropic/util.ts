@@ -617,6 +617,22 @@ export function applyClaudeRegionalPremium(modelName: string, config: any): any 
   return { ...config, regionalPremiumMultiplier: CLAUDE_REGIONAL_ENDPOINT_PREMIUM };
 }
 
+export function getFileReferences(
+  block: Anthropic.Messages.ContentBlock,
+): { type: string; file_id: string }[] {
+  if (block.type === 'container_upload') {
+    return [{ type: block.type, file_id: block.file_id }];
+  }
+  if (
+    (block.type === 'code_execution_tool_result' ||
+      block.type === 'bash_code_execution_tool_result') &&
+    'content' in block.content
+  ) {
+    return block.content.content.map(({ type, file_id }) => ({ type, file_id }));
+  }
+  return [];
+}
+
 export function outputFromMessage(message: Anthropic.Messages.Message, showThinking: boolean) {
   const segments: string[] = [];
   let previousBlockWasText = false;
@@ -638,20 +654,15 @@ export function outputFromMessage(message: Anthropic.Messages.Message, showThink
       segments.push(`Redacted Thinking: ${block.data}`);
     } else if (
       block.type === 'tool_use' ||
-      block.type === 'container_upload' ||
       (message.stop_reason === 'pause_turn' &&
         block.type !== 'thinking' &&
         block.type !== 'redacted_thinking')
     ) {
       segments.push(JSON.stringify(block));
-    } else if (
-      (block.type === 'code_execution_tool_result' ||
-        block.type === 'bash_code_execution_tool_result') &&
-      'content' in block.content
-    ) {
+    } else {
       // Keep generated files without including execution logs or encrypted payloads.
-      for (const file of block.content.content) {
-        segments.push(JSON.stringify({ type: file.type, file_id: file.file_id }));
+      for (const file of getFileReferences(block)) {
+        segments.push(JSON.stringify(file));
       }
     }
     // Omit other completed server-tool blocks so they cannot obscure the answer.
