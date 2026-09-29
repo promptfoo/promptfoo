@@ -480,6 +480,43 @@ redteam:
       });
     });
 
+    it('preserves the dated Sonnet 4.5 preset when importing a saved YAML configuration', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+
+      await user.click(screen.getByRole('button', { name: /Load Config/i }));
+
+      const file = new File(
+        [
+          `description: Saved Sonnet configuration
+targets:
+  - claude-sonnet-4-5-20250929
+prompts:
+  - "{{prompt}}"
+redteam:
+  purpose: Answer product questions
+`,
+        ],
+        'config.yaml',
+        { type: 'text/yaml' },
+      );
+
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      await user.upload(fileInput, file);
+
+      await waitFor(() => {
+        expect(useRedTeamConfig.getState().config.target).toMatchObject({
+          id: 'claude-sonnet-4-5-20250929',
+          label: 'claude-sonnet-4-5-20250929',
+        });
+      });
+    });
+
     it.each([
       ['vertex:gemini-3.1-pro-preview', 'global'],
       ['vertex:gemini-2.5-pro', undefined],
