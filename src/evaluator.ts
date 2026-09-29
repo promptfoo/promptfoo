@@ -101,6 +101,7 @@ import {
   sanitizeProviderIdForLog,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
+import { REDACTED } from './util/sanitizer';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
@@ -2968,30 +2969,66 @@ function markComparisonRows(
   }
 }
 
+function restoreComparisonCredentials(saved: unknown, configured: unknown): unknown {
+  if (saved === REDACTED) {
+    return configured ?? saved;
+  }
+  if (!saved || typeof saved !== 'object' || saved === configured || configured == null) {
+    return saved;
+  }
+  const current = typeof configured === 'object' ? (configured as Record<string, unknown>) : {};
+  if (Array.isArray(saved)) {
+    return saved.map((value, index) => restoreComparisonCredentials(value, current[index]));
+  }
+  return Object.fromEntries(
+    Object.entries(saved).map(([key, value]) => [
+      key,
+      restoreComparisonCredentials(value, Object.hasOwn(current, key) ? current[key] : undefined),
+    ]),
+  );
+}
+
+function comparisonProviderId(provider: GradingConfig['provider']): string | undefined {
+  const id =
+    typeof provider === 'string'
+      ? provider
+      : isApiProvider(provider)
+        ? provider.id()
+        : provider?.id;
+  return typeof id === 'string' ? providerToIdentifier(id) : undefined;
+}
+
 function restoreComparisonProvider(
   saved: GradingConfig['provider'],
   configured: GradingConfig['provider'],
 ): GradingConfig['provider'] {
-  if (!saved || !configured) {
+  if (!saved || !configured || isApiProvider(saved)) {
     return saved;
   }
   const configuredText = isProviderTypeMap(configured) ? configured.text : configured;
   if (isProviderTypeMap(saved)) {
     return { ...saved, text: restoreComparisonProvider(saved.text, configuredText) };
   }
-  const savedId = providerToIdentifier(saved);
-  // Persisted runtime providers may omit their ID or replace it with a function/class marker.
-  const runtimeMarker =
-    !savedId || savedId.startsWith('[Function] ') || /^\[.+ Instance\]$/.test(savedId);
-  return configuredText && (savedId === providerToIdentifier(configuredText) || runtimeMarker)
-    ? configuredText
+  const savedId = comparisonProviderId(saved);
+  // Older persisted runtime providers omit their ID or replace it with a function/class marker.
+  if (!savedId || savedId.startsWith('[Function] ') || /^\[.+ Instance\]$/.test(savedId)) {
+    return configuredText ?? saved;
+  }
+  return savedId === comparisonProviderId(configuredText)
+    ? restoreComparisonCredentials(saved, configuredText)
     : saved;
 }
 
-type ComparisonTestCase = {
-  configured: AtomicTestCase;
-  runtime?: AtomicTestCase;
-};
+function getComparisonProviders(test: AtomicTestCase) {
+  return {
+    provider: test.options?.provider,
+    assertionProvider: test.assert?.find(
+      (assertion): assertion is Assertion => assertion.type === 'select-best',
+    )?.provider,
+  };
+}
+
+type ComparisonProviders = ReturnType<typeof getComparisonProviders>;
 
 type RepeatCacheContext = Pick<RunEvalOptions, 'evaluateOptions' | 'repeatIndex'>;
 
@@ -3397,6 +3434,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   registers: EvalRegisters;
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
+  private readonly comparisonProviders = new Map<string, ComparisonProviders>();
   constructor(
     testSuite: TestSuite,
     store: EvaluationStore<TEvaluation, TResult>,
@@ -3517,6 +3555,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   private async persistEvalRow(row: EvaluateResult): Promise<void> {
+    // Capture grader references before a later hook can replace shared nested test fields.
+    this.comparisonProviders.set(getResultIndexKey(row), getComparisonProviders(row.testCase));
     try {
       await this.store.appendResult(row);
     } catch (error) {
@@ -4232,7 +4272,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     rowsWithMaxScoreAssertion,
     rowsWithSelectBestAssertion,
     runEvalOptions,
-    comparisonTestCases,
   }: {
     ciProgressReporter: CIProgressReporter | null;
     isWebUI: boolean;
@@ -4243,7 +4282,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     rowsWithMaxScoreAssertion: Set<number>;
     rowsWithSelectBestAssertion: Set<number>;
     runEvalOptions: RunEvalOptions[];
-    comparisonTestCases: Map<string, ComparisonTestCase>;
   }) {
     const compareRowsCount = rowsWithSelectBestAssertion.size + rowsWithMaxScoreAssertion.size;
     updateComparisonReporterTotals({
@@ -4263,7 +4301,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       repeatCacheContextByTestIdx,
       rowsWithSelectBestAssertion,
       runEvalOptions,
-      comparisonTestCases,
     });
 
     await this.processMaxScoreAssertions({
@@ -4287,7 +4324,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     repeatCacheContextByTestIdx,
     rowsWithSelectBestAssertion,
     runEvalOptions,
-    comparisonTestCases,
   }: {
     ciProgressReporter: CIProgressReporter | null;
     compareRowsCount: number;
@@ -4298,7 +4334,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     repeatCacheContextByTestIdx: Map<number, RepeatCacheContext>;
     rowsWithSelectBestAssertion: Set<number>;
     runEvalOptions: RunEvalOptions[];
-    comparisonTestCases: Map<string, ComparisonTestCase>;
   }) {
     let compareCount = 0;
     for (const testIdx of rowsWithSelectBestAssertion) {
@@ -4313,7 +4348,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         providerAbortSignal,
         repeatCacheContextByTestIdx,
         runEvalOptions,
-        comparisonTestCases,
         testIdx,
       });
     }
@@ -4330,7 +4364,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     providerAbortSignal,
     repeatCacheContextByTestIdx,
     runEvalOptions,
-    comparisonTestCases,
     testIdx,
   }: {
     ciProgressReporter: CIProgressReporter | null;
@@ -4342,7 +4375,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     providerAbortSignal?: AbortSignal;
     repeatCacheContextByTestIdx: Map<number, RepeatCacheContext>;
     runEvalOptions: RunEvalOptions[];
-    comparisonTestCases: Map<string, ComparisonTestCase>;
     testIdx: number;
   }) {
     if (isWebUI) {
@@ -4356,38 +4388,25 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     const firstResult = resultsToCompare[0];
-    const liveTest = comparisonTestCases.get(getResultIndexKey(firstResult));
-    const savedTest = liveTest?.runtime ?? firstResult.testCase;
-    const configuredTest = liveTest?.runtime ? undefined : liveTest?.configured;
-    // Resumed rows retain their hook-adjusted criteria and vars, but their saved
-    // providers have been serialized and redacted. Restore the live graders only.
-    const comparisonTestCase = configuredTest
-      ? {
-          ...savedTest,
-          options: {
-            ...savedTest.options,
-            provider: restoreComparisonProvider(
-              savedTest.options?.provider,
-              configuredTest.options?.provider,
-            ),
-          },
-        }
-      : savedTest;
-    const assertion = comparisonTestCase.assert?.find(
-      (a): a is Assertion => a.type === 'select-best',
-    );
+    const providers = this.comparisonProviders.get(getResultIndexKey(firstResult));
+    const savedTest = firstResult.testCase;
+    // Persisted rows retain each column's hook-adjusted criteria and vars. Only grader
+    // references and redacted credentials need to come from the current configuration.
+    const comparisonTestCase = {
+      ...savedTest,
+      options: {
+        ...savedTest.options,
+        provider: restoreComparisonProvider(savedTest.options?.provider, providers?.provider),
+      },
+    };
+    const assertion = savedTest.assert?.find((a): a is Assertion => a.type === 'select-best');
     if (!assertion) {
       return;
     }
-    const compareAssertion = configuredTest
-      ? {
-          ...assertion,
-          provider: restoreComparisonProvider(
-            assertion.provider,
-            configuredTest.assert?.find((a): a is Assertion => a.type === 'select-best')?.provider,
-          ),
-        }
-      : assertion;
+    const compareAssertion = {
+      ...assertion,
+      provider: restoreComparisonProvider(assertion.provider, providers?.assertionProvider),
+    };
 
     const repeatCacheContext = repeatCacheContextByTestIdx.get(testIdx);
     const outputs = resultsToCompare.map((r) => r.response?.output || '');
@@ -4940,9 +4959,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       tests,
     });
     markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
-    const comparisonTestCases = new Map<string, ComparisonTestCase>(
-      runEvalOptions.map((step) => [getResultIndexKey(step), { configured: step.test }]),
-    );
+    for (const step of runEvalOptions) {
+      this.comparisonProviders.set(getResultIndexKey(step), getComparisonProviders(step.test));
+    }
     const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
     await filterCompletedResumeSteps(runEvalOptions, this.store);
 
@@ -5087,10 +5106,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return interruptedEval;
     }
 
-    // Hooks may replace each column's test independently. Completed resume steps are absent.
-    for (const step of runEvalOptions) {
-      comparisonTestCases.get(getResultIndexKey(step))!.runtime = step.test;
-    }
     await this.processComparisonAssertions({
       ciProgressReporter,
       isWebUI,
@@ -5101,7 +5116,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       rowsWithMaxScoreAssertion,
       rowsWithSelectBestAssertion,
       runEvalOptions,
-      comparisonTestCases,
     });
 
     await this.finalizeEvaluation({

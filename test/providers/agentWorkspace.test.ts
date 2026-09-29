@@ -483,6 +483,26 @@ describe('agent workspaces', () => {
       expect(git(source, 'for-each-ref')).toBe(refsBefore);
     });
 
+    it.each(['auto', 'git'] as const)(
+      'removes the clone remote with a custom default remote name in %s mode',
+      async (mode) => {
+        const source = path.join(root, 'repo');
+        makeRepository(source);
+        const configFile = path.join(root, 'global.gitconfig');
+        write(configFile, '[clone]\n defaultRemoteName = upstream\n');
+        const restoreEnv = mockProcessEnv({ GIT_CONFIG_GLOBAL: configFile });
+        try {
+          const workspace = await create(source, mode);
+
+          expect(workspace.strategy).toBe('git');
+          expect(git(workspace.dir, 'remote')).toBe('');
+          expect((await workspace.metadata()).workspaceDiff).toBe('');
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
     it('records committed, uncommitted, new, and deleted files in the diff', async () => {
       const source = path.join(root, 'repo');
       makeRepository(source);
@@ -548,6 +568,53 @@ describe('agent workspaces', () => {
 
       expect(fs.readFileSync(path.join(source, 'README.md'), 'utf8')).toBe('original\n');
       expect((await workspace.metadata()).workspaceDiff).toContain('+changed');
+    });
+
+    it('copies symlink placeholders instead of converting them into links', async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const link = path.join(source, 'linked-readme');
+      fs.symlinkSync('README.md', link);
+      git(source, 'add', 'linked-readme');
+      git(source, 'commit', '-q', '-m', 'tracked link');
+      git(source, 'config', 'core.symlinks', 'false');
+      fs.unlinkSync(link);
+      git(source, 'checkout-index', '--force', '--index', '--all');
+      expect(git(source, 'status', '--porcelain')).toBe('');
+
+      const workspace = await create(source);
+
+      expect(workspace.strategy).toBe('copy');
+      expect(fs.lstatSync(path.join(workspace.dir, 'linked-readme')).isFile()).toBe(true);
+      expect(fs.readFileSync(path.join(workspace.dir, 'linked-readme'), 'utf8')).toBe('README.md');
+      await expect(create(source, 'git')).rejects.toThrow('files all match its current commit');
+    });
+
+    it('preserves source links when global configuration disables symlink checkout', async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      fs.symlinkSync('README.md', path.join(source, 'linked-readme'));
+      git(source, 'add', 'linked-readme');
+      git(source, 'commit', '-q', '-m', 'tracked link');
+      git(source, 'config', 'core.symlinks', 'true');
+      const configFile = path.join(root, 'global.gitconfig');
+      write(configFile, '[core]\n symlinks = false\n');
+      const restoreEnv = mockProcessEnv({ GIT_CONFIG_GLOBAL: configFile });
+      try {
+        const workspace = await create(source);
+
+        expect(workspace.strategy).toBe('git');
+        expect(fs.lstatSync(path.join(workspace.dir, 'linked-readme')).isSymbolicLink()).toBe(true);
+        expect((await workspace.metadata()).workspaceDiff).toBe('');
+      } finally {
+        restoreEnv();
+      }
     });
 
     it('truncates a long diff', async () => {
@@ -772,6 +839,27 @@ describe('agent workspaces', () => {
       await expect(createAgentWorkspace(source)).rejects.toThrow(
         'copy_working_dir does not support git submodules yet',
       );
+    });
+
+    it.each([true, false])('rejects populated gitlinks with .gitmodules=%s', async (hasConfig) => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      if (hasConfig) {
+        const nestedSource = path.join(root, 'module');
+        makeRepository(nestedSource);
+        git(source, '-c', 'protocol.file.allow=always', 'submodule', 'add', nestedSource, 'lib');
+      } else {
+        makeRepository(path.join(source, 'lib'));
+        git(source, 'add', 'lib');
+      }
+      git(source, 'commit', '-q', '-m', 'populated gitlink');
+      expect(git(source, 'status', '--porcelain')).toBe('');
+      expect(git(source, 'ls-files', '--stage')).toContain('160000');
+
+      for (const mode of ['auto', 'git'] as const) {
+        await expect(create(source, mode)).rejects.toThrow('does not support git submodules');
+      }
+      expect(fs.readFileSync(path.join(source, 'lib', 'README.md'), 'utf8')).toBe('original\n');
     });
 
     it('ignores repository variables inherited from a git hook', async () => {

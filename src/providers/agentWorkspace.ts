@@ -167,6 +167,7 @@ async function git(
 }
 
 class UnsupportedGitFilterError extends Error {}
+class UnsupportedGitSubmoduleError extends Error {}
 
 /**
  * The repository to clone when `source` is the root of a git repository whose working tree
@@ -198,7 +199,17 @@ async function getCloneableRepository(
     if ((await fs.realpath(topLevel)) !== source) {
       return undefined;
     }
-    const trackedPaths = await git(['ls-files', '-z'], { cwd: source, signal });
+    const trackedEntries = (
+      await git(['ls-files', '--stage', '-z'], { cwd: source, signal })
+    ).split('\0');
+    if (trackedEntries.some((entry) => entry.startsWith('160000 '))) {
+      throw new UnsupportedGitSubmoduleError(
+        `copy_working_dir does not support git submodules yet: ${source}`,
+      );
+    }
+    const trackedPaths = trackedEntries
+      .map((entry) => entry.slice(entry.indexOf('\t') + 1))
+      .join('\0');
     const attributes = await git(['check-attr', '-z', '--stdin', 'filter'], {
       cwd: source,
       input: trackedPaths,
@@ -212,20 +223,6 @@ async function getCloneableRepository(
       throw new UnsupportedGitFilterError(
         "copy_working_dir: 'git' does not support tracked Git filter attributes; use 'copy' or true to preserve materialized files.",
       );
-    }
-    if (process.platform !== 'win32') {
-      // core.filemode=false hides executable-bit changes from Git status.
-      const entries = await git(['ls-files', '--stage', '-z'], { cwd: source, signal });
-      for (const entry of entries.split('\0')) {
-        const mode = entry.slice(0, 6);
-        if (mode === '100644' || mode === '100755') {
-          signal?.throwIfAborted();
-          const file = path.join(source, entry.slice(entry.indexOf('\t') + 1));
-          if (Boolean((await fs.lstat(file)).mode & 0o100) !== (mode === '100755')) {
-            return undefined;
-          }
-        }
-      }
     }
     if (!allowIgnored) {
       const endings = await git(['ls-files', '--eol', '-z'], { cwd: source, signal });
@@ -249,6 +246,10 @@ async function getCloneableRepository(
     const status = await git(
       [
         '--no-optional-locks',
+        // Compare materialized modes and links even when the source config ignores them.
+        ...(process.platform === 'win32' ? [] : ['-c', 'core.filemode=true']),
+        '-c',
+        'core.symlinks=true',
         'status',
         '--porcelain',
         '--untracked-files=all',
@@ -269,7 +270,10 @@ async function getCloneableRepository(
     if (error instanceof Error && 'killed' in error && error.killed) {
       throw error;
     }
-    if (allowIgnored && error instanceof UnsupportedGitFilterError) {
+    if (
+      error instanceof UnsupportedGitSubmoduleError ||
+      (allowIgnored && error instanceof UnsupportedGitFilterError)
+    ) {
       throw error;
     }
     // Not a git repository, a repository without commits, or git is not installed.
@@ -576,13 +580,20 @@ export async function createAgentWorkspace(
 
   try {
     if (repo) {
-      await git(['clone', '--quiet', '--shared', '--no-checkout', realSource, dir], { signal });
+      await git(
+        ['clone', '--quiet', '--shared', '--no-checkout', '--origin', 'origin', realSource, dir],
+        {
+          signal,
+        },
+      );
       await git(
         [
           '-c',
           'core.autocrlf=false',
           '-c',
           'core.eol=lf',
+          '-c',
+          'core.symlinks=true',
           'checkout',
           '--quiet',
           '--detach',
