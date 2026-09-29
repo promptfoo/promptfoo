@@ -6,7 +6,6 @@ import path from 'path';
 
 import httpZ from 'http-z';
 import { LRUCache } from 'lru-cache';
-import { Agent, type Dispatcher, interceptors } from 'undici';
 import { z } from 'zod';
 import { fetchWithCache } from '../cache';
 import cliState from '../cliState';
@@ -21,12 +20,13 @@ import { HttpTlsFieldsSchema } from '../contracts/providerConfig/httpTls';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { stripDecompressionHeaders } from '../util/fetch/stripDecompressionHeaders';
+import { assertFipsTlsVerification, createTlsAgent } from '../util/fetch/tls';
 import {
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
   pathExists,
 } from '../util/file';
+import { isFipsEnabled } from '../util/fips';
 import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
@@ -61,6 +61,7 @@ import {
 } from './shared';
 import { normalizeResponseTransformResult } from './transformResult';
 import { loadTransformModule, parseFileTransformReference } from './transformUtils';
+import type { Dispatcher } from 'undici';
 
 export { loadTransformModule } from './transformUtils';
 
@@ -432,6 +433,11 @@ export async function generateSignature(
         break;
       }
       case 'jks': {
+        if (isFipsEnabled()) {
+          throw new Error(
+            'JKS certificate import is not supported in FIPS mode. Use a PEM private key instead.',
+          );
+        }
         // Check for keystore password in config first, then fallback to environment variable
         const keystorePassword =
           signatureAuth.keystorePassword ||
@@ -511,6 +517,11 @@ export async function generateSignature(
         );
 
         if (hasPfxPath || hasPfxContent) {
+          if (isFipsEnabled()) {
+            throw new Error(
+              'PFX/PKCS12 certificate import is not supported in FIPS mode. Use a PEM private key instead.',
+            );
+          }
           // Check for PFX password in config first, then fallback to environment variable
           const pfxPassword =
             signatureAuth.pfxPassword ||
@@ -1551,9 +1562,27 @@ export function estimateTokenCount(text: string, multiplier: number = 1.3): numb
   return Math.ceil(words.length * multiplier);
 }
 
-/**
- * Creates an HTTPS agent with TLS configuration for secure connections
- */
+function validateFipsTlsConfig(
+  tlsConfig: {
+    rejectUnauthorized?: boolean;
+    pfx?: unknown;
+    pfxPath?: string;
+    jksPath?: string;
+    jksContent?: string;
+  } = {},
+): void {
+  if (!isFipsEnabled()) {
+    return;
+  }
+  assertFipsTlsVerification(tlsConfig.rejectUnauthorized);
+  if (tlsConfig.jksPath || tlsConfig.jksContent || tlsConfig.pfx || tlsConfig.pfxPath) {
+    throw new Error(
+      'JKS and PFX/PKCS12 certificate import is not supported in FIPS mode. Use PEM cert/key and CA certificates instead.',
+    );
+  }
+}
+
+/** Creates an HTTPS agent with TLS configuration for secure connections. */
 async function createHttpsAgent(
   tlsConfig: z.infer<typeof TlsCertificateSchema>,
 ): Promise<Dispatcher> {
@@ -1734,14 +1763,7 @@ async function createHttpsAgent(
 
   logger.debug(`[HTTP Provider] Creating HTTPS agent with TLS configuration`);
 
-  // Compose the decompress interceptor like the shared pooled agents do — on
-  // Node 26 undici no longer auto-decompresses, so without this a gzip/br
-  // response body comes back to callers as raw compressed bytes.
-  return new Agent({
-    connect: tlsOptions,
-  })
-    .compose(interceptors.decompress({ skipErrorResponses: false }))
-    .compose(stripDecompressionHeaders());
+  return createTlsAgent(tlsOptions);
 }
 
 export class HttpProvider implements ApiProvider {
@@ -1771,6 +1793,8 @@ export class HttpProvider implements ApiProvider {
   private sessionEndpointParser?: Promise<(data: SessionParserData) => string>;
 
   constructor(url: string, options: ProviderOptions) {
+    // Check raw input before schema parsing can strip legacy TLS fields.
+    validateFipsTlsConfig(options.config?.tls);
     this.config = HttpProviderConfigSchema.parse(options.config);
     validateMultipartConfig(this.config);
     if (!this.config.tokenEstimation && cliState.config?.redteam) {
@@ -2322,6 +2346,7 @@ export class HttpProvider implements ApiProvider {
   }
 
   private async getHttpsAgent(): Promise<Dispatcher | undefined> {
+    validateFipsTlsConfig(this.config.tls);
     if (!this.config.tls) {
       return undefined;
     }

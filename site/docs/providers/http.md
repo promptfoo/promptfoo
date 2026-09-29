@@ -985,6 +985,8 @@ providers:
 
 ### Using PFX/PKCS12 Certificates
 
+In a FIPS-enabled runtime, use PEM cert/key files instead of PFX or JKS bundles. See the [FIPS runtime policy](/docs/usage/self-hosting/#fips-enabled-runtimes) for certificate and TLS requirements.
+
 For PFX or PKCS12 certificate bundles, you can either provide a file path or inline base64-encoded content:
 
 ```yaml
@@ -1428,6 +1430,8 @@ def get_auth(context):
 ### Digital Signature Authentication
 
 For APIs requiring cryptographic request signing, the HTTP provider supports digital signatures with PEM, JKS (Java KeyStore), and PFX certificate formats. The private key is **never sent to Promptfoo** and remains stored locally.
+
+FIPS-enabled runtimes support PEM signing keys and reject JKS/PFX imports. See the [FIPS runtime policy](/docs/usage/self-hosting/#fips-enabled-runtimes).
 
 #### Basic Usage (PEM)
 

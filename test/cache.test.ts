@@ -1,3 +1,4 @@
+import * as fsPromises from 'node:fs/promises';
 import fs from 'fs';
 import path from 'path';
 
@@ -26,7 +27,14 @@ import {
 import { cloudConfig } from '../src/globalConfig/cloud';
 import logger from '../src/logger';
 import { fetchWithRetries } from '../src/util/fetch/index';
+import * as fips from '../src/util/fips';
 import { mockProcessEnv } from './util/utils';
+import type { Dispatcher } from 'undici';
+
+vi.mock('node:fs/promises', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:fs/promises')>()),
+  readFile: vi.fn(),
+}));
 
 vi.mock('../src/util/config/manage', () => ({
   getConfigDirectoryPath: vi.fn().mockReturnValue('/mock/config/path'),
@@ -338,6 +346,76 @@ describe('cache configuration', () => {
 });
 
 describe('fetchWithCache', () => {
+  describe('FIPS policy', () => {
+    let restoreEnv: () => void;
+    beforeEach(() => {
+      restoreEnv = mockProcessEnv({
+        PROMPTFOO_INSECURE_SSL: undefined,
+        NODE_TLS_REJECT_UNAUTHORIZED: undefined,
+        PROMPTFOO_CA_CERT_PATH: undefined,
+      });
+      vi.spyOn(fips, 'isFipsEnabled').mockReturnValue(true);
+      vi.mocked(fsPromises.readFile).mockReset();
+      mockFetchWithRetries.mockImplementation(async () =>
+        mockFetchWithRetriesResponse(true, { value: 'fixture' }),
+      );
+    });
+    afterEach(() => {
+      restoreEnv();
+      vi.restoreAllMocks();
+    });
+
+    it.each([
+      { PROMPTFOO_INSECURE_SSL: 'true' },
+      { NODE_TLS_REJECT_UNAUTHORIZED: '0' },
+      { PROMPTFOO_CA_CERT_PATH: '/missing-ca.pem' },
+    ])('validates TLS configuration even for cached responses: %j', async (env) => {
+      const url = 'https://example.test/fips-cache';
+      await fetchWithCache(url);
+      expect((await fetchWithCache(url)).cached).toBe(true);
+      mockProcessEnv(env);
+      vi.mocked(fsPromises.readFile).mockRejectedValue(new Error('fixture missing CA'));
+      await expect(fetchWithCache(url)).rejects.toThrow('FIPS mode');
+      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
+    });
+
+    it.each([false, true])(
+      'isolates standard and FIPS cache entries with explicit key=%s',
+      async (explicit) => {
+        const options = explicit ? { cacheKey: 'fixture-principal' } : false;
+        const url = 'https://example.test/fips-cache';
+        vi.mocked(fips.isFipsEnabled).mockReturnValue(false);
+        await fetchWithCache(url, {}, 1000, 'json', options);
+        vi.mocked(fips.isFipsEnabled).mockReturnValue(true);
+        expect((await fetchWithCache(url, {}, 1000, 'json', options)).cached).toBe(false);
+        expect((await fetchWithCache(url, {}, 1000, 'json', options)).cached).toBe(true);
+        expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    it('rejects an opaque dispatcher before looking up an explicit cache key', async () => {
+      const url = 'https://example.test/fips-cache';
+      const cacheOptions = { cacheKey: 'fixture-principal' };
+      await fetchWithCache(url, {}, 1000, 'json', cacheOptions);
+      const dispatcher = { dispatch: vi.fn() } as unknown as Dispatcher;
+      await expect(fetchWithCache(url, { dispatcher }, 1000, 'json', cacheOptions)).rejects.toThrow(
+        'FIPS mode requires a Promptfoo-managed HTTP dispatcher',
+      );
+      expect(dispatcher.dispatch).not.toHaveBeenCalled();
+      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
+    });
+
+    it('rereads a configured CA file before returning a cached response', async () => {
+      mockProcessEnv({ PROMPTFOO_CA_CERT_PATH: '/fixture-ca.pem' });
+      vi.mocked(fsPromises.readFile).mockResolvedValue('CA fixture');
+      const url = 'https://example.test/fips-cache';
+      await fetchWithCache(url);
+      expect((await fetchWithCache(url)).cached).toBe(true);
+      expect(fsPromises.readFile).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
+    });
+  });
+
   const url = 'https://api.example.com/data';
   const response = { data: 'test data' };
 
