@@ -149,6 +149,18 @@ describe('handleMeteorAssertion', () => {
       );
     });
 
+    it('treats similarity equal to the threshold as a positive pass and inverse failure', async () => {
+      const input = { output: 'one two', value: 'one two', threshold: 0.9375 };
+      const positive = await meteor(input);
+      const inverse = await meteor({ ...input, inverse: true });
+
+      expect(positive.pass).toBe(true);
+      expect(positive.score).toBe(input.threshold);
+      expect(inverse.pass).toBe(false);
+      expect(inverse.score).toBe(0.0625);
+      expect(inverse.reason).toBe('METEOR score 0.9375 met threshold 0.9375 (expected it not to)');
+    });
+
     it('complements the positive score and passes when the score is below the threshold', async () => {
       const input = {
         output: 'The dog ran in the park',
