@@ -4,11 +4,11 @@ These examples evaluate Codex through the experimental `codex app-server` protoc
 
 ## Setup
 
-Install and sign in to Codex:
+Install Codex CLI 0.156.1 or newer for these GPT-6 examples, then sign in:
 
 ```bash
-npm i -g @openai/codex
-codex
+npm install -g @openai/codex@^0.156.1
+codex login
 ```
 
 You can also use an API key:
@@ -42,6 +42,7 @@ npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 ## Included Configs
 
 - `promptfooconfig.yaml` - Read-only structured repo summary.
+- `promptfooconfig.tracing.yaml` - Enables OTEL tracing and asserts on the `gen_ai.turn *` protocol-turn marker spans (see [Turn marker spans](https://www.promptfoo.dev/docs/tracing/#per-llm-turn-spans)).
 - `approval-policy/promptfooconfig.yaml` - Demonstrates deterministic approval request handling.
 - `review-diff/promptfooconfig.yaml` - Uses Codex app-server to review the current git diff.
 - `skills/promptfooconfig.yaml` - Demonstrates explicit skill input items.
@@ -50,6 +51,8 @@ The skills config expects `CODEX_SKILL_CREATOR_PATH` to point at a local
 `skill-creator/SKILL.md` file.
 
 ## Notes
+
+Codex runs its own agent loop; providers such as `openai:gpt-6-sol` make direct model calls.
 
 The provider starts its own `codex app-server` process. It does not attach to an already-running Codex Desktop app process.
 
@@ -60,4 +63,4 @@ The default examples use:
 - `skip_git_repo_check: true`
 - `thread_cleanup: unsubscribe`
 
-See [OpenAI Codex App Server Provider Documentation](/docs/providers/openai-codex-app-server/) for full configuration details.
+See [OpenAI Codex App Server Provider Documentation](https://www.promptfoo.dev/docs/providers/openai-codex-app-server/) for full configuration details.

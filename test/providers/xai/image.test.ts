@@ -1,8 +1,6 @@
 import { lookup } from 'node:dns/promises';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
-import { isBlobStorageEnabled } from '../../../src/blobs/extractor';
-import { storeBlob } from '../../../src/blobs/index';
 import { callOpenAiImageApi } from '../../../src/providers/openai/image';
 import { getRequestTimeoutMs } from '../../../src/providers/shared';
 import { createXAIImageProvider, XAIImageProvider } from '../../../src/providers/xai/image';
@@ -16,13 +14,6 @@ import { mockProcessEnv } from '../../util/utils';
 vi.mock('../../../src/logger');
 vi.mock('node:dns/promises', () => ({
   lookup: vi.fn(),
-}));
-vi.mock('../../../src/blobs/extractor', () => ({
-  isBlobStorageEnabled: vi.fn(),
-}));
-vi.mock('../../../src/blobs/index', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../src/blobs/index')>()),
-  storeBlob: vi.fn(),
 }));
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: vi.fn(),
@@ -40,7 +31,7 @@ vi.mock('../../../src/providers/openai/image', async () => {
 const lookupMock = lookup as unknown as Mock;
 
 describe('XAI Image Provider', () => {
-  const blobUri = (index: number) => `promptfoo://blob/${index.toString(16).padStart(32, '0')}`;
+  const imageData = `data:image/jpeg;base64,${Buffer.alloc(1024).toString('base64')}`;
   const mockApiKey = 'test-api-key';
   const mockPrompt = 'test prompt';
 
@@ -86,7 +77,6 @@ describe('XAI Image Provider', () => {
     vi.resetAllMocks();
     vi.clearAllMocks();
     lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
-    vi.mocked(isBlobStorageEnabled).mockReturnValue(true);
     vi.mocked(callOpenAiImageApi).mockResolvedValue(mockSuccessResponse);
     vi.mocked(getFetchTlsOptions).mockResolvedValue({});
     vi.mocked(getProxyUrlForTarget).mockReturnValue('');
@@ -97,20 +87,6 @@ describe('XAI Image Provider', () => {
       headers: new Headers({ 'content-type': 'image/jpeg' }),
       arrayBuffer: async () => new ArrayBuffer(1024),
     } as Response);
-    let blobIndex = 0;
-    vi.mocked(storeBlob).mockImplementation(async (_buffer, mimeType) => {
-      blobIndex += 1;
-      return {
-        ref: {
-          uri: blobUri(blobIndex),
-          hash: blobIndex.toString(16).padStart(32, '0'),
-          mimeType,
-          sizeBytes: 1024,
-          provider: 'filesystem',
-        },
-        deduplicated: false,
-      };
-    });
   });
 
   afterEach(() => {
@@ -252,6 +228,68 @@ describe('XAI Image Provider', () => {
         getRequestTimeoutMs(),
       );
       expect(result.cost).toBe(0.05);
+    });
+
+    it('prices grok-imagine-image-2.0 by quality and resolution tier', async () => {
+      // Tiers from xAI /v1/models/grok-imagine-image-2.0 `pricing`, verified live
+      // 2026-08-31: low/1k $0.04, low/2k $0.06, medium/1k $0.06, medium/2k $0.08.
+      const cases: {
+        quality?: 'low' | 'medium' | 'auto';
+        resolution?: '1k' | '2k';
+        expected: number;
+      }[] = [
+        { expected: 0.04 },
+        { quality: 'auto', resolution: '1k', expected: 0.04 },
+        { quality: 'low', resolution: '1k', expected: 0.04 },
+        { quality: 'low', resolution: '2k', expected: 0.06 },
+        { quality: 'medium', resolution: '1k', expected: 0.06 },
+        { quality: 'medium', resolution: '2k', expected: 0.08 },
+      ];
+
+      for (const { quality, resolution, expected } of cases) {
+        const provider = new XAIImageProvider('grok-imagine-image-2.0', {
+          config: { apiKey: mockApiKey, quality, resolution },
+        });
+
+        const result = await provider.callApi('Generate a cat');
+
+        expect(callOpenAiImageApi).toHaveBeenCalledWith(
+          'https://api.x.ai/v1/images/generations',
+          expect.objectContaining({ model: 'grok-imagine-image-2.0' }),
+          expect.any(Object),
+          getRequestTimeoutMs(),
+        );
+        expect(result.cost).toBeCloseTo(expected, 10);
+      }
+    });
+
+    it('does not price grok-imagine-image-2.0 at the quality-model fallback rate', async () => {
+      // Regression guard: before grok-imagine-image-2.0 was indexed it fell through
+      // the "unknown grok-imagine-* slug" branch and was billed at $0.05/$0.07.
+      const provider = new XAIImageProvider('grok-imagine-image-2.0', {
+        config: { apiKey: mockApiKey, quality: 'low', resolution: '1k' },
+      });
+
+      const result = await provider.callApi('Generate a cat');
+
+      expect(result.cost).not.toBeCloseTo(0.05, 10);
+      expect(result.cost).toBeCloseTo(0.04, 10);
+    });
+
+    it('prices auto-quality grok-imagine-image-2.0 edits at the medium output tier', async () => {
+      const provider = new XAIImageProvider('grok-imagine-image-2.0', {
+        config: {
+          apiKey: mockApiKey,
+          quality: 'auto',
+          resolution: '1k',
+          image: { url: 'https://example.com/source.png' },
+        },
+      });
+
+      const result = await provider.callApi('Edit the cat');
+
+      // Auto currently serves medium for edits: $0.06 output + $0.01 input image.
+      expect(result.cost).toBeCloseTo(0.07, 10);
     });
 
     it('routes Grok Imagine quality aliases to the canonical model slug', async () => {
@@ -423,8 +461,8 @@ describe('XAI Image Provider', () => {
       );
 
       expect(result).toMatchObject({
-        output: `![Generate a cat](${blobUri(1)})`,
-        images: [{ blobRef: expect.objectContaining({ uri: blobUri(1) }), mimeType: 'image/jpeg' }],
+        output: `![Generate a cat](${imageData})`,
+        images: [{ data: imageData, mimeType: 'image/jpeg' }],
         cached: false,
         cost: 0.07, // xAI pricing: $0.07 per generated image
       });
@@ -440,8 +478,8 @@ describe('XAI Image Provider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toMatchObject({
-        output: `![test prompt](${blobUri(1)})`,
-        images: [{ blobRef: expect.objectContaining({ uri: blobUri(1) }), mimeType: 'image/jpeg' }],
+        output: `![test prompt](${imageData})`,
+        images: [{ data: imageData, mimeType: 'image/jpeg' }],
         cached: true,
         cost: 0,
       });
@@ -467,10 +505,10 @@ describe('XAI Image Provider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toMatchObject({
-        output: `![test prompt](${blobUri(1)})`,
+        output: `![test prompt](${imageData})`,
         images: [
-          { blobRef: expect.objectContaining({ uri: blobUri(1) }), mimeType: 'image/jpeg' },
-          { blobRef: expect.objectContaining({ uri: blobUri(2) }), mimeType: 'image/jpeg' },
+          { data: imageData, mimeType: 'image/jpeg' },
+          { data: imageData, mimeType: 'image/jpeg' },
         ],
         cached: false,
         cost: 0.14,

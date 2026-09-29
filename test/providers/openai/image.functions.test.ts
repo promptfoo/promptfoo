@@ -1,8 +1,7 @@
 import { lookup } from 'node:dns/promises';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
-import { isBlobStorageEnabled } from '../../../src/blobs/extractor';
-import { BLOB_MAX_SIZE, storeBlob } from '../../../src/blobs/index';
+import { BLOB_MAX_SIZE } from '../../../src/blobs/constants';
 import { fetchWithCache } from '../../../src/cache';
 import {
   buildSafeStructuredImageOutputs,
@@ -33,13 +32,6 @@ vi.mock('../../../src/cache', async (importOriginal) => {
     fetchWithCache: vi.fn(),
   };
 });
-vi.mock('../../../src/blobs/extractor', () => ({
-  isBlobStorageEnabled: vi.fn(),
-}));
-vi.mock('../../../src/blobs/index', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../src/blobs/index')>()),
-  storeBlob: vi.fn(),
-}));
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: vi.fn(),
   getFetchTlsOptions: vi.fn(),
@@ -54,7 +46,6 @@ describe('OpenAI Image Provider Functions', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
-    vi.mocked(isBlobStorageEnabled).mockReturnValue(true);
     vi.mocked(getFetchTlsOptions).mockResolvedValue({});
     vi.mocked(getProxyUrlForTarget).mockReturnValue('');
     vi.mocked(fetchWithProxy).mockResolvedValue({
@@ -64,20 +55,6 @@ describe('OpenAI Image Provider Functions', () => {
       headers: new Headers({ 'content-type': 'image/png' }),
       arrayBuffer: async () => new ArrayBuffer(1024),
     } as Response);
-    let blobIndex = 0;
-    vi.mocked(storeBlob).mockImplementation(async (_buffer, mimeType) => {
-      blobIndex += 1;
-      return {
-        ref: {
-          uri: blobUri(blobIndex),
-          hash: blobIndex.toString(16).padStart(32, '0'),
-          mimeType,
-          sizeBytes: 1024,
-          provider: 'filesystem',
-        },
-        deduplicated: false,
-      };
-    });
   });
 
   afterEach(() => {
@@ -111,6 +88,14 @@ describe('OpenAI Image Provider Functions', () => {
 
     it('should validate any size for unknown models', () => {
       expect(validateSizeForModel('any-size', 'unknown-model')).toEqual({ valid: true });
+    });
+
+    it('should validate chatgpt-image-latest using GPT Image sizes', () => {
+      expect(validateSizeForModel('1024x1024', 'chatgpt-image-latest')).toEqual({ valid: true });
+      expect(validateSizeForModel('auto', 'chatgpt-image-latest')).toEqual({ valid: true });
+      expect(validateSizeForModel('512x512', 'chatgpt-image-latest')).toMatchObject({
+        valid: false,
+      });
     });
 
     it('should validate GPT Image 2 sizes using dimensional constraints', () => {
@@ -163,7 +148,9 @@ describe('OpenAI Image Provider Functions', () => {
         data: [{ url: 'https://example.com/image.png' }],
       };
 
-      expect(formatOutput(data, 'prompt', 'url')).toBe('[external image URL omitted for security]');
+      expect(formatOutput(data, 'prompt', 'url')).toEqual({
+        error: expect.stringContaining('No usable image data'),
+      });
     });
 
     it('should format base64 output correctly', () => {
@@ -281,6 +268,22 @@ describe('OpenAI Image Provider Functions', () => {
         moderation: 'low',
       });
     });
+
+    it('should prepare chatgpt-image-latest request body without response_format', () => {
+      expect(
+        prepareRequestBody('chatgpt-image-latest', 'prompt', '1024x1024', 'url', {
+          quality: 'high',
+          output_format: 'webp',
+        }),
+      ).toEqual({
+        model: 'chatgpt-image-latest',
+        prompt: 'prompt',
+        size: '1024x1024',
+        n: 1,
+        quality: 'high',
+        output_format: 'webp',
+      });
+    });
   });
 
   describe('calculateImageCost', () => {
@@ -337,6 +340,10 @@ describe('OpenAI Image Provider Functions', () => {
       );
     });
 
+    it('should calculate GPT Image 1.5-compatible fallback cost for chatgpt-image-latest', () => {
+      expect(calculateImageCost('chatgpt-image-latest', '1024x1024', 'low')).toBe(0.009);
+    });
+
     it('should not invent GPT Image 2 cost for auto quality or custom sizes', () => {
       expect(calculateImageCost('gpt-image-2', '1024x1024')).toBeUndefined();
       expect(calculateImageCost('gpt-image-2', '1024x1024', 'auto')).toBeUndefined();
@@ -377,6 +384,95 @@ describe('OpenAI Image Provider Functions', () => {
         timeout,
       );
       expect(result).toEqual(mockResponse);
+    });
+
+    it.each([
+      ['https://gateway.example/v1/images/generations?api_key=tenant-secret', {}],
+      ['https://gateway.example/v1/token_privateTenantCredential123/images/generations', {}],
+      ['https://gateway.example/v1/images/generations', { Authorization: 'Bearer tenant-secret' }],
+      ['https://gateway.example/v1/images/generations', { 'X-Route': 'Bearer tenant-secret' }],
+    ])(
+      'should bypass persistent image caching for an authenticated custom gateway',
+      async (url, headers) => {
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: { some: 'data' },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        await callOpenAiImageApi(
+          url,
+          { model: 'gpt-image-1', prompt: 'test' },
+          { 'Content-Type': 'application/json', ...headers },
+          30000,
+        );
+
+        expect(fetchWithCache).toHaveBeenCalledWith(
+          url,
+          expect.objectContaining({ method: 'POST' }),
+          30000,
+          'json',
+          true,
+        );
+      },
+    );
+
+    it('should bypass persistent image caching when the request body embeds a credential', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { some: 'data' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await callOpenAiImageApi(
+        'https://api.openai.com/v1/images/generations',
+        {
+          model: 'gpt-image-1',
+          prompt: 'Render this key: sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        },
+        { 'Content-Type': 'application/json' },
+        30000,
+      );
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://api.openai.com/v1/images/generations',
+        expect.objectContaining({ method: 'POST' }),
+        30000,
+        'json',
+        true,
+      );
+    });
+
+    it.each([
+      [
+        'api.openai.com with an Authorization header',
+        'https://api.openai.com/v1/images/generations',
+        { Authorization: 'Bearer sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+      ],
+      ['a credential-free custom gateway', 'https://gateway.example/v1/images/generations', {}],
+    ])('should preserve persistent image caching for %s', async (_label, url, headers) => {
+      // Positive controls for the bypass cases above: a credential header on the
+      // DEFAULT endpoint and a clean custom gateway must both keep caching
+      // enabled. The exact three-argument call pins bust=false — the bust path
+      // appends ('json', true).
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { some: 'data' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const body = { model: 'gpt-image-1', prompt: 'test' };
+      const fullHeaders = { 'Content-Type': 'application/json', ...headers };
+
+      await callOpenAiImageApi(url, body, fullHeaders, 30000);
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        url,
+        { method: 'POST', headers: fullHeaders, body: JSON.stringify(body) },
+        30000,
+      );
     });
   });
 
@@ -419,8 +515,13 @@ describe('OpenAI Image Provider Functions', () => {
       );
 
       expect(result).toMatchObject({
-        output: `![test prompt](${blobUri(1)})`,
-        images: [{ blobRef: expect.objectContaining({ uri: blobUri(1) }), mimeType: 'image/png' }],
+        output: `![test prompt](data:image/png;base64,${Buffer.alloc(1024).toString('base64')})`,
+        images: [
+          {
+            data: `data:image/png;base64,${Buffer.alloc(1024).toString('base64')}`,
+            mimeType: 'image/png',
+          },
+        ],
         cost: DALLE2_COSTS['512x512'],
       });
     });
@@ -507,12 +608,11 @@ describe('OpenAI Image Provider Functions', () => {
         undefined,
         1,
         undefined,
-        undefined,
         {},
         deleteFromCache,
       );
 
-      expect(result.error).toContain('cached response was evicted');
+      expect(result.error).toContain('No usable image data');
       expect(deleteFromCache).toHaveBeenCalledWith();
     });
 
@@ -623,13 +723,16 @@ describe('OpenAI Image Provider Functions', () => {
   });
 
   describe('buildSafeStructuredImageOutputs', () => {
-    it('should internalize external URLs into blob refs', async () => {
+    it('should download external URLs as inline image data', async () => {
       const result = await buildSafeStructuredImageOutputs({
         data: [{ url: 'https://example.com/image.jpg?size=large' }],
       });
 
       expect(result).toMatchObject([
-        { blobRef: expect.objectContaining({ uri: blobUri(1) }), mimeType: 'image/png' },
+        {
+          data: `data:image/png;base64,${Buffer.alloc(1024).toString('base64')}`,
+          mimeType: 'image/png',
+        },
       ]);
       expect(fetchWithProxy).toHaveBeenCalledWith(
         'https://example.com/image.jpg?size=large',
@@ -640,7 +743,6 @@ describe('OpenAI Image Provider Functions', () => {
         }),
       );
       expect(getFetchTlsOptions).toHaveBeenCalledWith();
-      expect(storeBlob).toHaveBeenCalledWith(expect.any(Buffer), 'image/png', undefined);
     });
 
     it('should route proxied downloads to a validated address while retaining the original host', async () => {
@@ -652,48 +754,21 @@ describe('OpenAI Image Provider Functions', () => {
 
       expect(result).toBeDefined();
       expect(fetchWithProxy).toHaveBeenCalledWith(
-        'https://93.184.216.34/image.jpg?size=large',
+        'https://example.com/image.jpg?size=large',
         expect.objectContaining({
-          headers: { Host: 'example.com' },
+          headers: { 'x-promptfoo-silent': 'true' },
+          skipCloudAuthInjection: true,
           dispatcher: expect.anything(),
         }),
       );
     });
 
-    it('should store a blob reference only when full row context is available', async () => {
-      await buildSafeStructuredImageOutputs(
-        { data: [{ url: 'https://example.com/image.png' }] },
-        undefined,
-        { evaluationId: 'eval-1', testIdx: 0, promptIdx: 1 },
-      );
-
-      expect(storeBlob).toHaveBeenCalledWith(expect.any(Buffer), 'image/png', {
-        evalId: 'eval-1',
-        testIdx: 0,
-        promptIdx: 1,
-        location: 'response.images[0]',
-        kind: 'image',
-      });
-    });
-
-    it('should defer blob references when evaluation row coordinates are unavailable', async () => {
-      await buildSafeStructuredImageOutputs(
-        { data: [{ url: 'https://example.com/image.png' }] },
-        undefined,
-        { evaluationId: 'eval-1' },
-      );
-
-      expect(storeBlob).toHaveBeenCalledWith(expect.any(Buffer), 'image/png', undefined);
-    });
-
-    it('should skip external URLs when blob storage is disabled', async () => {
-      vi.mocked(isBlobStorageEnabled).mockReturnValue(false);
-
-      const result = await buildSafeStructuredImageOutputs({
-        data: [{ url: 'https://example.com/image.jpg?size=large' }],
-      });
-
-      expect(result).toBeUndefined();
+    it('releases the download transport after storing the image', async () => {
+      await buildSafeStructuredImageOutputs({ data: [{ url: 'https://example.com/image.png' }] });
+      const options = vi.mocked(fetchWithProxy).mock.calls[0][1];
+      expect(options?.signal?.aborted).toBe(true);
+      expect(options?.skipCloudAuthInjection).toBe(true);
+      expect(options?.headers).toEqual({ 'x-promptfoo-silent': 'true' });
     });
 
     it('should block direct link-local IP targets before fetching', async () => {
@@ -769,7 +844,6 @@ describe('OpenAI Image Provider Functions', () => {
       const result = await buildSafeStructuredImageOutputs(
         { data: [{ url: 'https://example.com/image.png' }] },
         undefined,
-        undefined,
         'b64_json',
       );
 
@@ -814,7 +888,6 @@ describe('OpenAI Image Provider Functions', () => {
       });
 
       expect(result).toBeUndefined();
-      expect(storeBlob).not.toHaveBeenCalled();
     });
 
     it('should reject external SVG payloads before storing blobs', async () => {
@@ -831,7 +904,6 @@ describe('OpenAI Image Provider Functions', () => {
       });
 
       expect(result).toBeUndefined();
-      expect(storeBlob).not.toHaveBeenCalled();
     });
 
     it('should reject images larger than the blob size limit before downloading them', async () => {
@@ -851,7 +923,6 @@ describe('OpenAI Image Provider Functions', () => {
       });
 
       expect(result).toBeUndefined();
-      expect(storeBlob).not.toHaveBeenCalled();
     });
   });
 
@@ -868,14 +939,14 @@ describe('OpenAI Image Provider Functions', () => {
       expect(result).toBe(`![prompt](${blobUri(1)})`);
     });
 
-    it('should fall back to plain text when no safe image source is available', () => {
+    it('should report an error when no usable image source is available', () => {
       const result = formatStructuredImageOutput(
         { data: [{ url: 'https://example.com/image.png' }] },
         'prompt',
         'url',
       );
 
-      expect(result).toBe('[external image URL omitted for security]');
+      expect(result).toEqual({ error: expect.stringContaining('No usable image data') });
     });
 
     it('should require base64 data when base64 output was requested', () => {

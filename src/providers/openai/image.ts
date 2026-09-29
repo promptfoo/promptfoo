@@ -1,18 +1,24 @@
 import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import { BlockList, isIP } from 'node:net';
 import type { LookupAddress } from 'node:dns';
 
 import { Agent, type Dispatcher, interceptors, ProxyAgent } from 'undici';
-import { isBlobStorageEnabled } from '../../blobs/extractor';
-import { BLOB_MAX_SIZE, storeBlob } from '../../blobs/index';
+import { BLOB_MAX_SIZE } from '../../blobs/constants';
 import { type FetchWithCacheResult, fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { fetchWithProxy, getFetchTlsOptions, getProxyUrlForTarget } from '../../util/fetch/index';
+import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { ellipsize } from '../../util/text';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
-import { formatOpenAiError } from './util';
+import {
+  appendOpenAiApiPath,
+  assertOpenAiApiModel,
+  formatOpenAiError,
+  hasSensitiveOpenAiCachePath,
+  hasSensitiveOpenAiCacheString,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -28,8 +34,11 @@ type OpenAiImageModel =
   | 'dall-e-2'
   | 'dall-e-3'
   | 'gpt-image-2'
+  | 'gpt-image-2.5-sunburst'
+  | 'gpt-image-2.5-flare'
   | 'gpt-image-1'
   | 'gpt-image-1-mini'
+  | 'chatgpt-image-latest'
   | 'gpt-image-1.5';
 type OpenAiImageOperation = 'generation' | 'variation' | 'edit';
 type DallE2Size = '256x256' | '512x512' | '1024x1024';
@@ -45,9 +54,6 @@ const GPT_IMAGE2_MIN_PIXELS = 655_360;
 const GPT_IMAGE2_MAX_PIXELS = 8_294_400;
 const DATED_GPT_IMAGE2_MODEL_PATTERN = /^gpt-image-2-\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_SIZE = '1024x1024';
-const UNSAFE_EXTERNAL_IMAGE_URL_PLACEHOLDER = '[external image URL omitted for security]';
-export const UNUSABLE_CACHED_EXTERNAL_IMAGE_ERROR =
-  'Cached external image URL could not be internalized. The cached response was evicted; retry to generate a fresh durable image output.';
 const BLOCKED_IMAGE_HOSTNAMES = new Set(['localhost', 'metadata', 'metadata.google.internal']);
 const SAFE_EXTERNAL_IMAGE_MIME_TYPES = new Set([
   'image/avif',
@@ -158,6 +164,12 @@ type GptImage2Options = GptImageCommonOptions & {
   background?: GptImage2Background;
 };
 
+type GptImage25Options = Omit<GptImageCommonOptions, 'quality'> & {
+  quality?: GptImageQuality | 'xhigh' | 'max';
+  size?: GptImage2Size | 'auto';
+  background?: GptImage1Background;
+};
+
 type DallE2Options = CommonImageOptions & {
   size?: DallE2Size;
   image?: string; // Base64-encoded image or image URL
@@ -167,17 +179,20 @@ type DallE2Options = CommonImageOptions & {
 
 type OpenAiImageOptions = OpenAiSharedOptions & {
   model?: OpenAiImageModel;
-} & (DallE2Options | DallE3Options | GptImage1Options | GptImage2Options);
+} & (DallE2Options | DallE3Options | GptImage1Options | GptImage2Options | GptImage25Options);
 
 const GPT_IMAGE_QUALITIES = ['low', 'medium', 'high', 'auto'] as const;
+const GPT_IMAGE25_QUALITIES = [...GPT_IMAGE_QUALITIES, 'xhigh', 'max'] as const;
 const GPT_IMAGE1_BACKGROUNDS = ['transparent', 'opaque', 'auto'] as const;
 const GPT_IMAGE2_BACKGROUNDS = ['opaque', 'auto'] as const;
 const GPT_IMAGE_OUTPUT_FORMATS = ['png', 'jpeg', 'webp'] as const;
 const GPT_IMAGE_MODERATION_VALUES = ['auto', 'low'] as const;
 
-type ImageBlobContext = Pick<CallApiContextParams, 'evaluationId' | 'testIdx' | 'promptIdx'>;
-
 // Helper functions to check model types (including dated variants like gpt-image-1.5-2025-12-16)
+function isGptImage25(model: string): boolean {
+  return /^gpt-image-2\.5-(sunburst|flare)(-\d{4}-\d{2}-\d{2})?$/.test(model);
+}
+
 function isGptImage2(model: string): boolean {
   return model === 'gpt-image-2' || DATED_GPT_IMAGE2_MODEL_PATTERN.test(model);
 }
@@ -191,14 +206,27 @@ function isGptImage1Mini(model: string): boolean {
 }
 
 function isGptImage15(model: string): boolean {
-  return model === 'gpt-image-1.5' || model.startsWith('gpt-image-1.5-2025');
+  return (
+    model === 'gpt-image-1.5' ||
+    model === 'chatgpt-image-latest' ||
+    model.startsWith('gpt-image-1.5-2025')
+  );
 }
 
 function isGptImageModel(model: string): boolean {
-  return isGptImage2(model) || isGptImage1(model) || isGptImage1Mini(model) || isGptImage15(model);
+  return (
+    isGptImage25(model) ||
+    isGptImage2(model) ||
+    isGptImage1(model) ||
+    isGptImage1Mini(model) ||
+    isGptImage15(model)
+  );
 }
 
 function getGptImageModelDisplayName(model: string): string {
+  if (isGptImage25(model)) {
+    return 'GPT Image 2.5';
+  }
   if (isGptImage2(model)) {
     return 'GPT Image 2';
   }
@@ -211,7 +239,10 @@ function getGptImageModelDisplayName(model: string): string {
   return 'GPT Image 1';
 }
 
-function validateGptImage2Size(size: string): { valid: boolean; message?: string } {
+function validateCustomImageSize(
+  size: string,
+  model: string,
+): { valid: boolean; message?: string } {
   if (size === 'auto') {
     return { valid: true };
   }
@@ -223,7 +254,7 @@ function validateGptImage2Size(size: string): { valid: boolean; message?: string
   if (!sizeMatch) {
     return {
       valid: false,
-      message: `Invalid size "${size}" for GPT Image 2. ${constraints}`,
+      message: `Invalid size "${size}" for ${getGptImageModelDisplayName(model)}. ${constraints}`,
     };
   }
 
@@ -245,7 +276,7 @@ function validateGptImage2Size(size: string): { valid: boolean; message?: string
   ) {
     return {
       valid: false,
-      message: `Invalid size "${size}" for GPT Image 2. ${constraints}`,
+      message: `Invalid size "${size}" for ${getGptImageModelDisplayName(model)}. ${constraints}`,
     };
   }
 
@@ -270,8 +301,8 @@ export function validateSizeForModel(
     };
   }
 
-  if (isGptImage2(model)) {
-    return validateGptImage2Size(size);
+  if (isGptImage2(model) || isGptImage25(model)) {
+    return validateCustomImageSize(size, model);
   }
 
   if (
@@ -326,10 +357,13 @@ function validateGptImageQualityForModel(
     return { valid: true };
   }
 
-  if (typeof quality !== 'string' || !GPT_IMAGE_QUALITIES.includes(quality as GptImageQuality)) {
+  const validQualities: readonly string[] = isGptImage25(model)
+    ? GPT_IMAGE25_QUALITIES
+    : GPT_IMAGE_QUALITIES;
+  if (typeof quality !== 'string' || !validQualities.includes(quality)) {
     return {
       valid: false,
-      message: `Invalid quality "${String(quality)}" for ${getGptImageModelDisplayName(model)}. Valid qualities are: ${GPT_IMAGE_QUALITIES.join(', ')}.`,
+      message: `Invalid quality "${String(quality)}" for ${getGptImageModelDisplayName(model)}. Valid qualities are: ${validQualities.join(', ')}.`,
     };
   }
 
@@ -565,168 +599,48 @@ function normalizeExternalImageHostname(hostname: string): string {
   return hostname.replace(/^\[/, '').replace(/\]$/, '').replace(/\.$/, '').toLowerCase();
 }
 
-function parseIpv4Address(address: string): number[] | null {
-  const parts = address.split('.');
-  if (parts.length !== 4) {
-    return null;
-  }
-
-  const octets = parts.map((part) => {
-    if (!/^\d+$/.test(part)) {
-      return NaN;
-    }
-    return Number.parseInt(part, 10);
-  });
-
-  return octets.every((octet) => octet >= 0 && octet <= 255) ? octets : null;
+const blockedImageAddresses = new BlockList();
+for (const [address, prefix] of [
+  ['0.0.0.0', 8],
+  ['10.0.0.0', 8],
+  ['100.64.0.0', 10],
+  ['127.0.0.0', 8],
+  ['169.254.0.0', 16],
+  ['172.16.0.0', 12],
+  ['192.0.0.0', 24],
+  ['192.0.2.0', 24],
+  ['192.168.0.0', 16],
+  ['198.18.0.0', 15],
+  ['198.51.100.0', 24],
+  ['203.0.113.0', 24],
+  ['224.0.0.0', 3],
+] as const) {
+  blockedImageAddresses.addSubnet(address, prefix, 'ipv4');
+  // Apply the same destination restrictions to NAT64 and 6to4 addresses.
+  const octets = address.split('.').map(Number);
+  const embedded = `${((octets[0] << 8) | octets[1]).toString(16)}:${((octets[2] << 8) | octets[3]).toString(16)}`;
+  blockedImageAddresses.addSubnet(`64:ff9b::${embedded}`, 96 + prefix, 'ipv6');
+  blockedImageAddresses.addSubnet(`2002:${embedded}::`, 16 + prefix, 'ipv6');
 }
-
-function extractIpv4MappedIpv6Address(address: string): string | undefined {
-  const lowerAddress = address.toLowerCase();
-  if (!lowerAddress.startsWith('::ffff:')) {
-    return undefined;
-  }
-
-  const ipv4Address = lowerAddress.slice('::ffff:'.length);
-  return parseIpv4Address(ipv4Address) ? ipv4Address : undefined;
-}
-
-function parseIpv6Address(address: string): number[] | null {
-  const sanitizedAddress = address.split('%', 1)[0];
-  const parts = sanitizedAddress.split('::');
-  if (parts.length > 2) {
-    return null;
-  }
-
-  const left = parts[0] ? parts[0].split(':').filter(Boolean) : [];
-  const right = parts.length === 2 && parts[1] ? parts[1].split(':').filter(Boolean) : [];
-  const hasCompression = parts.length === 2;
-  const missingGroupCount = 8 - (left.length + right.length);
-
-  if ((!hasCompression && missingGroupCount !== 0) || (hasCompression && missingGroupCount < 0)) {
-    return null;
-  }
-
-  const groups = hasCompression
-    ? [...left, ...Array.from({ length: missingGroupCount }, () => '0'), ...right]
-    : left;
-
-  if (groups.length !== 8) {
-    return null;
-  }
-
-  const bytes: number[] = [];
-  for (const group of groups) {
-    if (!/^[0-9a-f]{1,4}$/i.test(group)) {
-      return null;
-    }
-
-    const value = Number.parseInt(group, 16);
-    bytes.push((value >> 8) & 0xff, value & 0xff);
-  }
-
-  return bytes;
-}
-
-function isUnsafeIpv4Address(address: string): boolean {
-  const octets = parseIpv4Address(address);
-  if (!octets) {
-    return true;
-  }
-
-  const [a, b, c] = octets;
-  return (
-    a === 0 ||
-    a === 10 ||
-    a === 127 ||
-    (a === 100 && b >= 64 && b <= 127) ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 0 && c === 0) ||
-    (a === 192 && b === 0 && c === 2) ||
-    (a === 192 && b === 168) ||
-    (a === 198 && b >= 18 && b <= 19) ||
-    (a === 198 && b === 51 && c === 100) ||
-    (a === 203 && b === 0 && c === 113) ||
-    a >= 224
-  );
-}
-
-function hasIpv6BytePrefix(bytes: number[], prefix: number[]): boolean {
-  return prefix.every((byte, index) => bytes[index] === byte);
-}
-
-function hasUnsafeEmbeddedIpv4Address(bytes: number[], startIndex: number): boolean {
-  const octets = bytes.slice(startIndex, startIndex + 4);
-  return octets.length === 4 && isUnsafeIpv4Address(octets.join('.'));
-}
-
-function isUnsafeIpv6Address(address: string): boolean {
-  const ipv4MappedAddress = extractIpv4MappedIpv6Address(address);
-  if (ipv4MappedAddress) {
-    return isUnsafeIpv4Address(ipv4MappedAddress);
-  }
-
-  const bytes = parseIpv6Address(address);
-  if (!bytes) {
-    return true;
-  }
-
-  const isIpv4Mapped =
-    bytes.slice(0, 10).every((byte) => byte === 0) && bytes[10] === 0xff && bytes[11] === 0xff;
-  if (isIpv4Mapped) {
-    return isUnsafeIpv4Address(bytes.slice(12).join('.'));
-  }
-
-  // IPv6 transition prefixes can route to an embedded IPv4 destination; block
-  // unsafe embedded targets before a NAT64/6to4 environment can translate them.
-  const isIpv4Compatible = bytes.slice(0, 12).every((byte) => byte === 0);
-  const isWellKnownNat64 =
-    hasIpv6BytePrefix(bytes, [0x00, 0x64, 0xff, 0x9b]) &&
-    bytes.slice(4, 12).every((byte) => byte === 0);
-  const isLocalUseNat64 = hasIpv6BytePrefix(bytes, [0x00, 0x64, 0xff, 0x9b, 0x00, 0x01]);
-  const isSixToFour = bytes[0] === 0x20 && bytes[1] === 0x02;
-  const hasUnsafeTranslatedIpv4 =
-    (isWellKnownNat64 && hasUnsafeEmbeddedIpv4Address(bytes, 12)) ||
-    (isSixToFour && hasUnsafeEmbeddedIpv4Address(bytes, 2));
-
-  const isAllZeroes = bytes.every((byte) => byte === 0);
-  const isLoopback = bytes.slice(0, 15).every((byte) => byte === 0) && bytes[15] === 1;
-  const isUniqueLocal = (bytes[0] & 0xfe) === 0xfc;
-  const isLinkLocal = bytes[0] === 0xfe && (bytes[1] & 0xc0) === 0x80;
-  const isDeprecatedSiteLocal = bytes[0] === 0xfe && (bytes[1] & 0xc0) === 0xc0;
-  const isMulticast = bytes[0] === 0xff;
-  const isDocumentation =
-    bytes[0] === 0x20 && bytes[1] === 0x01 && bytes[2] === 0x0d && bytes[3] === 0xb8;
-
-  return (
-    isAllZeroes ||
-    isLoopback ||
-    isIpv4Compatible ||
-    isUniqueLocal ||
-    isLinkLocal ||
-    isDeprecatedSiteLocal ||
-    isMulticast ||
-    isDocumentation ||
-    isLocalUseNat64 ||
-    hasUnsafeTranslatedIpv4
-  );
+for (const [address, prefix] of [
+  ['::', 96],
+  ['64:ff9b:1::', 48],
+  ['2001:db8::', 32],
+  ['fc00::', 7],
+  ['fe80::', 10],
+  ['fec0::', 10],
+  ['ff00::', 8],
+] as const) {
+  blockedImageAddresses.addSubnet(address, prefix, 'ipv6');
 }
 
 function getUnsafeIpReason(address: string): string | undefined {
   const normalizedAddress = normalizeExternalImageHostname(address);
-  switch (isIP(normalizedAddress)) {
-    case 4:
-      return isUnsafeIpv4Address(normalizedAddress)
-        ? `resolved to blocked IPv4 address ${normalizedAddress}`
-        : undefined;
-    case 6:
-      return isUnsafeIpv6Address(normalizedAddress)
-        ? `resolved to blocked IPv6 address ${normalizedAddress}`
-        : undefined;
-    default:
-      return undefined;
+  const family = isIP(normalizedAddress);
+  if (family && blockedImageAddresses.check(normalizedAddress, family === 4 ? 'ipv4' : 'ipv6')) {
+    return `resolved to blocked IPv${family} address ${normalizedAddress}`;
   }
+  return undefined;
 }
 
 type ExternalImageTargetValidation =
@@ -792,81 +706,37 @@ async function validateExternalImageTarget(url: string): Promise<ExternalImageTa
   }
 }
 
-function getLookupFamily(family: number | string | undefined): number | undefined {
-  if (family === 'IPv4') {
-    return 4;
-  }
-  if (family === 'IPv6') {
-    return 6;
-  }
-  return typeof family === 'number' && family > 0 ? family : undefined;
-}
-
-type ExternalImageDownloadTarget = {
-  dispatcher: Dispatcher;
-  headers?: Record<string, string>;
-  url: string;
-};
-
-async function createPinnedExternalImageDownloadTarget(
+async function createPinnedExternalImageDispatcher(
   url: string,
   resolvedAddresses: LookupAddress[],
-): Promise<ExternalImageDownloadTarget> {
+): Promise<Dispatcher> {
   const tlsOptions = await getFetchTlsOptions();
   const proxyUrl = getProxyUrlForTarget(url);
-
-  if (proxyUrl) {
-    const parsedUrl = new URL(url);
-    const hostname = normalizeExternalImageHostname(parsedUrl.hostname);
-    const pinnedUrl = new URL(parsedUrl);
-    const [address] = resolvedAddresses;
-    pinnedUrl.hostname = address.family === 6 ? `[${address.address}]` : address.address;
-
-    const requestTls = {
-      ...tlsOptions,
-      ...(isIP(hostname) ? {} : { servername: hostname }),
-    };
-    return {
-      url: pinnedUrl.toString(),
-      headers: { Host: parsedUrl.host },
-      dispatcher: new ProxyAgent({
-        uri: proxyUrl,
-        proxyTls: tlsOptions,
-        requestTls,
-      }).compose(interceptors.decompress({ skipErrorResponses: false })),
-    };
-  }
-
-  return {
-    url,
-    dispatcher: new Agent({
-      connect: {
-        ...tlsOptions,
-        lookup: (_hostname, options, callback) => {
-          const family = getLookupFamily(options.family);
-          const matchingAddresses = family
-            ? resolvedAddresses.filter((address) => address.family === family)
-            : resolvedAddresses;
-
-          if (matchingAddresses.length === 0) {
+  const hostname = normalizeExternalImageHostname(new URL(url).hostname);
+  const requestTls = { ...tlsOptions, ...(isIP(hostname) ? {} : { servername: hostname }) };
+  const agent = proxyUrl
+    ? new ProxyAgent({ uri: proxyUrl, proxyTls: tlsOptions, requestTls })
+    : new Agent({ connect: requestTls });
+  const pinnedAgent = isIP(hostname)
+    ? agent
+    : agent.compose(
+        interceptors.dns({
+          // Pin the validated addresses while preserving the HTTP host and TLS server name.
+          lookup: (_origin, _options, callback) => {
             callback(
-              new Error('No validated external image addresses match the requested family'),
-              '',
+              null,
+              resolvedAddresses.map(({ address, family }) => ({
+                address,
+                family: family as 4 | 6,
+                ttl: 60_000,
+              })),
             );
-            return;
-          }
-
-          if (options.all) {
-            callback(null, matchingAddresses);
-            return;
-          }
-
-          const [address] = matchingAddresses;
-          callback(null, address.address, address.family);
-        },
-      },
-    }).compose(interceptors.decompress({ skipErrorResponses: false })),
-  };
+          },
+        }),
+      );
+  return pinnedAgent.compose(
+    interceptors.decompress({ skipErrorResponses: false, maxSize: BLOB_MAX_SIZE }),
+  );
 }
 
 function isSafeExternalImageMimeType(mimeType: string): boolean {
@@ -916,19 +786,10 @@ export function buildStructuredImageOutputs(
     .filter((item: ImageOutput | null): item is ImageOutput => item !== null);
 }
 
-async function storeExternalImageUrlAsBlob(
+async function downloadExternalImage(
   url: string,
   outputFormat?: string,
-  blobContext?: ImageBlobContext,
-  index?: number,
 ): Promise<ImageOutput | null> {
-  if (!isBlobStorageEnabled()) {
-    logger.warn('[OpenAI Image] Skipping external image URL because blob storage is disabled', {
-      url,
-    });
-    return null;
-  }
-
   try {
     const validatedTarget = await validateExternalImageTarget(url);
     if ('blockReason' in validatedTarget) {
@@ -939,22 +800,24 @@ async function storeExternalImageUrlAsBlob(
       return null;
     }
 
-    const controller = new AbortController();
-    const timeoutHandle = setTimeout(() => controller.abort(), getRequestTimeoutMs());
-    const downloadTarget = await createPinnedExternalImageDownloadTarget(
+    const dispatcher = await createPinnedExternalImageDispatcher(
       url,
       validatedTarget.resolvedAddresses,
     );
+    const controller = new AbortController();
+    const timeoutHandle = setTimeout(() => controller.abort(), getRequestTimeoutMs());
     let buffer: Buffer;
     let mimeType: string;
     try {
       const downloadOptions = {
         redirect: 'error',
         signal: controller.signal,
-        dispatcher: downloadTarget.dispatcher,
-        ...(downloadTarget.headers ? { headers: downloadTarget.headers } : {}),
+        dispatcher,
+        // Binary downloads must not be cloned for request logging or receive saved Cloud auth.
+        headers: { 'x-promptfoo-silent': 'true' },
+        skipCloudAuthInjection: true,
       } as const;
-      const response = await fetchWithProxy(downloadTarget.url, downloadOptions);
+      const response = await fetchWithProxy(url, downloadOptions);
       if (!response.ok) {
         logger.warn('[OpenAI Image] Failed to download external image URL', {
           url,
@@ -1027,21 +890,10 @@ async function storeExternalImageUrlAsBlob(
       buffer = Buffer.concat(chunks, totalBytes);
     } finally {
       clearTimeout(timeoutHandle);
-      await downloadTarget.dispatcher.close();
+      controller.abort();
+      await dispatcher.destroy();
     }
-    const completeBlobContext =
-      blobContext?.evaluationId && blobContext.testIdx != null && blobContext.promptIdx != null
-        ? {
-            evalId: blobContext.evaluationId,
-            testIdx: blobContext.testIdx,
-            promptIdx: blobContext.promptIdx,
-            location: index == null ? 'response.images' : `response.images[${index}]`,
-            kind: 'image',
-          }
-        : undefined;
-    const { ref } = await storeBlob(buffer, mimeType, completeBlobContext);
-
-    return { blobRef: ref, mimeType };
+    return { data: `data:${mimeType};base64,${buffer.toString('base64')}`, mimeType };
   } catch (error) {
     logger.warn('[OpenAI Image] Failed to internalize external image URL', {
       url,
@@ -1054,7 +906,6 @@ async function storeExternalImageUrlAsBlob(
 export async function buildSafeStructuredImageOutputs(
   data: any,
   outputFormat?: string,
-  blobContext?: ImageBlobContext,
   responseFormat?: string,
 ): Promise<ImageOutput[] | undefined> {
   if (!Array.isArray(data.data) || data.data.length === 0) {
@@ -1062,7 +913,7 @@ export async function buildSafeStructuredImageOutputs(
   }
 
   const images = await Promise.all(
-    data.data.map(async (item: any, index: number): Promise<ImageOutput | null> => {
+    data.data.map(async (item: any): Promise<ImageOutput | null> => {
       if (item.b64_json) {
         const mimeType = getMimeTypeForOutputFormat(outputFormat);
         return { data: `data:${mimeType};base64,${item.b64_json}`, mimeType };
@@ -1073,7 +924,7 @@ export async function buildSafeStructuredImageOutputs(
       }
 
       if (isExternalImageUrl(item.url)) {
-        return storeExternalImageUrlAsBlob(item.url, outputFormat, blobContext, index);
+        return downloadExternalImage(item.url, outputFormat);
       }
 
       const mimeType = inferMimeTypeFromUrl(item.url);
@@ -1113,22 +964,7 @@ export function formatStructuredImageOutput(
     return { error: `No image URL found in response: ${JSON.stringify(data)}` };
   }
 
-  // Avoid returning a live URL when the image could not be internalized safely.
-  return UNSAFE_EXTERNAL_IMAGE_URL_PLACEHOLDER;
-}
-
-export function shouldEvictCachedExternalImageResponse(
-  data: any,
-  output: string | { error: string },
-  cached: boolean,
-): output is string {
-  return (
-    cached &&
-    output === UNSAFE_EXTERNAL_IMAGE_URL_PLACEHOLDER &&
-    isBlobStorageEnabled() &&
-    Array.isArray(data.data) &&
-    data.data.some((item: any) => typeof item?.url === 'string' && isExternalImageUrl(item.url))
-  );
+  return { error: 'No usable image data: the external image could not be downloaded safely.' };
 }
 
 export function formatOutput(
@@ -1176,7 +1012,6 @@ export function prepareRequestBody(
   }
 
   if (isGptImageModel(model)) {
-    // Quality: low, medium, high, or auto
     if ('quality' in config && config.quality) {
       body.quality = config.quality;
     }
@@ -1214,6 +1049,11 @@ export function calculateImageCost(
   const imageQuality = quality || 'standard';
   const gptImageQuality =
     quality === 'medium' || quality === 'high' || quality === 'low' ? quality : 'low';
+
+  // GPT Image 2.5 shares token rates with GPT Image 2, but not per-image token usage.
+  if (isGptImage25(model)) {
+    return undefined;
+  }
 
   if (model === 'dall-e-3') {
     const costKey = `${imageQuality}_${size}`;
@@ -1278,15 +1118,39 @@ export async function callOpenAiImageApi(
   headers: Record<string, string>,
   timeout: number,
 ): Promise<FetchWithCacheResult<any>> {
-  return await fetchWithCache(
-    url,
-    {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    },
-    timeout,
+  let sendsToOpenAiApi = false;
+  let hasSensitiveUrl = false;
+  try {
+    const parsedUrl = new URL(url);
+    sendsToOpenAiApi = parsedUrl.hostname.toLowerCase() === 'api.openai.com';
+    hasSensitiveUrl =
+      sanitizeUrl(parsedUrl.toString()) !== parsedUrl.toString() ||
+      hasSensitiveOpenAiCachePath(decodeURIComponent(parsedUrl.pathname));
+  } catch {
+    hasSensitiveUrl = true;
+  }
+
+  const isSensitiveHeader = (key: string) =>
+    isSecretField(key) ||
+    /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password)/i.test(key);
+  const hasSensitiveHeader = Object.entries(headers).some(
+    ([key, value]) => value.trim().length > 0 && isSensitiveHeader(key),
   );
+  const hasSensitiveHeaderValue = Object.entries(headers).some(
+    ([key, value]) => !isSensitiveHeader(key) && hasSensitiveOpenAiCacheString(value),
+  );
+  const serializedBody = JSON.stringify(body);
+  const hasSensitiveBody = hasSensitiveOpenAiCacheString(serializedBody);
+  const bustCache =
+    hasSensitiveUrl ||
+    hasSensitiveHeaderValue ||
+    hasSensitiveBody ||
+    (!sendsToOpenAiApi && hasSensitiveHeader);
+  const request = { method: 'POST', headers, body: serializedBody };
+
+  return bustCache
+    ? await fetchWithCache(url, request, timeout, 'json', true)
+    : await fetchWithCache(url, request, timeout);
 }
 
 export async function processApiResponse(
@@ -1300,7 +1164,6 @@ export async function processApiResponse(
   quality?: string,
   n: number = 1,
   outputFormat?: string,
-  blobContext?: ImageBlobContext,
   billingConfig: OpenAiImageOptions = {},
   deleteFromCache?: () => Promise<void>,
 ): Promise<ProviderResponse> {
@@ -1314,12 +1177,7 @@ export async function processApiResponse(
   }
 
   try {
-    const images = await buildSafeStructuredImageOutputs(
-      data,
-      outputFormat,
-      blobContext,
-      responseFormat,
-    );
+    const images = await buildSafeStructuredImageOutputs(data, outputFormat, responseFormat);
     const formattedOutput = formatStructuredImageOutput(
       data,
       prompt,
@@ -1330,11 +1188,6 @@ export async function processApiResponse(
     if (typeof formattedOutput === 'object') {
       await evictFromCache?.();
       return formattedOutput;
-    }
-
-    if (shouldEvictCachedExternalImageResponse(data, formattedOutput, cached)) {
-      await evictFromCache?.();
-      return { error: UNUSABLE_CACHED_EXTERNAL_IMAGE_ERROR };
     }
 
     const exactUsageCost = calculateOpenAIUsageCost(model, billingConfig, data.usage, {
@@ -1387,6 +1240,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     };
 
     const model = config.model || this.modelName;
+    assertOpenAiApiModel(model, this.getApiUrl());
     const operation = ('operation' in config && config.operation) || 'generation';
     // GPT Image models always return b64_json, so we treat them as such regardless of config
     const responseFormat = isGptImageModel(model) ? 'b64_json' : config.response_format || 'url';
@@ -1410,8 +1264,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     const headers = {
       'Content-Type': 'application/json',
       ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-      ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-      ...config.headers,
+      ...this.getOpenAiRequestHeaders(config.headers),
     };
 
     let data, status, statusText;
@@ -1420,7 +1273,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     let deleteFromCache: (() => Promise<void>) | undefined;
     try {
       ({ data, cached, status, statusText, latencyMs, deleteFromCache } = await callOpenAiImageApi(
-        `${this.getApiUrl()}${endpoint}`,
+        appendOpenAiApiPath(this.getApiUrl(), endpoint),
         body,
         headers,
         getRequestTimeoutMs(),
@@ -1450,7 +1303,6 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       config.quality,
       config.n ?? 1,
       'output_format' in config ? config.output_format : undefined,
-      context,
       config,
       deleteFromCache,
     );

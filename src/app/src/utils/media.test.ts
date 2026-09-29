@@ -677,6 +677,20 @@ describe('resolveBlobUri security', () => {
     expect(resolveBlobUri('https://api.example.com.evil/api/blobs/abc123')).toBeUndefined();
   });
 
+  it('normalizes media paths before checking the API route', () => {
+    expect(resolveBlobUri('/api/media/images/./test.png')).toBe('/api/media/images/test.png');
+    expect(resolveBlobUri('/api/media/../users/me/avatar')).toBeUndefined();
+    expect(resolveBlobUri('storageRef:../users/me/avatar')).toBeUndefined();
+    expect(resolveBlobUri('promptfoo://blob/../users/me/avatar')).toBeUndefined();
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com/base'));
+    expect(
+      resolveBlobUri('https://api.example.com/base/api/media/../users/me/avatar'),
+    ).toBeUndefined();
+    expect(resolveBlobUri('storageRef:images/test.png')).toBe(
+      'https://api.example.com/base/api/media/images/test.png',
+    );
+  });
+
   it('should pass through data: URIs', () => {
     const dataUri = 'data:image/png;base64,iVBORw0KGgo=';
     expect(resolveBlobUri(dataUri)).toBe(dataUri);

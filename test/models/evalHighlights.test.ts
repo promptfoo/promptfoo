@@ -14,7 +14,7 @@ describe('Highlights Filter Feature', () => {
 
   beforeEach(async () => {
     // Clear all tables before each test
-    const db = getDb();
+    const db = await getDb();
     await db.run('DELETE FROM eval_results');
     await db.run('DELETE FROM evals_to_datasets');
     await db.run('DELETE FROM evals_to_prompts');
@@ -211,7 +211,7 @@ describe('Highlights Filter Feature', () => {
 
     it('should handle malformed grading results gracefully', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
-      const db = getDb();
+      const db = await getDb();
 
       // Insert a result with null grading_result
       await db.run(`
@@ -697,7 +697,7 @@ describe('Highlights Filter Feature', () => {
   describe('Edge cases and error handling', () => {
     it('should handle results with undefined comment field', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
-      const db = getDb();
+      const db = await getDb();
 
       // Insert result with grading_result but no comment field
       await db.run(`

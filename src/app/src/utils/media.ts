@@ -83,36 +83,35 @@ export function resolveBlobUri(uri?: string | null): string | undefined {
   if (!uri) {
     return undefined;
   }
-
-  if (uri.startsWith(BLOB_URI_PREFIX)) {
-    return withApiBase(`/api/blobs/${uri.slice(BLOB_URI_PREFIX.length)}`);
-  }
-
-  if (uri.startsWith(STORAGE_REF_PREFIX)) {
-    const path = normalizePath(uri.slice(STORAGE_REF_PREFIX.length));
-    return withApiBase(`/api/media/${path}`);
-  }
-
-  // Only allow safe internal paths, the configured API origin, and data URIs.
-  // External URLs (http://, https://, //) are NOT allowed to prevent untrusted
-  // eval content from causing browser requests.
-  // See SECURITY.md - test data and model outputs are untrusted inputs
-  if (uri.startsWith('/api/blobs/') || uri.startsWith('/api/media/') || uri.startsWith('data:')) {
+  if (uri.startsWith('data:')) {
     return uri;
   }
 
-  if (!uri.includes('/api/blobs/') && !uri.includes('/api/media/')) {
-    return undefined;
+  let source = uri;
+  if (uri.startsWith(BLOB_URI_PREFIX)) {
+    source = withApiBase(`/api/blobs/${uri.slice(BLOB_URI_PREFIX.length)}`);
+  } else if (uri.startsWith(STORAGE_REF_PREFIX)) {
+    source = withApiBase(`/api/media/${normalizePath(uri.slice(STORAGE_REF_PREFIX.length))}`);
   }
 
   const apiBase = getApiBaseUrl();
-  if (
-    apiBase &&
-    (uri.startsWith(`${apiBase}/api/blobs/`) || uri.startsWith(`${apiBase}/api/media/`))
-  ) {
-    return uri;
+  const prefix = source.startsWith('/api/') ? '' : apiBase;
+  if (!source.startsWith(`${prefix}/api/`)) {
+    return undefined;
   }
 
+  // Check the normalized path so a media reference cannot select another API route.
+  try {
+    const path = new URL(source.slice(prefix.length), 'https://media.invalid');
+    if (
+      path.origin === 'https://media.invalid' &&
+      (path.pathname.startsWith('/api/blobs/') || path.pathname.startsWith('/api/media/'))
+    ) {
+      return `${prefix}${path.pathname}${path.search}${path.hash}`;
+    }
+  } catch {
+    return undefined;
+  }
   return undefined;
 }
 
@@ -158,35 +157,25 @@ export function resolveAudioSource(
 export function resolveImageSource(
   image?: { data?: string; format?: string; blobRef?: BlobLike } | string | null,
 ): string | undefined {
-  const resolveInlineImageData = (data: string, format: string): string | undefined => {
-    const blobUrl = resolveBlobUri(data);
+  if (typeof image !== 'string') {
+    const blobUrl = resolveBlobRef(image?.blobRef);
     if (blobUrl) {
       return blobUrl;
     }
-    if (data.startsWith('data:')) {
-      return data;
-    }
-    // Match the string-path behavior so arbitrary URLs and short identifiers
-    // are not reinterpreted as inline image payloads.
-    if (data.length >= 60 && /^[A-Za-z0-9+/=_-]+$/.test(data)) {
-      return `data:image/${format};base64,${data}`;
-    }
-    return undefined;
-  };
-
-  if (typeof image === 'string') {
-    return resolveInlineImageData(image, 'png');
   }
 
-  const blobUrl = resolveBlobRef(image?.blobRef);
+  const data = typeof image === 'string' ? image : image?.data;
+  if (!data) {
+    return undefined;
+  }
+  const blobUrl = resolveBlobUri(data);
   if (blobUrl) {
     return blobUrl;
   }
-
-  if (image?.data) {
-    return resolveInlineImageData(image.data, image.format || 'png');
+  if (data.length >= 60 && /^[A-Za-z0-9+/=_-]+$/.test(data)) {
+    const format = typeof image === 'string' ? 'png' : image?.format || 'png';
+    return `data:image/${format};base64,${data}`;
   }
-
   return undefined;
 }
 

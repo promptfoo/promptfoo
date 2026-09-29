@@ -180,6 +180,84 @@ describe('prompt optimizer', () => {
     );
   });
 
+  it('keeps an earlier-round improvement when a later round fails to generate candidates', async () => {
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Optimized B'),
+    });
+    // Round 1 generation succeeds; round 2 generation fails (e.g. the prompt has
+    // converged and the suggestions provider returns an error / no new candidates).
+    vi.mocked(provider.callApi)
+      .mockResolvedValueOnce(optimizerResponse('Optimized B'))
+      .mockResolvedValueOnce({ error: 'simulated suggestions provider failure' });
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    const baselineEval = evalWith(
+      [completedPrompt('Prompt B', 'B', 0.5)],
+      [evalResult(0, false, 'Missed the required JSON format.')],
+    );
+    const round1Eval = evalWith(
+      [
+        completedPrompt('Prompt B', 'B', 0.5),
+        completedPrompt('Optimized B', 'B [optimized 1]', 0.9),
+      ],
+      [],
+    );
+
+    vi.mocked(evaluate).mockResolvedValueOnce(baselineEval).mockResolvedValueOnce(round1Eval);
+
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Prompt B', label: 'B' }],
+      tests: [{}],
+    };
+
+    const result = await optimizePromptTestSuite({}, testSuite);
+
+    // The round-1 improvement must survive the round-2 failure instead of the
+    // whole command throwing and discarding it.
+    expect(result.improved).toBe(true);
+    expect(result.bestPrompt.label).toBe('B [optimized 1]');
+    expect(result.rounds).toHaveLength(1);
+    // Round 2 generation was attempted (and failed) before stopping.
+    expect(provider.callApi).toHaveBeenCalledTimes(2);
+  });
+
+  it('surfaces a first-round candidate generation failure instead of reporting no improvement', async () => {
+    const provider = createMockProvider({ id: 'optimizer-provider' });
+    vi.mocked(provider.callApi).mockResolvedValueOnce({
+      error: 'simulated suggestions provider failure',
+    });
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    const baselineEval = evalWith([completedPrompt('Prompt B', 'B', 0.5)], []);
+    vi.mocked(evaluate).mockResolvedValueOnce(baselineEval);
+
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Prompt B', label: 'B' }],
+      tests: [{}],
+    };
+
+    await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
+      /Failed to generate optimized prompt candidates/,
+    );
+  });
+
   it('defaults to the first prompt and provider', async () => {
     const provider = createMockProvider({
       id: 'optimizer-provider',
@@ -754,21 +832,24 @@ describe('prompt optimizer', () => {
   it.each([
     ['alone', {}],
     ['with variables', { vars: { name: 'Alice' } }],
-  ])('rejects a defaultTest-only scoring function %s when it has no assertions', async (_, rest) => {
-    const testSuite: TestSuite = {
-      providers: [createMockProvider({ id: 'target-provider' })],
-      prompts: [{ raw: 'Seed', label: 'Seed' }],
-      defaultTest: {
-        ...rest,
-        assertScoringFunction: () => ({ pass: true, score: 1, reason: 'scored' }),
-      },
-    };
+  ])(
+    'rejects a defaultTest-only scoring function %s when it has no assertions',
+    async (_, rest) => {
+      const testSuite: TestSuite = {
+        providers: [createMockProvider({ id: 'target-provider' })],
+        prompts: [{ raw: 'Seed', label: 'Seed' }],
+        defaultTest: {
+          ...rest,
+          assertScoringFunction: () => ({ pass: true, score: 1, reason: 'scored' }),
+        },
+      };
 
-    await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
-      'Prompt optimization requires at least one configured test or scenario.',
-    );
-    expect(evaluate).not.toHaveBeenCalled();
-  });
+      await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
+        'Prompt optimization requires at least one configured test or scenario.',
+      );
+      expect(evaluate).not.toHaveBeenCalled();
+    },
+  );
 
   it('throws a clear error when prompt/provider filters scope every test away from the selected pair', async () => {
     const provider = createMockProvider({

@@ -1,8 +1,6 @@
 import { lookup } from 'node:dns/promises';
 
 import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
-import { isBlobStorageEnabled } from '../../src/blobs/extractor';
-import { storeBlob } from '../../src/blobs/index';
 import { NscaleImageProvider } from '../../src/providers/nscale/image';
 import { callOpenAiImageApi } from '../../src/providers/openai/image';
 import {
@@ -22,13 +20,6 @@ vi.mock('../../src/logger', () => ({
     error: vi.fn(),
   },
 }));
-vi.mock('../../src/blobs/extractor', () => ({
-  isBlobStorageEnabled: vi.fn(),
-}));
-vi.mock('../../src/blobs/index', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../src/blobs/index')>()),
-  storeBlob: vi.fn(),
-}));
 vi.mock('../../src/util/fetch/index', () => ({
   fetchWithProxy: vi.fn(),
   getFetchTlsOptions: vi.fn(),
@@ -45,12 +36,11 @@ vi.mock('../../src/providers/openai/image', async () => {
 const lookupMock = lookup as unknown as Mock;
 
 describe('NscaleImageProvider', () => {
-  const blobUri = (index: number) => `promptfoo://blob/${index.toString(16).padStart(32, '0')}`;
+  const imageData = `data:image/png;base64,${Buffer.alloc(1024).toString('base64')}`;
 
   beforeEach(() => {
     vi.resetAllMocks();
     lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
-    vi.mocked(isBlobStorageEnabled).mockReturnValue(true);
     vi.mocked(getFetchTlsOptions).mockResolvedValue({});
     vi.mocked(getProxyUrlForTarget).mockReturnValue('');
     vi.mocked(callOpenAiImageApi).mockResolvedValue({
@@ -68,28 +58,14 @@ describe('NscaleImageProvider', () => {
       headers: new Headers({ 'content-type': 'image/png' }),
       arrayBuffer: async () => new ArrayBuffer(1024),
     } as Response);
-    let blobIndex = 0;
-    vi.mocked(storeBlob).mockImplementation(async (_buffer, mimeType) => {
-      blobIndex += 1;
-      return {
-        ref: {
-          uri: blobUri(blobIndex),
-          hash: blobIndex.toString(16).padStart(32, '0'),
-          mimeType,
-          sizeBytes: 1024,
-          provider: 'filesystem',
-        },
-        deduplicated: false,
-      };
-    });
   });
 
   afterEach(() => {
     vi.resetAllMocks();
   });
 
-  it('internalizes provider image URLs into blob-backed outputs', async () => {
-    const provider = new NscaleImageProvider('BlackForestLabs/FLUX.1-schnell', {
+  it('downloads provider images for the existing blob storage pipeline', async () => {
+    const provider = new NscaleImageProvider('black-forest-labs/FLUX.1-schnell', {
       config: { apiKey: 'test-key', response_format: 'url' },
     });
 
@@ -98,7 +74,7 @@ describe('NscaleImageProvider', () => {
     expect(callOpenAiImageApi).toHaveBeenCalledWith(
       'https://inference.api.nscale.com/v1/images/generations',
       {
-        model: 'BlackForestLabs/FLUX.1-schnell',
+        model: 'black-forest-labs/FLUX.1-schnell',
         prompt: 'Generate a cat',
         n: 1,
         response_format: 'url',
@@ -110,8 +86,8 @@ describe('NscaleImageProvider', () => {
       expect.any(Number),
     );
     expect(result).toMatchObject({
-      output: `![Generate a cat](${blobUri(1)})`,
-      images: [{ blobRef: expect.objectContaining({ uri: blobUri(1) }), mimeType: 'image/png' }],
+      output: `![Generate a cat](${imageData})`,
+      images: [{ data: imageData, mimeType: 'image/png' }],
       cached: false,
       cost: 0.0013,
     });
@@ -127,16 +103,14 @@ describe('NscaleImageProvider', () => {
       statusText: 'OK',
     });
 
-    const provider = new NscaleImageProvider('BlackForestLabs/FLUX.1-schnell', {
+    const provider = new NscaleImageProvider('black-forest-labs/FLUX.1-schnell', {
       config: { apiKey: 'test-key', response_format: 'url' },
     });
 
     const result = await provider.callApi('test prompt');
 
     expect(result).toMatchObject({
-      output: '[external image URL omitted for security]',
-      cached: false,
-      cost: 0.0013,
+      error: expect.stringContaining('No usable image data'),
     });
     expect(result.images).toBeUndefined();
     expect(fetchWithProxy).not.toHaveBeenCalled();
@@ -154,7 +128,7 @@ describe('NscaleImageProvider', () => {
       deleteFromCache,
     });
 
-    const provider = new NscaleImageProvider('BlackForestLabs/FLUX.1-schnell', {
+    const provider = new NscaleImageProvider('black-forest-labs/FLUX.1-schnell', {
       config: { apiKey: 'test-key', response_format: 'b64_json' },
     });
 
@@ -183,13 +157,13 @@ describe('NscaleImageProvider', () => {
       headers: new Headers(),
     } as Response);
 
-    const provider = new NscaleImageProvider('BlackForestLabs/FLUX.1-schnell', {
+    const provider = new NscaleImageProvider('black-forest-labs/FLUX.1-schnell', {
       config: { apiKey: 'test-key', response_format: 'url' },
     });
 
     const result = await provider.callApi('test prompt');
 
-    expect(result.error).toContain('cached response was evicted');
+    expect(result.error).toContain('No usable image data');
     expect(deleteFromCache).toHaveBeenCalledWith();
   });
 });

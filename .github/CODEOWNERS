@@ -6,9 +6,6 @@
 # - Team ownership provides coverage and knowledge sharing
 # - Individual ownership for specialized domains with clear expertise
 #
-# Generated from git history analysis (scripts/analyze-ownership.ts)
-# Last updated: 2026-01
-
 # ============================================================================
 # DEFAULT
 # ============================================================================
@@ -18,12 +15,12 @@
 # TOP-LEVEL DIRECTORIES
 # ============================================================================
 
-/docs/           @alandelong-oai @mldangelo-oai        # Internal agent docs
+/docs/           @alandelong-oai @mldangelo-oai        # Repository documentation
 /examples/       @mldangelo-oai @ianw-oai              # Example configurations
 /helm/           @mldangelo-oai                        # Kubernetes Helm charts
 
 # ============================================================================
-# SOURCE - SHARED OWNERSHIP (multiple contributors >15%)
+# SOURCE - SHARED OWNERSHIP
 # ============================================================================
 
 /src/app/        @mldangelo-oai @wholley-oai @faizan-oai       # Web UI
@@ -47,7 +44,7 @@
 /src/tracing/      @mldangelo-oai                          # Tracing & telemetry
 
 # ============================================================================
-# SOURCE - SPECIALIZED OWNERSHIP (clear primary owner)
+# SOURCE - SPECIALIZED OWNERSHIP
 # ============================================================================
 
 /src/codeScan/      @daneschneider-oai                         # Code scanning
@@ -64,7 +61,7 @@
 /src/providers/http.ts     @zcrab-oai @faizan-oai          # HTTP provider
 
 # ============================================================================
-# TESTS (mirror source ownership)
+# TESTS
 # ============================================================================
 
 /test/                  @mldangelo-oai                     # Test suite base
@@ -91,7 +88,7 @@
 # DEVELOPER PRODUCTIVITY
 # ============================================================================
 
-/.github/                      @mldangelo-oai           # CI/CD workflows
+/.github/                      @mldangelo-oai           # GitHub project config
 /scripts/                      @mldangelo-oai           # Build & dev scripts
 /biome.json                    @mldangelo-oai           # Linting config
 /tsconfig.json                 @mldangelo-oai           # TypeScript config
@@ -110,7 +107,7 @@
 /drizzle/ @mldangelo-oai @wholley-oai @faizan-oai         # Database migrations
 
 # ============================================================================
-# MODEL AUDIT (specialized domain - overrides broader patterns)
+# MODEL AUDIT (overrides broader patterns)
 # ============================================================================
 
 /src/commands/modelScan.ts              @ychhabria         # Model scan CLI command
