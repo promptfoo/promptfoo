@@ -129,15 +129,20 @@ const LLM_ASSERTION_TYPES = new Set<AssertionType>([
 
 const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
   const [asserts, setAsserts] = useState<Assertion[]>(initialValues || []);
+  const [rawValues, setRawValues] = useState<(string | undefined)[]>(
+    () => initialValues?.map(() => undefined) ?? [],
+  );
 
   const handleAdd = () => {
     const newAsserts = [...asserts, { type: 'equals' as AssertionType, value: '' }];
     setAsserts(newAsserts);
+    setRawValues((values) => [...values, undefined]);
     onAdd(newAsserts);
   };
 
   const handleRemoveAssert = (indexToRemove: number) => {
     const newAsserts = asserts.filter((_, index) => index !== indexToRemove);
+    setRawValues((values) => values.filter((_, index) => index !== indexToRemove));
     setAsserts(newAsserts);
     onAdd(newAsserts);
   };
@@ -213,16 +218,21 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                           : 'Enter expected value or criteria...'
                     }
                     value={
-                      typeof assert.value === 'string'
+                      rawValues[index] ??
+                      (typeof assert.value === 'string'
                         ? assert.value
                         : typeof assert.value === 'number'
                           ? String(assert.value)
                           : assert.value !== undefined && usesStructuredValue(assert.type)
                             ? JSON.stringify(assert.value, null, 2)
-                            : ''
+                            : '')
                     }
                     onChange={(e) => {
-                      let newValue: Assertion['value'] = e.target.value;
+                      const rawValue = e.target.value;
+                      setRawValues((values) =>
+                        values.map((value, i) => (i === index ? rawValue : value)),
+                      );
+                      let newValue: Assertion['value'] = rawValue;
                       if (usesStructuredValue(assert.type)) {
                         try {
                           const parsed: unknown = JSON.parse(e.target.value);

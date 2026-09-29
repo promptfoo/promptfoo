@@ -63,6 +63,32 @@ describeEvaluator('evaluator token usage', () => {
     },
   );
 
+  it.each([1, 2])(
+    'does not invent token usage for precomputed output at concurrency %i',
+    async (maxConcurrency) => {
+      const provider = { id: () => 'unused-fixture', callApi: vi.fn() };
+      const suite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('Ordinary fixture')],
+        tests: [
+          {
+            providerOutput: 'Saved ordinary response',
+            assert: [{ type: 'tokens-used', value: { max: 0 } }],
+          },
+        ],
+      };
+      const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, evalRecord, { maxConcurrency });
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(provider.callApi).not.toHaveBeenCalled();
+      expect(summary.results[0]).toMatchObject({
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
+      });
+      expect(summary.results[0].error).toContain('tokens-used requires');
+    },
+  );
+
   it('does not count deterministic assertions as grading-provider requests', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

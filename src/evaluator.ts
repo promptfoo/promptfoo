@@ -1803,7 +1803,9 @@ async function runEvalInternal({
             rateLimitRegistry,
             renderedPrompt: rendered.renderedPrompt,
             response,
-            reportedTokenUsage: providerCall.response.tokenUsage ?? null,
+            reportedTokenUsage: test.providerOutput
+              ? null
+              : (providerCall.response.tokenUsage ?? null),
             ret,
             test,
             testIdx: testIndex,

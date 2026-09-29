@@ -48,6 +48,21 @@ describe('AssertsForm', () => {
     expect(value).toHaveValue('{');
   });
 
+  it('preserves the caret and raw JSON while editing a structured value', async () => {
+    const user = userEvent.setup();
+    renderComponent(
+      <AssertsForm onAdd={onAdd} initialValues={[{ type: 'tokens-used', value: { max: 100 } }]} />,
+    );
+    const input = screen.getByRole('textbox', { name: 'Value' }) as HTMLTextAreaElement;
+    await user.click(input);
+    const digits = input.value.indexOf('100');
+    input.setSelectionRange(digits, digits + 3);
+    await user.keyboard('250');
+    expect(input.value).toBe('{\n  "max": 250\n}');
+    expect(input.selectionStart).toBe(digits + 3);
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'tokens-used', value: { max: 250 } }]);
+  });
+
   it('should render all assertions from initialValues as rows with the correct type and value fields populated', () => {
     initialValues = [
       { type: 'equals', value: 'expected output' },
