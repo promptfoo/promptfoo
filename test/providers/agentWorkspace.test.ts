@@ -9,6 +9,7 @@ import cliState from '../../src/cliState';
 import {
   type AgentWorkspace,
   assertIsolatedWorkingDir,
+  clearRepositoryEnv,
   createAgentWorkspace,
   createAgentWorkspaceForConfig,
   getCopyWorkingDirMode,
@@ -72,6 +73,32 @@ describe('getCopyWorkingDirMode', () => {
   });
 });
 
+describe('clearRepositoryEnv', () => {
+  it.each(['win32', 'linux'])(
+    'matches repository selectors using %s environment rules',
+    (platform) => {
+      const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+      Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+      try {
+        const env = {
+          GIT_DIR: 'repository',
+          git_work_tree: 'source',
+          Git_Index_File: 'index',
+          GIT_SSH_COMMAND: 'ssh',
+        };
+        clearRepositoryEnv(env);
+        expect(env).toEqual(
+          platform === 'win32'
+            ? { GIT_SSH_COMMAND: 'ssh' }
+            : { git_work_tree: 'source', Git_Index_File: 'index', GIT_SSH_COMMAND: 'ssh' },
+        );
+      } finally {
+        Object.defineProperty(process, 'platform', originalPlatform);
+      }
+    },
+  );
+});
+
 describe('agent workspaces', () => {
   let root: string;
   let workspaces: AgentWorkspace[];
@@ -96,6 +123,61 @@ describe('agent workspaces', () => {
   });
 
   describe('git repositories', () => {
+    it('cancels a Git command blocked on a source index without falling back to copying', async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const index = path.join(source, '.git', 'index');
+      fs.unlinkSync(index);
+      execFileSync('mkfifo', [index]);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 100);
+      try {
+        await expect(create(source, 'auto', controller.signal)).rejects.toMatchObject({
+          name: 'AbortError',
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+    });
+
+    it('propagates cancellation when computing metadata', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const controller = new AbortController();
+      const workspace = await create(source, 'git', controller.signal);
+      controller.abort();
+
+      await expect(workspace.metadata()).rejects.toMatchObject({ name: 'AbortError' });
+    });
+
+    it('does not let an agent-controlled FIFO index block metadata or cleanup', async () => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const workspace = await create(source);
+      const index = path.join(workspace.dir, '.git', 'index');
+      fs.unlinkSync(index);
+      execFileSync('mkfifo', [index]);
+
+      expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+      await workspace.remove();
+      expect(fs.existsSync(workspace.dir)).toBe(false);
+    });
+
+    it('rejects an oversized agent-controlled index before reading it', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      const workspace = await create(source);
+      fs.truncateSync(path.join(workspace.dir, '.git', 'index'), 64 * 1024 * 1024 + 1);
+
+      expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+    });
+
     it.each([
       ['sha256', 'sha1'],
       ['sha1', 'sha256'],
@@ -195,6 +277,32 @@ describe('agent workspaces', () => {
       } finally {
         restoreEnv();
       }
+    });
+
+    it('copies materialized CRLF files in automatic mode', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source);
+      git(source, 'config', 'core.autocrlf', 'true');
+      fs.unlinkSync(path.join(source, 'README.md'));
+      git(source, 'checkout-index', '--force', '--index', '--all');
+      expect(git(source, 'status', '--porcelain')).toBe('');
+
+      const workspace = await create(source);
+
+      expect(workspace.strategy).toBe('copy');
+      expect(fs.readFileSync(path.join(workspace.dir, 'README.md'), 'utf8')).toBe('original\r\n');
+      expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+    });
+
+    it('copies LF files that attributes would convert to CRLF during checkout', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source, { '.gitattributes': '*.txt text eol=crlf\n' });
+      expect(git(source, 'status', '--porcelain')).toBe('');
+
+      const workspace = await create(source);
+
+      expect(workspace.strategy).toBe('copy');
+      expect(fs.readFileSync(path.join(workspace.dir, 'src', 'app.txt'), 'utf8')).toBe('app\n');
     });
 
     it.each(['local-fixture.txt', 'node_modules/pkg/index.js'])(
@@ -639,6 +747,20 @@ describe('agent workspaces', () => {
       await expect(create(source)).rejects.toThrow('core.worktree');
       expect(fs.readFileSync(path.join(source, 'README.md'), 'utf8')).toBe('uncommitted\n');
     });
+
+    it.each(['auto', 'copy'] as const)(
+      'rejects tilde-expanded core.worktree in %s mode',
+      async (mode) => {
+        const source = path.join(root, 'repo');
+        makeRepository(source);
+        const relativeToHome = path.relative(os.homedir(), source).split(path.sep).join('/');
+        git(source, 'config', 'core.worktree', `~/${relativeToHome}`);
+        write(path.join(source, 'README.md'), 'uncommitted\n');
+
+        await expect(create(source, mode)).rejects.toThrow('core.worktree');
+        expect(fs.readFileSync(path.join(source, 'README.md'), 'utf8')).toBe('uncommitted\n');
+      },
+    );
 
     it('keeps a relative git working tree inside the copy', async () => {
       const source = path.join(root, 'repo');

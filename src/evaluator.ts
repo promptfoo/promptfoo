@@ -1676,6 +1676,7 @@ async function runEvalInternal({
       workspace = await createAgentWorkspaceForConfig(
         { ...activeProvider.config, ...rendered.setup.prompt.config },
         state.vars,
+        abortSignal,
       );
     }
     const stepWorkspace = workspace;

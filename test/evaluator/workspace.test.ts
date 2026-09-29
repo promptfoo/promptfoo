@@ -6,8 +6,10 @@ import os from 'os';
 import path from 'path';
 
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { evaluate } from '../../src/evaluator';
+import { evaluate, runEval } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
+import { isAgentWorkspace } from '../../src/providers/agentWorkspace';
+import { mockProcessEnv } from '../util/utils';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -92,6 +94,75 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
       );
     },
   );
+
+  it('keeps the workspace until concurrent grading stops after an assertion fails', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY: '2',
+      PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES: 'true',
+    });
+    let signalStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      signalStarted = resolve;
+    });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const grader: ApiProvider = {
+      id: () => 'openai:codex-sdk',
+      callApi: vi.fn<ApiProvider['callApi']>(async (_prompt, context) => {
+        const dir = context?.prompt.config?.working_dir as string;
+        expect(dir).toBe(workspaces[0]);
+        signalStarted();
+        await held;
+        existedDuringGrading.push(fs.existsSync(path.join(dir, 'run.txt')));
+        return { output: JSON.stringify({ pass: true, score: 1, reason: 'checked' }) };
+      }),
+    };
+    let settled = false;
+    const result = runEval({
+      provider: createTarget({ working_dir: fixture, copy_working_dir: 'copy' }),
+      prompt: toPrompt('Change the fixture'),
+      test: {
+        vars: {},
+        assert: [
+          {
+            type: 'javascript',
+            value: async () => {
+              await started;
+              return { pass: false, score: 0, reason: 'first failure' };
+            },
+          },
+          { type: 'agent-rubric', value: 'The workspace was changed', provider: grader },
+        ],
+      },
+      testIdx: 0,
+      promptIdx: 0,
+      delay: 0,
+      repeatIndex: 0,
+      isRedteam: false,
+      evaluateOptions: {},
+    }).then((rows) => {
+      settled = true;
+      return rows;
+    });
+
+    try {
+      await started;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(settled).toBe(false);
+      expect(fs.existsSync(workspaces[0])).toBe(true);
+      expect(isAgentWorkspace(workspaces[0])).toBe(true);
+    } finally {
+      release();
+      await result;
+      restoreEnv();
+    }
+
+    expect(existedDuringGrading).toEqual([true]);
+    expect(fs.existsSync(workspaces[0])).toBe(false);
+    expect((await result)[0].error).toContain('first failure');
+  });
 
   it('merges copy_working_dir from the prompt config', async () => {
     const target = createTarget({ working_dir: fixture });

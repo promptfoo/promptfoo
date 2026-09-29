@@ -307,7 +307,7 @@ providers:
 | `'git'`  | A clone of the current commit. `working_dir` must be the root of a repository whose files all match that commit. Ignored files, such as `node_modules`, are left out.       |
 | `'copy'` | A copy of the directory.                                                                                                                                                    |
 
-A clone is fast and doesn't write to your repository. It has no remote, so a push from the agent has nowhere to go. Repositories with tracked Git filter attributes, such as Git LFS, use a copy with `true` and are rejected by `'git'` mode.
+A clone is fast and doesn't write to your repository. It has no remote, so a push from the agent has nowhere to go. Automatic mode copies files whose materialized line endings would change during cloning. Repositories with tracked Git filter attributes, such as Git LFS, use a copy with `true` and are rejected by `'git'` mode.
 
 Assertions can read two fields from the response metadata:
 

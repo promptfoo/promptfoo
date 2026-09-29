@@ -10,7 +10,7 @@
  * A workspace keeps one call from affecting another; it is not a security sandbox.
  */
 import { execFile } from 'node:child_process';
-import { lstatSync, realpathSync, rmSync } from 'node:fs';
+import { constants, lstatSync, realpathSync, rmSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -44,6 +44,8 @@ interface RepositoryState {
 }
 
 const MAX_DIFF_LENGTH = 100_000;
+const MAX_GIT_BUFFER = 64 * 1024 * 1024;
+const GIT_TIMEOUT_MS = 30_000;
 // Git variables that point a git command at a particular repository, set for example when
 // promptfoo runs from a git hook. They are cleared so every command uses the repository
 // chosen here (the list `git rev-parse --local-env-vars` prints, plus GIT_ATTR_SOURCE).
@@ -72,8 +74,11 @@ let exitCleanupRegistered = false;
 
 /** Clear Git repository selectors from a per-call subprocess environment. */
 export function clearRepositoryEnv(env: NodeJS.ProcessEnv): void {
-  for (const name of REPOSITORY_ENV_VARS) {
-    delete env[name];
+  for (const name of Object.keys(env)) {
+    const canonicalName = process.platform === 'win32' ? name.toUpperCase() : name;
+    if (REPOSITORY_ENV_VARS.includes(canonicalName)) {
+      delete env[name];
+    }
   }
 }
 
@@ -134,15 +139,26 @@ export function assertIsolatedWorkingDir(config: {
 
 async function git(
   args: string[],
-  { cwd, env, input }: { cwd?: string; env?: Record<string, string>; input?: string } = {},
+  {
+    cwd,
+    env,
+    input,
+    signal,
+  }: { cwd?: string; env?: Record<string, string>; input?: string; signal?: AbortSignal } = {},
 ): Promise<string> {
+  signal?.throwIfAborted();
   const baseEnv = { ...process.env };
   clearRepositoryEnv(baseEnv);
   const command = execFileAsync('git', cwd ? ['-C', cwd, ...args] : args, {
     env: { ...baseEnv, ...env },
-    maxBuffer: 64 * 1024 * 1024,
+    maxBuffer: MAX_GIT_BUFFER,
+    timeout: GIT_TIMEOUT_MS,
+    killSignal: 'SIGKILL',
+    signal,
   });
   if (input !== undefined) {
+    // Cancellation can close the pipe while input is still being written.
+    command.child.stdin?.on('error', () => {});
     command.child.stdin?.end(input);
   }
   const { stdout } = await command;
@@ -159,6 +175,7 @@ class UnsupportedGitFilterError extends Error {}
 async function getCloneableRepository(
   source: string,
   allowIgnored: boolean,
+  signal?: AbortSignal,
 ): Promise<RepositoryState | undefined> {
   try {
     const [topLevel, objectsDir, objectFormat, head] = (
@@ -172,7 +189,7 @@ async function getCloneableRepository(
           '--show-object-format',
           'HEAD',
         ],
-        { cwd: source },
+        { cwd: source, signal },
       )
     )
       .trim()
@@ -180,10 +197,11 @@ async function getCloneableRepository(
     if ((await fs.realpath(topLevel)) !== source) {
       return undefined;
     }
-    const trackedPaths = await git(['ls-files', '-z'], { cwd: source });
+    const trackedPaths = await git(['ls-files', '-z'], { cwd: source, signal });
     const attributes = await git(['check-attr', '-z', '--stdin', 'filter'], {
       cwd: source,
       input: trackedPaths,
+      signal,
     });
     if (
       attributes
@@ -194,6 +212,24 @@ async function getCloneableRepository(
         "copy_working_dir: 'git' does not support tracked Git filter attributes; use 'copy' or true to preserve materialized files.",
       );
     }
+    if (!allowIgnored) {
+      const endings = await git(['ls-files', '--eol', '-z'], { cwd: source, signal });
+      if (
+        endings.split('\0').some((entry) => {
+          const match = /^i\/(\S+)\s+w\/(\S+)\s+attr\/(.*?)\t/.exec(entry);
+          if (!match) {
+            return false;
+          }
+          const [, index, working, attributes] = match;
+          return (
+            index !== working ||
+            (attributes.includes('eol=crlf') && (working === 'lf' || working === 'mixed'))
+          );
+        })
+      ) {
+        return undefined;
+      }
+    }
     // --no-optional-locks: a plain status refreshes, and so rewrites, the source's index.
     const status = await git(
       [
@@ -203,7 +239,7 @@ async function getCloneableRepository(
         '--untracked-files=all',
         ...(allowIgnored ? [] : ['--ignored']),
       ],
-      { cwd: source },
+      { cwd: source, signal },
     );
     if (status.trim()) {
       return undefined;
@@ -211,9 +247,13 @@ async function getCloneableRepository(
     // Status does not report files marked assume-unchanged or skip-worktree (which includes
     // a sparse checkout), so they can differ from the commit. `ls-files -v` tags them with a
     // lowercase letter or S.
-    const files = await git(['--no-optional-locks', 'ls-files', '-v'], { cwd: source });
+    const files = await git(['--no-optional-locks', 'ls-files', '-v'], { cwd: source, signal });
     return /^[a-zS]/m.test(files) ? undefined : { head, objectsDir, objectFormat };
   } catch (error) {
+    signal?.throwIfAborted();
+    if (error instanceof Error && 'killed' in error && error.killed) {
+      throw error;
+    }
     if (allowIgnored && error instanceof UnsupportedGitFilterError) {
       throw error;
     }
@@ -230,7 +270,8 @@ function isInside(root: string, target: string): boolean {
   );
 }
 
-async function assertCopyable(entry: string, root: string): Promise<boolean> {
+async function assertCopyable(entry: string, root: string, signal?: AbortSignal): Promise<boolean> {
+  signal?.throwIfAborted();
   const stat = await fs.lstat(entry);
   if (stat.isSymbolicLink()) {
     if (path.basename(entry) === '.git') {
@@ -248,16 +289,20 @@ async function assertCopyable(entry: string, root: string): Promise<boolean> {
     }
   } else if (stat.isDirectory() && path.basename(entry) === '.git') {
     const worktree = (
-      await git([
-        '--git-dir',
-        entry,
-        'config',
-        '--includes',
-        '--default',
-        '',
-        '--get',
-        'core.worktree',
-      ])
+      await git(
+        [
+          '--git-dir',
+          entry,
+          'config',
+          '--includes',
+          '--path',
+          '--default',
+          '',
+          '--get',
+          'core.worktree',
+        ],
+        { signal },
+      )
     ).trim();
     if (worktree && (path.isAbsolute(worktree) || !isInside(root, path.resolve(entry, worktree)))) {
       throw new Error(
@@ -303,19 +348,67 @@ function registerExitCleanup(): void {
   });
 }
 
+async function copyWorkspaceIndex(
+  dir: string,
+  destination: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  signal?.throwIfAborted();
+  const indexPath = path.join(dir, '.git', 'index');
+  // A nonblocking open prevents a replacement FIFO from hanging between checking and reading.
+  const flags =
+    constants.O_RDONLY |
+    (process.platform === 'win32' ? 0 : constants.O_NONBLOCK | constants.O_NOFOLLOW);
+  if (
+    process.platform === 'win32' &&
+    (await fs.lstat(indexPath).catch(() => undefined))?.isSymbolicLink()
+  ) {
+    throw new Error('workspace Git index must not be a symbolic link');
+  }
+  const index = await fs.open(indexPath, flags).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') {
+      return undefined;
+    }
+    throw error;
+  });
+  if (!index) {
+    return false;
+  }
+  try {
+    const stat = await index.stat();
+    if (!stat.isFile() || stat.size > MAX_GIT_BUFFER) {
+      throw new Error(
+        `workspace Git index must be a regular file of at most ${MAX_GIT_BUFFER} bytes`,
+      );
+    }
+    const contents = Buffer.alloc(stat.size);
+    let offset = 0;
+    while (offset < contents.length) {
+      signal?.throwIfAborted();
+      const { bytesRead } = await index.read(contents, offset, contents.length - offset, offset);
+      if (bytesRead === 0) {
+        break;
+      }
+      offset += bytesRead;
+    }
+    await fs.writeFile(destination, contents.subarray(0, offset));
+    return true;
+  } finally {
+    await index.close();
+  }
+}
+
 /**
- * The agent's changes as a unified diff against the cloned commit, including changes it
- * committed. Everything in and around the workspace may have been written by the agent (a
- * sandboxed agent can often write to the whole temp directory), so none of it is trusted:
- *
- * - Git runs in a scratch repository created now, at an unpredictable path, never with the
- *   workspace's `.git`, whose config could define commands for git to run.
- * - The scratch repository reads the cloned commit from the source repository's objects,
- *   which git never writes to, so nothing is written to the source repository.
- * - User/system Git config and templates are disabled so attributes cannot invoke a
- *   configured filter on agent-controlled files. Attributes come from the cloned commit.
+ * Diff against the cloned commit using a scratch repository. The agent's Git configuration
+ * is never loaded, and its index is copied through a checked file handle before Git reads it.
+ * User/system filters are disabled and attributes come from the cloned commit.
  */
-async function getWorkspaceDiff(dir: string, repo: RepositoryState): Promise<string> {
+async function getWorkspaceDiff(
+  dir: string,
+  repo: RepositoryState,
+  signal?: AbortSignal,
+): Promise<string> {
+  signal?.throwIfAborted();
   if (!isAgentWorkspace(dir)) {
     // Otherwise the diff would copy whatever the link points to into the results.
     throw new Error('the workspace directory was replaced by a link');
@@ -330,6 +423,7 @@ async function getWorkspaceDiff(dir: string, repo: RepositoryState): Promise<str
     };
     await git(['init', '--quiet', '--bare', `--object-format=${repo.objectFormat}`, gitDir], {
       env: isolatedConfig,
+      signal,
     });
     await fs.writeFile(path.join(gitDir, 'objects', 'info', 'alternates'), `${repo.objectsDir}\n`);
     const env = {
@@ -338,14 +432,15 @@ async function getWorkspaceDiff(dir: string, repo: RepositoryState): Promise<str
       GIT_WORK_TREE: dir,
       GIT_ATTR_SOURCE: repo.head,
     };
-    await git(['read-tree', repo.head], { env });
+    await git(['read-tree', repo.head], { env, signal });
     // Include ignored files the agent explicitly added, without loading its Git configuration.
-    const ignoredTracked = await git(
-      ['ls-files', '-z', '--cached', '--ignored', '--exclude-standard'],
-      {
-        env: { ...env, GIT_INDEX_FILE: path.join(dir, '.git', 'index') },
-      },
-    );
+    const workspaceIndex = path.join(scratch, 'workspace-index');
+    const ignoredTracked = (await copyWorkspaceIndex(dir, workspaceIndex, signal))
+      ? await git(['ls-files', '-z', '--cached', '--ignored', '--exclude-standard'], {
+          env: { ...env, GIT_INDEX_FILE: workspaceIndex },
+          signal,
+        })
+      : '';
     const existingIgnored: string[] = [];
     for (const file of ignoredTracked.split('\0').filter(Boolean)) {
       const fullPath = path.resolve(dir, file);
@@ -359,10 +454,11 @@ async function getWorkspaceDiff(dir: string, repo: RepositoryState): Promise<str
         {
           env,
           input: `${existingIgnored.join('\0')}\0`,
+          signal,
         },
       );
     }
-    await git(['-c', 'core.fsmonitor=false', 'add', '--all'], { env });
+    await git(['-c', 'core.fsmonitor=false', 'add', '--all'], { env, signal });
     const diff = await git(
       [
         '-c',
@@ -374,7 +470,7 @@ async function getWorkspaceDiff(dir: string, repo: RepositoryState): Promise<str
         '--no-textconv',
         repo.head,
       ],
-      { env },
+      { env, signal },
     );
     return diff.length > MAX_DIFF_LENGTH
       ? `${diff.slice(0, MAX_DIFF_LENGTH)}\n[diff truncated after ${MAX_DIFF_LENGTH} characters]`
@@ -388,7 +484,9 @@ async function getWorkspaceDiff(dir: string, repo: RepositoryState): Promise<str
 export async function createAgentWorkspace(
   source: string,
   mode: AgentWorkspaceMode = 'auto',
+  signal?: AbortSignal,
 ): Promise<AgentWorkspace> {
+  signal?.throwIfAborted();
   const realSource = await fs.realpath(source).catch(() => {
     throw new Error(`copy_working_dir: working_dir does not exist: ${source}`);
   });
@@ -397,7 +495,7 @@ export async function createAgentWorkspace(
   }
   // `auto` clones only when the clone would contain exactly the files in working_dir.
   const repo =
-    mode === 'copy' ? undefined : await getCloneableRepository(realSource, mode === 'git');
+    mode === 'copy' ? undefined : await getCloneableRepository(realSource, mode === 'git', signal);
   if (mode === 'git' && !repo) {
     throw new Error(
       "copy_working_dir: 'git' requires working_dir to be the root of a git repository whose " +
@@ -423,7 +521,7 @@ export async function createAgentWorkspace(
 
   try {
     if (repo) {
-      await git(['clone', '--quiet', '--shared', '--no-checkout', realSource, dir]);
+      await git(['clone', '--quiet', '--shared', '--no-checkout', realSource, dir], { signal });
       await git(
         [
           '-c',
@@ -435,15 +533,15 @@ export async function createAgentWorkspace(
           '--detach',
           repo.head,
         ],
-        { cwd: dir },
+        { cwd: dir, signal },
       );
       // Without a remote, a push from the agent cannot reach the source repository.
-      await git(['remote', 'remove', 'origin'], { cwd: dir });
+      await git(['remote', 'remove', 'origin'], { cwd: dir, signal });
       // Check links after checkout: ignored targets may exist only in the source repository.
-      const trackedFiles = await git(['ls-files', '--stage', '-z'], { cwd: dir });
+      const trackedFiles = await git(['ls-files', '--stage', '-z'], { cwd: dir, signal });
       for (const entry of trackedFiles.split('\0')) {
         if (entry.startsWith('120000 ')) {
-          await assertCopyable(path.join(dir, entry.slice(entry.indexOf('\t') + 1)), dir);
+          await assertCopyable(path.join(dir, entry.slice(entry.indexOf('\t') + 1)), dir, signal);
         }
       }
     } else {
@@ -453,7 +551,7 @@ export async function createAgentWorkspace(
         verbatimSymlinks: true,
         errorOnExist: true,
         force: false,
-        filter: (entry) => assertCopyable(entry, realSource),
+        filter: (entry) => assertCopyable(entry, realSource, signal),
       });
     }
   } catch (error) {
@@ -470,8 +568,12 @@ export async function createAgentWorkspace(
         return { workingDir: dir };
       }
       try {
-        return { workingDir: dir, workspaceDiff: await getWorkspaceDiff(dir, repo) };
+        return { workingDir: dir, workspaceDiff: await getWorkspaceDiff(dir, repo, signal) };
       } catch (error) {
+        signal?.throwIfAborted();
+        if (error instanceof Error && 'killed' in error && error.killed) {
+          throw error;
+        }
         logger.warn(`[copy_working_dir] Could not compute the workspace diff: ${error}`);
         return { workingDir: dir };
       }
@@ -486,6 +588,7 @@ export async function createAgentWorkspace(
 export async function createAgentWorkspaceForConfig(
   config: { copy_working_dir?: unknown; working_dir?: unknown } | undefined,
   vars?: Record<string, VarValue>,
+  signal?: AbortSignal,
 ): Promise<AgentWorkspace | undefined> {
   const mode = getCopyWorkingDirMode(config?.copy_working_dir);
   if (!mode) {
@@ -498,5 +601,6 @@ export async function createAgentWorkspaceForConfig(
   return createAgentWorkspace(
     resolveAgenticWorkingDir(workingDir, cliState.basePath) as string,
     mode,
+    signal,
   );
 }
