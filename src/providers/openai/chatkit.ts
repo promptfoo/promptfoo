@@ -31,14 +31,16 @@
  *   - Empty responses: The workflow may not generate text for some inputs
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import * as http from 'http';
 
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright';
+import cliState from '../../cliState';
 import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { providerRegistry } from '../providerRegistry';
 import { getRequestTimeoutMs } from '../shared';
-import { ChatKitBrowserPool, isLocalChatKitRequest } from './chatkit-pool';
+import { ChatKitBrowserPool, isLocalChatKitRequest, serveChatKitSession } from './chatkit-pool';
 import { OpenAiGenericProvider } from './index';
 import { appendOpenAiApiPath } from './util';
 
@@ -712,10 +714,10 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
   private server: http.Server | null = null;
   private serverPort: number = 0;
   private initialized: boolean = false;
-  // Keep pooled session factories isolated per provider without including
-  // API keys, headers, or endpoint details in the template key.
-  private readonly poolTemplateNamespace = crypto.randomUUID();
-  private readonly pooledClientSecretFactory = () => this.createChatKitClientSecret();
+  private readonly pooledSessions = new Map<
+    string,
+    { namespace: string; createClientSecret: (signal: AbortSignal) => Promise<string> }
+  >();
 
   // Static userId for consistent template keys across concurrent evaluations
   private static defaultUserId: string | null = null;
@@ -764,7 +766,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     return `[OpenAI ChatKit Provider ${this.chatKitConfig.workflowId}]`;
   }
 
-  private async createChatKitClientSecret(): Promise<string> {
+  private async createChatKitClientSecret(signal?: AbortSignal): Promise<string> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error('OpenAI API key is required for ChatKit provider');
@@ -795,6 +797,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       appendOpenAiApiPath(this.getApiUrl(), 'chatkit/sessions'),
       {
         method: 'POST',
+        signal,
         headers,
         body: JSON.stringify({
           workflow: {
@@ -859,19 +862,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         return;
       }
       if (req.method === 'POST' && req.url === '/api/chatkit/session') {
-        void this.createChatKitClientSecret()
-          .then((clientSecret) => {
-            res.writeHead(200, {
-              'Content-Type': 'application/json',
-              'Cache-Control': 'no-store',
-            });
-            res.end(JSON.stringify({ client_secret: clientSecret }));
-          })
-          .catch((error) => {
-            logger.error('[ChatKitProvider] Failed to create ChatKit client secret', { error });
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Failed to create ChatKit session' }));
-          });
+        void serveChatKitSession(res, (signal) => this.createChatKitClientSecret(signal));
         return;
       }
 
@@ -976,6 +967,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     }
     if (this.server) {
       this.server.close();
+      this.server.closeAllConnections();
       this.server = null;
     }
     this.initialized = false;
@@ -1207,19 +1199,35 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       headless: this.chatKitConfig.headless,
     });
 
-    // Generate a unique template key for this workflow configuration
-    // This ensures different workflows get isolated pages in the pool
+    // Reuse pages only within the same provider and effective evaluation settings.
+    // These settings stay in memory; template URLs contain only a random namespace.
+    const sessionSettings = JSON.stringify([
+      this.getApiUrl(),
+      this.getApiKey(),
+      this.getOpenAiRequestHeaders(),
+      cliState.env,
+      cliState.envFileOverrides,
+      cliState.basePath,
+    ]);
+    let session = this.pooledSessions.get(sessionSettings);
+    if (!session) {
+      session = {
+        namespace: crypto.randomUUID(),
+        createClientSecret: AsyncLocalStorage.bind((signal: AbortSignal) =>
+          this.createChatKitClientSecret(signal),
+        ),
+      };
+      this.pooledSessions.set(sessionSettings, session);
+    }
     const templateKey = ChatKitBrowserPool.generateTemplateKey(
       workflowId,
       this.chatKitConfig.version,
       userId,
-      this.poolTemplateNamespace,
+      session.namespace,
     );
-
-    // Register the HTML template for this workflow
     const sessionEndpoint = `/template/${encodeURIComponent(templateKey)}/session`;
     const html = generateChatKitHTML(sessionEndpoint);
-    pool.setTemplate(templateKey, html, this.pooledClientSecretFactory);
+    pool.setTemplate(templateKey, html, session.createClientSecret);
 
     let pooledPage: Awaited<ReturnType<typeof pool.acquirePage>> | null = null;
     const startTime = Date.now();

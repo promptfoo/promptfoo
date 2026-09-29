@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import type { IncomingMessage } from 'http';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -42,6 +43,7 @@ vi.mock('http', () => ({
       listen: vi.fn((_port: number, _host: string, callback: () => void) => callback()),
       address: vi.fn().mockReturnValue({ port: 3000 }),
       close: vi.fn(),
+      closeAllConnections: vi.fn(),
       once: vi.fn(), // Error handler registration
     };
   }),
@@ -89,6 +91,18 @@ describe('ChatKitBrowserPool', () => {
     ])('checks the local server authority for %j', (headers, expected) => {
       expect(isLocalChatKitRequest({ headers } as IncomingMessage, 3000)).toBe(expected);
     });
+
+    it.each([
+      [{ host: '127.0.0.1', origin: 'http://127.0.0.1' }, true],
+      [{ host: '127.0.0.1:80', origin: 'http://127.0.0.1' }, true],
+      [{ host: 'localhost', origin: 'http://localhost' }, false],
+      [{ host: '127.0.0.1', origin: 'http://127.0.0.1:3000' }, false],
+    ])(
+      'accepts only the exact normalized loopback authority at port 80: %j',
+      (headers, expected) => {
+        expect(isLocalChatKitRequest({ headers } as IncomingMessage, 80)).toBe(expected);
+      },
+    );
 
     it.each([
       ['GET', ''],
@@ -304,6 +318,44 @@ describe('ChatKitBrowserPool', () => {
       expect(mockChromium.launch).toHaveBeenCalledTimes(1);
     });
 
+    it.each(['disconnect', 'shutdown'])(
+      'cancels pending pooled session minting on %s',
+      async (reason) => {
+        const pool = ChatKitBrowserPool.getInstance();
+        let signal: AbortSignal | undefined;
+        pool.setTemplate(
+          TEST_TEMPLATE_KEY,
+          TEST_HTML,
+          (requestSignal) =>
+            new Promise((_resolve, reject) => {
+              signal = requestSignal;
+              signal.addEventListener('abort', () => reject(signal!.reason), { once: true });
+            }),
+        );
+        await pool.initialize();
+        const response = Object.assign(new EventEmitter(), { writeHead: vi.fn(), end: vi.fn() });
+        (pool as any).server.closeAllConnections.mockImplementation(() => response.emit('close'));
+        mockServerRequestHandler(
+          {
+            method: 'POST',
+            headers: { host: '127.0.0.1:3000' },
+            url: `/template/${encodeURIComponent(TEST_TEMPLATE_KEY)}/session`,
+          },
+          response,
+        );
+        expect(signal?.aborted).toBe(false);
+        if (reason === 'shutdown') {
+          await pool.shutdown();
+        } else {
+          response.emit('close');
+        }
+        await vi.waitFor(() => expect(response.listenerCount('close')).toBe(0));
+        expect(signal?.aborted).toBe(true);
+        expect(response.writeHead).not.toHaveBeenCalled();
+        expect(response.end).not.toHaveBeenCalled();
+      },
+    );
+
     it('should return pooled client secrets through the template session route', async () => {
       const instance = ChatKitBrowserPool.getInstance();
       instance.setTemplate(
@@ -322,10 +374,10 @@ describe('ChatKitBrowserPool', () => {
           headers: { host: '127.0.0.1:3000' },
           url: `/template/${encodeURIComponent(TEST_TEMPLATE_KEY)}/session`,
         },
-        {
+        Object.assign(new EventEmitter(), {
           writeHead,
           end,
-        },
+        }),
       );
 
       await Promise.resolve();
@@ -365,10 +417,10 @@ describe('ChatKitBrowserPool', () => {
           headers: { host: '127.0.0.1:3000' },
           url: `/template/${encodeURIComponent(firstKey)}/session`,
         },
-        {
+        Object.assign(new EventEmitter(), {
           writeHead: vi.fn(),
           end: firstEnd,
-        },
+        }),
       );
       await Promise.resolve();
       await Promise.resolve();
@@ -384,10 +436,10 @@ describe('ChatKitBrowserPool', () => {
           headers: { host: '127.0.0.1:3000' },
           url: `/template/${encodeURIComponent(secondKey)}/session`,
         },
-        {
+        Object.assign(new EventEmitter(), {
           writeHead: vi.fn(),
           end: secondEnd,
-        },
+        }),
       );
       await Promise.resolve();
       await Promise.resolve();
@@ -415,10 +467,10 @@ describe('ChatKitBrowserPool', () => {
           headers: { host: '127.0.0.1:3000' },
           url: `/template/${encodeURIComponent(TEST_TEMPLATE_KEY)}/session`,
         },
-        {
+        Object.assign(new EventEmitter(), {
           writeHead,
           end,
-        },
+        }),
       );
 
       await Promise.resolve();

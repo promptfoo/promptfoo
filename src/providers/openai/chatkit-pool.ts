@@ -40,15 +40,42 @@ interface ChatKitPoolConfig {
 
 type ChatKitTemplateRegistration = {
   html: string;
-  createClientSecret?: () => Promise<string>;
+  createClientSecret?: (signal: AbortSignal) => Promise<string>;
 };
 
 export function isLocalChatKitRequest(req: http.IncomingMessage, port: number): boolean {
-  const host = `127.0.0.1:${port}`;
+  const expected = new URL(`http://127.0.0.1:${port}`);
   return (
-    req.headers.host === host &&
-    (req.headers.origin === undefined || req.headers.origin === `http://${host}`)
+    (req.headers.host === expected.host || req.headers.host === `127.0.0.1:${port}`) &&
+    (req.headers.origin === undefined || req.headers.origin === expected.origin)
   );
+}
+
+export async function serveChatKitSession(
+  res: http.ServerResponse,
+  createClientSecret: (signal: AbortSignal) => Promise<string>,
+): Promise<void> {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  res.once('close', abort);
+  try {
+    const clientSecret = await createClientSecret(controller.signal);
+    if (!controller.signal.aborted) {
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+      });
+      res.end(JSON.stringify({ client_secret: clientSecret }));
+    }
+  } catch (error) {
+    if (!controller.signal.aborted) {
+      logger.error('[ChatKit] Failed to create client secret', { error });
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Failed to create ChatKit session' }));
+    }
+  } finally {
+    res.removeListener('close', abort);
+  }
 }
 
 /**
@@ -188,7 +215,11 @@ export class ChatKitBrowserPool {
   /**
    * Register a template for a workflow configuration
    */
-  setTemplate(templateKey: string, html: string, createClientSecret?: () => Promise<string>): void {
+  setTemplate(
+    templateKey: string,
+    html: string,
+    createClientSecret?: (signal: AbortSignal) => Promise<string>,
+  ): void {
     const existing = this.templates.get(templateKey);
     const htmlChanged = existing?.html !== html;
     const createClientSecretChanged = existing?.createClientSecret !== createClientSecret;
@@ -253,20 +284,7 @@ export class ChatKitBrowserPool {
 
         if (template) {
           if (req.method === 'POST' && route[2] && template.createClientSecret) {
-            void template
-              .createClientSecret()
-              .then((clientSecret) => {
-                res.writeHead(200, {
-                  'Content-Type': 'application/json',
-                  'Cache-Control': 'no-store',
-                });
-                res.end(JSON.stringify({ client_secret: clientSecret }));
-              })
-              .catch((error) => {
-                logger.error('[ChatKitPool] Failed to create ChatKit client secret', { error });
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Failed to create ChatKit session' }));
-              });
+            void serveChatKitSession(res, template.createClientSecret);
             return;
           }
 
@@ -687,6 +705,7 @@ export class ChatKitBrowserPool {
     // Close server
     if (this.server) {
       this.server.close();
+      this.server.closeAllConnections();
       this.server = null;
     }
 

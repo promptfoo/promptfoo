@@ -1,5 +1,8 @@
+import { EventEmitter } from 'node:events';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
+import cliState from '../../../src/cliState';
 import {
   cleanAssistantResponse,
   generateChatKitHTML,
@@ -40,6 +43,7 @@ vi.mock('http', () => ({
       listen: vi.fn((_port: number, _host: string, callback: () => void) => callback()),
       address: vi.fn().mockReturnValue({ port: 3000 }),
       close: vi.fn(),
+      closeAllConnections: vi.fn(),
       once: vi.fn(), // For error event handler
     };
   }),
@@ -152,6 +156,74 @@ describe('OpenAiChatKitProvider', () => {
         restoreEnv();
       }
     });
+
+    it.each([false, true])(
+      'binds delayed session minting to its evaluation scope (shared provider: %s)',
+      async (shared) => {
+        const pool = ChatKitBrowserPool.getInstance();
+        await cliState.withEnv({ OPENAI_API_BASE_URL: 'http://127.0.0.1:9001/v1' }, () =>
+          pool.initialize(),
+        );
+        const acquire = vi
+          .spyOn(pool, 'acquirePage')
+          .mockRejectedValue(new Error('stop after registration'));
+        const registrations = vi.spyOn(pool, 'setTemplate');
+        const fetchSpy = vi
+          .spyOn(fetchModule, 'fetchWithRetries')
+          .mockImplementation(
+            async () => new Response(JSON.stringify({ client_secret: 'fixture-session' })),
+          );
+        const first = new OpenAiChatKitProvider('wf_shared', { config: { apiKey: 'fixture-key' } });
+        const second = shared
+          ? first
+          : new OpenAiChatKitProvider('wf_shared', { config: { apiKey: 'fixture-key' } });
+        const scopes = [
+          { OPENAI_API_BASE_URL: 'http://127.0.0.1:9001/v1' },
+          { OPENAI_API_BASE_URL: 'http://127.0.0.1:9002/v1' },
+        ];
+        try {
+          await Promise.all([
+            cliState.withEnv(scopes[0], () => first.callApi('first')),
+            cliState.withEnv(scopes[1], () => second.callApi('second')),
+          ]);
+          await cliState.withEnv(scopes[0], () => first.callApi('repeat'));
+          const keys = registrations.mock.calls.map(([key]) => key);
+          expect(keys[0]).not.toBe(keys[1]);
+          expect(keys[0]).toBe(keys[2]);
+          expect(registrations.mock.calls[0][2]).toBe(registrations.mock.calls[2][2]);
+          const responses = keys.slice(0, 2).map((key) => {
+            const response = Object.assign(new EventEmitter(), {
+              writeHead: vi.fn(),
+              end: vi.fn(),
+            });
+            mockServerRequestHandler(
+              {
+                method: 'POST',
+                headers: { host: '127.0.0.1:3000' },
+                url: `/template/${encodeURIComponent(key)}/session`,
+              },
+              response,
+            );
+            return response;
+          });
+          await vi.waitFor(() =>
+            expect(responses.every((response) => response.end.mock.calls.length === 1)).toBe(true),
+          );
+          expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual(
+            scopes.map((env) => `${env.OPENAI_API_BASE_URL}/chatkit/sessions`),
+          );
+          for (const [, init] of fetchSpy.mock.calls) {
+            expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer fixture-key');
+          }
+        } finally {
+          acquire.mockRestore();
+          registrations.mockRestore();
+          fetchSpy.mockRestore();
+          await pool.shutdown();
+          ChatKitBrowserPool.resetInstance();
+        }
+      },
+    );
 
     it('should keep pooled session factories isolated by provider instance', async () => {
       const registeredTemplates = new Map<string, () => Promise<string>>();
@@ -347,6 +419,47 @@ describe('OpenAiChatKitProvider', () => {
       }
     });
 
+    it.each(['disconnect', 'cleanup'])(
+      'cancels pending standalone session minting on %s',
+      async (reason) => {
+        const provider = new OpenAiChatKitProvider('wf_test123', {
+          config: { apiKey: 'fixture-key' },
+        });
+        let signal: AbortSignal | undefined;
+        const fetchSpy = vi.spyOn(fetchModule, 'fetchWithRetries').mockImplementation(
+          (_url, options) =>
+            new Promise((_resolve, reject) => {
+              signal = options?.signal as AbortSignal;
+              signal.addEventListener('abort', () => reject(signal!.reason), { once: true });
+            }),
+        );
+        const response = Object.assign(new EventEmitter(), { writeHead: vi.fn(), end: vi.fn() });
+        try {
+          await (provider as any).initialize();
+          (provider as any).server.closeAllConnections.mockImplementation(() =>
+            response.emit('close'),
+          );
+          mockServerRequestHandler(
+            { method: 'POST', url: '/api/chatkit/session', headers: { host: '127.0.0.1:3000' } },
+            response,
+          );
+          expect(signal?.aborted).toBe(false);
+          if (reason === 'cleanup') {
+            await provider.cleanup();
+          } else {
+            response.emit('close');
+          }
+          await vi.waitFor(() => expect(response.listenerCount('close')).toBe(0));
+          expect(signal?.aborted).toBe(true);
+          expect(response.writeHead).not.toHaveBeenCalled();
+          expect(response.end).not.toHaveBeenCalled();
+        } finally {
+          fetchSpy.mockRestore();
+          await provider.cleanup();
+        }
+      },
+    );
+
     it('returns client secrets through the local provider route', async () => {
       const provider = new OpenAiChatKitProvider('wf_test123', {
         config: { apiKey: 'test-key' },
@@ -364,10 +477,10 @@ describe('OpenAiChatKitProvider', () => {
           url: '/api/chatkit/session',
           headers: { host: '127.0.0.1:3000', origin: 'http://127.0.0.1:3000' },
         },
-        {
+        Object.assign(new EventEmitter(), {
           writeHead,
           end,
-        },
+        }),
       );
 
       await Promise.resolve();
