@@ -1,7 +1,7 @@
 ---
 sidebar_label: Telecommunications Plugins
 title: Telecommunications Red Team Plugins
-description: Test AI systems for CPNI protection, E911 compliance, account security, TCPA consent, and FCC/CALEA telecom regulatory requirements with 12 specialized plugins.
+description: Test AI systems for CPNI protection, E911 compliance, account security, TCPA consent, and lawful customer-data handling with 12 telecom plugins.
 sidebar_position: 55
 ---
 
@@ -16,7 +16,7 @@ Telecommunications AI systems have unique safety and compliance requirements:
 - **Customer Privacy**: CPNI (Customer Proprietary Network Information) is protected by federal law under 47 U.S.C. Section 222
 - **Account Security**: SIM swap fraud and account takeover attacks are a growing threat to consumers
 - **Emergency Services**: Incorrect E911 information can be life-threatening
-- **Regulatory Exposure**: FCC, TCPA, and CALEA violations carry significant penalties
+- **Regulatory Exposure**: Violations of telecom and privacy laws can carry significant penalties
 - **High-Volume Operations**: Carriers handle large volumes of customer interactions through AI systems
 
 ## Available Telecommunications Plugins
@@ -132,7 +132,7 @@ Tests accuracy of emergency calling information including E911 capabilities, loc
 **Plugin ID:** `telecom:tcpa-violation`
 **Severity: High**
 
-Tests compliance with the Telephone Consumer Protection Act (TCPA), including consent requirements that vary by call/text type and technology used (for example, stricter rules for certain autodialed or prerecorded telemarketing calls/texts), as well as Do Not Call list compliance and robocall/text message restrictions.
+Tests TCPA consent, Do Not Call compliance, and robocall/text restrictions. Consent requirements depend on the call or text purpose, technology, and applicable exceptions; see the [FCC consent rules](https://docs.fcc.gov/public/attachments/FCC-12-21A1.pdf).
 
 **What it detects:**
 
@@ -150,7 +150,7 @@ Tests compliance with the Telephone Consumer Protection Act (TCPA), including co
 ❌ Ignoring customer's request to stop marketing calls
 ❌ Providing guidance on bulk SMS without proper consent
 ❌ Misrepresenting what constitutes valid prior express consent
-✓ "Marketing calls require prior express written consent. I've added you to our Do Not Call list"
+✓ "Some telemarketing calls require prior express written consent. I've added you to our Do Not Call list"
 ```
 
 ### Unauthorized Changes (Slamming/Cramming)
@@ -158,7 +158,7 @@ Tests compliance with the Telephone Consumer Protection Act (TCPA), including co
 **Plugin ID:** `telecom:unauthorized-changes`
 **Severity: High**
 
-Tests for vulnerabilities to slamming (unauthorized carrier switches, prohibited under FCC Section 258) and cramming (unauthorized charges, which may violate other FCC billing and consumer-protection rules).
+Tests for slamming (unauthorized carrier switches) and cramming (unauthorized charges). The [FCC distinguishes](https://docs.fcc.gov/public/attachments/FCC-18-78A1.pdf) Section 258 carrier-switching requirements from the Section 201(b) prohibition on unauthorized charges.
 
 **What it detects:**
 
@@ -288,7 +288,7 @@ Tests accuracy of network coverage claims, 5G availability, and roaming informat
 **Plugin ID:** `telecom:law-enforcement-request-handling`
 **Severity: Medium**
 
-Tests proper handling of law enforcement data requests in compliance with applicable legal process and privacy laws (for example, warrants, court orders, subpoenas, and valid emergency disclosure standards). CALEA obligations are separate and relate to technical assistance capability, not the legal threshold for customer data disclosure.
+Tests handling of law enforcement data requests under applicable legal process and privacy laws, including the Stored Communications Act. [CALEA Section 103](https://ndcac.fbi.gov/calea/thelaw/section103) concerns technical assistance capabilities; disclosure still requires lawful authorization.
 
 **What it detects:**
 
@@ -387,17 +387,17 @@ These plugins are particularly valuable for:
 
 The telecommunications plugins map to key regulatory requirements:
 
-| Regulation                     | Plugins                                                  |
-| ------------------------------ | -------------------------------------------------------- |
-| FCC CPNI (47 U.S.C. 222)       | `telecom:cpni-disclosure`, `telecom:location-disclosure` |
-| TCPA                           | `telecom:tcpa-violation`                                 |
-| FCC Section 258                | `telecom:unauthorized-changes`                           |
-| E911/Kari's Law/RAY BAUM's Act | `telecom:e911-misinformation`                            |
-| CALEA                          | `telecom:law-enforcement-request-handling`               |
-| Section 255/CVAA               | `telecom:accessibility-violation`                        |
-| FCC LNP Rules                  | `telecom:porting-misinformation`                         |
-| FCC Truth-in-Billing           | `telecom:billing-misinformation`                         |
-| FTC Act                        | `telecom:coverage-misinformation`                        |
+| Regulation                             | Plugins                                                  |
+| -------------------------------------- | -------------------------------------------------------- |
+| FCC CPNI (47 U.S.C. 222)               | `telecom:cpni-disclosure`, `telecom:location-disclosure` |
+| TCPA                                   | `telecom:tcpa-violation`                                 |
+| Communications Act Sections 201(b)/258 | `telecom:unauthorized-changes`                           |
+| E911/Kari's Law/RAY BAUM's Act         | `telecom:e911-misinformation`                            |
+| Stored Communications Act              | `telecom:law-enforcement-request-handling`               |
+| Section 255/CVAA                       | `telecom:accessibility-violation`                        |
+| FCC LNP Rules                          | `telecom:porting-misinformation`                         |
+| FCC Truth-in-Billing                   | `telecom:billing-misinformation`                         |
+| FTC Act                                | `telecom:coverage-misinformation`                        |
 
 ## Getting Help
 
