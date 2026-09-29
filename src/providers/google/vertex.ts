@@ -19,10 +19,12 @@ import {
   clampMaxTokensForThinkingBudget,
   claudeThinkingConsumesTokens,
   getTokenUsage,
+  isClaudeThinkingEnabled,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeClaudeThinkingConfig,
   outputFromMessage,
   parseMessages,
+  resolveClaudeSamplingParams,
 } from '../anthropic/util';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
@@ -134,7 +136,7 @@ type VertexEmbeddingProviderConfig = GoogleProviderConfig & {
   autoTruncate?: boolean;
 };
 
-export function getVertexApiHost(
+function getVertexApiHost(
   region: string,
   configApiHost?: string,
   envOverrides?: EnvOverrides,
@@ -371,19 +373,27 @@ export class VertexChatProvider extends GoogleGenericProvider {
     const resolvedTemperature = samplingParamsDeprecated ? undefined : this.config.temperature;
     const resolvedTopP = samplingParamsDeprecated
       ? undefined
-      : this.config.top_p || this.config.topP;
+      : (this.config.top_p ?? this.config.topP);
     const resolvedTopK = samplingParamsDeprecated
       ? undefined
-      : this.config.top_k || this.config.topK;
+      : (this.config.top_k ?? this.config.topK);
+
+    // Vertex forwards the body verbatim, so apply the same combination rules the Anthropic
+    // API enforces (temperature vs top_p, and the limits extended thinking imposes).
+    const { sampling, warnings: samplingWarnings } = resolveClaudeSamplingParams(
+      { temperature: resolvedTemperature, top_p: resolvedTopP, top_k: resolvedTopK },
+      { thinkingEnabled: isClaudeThinkingEnabled(thinkingConfig), samplingParamsDeprecated },
+    );
+    for (const warning of samplingWarnings) {
+      logger.warn(warning);
+    }
 
     const body: ClaudeRequest = {
       anthropic_version:
         this.config.anthropicVersion || this.config.anthropic_version || 'vertex-2023-10-16',
       stream: false,
       max_tokens: maxTokens,
-      temperature: resolvedTemperature,
-      top_p: resolvedTopP,
-      top_k: resolvedTopK,
+      ...sampling,
       ...(mergedSystem ? { system: mergedSystem } : {}),
       ...(thinkingConfig ? { thinking: thinkingConfig } : {}),
       // Claude on Vertex accepts output_config.effort the same way the Anthropic API does;
@@ -393,12 +403,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
       messages: extractedMessages as ClaudeRequest['messages'],
     };
 
-    // Default off the *effective* thinking state, not just an explicit `thinking` block, so a
-    // thinks-by-default model (Opus 5) renders reasoning like the Anthropic path does. Today
-    // this is a no-op — those responses carry an empty thinking block because `display`
-    // defaults to `omitted`, and outputFromMessage drops empty thinking either way — but it
-    // keeps the two paths consistent if that default ever changes, as it did in 4.6 -> 4.7.
-    const showThinking = this.config.showThinking ?? thinkingConsumesTokens;
+    // Between-tool progress is visible even though it needs no up-front thinking budget.
+    const showThinking =
+      this.config.showThinking ??
+      (thinkingConsumesTokens || thinkingConfig?.type === 'between_tools');
 
     const cache = await getCache();
     const cacheKey = getVertexBodyCacheKey(
@@ -1342,7 +1350,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   }
 }
 
-// Gemini 3.8 Flash is available through Vertex AI's global endpoint.
+// Gemini 3.6 Flash is available through Vertex AI's global endpoint.
 const DEFAULT_VERTEX_MODEL = 'gemini-3.8-flash';
 const DEFAULT_VERTEX_REGION = 'global';
 const DEFAULT_VERTEX_EMBEDDING_MODEL = 'gemini-embedding-001';

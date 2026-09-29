@@ -29,6 +29,7 @@ type Scope = 'source' | 'build' | 'test' | 'declaration';
 interface PackageJson extends Partial<Record<Section, Record<string, string>>> {
   name?: string;
   workspaces?: string[] | { packages: string[] };
+  peerDependenciesMeta?: Record<string, { optional?: boolean }>;
 }
 
 const ledgerSchema = z
@@ -133,6 +134,10 @@ function getShadowRanges(
     BlockStatement(node) {
       lexicalScopes.push([node.start, node.end]);
     },
+    TSModuleBlock(node) {
+      lexicalScopes.push([node.start, node.end]);
+      functionScopes.push([node.start, node.end]);
+    },
     ForStatement(node) {
       lexicalScopes.push([node.start, node.end]);
     },
@@ -221,7 +226,7 @@ function getShadowRanges(
     },
     TSImportEqualsDeclaration(node) {
       if (node.id.name === name) {
-        ranges.push([0, Number.POSITIVE_INFINITY]);
+        ranges.push(scopeFor(node.start, lexicalScopes));
       }
     },
     ClassDeclaration(node) {
@@ -803,16 +808,12 @@ export function reportDependencyOwnership(
           ((!node.callee.computed &&
             node.callee.property.type === 'Identifier' &&
             node.callee.property.name === 'require') ||
-            (node.callee.computed &&
-              node.callee.property.type === 'Literal' &&
-              node.callee.property.value === 'require'))
+            (node.callee.computed && staticSpecifier(node.callee.property) === 'require'))
         ) {
           load(node, node.arguments[0], 'value');
         } else if (
           node.callee.type === 'MemberExpression' &&
-          ((node.callee.computed &&
-            node.callee.property.type === 'Literal' &&
-            node.callee.property.value === 'resolve') ||
+          ((node.callee.computed && staticSpecifier(node.callee.property) === 'resolve') ||
             (!node.callee.computed &&
               node.callee.property.type === 'Identifier' &&
               node.callee.property.name === 'resolve')) &&
@@ -922,7 +923,8 @@ export function reportDependencyOwnership(
       (entry) =>
         entry.manifest === 'package.json' &&
         (entry.sections.includes('dependencies') ||
-          entry.sections.includes('optionalDependencies')),
+          entry.sections.includes('optionalDependencies') ||
+          entry.sections.includes('peerDependencies')),
     )
     .map((entry) => {
       const sourceRefs = entry.references.filter(
@@ -934,8 +936,14 @@ export function reportDependencyOwnership(
         kind: [
           entry.sections.includes('dependencies') ? 'dependency' : '',
           entry.sections.includes('optionalDependencies') ? 'optional' : '',
+          entry.sections.includes('peerDependencies')
+            ? packages.get(entry.manifest)?.peerDependenciesMeta?.[entry.dependency]?.optional
+              ? 'optional-peer'
+              : 'peer'
+            : '',
         ]
           .filter(Boolean)
+          .sort()
           .join('+'),
         owner: layers.length === 0 ? 'unreferenced' : layers.length === 1 ? layers[0] : 'shared',
         layers: layers.join(', ') || '-',

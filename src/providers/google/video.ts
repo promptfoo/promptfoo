@@ -14,7 +14,6 @@ import {
   loadCredentials,
   resolveProjectId,
 } from './util';
-import { getVertexApiHost } from './vertex';
 
 import type { BlobRef } from '../../blobs';
 import type { EnvOverrides } from '../../types/env';
@@ -188,12 +187,8 @@ export class GoogleVideoProvider implements ApiProvider {
   private getLocation(config: GoogleVideoOptions): string {
     return (
       config.region ||
-      this.env?.VERTEX_REGION ||
-      getEnvString('VERTEX_REGION') ||
-      this.env?.GOOGLE_CLOUD_LOCATION ||
-      getEnvString('GOOGLE_CLOUD_LOCATION') ||
-      this.env?.GOOGLE_LOCATION ||
       getEnvString('GOOGLE_LOCATION') ||
+      this.env?.GOOGLE_LOCATION ||
       DEFAULT_LOCATION
     );
   }
@@ -228,8 +223,7 @@ export class GoogleVideoProvider implements ApiProvider {
   private async getVertexEndpoint(config: GoogleVideoOptions, action: string): Promise<string> {
     const location = this.getLocation(config);
     const projectId = config.projectId || (await resolveProjectId(config, this.env));
-    const apiHost = getVertexApiHost(location, config.apiHost, this.env);
-    return `https://${apiHost}/v1/projects/${projectId}/locations/${location}/publishers/google/models/${this.modelName}:${action}`;
+    return `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${this.modelName}:${action}`;
   }
 
   private getAiStudioEndpoint(pathSuffix: string): string {
@@ -274,16 +268,6 @@ export class GoogleVideoProvider implements ApiProvider {
         return { error: `Video file not found: ${filePath}` };
       }
       return { data: fs.readFileSync(filePath).toString('base64') };
-    }
-    const dataUrl = videoPath.match(/^data:video\/[^;]+;base64,(.+)$/);
-    if (dataUrl) {
-      return { data: dataUrl[1] };
-    }
-    if (/^[a-z][a-z\d+.-]*:/i.test(videoPath)) {
-      return {
-        error:
-          'Vertex AI Veo sourceVideo must be base64 data, a data:video URL, gs:// URI, or file:// path.',
-      };
     }
     return { data: videoPath };
   }

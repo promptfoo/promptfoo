@@ -39,12 +39,12 @@ npm run architecture:check
 ## First Leaf Layer
 
 `packages/contracts/src` owns the implementation, with compatibility re-exports in
-`src/contracts` and the `src/contracts.ts` public entrypoint. They are the first intentionally
-leaf-safe surface. The private `@promptfoo-internal/contracts` workspace builds
+`src/contracts` and the `src/contracts.ts` public entrypoint. The private `@promptfoo-internal/contracts` workspace builds
 independently with Zod as its only runtime dependency. The published `promptfoo`
 facade bundles its implementation and declarations. It owns this portable subset:
 
 - shared token/input contracts
+- portable HTTP and MCP provider configuration schemas
 - browser-safe common and user API DTOs
 - portable blob references and provider-neutral capability/result contracts
 - provider environment override schema
@@ -83,6 +83,14 @@ dependency-light state implementation for embedded evaluators and focused tests.
 `src/node/evaluatorRuntime.ts` continues to own JSONL writer construction and
 resume append behavior. The evaluator orchestrates evaluation behavior without
 importing the concrete `Eval` model.
+
+`src/util/envFile.ts` owns plain `.env` file loading as a Node filesystem adapter.
+The imports from `src/envars.ts` and `src/server/server.ts` replace external
+`dotenv` calls at the same startup points; the edge baseline records these two
+internal dependencies. The loader imports only Node built-ins, so early loading
+does not initialize the logger, configuration state, or database. Keeping it
+separate from `setupEnv` preserves that initialization order without duplicating
+the parser across callers.
 
 The checker also resolves cross-layer source aliases such as `@promptfoo/*`.
 The browser-only `@app/*` alias stays inside the `app` layer. Alias spelling
@@ -165,3 +173,7 @@ npm run deps:ownership
 
 The report is intentionally descriptive for now. It gives us the evidence needed
 to move dependencies into future packages without guessing at ownership.
+
+It includes direct, optional, and peer dependency declarations. Peers marked
+optional in `peerDependenciesMeta` appear as `optional-peer`; other peers appear
+as `peer`. These labels describe the package contract, not what is installed.

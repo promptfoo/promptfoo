@@ -115,6 +115,8 @@ export const VALID_SCHEMA_TYPES: ReadonlyArray<SchemaType> = [
 export interface FunctionDeclaration {
   name: string;
   description?: string;
+  /** Live API function execution mode. Extended Thinking requires NON_BLOCKING. */
+  behavior?: 'BLOCKING' | 'NON_BLOCKING';
   parameters?: Schema;
   response?: Schema;
 }
@@ -128,6 +130,7 @@ interface GoogleSearchRetrieval {
 
 export interface Tool {
   functionDeclarations?: FunctionDeclaration[];
+  function_declarations?: FunctionDeclaration[];
   googleSearchRetrieval?: GoogleSearchRetrieval;
   codeExecution?: object;
   googleSearch?: object;
@@ -154,7 +157,9 @@ export interface Tool {
 export type ClaudeThinkingConfig =
   | { type: 'enabled'; budget_tokens?: number; display?: 'summarized' | 'omitted' }
   | { type: 'adaptive'; display?: 'summarized' | 'omitted' }
-  | { type: 'disabled' };
+  | { type: 'disabled' }
+  // Claude Sonnet 5.5's lowest setting: no up-front thinking. It takes no other field.
+  | { type: 'between_tools' };
 
 export interface GoogleSpeechConfig {
   voiceConfig?: {
@@ -193,7 +198,7 @@ export interface CompletionOptions {
   projectId?: string;
   region?: string;
   publisher?: string;
-  apiVersion?: string; // For Live API: 'v1alpha' or 'v1beta'
+  apiVersion?: string; // Live API: Gemini 'v1alpha'/'v1beta'; Vertex 'v1'/'v1beta1'
   /** Previous Gemini Interactions API ID for conversational video editing. */
   previousInteractionId?: string;
   /** Keep a Gemini interaction available for subsequent editing turns. */
@@ -659,7 +664,6 @@ export interface GoogleVideoOptions {
   // Vertex AI configuration
   projectId?: string; // Google Cloud project ID
   region?: string; // Vertex AI region (default: us-central1)
-  apiHost?: string; // Vertex API host override
   credentials?: string; // Path to credentials file or JSON string
 }
 

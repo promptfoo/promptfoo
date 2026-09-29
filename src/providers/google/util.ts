@@ -299,6 +299,23 @@ export function mergeGoogleCompletionOptions(
         }
       }
     }
+
+    // A provider-level passthrough policy must not override a prompt's tool choice.
+    // Preserve unrelated passthrough fields and non-function tool settings.
+    if (promptConfig?.passthrough === undefined && baseConfig.passthrough) {
+      const passthrough = { ...baseConfig.passthrough };
+      const inheritedToolConfig = normalizePassthroughGoogleToolConfig(baseConfig);
+      delete passthrough.toolConfig;
+      delete passthrough.tool_config;
+      if (inheritedToolConfig) {
+        const { functionCallingConfig: _functionCallingConfig, ...nonFunctionToolConfig } =
+          inheritedToolConfig;
+        if (Object.keys(nonFunctionToolConfig).length > 0) {
+          passthrough.toolConfig = nonFunctionToolConfig;
+        }
+      }
+      mergedConfig.passthrough = passthrough;
+    }
   }
 
   return mergedConfig;
@@ -598,29 +615,17 @@ export function calculateGoogleCost(
     }
   }
 
-  const tiered = (rate: number, overridden: boolean) =>
-    overridden ? rate : rate * serviceTierMultiplier;
-  const hasInputOverride = config.inputCost !== undefined || config.cost !== undefined;
-  const hasOutputOverride = config.outputCost !== undefined || config.cost !== undefined;
   return (
-    (textInputTokens - cachedTextTokens) * tiered(inputCost, hasInputOverride) +
-    cachedTextTokens * tiered(cachedInputCost, hasInputOverride) +
-    (audioInputTokens - cachedAudioTokens) *
-      tiered(serviceTierAudioInputCost, hasAudioInputOverride) +
-    cachedAudioTokens * tiered(cachedAudioInputCost, hasAudioInputOverride) +
-    (imageInputTokens - cachedImageTokens) *
-      tiered(imageInputCost, config.imageInputCost !== undefined || hasInputOverride) +
-    cachedImageTokens *
-      tiered(cachedImageInputCost, config.imageInputCost !== undefined || hasInputOverride) +
-    (completionTokens - audioOutputTokens - videoOutputTokens) *
-      tiered(outputCost, hasOutputOverride) +
-    audioOutputTokens *
-      tiered(
-        audioOutputCost,
-        config.audioOutputCost !== undefined || config.audioCost !== undefined || hasOutputOverride,
-      ) +
-    videoOutputTokens *
-      tiered(videoOutputCost, config.videoOutputCost !== undefined || hasOutputOverride)
+    ((textInputTokens - cachedTextTokens) * inputCost +
+      cachedTextTokens * cachedInputCost +
+      (audioInputTokens - cachedAudioTokens) * serviceTierAudioInputCost +
+      cachedAudioTokens * cachedAudioInputCost +
+      (imageInputTokens - cachedImageTokens) * imageInputCost +
+      cachedImageTokens * cachedImageInputCost +
+      (completionTokens - audioOutputTokens - videoOutputTokens) * outputCost +
+      audioOutputTokens * audioOutputCost +
+      videoOutputTokens * videoOutputCost) *
+    serviceTierMultiplier
   );
 }
 
@@ -1315,8 +1320,43 @@ export function normalizeGeminiAudio(output: Part[] | string | undefined) {
  *   (e.g., additionalProperties, $schema, default) that Gemini doesn't support
  */
 export function normalizeTools(tools: Tool[]): Tool[] {
-  return tools.map((tool) => {
+  // Canonical declarations take precedence even when a legacy alias appears in
+  // an earlier tool entry. For duplicates using the same spelling, the first wins.
+  const canonicalNames = new Set(
+    tools.flatMap((tool) => tool.functionDeclarations?.map(({ name }) => name) ?? []),
+  );
+  const seenNames = new Set<string>();
+
+  return tools.flatMap((tool) => {
     const normalizedTool: Tool = { ...tool };
+
+    // Normalize declarations before sanitizing their schemas. Merge both aliases
+    // without mutating the caller's tools or retaining duplicate wire fields.
+    if (tool.functionDeclarations || tool.function_declarations) {
+      normalizedTool.functionDeclarations = [
+        ...(tool.functionDeclarations ?? []),
+        ...(tool.function_declarations ?? []).filter(({ name }) => !canonicalNames.has(name)),
+      ].filter(({ name }) => {
+        if (seenNames.has(name)) {
+          return false;
+        }
+        seenNames.add(name);
+        return true;
+      });
+      delete normalizedTool.function_declarations;
+
+      // Removing duplicates must not leave an empty function tool on the wire.
+      // Keep any built-in tools sharing the entry, and leave existing empty inputs alone.
+      if (
+        normalizedTool.functionDeclarations.length === 0 &&
+        (tool.functionDeclarations?.length || tool.function_declarations?.length)
+      ) {
+        delete normalizedTool.functionDeclarations;
+        if (Object.keys(normalizedTool).length === 0) {
+          return [];
+        }
+      }
+    }
 
     // Use index access with type assertion to avoid TypeScript errors
     // Handle google_search -> googleSearch conversion
@@ -1343,7 +1383,7 @@ export function normalizeTools(tools: Tool[]): Tool[] {
       }));
     }
 
-    return normalizedTool;
+    return [normalizedTool];
   });
 }
 
@@ -1825,10 +1865,9 @@ export function validateFunctionCall(
     // Parse function call and validate it against schema
     const functionName = functionCall.name;
     const functionArgs = parseStringObject(functionCall.args);
-    const functionDeclarations = interpolatedFunctions?.find((f) => 'functionDeclarations' in f);
-    const functionSchema = functionDeclarations?.functionDeclarations?.find(
-      (f) => f.name === functionName,
-    );
+    const functionSchema = interpolatedFunctions
+      ?.flatMap((tool) => tool.functionDeclarations ?? [])
+      .find((declaration) => declaration.name === functionName);
     if (!functionSchema) {
       throw new Error(`Called "${functionName}", but there is no function with that name`);
     }

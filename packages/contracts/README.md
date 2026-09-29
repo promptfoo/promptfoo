@@ -39,6 +39,6 @@ The standalone test copies only this workspace's declared build inputs outside
 the repository, installs its declared dependencies, builds both formats, and
 installs its tarball in a second consumer. That consumer checks ESM/CommonJS
 runtime behavior and mode-specific TypeScript declarations without repository
-aliases or hoisted dependencies. The full-package artifact test separately proves
-that the public facade remains installable. This pilot establishes ownership and
-isolation; it does not claim a smaller full `promptfoo` installation.
+aliases or hoisted dependencies. The full-package artifact test separately checks that the published package
+remains installable. Moving these files does not reduce the full package install
+size.

@@ -5,6 +5,13 @@ import * as workspaceBlobs from '../../packages/contracts/src/blobs';
 import * as workspaceEnv from '../../packages/contracts/src/env';
 import * as workspaceIndex from '../../packages/contracts/src/index';
 import * as workspacePrompts from '../../packages/contracts/src/prompts';
+import * as workspaceAuth from '../../packages/contracts/src/providerConfig/auth';
+import * as workspaceHttp from '../../packages/contracts/src/providerConfig/http';
+import * as workspaceHttpAuth from '../../packages/contracts/src/providerConfig/httpAuth';
+import * as workspaceHttpMultipart from '../../packages/contracts/src/providerConfig/httpMultipart';
+import * as workspaceHttpSignature from '../../packages/contracts/src/providerConfig/httpSignature';
+import * as workspaceHttpTls from '../../packages/contracts/src/providerConfig/httpTls';
+import * as workspaceMcp from '../../packages/contracts/src/providerConfig/mcp';
 import * as workspaceProviders from '../../packages/contracts/src/providers';
 import * as workspaceShared from '../../packages/contracts/src/shared';
 import * as workspaceTraceProviderEndpoint from '../../packages/contracts/src/traceProviderEndpoint';
@@ -18,6 +25,13 @@ import * as contractsBlobs from '../../src/contracts/blobs';
 import * as contractsEnv from '../../src/contracts/env';
 import * as contractsIndex from '../../src/contracts/index';
 import * as contractsPrompts from '../../src/contracts/prompts';
+import * as contractsAuth from '../../src/contracts/providerConfig/auth';
+import * as contractsHttp from '../../src/contracts/providerConfig/http';
+import * as contractsHttpAuth from '../../src/contracts/providerConfig/httpAuth';
+import * as contractsHttpMultipart from '../../src/contracts/providerConfig/httpMultipart';
+import * as contractsHttpSignature from '../../src/contracts/providerConfig/httpSignature';
+import * as contractsHttpTls from '../../src/contracts/providerConfig/httpTls';
+import * as contractsMcp from '../../src/contracts/providerConfig/mcp';
 import * as contractsProviders from '../../src/contracts/providers';
 import * as contractsShared from '../../src/contracts/shared';
 import * as contractsTraceProviderEndpoint from '../../src/contracts/traceProviderEndpoint';
@@ -29,6 +43,13 @@ describe('contracts workspace compatibility', () => {
   const pairs: Array<[string, Record<string, unknown>, Record<string, unknown>]> = [
     ['public barrel', contracts, workspaceIndex],
     ['index', contractsIndex, workspaceIndex],
+    ['providerConfig/mcp', contractsMcp, workspaceMcp],
+    ['providerConfig/httpTls', contractsHttpTls, workspaceHttpTls],
+    ['providerConfig/httpSignature', contractsHttpSignature, workspaceHttpSignature],
+    ['providerConfig/httpMultipart', contractsHttpMultipart, workspaceHttpMultipart],
+    ['providerConfig/httpAuth', contractsHttpAuth, workspaceHttpAuth],
+    ['providerConfig/http', contractsHttp, workspaceHttp],
+    ['providerConfig/auth', contractsAuth, workspaceAuth],
     ['api/common', contractsApiCommon, workspaceApiCommon],
     ['api/user', contractsApiUser, workspaceApiUser],
     ['blobs', contractsBlobs, workspaceBlobs],

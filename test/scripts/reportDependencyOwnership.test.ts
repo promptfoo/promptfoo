@@ -84,6 +84,38 @@ describe('dependency ownership report', () => {
     ]);
   });
 
+  it.each([true, false, undefined])(
+    'preserves peer summaries with optional metadata %s',
+    (optional) => {
+      json('package.json', {
+        dependencies: { shared: '1' },
+        peerDependencies: { shared: '1', peer: '1', unused: '1' },
+        peerDependenciesMeta: optional === undefined ? undefined : { peer: { optional } },
+      });
+      write('src/index.ts', "import 'shared'; import 'peer/subpath';");
+      const report = reportDependencyOwnership(root, config);
+      expect(report.rows).toEqual([
+        {
+          dependency: 'peer',
+          kind: optional ? 'optional-peer' : 'peer',
+          owner: 'runtime',
+          layers: 'runtime',
+          files: 1,
+        },
+        {
+          dependency: 'shared',
+          kind: 'dependency+peer',
+          owner: 'runtime',
+          layers: 'runtime',
+          files: 1,
+        },
+        { dependency: 'unused', kind: 'peer', owner: 'unreferenced', layers: '-', files: 0 },
+      ]);
+      expect(report.undeclaredUsages).toEqual([]);
+      expect(report.runtimeDeclarationGaps).toEqual([]);
+    },
+  );
+
   it('keeps unaudited packages out of root ownership under configured source roots', () => {
     json('package.json', {
       dependencies: { shared: '1' },
@@ -112,6 +144,7 @@ describe('dependency ownership report', () => {
   it.each([
     { patterns: ['packages/*', '!packages/skip'], included: ['contracts'] },
     { patterns: ['!packages/skip', 'packages/*'], included: ['contracts'] },
+    { patterns: ['packages/*', '!packages/skip', 'packages/**'], included: ['contracts'] },
     {
       patterns: ['packages/*', '!packages/skip', 'packages/skip'],
       included: ['contracts', 'skip'],
@@ -1005,6 +1038,26 @@ describe('dependency ownership report', () => {
     write('src/index.js', "import require from './local.js'; require('local-only');");
     write('src/local.js', 'export default () => {};');
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
+  });
+
+  it('keeps namespace import-equals bindings inside their scope', () => {
+    write(
+      'src/index.ts',
+      "namespace Legacy { import require = Loader; require('local'); } require('driver');",
+    );
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'driver' }),
+    ]);
+  });
+
+  it('recognizes static template loader properties', () => {
+    write(
+      'src/index.ts',
+      "module[`require`]('driver'); require[`resolve`]('resolved'); import.meta[`resolve`]('imported');",
+    );
+    expect(
+      reportDependencyOwnership(root, config).undeclaredUsages.map(({ dependency }) => dependency),
+    ).toEqual(['driver', 'imported', 'resolved']);
   });
 
   it('handles import-equals loader shadows and computed module require', () => {
