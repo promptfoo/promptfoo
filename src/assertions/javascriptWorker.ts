@@ -67,15 +67,8 @@ export async function runJavascriptInWorker({
     'assertions',
     `javascriptWorkerEntry.${built ? 'js' : 'ts'}`,
   );
-  // --input-type applies to the parent's string entry point, not the worker file.
-  const execArgv: string[] = built
-    ? process.execArgv.filter(
-        (arg, index, args) =>
-          arg !== '--input-type' &&
-          !arg.startsWith('--input-type=') &&
-          args[index - 1] !== '--input-type',
-      )
-    : [];
+  // Parent entry-point and V8 flags are not valid worker startup arguments.
+  const execArgv: string[] = [];
   if (!built) {
     const loader = resolvePackageEntryPoint('tsx', getDirectory());
     if (!loader) {

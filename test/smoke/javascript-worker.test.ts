@@ -19,6 +19,10 @@ describe('built JavaScript assertion worker', () => {
   it.each([
     [['--input-type=module'], "import { assertions } from './dist/src/index.js';"],
     [['--input-type', 'commonjs'], "const { assertions } = require('./dist/src/index.cjs');"],
+    [
+      ['--max-old-space-size=4096', '--input-type=module'],
+      "import { assertions } from './dist/src/index.js';",
+    ],
   ])('runs a file worker from a string library entry point %j', (flags, load) => {
     const result = spawnSync(
       process.execPath,
