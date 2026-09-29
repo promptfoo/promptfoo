@@ -17,7 +17,11 @@ import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { categoryAliasesReverse, PLUGIN_CATEGORIES } from '../redteam/constants';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
-import { makeDefaultPolicyName } from '../redteam/plugins/policy/utils';
+import {
+  deserializePolicyIdFromMetric,
+  isPolicyMetric,
+  makeDefaultPolicyName,
+} from '../redteam/plugins/policy/utils';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import { getTraceStore } from '../tracing/store';
 import {
@@ -116,6 +120,7 @@ interface RedteamReportResultRow {
   gradingAssertionMetric: string | null;
   gradingSuggestions: string | null;
   gradingComponentResults: string | null;
+  identityMetric: string | null;
   metadataPluginId: string | null;
   metadataPolicyId: string | null;
   metadataHarmCategory: string | null;
@@ -127,6 +132,7 @@ interface RedteamReportResultRow {
 
 type RedteamReportStripFlags = ReturnType<typeof getStripFlags>;
 const MAX_REPORT_TEXT_LENGTH = 10_240;
+const MAX_REPORT_ITEMS = 25;
 
 const REDTEAM_REPORT_ERROR_MARKER = '[error details stripped]';
 
@@ -175,7 +181,7 @@ function projectSuggestionsForRedteamReport(
         },
       ];
     })
-    .slice(0, 25);
+    .slice(0, MAX_REPORT_ITEMS);
 }
 
 function projectAssertionForRedteamReport(
@@ -196,36 +202,63 @@ const REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES = [
   ...Object.keys(categoryAliasesReverse).map((alias) => `${alias}/`),
 ];
 
-function hasRedteamReportIdentity(result: unknown): boolean {
-  if (!isRecord(result) || !isRecord(result.assertion)) {
-    return false;
+function reportPluginIdFromMetric(metric: unknown): string | undefined {
+  if (typeof metric !== 'string') {
+    return undefined;
   }
-
-  if (result.assertion.type === 'moderation') {
-    return true;
+  if (isPolicyMetric(metric)) {
+    return deserializePolicyIdFromMetric(metric);
   }
-  const metric = result.assertion.metric;
-  return (
-    typeof metric === 'string' &&
-    (Object.prototype.hasOwnProperty.call(categoryAliasesReverse, metric) ||
-      REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES.some((prefix) => metric.startsWith(prefix)))
-  );
+  return categoryAliasesReverse[metric.split('/')[0] as keyof typeof categoryAliasesReverse];
 }
 
-function projectGradingResultForRedteamReport(gradingResult: GradingResult): GradingResult {
+function reportIdentityMetric(gradingResult: GradingResult | null | undefined): string | undefined {
+  const components = gradingResult?.componentResults;
+  return Array.isArray(components)
+    ? components.find((component) => reportPluginIdFromMetric(component?.assertion?.metric))
+        ?.assertion?.metric
+    : undefined;
+}
+
+function reportIdentityMetadata(
+  metadata: EvaluateResult['metadata'],
+  testMetadata: AtomicTestCase['metadata'],
+  harmCategory: unknown,
+  metric: unknown,
+): EvaluateResult['metadata'] {
+  const hasIdentity =
+    (typeof metadata?.pluginId === 'string' && metadata.pluginId !== 'policy') ||
+    (typeof testMetadata?.pluginId === 'string' && testMetadata.pluginId !== 'policy') ||
+    ((metadata?.pluginId === 'policy' || testMetadata?.pluginId === 'policy') &&
+      typeof (testMetadata?.policyId ?? metadata?.policyId) === 'string') ||
+    harmCategory ||
+    metadata?.harmCategory;
+  const pluginId = !hasIdentity && reportPluginIdFromMetric(metric);
+  return pluginId ? { ...metadata, pluginId } : metadata;
+}
+
+function projectGradingResultForRedteamReport(
+  gradingResult: GradingResult,
+  includeComponents = true,
+): GradingResult {
   const assertion = projectAssertionForRedteamReport(gradingResult.assertion);
   const suggestions = projectSuggestionsForRedteamReport(gradingResult.suggestions);
 
-  const components = Array.isArray(gradingResult.componentResults)
-    ? gradingResult.componentResults
-    : undefined;
-  const compactComponents = components?.filter(
-    (component, index) => index < 25 || hasRedteamReportIdentity(component),
+  const components =
+    includeComponents && Array.isArray(gradingResult.componentResults)
+      ? gradingResult.componentResults
+      : undefined;
+  const compactComponents = components?.slice(0, MAX_REPORT_ITEMS);
+  const blockedModeration = components?.find(
+    (component) => component?.assertion?.type === 'moderation' && component.pass === false,
   );
+  if (blockedModeration && compactComponents && !compactComponents.includes(blockedModeration)) {
+    compactComponents.push(blockedModeration);
+  }
   const componentResults = compactComponents
     ?.filter(isRecord)
     .map((componentResult) =>
-      projectGradingResultForRedteamReport(componentResult as unknown as GradingResult),
+      projectGradingResultForRedteamReport(componentResult as unknown as GradingResult, false),
     );
 
   return {
@@ -320,6 +353,17 @@ function jsonNumberOrNull(value: SQLWrapper, path: string): SQL<number | null> {
   >`CASE WHEN json_type(${value}, ${path}) IN ('integer', 'real') THEN json_extract(${value}, ${path}) ELSE NULL END`;
 }
 
+function jsonBoundedValueOrNull(value: SQLWrapper, path: string): SQL<string | null> {
+  return sql<string | null>`CASE
+    WHEN json_type(${value}, ${path}) = 'text'
+      THEN json_quote(substr(json_extract(${value}, ${path}), 1, ${MAX_REPORT_TEXT_LENGTH}))
+    WHEN json_type(${value}, ${path}) IN ('array', 'object')
+      THEN CASE WHEN length(${value} -> ${path}) <= ${MAX_REPORT_TEXT_LENGTH}
+        THEN ${value} -> ${path}
+        ELSE json_quote(substr(${value} -> ${path}, 1, ${MAX_REPORT_TEXT_LENGTH})) END
+    ELSE NULL END`;
+}
+
 function jsonSuggestionsOrNull(value: SQLWrapper, path: string): SQL<string | null> {
   return sql<string | null>`CASE
     WHEN json_type(${value}, ${path}) = 'array'
@@ -339,7 +383,7 @@ function jsonSuggestionsOrNull(value: SQLWrapper, path: string): SQL<string | nu
           'replace-prompt', 'pre-filter', 'post-filter', 'note'
         )
         AND json_type(report_suggestion.value, '$.value') = 'text'
-        AND report_suggestion.key < 25
+        AND report_suggestion.key < ${MAX_REPORT_ITEMS}
     )
     ELSE NULL
   END`;
@@ -385,13 +429,16 @@ function normalizePromptForRedteamReport(prompt: unknown, bound = true): Prompt 
 
 function projectProviderForRedteamReport(
   provider: EvaluateResult['provider'] | unknown,
+  bound = true,
 ): EvaluateResult['provider'] {
   if (!isRecord(provider)) {
     return { id: '' };
   }
   return {
     id: typeof provider.id === 'string' ? provider.id : '',
-    ...(typeof provider.label === 'string' && { label: provider.label }),
+    ...(typeof provider.label === 'string' && {
+      label: bound ? provider.label.slice(0, MAX_REPORT_TEXT_LENGTH) : provider.label,
+    }),
   };
 }
 
@@ -423,11 +470,11 @@ function createProjectedGradingResult(row: RedteamReportResultRow): GradingResul
   } as unknown as GradingResult);
 }
 
-function boundReportPrompt(prompt: NonNullable<EvaluateResult['response']>['prompt']) {
+function boundReportValue<T>(prompt: T): T | string | undefined {
   if (typeof prompt === 'string') {
     return prompt.slice(0, MAX_REPORT_TEXT_LENGTH);
   }
-  if (Array.isArray(prompt)) {
+  if (Array.isArray(prompt) || isRecord(prompt)) {
     const serialized = JSON.stringify(prompt);
     return serialized.length > MAX_REPORT_TEXT_LENGTH
       ? serialized.slice(0, MAX_REPORT_TEXT_LENGTH)
@@ -477,7 +524,12 @@ function createRedteamReportMetadata(
     ...(row.metadataPolicyId !== null && { policyId: row.metadataPolicyId }),
     ...(row.metadataHarmCategory !== null && { harmCategory: row.metadataHarmCategory }),
   };
-  return Object.keys(metadata).length > 0 ? metadata : undefined;
+  return reportIdentityMetadata(
+    Object.keys(metadata).length > 0 ? metadata : undefined,
+    { pluginId: row.testCasePluginId, policyId: row.testCasePolicyId },
+    parseJsonFragment<EvaluateResult['vars']>(row.vars)?.harmCategory,
+    row.identityMetric,
+  );
 }
 
 function createRedteamReportResult(
@@ -582,7 +634,13 @@ function projectResultForRedteamReport(
         ...(typeof metadata.harmCategory === 'string' && { harmCategory: metadata.harmCategory }),
       }
     : undefined;
-  const projectedMetadata = allowlistedMetadata;
+  const metric = reportIdentityMetric(result.gradingResult);
+  const projectedMetadata = reportIdentityMetadata(
+    allowlistedMetadata,
+    result.testCase?.metadata,
+    result.vars?.harmCategory,
+    metric,
+  );
 
   const redteamFinalPromptCandidate =
     result.response?.metadata?.redteamFinalPrompt ?? metadata?.redteamFinalPrompt;
@@ -592,16 +650,14 @@ function projectResultForRedteamReport(
       : typeof redteamFinalPromptCandidate === 'string'
         ? redteamFinalPromptCandidate.slice(0, MAX_REPORT_TEXT_LENGTH)
         : undefined;
-  const responsePrompt = boundReportPrompt(result.response?.prompt);
+  const responsePrompt = boundReportValue(result.response?.prompt);
   const hasResponsePrompt = !stripFlags.shouldStripPromptText && responsePrompt !== undefined;
   const response =
     result.response || redteamFinalPrompt !== undefined
       ? {
           ...(result.response && stripFlags.shouldStripResponseOutput
             ? { output: '[output stripped]' }
-            : typeof result.response?.output === 'string' && {
-                output: result.response.output.slice(0, MAX_REPORT_TEXT_LENGTH),
-              }),
+            : { output: boundReportValue(result.response?.output) }),
           ...(hasResponsePrompt && { prompt: responsePrompt }),
           ...(!hasResponsePrompt &&
             redteamFinalPrompt !== undefined && { metadata: { redteamFinalPrompt } }),
@@ -717,7 +773,7 @@ function projectPluginForRedteamReport(
     id: plugin.id,
     ...(typeof plugin.severity === 'string' && { severity: plugin.severity }),
   };
-  if (stripPromptText || plugin.id !== 'policy' || !isRecord(plugin.config)) {
+  if (plugin.id !== 'policy' || !isRecord(plugin.config)) {
     return projectedPlugin;
   }
 
@@ -727,16 +783,17 @@ function projectPluginForRedteamReport(
       policy: {
         id: sha256(policy).slice(0, 12),
         name: makeDefaultPolicyName(policyIndex),
-        text: policy.slice(0, MAX_REPORT_TEXT_LENGTH),
+        ...(!stripPromptText && { text: policy.slice(0, MAX_REPORT_TEXT_LENGTH) }),
       },
     };
   } else if (isRecord(policy)) {
     const projectedPolicy = {
       ...(typeof policy.id === 'string' && { id: policy.id }),
       ...(typeof policy.name === 'string' && { name: policy.name }),
-      ...(typeof policy.text === 'string' && {
-        text: policy.text.slice(0, MAX_REPORT_TEXT_LENGTH),
-      }),
+      ...(!stripPromptText &&
+        typeof policy.text === 'string' && {
+          text: policy.text.slice(0, MAX_REPORT_TEXT_LENGTH),
+        }),
     };
     if (Object.keys(projectedPolicy).length > 0) {
       projectedPlugin.config = { policy: projectedPolicy };
@@ -761,7 +818,9 @@ function projectConfigForRedteamReport(
       ? undefined
       : {
           id: providerId,
-          ...(typeof providerRecord?.label === 'string' && { label: providerRecord.label }),
+          ...(typeof providerRecord?.label === 'string' && {
+            label: providerRecord.label.slice(0, MAX_REPORT_TEXT_LENGTH),
+          }),
           ...(tools !== undefined && { config: { tools } }),
         };
   let policyIndex = 0;
@@ -857,7 +916,7 @@ function normalizeLegacyResultForDetail(
     promptIdx,
     testCase,
     promptId: typeof value.promptId === 'string' ? value.promptId : hashPrompt(prompt),
-    provider: projectProviderForRedteamReport(value.provider),
+    provider: projectProviderForRedteamReport(value.provider, false),
     prompt,
     vars: isRecord(value.vars)
       ? (value.vars as EvaluateResult['vars'])
@@ -886,7 +945,7 @@ function normalizeLegacyResultForDetail(
   const sanitized = sanitizeResultForJsonlArtifact(normalizedResult, stripFlags);
   return {
     ...sanitized,
-    provider: projectProviderForRedteamReport(sanitized.provider),
+    provider: projectProviderForRedteamReport(sanitized.provider, false),
   };
 }
 
@@ -1319,8 +1378,11 @@ export default class Eval {
         AND json_extract(legacy_result.value, '$.testIdx') = ${testIdx}
         AND json_extract(legacy_result.value, '$.promptIdx') = ${promptIdx}
         ${resultIdPredicate}
-      LIMIT 1
+      LIMIT 2
     `);
+    if (legacyRows.length !== 1) {
+      return undefined;
+    }
     const legacyRow = legacyRows[0];
     if (!legacyRow) {
       return undefined;
@@ -2385,12 +2447,19 @@ export default class Eval {
     }
 
     if (!this.persisted) {
-      return projectSummaryForRedteamReport(
-        await this.toEvaluateSummary(),
-        injectVar,
-        stripFlags,
-        true,
-      );
+      const summary = await this.toEvaluateSummary();
+      if (!stripFlags.shouldStripMetadata) {
+        summary.results.forEach((result, index) => {
+          const metric = reportIdentityMetric(this.results[index]?.gradingResult);
+          result.metadata = reportIdentityMetadata(
+            result.metadata,
+            result.testCase?.metadata,
+            result.vars?.harmCategory,
+            metric,
+          );
+        });
+      }
+      return projectSummaryForRedteamReport(summary, injectVar, stripFlags, true);
     }
 
     const reportVarKeys = [...new Set([injectVar, 'prompt', 'query', 'question', 'harmCategory'])];
@@ -2433,9 +2502,7 @@ export default class Eval {
       providerId: sql<
         string | null
       >`CASE WHEN json_type(${validProviderJson}, '$.id') = 'text' THEN json_extract(${validProviderJson}, '$.id') ELSE NULL END`,
-      providerLabel: sql<
-        string | null
-      >`CASE WHEN json_type(${validProviderJson}, '$.label') = 'text' THEN json_extract(${validProviderJson}, '$.label') ELSE NULL END`,
+      providerLabel: jsonBoundedTextOrNull(validProviderJson, '$.label'),
       promptObjectId: sql<
         string | null
       >`CASE WHEN json_type(${validPromptJson}, '$.id') = 'text' THEN json_extract(${validPromptJson}, '$.id') ELSE NULL END`,
@@ -2485,24 +2552,10 @@ export default class Eval {
       responseExists: jsonIsObject(sources.response),
       responseOutput: stripFlags.shouldStripResponseOutput
         ? sql<string | null>`NULL`
-        : sql<string | null>`CASE
-              WHEN json_type(${validResponseJson}, '$.output') = 'text'
-              THEN json_quote(substr(json_extract(${validResponseJson}, '$.output'), 1, ${MAX_REPORT_TEXT_LENGTH}))
-              ELSE NULL
-            END`,
+        : jsonBoundedValueOrNull(validResponseJson, '$.output'),
       responsePrompt: stripFlags.shouldStripPromptText
         ? sql<string | null>`NULL`
-        : sql<string | null>`CASE
-              WHEN json_type(${validResponseJson}, '$.prompt') = 'text'
-              THEN json_quote(substr(json_extract(${validResponseJson}, '$.prompt'), 1, ${MAX_REPORT_TEXT_LENGTH}))
-              WHEN json_type(${validResponseJson}, '$.prompt') = 'array'
-              THEN CASE
-                WHEN length(${validResponseJson} -> '$.prompt') <= ${MAX_REPORT_TEXT_LENGTH}
-                THEN ${validResponseJson} -> '$.prompt'
-                ELSE json_quote(substr(${validResponseJson} -> '$.prompt', 1, ${MAX_REPORT_TEXT_LENGTH}))
-              END
-              ELSE NULL
-            END`,
+        : jsonBoundedValueOrNull(validResponseJson, '$.prompt'),
       responseRedteamFinalPrompt:
         stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
           ? sql<string | null>`NULL`
@@ -2583,19 +2636,36 @@ export default class Eval {
               json_extract(${validGradingResultJson}, '$.componentResults')
             ) AS report_component
             WHERE report_component.type = 'object'
-              AND (report_component.key < 25 OR json_extract(${validReportComponentJson}, '$.assertion.type') = 'moderation' OR json_extract(${validReportComponentJson}, '$.assertion.metric') IN (${sql.join(
-                Object.keys(categoryAliasesReverse).map((alias) => sql`${alias}`),
-                sql`, `,
-              )}) OR (${sql.join(
-                REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES.map(
-                  (prefix) =>
-                    sql`json_extract(${validReportComponentJson}, '$.assertion.metric') LIKE ${prefix + '%'}`,
-                ),
-                sql` OR `,
-              )}))
+              AND (report_component.key < ${MAX_REPORT_ITEMS} OR report_component.key = (
+                SELECT blocked_component.key FROM json_each(json_extract(${validGradingResultJson}, '$.componentResults')) AS blocked_component
+                WHERE blocked_component.type = 'object'
+                  AND json_extract(blocked_component.value, '$.assertion.type') = 'moderation'
+                  AND json_extract(blocked_component.value, '$.pass') = 0
+                ORDER BY blocked_component.key LIMIT 1
+              ))
           )
           ELSE NULL
         END`,
+      identityMetric: sql<string | null>`(
+        SELECT ${jsonBoundedTextOrNull(validReportComponentJson, '$.assertion.metric')}
+        FROM json_each(CASE WHEN json_type(${validGradingResultJson}, '$.componentResults') = 'array'
+          THEN json_extract(${validGradingResultJson}, '$.componentResults') ELSE json('[]') END) AS report_component
+        WHERE report_component.type = 'object' AND (
+          json_extract(${validReportComponentJson}, '$.assertion.metric') IN (${sql.join(
+            Object.keys(categoryAliasesReverse).map((alias) => sql`${alias}`),
+            sql`, `,
+          )})
+          OR (${sql.join(
+            REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES.map(
+              (prefix) =>
+                sql`substr(json_extract(${validReportComponentJson}, '$.assertion.metric'), 1, ${prefix.length}) = ${prefix}`,
+            ),
+            sql` OR `,
+          )})
+        )
+        ORDER BY report_component.key
+        LIMIT 1
+      )`,
       metadataPluginId: jsonTextOrNull(validMetadataJson, '$.pluginId'),
       metadataPolicyId: jsonTextOrNull(validMetadataJson, '$.policyId'),
       metadataHarmCategory: jsonTextOrNull(validMetadataJson, '$.harmCategory'),

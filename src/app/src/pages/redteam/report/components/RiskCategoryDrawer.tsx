@@ -169,6 +169,8 @@ const RiskCategoryDrawer = ({
     setDetailsLoadError(null);
     setSelectedTest(null);
     setDetailsDialogOpen(false);
+    setSuggestionsDialogOpen(false);
+    setCurrentGradingResult(undefined);
     return () => {
       detailsAbortRef.current?.abort();
     };
@@ -190,7 +192,11 @@ const RiskCategoryDrawer = ({
   const totalTests = numPassed + numFailed;
   const passPercentage = totalTests > 0 ? Math.round((numPassed / totalTests) * 100) : 0;
 
-  const loadFullTestDetails = async (test: TestWithMetadata, detailsKey: string) => {
+  const loadFullTestDetails = async (
+    test: TestWithMetadata,
+    detailsKey: string,
+    view: 'details' | 'suggestions' = 'details',
+  ) => {
     const compactResult = test.result;
     setSelectedTest(null);
     setDetailsDialogOpen(false);
@@ -234,12 +240,17 @@ const RiskCategoryDrawer = ({
         return;
       }
 
-      setSelectedTest({
-        ...test,
-        gradingResult: fullResult.gradingResult ?? undefined,
-        result: fullResult,
-      });
-      setDetailsDialogOpen(true);
+      if (view === 'suggestions') {
+        setCurrentGradingResult(fullResult.gradingResult ?? undefined);
+        setSuggestionsDialogOpen(true);
+      } else {
+        setSelectedTest({
+          ...test,
+          gradingResult: fullResult.gradingResult ?? undefined,
+          result: fullResult,
+        });
+        setDetailsDialogOpen(true);
+      }
     } catch (error) {
       if (!isCurrentRequest()) {
         return;
@@ -279,9 +290,8 @@ const RiskCategoryDrawer = ({
         ? `coordinates:${test.result.testIdx}:${test.result.promptIdx}`
         : `${isFailed ? 'failure' : 'pass'}:${index}`;
     const strategyId = getStrategyIdFromTest(test);
-    const hasSuggestions = test.gradingResult?.componentResults?.some(
-      (result) => (result.suggestions?.length || 0) > 0,
-    );
+    // Full suggestions may be omitted from the compact grading preview.
+    const hasSuggestions = Boolean(test.gradingResult);
     const chatMessages = buildChatMessages(test);
     const maxTurns = Math.ceil(chatMessages.length / 2);
     const strategyLabel = strategyId
@@ -324,11 +334,11 @@ const RiskCategoryDrawer = ({
                     <button
                       type="button"
                       aria-label="View suggestions"
+                      disabled={loadingDetailsKey !== null}
                       className="rounded-md p-1 hover:bg-muted"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setCurrentGradingResult(test.gradingResult);
-                        setSuggestionsDialogOpen(true);
+                        void loadFullTestDetails(test, detailsKey, 'suggestions');
                       }}
                     >
                       <Lightbulb className="size-3.5 text-primary" />

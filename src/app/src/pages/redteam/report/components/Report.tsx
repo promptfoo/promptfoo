@@ -103,6 +103,7 @@ const App = ({ evalId: requestedEvalId, embedded, onActionsReady }: ReportProps)
       setEvalData(null);
       setLoadError(null);
       setSelectedPromptIndex(0);
+      setIsToolsDialogOpen(false);
 
       try {
         const resp = await callApi(
@@ -1074,7 +1075,7 @@ const App = ({ evalId: requestedEvalId, embedded, onActionsReady }: ReportProps)
         <ToolsDialog
           open={isToolsDialogOpen}
           onClose={() => setIsToolsDialogOpen(false)}
-          tools={tools}
+          evalId={evalId}
         />
       </div>
       {embedded && (

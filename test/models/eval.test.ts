@@ -1582,6 +1582,19 @@ describe('evaluator', () => {
       );
     });
 
+    it('rejects ambiguous ID-less legacy row details', async () => {
+      const results = ['first', 'second'].map((output) =>
+        createEvaluateResult({
+          id: undefined,
+          testIdx: 4,
+          promptIdx: 2,
+          response: { output },
+        }),
+      );
+      const evalId = await writeResultsToDatabase(createEvaluateSummaryV2({ results }), {});
+      expect(await Eval.getResultByIdAndIndices(evalId, 4, 2)).toBeUndefined();
+    });
+
     it('loads and sanitizes one legacy result without hydrating the evaluation', async () => {
       const longPrompt = 'legacy prompt '.repeat(1_000);
       const legacyResult = createEvaluateResult({
@@ -1675,7 +1688,7 @@ describe('evaluator', () => {
       expect(full?.result.results.results[0].response?.output).toBe(longOutput);
     });
 
-    it('keeps moderation, category and policy results after the preview component limit', async () => {
+    it('keeps category identity and one failed moderation result beyond the preview cap', async () => {
       const components = [
         ...Array.from({ length: 30 }, () => ({
           pass: true,
@@ -1722,14 +1735,15 @@ describe('evaluator', () => {
         const metrics = report.results.results[0].gradingResult?.componentResults?.map(
           (component) => component.assertion?.metric,
         );
-        expect(metrics).toHaveLength(28);
+        expect(metrics).toHaveLength(26);
+        expect(report.results.results[0].metadata?.pluginId).toBe('harmful');
         expect(
           report.results.results[0].gradingResult?.componentResults?.find(
             (component) => component.assertion?.type === 'moderation',
           )?.pass,
         ).toBe(false);
-        expect(metrics).toContain('Harmful');
-        expect(metrics).toContain('PolicyViolation:policy-id');
+        expect(metrics).not.toContain('Harmful');
+        expect(metrics).not.toContain('PolicyViolation:policy-id');
       }
     });
 
@@ -1794,6 +1808,63 @@ describe('evaluator', () => {
           },
         },
       ]);
+    });
+
+    it('keeps safe policy names and IDs when policy text is stripped', async () => {
+      const evaluation = new Eval({
+        env: { PROMPTFOO_STRIP_PROMPT_TEXT: 'true' },
+        redteam: {
+          plugins: [
+            { id: 'policy', config: { policy: 'Ordinary policy text' } },
+            {
+              id: 'policy',
+              config: {
+                policy: { id: 'policy-a', name: 'Named policy', text: 'Another policy text' },
+              },
+            },
+          ],
+        },
+      });
+      const report = await evaluation.toResultsFile({
+        resultProjection: 'redteamReport',
+        includeTraces: false,
+      });
+      expect(report.config.redteam?.plugins).toEqual([
+        {
+          id: 'policy',
+          config: {
+            policy: { id: sha256('Ordinary policy text').slice(0, 12), name: 'Custom Policy 1' },
+          },
+        },
+        { id: 'policy', config: { policy: { id: 'policy-a', name: 'Named policy' } } },
+      ]);
+    });
+
+    it.each([
+      { answer: 'saved object' },
+      [{ text: 'saved array' }],
+      { answer: 'x'.repeat(11_000) },
+    ])('keeps bounded structured output previews in every storage mode', async (output) => {
+      const result = createEvaluateResult({ response: { output } });
+      const persisted = await EvalFactory.create({ numResults: 0 });
+      const memory = new Eval({});
+      await persisted.addResult(result);
+      await memory.addResult(result);
+      const legacy = new Eval({});
+      legacy.oldResults = createEvaluateSummaryV2({ results: [result] });
+      const legacyId = await writeResultsToDatabase(legacy.oldResults, {});
+      const reports = await Promise.all(
+        [persisted, memory, legacy].map((eval_) =>
+          eval_.toResultsFile({ resultProjection: 'redteamReport', includeTraces: false }),
+        ),
+      );
+      reports.push((await readResult(legacyId, { resultProjection: 'redteamReport' }))!.result);
+      const json = JSON.stringify(output);
+      for (const report of reports) {
+        expect(report.results.results[0].response?.output).toEqual(
+          json.length > 10_240 ? json.slice(0, 10_240) : output,
+        );
+      }
     });
 
     it('honors scoped output stripping when loading normalized and legacy row details', async () => {
@@ -2511,6 +2582,7 @@ describe('evaluator', () => {
 
       expect(result.vars).toEqual({ prompt: false, question: { nested: true } });
       expect(result.response).toEqual({
+        output: { accepted: false },
         prompt: [{ role: 'user', content: 'Full provider prompt' }],
       });
       expect(result.gradingResult).toMatchObject({
@@ -3566,6 +3638,7 @@ describe('evaluator', () => {
       const cases = values.map((prompt, testIdx) =>
         createEvaluateResult({
           testIdx,
+          provider: { id: 'echo', label: longText },
           prompt: { raw: longText, label: longText, display: longText },
           vars: { prompt: longText, query: { nested: longText }, harmCategory: 42 },
           testCase: { vars: { prompt: longText, query: { nested: longText }, harmCategory: 42 } },
@@ -3579,9 +3652,10 @@ describe('evaluator', () => {
               score: 0,
               reason: longText,
               ...(index === 0 && {
+                componentResults: [{ pass: false, score: 0, reason: 'Nested details' }],
                 assertion: { type: 'contains', metric: 'Unrelated' },
               }),
-              ...(index === 29 && {
+              ...(index >= 25 && {
                 assertion: { type: 'contains', metric: 'PolicyViolation:late-policy' },
               }),
             })),
@@ -3620,10 +3694,9 @@ describe('evaluator', () => {
           expect(JSON.stringify(result.vars).length).toBeLessThanOrEqual(20_500);
           expect(result.vars.harmCategory).toBe(42);
           expect(result.gradingResult?.reason?.length).toBeLessThanOrEqual(10_240);
-          expect(result.gradingResult?.componentResults).toHaveLength(26);
-          expect(result.gradingResult?.componentResults?.[25].assertion?.metric).toBe(
-            'PolicyViolation:late-policy',
-          );
+          expect(result.provider.label?.length).toBeLessThanOrEqual(10_240);
+          expect(result.gradingResult?.componentResults).toHaveLength(25);
+          expect(result.gradingResult?.componentResults?.[0].componentResults).toBeUndefined();
           expect(result.gradingResult?.componentResults?.[0].reason.length).toBeLessThanOrEqual(
             10_240,
           );
@@ -3638,6 +3711,48 @@ describe('evaluator', () => {
         expect(full.results.results.map((result) => result.response?.prompt)).toEqual(values);
         expect(full.results.results[0].response?.output).toBe(longText);
         expect(full.results.results[0].gradingResult?.reason).toBe(longText);
+      }
+    });
+
+    it('preserves metric-only category identity when grading details are stripped', async () => {
+      const result = createEvaluateResult({
+        metadata: {},
+        testCase: {},
+        vars: {},
+        gradingResult: {
+          pass: false,
+          score: 0,
+          reason: 'private grading text',
+          componentResults: [
+            {
+              pass: false,
+              score: 0,
+              reason: 'private component text',
+              assertion: { type: 'contains', metric: 'PolicyViolation:policy-a' },
+            },
+          ],
+        },
+      });
+      const persisted = await EvalFactory.create({ numResults: 0 });
+      const memory = new Eval({});
+      await persisted.addResult(result);
+      await memory.addResult(result);
+      const legacy = new Eval({});
+      legacy.oldResults = createEvaluateSummaryV2({ results: [result] });
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_GRADING_RESULT: 'true' });
+      try {
+        for (const eval_ of [persisted, memory, legacy]) {
+          const compact = await eval_.toResultsFile({
+            resultProjection: 'redteamReport',
+            includeTraces: false,
+          });
+          expect(compact.results.results[0].metadata?.pluginId).toBe('policy-a');
+          expect(compact.results.results[0].gradingResult).toBeNull();
+          expect(JSON.stringify(compact)).not.toContain('private grading text');
+          expect(JSON.stringify(compact)).not.toContain('private component text');
+        }
+      } finally {
+        restoreEnv();
       }
     });
 

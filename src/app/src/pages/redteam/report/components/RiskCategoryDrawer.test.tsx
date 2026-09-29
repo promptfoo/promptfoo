@@ -21,7 +21,8 @@ vi.mock('react-router', () => ({
 
 vi.mock('@app/utils/api');
 
-const { mockEvalOutputPromptDialog } = vi.hoisted(() => ({
+const { mockEvalOutputPromptDialog, mockSuggestionsDialog } = vi.hoisted(() => ({
+  mockSuggestionsDialog: vi.fn(),
   mockEvalOutputPromptDialog: vi.fn(),
 }));
 
@@ -37,7 +38,10 @@ vi.mock('./PluginStrategyFlow', () => ({
 }));
 
 vi.mock('./SuggestionsDialog', () => ({
-  default: () => null,
+  default: (props: Record<string, unknown>) => {
+    mockSuggestionsDialog(props);
+    return null;
+  },
 }));
 
 describe('RiskCategoryDrawer Component Navigation', () => {
@@ -255,6 +259,40 @@ describe('RiskCategoryDrawer Component Navigation', () => {
 
     expect(stringifySpy).toHaveBeenCalledWith(complexOutput);
     expect(screen.getByText(JSON.stringify(complexOutput))).toBeInTheDocument();
+  });
+
+  it('loads full suggestions before opening the suggestions dialog', async () => {
+    const user = userEvent.setup();
+    const suggestion = { type: 'note', action: 'note' as const, value: 'complete recommendation' };
+    const fullGrading = {
+      pass: false,
+      score: 0,
+      reason: 'full',
+      componentResults: [{ pass: false, score: 0, reason: 'full', suggestions: [suggestion] }],
+    };
+    mockCallApiResponse({ data: { ...createMockEvaluateResult(), gradingResult: fullGrading } });
+    const compactGrading = {
+      ...fullGrading,
+      componentResults: [
+        { ...fullGrading.componentResults[0], suggestions: [{ ...suggestion, value: 'preview' }] },
+      ],
+    };
+    renderWithProviders(
+      <RiskCategoryDrawer
+        {...defaultProps}
+        failures={[{ ...defaultProps.failures[0], gradingResult: compactGrading }]}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'View suggestions' }));
+    await waitFor(() =>
+      expect(mockSuggestionsDialog).toHaveBeenLastCalledWith(
+        expect.objectContaining({ open: true, gradingResult: fullGrading }),
+      ),
+    );
+    expect(callApi).toHaveBeenCalledWith(
+      '/results/test-eval-123/rows/0/0',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
   });
 
   it('loads full grading details on demand using the coordinate fallback', async () => {
