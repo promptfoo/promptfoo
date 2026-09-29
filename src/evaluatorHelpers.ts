@@ -26,7 +26,11 @@ import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/
 import { renderVarsInObject } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
-import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
+import {
+  extractVariablesFromTemplate,
+  getNunjucksEngine,
+  templateReferencesVariable,
+} from './util/templates';
 import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
 
@@ -69,9 +73,8 @@ export function resolveVariables(
     const value = originals[key];
     if (typeof value === 'string') {
       if (renderTemplate && !referencesUndefinedVariables(value, originals)) {
-        for (const reference of extractVariablesFromTemplate(value)) {
-          const name = reference.split('.')[0];
-          if (Object.hasOwn(originals, name)) {
+        for (const name of Object.keys(originals)) {
+          if (templateReferencesVariable(value, name)) {
             resolve(name);
           }
         }

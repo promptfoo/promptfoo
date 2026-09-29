@@ -62,6 +62,94 @@ describe('runEval', () => {
     expect(mockProvider.callApi).toHaveBeenCalledWith('Test prompt', expect.anything(), undefined);
   });
 
+  it('keeps runtime output registers literal when resolving local templates', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: '{{message}}', label: 'register fixture' },
+      test: {
+        vars: { message: '{{answer}}!', settings: { marker: 'local value' } },
+      },
+      conversations: {},
+      registers: { answer: '{{settings.marker}}' },
+    });
+    expect(results[0].prompt.raw).toBe('{{settings.marker}}!');
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      '{{settings.marker}}!',
+      expect.anything(),
+      undefined,
+    );
+  });
+
+  it('resolves local expression dependencies before inserting imported data', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: '{{message}} / {{input}}', label: 'expression fixture' },
+      test: {
+        providerOutput: 'stored',
+        vars: {
+          message: '{{alias ~ "!"}}',
+          alias: '{{suffix}}',
+          suffix: 'done',
+          input: '{{marker}}',
+        },
+        metadata: { __promptfoo: { remote: true, remoteVars: ['input'] } },
+      },
+      conversations: {},
+      registers: {},
+    });
+    expect(results[0].prompt.raw).toBe('done! / {{marker}}');
+    expect(mockProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('rejects output-stripped replay before rendering or calling the provider', async () => {
+    const filter = vi.fn(() => 'rendered');
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: '{{input | fixture}}', label: 'redacted fixture' },
+      nunjucksFilters: { fixture: filter },
+      test: {
+        vars: { input: '{{marker}}', marker: 'local value' },
+        metadata: {
+          __promptfoo: { remote: true, remoteVars: ['input'], providerOutputRedacted: true },
+        },
+      },
+      conversations: {},
+      registers: {},
+    });
+    expect(results[0].success).toBe(false);
+    expect(results[0].error).toContain('Stored provider output was removed');
+    expect(filter).not.toHaveBeenCalled();
+    expect(mockProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('preserves imported data when a remote dataset requests a live response', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: '{{input}} / {{local}}', label: 'remote dataset fixture' },
+      test: {
+        vars: {
+          input: '{{settings.marker}}',
+          local: '{{suffix}}',
+          suffix: 'done',
+          settings: { marker: 'local value' },
+        },
+        metadata: { __promptfoo: { remote: true, remoteVars: ['input'] } },
+      },
+      conversations: {},
+      registers: {},
+    });
+    expect(results[0].prompt.raw).toBe('{{settings.marker}} / done');
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      '{{settings.marker}} / done',
+      expect.anything(),
+      undefined,
+    );
+  });
+
   it('should use empty providerOutput without calling the provider', async () => {
     const results = await runEval({
       ...defaultOptions,

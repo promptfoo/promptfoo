@@ -151,6 +151,27 @@ describe('sanitizeConfigForOutput', () => {
     expect(config.tests[0].metadata.note).toBe('remove me');
   });
 
+  it.each([true, false])(
+    'preserves output-redaction state across repeated exports (metadata stripping: %s)',
+    (stripMetadata) => {
+      const config = { tests: [{ providerOutput: '', vars: { input: '{{marker}}' } }] };
+      const output = sanitizeConfigForOutput(config, {
+        shouldStripMetadata: stripMetadata,
+        shouldStripResponseOutput: true,
+      });
+      expect(output.tests).toEqual([
+        {
+          vars: { input: '{{marker}}' },
+          metadata: { __promptfoo: { providerOutputRedacted: true } },
+        },
+      ]);
+      expect(sanitizeConfigForOutput(output, { shouldStripMetadata: true }).tests).toEqual(
+        output.tests,
+      );
+      expect(config.tests[0].providerOutput).toBe('');
+    },
+  );
+
   it('strips saved test data while preserving remote-row safety and local replay data', () => {
     const test = {
       vars: { input: 'private test vars' },
@@ -170,7 +191,10 @@ describe('sanitizeConfigForOutput', () => {
     });
     expect(JSON.stringify(output)).not.toContain('private');
     expect(output.tests).toEqual([
-      { metadata: { __promptfoo: { remote: true } }, assert: test.assert },
+      {
+        metadata: { __promptfoo: { remote: true, providerOutputRedacted: true } },
+        assert: test.assert,
+      },
     ]);
     expect(config.tests[0]).toBe(test);
     expect(config.tests[0].vars.input).toBe('private test vars');

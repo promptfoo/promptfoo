@@ -853,6 +853,7 @@ async function renderRunEvalPrompt({
   isRedteam,
   provider,
   promptForRender,
+  registerNames,
   test,
   testSuite,
   vars,
@@ -861,23 +862,20 @@ async function renderRunEvalPrompt({
   isRedteam: boolean;
   provider: ApiProvider;
   promptForRender: Prompt;
+  registerNames: string[];
   test: AtomicTestCase;
   testSuite?: TestSuite;
   vars: Vars;
 }): Promise<RenderedRunEvalPrompt> {
   const skipRenderVars =
-    test.providerOutput !== undefined && test.metadata?.__promptfoo?.remote === true
+    test.metadata?.__promptfoo?.remote === true
       ? (test.metadata.__promptfoo.remoteVars ?? Object.keys(vars))
       : shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
         ? [getRedteamInjectVar(test, promptForRender, testSuite)]
         : undefined;
-  const renderedPrompt = await renderPrompt(
-    promptForRender,
-    vars,
-    filters,
-    provider,
-    skipRenderVars,
-  );
+  const renderedPrompt = await renderPrompt(promptForRender, vars, filters, provider, [
+    ...new Set([...(skipRenderVars ?? []), ...registerNames]),
+  ]);
   if (isRedteam) {
     throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
   }
@@ -1682,11 +1680,20 @@ async function runEvalInternal({
   let workspace: AgentWorkspace | undefined;
 
   try {
+    if (
+      test.providerOutput === undefined &&
+      test.metadata?.__promptfoo?.providerOutputRedacted === true
+    ) {
+      throw new Error(
+        'Stored provider output was removed from this test. Restore providerOutput before replaying it.',
+      );
+    }
     const rendered = await renderRunEvalPrompt({
       filters,
       isRedteam,
       provider,
       promptForRender: state.promptForRender,
+      registerNames: Object.keys(registers ?? {}),
       test,
       testSuite,
       vars: state.vars,

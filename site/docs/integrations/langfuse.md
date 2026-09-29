@@ -145,6 +145,8 @@ tests: langfuse://traces?tags=production&limit=50
 
 Each trace becomes a test case. The response provider and its transform are skipped, including when a trace has no output; missing outputs are graded as an empty string. Test-level transforms still apply. Model-graded assertions still call their configured grading provider. Results are stored locally and are not written back to Langfuse. An empty trace selection stops with an error before evaluation.
 
+Exports created with `PROMPTFOO_STRIP_RESPONSE_OUTPUT=true` cannot replay stored responses. Restore `providerOutput` from the original source before replaying those tests.
+
 Trace input and output may contain production data. They appear in local results and exports. Model-graded assertions can send that data to the grading provider, and sharing an eval also shares its stored trace data.
 
 ### Trace filters

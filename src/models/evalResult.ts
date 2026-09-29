@@ -221,6 +221,19 @@ function projectTestCase(
     };
   }
 
+  if (
+    testCase.metadata?.__promptfoo?.providerOutputRedacted === true ||
+    (options.stripOutput && testCase.providerOutput !== undefined)
+  ) {
+    projectedTestCase.metadata = {
+      ...projectedTestCase.metadata,
+      __promptfoo: {
+        ...projectedTestCase.metadata?.__promptfoo,
+        providerOutputRedacted: true,
+      },
+    };
+  }
+
   return projectedTestCase;
 }
 

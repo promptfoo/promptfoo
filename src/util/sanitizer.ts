@@ -727,12 +727,15 @@ export function sanitizeConfigForOutput(
     ),
   ];
   for (const test of tests) {
-    if (!test || typeof test !== 'object') {
+    if (!test || typeof test !== 'object' || 'path' in test) {
       continue;
     }
     if (stripVars && 'vars' in test) {
       delete test.vars;
     }
+    const providerOutputRedacted =
+      test.metadata?.__promptfoo?.providerOutputRedacted === true ||
+      (stripOutput && test.providerOutput !== undefined);
     if (stripMetadata && 'metadata' in test) {
       // Keep the internal marker so exported remote rows cannot execute local file references.
       if (test.metadata?.__promptfoo?.remote === true) {
@@ -749,6 +752,12 @@ export function sanitizeConfigForOutput(
     }
     if (stripOutput && 'providerOutput' in test) {
       delete test.providerOutput;
+    }
+    if (providerOutputRedacted) {
+      test.metadata = {
+        ...test.metadata,
+        __promptfoo: { ...test.metadata?.__promptfoo, providerOutputRedacted: true },
+      };
     }
   }
   const provider = safe.tracing?.provider;
