@@ -31,7 +31,7 @@ describe.each(['python', 'js'])('redteaming guide %s dynamic prompt', (language)
       ].map((query) => ({ destination, query })),
     ),
   )('renders $destination while preserving the query: $query', async ({ destination, query }) => {
-    const source = guide.match(new RegExp('```' + language + '\\n([\\s\\S]*?)```'))?.[1];
+    const source = guide.match(new RegExp('```' + language + '\\r?\\n([\\s\\S]*?)```'))?.[1];
     expect(source).toBeDefined();
 
     const rendered = await renderPrompt(
