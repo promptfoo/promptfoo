@@ -6,7 +6,7 @@ import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
-import { type ApiProvider, type TestSuite } from '../../src/types/index';
+import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src/types/index';
 import { mockApiProvider, mockApiProvider2, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -157,7 +157,7 @@ describeEvaluator('evaluator options and hooks', () => {
     );
   });
 
-  it('should call runExtensionHook with correct parameters at appropriate times', async () => {
+  it.each([true, false])('calls hooks with results (persisted: %s)', async (persisted) => {
     const mockExtension = 'file:./path/to/extension.js:extensionFunction';
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -173,7 +173,9 @@ describeEvaluator('evaluator options and hooks', () => {
 
     const mockedRunExtensionHook = vi.mocked(runExtensionHook);
     mockedRunExtensionHook.mockClear();
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const evalRecord = persisted
+      ? await Eval.create({}, testSuite.prompts, { id: randomUUID() })
+      : new Eval({});
     await evaluate(testSuite, evalRecord, {});
 
     // Check if runExtensionHook was called 4 times (beforeAll, beforeEach, afterEach, afterAll)
@@ -241,10 +243,55 @@ describeEvaluator('evaluator options and hooks', () => {
             }),
           }),
         ]),
-        results: expect.any(Array),
+        results: [
+          expect.objectContaining({
+            testIdx: 0,
+            promptIdx: 0,
+            success: true,
+            score: 1,
+            response: expect.objectContaining({ output: 'Test output' }),
+          }),
+        ],
         suite: testSuite,
       }),
     );
+  });
+
+  it('retains an in-memory timeout row for afterAll and summary reads', async () => {
+    vi.useFakeTimers();
+    const provider: ApiProvider = {
+      id: () => 'local-timeout-provider',
+      callApi: vi.fn(() => new Promise<never>(() => {})),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+      extensions: ['file://test-extension.js:afterAll'],
+    };
+    const evaluation = new Eval({});
+    const pendingEvaluation = evaluate(testSuite, evaluation, { timeoutMs: 100 });
+    await vi.advanceTimersByTimeAsync(100);
+    await pendingEvaluation;
+
+    const expectedResult = expect.objectContaining({
+      success: false,
+      score: 0,
+      failureReason: ResultFailureReason.ERROR,
+      latencyMs: 100,
+      error: expect.stringContaining('Evaluation timed out after 100ms'),
+    });
+    expect(runExtensionHook).toHaveBeenCalledWith(
+      testSuite.extensions,
+      'afterAll',
+      expect.objectContaining({ results: [expectedResult] }),
+    );
+    expect(vi.mocked(runExtensionHook).mock.calls.some((call) => call[1] === 'afterEach')).toBe(
+      false,
+    );
+    const summary = await evaluation.toEvaluateSummary();
+    expect(summary.results).toEqual([expectedResult]);
+    expect(summary.stats).toMatchObject({ successes: 0, failures: 0, errors: 1 });
   });
 
   it('should handle multiple providers', async () => {
