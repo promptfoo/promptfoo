@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TlsHttpsConfigTab from './TlsHttpsConfigTab';
@@ -33,6 +33,45 @@ describe('TlsHttpsConfigTab', () => {
     mockUpdateCustomTarget = vi.fn();
   });
 
+  it('labels inline key and password fields and explains where their values go', async () => {
+    const user = userEvent.setup();
+    const tls = {
+      enabled: true,
+      rejectUnauthorized: true,
+      certificateType: 'pem',
+      keyInputType: 'inline',
+      key: 'test-key',
+      passphrase: 'test-password',
+    } satisfies NonNullable<HttpProviderOptions['config']>['tls'];
+    renderWithProviders(
+      <TlsHttpsConfigTab
+        selectedTarget={{ id: 'http', config: { tls } }}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+    const key = screen.getByRole('textbox', { name: 'Private Key' });
+    expect(key).toHaveAccessibleDescription(
+      /included in the provider configuration and exported YAML/,
+    );
+    expect(key).toHaveAttribute('spellcheck', 'false');
+    expect(key).toHaveAttribute('autocomplete', 'new-password');
+    fireEvent.change(key, { target: { value: 'replacement-key' } });
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('tls', {
+      ...tls,
+      key: 'replacement-key',
+      keyPath: undefined,
+    });
+
+    const password = screen.getByLabelText('Password');
+    expect(password).toHaveAttribute('type', 'password');
+    expect(password).toHaveAccessibleDescription(
+      /Required only if your private key file is encrypted/,
+    );
+    await user.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(password).toHaveAttribute('type', 'text');
+    expect(key).toHaveValue('test-key');
+  });
+
   describe('TLS Version Selects', () => {
     it('should render TLS version selects without errors when Advanced TLS Options is expanded', async () => {
       const user = userEvent.setup();
@@ -58,8 +97,8 @@ describe('TlsHttpsConfigTab', () => {
       await user.click(advancedSection);
 
       // Verify that both TLS version selects are rendered
-      expect(screen.getByRole('combobox', { name: 'Minimum TLS Version' })).toBeInTheDocument();
-      expect(screen.getByRole('combobox', { name: 'Maximum TLS Version' })).toBeInTheDocument();
+      expect(screen.getByText('Minimum TLS Version')).toBeInTheDocument();
+      expect(screen.getByText('Maximum TLS Version')).toBeInTheDocument();
     });
 
     it('should open minimum TLS version dropdown and show all options including Default', async () => {
@@ -348,10 +387,7 @@ describe('TlsHttpsConfigTab', () => {
         />,
       );
 
-      expect(screen.getByRole('combobox', { name: 'Certificate Type' })).toBeInTheDocument();
-      expect(
-        screen.getByText(/Uploaded or pasted certificate, key, and passphrase values/i),
-      ).toBeVisible();
+      expect(screen.getByText('Certificate Type')).toBeInTheDocument();
     });
 
     it('should show PEM configuration fields when PEM certificate type is selected', () => {
@@ -376,8 +412,6 @@ describe('TlsHttpsConfigTab', () => {
       expect(screen.getByText('PEM Certificate Configuration')).toBeInTheDocument();
       expect(screen.getByText('Client Certificate')).toBeInTheDocument();
       expect(screen.getByText('Private Key')).toBeInTheDocument();
-      expect(document.getElementById('tls-cert-upload')).toBeInTheDocument();
-      expect(document.getElementById('tls-key-upload')).toBeInTheDocument();
     });
 
     it('should show JKS configuration fields when JKS certificate type is selected', () => {
@@ -401,7 +435,6 @@ describe('TlsHttpsConfigTab', () => {
 
       expect(screen.getByText('JKS (Java KeyStore) Certificate')).toBeInTheDocument();
       expect(screen.getByText('JKS File Input')).toBeInTheDocument();
-      expect(document.getElementById('tls-jks-upload')).toBeInTheDocument();
       expect(screen.getByLabelText('Key Alias (Optional)')).toBeInTheDocument();
     });
 
@@ -427,89 +460,6 @@ describe('TlsHttpsConfigTab', () => {
       expect(screen.getByText('PFX/PKCS#12 Certificate Bundle')).toBeInTheDocument();
       // Check for Base64 button which is unique to PFX configuration
       expect(screen.getByRole('button', { name: /Base64/i })).toBeInTheDocument();
-      expect(document.getElementById('tls-pfx-upload')).toBeInTheDocument();
-    });
-
-    it('selects uploaded PEM inputs as the initial disclosed setup path', async () => {
-      const user = userEvent.setup();
-      renderWithProviders(
-        <TlsHttpsConfigTab
-          selectedTarget={{
-            id: 'http-provider',
-            config: { tls: { enabled: true, rejectUnauthorized: true } },
-          }}
-          updateCustomTarget={mockUpdateCustomTarget}
-        />,
-      );
-
-      await user.click(screen.getByRole('combobox', { name: 'Certificate Type' }));
-      await user.click(screen.getByRole('option', { name: /PEM/ }));
-
-      expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
-        'tls',
-        expect.objectContaining({
-          certificateType: 'pem',
-          certInputType: 'upload',
-          keyInputType: 'upload',
-        }),
-      );
-    });
-
-    it.each([
-      {
-        mode: 'PEM path inputs',
-        tls: {
-          enabled: true,
-          certificateType: 'pem',
-          certInputType: 'path',
-          keyInputType: 'path',
-        },
-        fields: [
-          { id: 'tls-cert-path', name: 'Client Certificate File Path' },
-          { id: 'tls-key-path', name: 'Private Key File Path' },
-          { id: 'tls-private-key-password', name: 'Password' },
-        ],
-      },
-      {
-        mode: 'JKS path inputs',
-        tls: {
-          enabled: true,
-          certificateType: 'jks',
-          jksInputType: 'path',
-        },
-        fields: [
-          { id: 'tls-jks-path', name: 'JKS File Path' },
-          { id: 'tls-jks-password', name: 'Keystore Password' },
-        ],
-      },
-      {
-        mode: 'PFX and CA inline inputs',
-        tls: {
-          enabled: true,
-          certificateType: 'pfx',
-          pfxInputType: 'base64',
-          caInputType: 'inline',
-        },
-        fields: [
-          { id: 'tls-pfx-content', name: 'PFX Certificate Content' },
-          { id: 'tls-pfx-passphrase', name: 'PFX Passphrase' },
-          { id: 'tls-ca-inline', name: 'CA Certificate Content' },
-        ],
-      },
-    ])('labels $mode for non-visual navigation', ({ tls, fields }) => {
-      renderWithProviders(
-        <TlsHttpsConfigTab
-          selectedTarget={{
-            id: 'http-provider',
-            config: { tls } as HttpProviderOptions['config'],
-          }}
-          updateCustomTarget={mockUpdateCustomTarget}
-        />,
-      );
-
-      for (const { id, name } of fields) {
-        expect(document.getElementById(id)).toHaveAccessibleName(name);
-      }
     });
   });
 

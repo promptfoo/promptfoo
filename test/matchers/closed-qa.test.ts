@@ -89,6 +89,47 @@ describe('matchesClosedQa', () => {
     );
   });
 
+  it('should tag a grading provider error as a grader failure', async () => {
+    // `metadata.graderError` lets inverse-aware callers (e.g.
+    // not-model-graded-closedqa) propagate the failure instead of flipping a
+    // transport error into a pass.
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      error: 'Grader provider unavailable',
+    });
+
+    await expect(
+      matchesClosedQa('Input text', 'Expected output', 'Sample output', {}),
+    ).resolves.toEqual({
+      pass: false,
+      reason: 'Grader provider unavailable',
+      score: 0,
+      tokensUsed: {
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+        cached: expect.any(Number),
+        completionDetails: expect.any(Object),
+        numRequests: 0,
+      },
+      metadata: { graderError: true },
+    });
+  });
+
+  it('should tag an empty grading provider response as a grader failure', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({ output: undefined });
+
+    const result = await matchesClosedQa('Input text', 'Expected output', 'Sample output', {});
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        pass: false,
+        reason: 'No output',
+        score: 0,
+        metadata: { graderError: true },
+      }),
+    );
+  });
+
   it('should handle input, criteria, and completion that need escaping', async () => {
     const input = 'Input "text" with \\ escape characters and \\"nested\\" escapes';
     const expected = 'Expected "output" with \\\\ escape characters and \\"nested\\" escapes';
@@ -202,5 +243,40 @@ Does the answer meet the criteria? Answer Y or N.`;
     expect(actualPrompt).not.toContain('{{input}}');
     expect(actualPrompt).not.toContain('{{criteria}}');
     expect(actualPrompt).not.toContain('{{completion}}');
+  });
+
+  it('should keep reserved closed-qa vars ahead of user vars', async () => {
+    const mockCallApi = vi.spyOn(DefaultGradingProvider, 'callApi');
+
+    await matchesClosedQa(
+      'input from prompt',
+      'criteria from assertion',
+      'completion from provider',
+      {
+        rubricPrompt:
+          'input={{ input }}\ncriteria={{ criteria }}\ncompletion={{ completion }}\nextra={{ extra }}',
+      },
+      {
+        input: 'vars input sentinel',
+        criteria: 'vars criteria sentinel',
+        completion: 'vars completion sentinel',
+        extra: 'kept user var',
+      },
+    );
+
+    const [prompt, callApiContext] = mockCallApi.mock.calls[0];
+    expect(prompt).toContain('input=input from prompt');
+    expect(prompt).toContain('criteria=criteria from assertion');
+    expect(prompt).toContain('completion=completion from provider');
+    expect(prompt).toContain('extra=kept user var');
+    expect(prompt).not.toContain('vars input sentinel');
+    expect(prompt).not.toContain('vars criteria sentinel');
+    expect(prompt).not.toContain('vars completion sentinel');
+    expect(callApiContext?.vars).toMatchObject({
+      input: 'input from prompt',
+      criteria: 'criteria from assertion',
+      completion: 'completion from provider',
+      extra: 'kept user var',
+    });
   });
 });

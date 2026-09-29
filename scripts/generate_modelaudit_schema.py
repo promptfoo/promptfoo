@@ -119,10 +119,7 @@ def write_text_atomic(path: Path, contents: str) -> None:
             tmp_file.write(contents)
         os.replace(tmp_name, path)
     except Exception:
-        try:
-            os.unlink(tmp_name)
-        except FileNotFoundError:
-            pass
+        Path(tmp_name).unlink(missing_ok=True)
         raise
 
 

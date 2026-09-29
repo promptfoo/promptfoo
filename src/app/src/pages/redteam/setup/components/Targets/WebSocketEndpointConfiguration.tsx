@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import Editor from '@app/components/ui/code-editor';
 import { HelperText } from '@app/components/ui/helper-text';
@@ -7,7 +7,7 @@ import { Label } from '@app/components/ui/label';
 import { NumberInput } from '@app/components/ui/number-input';
 import { Switch } from '@app/components/ui/switch';
 import { Textarea } from '@app/components/ui/textarea';
-import Prism from '@app/lib/prism';
+import { highlightJS } from '@app/lib/codeHighlight';
 import { cn } from '@app/lib/utils';
 import dedent from 'dedent';
 import {
@@ -24,16 +24,28 @@ interface WebSocketEndpointConfigurationProps {
   urlError: string | null;
 }
 
-const highlightJS = (code: string): string => {
-  try {
-    const grammar = Prism?.languages?.javascript;
-    if (!grammar) {
-      return code;
-    }
-    return Prism.highlight(code, grammar, 'javascript');
-  } catch {
-    return code;
+const formatProtocols = (protocols: unknown): string => {
+  if (Array.isArray(protocols)) {
+    return protocols.join(', ');
   }
+  return typeof protocols === 'string' ? protocols : '';
+};
+
+const parseProtocols = (value: string): string[] | undefined => {
+  const protocols = value
+    .split(',')
+    .map((protocol) => protocol.trim())
+    .filter(Boolean);
+
+  return protocols.length > 0 ? protocols : undefined;
+};
+
+const hasRawWebSocketProtocolHeader = (headers: unknown): boolean => {
+  return (
+    headers != null &&
+    typeof headers === 'object' &&
+    Object.keys(headers).some((key) => key.toLowerCase() === 'sec-websocket-protocol')
+  );
 };
 
 const WebSocketEndpointConfiguration = ({
@@ -41,71 +53,89 @@ const WebSocketEndpointConfiguration = ({
   updateWebSocketTarget,
   urlError,
 }: WebSocketEndpointConfigurationProps) => {
-  const urlErrorId = useId();
-  const urlHelpId = useId();
-  const messageTemplateHelpId = useId();
-  const streamResponseToggleHelpId = useId();
-  const streamResponseHelpId = useId();
-  const responseTransformHelpId = useId();
-  const streamResponseEditorContainerRef = useRef<HTMLDivElement>(null);
+  const targetUrl =
+    (typeof selectedTarget.config.url === 'string' && selectedTarget.config.url.trim()) ||
+    (/^wss?:\/\//i.test(selectedTarget.id) ? selectedTarget.id : '');
+  const [urlInput, setUrlInput] = useState(() => targetUrl);
+  const isUrlInputFocused = useRef(false);
+  const formattedProtocols = formatProtocols(selectedTarget.config.protocols);
+  const [protocolsInput, setProtocolsInput] = useState(() => formattedProtocols);
+  const isProtocolsInputFocused = useRef(false);
   const [streamResponse, setStreamResponse] = useState(
     Boolean(selectedTarget.config.streamResponse),
   );
-
   useEffect(() => {
-    if (!streamResponse) {
-      return;
+    if (!isUrlInputFocused.current) {
+      setUrlInput(targetUrl);
     }
-
-    streamResponseEditorContainerRef.current
-      ?.querySelector('textarea')
-      ?.setAttribute('aria-describedby', streamResponseHelpId);
-  }, [streamResponse, streamResponseHelpId]);
-
+  }, [targetUrl]);
+  useEffect(() => {
+    if (!isProtocolsInputFocused.current) {
+      setProtocolsInput(formattedProtocols);
+    }
+  }, [formattedProtocols]);
   return (
     <div className="mt-4">
       <h3 className="mb-4 text-lg font-semibold">Custom WebSocket Endpoint Configuration</h3>
       <div className="rounded-lg border border-border p-4">
         <div className="space-y-2">
-          <Label htmlFor="websocket-url">
-            WebSocket URL
-            <span aria-hidden="true" className="ml-1 text-destructive">
-              *
-            </span>
-          </Label>
+          <Label htmlFor="websocket-url">WebSocket URL</Label>
           <Input
             id="websocket-url"
-            required
-            value={selectedTarget.config.url}
-            onChange={(e) => updateWebSocketTarget('url', e.target.value)}
-            placeholder="wss://example.com/ws"
-            aria-invalid={Boolean(urlError)}
-            aria-describedby={urlError ? `${urlErrorId} ${urlHelpId}` : urlHelpId}
+            value={urlInput}
+            onChange={(e) => {
+              setUrlInput(e.target.value);
+              updateWebSocketTarget('url', e.target.value);
+            }}
+            onFocus={() => {
+              isUrlInputFocused.current = true;
+            }}
+            onBlur={() => {
+              isUrlInputFocused.current = false;
+              setUrlInput(targetUrl);
+            }}
             className={cn(urlError && 'border-destructive')}
           />
-          {urlError && (
-            <HelperText id={urlErrorId} error role="alert">
-              {urlError}
-            </HelperText>
-          )}
-          <HelperText id={urlHelpId} className="text-sm">
-            Use <code>wss://</code> for encrypted connections or <code>ws://</code> for local
-            development.
-          </HelperText>
+          {urlError && <HelperText error>{urlError}</HelperText>}
         </div>
 
         <div className="mt-4 space-y-2">
           <Label htmlFor="message-template">Message Template</Label>
-          <p id={messageTemplateHelpId} className="text-sm text-muted-foreground">
-            Include <code>{'{{prompt}}'}</code> where Promptfoo should insert each test input.
-          </p>
           <Textarea
             id="message-template"
-            value={selectedTarget.config.messageTemplate}
+            value={selectedTarget.config.messageTemplate ?? ''}
             onChange={(e) => updateWebSocketTarget('messageTemplate', e.target.value)}
-            aria-describedby={messageTemplateHelpId}
             rows={3}
           />
+        </div>
+
+        <div className="mt-4 space-y-2">
+          <Label htmlFor="websocket-protocols">WebSocket Subprotocols</Label>
+          <Input
+            id="websocket-protocols"
+            value={protocolsInput}
+            onChange={(e) => {
+              setProtocolsInput(e.target.value);
+              updateWebSocketTarget('protocols', parseProtocols(e.target.value));
+            }}
+            onFocus={() => {
+              isProtocolsInputFocused.current = true;
+            }}
+            onBlur={() => {
+              isProtocolsInputFocused.current = false;
+              setProtocolsInput(formattedProtocols);
+            }}
+            placeholder="json, graphql-transport-ws"
+          />
+          <p className="text-sm text-muted-foreground">
+            Optional comma-separated subprotocols to request during the WebSocket handshake.
+          </p>
+          {hasRawWebSocketProtocolHeader(selectedTarget.config.headers) && (
+            <p className="text-sm text-muted-foreground">
+              If your <code>Sec-WebSocket-Protocol</code> header is a negotiated subprotocol, move
+              it here. Leave it in headers only when your endpoint expects a raw header.
+            </p>
+          )}
         </div>
 
         <div className="mt-4">
@@ -130,14 +160,13 @@ const WebSocketEndpointConfiguration = ({
 
         <div className="mt-4 space-y-2">
           <Label htmlFor="stream-response">Stream Response</Label>
-          <HelperText id={streamResponseToggleHelpId} className="text-sm">
+          <p className="text-sm text-muted-foreground">
             Configure your WebSocket to stream responses instead of returning a single response per
             prompt.
-          </HelperText>
+          </p>
           <Switch
             id="stream-response"
             checked={streamResponse}
-            aria-describedby={streamResponseToggleHelpId}
             onCheckedChange={(checked) => {
               setStreamResponse(checked);
               if (checked) {
@@ -154,7 +183,7 @@ const WebSocketEndpointConfiguration = ({
         {streamResponse ? (
           <div className="mt-4 space-y-2">
             <Label htmlFor="stream-response-transform">Stream Response Transform</Label>
-            <p id={streamResponseHelpId} className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Extract specific data from the WebSocket messages. See{' '}
               <a
                 href="https://www.promptfoo.dev/docs/providers/websocket/#streaming-responses"
@@ -166,12 +195,10 @@ const WebSocketEndpointConfiguration = ({
               </a>{' '}
               for more information.
             </p>
-            <div
-              ref={streamResponseEditorContainerRef}
-              className="relative rounded-md border border-border bg-card"
-            >
+            <div className="relative rounded-md border border-border bg-card">
               <Editor
-                textareaId="stream-response-transform"
+                id="stream-response-transform"
+                aria-describedby="stream-response-helper-text"
                 value={selectedTarget.config.streamResponse ?? DEFAULT_WEBSOCKET_STREAM_RESPONSE}
                 onValueChange={(code) => updateWebSocketTarget('streamResponse', code)}
                 highlight={highlightJS}
@@ -194,13 +221,9 @@ const WebSocketEndpointConfiguration = ({
             <Label htmlFor="response-transform">Response Transform</Label>
             <Input
               id="response-transform"
-              value={selectedTarget.config.transformResponse}
+              value={selectedTarget.config.transformResponse ?? ''}
               onChange={(e) => updateWebSocketTarget('transformResponse', e.target.value)}
-              aria-describedby={responseTransformHelpId}
             />
-            <HelperText id={responseTransformHelpId} className="text-sm">
-              Optional. Extract a value from the single response returned for each prompt.
-            </HelperText>
           </div>
         )}
       </div>

@@ -18,10 +18,6 @@ export interface SensitiveTextFieldProps {
   required?: boolean;
 }
 
-/**
- * An Input component for sensitive input (passwords, passphrases, etc.)
- * with built-in visibility toggle functionality
- */
 const SensitiveTextField: React.FC<SensitiveTextFieldProps> = ({
   value,
   onChange,
@@ -37,7 +33,7 @@ const SensitiveTextField: React.FC<SensitiveTextFieldProps> = ({
   const generatedId = useId();
   const inputId = id ?? generatedId;
   const helperTextId = helperText ? `${inputId}-help` : undefined;
-  const toggleLabel = `${showValue ? 'Hide' : 'Show'} ${label ?? 'sensitive value'}`;
+  const toggleLabel = `${showValue ? 'Hide' : 'Show'} ${label?.toLowerCase() ?? 'sensitive value'}`;
 
   return (
     <div className={cn('space-y-2', className)}>
@@ -62,9 +58,6 @@ const SensitiveTextField: React.FC<SensitiveTextFieldProps> = ({
           disabled={disabled}
           required={required}
           aria-describedby={helperTextId}
-          // Block browser/password-manager autofill for TLS passphrases, API
-          // secrets, and similar. These are not login passwords; saving them
-          // as such leaks them outside the app.
           autoComplete="new-password"
           spellCheck={false}
           data-1p-ignore
