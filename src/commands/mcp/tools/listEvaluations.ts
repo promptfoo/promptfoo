@@ -4,10 +4,6 @@ import { paginate } from '../lib/performance';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-/**
- * Tool to list and browse evaluation runs
- * Provides filtered views and pagination support
- */
 export function registerListEvaluationsTool(server: McpServer) {
   server.tool(
     'list_evaluations',
@@ -38,10 +34,8 @@ export function registerListEvaluationsTool(server: McpServer) {
       try {
         const evals = await getEvalSummaries(datasetId);
 
-        // Apply pagination
         const paginatedResult = paginate(evals, { page, pageSize });
 
-        // Add helpful summary information
         const summary = {
           totalCount: paginatedResult.pagination.totalItems,
           recentCount: evals.filter((e) => {

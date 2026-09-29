@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { registerListEvaluationsTool } from '../../../../src/commands/mcp/tools/listEvaluations';
 import { runDbMigrations } from '../../../../src/migrate';
 import Eval, { getEvalSummaries } from '../../../../src/models/eval';
@@ -30,7 +30,6 @@ describe('list_evaluations in a long-lived MCP session', () => {
     for (const eval_ of created.splice(0)) {
       await eval_.delete();
     }
-    vi.restoreAllMocks();
   });
 
   async function create(description: string, marker = randomUUID()) {
