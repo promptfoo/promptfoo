@@ -49,7 +49,7 @@ const FeedbackPageContent = () => {
         </Box>
 
         <ThirdPartyContentGate
-          description="Load the hosted feedback form when you are ready to share your thoughts."
+          description="Load the feedback form."
           loadLabel="Load feedback form"
           minHeight={iframeStyle.height}
           serviceName="Google Forms"

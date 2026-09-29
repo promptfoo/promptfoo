@@ -24,16 +24,14 @@ function NewsletterEmbed(): React.ReactElement {
     };
   }, []);
 
-  return (
-    <div ref={containerRef}>{/* The form will be injected here by the external script */}</div>
-  );
+  return <div ref={containerRef} />;
 }
 
 const NewsletterForm: React.FC = () => {
   return (
     <ThirdPartyContentGate
       className={styles.container}
-      description="Load the hosted newsletter signup form when you are ready to subscribe."
+      description="Load the newsletter signup form."
       loadLabel="Load newsletter signup"
       serviceName="EmailOctopus"
       title="Newsletter Signup"

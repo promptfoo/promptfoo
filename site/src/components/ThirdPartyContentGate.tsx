@@ -19,36 +19,7 @@ interface ThirdPartyContentGateProps {
   title: string;
 }
 
-function canAutoloadThirdPartyContent(): boolean {
-  const consent = (window as PrivacyWindow).__pf_consent;
-  return consent?.marketing === 1;
-}
-
-function getClassName(className?: string): string {
-  return className ? `${styles.gate} ${className}` : styles.gate;
-}
-
-function getStyle(minHeight?: number | string): React.CSSProperties | undefined {
-  if (minHeight === undefined) {
-    return undefined;
-  }
-  return { minHeight };
-}
-
-function GateFallback({
-  className,
-  minHeight,
-}: Pick<ThirdPartyContentGateProps, 'className' | 'minHeight'>): React.ReactElement {
-  const fallbackClassName = className ? `${styles.loading} ${className}` : styles.loading;
-
-  return (
-    <div className={fallbackClassName} style={getStyle(minHeight)}>
-      <p>Loading privacy controls…</p>
-    </div>
-  );
-}
-
-function ClientThirdPartyContentGate({
+export default function ThirdPartyContentGate({
   children,
   className,
   description,
@@ -59,10 +30,11 @@ function ClientThirdPartyContentGate({
   serviceName,
   title,
 }: ThirdPartyContentGateProps): React.ReactElement {
-  const [enabled, setEnabled] = React.useState(canAutoloadThirdPartyContent);
+  const [enabled, setEnabled] = React.useState<boolean | null>(null);
 
   React.useEffect(() => {
-    const refreshEnabledState = () => setEnabled(canAutoloadThirdPartyContent());
+    const refreshEnabledState = () =>
+      setEnabled((window as PrivacyWindow).__pf_consent?.marketing === 1);
     refreshEnabledState();
     window.addEventListener('pf_consent_change', refreshEnabledState);
     return () => window.removeEventListener('pf_consent_change', refreshEnabledState);
@@ -74,12 +46,23 @@ function ClientThirdPartyContentGate({
     }
   }, [enabled]);
 
+  if (enabled === null) {
+    return (
+      <div
+        className={className ? `${styles.loading} ${className}` : styles.loading}
+        style={{ minHeight }}
+      >
+        <p>Loading privacy controls…</p>
+      </div>
+    );
+  }
+
   if (enabled) {
     return <>{children}</>;
   }
 
   return (
-    <div className={getClassName(className)} style={getStyle(minHeight)}>
+    <div className={className ? `${styles.gate} ${className}` : styles.gate} style={{ minHeight }}>
       <p className={styles.eyebrow}>Third-Party Content</p>
       <p className={styles.title}>{title}</p>
       <p className={styles.description}>{description}</p>
@@ -99,20 +82,4 @@ function ClientThirdPartyContentGate({
       </div>
     </div>
   );
-}
-
-export default function ThirdPartyContentGate(
-  props: ThirdPartyContentGateProps,
-): React.ReactElement {
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return <GateFallback className={props.className} minHeight={props.minHeight} />;
-  }
-
-  return <ClientThirdPartyContentGate {...props} />;
 }

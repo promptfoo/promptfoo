@@ -1,10 +1,10 @@
 /**
- * Multi-region cookie consent with granular categories.
+ * Separate analytics and marketing choices, with defaults based on country.
  *
  * Regions:
  *   opt_in  — EU-27, EEA, GB, CH, BR, CA: block scripts until consent
  *   opt_out — US: scripts load immediately, footer opt-out
- *   notice  — everyone else: implied consent, scripts load immediately
+ *   notice  — other recognized countries: scripts load immediately
  *
  * Cookie format: pf_consent=v1.{region}.{analytics}.{marketing}
  *   region: i=opt_in, o=opt_out, n=notice
