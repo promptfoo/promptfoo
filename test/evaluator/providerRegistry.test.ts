@@ -578,6 +578,38 @@ describeEvaluator('registered resources across overlapping evaluations', () => {
     }
   });
 
+  it('releases cleanup ownership when a later setup ends before preceding cleanup settles', async () => {
+    const registry = new ProviderRegistry(false);
+    const cleanupStarted = deferred();
+    const finishCleanup = deferred();
+    const setupError = new Error('Setup cancelled before using the provider');
+    const provider = {
+      id: () => 'cancelled-setup-with-pending-cleanup',
+      cleanup: vi.fn(async () => {
+        cleanupStarted.resolve();
+        await finishCleanup.promise;
+      }),
+    };
+    const preceding = registry.withEvaluation(() => registry.cleanupWhenIdle([provider]));
+    try {
+      await cleanupStarted.promise;
+      await expect(
+        registry.withEvaluation(async () => {
+          await registry.cleanupWhenIdle([provider]);
+          throw setupError;
+        }),
+      ).rejects.toBe(setupError);
+
+      finishCleanup.resolve();
+      await preceding;
+      await registry.shutdownForProcess();
+      expect(provider.cleanup).toHaveBeenCalledExactlyOnceWith();
+    } finally {
+      finishCleanup.resolve();
+      await preceding;
+    }
+  });
+
   it('records CLI cleanup ownership without blocking setup on an earlier teardown', async () => {
     const cleanupStarted = deferred();
     const releaseCleanup = deferred();

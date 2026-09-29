@@ -309,13 +309,6 @@ async function disposePipelines(): Promise<void> {
 }
 
 /**
- * Ensure cleanup handler is registered with the provider registry.
- */
-function ensureCleanupRegistered(): void {
-  providerRegistry.register(pipelineResource);
-}
-
-/**
  * Provider for local text embeddings using Transformers.js feature extraction.
  *
  * @example
@@ -337,7 +330,7 @@ export class TransformersEmbeddingProvider implements ApiProvider {
     this.id = id ? () => id : this.id;
     this.config = config || {};
 
-    ensureCleanupRegistered();
+    providerRegistry.register(pipelineResource);
   }
 
   id(): string {
@@ -449,7 +442,7 @@ export class TransformersTextGenerationProvider implements ApiProvider {
     this.id = id ? () => id : this.id;
     this.config = config || {};
 
-    ensureCleanupRegistered();
+    providerRegistry.register(pipelineResource);
   }
 
   id(): string {
