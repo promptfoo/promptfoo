@@ -200,136 +200,110 @@ async function fetchImageAsBase64(
   }
 }
 
-/**
- * DatasetManager to handle UnsafeBench dataset caching and filtering
- */
-class UnsafeBenchDatasetManager {
-  private static instance: UnsafeBenchDatasetManager | null = null;
-  private readonly datasets = new Map<number, Promise<UnsafeBenchInput[]>>();
-
-  static getInstance(): UnsafeBenchDatasetManager {
-    return (UnsafeBenchDatasetManager.instance ??= new UnsafeBenchDatasetManager());
+async function getFilteredRecords(
+  limit: number,
+  config?: UnsafeBenchPluginConfig,
+): Promise<UnsafeBenchInput[]> {
+  if (limit <= 0) {
+    return [];
   }
+  const includeSafe = readIncludeSafe(config);
+  const records = (await loadDataset(includeSafe ? 2000 : 1000)).filter(
+    (record) => includeSafe || record.safety_label === 'unsafe',
+  );
+  const select = (candidates: UnsafeBenchInput[], count: number, context?: string) =>
+    includeSafe
+      ? selectBalancedUnsafeBenchRecords(candidates, count, context)
+      : sampleArray(candidates, count);
+  const categories = [...new Set(config?.categories?.map((category) => category.toLowerCase()))];
+  const selected = categories.length
+    ? categories.flatMap((category) =>
+        select(
+          records.filter((record) => record.category.toLowerCase() === category),
+          Math.floor(limit / categories.length),
+          `category ${category}`,
+        ),
+      )
+    : select(records, limit);
 
-  async getFilteredRecords(
-    limit: number,
-    config?: UnsafeBenchPluginConfig,
-  ): Promise<UnsafeBenchInput[]> {
-    if (limit <= 0) {
-      return [];
+  const selectedRecords = new Set(selected);
+  const remaining = records.filter((record) => !selectedRecords.has(record));
+
+  // Image conversion depends on each request's size limit.
+  const materialized = await async.mapLimit<UnsafeBenchInput, UnsafeBenchInput | null>(
+    selected,
+    4,
+    async (record: UnsafeBenchInput) => {
+      let candidate: UnsafeBenchInput | undefined = record;
+      while (candidate) {
+        const image = /^https?:\/\//i.test(candidate.image)
+          ? await fetchImageAsBase64(candidate.image, config?.longest_edge ?? 8000)
+          : candidate.image;
+        if (image) {
+          if (candidate.safety_label !== record.safety_label) {
+            logger.warn(
+              `[unsafebench] Could not load enough ${record.safety_label} images; using an available ${candidate.safety_label} image`,
+            );
+          }
+          return { ...candidate, image };
+        }
+        const matchesCategory = (item: UnsafeBenchInput) =>
+          !categories.length || item.category.toLowerCase() === record.category.toLowerCase();
+        let replacement = remaining.findIndex(
+          (item) => matchesCategory(item) && item.safety_label === record.safety_label,
+        );
+        if (replacement < 0) {
+          replacement = remaining.findIndex(matchesCategory);
+        }
+        // Claim before awaiting so concurrent workers cannot reuse a replacement.
+        candidate = replacement < 0 ? undefined : remaining.splice(replacement, 1)[0];
+      }
+      return null;
+    },
+  );
+  return materialized.filter((record): record is UnsafeBenchInput => record !== null);
+}
+
+async function loadDataset(fetchLimit: number): Promise<UnsafeBenchInput[]> {
+  // Dataset-viewer image URLs expire, so fetch fresh rows for each generation.
+  const rows = await fetchHuggingFaceDataset(DATASET_PATH, fetchLimit, { cache: false });
+  const records: UnsafeBenchInput[] = [];
+  for (const row of rows ?? []) {
+    const vars = row.vars;
+    const label = typeof vars?.safety_label === 'string' ? vars.safety_label.toLowerCase() : '';
+    if (label !== 'safe' && label !== 'unsafe') {
+      continue;
     }
-    const includeSafe = readIncludeSafe(config);
-    const records = (await this.loadDataset(includeSafe ? 2000 : 1000)).filter(
-      (record) => includeSafe || record.safety_label === 'unsafe',
-    );
-    const select = (candidates: UnsafeBenchInput[], count: number, context?: string) =>
-      includeSafe
-        ? selectBalancedUnsafeBenchRecords(candidates, count, context)
-        : sampleArray(candidates, count);
-    const categories = [...new Set(config?.categories?.map((category) => category.toLowerCase()))];
-    const selected = categories.length
-      ? categories.flatMap((category) =>
-          select(
-            records.filter((record) => record.category.toLowerCase() === category),
-            Math.floor(limit / categories.length),
-            `category ${category}`,
-          ),
-        )
-      : select(records, limit);
-
-    const selectedRecords = new Set(selected);
-    const remaining = records.filter((record) => !selectedRecords.has(record));
-
-    // Cache metadata only; image conversion depends on each request's size limit.
-    const materialized = await async.mapLimit<UnsafeBenchInput, UnsafeBenchInput | null>(
-      selected,
-      4,
-      async (record: UnsafeBenchInput) => {
-        let candidate: UnsafeBenchInput | undefined = record;
-        while (candidate) {
-          const image = /^https?:\/\//i.test(candidate.image)
-            ? await fetchImageAsBase64(candidate.image, config?.longest_edge ?? 8000)
-            : candidate.image;
-          if (image) {
-            if (candidate.safety_label !== record.safety_label) {
-              logger.warn(
-                `[unsafebench] Could not load enough ${record.safety_label} images; using an available ${candidate.safety_label} image`,
-              );
-            }
-            return { ...candidate, image };
-          }
-          const matchesCategory = (item: UnsafeBenchInput) =>
-            !categories.length || item.category.toLowerCase() === record.category.toLowerCase();
-          let replacement = remaining.findIndex(
-            (item) => matchesCategory(item) && item.safety_label === record.safety_label,
-          );
-          if (replacement < 0) {
-            replacement = remaining.findIndex(matchesCategory);
-          }
-          // Claim before awaiting so concurrent workers cannot reuse a replacement.
-          candidate = replacement < 0 ? undefined : remaining.splice(replacement, 1)[0];
-        }
-        return null;
-      },
-    );
-    return materialized.filter((record): record is UnsafeBenchInput => record !== null);
-  }
-
-  private loadDataset(fetchLimit: number): Promise<UnsafeBenchInput[]> {
-    const cached = this.datasets.get(fetchLimit);
-    if (cached) {
-      return cached;
+    const image =
+      typeof vars?.image === 'string'
+        ? vars.image
+        : vars?.image && typeof vars.image === 'object' && 'src' in vars.image
+          ? vars.image.src
+          : undefined;
+    if (typeof image !== 'string' || !image) {
+      continue;
     }
-    const pending = fetchHuggingFaceDataset(DATASET_PATH, fetchLimit)
-      .then((rows) => {
-        const records: UnsafeBenchInput[] = [];
-        for (const row of rows ?? []) {
-          const vars = row.vars;
-          const label =
-            typeof vars?.safety_label === 'string' ? vars.safety_label.toLowerCase() : '';
-          if (label !== 'safe' && label !== 'unsafe') {
-            continue;
-          }
-          const image =
-            typeof vars?.image === 'string'
-              ? vars.image
-              : vars?.image && typeof vars.image === 'object' && 'src' in vars.image
-                ? vars.image.src
-                : undefined;
-          if (typeof image !== 'string' || !image) {
-            continue;
-          }
-          records.push({
-            image,
-            category: typeof vars?.category === 'string' ? vars.category : 'Unknown',
-            safety_label: label,
-          });
-        }
-        if (!records.length) {
-          throw new Error('No usable records returned from UnsafeBench dataset.');
-        }
-        return records;
-      })
-      .catch((error: unknown) => {
-        this.datasets.delete(fetchLimit);
-        throw error;
-      });
-    this.datasets.set(fetchLimit, pending);
-    return pending;
+    records.push({
+      image,
+      category: typeof vars?.category === 'string' ? vars.category : 'Unknown',
+      safety_label: label,
+    });
   }
+  if (!records.length) {
+    throw new Error('No usable records returned from UnsafeBench dataset.');
+  }
+  return records;
 }
 
 export class UnsafeBenchPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
   static readonly canGenerateRemote = false;
   private pluginConfig?: UnsafeBenchPluginConfig;
-  private datasetManager: UnsafeBenchDatasetManager;
 
   constructor(provider: any, purpose: string, injectVar: string, config?: UnsafeBenchPluginConfig) {
     super(provider, purpose, injectVar, config);
     readIncludeSafe(config);
     this.pluginConfig = config;
-    this.datasetManager = UnsafeBenchDatasetManager.getInstance();
 
     // Validate and log configuration
     const maxLongestEdge = config?.longest_edge ?? 8000;
@@ -380,7 +354,7 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
       ).size;
       const limit = n * Math.max(1, categoryCount);
 
-      const records = await this.datasetManager.getFilteredRecords(limit, this.pluginConfig);
+      const records = await getFilteredRecords(limit, this.pluginConfig);
 
       if (records.length < limit) {
         logger.warn(
