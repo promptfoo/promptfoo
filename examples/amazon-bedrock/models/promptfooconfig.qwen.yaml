@@ -119,4 +119,4 @@ tests:
       - type: contains
         value: '15 * 8 + 42'
     options:
-      provider: bedrock:qwen.qwen3-coder-480b-a35b-v1:0:Qwen3 Coder 480B with Tools
+      provider: Qwen3 Coder 480B with Tools

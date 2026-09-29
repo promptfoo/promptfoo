@@ -17,6 +17,8 @@ assert:
     threshold: 0.7 # Score between 0 and 1
 ```
 
+If `threshold` is omitted, it defaults to `0.5`.
+
 ### How it works
 
 The answer relevance checker:
@@ -73,7 +75,7 @@ assert:
     threshold: 0.8
     provider:
       text: anthropic:claude-sonnet-4-6
-      embedding: cohere:embed-english-v3.0
+      embedding: cohere:embedding:embed-english-v3.0
 ```
 
 ### Customizing the Prompt

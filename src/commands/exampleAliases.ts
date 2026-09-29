@@ -53,7 +53,6 @@ export const EXAMPLE_ALIASES: Record<string, string> = {
   'function-tools-callback': 'eval-function-tools-callback',
   'g-eval': 'eval-g-eval',
   'github-action': 'integration-github-action',
-  'github-models': 'provider-github-models',
   'golang-provider': 'provider-golang',
   'google-adk-example': 'integration-google-adk',
   'google-sheets': 'integration-google-sheets',
@@ -216,5 +215,15 @@ export const REMOVED_EXAMPLES: Record<
   'gemma-vs-mistral': {
     legacyRef: '0.120.26',
     reason: 'gemma-vs-mistral was removed because the underlying model is no longer available.',
+  },
+  'openai-deep-research': {
+    legacyRef: '31b566872971532e6d428c0cbad4487d22d936c5',
+    reason:
+      'This historical example uses retired OpenAI deep-research models and cannot run against the current OpenAI API.',
+  },
+  'redteam-dalle': {
+    legacyRef: '31b566872971532e6d428c0cbad4487d22d936c5',
+    reason:
+      'This historical example uses retired DALL·E models and cannot run against the current OpenAI API.',
   },
 };

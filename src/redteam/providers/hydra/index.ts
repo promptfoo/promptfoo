@@ -11,7 +11,12 @@ import {
 } from '../../../tracing/traceContext';
 import invariant from '../../../util/invariant';
 import { sleep } from '../../../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../../util/tokenUsageUtils';
+import { getTargetConversation } from '../../grading/storedResult';
 import { materializeInputVariablesWithMetadata } from '../../inputVariables';
 import {
   getRemoteGenerationDisabledError,
@@ -39,12 +44,14 @@ import {
   isBasicRefusal,
 } from '../../util';
 import {
+  accumulateGraderResult,
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
   isConversationEndedResponse,
   type Message,
+  runRedteamGrader,
   type TargetResponse,
   type TurnBacktrackingStopReason,
 } from '../shared';
@@ -345,6 +352,7 @@ export class HydraProvider implements ApiProvider {
     let stopReason: TurnBacktrackingStopReason = 'Max turns reached';
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
+    let lastResponseMessages: Message[] = [];
     let backtrackCount = 0;
     let agentFailureError: string | undefined;
 
@@ -434,7 +442,7 @@ export class HydraProvider implements ApiProvider {
       );
 
       // Agent coordination calls are internal and should not count as target probes.
-      accumulateResponseTokenUsage(totalTokenUsage, agentResp, { countAsRequest: false });
+      accumulateAttackerTokenUsage(totalTokenUsage, agentResp);
 
       if (this.agentProvider.delay) {
         await sleep(this.agentProvider.delay);
@@ -587,6 +595,9 @@ export class HydraProvider implements ApiProvider {
             goal: test?.metadata?.goal as string | undefined,
           },
         );
+        if (lastTransformResult.tokenUsage) {
+          accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
+        }
 
         // Skip turn if transform failed
         if (lastTransformResult.error) {
@@ -650,7 +661,10 @@ export class HydraProvider implements ApiProvider {
       }
 
       // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
-      lastFinalAttackPrompt = finalTargetPrompt;
+      lastFinalAttackPrompt =
+        lastTransformResult?.prompt ||
+        getTargetConversation(this.conversationHistory).lastUserPrompt ||
+        nextMessage;
 
       // Get target response
       const iterationStart = Date.now();
@@ -672,17 +686,22 @@ export class HydraProvider implements ApiProvider {
         options,
       );
       lastTargetResponse = targetResponse;
+      lastResponseMessages = [
+        ...this.conversationHistory,
+        { role: 'assistant', content: targetResponse.output || '' },
+      ];
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
       // Fetch trace context if tracing is enabled
       let traceContext: TraceContextData | null = null;
       let computedTraceSummary: string | undefined;
-      if (shouldFetchTrace) {
+      if (shouldFetchTrace && !targetResponse.cached) {
         const traceparent = context?.traceparent ?? undefined;
         const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
 
         if (traceId) {
           traceContext = await fetchTraceContext(traceId, {
+            abortSignal: options?.abortSignal,
             earliestStartTime: iterationStart,
             includeInternalSpans: tracingOptions.includeInternalSpans,
             maxSpans: tracingOptions.maxSpans,
@@ -691,6 +710,9 @@ export class HydraProvider implements ApiProvider {
             retryDelayMs: tracingOptions.retryDelayMs,
             spanFilter: tracingOptions.spanFilter,
             sanitizeAttributes: tracingOptions.sanitizeAttributes,
+            providerConfig: tracingOptions.provider,
+            queryDelay: tracingOptions.queryDelay,
+            redactAttributes: tracingOptions.redactAttributes,
           });
 
           if (traceContext) {
@@ -783,6 +805,8 @@ export class HydraProvider implements ApiProvider {
         }
       }
 
+      // Externalization can replace the response object. Return the same output we grade.
+      lastTargetResponse = targetResponse;
       const historyOutput =
         isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload()
           ? scrubOutputForHistory(targetResponse.output)
@@ -793,6 +817,7 @@ export class HydraProvider implements ApiProvider {
         role: 'assistant',
         content: historyOutput,
       });
+      lastResponseMessages = [...this.conversationHistory];
 
       // Check for refusal and backtrack if in stateless mode and backtracking enabled
       const isRefusal = isBasicRefusal(targetResponse.output);
@@ -910,8 +935,9 @@ export class HydraProvider implements ApiProvider {
             });
           }
 
-          const { grade, rubric } = await grader.getResult(
-            nextMessage,
+          const { grade, rubric } = await runRedteamGrader(
+            grader,
+            lastFinalAttackPrompt || nextMessage,
             targetResponse.output,
             test,
             targetProvider,
@@ -921,10 +947,19 @@ export class HydraProvider implements ApiProvider {
             gradingContext,
           );
           graderResult = grade;
-          storedGraderResult = {
-            ...grade,
-            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-          };
+          storedGraderResult = accumulateGraderResult(
+            storedGraderResult,
+            {
+              ...grade,
+              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+            },
+            {
+              prompt: lastFinalAttackPrompt || nextMessage,
+              output: targetResponse.output,
+              pluginId: test.metadata?.pluginId,
+              assertion: assertToUse,
+            },
+          );
 
           logger.debug(`${this.logPrefix} Grader result`, {
             turn,
@@ -993,9 +1028,7 @@ export class HydraProvider implements ApiProvider {
           options,
         );
         // Learning update is an internal cloud call, not a target probe.
-        accumulateResponseTokenUsage(totalTokenUsage, learningResponse, {
-          countAsRequest: false,
-        });
+        accumulateAttackerTokenUsage(totalTokenUsage, learningResponse);
 
         logger.debug(`${this.logPrefix} Scan learnings updated`, { scanId, testRunId });
       } catch (error) {
@@ -1004,7 +1037,7 @@ export class HydraProvider implements ApiProvider {
       }
     }
 
-    const messages = this.conversationHistory.map((msg) => ({
+    const messages = lastResponseMessages.map((msg) => ({
       role: msg.role,
       content: msg.content,
     })) as Record<string, any>[];

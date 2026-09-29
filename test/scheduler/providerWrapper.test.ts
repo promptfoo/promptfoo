@@ -176,6 +176,40 @@ describe('providerWrapper', () => {
       expect(headers).toEqual({ 'retry-after': '60' });
     });
 
+    it('should keep hard-quota headers out of the rate-limit state', async () => {
+      let capturedOptions: any;
+      mockExecute.mockImplementation(async (_provider, callFn, options) => {
+        capturedOptions = options;
+        return callFn();
+      });
+
+      const wrappedProvider = wrapProviderWithRateLimiting(mockProvider, mockRegistry);
+      await wrappedProvider.callApi('test');
+
+      const headers = {
+        'x-ratelimit-remaining-requests': '0',
+        'x-ratelimit-reset-requests': '3600s',
+      };
+      const quota: ProviderResponse = {
+        error: 'Quota exceeded: HTTP 429 Too Many Requests (code: credit_balance_exhausted)',
+        metadata: {
+          rateLimitKind: 'quota',
+          http: { status: 429, statusText: 'Too Many Requests', headers },
+        },
+      };
+      expect(capturedOptions.getHeaders(quota)).toBeUndefined();
+      expect(capturedOptions.isRateLimited(quota, undefined)).toBe(false);
+
+      const throttle: ProviderResponse = {
+        error: 'Rate limit exceeded: HTTP 429 Too Many Requests',
+        metadata: {
+          rateLimitKind: 'rate_limit',
+          http: { status: 429, statusText: 'Too Many Requests', headers },
+        },
+      };
+      expect(capturedOptions.getHeaders(throttle)).toEqual(headers);
+    });
+
     it('should parse retry-after header', async () => {
       let capturedOptions: any;
       mockExecute.mockImplementation(async (_provider, callFn, options) => {

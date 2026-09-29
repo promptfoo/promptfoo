@@ -1,6 +1,7 @@
 import { SingleBar } from 'cli-progress';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
+import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import * as remoteGeneration from '../../../src/redteam/remoteGeneration';
 import {
@@ -240,9 +241,14 @@ describe('mathPrompt', () => {
     });
 
     it('keeps remote generation enabled for the built-in default selection', async () => {
+      const generationTokenUsage = {};
       vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
       vi.mocked(fetchWithCache).mockResolvedValue({
-        data: { result: [{ vars: { prompt: 'remote-default' } }] },
+        cached: false,
+        data: {
+          result: [{ vars: { prompt: 'remote-default' } }],
+          tokenUsage: { total: 45, prompt: 30, completion: 15, numRequests: 3 },
+        },
       } as any);
 
       const result = await addMathPrompt(
@@ -251,7 +257,10 @@ describe('mathPrompt', () => {
         { mathConcepts: ['topology'] },
         {
           generationProviderSelection: {
-            provider: createMockProvider({ id: 'default-regular' }),
+            provider: trackGenerationTokenUsage(
+              createMockProvider({ id: 'default-regular' }),
+              generationTokenUsage,
+            ),
             source: 'default',
           },
         },
@@ -260,6 +269,12 @@ describe('mathPrompt', () => {
       expect(fetchWithCache).toHaveBeenCalledTimes(1);
       expect(redteamProviderManager.getDefaultProvider).not.toHaveBeenCalled();
       expect(result[0]?.vars?.prompt).toBe('remote-default');
+      expect(generationTokenUsage).toMatchObject({
+        total: 45,
+        prompt: 30,
+        completion: 15,
+        numRequests: 3,
+      });
     });
 
     it('uses the request-scoped generation provider for local encoding', async () => {

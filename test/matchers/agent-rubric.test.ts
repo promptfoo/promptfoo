@@ -146,6 +146,25 @@ describe('matchesAgentRubric', () => {
     expect(mocks.textProvider.callApi).not.toHaveBeenCalled();
   });
 
+  it.each(['openai:codex-security', 'openai:codex-security:gpt-5.6-sol'])(
+    'rejects %s as a rubric grader instead of treating scan findings as a passing verdict',
+    async (providerId) => {
+      const { matchesAgentRubric } = await import('../../src/matchers/agent');
+      const securityProvider = {
+        id: () => providerId,
+        callApi: vi.fn(async () => ({ output: JSON.stringify({ findings: [] }) })),
+      } as ApiProvider;
+      mocks.loadApiProvider.mockResolvedValue(securityProvider);
+
+      await expect(
+        matchesAgentRubric('Inspect the artifact', 'done', { provider: providerId }),
+      ).rejects.toThrow('agent-rubric assertion requires an agentic grading provider');
+
+      expect(securityProvider.callApi).not.toHaveBeenCalled();
+      expect(mocks.codexProvider.callApi).not.toHaveBeenCalled();
+    },
+  );
+
   it('applies llm-rubric threshold semantics to agent results', async () => {
     const { matchesAgentRubric } = await import('../../src/matchers/agent');
     mocks.codexProvider.callApi = vi.fn(

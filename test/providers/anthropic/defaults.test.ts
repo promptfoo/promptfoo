@@ -31,6 +31,10 @@ describe('Anthropic Default Providers', () => {
       expect(providers.llmRubricProvider).toBeInstanceOf(AnthropicLlmRubricProvider);
       expect(providers.suggestionsProvider).toBeInstanceOf(AnthropicMessagesProvider);
       expect(providers.synthesizeProvider).toBeInstanceOf(AnthropicMessagesProvider);
+      expect(providers.webSearchProvider).toBeInstanceOf(AnthropicMessagesProvider);
+      for (const provider of Object.values(providers)) {
+        expect(provider.id()).toBe('anthropic:claude-sonnet-5');
+      }
     });
 
     it('should return the same instances on repeated calls', () => {

@@ -58,7 +58,7 @@ Or configure a different provider for grading:
 
 ```yaml
 redteam:
-  provider: anthropic:messages:claude-sonnet-4-20250514
+  provider: anthropic:messages:claude-sonnet-4-6
 ```
 
 With this configuration, Promptfoo servers usually receive only [telemetry](#telemetry) unless you use red team target/provider setup helpers, red team target/provider test requests, sharing, Cloud sync, hosted reports, or other Cloud-backed features.
