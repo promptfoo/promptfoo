@@ -167,6 +167,8 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
 
+When a `not-javascript`, `not-python`, or `not-ruby` assertion returns a full grading result, a negated failure keeps its custom `reason`, falling back to a generic message if it is empty. A negated pass reports `Assertion passed`; the script's score is preserved in either case.
+
 The `search-rubric` and `not-search-rubric` assertions require a rubric value that renders to a string.
 
 For `not-classifier`, `not-search-rubric`, `not-factuality` (also `not-model-graded-factuality`), and `not-model-graded-closedqa`, a grader error or missing verdict remains a failure with score `0`. Negation only inverts a valid grading result.

@@ -18,4 +18,18 @@ describe('predefinedTargets', () => {
       label: 'Anthropic Claude 4.1 Opus',
     });
   });
+
+  it('offers the Sonnet 4.5 alias while preserving the dated preset for saved configurations', () => {
+    expect(predefinedTargets).toContainEqual({
+      value: 'claude-sonnet-4-5',
+      label: 'Anthropic Claude 4.5 Sonnet',
+    });
+    expect(predefinedTargets.map((target) => target.value)).not.toContain(
+      'claude-sonnet-4-5-20250929',
+    );
+    expect(findPredefinedTarget('claude-sonnet-4-5-20250929')).toEqual({
+      value: 'claude-sonnet-4-5-20250929',
+      label: 'Anthropic Claude 4.5 Sonnet',
+    });
+  });
 });
