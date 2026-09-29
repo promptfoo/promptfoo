@@ -51,7 +51,7 @@ Use Node.js `>=22.22.0`, which matches promptfoo's repo/runtime requirement and 
 
 :::note
 
-This package is installed separately and only needed for the OpenAI Codex SDK provider. The provider supports version `^0.156.1` and checks compatibility when invoked. The published `@openai/codex-sdk` and `@openai/codex` packages currently declare the Apache-2.0 license.
+The provider checks SDK compatibility when called. The published `@openai/codex-sdk` and `@openai/codex` packages currently declare the Apache-2.0 license.
 
 :::
 

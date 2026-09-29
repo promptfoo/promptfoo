@@ -370,10 +370,7 @@ export const CLAUDE_CODE_MODEL_ALIASES = [
   'opusplan[1m]',
 ];
 
-/**
- * Oldest supported Claude Agent SDK. Any later 0.3.x release is accepted, so a source checkout,
- * a Renovate bump, or a user on a newer SDK keeps working without a matching promptfoo release.
- */
+// Accept compatible 0.3.x updates without requiring a Promptfoo release for each SDK patch.
 const CLAUDE_AGENT_SDK_RANGE = '^0.3.273';
 
 /**
