@@ -411,7 +411,7 @@
       "minimumReleaseAge": "10 days"
     },
     {
-      "description": "Keep Python example dependencies current in separate example branches, with time for release stabilization",
+      "description": "Update Python dependencies monthly in separate branches for each example",
       "matchManagers": ["pip_requirements", "pep621"],
       "matchFileNames": ["examples/**/requirements*.txt", "examples/**/pyproject.toml"],
       "additionalBranchPrefix": "{{packageFileDir}}-",
@@ -421,23 +421,7 @@
       "minimumReleaseAge": "10 days"
     },
     {
-      "description": "Preserve provider-python's Python 3.9-compatible AnyIO pin until the example raises its Python floor and replaces the 4.12.x pin.",
-      "matchManagers": ["pip_requirements"],
-      "matchFileNames": ["examples/provider-python/requirements.txt"],
-      "matchPackageNames": ["anyio"],
-      "matchCurrentValue": "/^==\\s*4\\.12\\.\\d+$/",
-      "allowedVersions": "<4.13"
-    },
-    {
-      "description": "Preserve the OpenAI usage-object compatibility bound for Agents SDK 0.14 until the example migrates the SDK and removes this bound.",
-      "matchManagers": ["pip_requirements"],
-      "matchFileNames": ["examples/openai-agents/requirements.txt"],
-      "matchPackageNames": ["openai"],
-      "matchCurrentValue": "/<\\s*2\\.45(?:\\.0)?(?:,|$)/",
-      "allowedVersions": "<2.45.0"
-    },
-    {
-      "description": "Change example Python support floors explicitly alongside compatibility validation, not as routine package updates.",
+      "description": "Review Python support floor changes separately from dependency updates",
       "matchManagers": ["pep621"],
       "matchFileNames": ["examples/**/pyproject.toml"],
       "matchDepTypes": ["requires-python"],

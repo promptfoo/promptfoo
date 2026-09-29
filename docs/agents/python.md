@@ -31,20 +31,20 @@ Use the built-in `unittest` module for new Python tests.
 
 ## Example Dependencies
 
-Keep each example's manifest limited to the packages it imports or invokes. Let
-those packages resolve their own dependencies, except for documented security or
-compatibility constraints that their metadata does not enforce. Keep optional
-providers and tracing integrations in separate install instructions when the
-default example does not use them.
+List the packages each example imports or invokes. Add transitive dependencies
+only for documented security or compatibility constraints. Put optional providers
+and tracing integrations in separate install instructions when the default
+example does not use them.
 
 Test updates in a fresh virtual environment, run `python -m pip check`, and run
 the example with the local CLI. Inspect the exported results for errors and
 unexpected failures. Document the Python version and any credentials or services
-needed to reproduce the run. The Python example dependency workflow checks clean
-installation of changed manifests on Python 3.12, or all tracked example manifests
-when the workflow or its selector changes. Tool-only pyprojects without PEP 621
-project metadata are excluded. This does not replace example execution or checks
-at an example's minimum supported Python version.
+needed to reproduce the run.
+
+The Python example dependency workflow installs changed manifests on Python 3.12.
+It checks all tracked example manifests when the workflow or selector changes,
+and skips tool-only pyprojects without PEP 621 project metadata. Run the example
+and check its minimum supported Python version separately.
 
 ## Provider Pattern
 

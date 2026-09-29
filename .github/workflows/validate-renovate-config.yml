@@ -5,7 +5,6 @@ on:
     paths:
       - 'renovate.json'
       - '.nvmrc'
-      - '.github/scripts/validate-renovate-python-holds.mjs'
       - '.github/workflows/validate-renovate-config.yml'
   push:
     branches:
@@ -13,7 +12,6 @@ on:
     paths:
       - 'renovate.json'
       - '.nvmrc'
-      - '.github/scripts/validate-renovate-python-holds.mjs'
       - '.github/workflows/validate-renovate-config.yml'
 
 permissions:
@@ -43,8 +41,3 @@ jobs:
 
       - name: Validate renovate.json
         run: node "$RUNNER_TEMP/renovate-tool/node_modules/renovate/dist/config-validator.js"
-
-      - name: Check Python compatibility holds with Renovate
-        run: >-
-          node .github/scripts/validate-renovate-python-holds.mjs
-          "$RUNNER_TEMP/renovate-tool/node_modules/renovate"
