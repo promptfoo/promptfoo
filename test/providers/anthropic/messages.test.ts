@@ -2651,37 +2651,91 @@ describe('AnthropicMessagesProvider', () => {
       },
     );
 
-    it('names the turn container in MCP follow-up requests', async () => {
-      provider = createProvider('claude-sonnet-4-6', {
-        config: { mcp: { enabled: true, server: { command: 'npm', args: ['start'] } } },
-      });
-      mcpMocks.callTool.mockResolvedValueOnce({ content: 'Found Acme Solar.' });
-      const create = vi
-        .spyOn(provider.anthropic.messages, 'create')
-        .mockResolvedValueOnce({
-          content: [
-            {
-              type: 'tool_use',
-              id: 'toolu_search',
-              name: 'search_companies',
-              input: { query: 'solar' },
+    it.each([false, true])(
+      'retains the latest container across paused and MCP turns with null containers (stream: %s)',
+      async (stream) => {
+        provider = createProvider('claude-sonnet-4-6', {
+          config: {
+            stream,
+            mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
+          },
+        });
+        mcpMocks.callTool.mockResolvedValue({ content: 'Found Acme Solar.' });
+        const responses = [
+          {
+            content: [{ type: 'text', text: 'Preparing the search.' }],
+            container: { id: 'container_turn', expires_at: '2026-09-30T00:00:00Z', skills: null },
+            stop_reason: 'pause_turn',
+          },
+          {
+            content: [
+              {
+                type: 'tool_use',
+                id: 'toolu_search',
+                name: 'search_companies',
+                input: { query: 'solar' },
+              },
+            ],
+            container: null,
+            stop_reason: 'tool_use',
+          },
+          {
+            content: [{ type: 'text', text: 'Checking the results.' }],
+            container: {
+              id: 'container_updated',
+              expires_at: '2026-09-30T00:00:00Z',
+              skills: null,
             },
-          ],
-          container: { id: 'container_turn', expires_at: '2026-09-30T00:00:00Z', skills: null },
-          stop_reason: 'tool_use',
+            stop_reason: 'pause_turn',
+          },
+          {
+            content: [
+              {
+                type: 'tool_use',
+                id: 'toolu_details',
+                name: 'search_companies',
+                input: { query: 'Acme Solar' },
+              },
+            ],
+            container: null,
+            stop_reason: 'tool_use',
+          },
+          {
+            content: [{ type: 'text', text: 'Acme Solar is a match.' }],
+            container: null,
+            stop_reason: 'end_turn',
+          },
+        ].map((response) => ({
+          ...response,
           usage: { input_tokens: 10, output_tokens: 5 },
-        } as Anthropic.Messages.Message)
-        .mockResolvedValueOnce({
-          content: [{ type: 'text', text: 'Acme Solar is a match.' }],
-          stop_reason: 'end_turn',
-          usage: { input_tokens: 7, output_tokens: 4 },
-        } as Anthropic.Messages.Message);
+        })) as Anthropic.Messages.Message[];
+        const create = vi.spyOn(provider.anthropic.messages, 'create');
+        const streamed = vi.spyOn(provider.anthropic.messages, 'stream');
+        for (const response of responses) {
+          if (stream) {
+            streamed.mockReturnValueOnce({
+              finalMessage: vi.fn().mockResolvedValue(response),
+            } as unknown as ReturnType<typeof provider.anthropic.messages.stream>);
+          } else {
+            create.mockResolvedValueOnce(response);
+          }
+        }
 
-      await provider.callApi('Find solar companies');
+        const result = await provider.callApi('Find solar companies');
 
-      expect(create.mock.calls[0][0]).not.toHaveProperty('container');
-      expect(create.mock.calls[1][0].container).toBe('container_turn');
-    });
+        const calls = stream ? streamed.mock.calls : create.mock.calls;
+        expect(calls.map(([params]) => params.container)).toEqual([
+          undefined,
+          'container_turn',
+          'container_turn',
+          'container_updated',
+          'container_updated',
+        ]);
+        expect(mcpMocks.callTool).toHaveBeenCalledTimes(2);
+        expect(result.output).toBe('Acme Solar is a match.');
+        expect(result.error).toBeUndefined();
+      },
+    );
 
     it('continues MCP tool execution through the streaming path', async () => {
       provider = createProvider('claude-sonnet-4-6', {
@@ -2883,6 +2937,12 @@ describe('AnthropicMessagesProvider', () => {
 
     it.each([
       ['names the paused container', undefined, 'container_paused'],
+      ['keeps the caller-pinned container', 'container_pinned', 'container_pinned'],
+      [
+        'keeps the caller-pinned container and skills',
+        { id: 'container_pinned', skills: [{ type: 'anthropic', skill_id: 'xlsx' }] },
+        { id: 'container_pinned', skills: [{ type: 'anthropic', skill_id: 'xlsx' }] },
+      ],
       [
         'keeps the requested skills in the paused container',
         { skills: [{ type: 'anthropic', skill_id: 'xlsx', version: 'latest' }] },
@@ -2901,11 +2961,16 @@ describe('AnthropicMessagesProvider', () => {
           ...pausedTurn,
           container: { id: 'container_paused', expires_at: '2026-09-30T00:00:00Z', skills: null },
         })
+        .mockResolvedValueOnce(pausedTurn)
         .mockResolvedValueOnce(finishedTurn);
 
       await provider.callApi('Build the spreadsheet');
 
-      expect(create.mock.calls[1][0].container).toEqual(expected);
+      expect(create).toHaveBeenCalledTimes(3);
+      expect(create.mock.calls.slice(1).map(([params]) => params.container)).toEqual([
+        expected,
+        expected,
+      ]);
     });
 
     it('stops resuming after five pauses and keeps the partial turn', async () => {
