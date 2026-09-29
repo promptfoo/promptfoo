@@ -28,7 +28,7 @@ import { sanitizeConfigForOutput } from './util/sanitizer';
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
 import type ModelAudit from './models/modelAudit';
-import type { Prompt, TestCase } from './types';
+import type { Prompt, TestCaseWithVarsFile } from './types';
 
 interface ShareDomainResult {
   domain: string;
@@ -200,7 +200,7 @@ function stripPromptPaths<T extends Partial<Prompt>>(prompt: T): T {
 }
 
 // Mutate only the sanitized share copy; local replay paths stay intact.
-function stripTestPaths(test: TestCase): void {
+function stripTestPaths(test: TestCaseWithVarsFile): void {
   if (test.vars) {
     test.vars = stripFilePaths(test.vars);
   }

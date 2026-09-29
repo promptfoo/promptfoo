@@ -1133,6 +1133,43 @@ describe('CommandLineOptionsSchema suggestionsCount', () => {
 });
 
 describe('TestSuiteConfigSchema', () => {
+  it.each([
+    { vars: 'vars.yaml' },
+    { vars: 'file://vars.yaml' },
+    { vars: ['file://first.yaml', 'second.yaml'] },
+  ])(
+    'accepts authored vars references $vars in tests, defaults, and scenario tests',
+    ({ vars }) => {
+      const config = {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        tests: [{ vars }],
+        defaultTest: { vars },
+        scenarios: [{ config: [{}], tests: [{ vars }] }],
+      };
+      expect(TestSuiteConfigSchema.parse(config)).toMatchObject(config);
+    },
+  );
+
+  it.each([{ vars: 42 }, { vars: [42] }])(
+    'rejects invalid authored vars references $vars',
+    ({ vars }) => {
+      for (const testSource of [
+        { tests: [{ vars }] },
+        { defaultTest: { vars } },
+        { scenarios: [{ config: [{}], tests: [{ vars }] }] },
+      ]) {
+        expect(
+          TestSuiteConfigSchema.safeParse({
+            providers: ['echo'],
+            prompts: ['Hello'],
+            ...testSource,
+          }).success,
+        ).toBe(false);
+      }
+    },
+  );
+
   const rootDir = path.join(__dirname, '../..');
   const configFiles = globSync(`${rootDir}/examples/**/promptfooconfig.{yaml,yml,json}`, {
     windowsPathsNoEscape: true,

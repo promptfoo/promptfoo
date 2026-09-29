@@ -186,6 +186,10 @@ tests:
   - vars: file://path/to/vars*.yaml
 ```
 
+`vars` also accepts a list of file references, loaded in order. These forms work in `defaultTest.vars` and scenario tests too.
+
+When combining configs, vars mappings merge by key. If either value is a file reference or list, the later `vars` value replaces the earlier one. Relative paths resolve from the config that declares them.
+
 You can also load individual variables from file by using the `file://` prefix. For example:
 
 ```yaml

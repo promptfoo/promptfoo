@@ -28,6 +28,7 @@ import {
   type RedteamStrategyObject,
   type Scenario,
   type TestCase,
+  type TestCaseWithVarsFile,
   type TestSuite,
   type TestSuiteConfig,
   TestSuiteConfigSchema,
@@ -720,7 +721,7 @@ async function prepareCombinedConfig(
         ...('config' in test && { config: resolveNestedFileReferences(basePath, test.config) }),
       };
     }
-    const source = test as TestCase;
+    const source = test as TestCaseWithVarsFile;
     // Keep grader IDs unchanged so references can reuse configured providers.
     return {
       ...source,
@@ -831,7 +832,7 @@ async function prepareCombinedConfig(
     prompts,
     tests: [],
     scenarios,
-    defaultTest: configSources.reduce((prev: Partial<TestCase> | string | undefined, source) => {
+    defaultTest: configSources.reduce((prev: TestCaseWithVarsFile | string | undefined, source) => {
       const { config: curr, basePath } = source;
       // The last file default wins; inline defaults only merge when no file was selected.
       if (typeof curr.defaultTest === 'string') {
@@ -846,18 +847,23 @@ async function prepareCombinedConfig(
         return undefined;
       }
       // Otherwise merge objects
-      const currDefaultTest = typeof curr.defaultTest === 'object' ? curr.defaultTest : {};
+      const currDefaultTest =
+        typeof curr.defaultTest === 'object'
+          ? (makeTestAbsolute(basePath, curr.defaultTest) as TestCaseWithVarsFile)
+          : {};
       const prevObj = typeof prev === 'object' ? prev : {};
-      // A vars file reference (string or list) is loaded later and cannot be merged by key.
-      const hasVarsFile = [prevObj.vars, currDefaultTest.vars].some(
-        (vars) => typeof vars === 'string' || Array.isArray(vars),
-      );
+      const previousVars = prevObj.vars;
+      const currentVars = currDefaultTest.vars;
       return {
         ...prevObj,
         ...currDefaultTest,
-        vars: hasVarsFile
-          ? (currDefaultTest.vars ?? prevObj.vars)
-          : { ...prevObj?.vars, ...currDefaultTest?.vars },
+        vars:
+          typeof previousVars === 'string' ||
+          Array.isArray(previousVars) ||
+          typeof currentVars === 'string' ||
+          Array.isArray(currentVars)
+            ? (currentVars ?? previousVars)
+            : { ...previousVars, ...currentVars },
         assert: [...(prevObj?.assert || []), ...(currDefaultTest?.assert || [])],
         options: { ...prevObj?.options, ...currDefaultTest?.options },
         metadata: { ...prevObj?.metadata, ...currDefaultTest?.metadata },
@@ -921,6 +927,7 @@ export async function resolveConfigs(
   commandLineOptions?: Partial<CommandLineOptions>;
   selectedProviderConfigs?: TestSuiteConfig['providers'];
   testSources?: TestSource[];
+  defaultTestSource?: TestSuiteConfig['defaultTest'];
 }> {
   let fileConfig: Partial<UnifiedConfig> = {};
   let testSources: TestSource[] | undefined;
@@ -1014,15 +1021,15 @@ async function resolveLoadedConfig(
   cliState.basePath = basePath;
 
   // Get the raw defaultTest value which could be a string (file://), object (TestCase), or undefined
-  const defaultTestRaw: any = fileConfig.defaultTest || defaultConfig.defaultTest;
+  const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
 
   // Load defaultTest from file:// reference if needed
-  let processedDefaultTest: Partial<TestCase> | undefined;
+  let processedDefaultTest: TestCaseWithVarsFile | undefined;
   if (typeof defaultTestRaw === 'string' && defaultTestRaw.startsWith('file://')) {
     const loaded = await maybeLoadFromExternalFile(defaultTestRaw);
-    processedDefaultTest = loaded as Partial<TestCase>;
-  } else if (defaultTestRaw) {
-    processedDefaultTest = defaultTestRaw as Partial<TestCase>;
+    processedDefaultTest = loaded as TestCaseWithVarsFile;
+  } else if (typeof defaultTestRaw === 'object') {
+    processedDefaultTest = defaultTestRaw;
   }
 
   const authoredTracing = fileConfig.tracing || defaultConfig.tracing;
@@ -1172,10 +1179,10 @@ async function resolveLoadedConfig(
     testConfigs.map((test) => readTest(test, basePath, false, config.env)),
   );
 
-  let parsedScenarios = config.scenarios;
+  let parsedScenarios: Scenario[] | undefined;
   // Parse testCases for each scenario
-  if (parsedScenarios && (!Array.isArray(parsedScenarios) || parsedScenarios.length > 0)) {
-    parsedScenarios = (await maybeLoadFromExternalFile(parsedScenarios)) as Scenario[];
+  if (config.scenarios) {
+    parsedScenarios = (await maybeLoadFromExternalFile(config.scenarios)) as Scenario[];
     // Flatten the scenarios array in case glob patterns were used
     parsedScenarios = parsedScenarios.flat().map((scenario) =>
       typeof scenario === 'object'
@@ -1325,5 +1332,6 @@ async function resolveLoadedConfig(
     basePath,
     commandLineOptions,
     selectedProviderConfigs: filteredProviderConfigs,
+    defaultTestSource: defaultTestRaw,
   };
 }
