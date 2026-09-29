@@ -1,15 +1,12 @@
-/**
- * MCP errors with a code and serializable details.
- */
-export abstract class McpError extends Error {
-  abstract readonly code: string;
-  abstract readonly statusCode: number;
-  public readonly details?: Record<string, unknown>;
+export class ConfigurationError extends Error {
+  readonly code = 'CONFIGURATION_ERROR';
+  readonly statusCode = 400;
+  readonly details: { configPath?: string };
 
-  constructor(message: string, details?: Record<string, unknown>) {
+  constructor(message: string, configPath?: string) {
     super(message);
     this.name = this.constructor.name;
-    this.details = details;
+    this.details = { configPath };
     Error.captureStackTrace(this, this.constructor);
   }
 
@@ -19,17 +16,5 @@ export abstract class McpError extends Error {
       message: this.message,
       details: this.details,
     };
-  }
-}
-
-/**
- * Error thrown when configuration is invalid
- */
-export class ConfigurationError extends McpError {
-  readonly code = 'CONFIGURATION_ERROR';
-  readonly statusCode = 400;
-
-  constructor(message: string, configPath?: string) {
-    super(message, { configPath });
   }
 }
