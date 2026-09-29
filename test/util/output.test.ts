@@ -1199,7 +1199,7 @@ describe('writeOutput', () => {
         expect(names[0][0]).toContain('🚀...');
       } else if (secondId !== 'echo') {
         expect(names[0][0]).toMatch(/^\[target\] prompt 1 \([a-f0-9]{16}\)$/);
-        expect(names[0][1]).toBe('[target] prompt 1');
+        expect(names[0][1]).toMatch(/^\[target\] prompt 1 \([a-f0-9]{16}\)$/);
       }
     },
   );
@@ -1278,23 +1278,58 @@ describe('writeOutput', () => {
       .testsuites.testsuite;
     const names = suites.map((suite) => suite['@_name']);
     expect(names[0]).toMatch(/ \([a-f0-9]{16}\)$/);
-    expect(names[1]).not.toMatch(/ \([a-f0-9]{16}\)$/);
+    expect(names[1]).toMatch(/ \([a-f0-9]{16}\)$/);
     expect(new Set(names).size).toBe(2);
   });
 
-  it('keeps JUnit suite identities distinct for providers with matching labels', async () => {
-    const eval_ = new Eval({});
-    for (const id of ['provider-a', 'provider-b']) {
-      await eval_.addResult(createEvaluateResult({ provider: { id, label: 'my model' } }));
-    }
-
-    const suites: { '@_name': string }[] = new XMLParser({ ignoreAttributes: false }).parse(
-      await createJunitXml(eval_),
-    ).testsuites.testsuite;
-    const names = suites.map((suite) => suite['@_name']);
-    expect(names).toContain('[my model] prompt 1');
-    expect(names).toContainEqual(expect.stringMatching(/^\[my model\] prompt 1 \([a-f0-9]{16}\)$/));
-  });
+  it.each([
+    ['shared', 'shared'],
+    ['shared', ' shared '],
+    ['x'.repeat(520) + 'a', 'x'.repeat(520) + 'b'],
+  ])(
+    'keeps colliding provider and prompt identities stable across result order: %j',
+    async (first, second) => {
+      const rows = [
+        ['provider-a', first, 'prompt-a', 0],
+        ['provider-b', second, 'prompt-a', 0],
+        ['provider-a', first, 'prompt-b', 1],
+        ['provider-b', second, 'prompt-b', 1],
+      ].map(([id, label, promptId, promptIdx]) =>
+        createEvaluateResult({
+          provider: { id: String(id), label: String(label) },
+          promptId: String(promptId),
+          promptIdx: Number(promptIdx),
+          testCase: { description: `${id}:${promptId}` },
+        }),
+      );
+      const identities: Map<string, string>[] = [];
+      for (const results of [rows, [...rows].reverse()]) {
+        const fetchResultsBatched = vi.fn(async function* () {
+          yield results.slice(0, 2);
+          yield results.slice(2);
+        });
+        const eval_ = {
+          persisted: true,
+          createdAt: new Date('2026-01-01'),
+          useOldResults: () => false,
+          fetchResultsBatched,
+        } as unknown as Eval;
+        const xml = await createJunitXml(eval_);
+        expect(() => new SaxesParser().write(xml).close()).not.toThrow();
+        const suites = new XMLParser({ ignoreAttributes: false }).parse(xml).testsuites.testsuite;
+        expect(fetchResultsBatched).toHaveBeenCalledOnce();
+        const identity = new Map<string, string>();
+        for (const suite of suites) {
+          expect(suite['@_name']).toMatch(/ \([a-f0-9]{16}\)$/);
+          expect(suite.testcase['@_classname']).toBe(suite['@_name']);
+          identity.set(suite.testcase['@_name'], suite['@_name']);
+        }
+        expect(new Set(identity.values()).size).toBe(4);
+        identities.push(identity);
+      }
+      expect(identities[1]).toEqual(identities[0]);
+    },
+  );
 
   it('removes forbidden name characters before fallback and length limits', async () => {
     const eval_ = new Eval({});
@@ -1331,7 +1366,7 @@ describe('writeOutput', () => {
     }
   });
 
-  it('keeps different clean prompts numbered under a shared display name', async () => {
+  it('distinguishes providers with matching labels even when their prompts differ', async () => {
     const eval_ = new Eval({});
     for (const id of ['first', 'second']) {
       await eval_.addResult(
@@ -1341,8 +1376,8 @@ describe('writeOutput', () => {
     const suites = new XMLParser({ ignoreAttributes: false }).parse(await createJunitXml(eval_))
       .testsuites.testsuite;
     expect(suites).toMatchObject([
-      { '@_name': '[shared] prompt 1' },
-      { '@_name': '[shared] prompt 2' },
+      { '@_name': expect.stringMatching(/^\[shared\] prompt 1 \([a-f0-9]{16}\)$/) },
+      { '@_name': expect.stringMatching(/^\[shared\] prompt 1 \([a-f0-9]{16}\)$/) },
     ]);
   });
 

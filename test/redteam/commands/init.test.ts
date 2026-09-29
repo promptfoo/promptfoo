@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'fs/promises';
 
 import confirm from '@inquirer/confirm';
@@ -7,6 +8,7 @@ import select from '@inquirer/select';
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readGlobalConfig } from '../../../src/globalConfig/globalConfig';
+import { validatePythonPath } from '../../../src/python/pythonUtils';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
 import { redteamInit, renderRedteamConfig } from '../../../src/redteam/commands/init';
 import { type Strategy } from '../../../src/redteam/constants';
@@ -263,6 +265,15 @@ describe('redteamInit', () => {
       .mocked(fs.writeFile)
       .mock.calls.find(([path]) => path === 'chat.py')?.[1] as string;
     expect(chatProvider).toContain("urllib.parse.urlparse('https://example.com/api/chat')");
+    const python = await validatePythonPath('python', false);
+    execFileSync(
+      python,
+      ['-c', 'import ast, sys; ast.parse(sys.stdin.read(), filename="chat.py")'],
+      {
+        input: chatProvider,
+        encoding: 'utf8',
+      },
+    );
   });
 
   it.each([
