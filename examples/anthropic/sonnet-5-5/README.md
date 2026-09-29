@@ -10,21 +10,16 @@ npx promptfoo@latest init --example anthropic/sonnet-5-5
 cd sonnet-5-5
 ```
 
-## Working with Sonnet 5.5
+## Thinking settings
 
-- **Adaptive thinking is on by default.** Omitting `thinking` lets the model decide how much to
-  reason, steered by `effort`, which defaults to `high`. Anthropic recalibrated the effort levels
-  for Sonnet 5.5, so re-run an effort sweep rather than reusing a Sonnet 5 setting.
-- **`between_tools` replaces `disabled`.** Sonnet 5.5 rejects `thinking: { type: disabled }`. Its
-  lowest setting, `thinking: { type: between_tools }`, turns off up-front thinking and is only
-  accepted at `effort` `high` or below. If your config still says `disabled`, promptfoo sends
-  `between_tools` instead and logs a warning once.
-- **Forced tool use is rejected.** Promptfoo omits `tool_choice` values of type `any` or `tool`;
-  use `auto`, and say in the prompt when a tool applies.
-- **Sampling controls are managed for you.** Sonnet 5.5 rejects `temperature`, `top_p`, and
-  `top_k`; promptfoo omits them automatically.
-- **Pricing.** $2 / $10 per million input / output tokens, the same as Sonnet 5, across the full
-  1M-token context window.
+Adaptive thinking is on by default. `between_tools` turns off up-front thinking and
+requires effort `high` or below. This example uses no tools, so `between_tools` returns
+only text. With tools, progress updates can still appear in thinking blocks.
+
+Promptfoo converts legacy `disabled` thinking to `between_tools`, omits unsupported
+sampling parameters, and removes forced `any`/`tool` choices. See the
+[provider documentation](https://promptfoo.dev/docs/providers/anthropic/#claude-sonnet-55-notes)
+for model-specific settings and pricing.
 
 ## Running the Example
 
@@ -36,7 +31,7 @@ npx promptfoo@latest view
 
 ## Other providers
 
-- AWS Bedrock: `bedrock:global.anthropic.claude-sonnet-5-5` (the only inference profile at launch)
+- AWS Bedrock: `bedrock:global.anthropic.claude-sonnet-5-5`
 - Google Vertex: `vertex:claude-sonnet-5-5` with `config.region: global`
 - Azure AI Foundry: a `claude-sonnet-5-5` deployment
 

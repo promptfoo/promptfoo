@@ -24,7 +24,6 @@ providers:
     config:
       max_tokens: 2048
       region: us-east-1
-  # Sonnet 5.5 launched with only the `global.` profile.
   - id: bedrock:global.anthropic.claude-sonnet-5-5
     label: Claude Sonnet 5.5
     config:

@@ -1255,6 +1255,13 @@ describe('JavaScript file references', () => {
       },
       false,
       0.75,
+      'Custom reason',
+    ],
+    [
+      'empty-reason GradingResult results for not-javascript assertions',
+      { type: 'not-javascript', value: () => ({ pass: true, score: 1, reason: '' }) },
+      false,
+      1,
       'Custom function returned true',
     ],
   ];
@@ -1325,11 +1332,7 @@ describe('JavaScript file references', () => {
           expect(result).toMatchObject({
             pass: rawPass !== inverse,
             score: 0.4,
-            reason: inverse
-              ? rawPass
-                ? 'Custom function returned true'
-                : 'Assertion passed'
-              : 'Custom reason',
+            reason: inverse && !rawPass ? 'Assertion passed' : 'Custom reason',
             namedScores: { safety: 0.7 },
             tokensUsed: { total: 3 },
             assertion: { type: 'javascript', value: '() => false' },
@@ -1343,6 +1346,16 @@ describe('JavaScript file references', () => {
   );
 
   const inverseStringAssertionCases: [string, Assertion, boolean, number, string][] = [
+    [
+      'empty-reason GradingResult results for not-javascript assertions',
+      {
+        type: 'not-javascript',
+        value: "({ pass: true, score: 1, reason: '' })",
+      },
+      false,
+      1,
+      'Custom function returned true',
+    ],
     [
       'boolean results for not-javascript assertions',
       {
@@ -1378,7 +1391,7 @@ describe('JavaScript file references', () => {
       },
       false,
       0.75,
-      'Custom function returned true',
+      'Custom reason',
     ],
   ];
 

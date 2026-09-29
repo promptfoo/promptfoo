@@ -711,6 +711,16 @@ describe('AwsBedrockGenericProvider', () => {
     ])(
       'preserves sampling and manual thinking for Claude inference profile %s',
       async (modelName) => {
+        // The profile hides the model, so the Claude 5 fallback must neither drop sampling
+        // nor convert manual thinking to adaptive.
+        const sampled = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          { region: 'us-east-1', temperature: 0.5 },
+          'hi',
+          undefined,
+          modelName,
+        );
+        expect(sampled.temperature).toBe(0.5);
+
         const thinking = { type: 'enabled', budget_tokens: 8192 } as const;
         const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
           { region: 'us-east-1', temperature: 0.5, thinking },
@@ -718,11 +728,33 @@ describe('AwsBedrockGenericProvider', () => {
           undefined,
           modelName,
         );
-
-        expect(params.temperature).toBe(0.5);
         expect(params.thinking).toEqual(thinking);
+        // Every Claude model rejects a non-default temperature with extended thinking.
+        expect(params.temperature).toBeUndefined();
       },
     );
+
+    // Extended thinking only accepts the default temperature, so the handler's own 0
+    // default must not be sent either (verified live: a ValidationException before).
+    it('does not send the default temperature with extended thinking', async () => {
+      const thinking = { type: 'enabled', budget_tokens: 1024 } as const;
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1', max_tokens: 2048, thinking },
+        'hi',
+        undefined,
+        'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+      );
+      expect(params.thinking).toEqual(thinking);
+      expect(params).not.toHaveProperty('temperature');
+
+      const plain = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1' },
+        'hi',
+        undefined,
+        'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+      );
+      expect(plain.temperature).toBe(0);
+    });
 
     it('gives Claude Opus 5 thinking headroom in the default max_tokens', async () => {
       // Opus 5 spends part of max_tokens on its default adaptive thinking even with no
@@ -3593,9 +3625,6 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
   });
 
   it('maps Claude Sonnet 5.5 across the base and global inference profiles', () => {
-    // Verified via `aws bedrock list-inference-profiles` (2026-09-29): Sonnet 5.5 launched
-    // with base + global only. Geo prefixes still resolve through the `anthropic.claude`
-    // catch-all once AWS adds them.
     for (const id of ['anthropic.claude-sonnet-5-5', 'global.anthropic.claude-sonnet-5-5']) {
       expect(AWS_BEDROCK_MODELS[id]).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
       expect(getHandlerForModel(id)).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);

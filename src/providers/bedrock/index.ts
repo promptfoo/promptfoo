@@ -9,12 +9,14 @@ import {
   clampMaxTokensForThinkingBudget,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
+  isClaudeThinkingEnabled,
   isForcedToolChoiceUnsupportedClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   isThinkingOnByDefaultClaudeModel,
   normalizeClaudeThinkingConfig,
   outputFromMessage,
   parseMessages,
+  resolveClaudeSamplingParams,
 } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
@@ -29,6 +31,7 @@ import type {
   ProviderResponse,
 } from '../../types/providers';
 import type { TokenUsage, VarValue } from '../../types/shared';
+import type { ClaudeThinkingConfig } from '../anthropic/types';
 
 // Utility function to coerce string values to numbers
 export const coerceStrToNum = (value: string | number | undefined): number | undefined =>
@@ -102,7 +105,7 @@ export interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
     name?: string;
   };
   /** Same shape the Anthropic Messages provider accepts; see normalizeClaudeThinkingConfig. */
-  thinking?: Anthropic.Messages.ThinkingConfigParam;
+  thinking?: ClaudeThinkingConfig;
 }
 
 interface BedrockLlamaGenerationOptions extends BedrockOptions {
@@ -1634,19 +1637,28 @@ export const BEDROCK_MODEL = {
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
         thinksByDefault ? 2048 : 1024,
       );
-      // Newer Claude models deprecate manual sampling controls at the model
-      // level — Bedrock relays the resulting 400 as a ValidationException. Drop
-      // `temperature` regardless of which IAM-region prefix the user picked.
-      // (This handler never emits top_p/top_k.) `params` is a shared model
-      // handler with no per-instance state to dedup a warning across requests,
-      // so we normalize silently here; the Anthropic Messages provider surfaces
-      // the one-time heads-up and the provider docs document the behavior.
-      const samplingParamsDeprecated = modelName
-        ? isSamplingParamsDeprecatedClaudeModel(modelName)
-        : false;
-      if (!samplingParamsDeprecated) {
-        addConfigParam(params, 'temperature', config?.temperature, undefined, 0);
+      const thinking = modelName
+        ? // InvokeModel exposes no effort field, so the effort-capped rules cannot apply here.
+          normalizeClaudeThinkingConfig(modelName, config?.thinking, undefined)
+        : config?.thinking;
+      // Bedrock relays Claude's 400s as ValidationExceptions, so apply the same sampling rules
+      // as the Anthropic API: models that deprecate sampling take no temperature, and extended
+      // thinking rejects anything but the default, including this handler's 0 default. (This
+      // handler never emits top_p/top_k.)
+      const { sampling, warnings: samplingWarnings } = resolveClaudeSamplingParams(
+        { temperature: config?.temperature },
+        {
+          thinkingEnabled: alwaysOnAdaptiveThinking || isClaudeThinkingEnabled(thinking),
+          samplingParamsDeprecated: modelName
+            ? isSamplingParamsDeprecatedClaudeModel(modelName)
+            : false,
+          defaultTemperature: 0,
+        },
+      );
+      for (const warning of samplingWarnings) {
+        logger.warn(warning);
       }
+      addConfigParam(params, 'temperature', sampling.temperature, undefined, undefined);
       addConfigParam(
         params,
         'tools',
@@ -1654,9 +1666,8 @@ export const BEDROCK_MODEL = {
         undefined,
         undefined,
       );
-      // Like the sampling-param drop above, the forced-tool-choice and
-      // disabled-thinking drops below normalize silently — the Converse and
-      // Anthropic Messages providers surface the one-time warnings.
+      // The forced-tool-choice and disabled-thinking drops below normalize silently —
+      // the Converse and Anthropic Messages providers surface the one-time warnings.
       const toolChoice =
         (alwaysOnAdaptiveThinking ||
           (!!modelName && isForcedToolChoiceUnsupportedClaudeModel(modelName))) &&
@@ -1664,10 +1675,6 @@ export const BEDROCK_MODEL = {
           ? undefined
           : config?.tool_choice;
       addConfigParam(params, 'tool_choice', toolChoice, undefined, undefined);
-      const thinking = modelName
-        ? // InvokeModel exposes no effort field, so the effort-capped rules cannot apply here.
-          normalizeClaudeThinkingConfig(modelName, config?.thinking, undefined)
-        : config?.thinking;
       addConfigParam(params, 'thinking', thinking, undefined, undefined);
       // max_tokens was resolved above, before the thinking config was known. Anthropic
       // rejects a budget at or above the cap, so raise the floor now that both are settled.
@@ -2586,9 +2593,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   // Claude Sonnet 5 uses the global endpoint like the other Claude 5-generation
   // models (Fable 5, Opus 4.7/4.8) rather than the older `apac.` prefix.
   'global.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  // Claude Sonnet 5.5 launched with only the global profile. Verified via
-  // `aws bedrock list-inference-profiles` in all 17 regions that serve it (2026-09-29); geo
-  // prefixes AWS adds later still resolve through the `anthropic.claude` catch-all.
   'global.anthropic.claude-sonnet-5-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
 };
 
