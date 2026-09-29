@@ -45,6 +45,17 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     expect('max_output_tokens' in body).toBe(false);
   });
 
+  it('should treat fine-tuned o-series models as reasoning models', async () => {
+    const provider = new OpenAiResponsesProvider('ft:o4-mini-2025-04-16:company::model', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body).not.toHaveProperty('max_output_tokens');
+    expect(body).not.toHaveProperty('temperature');
+  });
+
   it('should handle reasoning models correctly', async () => {
     // Mock API response for o1-pro model
     const mockApiResponse = {
@@ -126,56 +137,55 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     { model: 'o3-pro', reasoningEffort: 'high', maxOutputTokens: 2000 },
     { model: 'o4-mini', reasoningEffort: 'medium', maxOutputTokens: 1000 },
     { model: 'codex-mini-latest', reasoningEffort: 'medium', maxOutputTokens: 1000 },
-  ] as const)('should configure $model model correctly with reasoning parameters', async ({
-    model,
-    reasoningEffort,
-    maxOutputTokens,
-  }) => {
-    const mockApiResponse = {
-      id: 'resp_abc123',
-      status: 'completed',
-      model,
-      output: [
-        {
-          type: 'message',
-          role: 'assistant',
-          content: [
-            {
-              type: 'output_text',
-              text: `Response from ${model} model`,
-            },
-          ],
+  ] as const)(
+    'should configure $model model correctly with reasoning parameters',
+    async ({ model, reasoningEffort, maxOutputTokens }) => {
+      const mockApiResponse = {
+        id: 'resp_abc123',
+        status: 'completed',
+        model,
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: `Response from ${model} model`,
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+      };
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: mockApiResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiResponsesProvider(model, {
+        config: {
+          apiKey: 'test-key',
+          reasoning_effort: reasoningEffort,
+          max_output_tokens: maxOutputTokens,
         },
-      ],
-      usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
-    };
+      });
 
-    vi.mocked(cache.fetchWithCache).mockResolvedValue({
-      data: mockApiResponse,
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      await provider.callApi('Test prompt');
 
-    const provider = new OpenAiResponsesProvider(model, {
-      config: {
-        apiKey: 'test-key',
-        reasoning_effort: reasoningEffort,
-        max_output_tokens: maxOutputTokens,
-      },
-    });
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
 
-    await provider.callApi('Test prompt');
-
-    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
-    const reqOptions = mockCall[1] as { body: string };
-    const body = JSON.parse(reqOptions.body);
-
-    expect(body.model).toBe(model);
-    expect(body.reasoning).toEqual({ effort: reasoningEffort });
-    expect(body.max_output_tokens).toBe(maxOutputTokens);
-    expect(body.temperature).toBeUndefined();
-  });
+      expect(body.model).toBe(model);
+      expect(body.reasoning).toEqual({ effort: reasoningEffort });
+      expect(body.max_output_tokens).toBe(maxOutputTokens);
+      expect(body.temperature).toBeUndefined();
+    },
+  );
 
   it('should forward GPT-5.6 persisted reasoning and Pro mode', async () => {
     const provider = new OpenAiResponsesProvider('gpt-5.6-sol', {
@@ -190,16 +200,16 @@ describe('OpenAiResponsesProvider reasoning models', () => {
   });
 
   describe('deep research model validation', () => {
-    it('should require web_search_preview tool for deep research models', async () => {
+    it('should require a data-source tool for deep research models', async () => {
       const provider = new OpenAiResponsesProvider('o3-deep-research', {
         config: {
           apiKey: 'test-key',
-          tools: [{ type: 'code_interpreter' } as any], // Missing web_search_preview
+          tools: [{ type: 'code_interpreter' } as any],
         },
       });
 
       const result = await provider.callApi('Test prompt');
-      expect(result.error).toContain('requires the web_search_preview tool');
+      expect(result.error).toContain('requires at least one data source');
       expect(result.error).toContain('o3-deep-research');
       expect(cache.fetchWithCache).not.toHaveBeenCalled();
     });
@@ -235,12 +245,68 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       expect(result.output).toBe('Research complete');
     });
 
+    it.each([
+      { tools: [{ type: 'web_search' }] },
+      { tools: [{ type: 'file_search', vector_store_ids: ['vs_123'] }] },
+      {
+        tools: [
+          {
+            type: 'mcp',
+            server_label: 'test_server',
+            server_url: 'https://example.com/mcp',
+            require_approval: 'never',
+          },
+        ],
+      },
+    ])('should accept a supported deep research data source %#', async ({ tools }) => {
+      (cache.fetchWithCache as Mock).mockResolvedValueOnce({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Research complete' }],
+            },
+          ],
+          usage: { input_tokens: 100, output_tokens: 200 },
+        },
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      const result = await new OpenAiResponsesProvider('o3-deep-research', {
+        config: { apiKey: 'test-key', tools: tools as any },
+      }).callApi('Test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Research complete');
+    });
+
+    it.each([
+      { label: 'without vector_store_ids', tools: [{ type: 'file_search' }] },
+      {
+        label: 'with empty vector_store_ids',
+        tools: [{ type: 'file_search', vector_store_ids: [] }],
+      },
+    ])('should not count file_search $label as a deep research data source', async ({ tools }) => {
+      const provider = new OpenAiResponsesProvider('o3-deep-research', {
+        config: { apiKey: 'test-key', tools: tools as any },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toContain('requires at least one data source');
+      expect(result.error).toContain('o3-deep-research');
+      expect(result.error).toContain('file_search with vector_store_ids');
+      expect(cache.fetchWithCache).not.toHaveBeenCalled();
+    });
+
     it('should require MCP tools to have require_approval: never for deep research', async () => {
       const provider = new OpenAiResponsesProvider('o3-deep-research', {
         config: {
           apiKey: 'test-key',
           tools: [
-            { type: 'web_search_preview' } as any,
             {
               type: 'mcp',
               server_label: 'test_server',
@@ -370,45 +436,45 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       );
     });
 
-    it.each([
-      'gpt-5.4-pro',
-      'gpt-5.5-pro',
-    ])('should use longer timeout for %s models', async (model) => {
-      const mockData = {
-        output: [
-          {
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'output_text', text: 'Response complete' }],
+    it.each(['gpt-5.4-pro', 'gpt-5.5-pro'])(
+      'should use longer timeout for %s models',
+      async (model) => {
+        const mockData = {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Response complete' }],
+            },
+          ],
+          usage: { input_tokens: 100, output_tokens: 200 },
+        };
+
+        (cache.fetchWithCache as Mock).mockResolvedValueOnce({
+          data: mockData,
+          status: 200,
+          statusText: 'OK',
+          cached: false,
+        });
+
+        const provider = new OpenAiResponsesProvider(model, {
+          config: {
+            apiKey: 'test-key',
           },
-        ],
-        usage: { input_tokens: 100, output_tokens: 200 },
-      };
+        });
 
-      (cache.fetchWithCache as Mock).mockResolvedValueOnce({
-        data: mockData,
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      });
+        await provider.callApi('Test prompt');
 
-      const provider = new OpenAiResponsesProvider(model, {
-        config: {
-          apiKey: 'test-key',
-        },
-      });
-
-      await provider.callApi('Test prompt');
-
-      expect(cache.fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.any(Object),
-        LONG_RUNNING_MODEL_TIMEOUT_MS,
-        'json',
-        undefined,
-        undefined,
-      );
-    });
+        expect(cache.fetchWithCache).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.any(Object),
+          LONG_RUNNING_MODEL_TIMEOUT_MS,
+          'json',
+          undefined,
+          undefined,
+        );
+      },
+    );
 
     it('should use longer timeout for gpt-5.5-pro models', async () => {
       const mockData = {

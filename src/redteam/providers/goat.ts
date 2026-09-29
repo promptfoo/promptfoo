@@ -14,7 +14,12 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
+import { getTargetConversation } from '../grading/storedResult';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
   getRemoteGenerationHeaders,
@@ -39,9 +44,15 @@ import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
 import { getGoalRubric } from './prompts';
 import {
+  accumulateGraderResult,
+  accumulateUnblockingTokenUsage,
   buildGraderResultAssertion,
+  callTargetProvider,
+  captureFlaggedTurn,
   getGraderAssertionValue,
   getLastMessageContent,
+  resolveStoredGraderResult,
+  runRedteamGrader,
   tryUnblocking,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -65,7 +76,7 @@ import type {
 } from '../../types/providers';
 import type { RedteamGradingContext } from '../grading/types';
 import type { BaseRedteamMetadata } from '../types';
-import type { Message } from './shared';
+import type { FlaggedTurn, Message } from './shared';
 
 const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
   '[Image output attached. Inspect the attached image directly for visual grading.]';
@@ -85,6 +96,7 @@ interface GoatMetadata extends BaseRedteamMetadata {
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
   traceSnapshots?: Record<string, unknown>[];
+  transformDisplayVars?: Record<string, string>;
 }
 
 /**
@@ -247,6 +259,7 @@ export default class GoatProvider implements ApiProvider {
     let assertToUse: Assertion | AssertionSet | undefined;
     let graderPassed: boolean | undefined;
     let storedGraderResult: GradingResult | undefined;
+    let flaggedTurn: FlaggedTurn | undefined;
     const { getGraderById } = await import('../graders');
     let test: AtomicTestCase | undefined;
 
@@ -282,6 +295,7 @@ export default class GoatProvider implements ApiProvider {
             purpose: context?.test?.metadata?.purpose,
             targetId: this.config.targetId,
           });
+          accumulateUnblockingTokenUsage(totalTokenUsage, unblockingResult);
 
           if (unblockingResult.success && unblockingResult.unblockingPrompt) {
             logger.debug(
@@ -310,6 +324,9 @@ export default class GoatProvider implements ApiProvider {
                   goal: context?.test?.metadata?.goal as string | undefined,
                 },
               );
+              if (transformResult.tokenUsage) {
+                accumulateAttackerTokenUsage(totalTokenUsage, transformResult);
+              }
               if (transformResult.error) {
                 logger.warn('[GOAT] Transform failed for unblocking prompt', {
                   error: transformResult.error,
@@ -321,7 +338,8 @@ export default class GoatProvider implements ApiProvider {
             }
 
             throwIfTargetPromptExceedsMaxChars(unblockingTargetPrompt, maxCharsPerMessage);
-            const unblockingResponse = await targetProvider.callApi(
+            const unblockingResponse = await callTargetProvider(
+              targetProvider,
               unblockingTargetPrompt,
               context,
               options,
@@ -373,6 +391,10 @@ export default class GoatProvider implements ApiProvider {
             options?.abortSignal,
           );
           const data = (await response.json()) as ExtractAttackFailureResponse;
+          accumulateAttackerTokenUsage(totalTokenUsage, {
+            tokenUsage: (data as ExtractAttackFailureResponse & { tokenUsage?: TokenUsage })
+              .tokenUsage,
+          });
 
           if (!data.message) {
             logger.info('[GOAT] Invalid message from GOAT, skipping turn', { data });
@@ -414,6 +436,7 @@ export default class GoatProvider implements ApiProvider {
           options?.abortSignal,
         );
         const data = await response.json();
+        accumulateAttackerTokenUsage(totalTokenUsage, { tokenUsage: data?.tokenUsage });
         if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
           logger.info('[GOAT] Invalid message from GOAT, skipping turn', { data });
           continue;
@@ -476,21 +499,21 @@ export default class GoatProvider implements ApiProvider {
           Object.keys(attackerVars),
         );
 
-        messages.push({
-          role: attackerMessage.role,
-          content: renderedAttackerPrompt,
-        });
+        const pendingMessage = { role: attackerMessage.role, content: renderedAttackerPrompt };
+        const turnMessages = [...messages, pendingMessage];
 
         logger.debug(
           dedent`
           ${chalk.bold.green(`GOAT turn ${turn} history:`)}
-          ${chalk.cyan(JSON.stringify(messages, null, 2))}
+          ${chalk.cyan(JSON.stringify(turnMessages, null, 2))}
         `,
         );
 
         // Get the latest message content for transforms
-        const latestMessageContent = messages[messages.length - 1].content;
-        let targetPrompt = this.config.stateful ? latestMessageContent : JSON.stringify(messages);
+        const latestMessageContent = turnMessages[turnMessages.length - 1].content;
+        let targetPrompt = this.config.stateful
+          ? latestMessageContent
+          : JSON.stringify(turnMessages);
         logger.debug(`GOAT turn ${turn} target prompt: ${renderedAttackerPrompt}`);
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -518,6 +541,9 @@ export default class GoatProvider implements ApiProvider {
               goal: context?.test?.metadata?.goal as string | undefined,
             },
           );
+          if (lastTransformResult.tokenUsage) {
+            accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
+          }
 
           // Skip turn if transform failed
           if (lastTransformResult.error) {
@@ -533,7 +559,7 @@ export default class GoatProvider implements ApiProvider {
           // - Current turn as audio/image (the actual attack)
           if (lastTransformResult.audio || lastTransformResult.image) {
             // Build hybrid payload with conversation history + current transformed turn
-            const historyWithoutCurrentTurn = messages.slice(0, -1);
+            const historyWithoutCurrentTurn = turnMessages.slice(0, -1);
             const hybridPayload = {
               _promptfoo_audio_hybrid: true,
               history: historyWithoutCurrentTurn,
@@ -570,9 +596,6 @@ export default class GoatProvider implements ApiProvider {
           if (lastTransformResult.displayVars) {
             lastTransformDisplayVars = lastTransformResult.displayVars;
           }
-
-          // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
-          lastFinalAttackPrompt = lastTransformResult.prompt;
         }
 
         const iterationStart = Date.now();
@@ -586,11 +609,14 @@ export default class GoatProvider implements ApiProvider {
               },
             }
           : context;
-        const targetResponse = (await targetProvider.callApi(
+        const targetResponse = (await callTargetProvider(
+          targetProvider,
           targetPrompt,
           targetContext,
           options,
         )) as GoatProviderResponse;
+        messages.push(pendingMessage);
+        lastFinalAttackPrompt = lastTransformResult?.prompt || latestMessageContent;
 
         if (!targetResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
           logger.debug(`Sleeping for ${targetProvider.delay}ms`);
@@ -602,12 +628,13 @@ export default class GoatProvider implements ApiProvider {
 
         let traceContext: TraceContextData | null = null;
         let computedTraceSummary: string | undefined;
-        if (shouldFetchTrace) {
+        if (shouldFetchTrace && !targetResponse.cached) {
           const traceparent = context?.traceparent ?? undefined;
           const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
 
           if (traceId) {
             traceContext = await fetchTraceContext(traceId, {
+              abortSignal: options?.abortSignal,
               earliestStartTime: iterationStart,
               includeInternalSpans: tracingOptions.includeInternalSpans,
               maxSpans: tracingOptions.maxSpans,
@@ -616,6 +643,9 @@ export default class GoatProvider implements ApiProvider {
               retryDelayMs: tracingOptions.retryDelayMs,
               spanFilter: tracingOptions.spanFilter,
               sanitizeAttributes: tracingOptions.sanitizeAttributes,
+              providerConfig: tracingOptions.provider,
+              queryDelay: tracingOptions.queryDelay,
+              redactAttributes: tracingOptions.redactAttributes,
             });
 
             if (traceContext) {
@@ -727,6 +757,7 @@ export default class GoatProvider implements ApiProvider {
           // Build grading context with image outputs, tracing, and exfil tracking data.
           let gradingContext: RedteamGradingContext | undefined = {
             providerResponse: finalResponse,
+            conversationTranscript: getTargetConversation(messages).conversationTranscript,
             ...(finalResponse.images?.length ? { imageOutputs: finalResponse.images } : {}),
           };
 
@@ -779,9 +810,20 @@ export default class GoatProvider implements ApiProvider {
             };
           }
 
-          const { grade, rubric } = await grader.getResult(
-            attackerMessage.content,
-            finalOutput,
+          const gradedTurn = {
+            prompt:
+              lastFinalAttackPrompt ||
+              getLastMessageContent(messages, 'user') ||
+              attackerMessage.content,
+            output: finalOutput,
+            messages,
+            guardrails: finalResponse.guardrails,
+            transformDisplayVars: lastTransformDisplayVars,
+          };
+          const { grade, rubric } = await runRedteamGrader(
+            grader,
+            gradedTurn.prompt,
+            gradedTurn.output,
             test,
             targetProvider,
             getGraderAssertionValue(assertToUse),
@@ -790,10 +832,19 @@ export default class GoatProvider implements ApiProvider {
             gradingContext,
           );
           graderPassed = grade.pass;
-          storedGraderResult = {
-            ...grade,
-            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-          };
+          storedGraderResult = accumulateGraderResult(
+            storedGraderResult,
+            {
+              ...grade,
+              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+            },
+            {
+              ...gradedTurn,
+              pluginId: test.metadata?.pluginId,
+              assertion: assertToUse,
+            },
+          );
+          flaggedTurn ??= captureFlaggedTurn(storedGraderResult, gradedTurn);
         }
 
         if (graderPassed === false) {
@@ -832,27 +883,39 @@ export default class GoatProvider implements ApiProvider {
     }
 
     const finalPrompt = getLastMessageContent(messages, 'user') || '';
-    return {
+    const reported = flaggedTurn ?? {
       output: getLastMessageContent(messages, 'assistant') || '',
       prompt: finalPrompt,
+      messages,
+      guardrails: lastTargetResponse?.guardrails,
+      transformDisplayVars: lastTransformDisplayVars,
+    };
+    return {
+      output: reported.output,
+      prompt: reported.prompt,
       metadata: {
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
-        redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,
-        messages: messages as Record<string, any>[],
+        redteamFinalPrompt: flaggedTurn ? flaggedTurn.prompt : lastFinalAttackPrompt || finalPrompt,
+        messages: reported.messages as Record<string, any>[],
         stopReason,
         redteamHistory,
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
-        storedGraderResult,
+        storedGraderResult: resolveStoredGraderResult(
+          flaggedTurn?.graderResult,
+          storedGraderResult,
+        ),
         traceSnapshots:
           traceSnapshots.length > 0
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
             : undefined,
         sessionId: getSessionId(lastTargetResponse, context),
-        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+        ...(reported.transformDisplayVars && {
+          transformDisplayVars: reported.transformDisplayVars,
+        }),
       },
       tokenUsage: totalTokenUsage,
-      guardrails: lastTargetResponse?.guardrails,
+      guardrails: reported.guardrails,
     };
   }
 }

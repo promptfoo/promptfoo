@@ -17,7 +17,7 @@ const DEFAULT_INPUT = `prompts:
 
 providers:
   - openai:chat:gpt-4.1-mini
-  - anthropic:messages:claude-3-5-sonnet-20241022
+  - anthropic:messages:claude-sonnet-4-6
 
 tests:
   - vars:
@@ -117,7 +117,7 @@ const ConfigValidator = () => {
     <Layout title="Config Validator" description="Validate your promptfoo configuration">
       <Container maxWidth="lg" sx={{ mb: 4 }}>
         <Box sx={{ my: 4 }}>
-          <Typography variant="h3" gutterBottom align="center">
+          <Typography variant="h3" component="h1" gutterBottom align="center">
             Promptfoo Config Validator
           </Typography>
           <Typography variant="body1" gutterBottom align="center">
