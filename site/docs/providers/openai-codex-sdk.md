@@ -23,7 +23,7 @@ For direct model API calls, use the [OpenAI provider](/docs/providers/openai).
 Use Node.js 22.22.0 or later. In your eval project, install Promptfoo and the SDK:
 
 ```bash
-npm install --save-dev promptfoo @openai/codex-sdk@^0.153.2
+npm install --save-dev promptfoo @openai/codex-sdk@^0.156.1
 ```
 
 The SDK includes the Codex CLI. Promptfoo lists it as an optional dependency, but this provider requires it.
@@ -36,7 +36,7 @@ The SDK includes the Codex CLI. Promptfoo lists it as an optional dependency, bu
 
 Choose one authentication method:
 
-- **ChatGPT sign-in:** run `npx codex login` and complete the browser flow. Remove `config.apiKey` and any `OPENAI_API_KEY` or `CODEX_API_KEY` values from your shell, `.env`, and eval config to reuse that login. Promptfoo automatically loads `.env` from the directory where you run it.
+- **ChatGPT sign-in:** run `npx --package @openai/codex@^0.156.1 codex login` and complete the browser flow. Remove `config.apiKey` and any `OPENAI_API_KEY` or `CODEX_API_KEY` values from your shell, `.env`, and eval config to reuse that login. Promptfoo automatically loads `.env` from the directory where you run it.
 - **API key:** set `OPENAI_API_KEY` in your shell or secret manager. `CODEX_API_KEY` is also supported. API usage is billed separately from ChatGPT subscriptions.
 
 For custom Codex homes, CI, and AWS credentials, see [authentication and environment](#authentication-and-environment). OpenAI's [authentication guide](https://learn.chatgpt.com/docs/auth) covers account access and login storage.
@@ -53,7 +53,7 @@ prompts:
   - 'Write a Python factorial function. Return only the code.'
 
 providers:
-  - id: openai:codex-sdk:gpt-5.6-terra
+  - id: openai:codex-sdk:gpt-6-sol
     config:
       sandbox_mode: read-only
       approval_policy: never
@@ -86,28 +86,28 @@ Inspect the entries under `results.results` in `results.json`. Each row includes
 
 These IDs select the same provider:
 
-| ID                               | Model selection                               |
-| -------------------------------- | --------------------------------------------- |
-| `openai:codex-sdk`               | `config.model`, or Codex's configured default |
-| `openai:codex-sdk:gpt-5.6-terra` | Model in the ID                               |
-| `openai:codex:gpt-5.6-terra`     | Short alias for the same provider and model   |
+| ID                           | Model selection                               |
+| ---------------------------- | --------------------------------------------- |
+| `openai:codex-sdk`           | `config.model`, or Codex's configured default |
+| `openai:codex-sdk:gpt-6-sol` | Model in the ID                               |
+| `openai:codex:gpt-6-sol`     | Short alias for the same provider and model   |
 
 A model in the ID takes precedence over the provider's `config.model`. To compare models, add one provider entry per model.
 
-Choose a model your account can access from [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models). Use a concrete model such as `gpt-5.6-terra` for repeatable comparisons. Omitting it lets Codex choose from its configuration, so results can change when that configuration or its defaults change. GPT-6 Astra requires Codex 0.153.1 or later; the installation above includes a compatible runtime.
+Choose a model your account can access from [OpenAI's Codex model guide](https://learn.chatgpt.com/docs/models). Use a concrete model such as `gpt-6-sol` for repeatable comparisons. Omitting it lets Codex choose from its configuration, so results can change when that configuration or its defaults change. GPT-6 Sol and Luna require Codex 0.156.1 or later; Astra requires 0.153.1 or later. The installation above includes a compatible runtime.
 
 Set reasoning effort when you need to compare speed and answer quality:
 
 ```yaml
 providers:
-  - id: openai:codex-sdk:gpt-5.6-terra
+  - id: openai:codex-sdk:gpt-6-sol
     config:
       sandbox_mode: read-only
       approval_policy: never
       model_reasoning_effort: high
 ```
 
-Promptfoo accepts `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, and `ultra`. The selected model and Codex runtime determine which levels work. `ultra` is a Codex setting that uses subagents, not a Responses API reasoning value. Check model availability and reasoning support when migrating older saved configs instead of reusing a retired model's settings.
+Promptfoo accepts `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, and `ultra`. The selected model and Codex runtime determine which levels work. `ultra` is a Codex setting that uses subagents, not a Responses API reasoning value. GPT-6 Luna does not support `ultra`. Check model availability and reasoning support when migrating saved configs.
 
 <Link id="with-working-directory" />
 <Link id="skipping-git-check" />
@@ -120,7 +120,7 @@ Set `working_dir` to the repository you want Codex to inspect or edit:
 
 ```yaml
 providers:
-  - id: openai:codex-sdk:gpt-5.6-terra
+  - id: openai:codex-sdk:gpt-6-sol
     config:
       working_dir: ./sample-project
       sandbox_mode: read-only
@@ -151,7 +151,7 @@ For editing tasks, use `workspace-write` with a disposable checkout. It can also
 
 ```yaml
 providers:
-  - id: openai:codex-sdk:gpt-5.6-terra
+  - id: openai:codex-sdk:gpt-6-sol
     config:
       working_dir: ./sample-project
       additional_directories:
@@ -168,20 +168,24 @@ Both paths above resolve from the config file's directory. Codex's [sandbox and 
 
 A fresh thread resets conversation history, but it does not reset files. Tests that share a writable directory can change each other's inputs, including when they run concurrently.
 
-Prepare a separate fixture directory for each independent editing test, then select it with a test variable:
+Set `copy_working_dir: true` to give each eval step a fresh copy of a fixture directory:
 
 ```yaml
 providers:
-  - id: openai:codex-sdk:gpt-5.6-terra
+  - id: openai:codex-sdk:gpt-6-sol
     config:
-      working_dir: '{{workspaceDir}}'
+      working_dir: ./sample-project
+      copy_working_dir: true
+      skip_git_repo_check: true
       sandbox_mode: workspace-write
       approval_policy: never
       network_access_enabled: false
       web_search_mode: disabled
 ```
 
-Create those directories before the eval and restore them before repeating it. For reproducible CI, also pin the SDK version, model, repository revision, and Codex configuration. A dedicated [Codex home](#authentication-and-environment) helps control user-level configuration and skills.
+Promptfoo clones a clean Git repository or copies other directories. A copy without its own `.git` directory, including a repository subdirectory, needs `skip_git_repo_check: true`. See [isolated workspaces](/docs/guides/evaluate-coding-agents#isolated-workspaces) for supported layouts and workspace artifacts.
+
+For reproducible CI, also pin the SDK version, model, repository revision, and Codex configuration. A dedicated [Codex home](#authentication-and-environment) helps control user-level configuration and skills.
 
 ### Web search and network access
 
@@ -189,7 +193,7 @@ Web search and command network access are separate settings:
 
 ```yaml
 providers:
-  - id: openai:codex-sdk:gpt-5.6-terra
+  - id: openai:codex-sdk:gpt-6-sol
     config:
       sandbox_mode: workspace-write
       approval_policy: never
@@ -232,7 +236,7 @@ prompts:
   - 'Describe a Python function named factorial that takes an integer n.'
 
 providers:
-  - id: openai:codex-sdk:gpt-5.6-terra
+  - id: openai:codex-sdk:gpt-6-sol
     config:
       sandbox_mode: read-only
       approval_policy: never
@@ -277,7 +281,7 @@ prompts:
   - '{{request}}'
 
 providers:
-  - id: openai:codex-sdk:gpt-5.6-terra
+  - id: openai:codex-sdk:gpt-6-sol
     config:
       sandbox_mode: read-only
       approval_policy: never
@@ -314,7 +318,7 @@ Use the `sessionId` from a previous provider response as `thread_id`. The same C
 
 ```yaml
 providers:
-  - id: openai:codex-sdk:gpt-5.6-terra
+  - id: openai:codex-sdk:gpt-6-sol
     config:
       thread_id: '<session-id>'
       sandbox_mode: read-only
@@ -378,7 +382,7 @@ tracing:
       acceptFormats: [json]
 
 providers:
-  - id: openai:codex-sdk:gpt-5.6-terra
+  - id: openai:codex-sdk:gpt-6-sol
     config:
       sandbox_mode: read-only
       approval_policy: never
@@ -424,7 +428,7 @@ The Codex subprocess receives a minimal environment with OS basics such as `PATH
 
 ```yaml
 providers:
-  - id: openai:codex-sdk:gpt-5.6-terra
+  - id: openai:codex-sdk:gpt-6-sol
     config:
       sandbox_mode: read-only
       approval_policy: never
@@ -460,7 +464,7 @@ providers:
         AWS_SECRET_ACCESS_KEY: '{{env.AWS_SECRET_ACCESS_KEY}}'
 ```
 
-For temporary credentials, also pass `AWS_SESSION_TOKEN`. For profile-based authentication, forward the required AWS profile and configuration variables instead. Check [Bedrock model access and Regions](/docs/providers/aws-bedrock#openai-models) before running the eval.
+For temporary credentials, also pass `AWS_SESSION_TOKEN`. For profile-based authentication, forward the required AWS profile and configuration variables instead. Check [Bedrock model access and Regions](/docs/providers/aws-bedrock#openai-models) before running the eval. Codex 0.156.1 does not list GPT-6 Sol or Luna in its Bedrock catalog; use the direct Promptfoo Bedrock provider for those models.
 
 Promptfoo does not inject ambient OpenAI keys for a custom `model_provider` unless you explicitly supply `config.apiKey` or the keys in `cli_env`. Top-level `model_provider` takes precedence over `cli_config.model_provider`.
 
@@ -484,6 +488,7 @@ Set `maxRetries` on the provider itself. The scheduler reads it from the provide
 | `model`                  | Codex configuration       | Requested model; a model in the provider ID takes precedence                             |
 | `model_reasoning_effort` | Codex configuration       | `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, or `ultra`, subject to model support |
 | `working_dir`            | Process working directory | Existing working directory; relative paths use the config directory                      |
+| `copy_working_dir`       | `false`                   | Fresh workspace per eval step: `true`, `'git'`, or `'copy'`                              |
 | `additional_directories` | Codex configuration       | Additional writable directories for `workspace-write`; paths use the config directory    |
 | `skip_git_repo_check`    | `false`                   | Allow an existing working directory outside Git                                          |
 | `sandbox_mode`           | Codex configuration       | `read-only`, `workspace-write`, or `danger-full-access`                                  |
@@ -562,7 +567,7 @@ If the requested model is omitted or unknown to the pricing table, `cost` is und
 | API-key error when using ChatGPT sign-in | Remove API keys from the shell, `.env`, and eval config; a configured key takes precedence over the Codex login |
 | Model or reasoning setting rejected      | Check account access, model support, and the bundled or overridden CLI version                                  |
 | Later tests remember earlier answers     | Disable `persist_threads` and remove `thread_id`; disabling response caching does not reset a thread            |
-| Later tests see earlier file edits       | Restore the fixture or give each independent test its own working directory                                     |
+| Later tests see earlier file edits       | Use `copy_working_dir: true` or restore the fixture before each test                                            |
 | Resumed conversation starts fresh        | Disable `deep_tracing`, which ignores thread options                                                            |
 
 Retryable Codex rate limits are passed to Promptfoo's scheduler with the SDK's reset hint, or a one-minute fallback delay. `maxRetries` controls retries. Hard quota exhaustion is returned as an error without retrying; increasing retries will not resolve it.

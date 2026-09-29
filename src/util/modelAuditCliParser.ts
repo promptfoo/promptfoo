@@ -76,10 +76,7 @@ const CLI_ARG_MAP: Partial<
 /**
  * Elegant, configuration-driven CLI argument parser
  */
-export function parseModelAuditArgs(
-  paths: string[],
-  options: unknown,
-): { args: string[]; unsupportedOptions: string[] } {
+export function parseModelAuditArgs(paths: string[], options: unknown): string[] {
   const validatedOptions = ModelAuditCliOptionsSchema.parse(options);
   const args: string[] = ['scan', ...paths];
 
@@ -118,5 +115,5 @@ export function parseModelAuditArgs(
     }
   }
 
-  return { args, unsupportedOptions: [] };
+  return args;
 }
