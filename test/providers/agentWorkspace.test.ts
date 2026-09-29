@@ -7,6 +7,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import logger from '../../src/logger';
 import {
   type AgentWorkspace,
   assertIsolatedWorkingDir,
@@ -892,13 +893,16 @@ describe('agent workspaces', () => {
         const configFile = path.join(root, 'global.gitconfig');
         write(configFile, '[clone]\n defaultRemoteName = upstream\n');
         const restoreEnv = mockProcessEnv({ GIT_CONFIG_GLOBAL: configFile });
+        const warnings = vi.spyOn(logger, 'warn');
         try {
           const workspace = await create(source, mode);
 
           expect(workspace.strategy).toBe('git');
           expect(git(workspace.dir, 'remote')).toBe('');
-          expect((await workspace.metadata()).workspaceDiff).toBe('');
+          const metadata = await workspace.metadata();
+          expect(metadata.workspaceDiff, warnings.mock.calls.flat().join('\n')).toBe('');
         } finally {
+          warnings.mockRestore();
           restoreEnv();
         }
       },

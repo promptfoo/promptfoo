@@ -535,7 +535,8 @@ async function getWorkspaceDiff(
   try {
     const gitDir = path.join(scratch, 'git');
     const isolatedConfig = {
-      GIT_CONFIG_GLOBAL: os.devNull,
+      // Git for Windows accepts /dev/null, but rejects Node's \\.\nul spelling.
+      GIT_CONFIG_GLOBAL: '/dev/null',
       GIT_CONFIG_NOSYSTEM: '1',
       GIT_TEMPLATE_DIR: '',
     };
