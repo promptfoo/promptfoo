@@ -171,9 +171,11 @@ Choose the appropriate transport based on your use case:
 
 ### HTTP Security
 
-The HTTP transport exposes tools that can run evals, read local promptfoo configs, and write generated outputs. It only listens on `127.0.0.1`, rejects non-local `Host` headers, and blocks cross-site browser POSTs.
+HTTP listens on `127.0.0.1` and accepts `Host` headers for `127.0.0.1`, `localhost`, or `[::1]`, with an optional port. Browser POSTs use the web UI's CSRF checks before their JSON bodies are parsed. Local origins and origins configured in [`PROMPTFOO_CSRF_ALLOWED_ORIGINS`](/docs/usage/command-line/#environment-variables) remain allowed.
 
-MCP tools that load config files accept YAML and JSON configs only. JavaScript and TypeScript configs are rejected because importing them executes code. Config globs and referenced files must also stay within the project directory where the MCP server started.
+This changes the previous listener on all network interfaces. Remote clients, Docker port publication, and IPv6-only connections no longer work. Run the HTTP client in the same network namespace and connect to `127.0.0.1`, or use STDIO with a compatible client.
+
+Local-only HTTP does not sandbox tool access. MCP tools can read configs, execute providers and assertions, and write outputs with the server process's permissions. Connect only trusted clients and use trusted configs.
 
 ## Best Practices
 
@@ -304,7 +306,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 # Configure promptfoo behavior
 export PROMPTFOO_CONFIG_DIR=/path/to/configs
-export PROMPTFOO_OUTPUT_DIR=/path/to/outputs
+export PROMPTFOO_LOG_DIR=/path/to/logs
 
 # Start server with environment
 npx promptfoo@latest mcp --transport stdio

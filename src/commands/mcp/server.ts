@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { getRequestListener } from '@hono/node-server';
 import express from 'express';
 import logger from '../../logger';
 import { csrfProtection } from '../../server/middleware/csrfProtection';
@@ -21,22 +22,11 @@ import { registerTestProviderTool } from './tools/testProvider';
 import { registerValidatePromptfooConfigTool } from './tools/validatePromptfooConfig';
 import type { NextFunction, Request, Response } from 'express';
 
-export const DEFAULT_MCP_HTTP_HOST = '127.0.0.1';
-const ALLOWED_MCP_HTTP_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
-
-function getHostnameFromHostHeader(host: string): string | undefined {
-  const bracketedIpv6 = host.match(/^(\[[^\]]+\])(?::\d+)?$/);
-  if (bracketedIpv6) {
-    return bracketedIpv6[1].toLowerCase();
-  }
-
-  const hostnameWithOptionalPort = host.match(/^([^:@/]+)(?::\d+)?$/);
-  return hostnameWithOptionalPort?.[1].toLowerCase();
-}
+const MCP_HTTP_HOST = '127.0.0.1';
+const LOCAL_HOST_HEADER = /^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/i;
 
 export function mcpHostProtection(req: Request, res: Response, next: NextFunction): void {
-  const hostname = req.headers.host ? getHostnameFromHostHeader(req.headers.host) : undefined;
-  if (hostname && ALLOWED_MCP_HTTP_HOSTS.has(hostname)) {
+  if (req.headers.host && LOCAL_HOST_HEADER.test(req.headers.host)) {
     next();
     return;
   }
@@ -47,10 +37,6 @@ export function mcpHostProtection(req: Request, res: Response, next: NextFunctio
     path: req.path,
   });
   res.status(403).json({ error: 'MCP HTTP requests require a local Host header' });
-}
-
-function formatHttpHostForUrl(host: string): string {
-  return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
 }
 
 function setMcpTransport(transport: 'http' | 'stdio'): void {
@@ -77,10 +63,10 @@ async function loadMcpServerSdk(): Promise<
 }
 
 async function loadMcpHttpTransport(): Promise<
-  typeof import('@modelcontextprotocol/sdk/server/streamableHttp.js')
+  typeof import('@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js')
 > {
   try {
-    return await import('@modelcontextprotocol/sdk/server/streamableHttp.js');
+    return await import('@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js');
   } catch (error) {
     if (isMissingPackageImportError(error, '@modelcontextprotocol/sdk')) {
       throw createMcpSdkDependencyError();
@@ -164,27 +150,35 @@ export async function startHttpMcpServer(port: number): Promise<void> {
 
   const app = express();
   app.use(mcpHostProtection);
-  app.use(express.json());
   app.use(csrfProtection);
+  app.use(express.json());
 
   const mcpServer = await createMcpServer();
 
-  // Set up HTTP transport for MCP
-  const { StreamableHTTPServerTransport } = await loadMcpHttpTransport();
-  const transport = new StreamableHTTPServerTransport({
+  // Keep Node request adaptation on our patched direct dependency rather than the SDK's
+  // nested adapter, which can otherwise remain vulnerable in downstream installs.
+  const { WebStandardStreamableHTTPServerTransport } = await loadMcpHttpTransport();
+  const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),
   });
+  const requestListener = getRequestListener(
+    (request, { incoming }) =>
+      transport.handleRequest(request, {
+        parsedBody: (incoming as express.Request).body,
+      }),
+    { overrideGlobalObjects: false },
+  );
 
   await mcpServer.connect(transport);
 
   // Handle MCP requests
   app.post('/mcp', async (req, res) => {
-    await transport.handleRequest(req, res, req.body);
+    await requestListener(req, res);
   });
 
   // Handle SSE
   app.get('/mcp/sse', async (req, res) => {
-    await transport.handleRequest(req, res);
+    await requestListener(req, res);
   });
 
   // Health check
@@ -195,17 +189,15 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   // Return a Promise that only resolves when the server shuts down
   // This keeps long-running commands running until SIGINT/SIGTERM
   return new Promise<void>((resolve) => {
-    const host = DEFAULT_MCP_HTTP_HOST;
-    const urlHost = formatHttpHostForUrl(host);
-    const httpServer = app.listen(port, host, () => {
-      logger.info(`Promptfoo MCP server running at http://${urlHost}:${port}`);
-      logger.info(`MCP endpoint: http://${urlHost}:${port}/mcp`);
-      logger.info(`SSE endpoint: http://${urlHost}:${port}/mcp/sse`);
+    const httpServer = app.listen(port, MCP_HTTP_HOST, () => {
+      logger.info(`Promptfoo MCP server running at http://${MCP_HTTP_HOST}:${port}`);
+      logger.info(`MCP endpoint: http://${MCP_HTTP_HOST}:${port}/mcp`);
+      logger.info(`SSE endpoint: http://${MCP_HTTP_HOST}:${port}/mcp/sse`);
 
       // Track server start
       telemetry.record('feature_used', {
         feature: 'mcp_server_started',
-        host,
+        host: MCP_HTTP_HOST,
         transport: 'http',
         port,
       });
@@ -220,8 +212,6 @@ export async function startHttpMcpServer(port: number): Promise<void> {
         return;
       }
       isShuttingDown = true;
-      process.removeListener('SIGINT', shutdown);
-      process.removeListener('SIGTERM', shutdown);
 
       logger.info('Shutting down MCP server...');
       const SHUTDOWN_TIMEOUT_MS = 5000;
@@ -302,9 +292,6 @@ export async function startStdioMcpServer(): Promise<void> {
           return;
         }
         isShuttingDown = true;
-        process.removeListener('SIGINT', shutdown);
-        process.removeListener('SIGTERM', shutdown);
-        process.stdin.removeListener('end', shutdown);
 
         // Add timeout to prevent indefinite hangs, matching HTTP server pattern
         const SHUTDOWN_TIMEOUT_MS = 5000;

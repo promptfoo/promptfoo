@@ -54,7 +54,7 @@ describe('Databricks Foundation Model APIs Provider', () => {
       );
 
       expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-      expect(provider.config.apiBaseUrl).toBe(workspaceUrl);
+      expect(provider.config.apiBaseUrl).toBe(`${workspaceUrl}/serving-endpoints`);
       expect(provider.config.apiKeyEnvar).toBe('DATABRICKS_TOKEN');
     });
 
@@ -140,7 +140,7 @@ describe('Databricks Foundation Model APIs Provider', () => {
       };
       const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
 
-      expect((provider.config as any).extraBodyParams).toEqual({
+      expect((provider.config as any).passthrough).toEqual({
         usage_context: {
           project: 'test-project',
           team: 'engineering',
@@ -155,14 +155,14 @@ describe('Databricks Foundation Model APIs Provider', () => {
           usageContext: {
             project: 'test-project',
           },
-          extraBodyParams: {
+          passthrough: {
             custom_param: 'value',
           },
         },
       };
       const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
 
-      expect((provider.config as any).extraBodyParams).toEqual({
+      expect((provider.config as any).passthrough).toEqual({
         custom_param: 'value',
         usage_context: {
           project: 'test-project',
@@ -202,7 +202,7 @@ describe('Databricks Foundation Model APIs Provider', () => {
   });
 
   describe('getApiUrl method', () => {
-    it('should return custom URL for pay-per-token endpoints', () => {
+    it('should return the compatible base URL for pay-per-token endpoints', () => {
       const options: DatabricksMosaicAiProviderOptions = {
         config: {
           workspaceUrl,
@@ -217,9 +217,7 @@ describe('Databricks Foundation Model APIs Provider', () => {
       // Use type assertion to access protected method
       const url = (provider as any).getApiUrl();
 
-      expect(url).toBe(
-        `${workspaceUrl}/serving-endpoints/databricks-meta-llama-3-3-70b-instruct/invocations`,
-      );
+      expect(url).toBe(`${workspaceUrl}/serving-endpoints`);
     });
 
     it('should use parent class URL for custom endpoints', () => {
