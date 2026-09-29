@@ -102,6 +102,52 @@ describe('EvalResult', () => {
   );
 
   it.each(['single', 'batch', 'jsonl'])(
+    'preserves stored transcript data while redacting transport headers for %s results',
+    async (boundary) => {
+      const transcript = '{ "password": "sample text", "token": "ordinary word" }';
+      const history = [{ prompt: 'A sample record', output: transcript }];
+      const metadata = {
+        redteamHistory: history,
+        audio: { transcript },
+        output: { password: 'sample text', http: { headers: { authorization: 'sample text' } } },
+        http: {
+          requestHeaders: {
+            toJSON: () => ({ Authorization: 'fixture-transport-credential', Accept: 'text/plain' }),
+          },
+        },
+      };
+      const provider: ProviderOptions = {
+        id: 'fixture',
+        config: { apiKey: 'fixture-provider-credential' },
+      };
+      const input = createEvaluateResult({ metadata, provider });
+      const result =
+        boundary === 'single'
+          ? await EvalResult.createFromEvaluateResult('transcript-fixture', input)
+          : boundary === 'batch'
+            ? (await EvalResult.createManyFromEvaluateResult([input], 'transcript-fixture'))[0]
+            : sanitizeResultForJsonlArtifact(input);
+      const saved = result instanceof EvalResult ? await EvalResult.findById(result.id) : result;
+      const expectedMetadata = {
+        ...metadata,
+        http: { requestHeaders: { Authorization: '[REDACTED]', Accept: 'text/plain' } },
+      };
+
+      expect(saved?.metadata).toEqual(expectedMetadata);
+      expect((saved?.provider as ProviderOptions)?.config?.apiKey).toBe('[REDACTED]');
+      expect(metadata.redteamHistory).toEqual(history);
+      expect(metadata.http.requestHeaders.toJSON().Authorization).toBe(
+        'fixture-transport-credential',
+      );
+      if (result instanceof EvalResult) {
+        result.metadata = metadata;
+        await result.save();
+        expect((await EvalResult.findById(result.id))?.metadata).toEqual(expectedMetadata);
+      }
+    },
+  );
+
+  it.each(['single', 'batch', 'jsonl'])(
     'preserves opaque inputs while redacting grader credentials for %s results',
     async (boundary) => {
       const opaqueInput = 'abcdef0123456789'.repeat(8);

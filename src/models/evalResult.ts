@@ -709,15 +709,12 @@ function sanitizeResponseForDb<T extends ProviderResponse | null | undefined>(re
 // source so a legacy top-level `metadata.headers` is redacted only where it echoes the
 // transport — leaving user-authored test metadata headers intact.
 function sanitizeMetadataForDb<T>(metadata: T, responseMetadata?: unknown): T {
-  const sanitized = sanitizeForDbWithSecrets(metadata, false);
-  const record = asRecord(sanitized);
-  const sessionId =
-    asRecord(metadata) && Object.getOwnPropertyDescriptor(metadata, 'sessionId')?.value;
-  // This field identifies the conversation. Session credentials in headers stay redacted.
-  if (record && typeof sessionId === 'string') {
-    record.sessionId = sessionId;
+  // Root serializers can move transport credentials outside their known header slots.
+  if (metadata && typeof metadata === 'object' && 'toJSON' in metadata) {
+    return REDACTED as T;
   }
-  return redactHttpHeadersOnMetadata(sanitized, {
+  // Preserve literal transcripts and redact only known transport header slots.
+  return redactHttpHeadersOnMetadata(sanitizeForDb(metadata), {
     legacyHeadersSource: sanitizeForDb(responseMetadata),
   });
 }
