@@ -8,7 +8,7 @@ import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@op
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
-import { getEnvString } from '../../envars';
+import { getEnvString, getProcessEnv } from '../../envars';
 import logger from '../../logger';
 import {
   addActiveSpanRoleAttribute,
@@ -24,6 +24,7 @@ import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { VERSION } from '../../version';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
+import { clearRepositoryEnv, isAgentWorkspace } from '../agentWorkspace';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 import {
@@ -679,8 +680,9 @@ function mergeCodexAppServerConfig(
 
 function getMinimalProcessEnv(): Record<string, string> {
   const env: Record<string, string> = {};
+  const processEnv = getProcessEnv();
   for (const key of MINIMAL_CLI_ENV_KEYS) {
-    const value = process.env[key];
+    const value = processEnv[key];
     if (typeof value === 'string' && value.length > 0) {
       env[key] = value;
     }
@@ -1598,7 +1600,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       Object.entries(config.cli_env ?? {}).map(([key, value]) => [key, String(value)]),
     );
     const env: Record<string, string> = {
-      ...(inheritProcessEnv ? (process.env as Record<string, string>) : getMinimalProcessEnv()),
+      ...(inheritProcessEnv ? (getProcessEnv() as Record<string, string>) : getMinimalProcessEnv()),
       ...cliEnv,
     };
 
@@ -1662,6 +1664,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       }
     } else {
       delete sortedEnv.TRACEPARENT;
+    }
+
+    if (config.working_dir && isAgentWorkspace(config.working_dir)) {
+      clearRepositoryEnv(sortedEnv);
     }
 
     return sortedEnv;
@@ -3437,6 +3443,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         input: number;
         output: number;
         cached: number;
+        cacheWrite?: number;
         reasoning: number;
       }
     | undefined {
@@ -3453,6 +3460,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       input,
       output,
       cached: usage.cachedInputTokens ?? usage.cached_input_tokens ?? 0,
+      cacheWrite: usage.cacheWriteInputTokens ?? usage.cache_write_input_tokens,
       reasoning: usage.reasoningOutputTokens ?? usage.reasoning_output_tokens ?? 0,
     };
   }
@@ -3465,6 +3473,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     return {
       input_tokens: usage.input,
       cached_input_tokens: usage.cached,
+      cache_write_input_tokens: usage.cacheWrite ?? 0,
       output_tokens: usage.output,
       reasoning_output_tokens: usage.reasoning,
     };
@@ -3480,6 +3489,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       completion: usage.output,
       total: usage.input + usage.output,
       cached: usage.cached,
+      ...(typeof usage.cacheWrite === 'number'
+        ? { completionDetails: { cacheCreationInputTokens: usage.cacheWrite } }
+        : {}),
     };
   }
 
@@ -3618,6 +3630,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       attributes['gen_ai.usage.output_tokens'] = usage.output;
       if (usage.cached) {
         attributes[GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS] = usage.cached;
+      }
+      if (usage.cacheWrite) {
+        attributes[GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS] = usage.cacheWrite;
       }
       if (usage.reasoning) {
         attributes[GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS] = usage.reasoning;

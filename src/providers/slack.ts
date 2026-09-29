@@ -6,11 +6,13 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  EnvOverrides,
   ProviderResponse,
 } from '../types/index';
 
 export interface SlackProviderOptions {
   id?: string;
+  env?: EnvOverrides;
   config?: {
     /** Slack Bot User OAuth Token (xoxb-...) */
     token?: string;
@@ -49,7 +51,8 @@ export class SlackProvider implements ApiProvider {
   constructor(options: SlackProviderOptions = {}) {
     this.options = options;
 
-    const token = options.config?.token || process.env.SLACK_BOT_TOKEN;
+    const token =
+      options.config?.token || options.env?.SLACK_BOT_TOKEN || process.env.SLACK_BOT_TOKEN;
     if (!token) {
       throw new Error(
         'Slack provider requires a token. Set SLACK_BOT_TOKEN or provide it in config.',
@@ -83,6 +86,7 @@ export class SlackProvider implements ApiProvider {
     const channel = config.channel!;
     const timeout = config.timeout || 60000;
     const responseStrategy = config.responseStrategy || 'first';
+    let responseChannel = channel;
 
     try {
       // Format the message if a custom formatter is provided
@@ -103,18 +107,24 @@ export class SlackProvider implements ApiProvider {
       }
 
       const messageTs = postResult.ts;
+      // User targets open a DM whose conversation ID is returned by Slack.
+      responseChannel = postResult.channel || channel;
 
       // Handle different response collection strategies
       let responseText: string;
       const responseMetadata: Record<string, any> = {
         messageTs,
-        channel,
+        channel: responseChannel,
       };
 
       switch (responseStrategy) {
         case 'timeout':
           // Just wait for the timeout and collect all responses
-          responseText = await this.collectResponsesUntilTimeout(channel, messageTs, timeout);
+          responseText = await this.collectResponsesUntilTimeout(
+            responseChannel,
+            messageTs,
+            timeout,
+          );
           break;
 
         case 'user':
@@ -122,7 +132,7 @@ export class SlackProvider implements ApiProvider {
             throw new Error('waitForUser must be specified when using "user" response strategy');
           }
           responseText = await this.waitForUserResponse(
-            channel,
+            responseChannel,
             messageTs,
             config.waitForUser,
             timeout,
@@ -132,7 +142,7 @@ export class SlackProvider implements ApiProvider {
 
         case 'first':
         default:
-          responseText = await this.waitForFirstResponse(channel, messageTs, timeout);
+          responseText = await this.waitForFirstResponse(responseChannel, messageTs, timeout);
           break;
       }
 
@@ -159,9 +169,11 @@ export class SlackProvider implements ApiProvider {
         const slackError = error.data.error;
         switch (slackError) {
           case 'channel_not_found':
-            return { error: `Channel ${channel} not found. Please check the channel ID.` };
+            return { error: `Channel ${responseChannel} not found. Please check the channel ID.` };
           case 'not_in_channel':
-            return { error: `Bot is not in channel ${channel}. Please invite the bot first.` };
+            return {
+              error: `Bot is not in channel ${responseChannel}. Please invite the bot first.`,
+            };
           case 'missing_scope':
             return { error: 'Bot token is missing required scopes. Please check permissions.' };
           case 'ratelimited':

@@ -44,18 +44,40 @@ providers:
       portkeyProvider: openai
 ```
 
+### Credentials
+
+A Portkey request can carry two credentials, and they are sent in different places:
+
+| Credential                  | Sent as                 | Set with                                        |
+| --------------------------- | ----------------------- | ----------------------------------------------- |
+| Your Portkey key            | `x-portkey-api-key`     | `PORTKEY_API_KEY`, or `portkeyApiKey` in config |
+| The upstream provider's key | `Authorization: Bearer` | `OPENAI_API_KEY`, or `apiKey` in config         |
+
+When Portkey holds the provider credential — a model catalog provider slug or a virtual key — the Portkey key is all you need, and promptfoo does not forward a provider key. A provider key is only sent for direct passthrough, such as `portkeyProvider: openai` with no slug.
+
+To send additional headers, use `config.headers`:
+
+```yaml
+providers:
+  - id: portkey:gpt-5.6
+    config:
+      portkeyProvider: openai
+      headers:
+        x-my-header: my-value
+```
+
 ### Model catalog
 
-Portkey's [model catalog](https://portkey.ai/docs/product/model-catalog) replaced virtual keys. Address models as `@<ai-provider-slug>/<model-name>` after the `portkey:` prefix:
+Copy the AI provider slug and model name from Portkey's [model catalog](https://portkey.ai/docs/product/model-catalog). Use `@<ai-provider-slug>/<model-name>` after the `portkey:` prefix:
 
 ```yaml
 providers:
   - id: 'portkey:@bedrock-eu/eu.anthropic.claude-sonnet-4-5-20250929-v1:0'
 ```
 
-Colons in the model name are preserved, so Bedrock and Vertex identifiers work as-is.
+Colons in the model name are preserved.
 
-Send the slug separately when the same model name is served by more than one provider:
+Alternatively, set the provider slug in `config.portkeyProvider`:
 
 ```yaml
 providers:
@@ -64,11 +86,11 @@ providers:
       portkeyProvider: '@bedrock-eu'
 ```
 
-Use a `PORTKEY_API_KEY` from the workspace that owns the AI provider.
+Use a `PORTKEY_API_KEY` from a workspace with access to the AI provider.
 
-### Gateway options
+### Other options
 
-Any `portkey`-prefixed config key is sent as the matching [Portkey header](https://portkey.ai/docs/api-reference/inference-api/headers), so `portkeyCacheNamespace` becomes `x-portkey-cache-namespace`. Common options:
+`portkey`-prefixed config keys, except `portkeyApiBaseUrl`, are sent as the matching [Portkey header](https://portkey.ai/docs/api-reference/inference-api/headers), so `portkeyCacheNamespace` becomes `x-portkey-cache-namespace`. Common options:
 
 | Parameter                  | Description                                                    |
 | -------------------------- | -------------------------------------------------------------- |
@@ -79,7 +101,7 @@ Any `portkey`-prefixed config key is sent as the matching [Portkey header](https
 | `portkeyCustomHost`        | Base URL for privately hosted models.                          |
 | `portkeyMetadata`          | Metadata for filtering in Portkey analytics.                   |
 | `portkeyTraceId`           | Correlates related requests.                                   |
-| `portkeyCacheForceRefresh` | Bypasses the Portkey cache for the request.                    |
+| `portkeyCacheForceRefresh` | Fetches a new response and updates the Portkey cache.          |
 | `portkeyCacheNamespace`    | Partitions the cache store.                                    |
 | `portkeyRequestTimeout`    | Timeout in milliseconds.                                       |
 

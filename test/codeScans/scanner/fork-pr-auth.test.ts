@@ -50,7 +50,6 @@ describe('Scanner fork PR auth rejection', () => {
         diffsOnly: options.diffsOnly ?? config.diffsOnly,
       })),
       resolveGuidance: vi.fn().mockReturnValue(undefined),
-      resolveApiHost: vi.fn().mockReturnValue('https://api.example.com'),
     }));
     vi.doMock('simple-git', () => ({
       default: vi.fn(() => ({
