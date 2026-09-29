@@ -69,7 +69,7 @@ const ApiProviderObjectSchema = z.object({
   inputs: InputsSchema.optional(),
 });
 
-export const ApiProviderSchema = z.any().transform((input, ctx) => {
+export const ApiProviderSchema = z.unknown().transform((input, ctx) => {
   const result = ApiProviderObjectSchema.safeParse(input);
   if (!result.success) {
     ctx.addIssue({ code: 'custom', message: result.error.message });
@@ -88,6 +88,7 @@ export const ApiProviderSchema = z.any().transform((input, ctx) => {
       result.data.promptfooCapabilities,
     );
   }
+  // Keep subclass declarations available after Zod copies the provider object.
   Object.defineProperty(result.data, Symbol.for('promptfoo.capabilityDelegate'), {
     value: input,
   });

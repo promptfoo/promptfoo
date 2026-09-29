@@ -175,6 +175,36 @@ describe('matchesAnswerRelevance', () => {
     );
   });
 
+  it('tags a grading provider error as a grader error so inverse assertions cannot pass it', async () => {
+    // Without the graderError tag, applyRagInverse() cannot tell an infrastructure
+    // failure apart from a genuine low score, and `not-answer-relevance` would flip
+    // a grading outage into a silent pass.
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      error: 'grading provider exploded',
+      tokenUsage: { total: 0, prompt: 0, completion: 0 },
+    });
+
+    const result = await matchesAnswerRelevance('q', 'a', 0.5);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('grading provider exploded');
+    expect(result.metadata).toMatchObject({ graderError: true });
+  });
+
+  it('tags an embedding provider error as a grader error', async () => {
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
+      error: 'embedding provider exploded',
+      tokenUsage: { total: 0, prompt: 0, completion: 0 },
+    });
+
+    const result = await matchesAnswerRelevance('q', 'a', 0.5);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.metadata).toMatchObject({ graderError: true });
+  });
+
   it('tracks token usage for successful calls', async () => {
     const input = 'Input text';
     const output = 'Sample output';
@@ -194,52 +224,23 @@ describe('matchesAnswerRelevance', () => {
     expect(result.tokensUsed?.completionDetails).toBeDefined();
   });
 
-  it('retains completed usage when a later candidate embedding fails', async () => {
-    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi')
-      .mockResolvedValueOnce({
-        embedding: [1, 0, 0],
-        tokenUsage: { total: 5, prompt: 2, completion: 3 },
-      })
-      .mockResolvedValueOnce({
-        embedding: [1, 0, 0],
-        tokenUsage: { total: 5, prompt: 2, completion: 3 },
-      })
-      .mockRejectedValueOnce(new DOMException('cancelled later embedding', 'AbortError'));
+  it('rejects an excluded embedding operation before generating questions', async () => {
+    const callEmbeddingApi = vi.fn().mockRejectedValue(new Error('excluded embedding stub'));
+    const provider = {
+      id: () => 'similarity-only',
+      promptfooCapabilities: ['callSimilarityApi'] as const,
+      callApi: vi.fn(),
+      callSimilarityApi: vi.fn().mockResolvedValue({ similarity: 1 }),
+      callEmbeddingApi,
+    };
 
-    const result = await matchesAnswerRelevance('Input text', 'Sample output', 0.5);
-
-    expect(result).toMatchObject({
-      pass: false,
-      reason: 'cancelled later embedding',
-      tokensUsed: { total: 40, prompt: 19, completion: 21 },
-    });
-  });
-
-  it('retains generated-question usage when the input embedding aborts', async () => {
-    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockRejectedValueOnce(
-      new DOMException('cancelled input embedding', 'AbortError'),
-    );
-
-    const result = await matchesAnswerRelevance('Input text', 'Sample output', 0.5);
-
-    expect(result).toMatchObject({
-      pass: false,
-      reason: 'cancelled input embedding',
-      tokensUsed: { total: 30, prompt: 15, completion: 15 },
-    });
-  });
-
-  it('rethrows ordinary candidate embedding failures', async () => {
-    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi')
-      .mockResolvedValueOnce({
-        embedding: [1, 0, 0],
-        tokenUsage: { total: 5, prompt: 2, completion: 3 },
-      })
-      .mockRejectedValueOnce(new Error('candidate transport failed'));
-
-    await expect(matchesAnswerRelevance('Input text', 'Sample output', 0.5)).rejects.toThrow(
-      'candidate transport failed',
-    );
+    await expect(
+      matchesAnswerRelevance('Input text', 'Sample output', 0.5, {
+        provider: { embedding: provider, text: DefaultGradingProvider },
+      }),
+    ).rejects.toThrow('must implement callEmbeddingApi');
+    expect(callEmbeddingApi).not.toHaveBeenCalled();
+    expect(DefaultGradingProvider.callApi).not.toHaveBeenCalled();
   });
 
   it('should return metadata with generated questions and similarities', async () => {

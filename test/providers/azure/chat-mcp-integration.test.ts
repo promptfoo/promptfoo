@@ -83,7 +83,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
 
   it('should integrate MCP tools with FunctionCallbackHandler', async () => {
     // Wait for MCP initialization
-    await provider.ensureInitialized();
+    await (provider as any).initializationPromise;
 
     // Verify MCP client was initialized
     expect(mcpMocks.mockInitialize).toHaveBeenCalled();
@@ -96,7 +96,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
 
   it('should execute MCP tool through FunctionCallbackHandler', async () => {
     // Wait for MCP initialization
-    await provider.ensureInitialized();
+    await (provider as any).initializationPromise;
 
     const handler = (provider as any).functionCallbackHandler;
 
@@ -109,7 +109,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
     const result = await handler.processCall(toolCall, {});
 
     // Verify MCP tool was called
-    expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', {}, undefined);
+    expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', {});
 
     // Verify result format matches expected pattern (not [object Object])
     expect(result).toEqual({
@@ -124,7 +124,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
 
   it('should handle MCP tool errors gracefully', async () => {
     // Wait for MCP initialization
-    await provider.ensureInitialized();
+    await (provider as any).initializationPromise;
 
     // Configure mock to return an error
     mcpMocks.mockCallTool.mockResolvedValue({
@@ -167,7 +167,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
 
   it('should prioritize MCP tools over function callbacks', async () => {
     // Wait for MCP initialization
-    await provider.ensureInitialized();
+    await (provider as any).initializationPromise;
 
     const handler = (provider as any).functionCallbackHandler;
 
@@ -184,7 +184,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
     const result = await handler.processCall(toolCall, functionCallbacks);
 
     // Should call MCP tool, not function callback
-    expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', {}, undefined);
+    expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', {});
     expect(functionCallbacks.list_resources).not.toHaveBeenCalled();
 
     // Result should be from MCP tool

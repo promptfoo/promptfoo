@@ -4,8 +4,7 @@ import {
   loadCallbackFromFileUrl,
   wrapError,
 } from '../util/functions/loadFunction';
-import { getMcpErrorMessage, isMcpErrorResult } from './mcp/util';
-import { awaitProviderOperation } from './shared';
+import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from './mcp/util';
 import { withGenAIToolSpan } from './tracing';
 
 import type {
@@ -56,7 +55,6 @@ export async function executeProviderFunctionCallback({
   callbacks,
   cache,
   logPrefix,
-  signal,
 }: {
   functionName: string;
   args: string;
@@ -66,9 +64,7 @@ export async function executeProviderFunctionCallback({
   cache: Record<string, Function>;
   /** This provider's log prefix, e.g. `[Bedrock Converse]`. */
   logPrefix?: string;
-  signal?: AbortSignal;
 }): Promise<string> {
-  signal?.throwIfAborted();
   const prefix = logPrefix ? `${logPrefix} ` : '';
   try {
     let callback = cache[functionName];
@@ -78,10 +74,7 @@ export async function executeProviderFunctionCallback({
 
       if (callbackRef && typeof callbackRef === 'string') {
         callback = callbackRef.startsWith('file://')
-          ? await awaitProviderOperation(
-              loadProviderCallbackFromFileUrl(callbackRef, logPrefix),
-              signal,
-            )
+          ? await loadProviderCallbackFromFileUrl(callbackRef, logPrefix)
           : new Function('return ' + callbackRef)();
         cache[functionName] = callback;
       } else if (typeof callbackRef === 'function') {
@@ -95,10 +88,8 @@ export async function executeProviderFunctionCallback({
     }
 
     logger.debug(`${prefix}Executing function '${functionName}' with args: ${args}`);
-    signal?.throwIfAborted();
-    const result = await awaitProviderOperation(
-      withGenAIToolSpan({ name: functionName, arguments: args, callId }, () => callback(args)),
-      signal,
+    const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
+      callback(args),
     );
 
     if (result === undefined || result === null) {
@@ -143,9 +134,7 @@ export class FunctionCallbackHandler {
     call: FunctionCall | ToolCall | any,
     callbacks?: FunctionCallbackConfig,
     context?: any,
-    options?: { abortSignal?: AbortSignal },
   ): Promise<FunctionCallResult> {
-    options?.abortSignal?.throwIfAborted();
     // Extract function information from various formats
     const functionInfo = this.extractFunctionInfo(call);
 
@@ -158,11 +147,7 @@ export class FunctionCallbackHandler {
       }
 
       if (this.mcpToolNames.has(functionInfo.name)) {
-        return await this.executeMcpTool(
-          functionInfo.name,
-          functionInfo.arguments,
-          options?.abortSignal,
-        );
+        return await this.executeMcpTool(functionInfo.name, functionInfo.arguments);
       }
     }
 
@@ -186,14 +171,12 @@ export class FunctionCallbackHandler {
           : typeof call?.id === 'string'
             ? call.id
             : undefined,
-        options?.abortSignal,
       );
       return {
         output: result,
         isError: false,
       };
     } catch (error) {
-      options?.abortSignal?.throwIfAborted();
       // Surface security-class failures at `warn` so a rejected path-traversal
       // attempt isn't indistinguishable from "no callback registered". The
       // generic loader/runtime errors stay at debug to avoid log noise from
@@ -230,7 +213,7 @@ export class FunctionCallbackHandler {
     calls: any,
     callbacks?: FunctionCallbackConfig,
     context?: any,
-    options?: { returnRawOnError?: boolean; abortSignal?: AbortSignal },
+    _options?: { returnRawOnError?: boolean },
   ): Promise<any> {
     if (!calls) {
       return calls;
@@ -239,23 +222,14 @@ export class FunctionCallbackHandler {
     const isArray = Array.isArray(calls);
     const callsArray = isArray ? calls : [calls];
 
-    const settled = await Promise.allSettled(
-      callsArray.map((call) => this.processCall(call, callbacks, context, options)),
+    const results = await Promise.all(
+      callsArray.map((call) => this.processCall(call, callbacks, context)),
     );
-    const results = settled.map((result, index) =>
-      result.status === 'fulfilled'
-        ? result.value
-        : { output: JSON.stringify(callsArray[index]), isError: true },
-    );
-    const rejected = settled.find((result) => result.status === 'rejected');
 
     // If any callback succeeded, return processed results
     const hasSuccess = results.some(
       (r, index) => !r.isError && r.output !== JSON.stringify(callsArray[index]),
     );
-    if (rejected && !hasSuccess) {
-      throw rejected.reason;
-    }
 
     if (hasSuccess) {
       const outputs = results.map((r) => r.output);
@@ -312,9 +286,7 @@ export class FunctionCallbackHandler {
     callbacks: FunctionCallbackConfig,
     context?: any,
     callId?: string,
-    signal?: AbortSignal,
   ): Promise<string> {
-    signal?.throwIfAborted();
     return await withGenAIToolSpan({ name: functionName, arguments: args, callId }, async () => {
       // Get or load the callback
       let callback = this.loadedCallbacks[functionName];
@@ -325,10 +297,7 @@ export class FunctionCallbackHandler {
         if (typeof callbackConfig === 'string') {
           // String callback - either file reference or inline code
           if (callbackConfig.startsWith('file://')) {
-            callback = await awaitProviderOperation(
-              this.loadExternalFunction(callbackConfig),
-              signal,
-            );
+            callback = await this.loadExternalFunction(callbackConfig);
           } else {
             // Inline function string
             callback = new Function('return ' + callbackConfig)() as FunctionCallback;
@@ -343,8 +312,7 @@ export class FunctionCallbackHandler {
         this.loadedCallbacks[functionName] = callback;
       }
 
-      signal?.throwIfAborted();
-      const result = await awaitProviderOperation(Promise.resolve(callback(args, context)), signal);
+      const result = await callback(args, context);
       return typeof result === 'string' ? result : JSON.stringify(result);
     });
   }
@@ -371,11 +339,7 @@ export class FunctionCallbackHandler {
   /**
    * Executes an MCP tool
    */
-  private async executeMcpTool(
-    toolName: string,
-    args: unknown,
-    signal?: AbortSignal,
-  ): Promise<FunctionCallResult> {
+  private async executeMcpTool(toolName: string, args: unknown): Promise<FunctionCallResult> {
     try {
       if (!this.mcpClient) {
         throw new Error('MCP client not available');
@@ -384,8 +348,7 @@ export class FunctionCallbackHandler {
       // Parse arguments: support stringified JSON, object, or empty
       const parsedArgs =
         args == null || args === '' ? {} : typeof args === 'string' ? JSON.parse(args) : args;
-      signal?.throwIfAborted();
-      const result = await this.mcpClient.callTool(toolName, parsedArgs, signal);
+      const result = await this.mcpClient.callTool(toolName, parsedArgs);
 
       if (isMcpErrorResult(result)) {
         return {
@@ -394,43 +357,9 @@ export class FunctionCallbackHandler {
         };
       }
 
-      // Normalize MCP content to a readable string to avoid "[object Object]"
-      const normalizeContent = (content: any): string => {
-        if (content == null) {
-          return '';
-        }
-        if (typeof content === 'string') {
-          return content;
-        }
-        if (Array.isArray(content)) {
-          return content
-            .map((part) => {
-              if (typeof part === 'string') {
-                return part;
-              }
-              if (part && typeof part === 'object') {
-                if ('text' in part && (part as any).text != null) {
-                  return String((part as any).text);
-                }
-                if ('json' in part) {
-                  return JSON.stringify((part as any).json);
-                }
-                if ('data' in part) {
-                  return JSON.stringify((part as any).data);
-                }
-                return JSON.stringify(part);
-              }
-              return String(part);
-            })
-            .join('\n');
-        }
-        return JSON.stringify(content);
-      };
-
-      const content = normalizeContent(result?.content);
+      const content = normalizeMcpToolContent(result?.content);
       return { output: `MCP Tool Result (${toolName}): ${content}`, isError: false };
     } catch (error) {
-      signal?.throwIfAborted();
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.debug(`MCP tool execution failed for ${toolName}: ${errorMessage}`);
       return {

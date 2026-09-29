@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { PromptfooChatCompletionProvider } from '../../../src/providers/promptfoo';
-import { providerRegistry } from '../../../src/providers/providerRegistry';
 import {
   ATTACKER_MODEL,
   ATTACKER_MODEL_SMALL,
@@ -197,25 +196,6 @@ describe('shared redteam provider utilities', () => {
 
   describe('RedteamProviderManager', () => {
     const mockApiProvider = createMockProvider({ response: { output: 'test output' } });
-
-    it('releases a cached provider claimed during an evaluation', async () => {
-      const cleanup = vi.fn();
-      const cached = { ...mockApiProvider, cleanup };
-      mockedLoadApiProviders.mockResolvedValue([cached]);
-      await redteamProviderManager.setProvider('cached-provider');
-      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
-      redteamProviderManager.setRateLimitRegistry(registry);
-      try {
-        const wrapped = await providerRegistry.withScope([], () =>
-          redteamProviderManager.getProvider({}),
-        );
-        expect(isRateLimitWrapped(wrapped)).toBe(true);
-        expect(cleanup).toHaveBeenCalledOnce();
-      } finally {
-        registry.dispose();
-        redteamProviderManager.setRateLimitRegistry(undefined);
-      }
-    });
 
     it('creates default OpenAI provider when no provider specified', async () => {
       const result = await redteamProviderManager.getProvider({});
@@ -1766,6 +1746,26 @@ describe('shared redteam provider utilities', () => {
       });
     });
 
+    it.each([
+      { total: 35, prompt: 20, completion: 15, cached: 10 },
+      { prompt: 20, completion: 15, cached: 10 },
+      { total: 20, cached: 35 },
+      { total: 0, cached: 35 },
+    ])(
+      'counts all replayed tokens when cached only reports the prompt-cache portion: %j',
+      (tokensUsed) => {
+        expect(
+          accumulateGraderResult(undefined, {
+            pass: true,
+            score: 1,
+            reason: 'Cached verdict',
+            metadata: { cachedResponse: true },
+            tokensUsed: { ...tokensUsed, numRequests: 1 },
+          }).tokensUsed,
+        ).toEqual({ total: 0, prompt: 0, completion: 0, cached: 35, numRequests: 0 });
+      },
+    );
+
     it('preserves fresh grading usage before and after a cached middle turn', () => {
       const first = {
         pass: true,
@@ -1787,7 +1787,9 @@ describe('shared redteam provider utilities', () => {
         tokensUsed: { total: 20, prompt: 15, completion: 5, numRequests: 1 },
       };
 
-      const result = accumulateGraderResult(accumulateGraderResult(first, cached), last);
+      const cachedAfterFresh = accumulateGraderResult(first, cached);
+      expect(cachedAfterFresh.metadata?.cachedResponse).not.toBe(true);
+      const result = accumulateGraderResult(cachedAfterFresh, last);
 
       expect(result.tokensUsed).toMatchObject({
         total: 60,
