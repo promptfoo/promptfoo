@@ -22,6 +22,13 @@ import {
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
+import {
+  applyGpt6RequestRules,
+  getGpt6ChatReasoningEffort,
+  getGpt6Variant,
+  isGpt6Model,
+  resolveGpt6ChatOutputCap,
+} from '../openai/gpt6';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
@@ -76,7 +83,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
    * Reasoning models use max_completion_tokens instead of max_tokens,
    * don't support temperature, and accept reasoning_effort parameter.
    */
-  protected isReasoningModel(): boolean {
+  protected isReasoningModel(modelName = this.config.modelName ?? this.deploymentName): boolean {
     // Check explicit config flags first
     if (this.config.isReasoningModel || this.config.o1) {
       return true;
@@ -84,7 +91,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     // Auto-detect reasoning models by deployment name (case-insensitive)
     // Supports both direct names (o1-preview) and prefixed names (prod-o1-mini)
-    const lowerName = this.deploymentName.toLowerCase();
+    const lowerName = modelName.toLowerCase();
     return (
       // OpenAI reasoning models
       lowerName.startsWith('o1') ||
@@ -96,6 +103,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       // GPT-5 series (reasoning by default)
       lowerName.startsWith('gpt-5') ||
       lowerName.includes('-gpt-5') ||
+      isGpt6Model(lowerName) ||
       // DeepSeek reasoning models
       lowerName.includes('deepseek-r1') ||
       lowerName.includes('deepseek_r1') ||
@@ -196,16 +204,26 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       : {};
 
     // Check if this is configured as a reasoning model
-    const isReasoningModel = this.isReasoningModel();
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    const capabilityModelName = (
+      typeof passthroughModel === 'string'
+        ? passthroughModel
+        : (config.modelName ?? this.deploymentName)
+    ).toLowerCase();
+    const isReasoningModel = this.isReasoningModel(capabilityModelName);
+    const gpt6Variant = getGpt6Variant(capabilityModelName);
+    const useModelDefaults =
+      gpt6Variant === 'sol' || gpt6Variant === 'luna' || gpt6Variant === '6.1-sol';
     const samplingParamsDeprecated = this.isSamplingParamsDeprecatedClaudeModel(config);
     const grokSamplingRestricted = this.isGrok4OrNewerModel();
 
     // Get max tokens based on model type
-    const maxTokensDefault = config.omitDefaults
-      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
-        ? undefined
-        : getEnvInt('OPENAI_MAX_TOKENS')
-      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
+    const maxTokensDefault =
+      config.omitDefaults || useModelDefaults
+        ? getEnvString('OPENAI_MAX_TOKENS') === undefined
+          ? undefined
+          : getEnvInt('OPENAI_MAX_TOKENS')
+        : getEnvInt('OPENAI_MAX_TOKENS', 1024);
     const maxTokens = config.max_tokens ?? maxTokensDefault;
     const maxCompletionTokens =
       config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? maxTokens;
@@ -228,7 +246,22 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       : (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0));
 
     // Get reasoning effort for reasoning models
-    const reasoningEffort = config.reasoning_effort ?? (config.omitDefaults ? undefined : 'medium');
+    const configuredGpt6Effort = gpt6Variant
+      ? getGpt6ChatReasoningEffort(this.config, context?.prompt?.config, (value) =>
+          renderVarsInObject(value, context?.vars),
+        )
+      : undefined;
+    const defaultReasoningEffort = config.omitDefaults || useModelDefaults ? undefined : 'medium';
+    const reasoningEffort = gpt6Variant
+      ? configuredGpt6Effort === undefined
+        ? defaultReasoningEffort
+        : configuredGpt6Effort
+      : (config.reasoning_effort ?? defaultReasoningEffort);
+    const renderedReasoningEffort = isReasoningModel
+      ? gpt6Variant
+        ? reasoningEffort
+        : renderVarsInObject(reasoningEffort, context?.vars)
+      : undefined;
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
@@ -246,12 +279,15 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       messages,
       ...(isReasoningModel
         ? {
-            ...(reasoningEffort === undefined
+            ...(renderedReasoningEffort === undefined
               ? {}
-              : { reasoning_effort: renderVarsInObject(reasoningEffort, context?.vars) }),
+              : { reasoning_effort: renderedReasoningEffort }),
             ...(maxCompletionTokens === undefined
               ? {}
               : { max_completion_tokens: maxCompletionTokens }),
+            ...(isGpt6Model(capabilityModelName) && temperature !== undefined
+              ? { temperature }
+              : {}),
           }
         : {
             ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
@@ -300,7 +336,33 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       delete body.tool_choice;
     }
 
-    return { body, config };
+    if (gpt6Variant) {
+      if (renderedReasoningEffort === undefined) {
+        delete body.reasoning_effort;
+      } else {
+        body.reasoning_effort = renderedReasoningEffort;
+      }
+    }
+    if (useModelDefaults) {
+      const outputCap = resolveGpt6ChatOutputCap(this.config, context?.prompt?.config, false, {
+        maxCompletionTokens: getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'),
+        maxTokens: getEnvInt('OPENAI_MAX_TOKENS'),
+      });
+      if (outputCap === undefined) {
+        delete body.max_completion_tokens;
+      } else {
+        body.max_completion_tokens = outputCap;
+      }
+    }
+    applyGpt6RequestRules(body, capabilityModelName, 'chat');
+
+    return {
+      body,
+      config:
+        typeof passthroughModel === 'string'
+          ? { ...config, modelName: capabilityModelName }
+          : config,
+    };
   }
 
   async callApi(

@@ -13,7 +13,7 @@ This provider integrates [OpenCode](https://opencode.ai/), an open-source AI cod
 - `opencode:sdk` - Uses OpenCode's configured model
 - `opencode` - Same as `opencode:sdk`
 
-The model is configured via the OpenCode CLI or `~/.opencode/config.yaml`.
+When you omit `provider_id` and `model`, OpenCode selects the model using its own configuration and defaults. Set a global model in `~/.config/opencode/opencode.json`; see [OpenCode configuration](https://opencode.ai/docs/config/). Additional suffixes on the promptfoo provider ID identify provider instances; they do not select a model.
 
 ## Installation
 
@@ -77,26 +77,26 @@ prompts:
   - 'Write a Python function that validates email addresses'
 ```
 
-Configure your model via the OpenCode CLI: `opencode config set model openai/gpt-4o`
+Select a model with `/models` in OpenCode, or set `model` in your OpenCode configuration.
 
 By default, OpenCode SDK runs in a temporary directory with no tools enabled. When your test cases finish, the temporary directory is deleted.
 
 ### With Inline Model Configuration
 
-Specify the provider and model directly in your config:
+Set `provider_id` to the OpenCode provider key and `model` to the model ID within that provider:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: opencode:sdk
     config:
       provider_id: anthropic
-      model: claude-sonnet-4-20250514
+      model: claude-sonnet-5
 
 prompts:
   - 'Write a Python function that validates email addresses'
 ```
 
-This overrides the model configured via the OpenCode CLI for this specific eval.
+This overrides OpenCode's model selection for this specific eval. Keep `provider_id` separate from `model`; for example, a custom provider with a model ID of `team/model-name` uses `provider_id: my-provider` and `model: team/model-name`.
 
 ### With Working Directory
 
@@ -114,6 +114,8 @@ prompts:
 
 By default, when you specify a working directory, OpenCode SDK has access to these read-only tools: `read`, `grep`, `glob`, `list`.
 Relative `working_dir` values are resolved from the directory containing the config file.
+
+For isolated workspaces (`copy_working_dir`), unset repository-selecting Git environment variables such as `GIT_DIR`, `GIT_WORK_TREE`, and `GIT_INDEX_FILE` before starting promptfoo. OpenCode's local server inherits these variables directly, so isolated calls reject them.
 
 ### Structured Output
 
@@ -188,30 +190,31 @@ When enabling write/edit/bash tools, consider how you will reset files after eac
 
 ## Supported Parameters
 
-| Parameter                 | Type    | Description                                                                | Default                                |
-| ------------------------- | ------- | -------------------------------------------------------------------------- | -------------------------------------- |
-| `apiKey`                  | string  | Inject API key into a spawned OpenCode server for `provider_id`            | Environment variable                   |
-| `baseUrl`                 | string  | URL for an existing OpenCode server                                        | Auto-start server                      |
-| `hostname`                | string  | Server hostname when starting a new server                                 | `127.0.0.1`                            |
-| `port`                    | number  | Server port when starting a new server                                     | Auto-select                            |
-| `timeout`                 | number  | Server startup timeout in milliseconds                                     | `30000`                                |
-| `log_level`               | string  | OpenCode server log level (`debug`, `info`, `warn`, `error`, `off`)        | Provider default                       |
-| `working_dir`             | string  | Directory for file operations and read-only default tools                  | Temporary directory                    |
-| `workspace`               | string  | Workspace identifier for workspace-aware OpenCode requests                 | None                                   |
-| `provider_id`             | string  | LLM provider (`anthropic`, `openai`, `google`, `ollama`, etc.)             | OpenCode default                       |
-| `model`                   | string  | Model to use for this request                                              | OpenCode default                       |
-| `format`                  | object  | Output format, including JSON Schema structured output                     | Text                                   |
-| `variant`                 | string  | Provider/model variant defined in OpenCode config                          | Default variant                        |
-| `tools`                   | object  | Tool configuration                                                         | None; read-only with `working_dir`     |
-| `permission`              | object  | Permission configuration for tools                                         | No extra rules; wildcard-deny baseline |
-| `agent`                   | string  | Built-in or preconfigured agent to use                                     | Default agent                          |
-| `custom_agent`            | object  | Custom agent configuration when promptfoo starts the OpenCode server       | None                                   |
-| `session_id`              | string  | Resume an existing session                                                 | Create new session                     |
-| `parent_session_id`       | string  | Fork from an existing session (v2 server only); inherits compacted history | None                                   |
-| `persist_sessions`        | boolean | Reuse the same session for repeated calls with the same provider config    | `false`                                |
-| `mcp`                     | object  | MCP server configuration when promptfoo starts the OpenCode server         | None                                   |
-| `cache_mcp`               | boolean | Enable caching when MCP is configured                                      | `false`                                |
-| `restart_server_per_call` | boolean | Restart the server per call so spans correlate to each test case           | `false`                                |
+| Parameter                 | Type              | Description                                                                | Default                                |
+| ------------------------- | ----------------- | -------------------------------------------------------------------------- | -------------------------------------- |
+| `apiKey`                  | string            | Inject API key into a spawned OpenCode server for `provider_id`            | Environment variable                   |
+| `baseUrl`                 | string            | URL for an existing OpenCode server                                        | Auto-start server                      |
+| `hostname`                | string            | Server hostname when starting a new server                                 | `127.0.0.1`                            |
+| `port`                    | number            | Server port when starting a new server                                     | Auto-select                            |
+| `timeout`                 | number            | Server startup timeout in milliseconds                                     | `30000`                                |
+| `log_level`               | string            | OpenCode server log level (`debug`, `info`, `warn`, `error`, `off`)        | Provider default                       |
+| `working_dir`             | string            | Directory for file operations and read-only default tools                  | Temporary directory                    |
+| `copy_working_dir`        | boolean \| string | Fresh copy of `working_dir` per eval step ([details][isolated-workspaces]) | false                                  |
+| `workspace`               | string            | Workspace identifier for workspace-aware OpenCode requests                 | None                                   |
+| `provider_id`             | string            | LLM provider (`anthropic`, `openai`, `google`, `ollama`, etc.)             | OpenCode default                       |
+| `model`                   | string            | Model ID within `provider_id`; set both for an explicit selection          | OpenCode default                       |
+| `format`                  | object            | Output format, including JSON Schema structured output                     | Text                                   |
+| `variant`                 | string            | Provider/model variant defined in OpenCode config                          | Default variant                        |
+| `tools`                   | object            | Tool configuration                                                         | None; read-only with `working_dir`     |
+| `permission`              | object            | Permission configuration for tools                                         | No extra rules; wildcard-deny baseline |
+| `agent`                   | string            | Built-in or preconfigured agent to use                                     | Default agent                          |
+| `custom_agent`            | object            | Custom agent configuration when promptfoo starts the OpenCode server       | None                                   |
+| `session_id`              | string            | Resume an existing session                                                 | Create new session                     |
+| `parent_session_id`       | string            | Fork from an existing session (v2 server only); inherits compacted history | None                                   |
+| `persist_sessions`        | boolean           | Reuse the same session for repeated calls with the same provider config    | `false`                                |
+| `mcp`                     | object            | MCP server configuration when promptfoo starts the OpenCode server         | None                                   |
+| `cache_mcp`               | boolean           | Enable caching when MCP is configured                                      | `false`                                |
+| `restart_server_per_call` | boolean           | Restart the owned server when the request traceparent changes              | `false`                                |
 
 ## Supported Providers
 
@@ -239,18 +242,16 @@ OpenCode supports 75+ LLM providers through [Models.dev](https://models.dev/):
 - LM Studio
 - llama.cpp
 
-Configure your preferred model using the OpenCode CLI:
+Configure your preferred default model in OpenCode's global configuration:
 
-```bash
-# Set your default model
-opencode config set model anthropic/claude-sonnet-4-20250514
-
-# Or for OpenAI
-opencode config set model openai/gpt-4o
-
-# Or for local models
-opencode config set model ollama/llama3
+```json title="~/.config/opencode/opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anthropic/claude-sonnet-5"
+}
 ```
+
+OpenCode's `model` setting uses the full `provider/model-id` format, such as `openai/gpt-4o` or `ollama/llama3`. Use the provider key and model ID configured on your OpenCode server, including any model path segments.
 
 ## Tools and Permissions
 
@@ -427,6 +428,17 @@ and includes the loaded `SKILL.md` path when OpenCode returns the skill director
 in its result metadata. Those errored entries remain available for diagnostics,
 but they do not count as successful `skill-used` matches.
 
+Because OpenCode is multi-turn, the `skill` tool is usually invoked before the
+final response, so its tool part is absent from that response. To catch those
+calls, promptfoo fetches the session message history after each prompt and
+collects the parts between the user message that triggered the prompt and the
+assistant message it returned. This costs one extra `session.messages` call per
+prompt and is skipped whenever the `skill` tool is disabled — which includes the
+default `tools` config — so evals that never opt into skills pay nothing. If
+either boundary message is missing from the returned history (a truncated or
+paginated response, for example), promptfoo falls back to the final message's
+parts rather than risk attributing another prompt's skill calls to this one.
+
 ## Session Management
 
 ### Ephemeral Sessions (Default)
@@ -506,9 +518,7 @@ providers:
       custom_agent:
         description: Security-focused code reviewer
         mode: primary # 'primary', 'subagent', or 'all'
-        model: claude-sonnet-4-20250514
-        temperature: 0.3
-        top_p: 0.9 # Nucleus sampling parameter
+        model: anthropic/claude-sonnet-5
         steps: 10 # Max iterations before text-only response
         color: '#ff5500' # Visual identification
         tools:
@@ -526,11 +536,13 @@ providers:
 
 `custom_agent` is applied when promptfoo starts the OpenCode server itself. If you use `baseUrl`, define that agent on the target server and use `agent` to select it.
 
+`custom_agent.model` uses OpenCode's full [`provider/model-id` format](https://opencode.ai/docs/agents/#model). For example, `anthropic/claude-sonnet-5` selects the Anthropic provider. Unlike the top-level `model` field, it includes the provider key; promptfoo passes this string unchanged. Omit it to use OpenCode's agent model defaults.
+
 | Parameter     | Type    | Description                               |
 | ------------- | ------- | ----------------------------------------- |
 | `description` | string  | Required. Explains the agent's purpose    |
 | `mode`        | string  | 'primary', 'subagent', or 'all'           |
-| `model`       | string  | Model ID (overrides global)               |
+| `model`       | string  | Full OpenCode `provider/model-id`         |
 | `temperature` | number  | Response randomness (0.0-1.0)             |
 | `top_p`       | number  | Nucleus sampling (0.0-1.0)                |
 | `steps`       | number  | Max iterations before text-only response  |
@@ -631,77 +643,43 @@ tests:
 
 ## Trace Correlation (`trajectory:*` assertions)
 
-OpenCode ships no built-in OpenTelemetry support. Per-tool-call spans come from a third-party
-plugin (for example `@devtheops/opencode-plugin-otel`) that you install into OpenCode and point at
-promptfoo's OTLP receiver. That plugin reads its trace-correlation context from the
-`OPENCODE_TRACEPARENT` environment variable **once, at process boot**.
-
-That boot-time read is the catch. Because promptfoo starts one `opencode serve` process and reuses
-it for the whole evaluation, every span the server emits carries whichever traceparent was current
-when the server started. Spans from test case 12 land under test case 1's trace, so `trajectory:*`
-assertions — `trajectory:tool-used`, `trajectory:tool-args-match`, `trajectory:step-count` — have
-nothing they can correlate back to the case under test.
-
-Set `restart_server_per_call: true` to give each call its own server, booted with that call's
-traceparent:
+For an OpenCode tracing plugin that reads `OPENCODE_TRACEPARENT` at startup, enable
+`restart_server_per_call` to pass each request's trace context to the server:
 
 ```yaml
-# Required: without tracing there is no per-call traceparent to hand the server.
 tracing:
   enabled: true
-  otlp:
-    http:
-      enabled: true
 
 providers:
   - id: opencode:sdk
     config:
-      provider_id: anthropic
-      model: claude-sonnet-4-20250514
-      working_dir: ./my-project
       restart_server_per_call: true
-
-tests:
-  - vars:
-      question: Which files define the login flow?
-    assert:
-      - type: trajectory:tool-used
-        value: grep
 ```
 
-If the flag is set while tracing is off, promptfoo warns once: the restarted server has no
-trace context to be tagged with, so you pay the cost below for no correlation.
+Configure the plugin separately to export spans to promptfoo's OTLP receiver. This option
+passes trace context; it does not install a plugin or create OpenCode spans.
 
-### Trade-offs
+Set this option on the provider; prompt-level overrides are rejected. The provider restarts
+its server when the traceparent changes, serializes calls on that provider instance, and
+disables response caching. Calls with the same traceparent reuse
+the server. A missing or invalid traceparent clears the server's inherited trace context
+and produces a warning once.
 
-Restarting the server on every call is not free, which is why it is opt-in:
-
-- **Cost:** a full OpenCode server start per test case. On a large suite this dominates runtime.
-- **Caching is disabled.** A cache hit returns without running the agent, so it emits no spans and
-  a `trajectory:*` assertion would have nothing to read. Per-call traces require per-call execution.
-- **Calls are serialized.** The server is per-call state, so promptfoo runs one call at a time on a
-  provider instance with this flag set, regardless of `--max-concurrency`. Use separate provider
-  instances if you need parallelism.
-
-### Incompatible options
-
-promptfoo rejects these combinations rather than silently emitting uncorrelated traces:
-
-| Option             | Why it conflicts                                                                 |
-| ------------------ | -------------------------------------------------------------------------------- |
-| `baseUrl`          | The server belongs to you, not promptfoo, so it cannot be restarted or re-tagged |
-| `persist_sessions` | A restart discards the server-side session the setting exists to preserve        |
-| `session_id`       | The resumed session lives on the server the restart just stopped                 |
-
-Leave the flag off if you only need a single well-formed root trace per run rather than per-call
-correlation: promptfoo still seeds `OPENCODE_TRACEPARENT` at server boot when the ambient
-environment has not already set it.
+This option cannot be combined with `baseUrl`, `persist_sessions`, `session_id`, or
+`parent_session_id`: the provider must own the server and be free to discard its sessions.
+Omit `port` or set it to `0` so each replacement can start before the old process exits.
+With the option off, the provider seeds `OPENCODE_TRACEPARENT` when it starts a server,
+unless the environment already supplies a value.
 
 ## Managing Side Effects
 
 When using tools that allow side effects (write, edit, bash), consider:
 
+- **Isolated workspaces**: Set `copy_working_dir: true` to run each eval step in a fresh copy of `working_dir` (see [isolated workspaces][isolated-workspaces])
 - **Serial execution**: Set `evaluateOptions.maxConcurrency: 1` to prevent race conditions
+
+[isolated-workspaces]: /docs/guides/evaluate-coding-agents#isolated-workspaces
+
 - **Git reset**: Use git to reset files after each test
 - **Extension hooks**: Use promptfoo hooks for setup/cleanup
 - **Containers**: Run tests in containers for isolation

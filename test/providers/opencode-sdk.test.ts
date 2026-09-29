@@ -136,6 +136,17 @@ const createMockPromptResponse = (
   },
 });
 
+// Helper to stamp history anchors onto a mock prompt response. The provider
+// slices session history between the assistant message's parentID (start) and
+// its own id (end), so tests that exercise skill tracking need both set.
+const createMockPromptResponseWithAnchors = (
+  text: string,
+  anchors: { id: string; parentID: string },
+) => {
+  const base = createMockPromptResponse([{ type: 'text', text }]);
+  return { data: { ...base.data, info: { ...base.data.info, ...anchors } } };
+};
+
 describe('OpenCodeSDKProvider', () => {
   let tempDirSpy: MockInstance;
   let statSyncSpy: MockInstance;
@@ -148,6 +159,7 @@ describe('OpenCodeSDKProvider', () => {
     // random test ordering.
     mockSessionCreate.mockReset();
     mockSessionPrompt.mockReset();
+    mockSessionMessages.mockReset();
     mockSessionDelete.mockReset();
     mockSessionAbort.mockReset();
 
@@ -183,6 +195,7 @@ describe('OpenCodeSDKProvider', () => {
     );
     mockSessionDelete.mockResolvedValue(undefined);
     mockSessionAbort.mockResolvedValue(undefined);
+    mockSessionMessages.mockResolvedValue([]);
 
     // File system mocks
     tempDirSpy = vi.spyOn(fs, 'mkdtempSync').mockReturnValue('/tmp/test-temp-dir');
@@ -292,6 +305,36 @@ describe('OpenCodeSDKProvider', () => {
 
   describe('callApi', () => {
     describe('basic functionality', () => {
+      it('passes scoped env-file defaults to the server while preserving provider overrides', async () => {
+        const { default: cliState } =
+          await vi.importActual<typeof import('../../src/cliState')>('../../src/cliState');
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([{ type: 'text', text: 'ok' }]),
+        );
+        try {
+          const provider = new OpenCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'provider-key' },
+          });
+          const result = await cliState.withEnvFileOverrides(
+            { PROMPTFOO_REVIEW_ENV_PROBE: 'file', ANTHROPIC_API_KEY: 'file-key' },
+            () => provider.callApi('Test prompt'),
+          );
+          expect(result.output).toBe('ok');
+          expect(mockCreateOpencode).toHaveBeenCalledWith(
+            expect.objectContaining({
+              env: expect.objectContaining({
+                PROMPTFOO_REVIEW_ENV_PROBE: 'file',
+                ANTHROPIC_API_KEY: 'provider-key',
+              }),
+            }),
+          );
+          expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
+        } finally {
+          restoreEnv();
+        }
+      });
+
       it('should successfully call API with simple prompt', async () => {
         mockSessionPrompt.mockResolvedValue(
           createMockPromptResponse(
@@ -766,6 +809,495 @@ describe('OpenCodeSDKProvider', () => {
             source: 'tool',
             is_error: true,
           },
+        ]);
+      });
+
+      it('should capture skill calls from intermediate turns via session history', async () => {
+        // The skill tool is invoked in turn 1; the final response (turn 2) has only
+        // a text part. Without fetching the full session history, deriveSkillCalls
+        // would see no tool parts and return [] — causing skill-used assertions to fail.
+        // parentID on the assistant message anchors the slice to the user message
+        // that triggered this prompt, so only the relevant turns are inspected.
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponseWithAnchors('All done.', {
+            id: 'assistant-msg-1',
+            parentID: 'user-msg-1',
+          }),
+        );
+        // Session messages use { info: { id }, parts } structure (matching the real API)
+        mockSessionMessages.mockResolvedValue([
+          // Message from a PREVIOUS prompt — must not bleed into this evaluation
+          {
+            info: { id: 'user-msg-0', role: 'user' },
+            parts: [{ type: 'text', text: 'Previous prompt' }],
+          },
+          {
+            info: { id: 'assistant-msg-0', role: 'assistant' },
+            parts: [
+              {
+                type: 'tool',
+                tool: 'skill',
+                state: {
+                  status: 'completed',
+                  input: { name: 'old-skill' },
+                  metadata: { name: 'old-skill', dir: '/repo/.agents/skills/old-skill' },
+                },
+              },
+            ],
+          },
+          // Messages belonging to THIS prompt (anchor: user-msg-1)
+          {
+            info: { id: 'user-msg-1', role: 'user' },
+            parts: [{ type: 'text', text: 'Apply the code standards skill' }],
+          },
+          {
+            info: { id: 'intermediate-msg-1', role: 'assistant' },
+            parts: [
+              {
+                type: 'tool',
+                tool: 'skill',
+                state: {
+                  status: 'completed',
+                  input: { name: 'code-standards' },
+                  metadata: {
+                    name: 'code-standards',
+                    dir: '/repo/.agents/skills/code-standards',
+                  },
+                },
+              },
+            ],
+          },
+          {
+            info: { id: 'assistant-msg-1', role: 'assistant' },
+            parts: [{ type: 'text', text: 'All done.' }],
+          },
+        ]);
+
+        const provider = new OpenCodeSDKProvider({
+          config: { tools: { skill: true } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Apply the code standards skill');
+
+        // Only the skill from THIS prompt's turns must appear — not old-skill
+        expect(result.metadata?.skillCalls).toEqual([
+          {
+            name: 'code-standards',
+            input: { name: 'code-standards' },
+            path: path.join('/repo/.agents/skills/code-standards', 'SKILL.md'),
+            source: 'tool',
+          },
+        ]);
+      });
+
+      it('should not include messages from a concurrent prompt on the same session', async () => {
+        // If another prompt fires on the same persistent session while session.messages
+        // is in flight, messages after the current assistant message must be excluded.
+        // The end anchor (assistantMessage.id) bounds the slice from above.
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponseWithAnchors('Done.', {
+            id: 'assistant-msg-1',
+            parentID: 'user-msg-1',
+          }),
+        );
+        mockSessionMessages.mockResolvedValue([
+          {
+            info: { id: 'user-msg-1', role: 'user' },
+            parts: [{ type: 'text', text: 'Current prompt' }],
+          },
+          {
+            info: { id: 'assistant-msg-1', role: 'assistant' },
+            parts: [{ type: 'text', text: 'Done.' }],
+          },
+          // Messages from a CONCURRENT prompt — must not be included
+          {
+            info: { id: 'user-msg-2', role: 'user' },
+            parts: [{ type: 'text', text: 'Concurrent prompt' }],
+          },
+          {
+            info: { id: 'concurrent-intermediate', role: 'assistant' },
+            parts: [
+              {
+                type: 'tool',
+                tool: 'skill',
+                state: {
+                  status: 'completed',
+                  input: { name: 'other-skill' },
+                  metadata: { name: 'other-skill', dir: '/repo/.agents/skills/other-skill' },
+                },
+              },
+            ],
+          },
+        ]);
+
+        const provider = new OpenCodeSDKProvider({
+          config: { tools: { skill: true } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Current prompt');
+
+        // other-skill from the concurrent prompt must not appear
+        expect(result.metadata?.skillCalls).toBeUndefined();
+      });
+
+      it('should fall back to final response parts when session.messages fails', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([
+            {
+              type: 'tool',
+              tool: 'skill',
+              state: {
+                status: 'completed',
+                input: { name: 'review-standards' },
+                metadata: {
+                  name: 'review-standards',
+                  dir: '/repo/.agents/skills/review-standards',
+                },
+              },
+            },
+            { type: 'text', text: 'Done.' },
+          ]),
+        );
+        mockSessionMessages.mockRejectedValue(new Error('messages endpoint unavailable'));
+
+        const provider = new OpenCodeSDKProvider({
+          config: { tools: { skill: true } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Use skill');
+
+        // The fetch was attempted and failed
+        expect(mockSessionMessages).toHaveBeenCalledTimes(1);
+        // Graceful degradation: skill in final parts is still captured
+        expect(result.metadata?.skillCalls).toEqual([
+          {
+            name: 'review-standards',
+            input: { name: 'review-standards' },
+            path: path.join('/repo/.agents/skills/review-standards', 'SKILL.md'),
+            source: 'tool',
+          },
+        ]);
+      });
+
+      it('should fall back to final response parts when the parent message is missing from history', async () => {
+        // A truncated/paginated history (or a server that does not echo the
+        // parent user message) must not cause the whole session history to be
+        // attributed to this prompt — that would resurrect cross-prompt bleed.
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponseWithAnchors('Done.', {
+            id: 'assistant-msg-9',
+            parentID: 'user-msg-9',
+          }),
+        );
+        // History from earlier prompts only; user-msg-9 is absent
+        mockSessionMessages.mockResolvedValue([
+          {
+            info: { id: 'assistant-msg-0', role: 'assistant' },
+            parts: [
+              {
+                type: 'tool',
+                tool: 'skill',
+                state: {
+                  status: 'completed',
+                  input: { name: 'old-skill' },
+                  metadata: { name: 'old-skill', dir: '/repo/.agents/skills/old-skill' },
+                },
+              },
+            ],
+          },
+          {
+            info: { id: 'assistant-msg-9', role: 'assistant' },
+            parts: [{ type: 'text', text: 'Done.' }],
+          },
+        ]);
+
+        const provider = new OpenCodeSDKProvider({
+          config: { tools: { skill: true } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Current prompt');
+
+        // old-skill from the unanchored history must not be attributed
+        expect(result.metadata?.skillCalls).toBeUndefined();
+      });
+
+      it('should not attribute later skill calls when the assistant end anchor is missing from history', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponseWithAnchors('Done.', {
+            id: 'assistant-msg-1',
+            parentID: 'user-msg-1',
+          }),
+        );
+        mockSessionMessages.mockResolvedValue([
+          {
+            info: { id: 'user-msg-1', role: 'user' },
+            parts: [{ type: 'text', text: 'Current prompt' }],
+          },
+          {
+            info: { id: 'concurrent-assistant', role: 'assistant' },
+            parts: [
+              {
+                type: 'tool',
+                tool: 'skill',
+                state: {
+                  status: 'completed',
+                  input: { name: 'other-skill' },
+                  metadata: { name: 'other-skill', dir: '/repo/.agents/skills/other-skill' },
+                },
+              },
+            ],
+          },
+        ]);
+
+        const provider = new OpenCodeSDKProvider({
+          config: { tools: { skill: true } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Current prompt');
+
+        expect(mockSessionMessages).toHaveBeenCalledTimes(1);
+        expect(result.metadata?.skillCalls).toBeUndefined();
+      });
+
+      it('should skip the history fetch when the response has no assistant end anchor', async () => {
+        const promptResponse = createMockPromptResponse([{ type: 'text', text: 'Done.' }]);
+        (promptResponse.data.info as Record<string, unknown>).parentID = 'user-msg-1';
+        delete (promptResponse.data.info as Record<string, unknown>).id;
+        mockSessionPrompt.mockResolvedValue(promptResponse);
+
+        const provider = new OpenCodeSDKProvider({
+          config: { tools: { skill: true } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Current prompt');
+
+        expect(mockSessionMessages).not.toHaveBeenCalled();
+        expect(result.metadata?.skillCalls).toBeUndefined();
+      });
+
+      it('should skip the history fetch when the response has no parentID anchor', async () => {
+        const promptResponse = createMockPromptResponse([{ type: 'text', text: 'Done.' }]);
+        delete (promptResponse.data.info as Record<string, unknown>).parentID;
+        mockSessionPrompt.mockResolvedValue(promptResponse);
+
+        const provider = new OpenCodeSDKProvider({
+          config: { tools: { skill: true } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Current prompt');
+
+        expect(mockSessionMessages).not.toHaveBeenCalled();
+        expect(result.metadata?.skillCalls).toBeUndefined();
+      });
+
+      it('should skip session.messages fetch when skill tool is disabled', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: { tools: { skill: false } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Do something without skills');
+
+        expect(mockSessionMessages).not.toHaveBeenCalled();
+      });
+
+      it('should fetch session history when skill is allowed through the permission config', async () => {
+        // The tool policy denies everything by default via the `*` wildcard, but
+        // permission rules are applied after it and win on a last-match basis.
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponseWithAnchors('All done.', {
+            id: 'assistant-msg-1',
+            parentID: 'user-msg-1',
+          }),
+        );
+        mockSessionMessages.mockResolvedValue([
+          {
+            info: { id: 'user-msg-1', role: 'user' },
+            parts: [{ type: 'text', text: 'Use the skill' }],
+          },
+          {
+            info: { id: 'intermediate-msg-1', role: 'assistant' },
+            parts: [
+              {
+                type: 'tool',
+                tool: 'skill',
+                state: { status: 'completed', input: { name: 'code-standards' } },
+              },
+            ],
+          },
+          {
+            info: { id: 'assistant-msg-1', role: 'assistant' },
+            parts: [{ type: 'text', text: 'All done.' }],
+          },
+        ]);
+
+        const provider = new OpenCodeSDKProvider({
+          config: { permission: { skill: 'allow' } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Use the skill');
+
+        expect(mockSessionMessages).toHaveBeenCalledTimes(1);
+        expect(result.metadata?.skillCalls).toEqual([
+          { name: 'code-standards', input: { name: 'code-standards' }, source: 'tool' },
+        ]);
+      });
+
+      it('should fetch session history when a patterned policy allows some skills', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponseWithAnchors('All done.', {
+            id: 'assistant-msg-1',
+            parentID: 'user-msg-1',
+          }),
+        );
+        mockSessionMessages.mockResolvedValue([
+          {
+            info: { id: 'user-msg-1', role: 'user' },
+            parts: [{ type: 'text', text: 'Use the code standards skill' }],
+          },
+          {
+            info: { id: 'intermediate-msg-1', role: 'assistant' },
+            parts: [
+              {
+                type: 'tool',
+                tool: 'skill',
+                state: { status: 'completed', input: { name: 'code-standards' } },
+              },
+            ],
+          },
+          {
+            info: { id: 'assistant-msg-1', role: 'assistant' },
+            parts: [{ type: 'text', text: 'All done.' }],
+          },
+        ]);
+
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            permission: {
+              skill: {
+                '*': 'allow',
+                'blocked-skill': 'deny',
+              },
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Use the code standards skill');
+
+        expect(mockSessionMessages).toHaveBeenCalledTimes(1);
+        expect(result.metadata?.skillCalls).toEqual([
+          { name: 'code-standards', input: { name: 'code-standards' }, source: 'tool' },
+        ]);
+      });
+
+      it('should skip session.messages fetch when tools config is omitted (skill disabled by default)', async () => {
+        // The default tool policy denies every tool through the `*` wildcard, so
+        // no skill parts can exist and the fetch must be skipped.
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Do something with default tools');
+
+        expect(mockSessionMessages).not.toHaveBeenCalled();
+        expect(result.output).toBe('Test response');
+      });
+
+      it('should not fetch session history when the call is aborted during the prompt', async () => {
+        const controller = new AbortController();
+        mockSessionPrompt.mockImplementation(async () => {
+          controller.abort();
+          return createMockPromptResponse([{ type: 'text', text: 'Late response' }]);
+        });
+
+        const provider = new OpenCodeSDKProvider({
+          config: { tools: { skill: true } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Do something', undefined, {
+          abortSignal: controller.signal,
+        });
+
+        expect(result.error).toBe('OpenCode SDK call aborted');
+        expect(mockSessionMessages).not.toHaveBeenCalled();
+      });
+
+      it('should forward the abort signal to session.messages and honor aborts during the fetch', async () => {
+        const controller = new AbortController();
+        mockSessionMessages.mockImplementation(async () => {
+          controller.abort();
+          return [];
+        });
+
+        const provider = new OpenCodeSDKProvider({
+          config: { tools: { skill: true } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Do something', undefined, {
+          abortSignal: controller.signal,
+        });
+
+        // The v2 client takes the fetch options (including the signal) as a
+        // second argument, so a timeout can cancel the in-flight history fetch.
+        expect(mockSessionMessages).toHaveBeenCalledWith(
+          expect.objectContaining({ sessionID: 'test-session-123' }),
+          { signal: controller.signal },
+        );
+        // An abort that fires while the history fetch is in flight must not
+        // produce (or cache) a successful response.
+        expect(result.error).toBe('OpenCode SDK call aborted');
+        expect(result.output).toBeUndefined();
+        expect(mockSessionAbort).not.toHaveBeenCalled();
+      });
+
+      it('should use the v1 nested request shape for the history fetch when v2 is unavailable', async () => {
+        const { importModule } = await import('../../src/esm');
+        vi.mocked(importModule).mockImplementation(async (modulePath: string) => {
+          if (/[/\\]dist[/\\]v2[/\\]/.test(modulePath)) {
+            throw new Error('v2 unavailable');
+          }
+          return {
+            createOpencode: mockCreateOpencode,
+            createOpencodeClient: mockCreateOpencodeClient,
+          };
+        });
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponseWithAnchors('All done.', {
+            id: 'assistant-msg-1',
+            parentID: 'user-msg-1',
+          }),
+        );
+        mockSessionMessages.mockResolvedValue([
+          {
+            info: { id: 'user-msg-1', role: 'user' },
+            parts: [{ type: 'text', text: 'Use the skill' }],
+          },
+          {
+            info: { id: 'intermediate-msg-1', role: 'assistant' },
+            parts: [
+              {
+                type: 'tool',
+                tool: 'skill',
+                state: { status: 'completed', input: { name: 'code-standards' } },
+              },
+            ],
+          },
+          {
+            info: { id: 'assistant-msg-1', role: 'assistant' },
+            parts: [{ type: 'text', text: 'All done.' }],
+          },
+        ]);
+
+        const provider = new OpenCodeSDKProvider({
+          config: { tools: { skill: true } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Use the skill');
+
+        expect(mockSessionMessages).toHaveBeenCalledWith({
+          path: { id: 'test-session-123', sessionID: 'test-session-123' },
+          query: undefined,
+        });
+        expect(result.metadata?.skillCalls).toEqual([
+          { name: 'code-standards', input: { name: 'code-standards' }, source: 'tool' },
         ]);
       });
 
@@ -2790,15 +3322,50 @@ describe('OpenCodeSDKProvider', () => {
       expect(seen[0].OPENCODE_TRACEPARENT).toBeUndefined();
     });
 
+    it.each([
+      '00-short-short-01',
+      'ff-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
+      '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-zz',
+    ])('ignores malformed trace context %s', async (traceparent) => {
+      const seen = captureSpawnEnv();
+      const provider = new OpenCodeSDKProvider();
+      await provider.callApi('Hello', contextWith(traceparent));
+      expect(seen[0].OPENCODE_TRACEPARENT).toBeUndefined();
+    });
+
     it('applies the rest of buildServerEnv to the spawn, not just the traceparent', async () => {
       const seen = captureSpawnEnv();
       const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
 
       await provider.callApi('Test prompt', contextWith(TRACEPARENT_A));
 
-      // Regression: the SDK never read the `env` option, so the ~/.opencode/bin PATH entry
-      // (and every other computed variable) used to be dropped on the floor.
+      // The SDK must inherit the computed CLI search path.
       expect(seen[0].PATH).toContain(path.join(os.homedir(), '.opencode', 'bin'));
+    });
+
+    it('preserves the Windows Path key and uses its delimiter with provider overrides', async () => {
+      const delimiter = Object.getOwnPropertyDescriptor(path, 'delimiter')!;
+      Object.defineProperty(path, 'delimiter', { ...delimiter, value: ';' });
+      vi.spyOn(os, 'platform').mockReturnValue('win32');
+      mockProcessEnv({ PATH: undefined, Path: 'C:\\ambient' });
+      const seen: Array<Record<string, string | undefined>> = [];
+      mockCreateOpencode.mockImplementation(async (options) => {
+        seen.push({ Path: process.env.Path, PATH: options.env.PATH });
+        return {
+          client: mockClient,
+          server: { url: 'http://127.0.0.1:4096', close: mockServerClose },
+        };
+      });
+      try {
+        const provider = new OpenCodeSDKProvider({ env: { PATH: 'C:\\provider' } });
+        await provider.callApi('Hello', contextWith(TRACEPARENT_A));
+        expect(seen).toEqual([
+          { Path: `${path.join(os.homedir(), '.opencode', 'bin')};C:\\provider`, PATH: undefined },
+        ]);
+        expect(process.env.Path).toBe('C:\\ambient');
+      } finally {
+        Object.defineProperty(path, 'delimiter', delimiter);
+      }
     });
 
     describe('restart_server_per_call', () => {
@@ -2856,8 +3423,7 @@ describe('OpenCodeSDKProvider', () => {
           };
         });
 
-        // Hold the first prompt open so the second call has every chance to race ahead and
-        // swap the server out from under it.
+        // Keep the first prompt active while the second call queues.
         const firstPromptStarted = createDeferred<void>();
         const releaseFirstPrompt = createDeferred<void>();
         let promptCalls = 0;
@@ -2892,6 +3458,30 @@ describe('OpenCodeSDKProvider', () => {
         expect(mockServerClose).toHaveBeenCalledTimes(1);
       });
 
+      it('finishes session deletion before replacing the server for the next call', async () => {
+        captureSpawnEnv();
+        const deletionStarted = createDeferred<void>();
+        const releaseDeletion = createDeferred<void>();
+        mockSessionDelete.mockImplementationOnce(async () => {
+          deletionStarted.resolve();
+          await releaseDeletion.promise;
+          return { data: true };
+        });
+        const provider = new OpenCodeSDKProvider({ config: { restart_server_per_call: true } });
+        const first = provider.callApi('first', contextWith(TRACEPARENT_A));
+        await deletionStarted.promise;
+        const second = provider.callApi('second', contextWith(TRACEPARENT_B));
+        try {
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          expect(mockCreateOpencode).toHaveBeenCalledTimes(1);
+          expect(mockServerClose).not.toHaveBeenCalled();
+        } finally {
+          releaseDeletion.resolve();
+          await Promise.all([first, second]);
+        }
+        expect(mockCreateOpencode).toHaveBeenCalledTimes(2);
+      });
+
       it('warns once when the flag is set but calls carry no trace context', async () => {
         const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
         captureSpawnEnv();
@@ -2904,7 +3494,7 @@ describe('OpenCodeSDKProvider', () => {
         await provider.callApi('second', contextWith(TRACEPARENT_ZERO));
 
         const warnings = warnSpy.mock.calls.filter((call) =>
-          String(call[0] ?? '').includes('carries no trace context'),
+          String(call[0] ?? '').includes('has no valid trace context'),
         );
         expect(warnings).toHaveLength(1);
       });
@@ -2920,7 +3510,7 @@ describe('OpenCodeSDKProvider', () => {
         await provider.callApi('Test prompt', contextWith(TRACEPARENT_A));
 
         const warnings = warnSpy.mock.calls.filter((call) =>
-          String(call[0] ?? '').includes('carries no trace context'),
+          String(call[0] ?? '').includes('has no valid trace context'),
         );
         expect(warnings).toHaveLength(0);
       });
@@ -2943,6 +3533,34 @@ describe('OpenCodeSDKProvider', () => {
         }
       });
 
+      it.each([false, true])('rejects a prompt override of restart mode %s', async (enabled) => {
+        const provider = new OpenCodeSDKProvider({ config: { restart_server_per_call: enabled } });
+        const context = contextWith(TRACEPARENT_A);
+        context.prompt.config = { restart_server_per_call: !enabled };
+        await expect(provider.callApi('Hello', context)).rejects.toThrow(
+          'restart_server_per_call is provider-level configuration',
+        );
+        expect(mockCreateOpencode).not.toHaveBeenCalled();
+      });
+
+      it('rejects a fixed port before spawning a server that cannot safely restart', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: { restart_server_per_call: true, port: 4096 },
+        });
+        await expect(provider.callApi('Hello', contextWith(TRACEPARENT_A))).rejects.toThrow(
+          'requires an automatically assigned port',
+        );
+        expect(mockCreateOpencode).not.toHaveBeenCalled();
+      });
+
+      it('allows port zero for automatically assigned ports', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: { restart_server_per_call: true, port: 0 },
+        });
+        await provider.callApi('Hello', contextWith(TRACEPARENT_A));
+        expect(mockCreateOpencode).toHaveBeenCalledWith(expect.objectContaining({ port: 0 }));
+      });
+
       it('rejects baseUrl, which promptfoo cannot restart', async () => {
         const provider = new OpenCodeSDKProvider({
           config: { restart_server_per_call: true, baseUrl: 'http://127.0.0.1:4096' },
@@ -2958,6 +3576,7 @@ describe('OpenCodeSDKProvider', () => {
       it.each([
         ['persist_sessions', { persist_sessions: true }],
         ['session_id', { session_id: 'session-abc' }],
+        ['parent_session_id', { parent_session_id: 'parent-abc' }],
       ])('rejects %s, whose state a restart would discard', async (name, extra) => {
         const provider = new OpenCodeSDKProvider({
           config: { restart_server_per_call: true, ...extra },

@@ -1,18 +1,4 @@
-/**
- * Contract test for the environment promptfoo hands to the spawned `opencode serve` process.
- *
- * The rest of the OpenCode suite mocks `createOpencode`, so it cannot see this contract break --
- * and it can break with no change to our code at all. `@opencode-ai/sdk` ignores the `env` option
- * it is handed (its `ServerOptions` type has no `env` field) and spawns with `{ ...process.env }`,
- * so promptfoo applies the computed env to `process.env` around the spawn and depends on
- * `createOpencode()` reaching `cross-spawn` synchronously.
- *
- * This runs against the REAL SDK with a stub `opencode` on PATH and asserts the *outcome* rather
- * than the mechanism:
- * - if an upgrade inserts an `await` before the spawn, our restore runs too early and this fails,
- *   which is exactly the signal we want;
- * - if an upgrade starts honoring the `env` option, this still passes, because nothing is broken.
- */
+/** Verify SDK startup with a stub CLI that records its inherited environment. */
 
 import fs from 'fs';
 import os from 'os';
@@ -31,6 +17,7 @@ interface StubOpenCodeModule {
     hostname?: string;
     port?: number;
     timeout?: number;
+    env?: Record<string, string | undefined>;
   }) => Promise<{ server: { url: string; close(): void } }>;
 }
 
@@ -60,7 +47,7 @@ function createStubOpenCodeCli(): { binDir: string; probeLog: string } {
       '} > "$PROMPTFOO_SPAWN_PROBE_LOG"',
       'echo "opencode server listening on http://127.0.0.1:4096"',
       '# Stay alive until the test closes us, but bounded so an orphan cannot linger.',
-      'sleep 10',
+      'exec /bin/sleep 10',
       '',
     ].join('\n'),
     { mode: 0o755 },
@@ -77,6 +64,7 @@ describeSpawnContract('OpenCode SDK spawn environment contract', () => {
 
   beforeEach(() => {
     restoreEnv = mockProcessEnv({
+      PATH: '/nonexistent/promptfoo-opencode-contract-test',
       OPENCODE_TRACEPARENT: undefined,
       PROMPTFOO_SPAWN_PROBE: undefined,
       PROMPTFOO_SPAWN_PROBE_LOG: undefined,
@@ -110,11 +98,10 @@ describeSpawnContract('OpenCode SDK spawn environment contract', () => {
     };
 
     const pending = spawnWithServerEnv(serverEnv, () =>
-      createOpencode({ hostname: '127.0.0.1', port: 4096, timeout: 15000 }),
+      createOpencode({ hostname: '127.0.0.1', port: 4096, timeout: 15000, env: serverEnv }),
     );
 
-    // Restored before the first suspension point, so a concurrently spawning provider can
-    // neither observe these values nor inherit them.
+    // The parent environment is restored before the server startup promise resolves.
     expect(process.env.OPENCODE_TRACEPARENT).toBeUndefined();
     expect(process.env.PROMPTFOO_SPAWN_PROBE).toBeUndefined();
 
@@ -137,13 +124,13 @@ describeSpawnContract('OpenCode SDK spawn environment contract', () => {
       /* @vite-ignore */ OPENCODE_V2_SPECIFIER
     )) as StubOpenCodeModule;
 
-    const opencode = await spawnWithServerEnv(
-      {
-        PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ''}`,
-        OPENCODE_TRACEPARENT: TRACEPARENT,
-        PROMPTFOO_SPAWN_PROBE_LOG: probeLog,
-      },
-      () => createOpencode({ hostname: '127.0.0.1', port: 4096, timeout: 15000 }),
+    const serverEnv = {
+      PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ''}`,
+      OPENCODE_TRACEPARENT: TRACEPARENT,
+      PROMPTFOO_SPAWN_PROBE_LOG: probeLog,
+    };
+    const opencode = await spawnWithServerEnv(serverEnv, () =>
+      createOpencode({ hostname: '127.0.0.1', port: 4096, timeout: 15000, env: serverEnv }),
     );
 
     try {
