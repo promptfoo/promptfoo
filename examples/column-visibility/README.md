@@ -2,6 +2,8 @@
 
 Hide long context variables when an eval opens in the web viewer. This example uses the echo provider and needs no API keys.
 
+## Run the example
+
 ```bash
 npx promptfoo@latest init --example column-visibility
 npx promptfoo@latest eval

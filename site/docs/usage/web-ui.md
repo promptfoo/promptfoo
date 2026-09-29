@@ -136,7 +136,7 @@ Or set via **API Settings** in the top-right menu. See [sharing docs](/docs/usag
 
 Use **Columns** in the toolbar to hide variables, prompts, or individual table columns. Variable choices are saved by the eval's variable schema, so evals with the same variable names share visibility preferences.
 
-Config authors can set viewer defaults for everyone who opens an eval:
+Config authors can set defaults for viewers who have not saved column preferences:
 
 ```yaml
 defaultColumnVisibility:
