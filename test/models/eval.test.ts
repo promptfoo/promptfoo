@@ -282,7 +282,7 @@ describe('evaluator', () => {
       await eval_.setResults(results);
 
       const batches: EvalResult[][] = [];
-      for await (const batch of eval_.fetchResultsBatched(1)) {
+      for await (const batch of eval_.fetchResultsBatched(100)) {
         batches.push(batch);
       }
 

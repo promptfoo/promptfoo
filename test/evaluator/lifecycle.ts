@@ -21,7 +21,6 @@ export function describeEvaluator(name: string, defineTests: () => void) {
       );
       cliState.resume = false;
       cliState.retryMode = false;
-      delete cliState._retryErrorResultIds;
       cliState.basePath = '';
       cliState.webUI = false;
     });
@@ -32,7 +31,6 @@ export function describeEvaluator(name: string, defineTests: () => void) {
       vi.clearAllMocks();
       cliState.resume = false;
       cliState.retryMode = false;
-      delete cliState._retryErrorResultIds;
       cliState.basePath = '';
       cliState.webUI = false;
       await clearCache();

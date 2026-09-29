@@ -2,7 +2,6 @@ import EvalResult, { asEvaluateResult } from '../models/evalResult';
 
 import type { EvaluationStore } from '../evaluator/runtime';
 import type Eval from '../models/eval';
-import type { EvalRunStats } from '../runStats/types';
 import type { CompletedPrompt, EvaluateResult } from '../types/index';
 
 export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
@@ -32,7 +31,7 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
     return this.evaluation.resultPersistenceFailed;
   }
 
-  appendResult(result: EvaluateResult): Promise<EvalResult | undefined> {
+  appendResult(result: EvaluateResult): Promise<void> {
     return this.evaluation.addResult(result);
   }
 
@@ -48,27 +47,12 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
     return EvalResult.getCompletedIndexPairs(this.id, options);
   }
 
-  readFailedResults(): Promise<EvalResult[]> {
-    return this.evaluation.getFailedResults();
-  }
-
   readFailedResultsByTestIdx(testIdx: number): Promise<EvalResult[]> {
     return this.evaluation.getFailedResultsByTestIdx(testIdx);
   }
 
-  readResultBatches(batchSize?: number): AsyncGenerator<EvalResult[]> {
-    return this.evaluation.fetchResultsBatched(batchSize);
-  }
-
   readResults(): Promise<Array<EvalResult | EvaluateResult>> {
     return this.evaluation.getResults();
-  }
-
-  readResultsByIdsBatched(
-    resultIds: readonly string[],
-    batchSize?: number,
-  ): AsyncGenerator<EvalResult[]> {
-    return this.evaluation.fetchResultsByIdsBatched(resultIds, batchSize);
   }
 
   readResultsByTestIdx(testIdx: number): Promise<EvalResult[]> {
@@ -93,10 +77,6 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
 
   setDurationMs(durationMs: number): void {
     this.evaluation.setDurationMs(durationMs);
-  }
-
-  setRunStats(runStats: EvalRunStats): void {
-    this.evaluation.runStats = runStats;
   }
 
   setVars(vars: string[]): void {

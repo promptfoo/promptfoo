@@ -119,7 +119,6 @@ describe('retryCommand', () => {
     cliState.resume = false;
     cliState.retryMode = false;
     cliState.maxConcurrency = undefined;
-    delete cliState._retryErrorResultIds;
     vi.mocked(shouldShareResults).mockReturnValue(false);
     vi.mocked(isSharingEnabled).mockReturnValue(false);
   });
@@ -131,7 +130,6 @@ describe('retryCommand', () => {
     cliState.resume = false;
     cliState.retryMode = false;
     cliState.maxConcurrency = undefined;
-    delete cliState._retryErrorResultIds;
   });
 
   it('rejects a retry for an evaluation that does not exist', async () => {
@@ -519,7 +517,6 @@ describe('retryCommand', () => {
       expect(cliState.resume).toBe(true);
       expect(cliState.retryMode).toBe(true);
       expect(cliState.maxConcurrency).toBe(4);
-      expect(cliState._retryErrorResultIds).toEqual(['error-result-1']);
       expect(receivedSuite).toBe(testSuite);
       expect(receivedEval).toBe(originalEval);
       expect(options).toEqual({
@@ -551,7 +548,6 @@ describe('retryCommand', () => {
     expect(cliState.resume).toBe(false);
     expect(cliState.retryMode).toBe(false);
     expect(cliState.maxConcurrency).toBeUndefined();
-    expect(cliState._retryErrorResultIds).toBeUndefined();
   });
 
   it('uses an explicit config and forces concurrency to one when delay is requested', async () => {
@@ -657,7 +653,6 @@ describe('retryCommand', () => {
     expect(cliState.resume).toBe(false);
     expect(cliState.retryMode).toBe(false);
     expect(cliState.maxConcurrency).toBeUndefined();
-    expect(cliState._retryErrorResultIds).toBeUndefined();
   });
 
   it('restores JSONL output and preserves error rows when retry persistence fails', async () => {

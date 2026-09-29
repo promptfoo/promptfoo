@@ -11,17 +11,9 @@ import {
 } from 'vitest';
 import * as envars from '../src/envars';
 import { getUserAuthInfo, getUserId } from '../src/globalConfig/accounts';
-import {
-  sanitizeTelemetryProviderBreakdown,
-  TELEMETRY_EVENTS,
-  Telemetry,
-  TelemetryEventSchema,
-} from '../src/telemetry';
+import { TELEMETRY_EVENTS, Telemetry, TelemetryEventSchema } from '../src/telemetry';
 import { fetchWithProxy, fetchWithTimeout } from '../src/util/fetch/index';
-import { sanitizeTelemetryProviderIdentifier } from '../src/util/telemetryIdentifiers';
 import { mockProcessEnv } from './util/utils';
-
-import type { ProviderStats } from '../src/runStats/types';
 
 const { loadPostHog } = vi.hoisted(() => ({ loadPostHog: vi.fn() }));
 
@@ -69,60 +61,6 @@ vi.mock('../src/cliState', () => ({
     config: undefined,
   },
 }));
-
-describe('telemetry provider categories', () => {
-  it.each([
-    ['openai:chat:fixture-private-model', 'openai'],
-    ['huggingface:chat:fixture-team/private-model', 'huggingface'],
-    ['replicate:fixture-team/private-model', 'replicate'],
-    ['ollama:fixture-private-model', 'ollama'],
-    ['azure:chat:fixture-private-deployment', 'azure'],
-    ['https://fixture.invalid/private', 'https'],
-    ['fixture-private-provider', 'custom'],
-    ['fixture-private-vendor:private-model', 'custom'],
-  ])('categorizes %s without emitting resource identifiers', (identifier, category) => {
-    expect(sanitizeTelemetryProviderIdentifier(identifier)).toBe(category);
-  });
-
-  it('aggregates private identifiers into bounded categories before selecting ten rows', () => {
-    const row = (provider: string): ProviderStats => ({
-      provider,
-      requests: 1,
-      successes: 1,
-      failures: 0,
-      successRate: 1,
-      avgLatencyMs: 12,
-      totalTokens: 2,
-      promptTokens: 1,
-      completionTokens: 1,
-      cachedTokens: 0,
-      tokensPerRequest: 2,
-      cacheRate: 0,
-    });
-    const rows = Array.from({ length: 2000 }, (_, index) => row(`huggingface:fixture-${index}`));
-    const categories = [
-      'openai',
-      'anthropic',
-      'azure',
-      'bedrock',
-      'mistral',
-      'google',
-      'vertex',
-      'replicate',
-      'ollama',
-      'xai',
-      'groq',
-      'cohere',
-    ];
-    const result = sanitizeTelemetryProviderBreakdown([
-      ...rows,
-      ...categories.map((provider) => row(`${provider}:fixture-private`)),
-    ]);
-    expect(result).toHaveLength(10);
-    expect(result[0]).toMatchObject({ provider: 'huggingface', requests: 2000, totalTokens: 4000 });
-    expect(JSON.stringify(result)).not.toContain('fixture');
-  });
-});
 
 vi.mock('../src/envars', async () => {
   const actual = await vi.importActual<typeof import('../src/envars')>('../src/envars');

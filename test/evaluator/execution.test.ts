@@ -12,7 +12,6 @@ import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { EchoProvider } from '../../src/providers/echo';
 import { providerRegistry } from '../../src/providers/providerRegistry';
-import { computeRunStats } from '../../src/runStats/index';
 import {
   type ApiProvider,
   type ProviderResponse,
@@ -353,11 +352,10 @@ describeEvaluator('evaluator execution control', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     const addResult = evalRecord.addResult.bind(evalRecord);
     vi.spyOn(evalRecord, 'addResult').mockImplementation(async (row) => {
-      const result = await addResult(row);
+      await addResult(row);
       if (row.testIdx === 1) {
         releaseFirst();
       }
-      return result;
     });
 
     await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
@@ -655,14 +653,6 @@ describeEvaluator('evaluator execution control', () => {
       );
       expect(evalRecord.resultPersistenceFailed).toBe(true);
       expect(evalRecord.hasResultPersistenceFailure({ promptIdx: 0, testIdx: 0 })).toBe(true);
-      expect(evalRecord.runStats?.providers).toEqual([
-        expect.objectContaining({
-          provider: 'test-provider',
-          requests: 1,
-          successes: 1,
-          failures: 0,
-        }),
-      ]);
     } finally {
       mockAddResult.mockRestore();
       errorSpy.mockRestore();
@@ -1132,7 +1122,7 @@ describeEvaluator('evaluator execution control', () => {
         await waitForTarget(40, options?.abortSignal);
         return {
           output: `Target output for ${prompt}`,
-          tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 },
+          tokenUsage: createEmptyTokenUsage(),
         };
       }),
     };
@@ -1194,10 +1184,5 @@ describeEvaluator('evaluator execution control', () => {
     );
     expect(resultByTopic.get('alpha')?.error).toBeUndefined();
     expect(resultByTopic.get('gamma')?.error).toContain('Evaluation exceeded max duration');
-    expect(resultByTopic.get('gamma')?.response?.tokenUsage?.numRequests).toBe(0);
-    expect(provider.callApi).toHaveBeenCalledTimes(2);
-    expect(computeRunStats({ results, providers: [provider] }).providers).toEqual([
-      expect.objectContaining({ requests: 2 }),
-    ]);
   });
 });

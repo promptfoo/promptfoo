@@ -1,9 +1,7 @@
-import type { EvalRunStats } from '../runStats/types';
 import type { CompletedPrompt, EvaluateResult, TestSuite, UnifiedConfig } from '../types/index';
 
 export type EvaluationStoreResult = Pick<
   EvaluateResult,
-  | 'id'
   | 'cost'
   | 'error'
   | 'failureReason'
@@ -28,7 +26,6 @@ export interface EvaluationRecord {
   readonly prompts: CompletedPrompt[];
   readonly results: EvaluationStoreResult[];
   resultPersistenceFailed: boolean;
-  runStats?: EvalRunStats;
 }
 
 export interface EvaluationStore<
@@ -43,25 +40,18 @@ export interface EvaluationStore<
   readonly results: TResult[];
   readonly resultPersistenceFailed: boolean;
 
-  appendResult(result: EvaluateResult): Promise<TResult | undefined>;
+  appendResult(result: EvaluateResult): Promise<void>;
   appendPrompts(prompts: CompletedPrompt[]): Promise<void>;
   hasResultPersistenceFailure(result: Pick<EvaluateResult, 'promptIdx' | 'testIdx'>): boolean;
   readCompletedIndexPairs(options?: { excludeErrors?: boolean }): Promise<Set<string>>;
-  readFailedResults(): Promise<TResult[]>;
   readFailedResultsByTestIdx(testIdx: number): Promise<TResult[]>;
-  readResultBatches(batchSize?: number): AsyncGenerator<TResult[]>;
   readResults(): Promise<Array<TResult | EvaluateResult>>;
-  readResultsByIdsBatched(
-    resultIds: readonly string[],
-    batchSize?: number,
-  ): AsyncGenerator<TResult[]>;
   readResultsByTestIdx(testIdx: number): Promise<TResult[]>;
   recordFinalResult(result: EvaluateResult): void;
   recordResultPersistenceFailure(result: EvaluateResult): void;
   save(): Promise<void>;
   saveResult(result: TResult): Promise<void>;
   setDurationMs(durationMs: number): void;
-  setRunStats(runStats: EvalRunStats): void;
   setVars(vars: string[]): void;
   toEvaluateResult(result: TResult | EvaluateResult): EvaluateResult;
 }

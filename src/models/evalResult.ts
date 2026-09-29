@@ -990,9 +990,8 @@ export default class EvalResult {
     return ret;
   }
 
-  // This is a generator that yields batches of results from the database.
-  // It batches by test index so every result for a test is yielded together,
-  // while still handling sparse test-index ranges from filtered/resumed evals.
+  // This is a generator that yields batches of results from the database
+  // These are batched by test Id, not just results to ensure we get all results for a given test
   static async *findManyByEvalIdBatched(
     evalId: string,
     opts?: {
@@ -1031,37 +1030,6 @@ export default class EvalResult {
 
       yield results.map((result) => new EvalResult({ ...result, persisted: true }));
       offset += batchSize;
-    }
-  }
-
-  /**
-   * Streams only explicitly selected rows, preserving the order in which their
-   * IDs were captured by the current evaluation invocation.
-   */
-  static async *findManyByIdsBatched(
-    resultIds: readonly string[],
-    opts?: { batchSize?: number },
-  ): AsyncGenerator<EvalResult[]> {
-    if (resultIds.length === 0) {
-      return;
-    }
-
-    const db = await getDb();
-    const batchSize = opts?.batchSize || 100;
-
-    for (let offset = 0; offset < resultIds.length; offset += batchSize) {
-      const ids = resultIds.slice(offset, offset + batchSize);
-      const results = await db
-        .select()
-        .from(evalResultsTable)
-        .where(inArray(evalResultsTable.id, ids))
-        .all();
-      const resultById = new Map(results.map((result) => [result.id, result]));
-
-      yield ids.flatMap((id) => {
-        const result = resultById.get(id);
-        return result ? [new EvalResult({ ...result, persisted: true })] : [];
-      });
     }
   }
 
