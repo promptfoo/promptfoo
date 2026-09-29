@@ -1,38 +1,47 @@
+import { getEnvString } from '../envars';
 import logger from '../logger';
+import { renderVarsInObject } from '../util/render';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { getOpenAICompletionTokenDetails } from './openai/util';
-import { calculateCost, clampCachedTokens } from './shared';
+import { clampCachedTokens } from './shared';
 
-import type { ApiProvider, ProviderOptions } from '../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderOptions,
+} from '../types/index';
 import type { OpenAiChatCompletionCostData } from './openai/chat';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 type DeepSeekConfig = OpenAiCompletionOptions;
 
 type DeepSeekProviderOptions = Omit<ProviderOptions, 'config'> & {
-  config?: {
+  config?: DeepSeekConfig & {
     config?: DeepSeekConfig;
+    env?: ProviderOptions['env'];
   };
 };
 
 export const DEEPSEEK_CHAT_MODELS = [
-  {
-    id: 'deepseek-v4-flash',
+  // Peak-hour estimates; off-peak rates are half. https://api-docs.deepseek.com/quick_start/pricing/
+  ...['deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp'].map((id) => ({
+    id,
     cost: {
-      input: 0.14 / 1e6,
-      output: 0.28 / 1e6,
-      cache_read: 0.0028 / 1e6,
+      input: 0.3 / 1e6,
+      output: 1.2 / 1e6,
+      cache_read: 0.006 / 1e6,
     },
-  },
+  })),
   {
     id: 'deepseek-v4-pro',
     cost: {
-      input: 0.435 / 1e6,
-      output: 0.87 / 1e6,
-      cache_read: 0.003625 / 1e6,
+      input: 1.32 / 1e6,
+      output: 3.96 / 1e6,
+      cache_read: 0.044 / 1e6,
     },
   },
-  // Legacy aliases retained for compatibility.
+  // Retired models retain their historical rates.
   {
     id: 'deepseek-chat',
     cost: {
@@ -73,20 +82,32 @@ export function calculateDeepSeekCost(
   }
 
   const model = DEEPSEEK_CHAT_MODELS.find((m) => m.id === modelName);
-  if (!model || !model.cost) {
-    // Use default pricing for unknown models
-    return calculateCost(modelName, config, promptTokens, completionTokens, DEEPSEEK_CHAT_MODELS);
+  if (
+    !model &&
+    config.inputCost === undefined &&
+    config.outputCost === undefined &&
+    config.cost === undefined &&
+    config.cacheReadCost === undefined
+  ) {
+    return undefined;
   }
 
   const billableCachedTokens = clampCachedTokens(cachedTokens, promptTokens);
   const uncachedPromptTokens = promptTokens - billableCachedTokens;
-  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
-  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
-  const cacheReadCost = config.cacheReadCost ?? model.cost.cache_read;
+  const inputCost = config.inputCost ?? config.cost ?? model?.cost.input;
+  const outputCost = config.outputCost ?? config.cost ?? model?.cost.output;
+  const cacheReadCost = config.cacheReadCost ?? model?.cost.cache_read ?? inputCost;
+  if (
+    (uncachedPromptTokens > 0 && inputCost === undefined) ||
+    (billableCachedTokens > 0 && cacheReadCost === undefined) ||
+    (completionTokens > 0 && outputCost === undefined)
+  ) {
+    return undefined;
+  }
 
-  const inputCostTotal = inputCost * uncachedPromptTokens;
-  const cacheReadCostTotal = cacheReadCost * billableCachedTokens;
-  const outputCostTotal = outputCost * completionTokens;
+  const inputCostTotal = (inputCost ?? 0) * uncachedPromptTokens;
+  const cacheReadCostTotal = (cacheReadCost ?? 0) * billableCachedTokens;
+  const outputCostTotal = (outputCost ?? 0) * completionTokens;
 
   logger.debug(
     `DeepSeek cost calculation for ${modelName}: ` +
@@ -109,11 +130,15 @@ class DeepSeekProvider extends OpenAiChatCompletionProvider {
 
     super(modelName, {
       ...providerOptions,
+      env: providerOptions.config?.env ?? providerOptions.env,
       config: {
         ...providerOptions.config,
         ...deepseekConfig,
         apiKeyEnvar: 'DEEPSEEK_API_KEY',
-        apiBaseUrl: 'https://api.deepseek.com/v1',
+        apiBaseUrl:
+          deepseekConfig?.apiBaseUrl ??
+          providerOptions.config?.apiBaseUrl ??
+          'https://api.deepseek.com/v1',
       },
     });
   }
@@ -137,6 +162,27 @@ class DeepSeekProvider extends OpenAiChatCompletionProvider {
     };
   }
 
+  override async getOpenAiBody(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ) {
+    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = result;
+    // Let DeepSeek choose its reasoning budget instead of the inherited 1,024-token limit.
+    if (
+      config.max_tokens === undefined &&
+      config.passthrough?.max_tokens === undefined &&
+      getEnvString('OPENAI_MAX_TOKENS') === undefined
+    ) {
+      delete body.max_tokens;
+    }
+    if (config.reasoning_effort !== undefined) {
+      body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars);
+    }
+    return result;
+  }
+
   protected override calculateResponseCost(
     data: OpenAiChatCompletionCostData,
     config: OpenAiCompletionOptions,
@@ -145,12 +191,14 @@ class DeepSeekProvider extends OpenAiChatCompletionProvider {
     if (cached) {
       return 0;
     }
+    const { usage } = data;
+    const passthrough = config.passthrough as { model?: string } | undefined;
     return calculateDeepSeekCost(
-      this.modelName,
+      passthrough?.model ?? this.modelName,
       config,
-      data.usage?.prompt_tokens,
-      data.usage?.completion_tokens,
-      getOpenAICompletionTokenDetails(data.usage ?? {})?.cacheReadInputTokens,
+      usage?.prompt_tokens,
+      usage?.completion_tokens,
+      getOpenAICompletionTokenDetails(usage ?? {})?.cacheReadInputTokens,
     );
   }
 }
@@ -160,8 +208,21 @@ export function createDeepSeekProvider(
   options: DeepSeekProviderOptions = {},
 ): ApiProvider {
   const splits = providerPath.split(':');
-  // Preserve the historical non-thinking default for `deepseek` while the
-  // compatibility alias remains available upstream.
-  const modelName = splits.slice(1).join(':') || 'deepseek-chat';
-  return new DeepSeekProvider(modelName, options);
+  const modelName = splits.slice(1).join(':');
+  if (modelName) {
+    return new DeepSeekProvider(modelName, options);
+  }
+
+  // The retired shorthand used non-thinking mode; the replacement defaults to thinking.
+  const config = options.config?.config;
+  return new DeepSeekProvider('deepseek-flash', {
+    ...options,
+    config: {
+      ...options.config,
+      config: {
+        ...config,
+        passthrough: { thinking: { type: 'disabled' }, ...config?.passthrough },
+      },
+    },
+  });
 }
