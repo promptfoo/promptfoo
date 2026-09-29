@@ -5,27 +5,16 @@ interface ParsedField {
   nextIndex: number;
 }
 
-/**
- * Advance over separators between parsed fields.
- *
- * Contains-any values allow whitespace around comma delimiters, and historical
- * parsing ignored repeated commas rather than producing empty fields.
- */
+// Ignore whitespace and repeated commas between fields. Quoted empty fields
+// are preserved by parseQuotedField.
 function skipWhitespaceAndCommas(value: string, startIndex: number): number {
   let i = startIndex;
-  while (i < value.length) {
-    i = skipWhitespace(value, i);
-    if (value[i] !== ',') {
-      break;
-    }
+  while (i < value.length && (value[i] === ',' || /\s/.test(value[i]))) {
     i++;
   }
   return i;
 }
 
-/**
- * Advance over whitespace while preserving comma delimiter handling for callers.
- */
 function skipWhitespace(value: string, startIndex: number): number {
   let i = startIndex;
   while (i < value.length && /\s/.test(value[i])) {
@@ -34,12 +23,7 @@ function skipWhitespace(value: string, startIndex: number): number {
   return i;
 }
 
-/**
- * Parse a quoted field using the assertion parser's CSV-like escape rules.
- *
- * Supports backslash-escaped quotes/backslashes and doubled quotes, and rejects
- * unterminated fields so malformed assertion values do not silently pass.
- */
+// Quoted fields support escaped quotes/backslashes and doubled quotes.
 function parseQuotedField(value: string, startIndex: number): ParsedField {
   let i = startIndex + 1;
   let field = '';
@@ -66,9 +50,6 @@ function parseQuotedField(value: string, startIndex: number): ParsedField {
   return { field, nextIndex: i };
 }
 
-/**
- * Parse an unquoted field up to the next comma, trimming surrounding whitespace.
- */
 function parseUnquotedField(value: string, startIndex: number): ParsedField {
   let i = startIndex;
   while (i < value.length && value[i] !== ',') {
@@ -78,9 +59,8 @@ function parseUnquotedField(value: string, startIndex: number): ParsedField {
 }
 
 /**
- * Split a contains-any string into fields while preserving quoted commas.
- *
- * A browser-safe helper shared by CSV imports and runtime assertions.
+ * Parse comma-separated assertion values, preserving commas and empty strings inside quotes.
+ * Shared by CSV imports and runtime assertions without backend dependencies.
  */
 export function parseCommaSeparatedValues(value: string): string[] {
   const results: string[] = [];
