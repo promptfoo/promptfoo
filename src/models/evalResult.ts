@@ -212,7 +212,13 @@ function projectTestCase(
     delete projectedTestCase.providerOutput;
   }
   if (options.stripMetadata && testCase.metadata?.__promptfoo?.remote === true) {
-    projectedTestCase.metadata = { __promptfoo: { remote: true } };
+    const remoteVars = testCase.metadata.__promptfoo.remoteVars;
+    projectedTestCase.metadata = {
+      __promptfoo: {
+        remote: true,
+        ...(!options.stripVars && Array.isArray(remoteVars) ? { remoteVars: [...remoteVars] } : {}),
+      },
+    };
   }
 
   return projectedTestCase;

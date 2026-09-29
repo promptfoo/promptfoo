@@ -1431,6 +1431,33 @@ describe('EvalResult', () => {
       expect(result.toEvaluateResult().tokenUsage?.numRequests).toBe(1);
     });
 
+    it('retains imported variable names in metadata-stripped row projections', () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
+      try {
+        const testCase = createAtomicTestCase({
+          vars: { input: '{{literal}}', local: '{{suffix}}', suffix: 'local' },
+          providerOutput: 'stored',
+          metadata: { __promptfoo: { remote: true, remoteVars: ['input'] }, private: 'omit' },
+        });
+        const result = new EvalResult({
+          ...mockEvaluateResult,
+          id: 'remote-row',
+          evalId: 'fixture-eval',
+          testCase,
+          response: null,
+          gradingResult: null,
+        });
+        const projected = result.toEvaluateResult().testCase;
+        expect(projected?.metadata).toEqual({
+          __promptfoo: { remote: true, remoteVars: ['input'] },
+        });
+        expect(projected?.vars).toEqual(testCase.vars);
+        expect(projected?.providerOutput).toBe('stored');
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('should strip nested provider response metadata when metadata stripping is enabled', () => {
       const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
 

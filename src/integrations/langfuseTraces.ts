@@ -425,12 +425,19 @@ function traceToTestCase(trace: LangfuseTrace, baseUrl: string): LangfuseTraceTe
   };
 
   // Never fall back to a configured provider for stored-trace evaluation.
-  testCase.providerOutput =
-    outputValue === undefined || outputValue === null
-      ? ''
-      : typeof outputValue === 'string'
+  if (outputValue === undefined || outputValue === null) {
+    testCase.providerOutput = '';
+  } else if (Array.isArray(outputValue)) {
+    const toolCalls =
+      outputValue.length > 0 &&
+      outputValue.every((item) => isRecord(item) && isRecord(item.function));
+    testCase.providerOutput = toolCalls ? { tool_calls: outputValue } : JSON.stringify(outputValue);
+  } else {
+    testCase.providerOutput =
+      isRecord(outputValue) || typeof outputValue === 'string'
         ? outputValue
         : JSON.stringify(outputValue);
+  }
 
   return testCase;
 }

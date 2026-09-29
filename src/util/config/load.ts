@@ -269,8 +269,30 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
     });
   }
 
-  // Dereference JSON
-  const config = (await $RefParser.dereference(rawConfig)) as unknown as UnifiedConfig;
+  const literalPaths = new Set<string>();
+  const excludeRemoteData = (pointer: string, value?: unknown): boolean => {
+    if (literalPaths.has(pointer)) {
+      return true;
+    }
+    if (value && typeof value === 'object') {
+      const test = value as TestCase;
+      const remote = test.metadata?.__promptfoo;
+      if (remote?.remote === true) {
+        for (const field of ['metadata', 'providerOutput', 'description']) {
+          literalPaths.add(`${pointer}/${field}`);
+        }
+        for (const name of remote.remoteVars ?? Object.keys(test.vars ?? {})) {
+          const escaped = name.replace(/~/g, '~0').replace(/\//g, '~1');
+          literalPaths.add(`${pointer}/vars/${escaped}`);
+        }
+      }
+    }
+    return false;
+  };
+  const config = (await $RefParser.dereference(rawConfig, {
+    resolveExcludedPathMatcher: excludeRemoteData,
+    dereference: { excludedPathMatcher: excludeRemoteData },
+  })) as unknown as UnifiedConfig;
 
   // Restore functions and tools parameters
   if (Array.isArray(config.providers)) {
@@ -721,6 +743,10 @@ async function prepareCombinedConfig(
       };
     }
     const source = test as TestCase;
+    const remote = source.metadata?.__promptfoo;
+    const remoteVars = new Set(
+      remote?.remote === true ? (remote.remoteVars ?? Object.keys(source.vars ?? {})) : [],
+    );
     // Keep grader IDs unchanged so references can reuse configured providers.
     return {
       ...source,
@@ -730,7 +756,12 @@ async function prepareCombinedConfig(
             ? resolveConfigPath(basePath, source.vars)
             : Array.isArray(source.vars)
               ? source.vars.map((value) => resolveConfigPath(basePath, value))
-              : resolveNestedFileReferences(basePath, source.vars),
+              : Object.fromEntries(
+                  Object.entries(source.vars).map(([name, value]) => [
+                    name,
+                    remoteVars.has(name) ? value : resolveNestedFileReferences(basePath, value),
+                  ]),
+                ),
       }),
       ...(typeof source.provider === 'string' &&
         source.provider.startsWith('file://') && {

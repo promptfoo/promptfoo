@@ -19,6 +19,37 @@ afterEach(() => {
 });
 
 describe('dereferenceConfig local references', () => {
+  it('excludes imported reference-shaped data from resolution and dereferencing', async () => {
+    const literal = { $ref: 'literal://retained-marker' };
+    const config = {
+      definitions: { local: 'resolved' },
+      prompts: [{ $ref: '#/definitions/local' }],
+      providers: ['echo'],
+      tests: [
+        {
+          vars: { 'raw/key~': literal, local: { $ref: '#/definitions/local' } },
+          providerOutput: literal,
+          metadata: {
+            __promptfoo: { remote: true, remoteVars: ['raw/key~'] },
+            imported: literal,
+          },
+        },
+      ],
+    } as unknown as UnifiedConfig;
+    const loaded = await dereferenceConfig(config);
+    expect(loaded.prompts).toEqual(['resolved']);
+    expect(loaded.tests).toEqual([
+      {
+        vars: { 'raw/key~': literal, local: 'resolved' },
+        providerOutput: literal,
+        metadata: {
+          __promptfoo: { remote: true, remoteVars: ['raw/key~'] },
+          imported: literal,
+        },
+      },
+    ]);
+  });
+
   it('resolves an own property without reading inherited properties', async () => {
     const definitions = Object.assign(Object.create({ inherited: 'inherited prompt' }), {
       own: 'own prompt',

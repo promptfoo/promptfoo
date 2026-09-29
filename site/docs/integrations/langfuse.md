@@ -163,7 +163,7 @@ Unknown or empty selectors and repeated scalar selectors are rejected. A `sessio
 
 Imported variables and values returned by `transformVars` are treated as literal data, including template syntax and file references. Local variables that are not returned by `transformVars` keep their normal template and file loading behavior.
 
-`input` and `output` contain values extracted from common chat, Responses, and text formats. Mixed text and tool-call outputs retain their structured content. Use the original payloads for assertions that need all fields:
+`input` and `output` contain values extracted from common chat, Responses, and text formats. Stored OpenAI tool calls retain the structure needed by `is-valid-openai-tools-call`. Mixed text and tool-call outputs retain their content. Use the original payloads for assertions that need all fields:
 
 | Variable                                                         | Value                                              |
 | ---------------------------------------------------------------- | -------------------------------------------------- |

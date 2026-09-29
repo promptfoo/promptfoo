@@ -54,7 +54,8 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
 export function resolveVariables(
   variables: Record<string, VarValue>,
   skipResolveVars?: string[],
-  varsResolvedFromSkipped?: Set<string>,
+  renderedVarNames?: Set<string>,
+  renderTemplate?: (template: string, vars: Record<string, VarValue>) => string,
 ): Record<string, VarValue> {
   const originals = { ...variables };
   const resolved = new Set(skipResolveVars);
@@ -67,17 +68,28 @@ export function resolveVariables(
     resolving.add(key);
     const value = originals[key];
     if (typeof value === 'string') {
-      // Substitute the original template once, without parsing text inserted from other vars.
-      variables[key] = value.replace(/\{\{\s*(\w+)\s*\}\}/g, (placeholder, name: string) => {
-        if (originals[name] === undefined) {
-          return placeholder;
+      if (renderTemplate && !referencesUndefinedVariables(value, originals)) {
+        for (const reference of extractVariablesFromTemplate(value)) {
+          const name = reference.split('.')[0];
+          if (Object.hasOwn(originals, name)) {
+            resolve(name);
+          }
         }
-        const replacement = resolve(name);
-        if (skipResolveVars?.includes(name) || varsResolvedFromSkipped?.has(name)) {
-          varsResolvedFromSkipped?.add(key);
-        }
-        return String(replacement);
-      });
+        variables[key] = renderTemplate(value, variables);
+        renderedVarNames?.add(key);
+      } else {
+        // Substitute the original template once, without parsing text inserted from other vars.
+        variables[key] = value.replace(/\{\{\s*(\w+)\s*\}\}/g, (placeholder, name: string) => {
+          if (originals[name] === undefined) {
+            return placeholder;
+          }
+          const replacement = resolve(name);
+          if (skipResolveVars?.includes(name) || renderedVarNames?.has(name)) {
+            renderedVarNames?.add(key);
+          }
+          return String(replacement);
+        });
+      }
     }
     resolving.delete(key);
     resolved.add(key);
@@ -425,8 +437,15 @@ export async function renderPrompt(
     }
   }
   // Resolve variable mappings
-  const varsResolvedFromSkipped = new Set<string>();
-  resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
+  const renderedVarNames = new Set<string>();
+  resolveVariables(
+    vars,
+    skipRenderVars,
+    renderedVarNames,
+    skipRenderVars?.length
+      ? (template, values) => nunjucks.renderString(autoWrapRawIfPartialNunjucks(template), values)
+      : undefined,
+  );
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
@@ -520,7 +539,7 @@ export async function renderPrompt(
         if (
           typeof value !== 'string' ||
           skipRenderVars?.includes(key) ||
-          varsResolvedFromSkipped.has(key)
+          renderedVarNames.has(key)
         ) {
           return [key, value];
         }

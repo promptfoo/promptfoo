@@ -217,10 +217,15 @@ export async function filterTestsByResults(
     // Extract test case, filtering runtime vars and omitting provider (security)
     extractedTests.push({
       description: result.testCase.description,
-      vars: filterRuntimeVars(result.testCase.vars) || {},
+      vars: result.testCase.metadata?.__promptfoo?.remote
+        ? result.testCase.vars || {}
+        : filterRuntimeVars(result.testCase.vars) || {},
       assert: result.testCase.assert,
       metadata: result.testCase.metadata,
       options: result.testCase.options,
+      ...('providerOutput' in result.testCase && {
+        providerOutput: result.testCase.providerOutput,
+      }),
       // Intentionally omit: provider (security - may contain stale credentials)
     });
   }

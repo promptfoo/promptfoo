@@ -25,6 +25,10 @@ const EXPLICIT_RUNTIME_VAR_KEYS = ['sessionId'] as const;
  * 2. Being in the explicit runtime var list (for legacy vars like sessionId)
  */
 export function isRuntimeVar(key: string): boolean {
+  // Stored traces with identical input/output still represent different test cases.
+  if (key === '__langfuse_trace_id') {
+    return false;
+  }
   return key.startsWith('_') || EXPLICIT_RUNTIME_VAR_KEYS.includes(key as any);
 }
 

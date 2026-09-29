@@ -17,6 +17,42 @@ function scenario(name: string) {
 describe('Scenario loading with glob patterns', () => {
   let directory: string;
 
+  it('keeps imported scenario data literal during complete config loading', async () => {
+    const configPath = path.join(directory, 'replay.json');
+    const imported = {
+      input: 'file://{{env.TRACE_LITERAL}}/fixture.txt',
+      raw: { $ref: '#/definitions/local' },
+    };
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        definitions: { local: 'resolved local definition' },
+        env: { TRACE_LITERAL: 'must-not-insert' },
+        prompts: ['{{input}}'],
+        providers: ['echo'],
+        scenarios: [
+          {
+            config: [{}],
+            tests: [
+              {
+                vars: { ...imported, local: { $ref: '#/definitions/local' } },
+                providerOutput: { $ref: '#/definitions/local' },
+                metadata: { __promptfoo: { remote: true, remoteVars: ['input', 'raw'] } },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const { testSuite } = await cliState.withConfig(undefined, () =>
+      cliState.withBasePath(undefined, () => resolveConfigs({ config: [configPath] }, {})),
+    );
+    expect(testSuite.scenarios?.[0].tests?.[0]).toMatchObject({
+      vars: { ...imported, local: 'resolved local definition' },
+      providerOutput: { $ref: '#/definitions/local' },
+    });
+  });
+
   beforeEach(() => {
     directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-scenarios-'));
     for (const [folder, names] of [

@@ -210,9 +210,9 @@ describe('langfuseTraces', () => {
         data: [{ id: 'mixed', timestamp: '2026-01-01T00:00:00Z', input: 'Weather?', output }],
       });
       const [test] = await fetchLangfuseTraces('langfuse://traces');
-      expect(test.providerOutput).toContain('Checking weather');
-      expect(test.providerOutput).toContain('weather');
-      expect(test.providerOutput).toMatch(/tool_calls|tool_use|function_call/);
+      expect(JSON.stringify(test.providerOutput)).toContain('Checking weather');
+      expect(JSON.stringify(test.providerOutput)).toContain('weather');
+      expect(JSON.stringify(test.providerOutput)).toMatch(/tool_calls|tool_use|function_call/);
     });
 
     it.each([401, 403])('reports status from Fetch Response errors (%s)', async (status) => {
@@ -658,7 +658,7 @@ describe('langfuseTraces', () => {
       const tests = await fetchLangfuseTraces('langfuse://traces');
 
       expect(tests[0].vars?.output).toEqual(toolCalls);
-      expect(tests[0].providerOutput).toBe(JSON.stringify(toolCalls));
+      expect(tests[0].providerOutput).toEqual({ tool_calls: toolCalls });
     });
 
     it('should preserve tool calls from top-level assistant message arrays', async () => {
@@ -683,7 +683,7 @@ describe('langfuseTraces', () => {
       const tests = await fetchLangfuseTraces('langfuse://traces');
 
       expect(tests[0].vars?.output).toEqual(toolCalls);
-      expect(tests[0].providerOutput).toBe(JSON.stringify(toolCalls));
+      expect(tests[0].providerOutput).toEqual({ tool_calls: toolCalls });
     });
 
     it('should preserve tool calls from a top-level assistant message object', async () => {
@@ -702,7 +702,7 @@ describe('langfuseTraces', () => {
       const tests = await fetchLangfuseTraces('langfuse://traces');
 
       expect(tests[0].vars?.output).toEqual(functionCall);
-      expect(tests[0].providerOutput).toBe(JSON.stringify(functionCall));
+      expect(tests[0].providerOutput).toEqual(functionCall);
     });
 
     it('should handle traces with Anthropic format', async () => {
@@ -757,8 +757,8 @@ describe('langfuseTraces', () => {
       // Should fall back to the full object when format is unknown
       expect(tests[0].vars?.input).toEqual({ custom_field: 'custom input' });
       expect(tests[0].vars?.output).toEqual({ custom_response: 'custom output' });
-      // providerOutput should stringify unknown objects
-      expect(tests[0].providerOutput).toBe(JSON.stringify({ custom_response: 'custom output' }));
+      // Preserve structured stored outputs for native assertions.
+      expect(tests[0].providerOutput).toEqual({ custom_response: 'custom output' });
     });
 
     it('should use LANGFUSE_HOST as fallback for base URL', async () => {
