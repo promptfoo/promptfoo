@@ -75,7 +75,7 @@ describe('OpenAIRealtimeConnection', () => {
   let config: VoiceProviderConfig;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mockWsInstances.length = 0;
     vi.stubEnv('OPENAI_API_KEY', 'test-api-key');
 
@@ -101,6 +101,8 @@ describe('OpenAIRealtimeConnection', () => {
 
   afterEach(() => {
     connection.disconnect();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
     vi.unstubAllEnvs();
   });
 

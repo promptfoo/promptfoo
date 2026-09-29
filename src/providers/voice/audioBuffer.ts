@@ -12,7 +12,7 @@ function resampleChunks(chunks: AudioChunk[], outputRate: number) {
   }> = [];
   for (const chunk of chunks) {
     const data = audioDataToPcm16(base64ToBuffer(chunk.data), chunk.format);
-    const previous = segments.at(-1);
+    const previous = segments[segments.length - 1];
     if (
       previous &&
       previous.sampleRate === chunk.sampleRate &&
