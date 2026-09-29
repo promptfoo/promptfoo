@@ -236,6 +236,30 @@ describe('runEval', () => {
     );
   });
 
+  it('shares resolved ordinary aliases with provider and assertion contexts', async () => {
+    const provider: ApiProvider = {
+      id: () => 'echo-fixture',
+      callApi: vi.fn(async (prompt, context) => {
+        expect(context?.vars.greeting).toBe('Hello Alice');
+        return { output: prompt };
+      }),
+    };
+    const results = await runEval({
+      ...defaultOptions,
+      provider,
+      prompt: { raw: '{{greeting}}', label: 'ordinary alias' },
+      test: {
+        vars: { name: 'Alice', greeting: 'Hello {{name}}' },
+        assert: [{ type: 'equals', value: '{{greeting}}' }],
+      },
+      conversations: {},
+      registers: {},
+    });
+    expect(results[0].success).toBe(true);
+    expect(results[0].score).toBe(1);
+    expect(results[0].vars.greeting).toBe('Hello Alice');
+  });
+
   it('renders local defaults while keeping imported stored-output values literal', async () => {
     const results = await runEval({
       ...defaultOptions,
@@ -250,7 +274,7 @@ describe('runEval', () => {
       registers: {},
     });
     expect(results[0].prompt.raw).toBe('{{source}} / local context');
-    expect(results[0].vars.context).toBe('{{source}}');
+    expect(results[0].vars.context).toBe('local context');
   });
 
   it('renders every local placeholder once while preserving imported literal text', async () => {

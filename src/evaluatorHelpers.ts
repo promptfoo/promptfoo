@@ -439,7 +439,14 @@ export async function renderPrompt(
       vars[key] = (vars[key] as string).replace(/\n$/, '');
     }
   }
-  // Keep resolved aliases local so later renders start from the original templates.
+  // Share resolved bare aliases with provider and assertion contexts, but keep
+  // templates that still contain expressions or inserted template text intact.
+  const aliases = resolveVariables({ ...vars }, skipRenderVars);
+  for (const [key, value] of Object.entries(aliases)) {
+    if (!skipRenderVars?.includes(key) && typeof value === 'string' && !/{[{%#]/.test(value)) {
+      vars[key] = value;
+    }
+  }
   const renderedVarNames = new Set<string>();
   vars = resolveVariables(
     { ...vars },
