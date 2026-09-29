@@ -218,7 +218,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     ).toLowerCase();
     const isReasoningModel = this.isReasoningModel(capabilityModelName);
     const gpt6Variant = getGpt6Variant(capabilityModelName);
-    const useModelDefaults = gpt6Variant === 'sol' || gpt6Variant === 'luna';
+    const useModelDefaults =
+      gpt6Variant === 'sol' || gpt6Variant === 'luna' || gpt6Variant === '6.1-sol';
     const samplingParamsDeprecated = this.isSamplingParamsDeprecatedClaudeModel(config);
     const grokSamplingRestricted = this.isGrok4OrNewerModel();
 

@@ -32,9 +32,8 @@ export class McpClientSession {
         this.startupPending = false;
       }
     };
+    // Handle eager startup rejection here; initialize() still awaits the original promise.
     void initialization.then(markSettled, markSettled);
-    // Eager construction can be followed by validation only. Preserve the error for callers.
-    void this.initializationPromise.catch(() => undefined);
   }
 
   async initialize(): Promise<MCPClient> {
