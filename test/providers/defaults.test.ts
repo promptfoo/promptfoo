@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureEmbeddingProvider } from '../../src/providers/azure/embedding';
+import { AzureGenericProvider } from '../../src/providers/azure/generic';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
 import {
   getDefaultProviders,
@@ -235,6 +236,25 @@ describe('Provider override tests', () => {
 
     expect(providers.redteamProvider?.config?.temperature).toBe(0.31);
     expect(providers.redteamJsonProvider?.config?.temperature).toBe(0.31);
+  });
+
+  it('initializes Azure redteam variants only when requested', async () => {
+    const initialize = vi.spyOn(AzureGenericProvider.prototype, 'initialize').mockResolvedValue();
+    try {
+      const providers = await getDefaultProviders({
+        AZURE_OPENAI_API_KEY: 'fixture-key',
+        AZURE_DEPLOYMENT_NAME: 'azure-chat',
+      });
+      expect(initialize).toHaveBeenCalledTimes(1);
+      const plain = providers.redteamProvider;
+      expect(initialize).toHaveBeenCalledTimes(2);
+      expect(providers.redteamProvider).toBe(plain);
+      const json = providers.redteamJsonProvider;
+      expect(initialize).toHaveBeenCalledTimes(3);
+      expect(providers.redteamJsonProvider).toBe(json);
+    } finally {
+      initialize.mockRestore();
+    }
   });
 
   it('should include JSON-capable redteam providers for Azure defaults', async () => {

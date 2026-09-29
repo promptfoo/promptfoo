@@ -165,6 +165,15 @@ async function loadRedteamProvider({
       jsonOnly,
       preferSmallModel,
     });
+    if (jsonOnly) {
+      const callApi = configuredDefault.callApi.bind(configuredDefault);
+      configuredDefault.callApi = async (...args) => {
+        const response = await callApi(...args);
+        return response.output !== null && typeof response.output === 'object'
+          ? { ...response, output: JSON.stringify(response.output) }
+          : response;
+      };
+    }
     return configuredDefault;
   }
 

@@ -1,4 +1,5 @@
-import { getEnvString } from '../envars';
+import cliState from '../cliState';
+import { getEnvOverrides, getEnvString } from '../envars';
 import logger from '../logger';
 import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider } from './azure/chat';
@@ -203,20 +204,25 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
 
     const azureProvider = new AzureChatCompletionProvider(deploymentName, { env });
 
-    const azureRedteamProvider = bindRedteamProviderEnvironment(
-      new AzureChatCompletionProvider(deploymentName, {
-        env,
-        config: { temperature: redteamTemperature },
-      }),
-      env,
-    );
-    const azureRedteamJsonProvider = bindRedteamProviderEnvironment(
-      new AzureChatCompletionProvider(deploymentName, {
-        env,
-        config: { temperature: redteamTemperature, response_format: { type: 'json_object' } },
-      }),
-      env,
-    );
+    const redteamEnv = { ...(env ?? getEnvOverrides()) };
+    const fileEnv = { ...getEnvOverrides('file') };
+    const createRedteamProvider = (jsonOnly: boolean) =>
+      cliState.withEnvFileOverrides(fileEnv, () =>
+        cliState.withEnv(redteamEnv, () =>
+          bindRedteamProviderEnvironment(
+            new AzureChatCompletionProvider(deploymentName, {
+              env: redteamEnv,
+              config: {
+                temperature: redteamTemperature,
+                ...(jsonOnly ? { response_format: { type: 'json_object' } } : {}),
+              },
+            }),
+            redteamEnv,
+          ),
+        ),
+      );
+    let redteamProvider: ApiProvider | undefined;
+    let redteamJsonProvider: ApiProvider | undefined;
 
     providers = {
       embeddingProvider: await getEmbeddingProviderForAzureDefaults(env),
@@ -225,8 +231,13 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: azureProvider,
       synthesizeProvider: azureProvider,
-      redteamProvider: azureRedteamProvider,
-      redteamJsonProvider: azureRedteamJsonProvider,
+      // Azure authenticates in its constructor; ordinary grading must not initialize these.
+      get redteamProvider() {
+        return (redteamProvider ??= createRedteamProvider(false));
+      },
+      get redteamJsonProvider() {
+        return (redteamJsonProvider ??= createRedteamProvider(true));
+      },
       // Azure doesn't have web search by default
     };
   } else if (preferAnthropic) {

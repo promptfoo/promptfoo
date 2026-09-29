@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { getEnvOverrides } from '../../../src/envars';
+import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
+import { getDefaultProviders } from '../../../src/providers/defaults';
 import { hasGoogleDefaultCredentials } from '../../../src/providers/google/util';
 import { MistralChatCompletionProvider } from '../../../src/providers/mistral';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
@@ -103,6 +105,74 @@ describe('automatic redteam provider call environment', () => {
       expect(getEnvOverrides()).toBe(cliState.config.env);
     },
   );
+
+  it('retains the creation environment when an Azure variant is first accessed later', async () => {
+    const defaults = await cliState.withEnvFileOverrides(
+      {
+        AZURE_OPENAI_API_KEY: 'fixture-file-key',
+        AZURE_OPENAI_API_BASE_URL: 'https://captured-azure.invalid',
+      },
+      () => getDefaultProviders({ AZURE_DEPLOYMENT_NAME: 'fixture-deployment' }),
+    );
+    await cliState.withEnvFileOverrides(
+      {
+        AZURE_OPENAI_API_KEY: 'fixture-unrelated-key',
+        AZURE_OPENAI_API_BASE_URL: 'https://unrelated-azure.invalid',
+      },
+      async () => {
+        await defaults.redteamProvider!.callApi('Hello fixture.');
+      },
+    );
+    const [url, options] = vi.mocked(fetch).mock.calls[0];
+    expect(String(url)).toContain('https://captured-azure.invalid');
+    expect(new Headers(options?.headers).get('api-key')).toBe('fixture-file-key');
+  });
+
+  it('normalizes automatic Azure JSON output while preserving explicit provider responses', async () => {
+    const env = {
+      AZURE_OPENAI_API_KEY: 'fixture-azure',
+      AZURE_DEPLOYMENT_NAME: 'fixture-deployment',
+      AZURE_OPENAI_API_BASE_URL: 'https://azure-fixture.invalid',
+    };
+    const payload = { message: 'Hello fixture' };
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: JSON.stringify(payload) } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const automatic = await cliState.withEnv(env, () =>
+      redteamProviderManager.getProvider({ ignoreCliState: true, jsonOnly: true }),
+    );
+    const result = await automatic.callApi('Return the greeting fixture as JSON.');
+    expect(typeof result.output).toBe('string');
+    expect(JSON.parse(result.output)).toEqual(payload);
+    expect(result.tokenUsage?.total).toBe(2);
+
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: JSON.stringify(payload) } }],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const explicit = new AzureChatCompletionProvider('fixture-deployment', {
+      env,
+      config: { response_format: { type: 'json_object' } },
+    });
+    const selected = await redteamProviderManager.getProvider({
+      provider: explicit,
+      jsonOnly: true,
+    });
+    expect(selected).toBe(explicit);
+    expect((await selected.callApi('Return the greeting fixture as JSON.')).output).toEqual(
+      payload,
+    );
+  });
 
   it('retains a captured endpoint and process fallback across another request scope', async () => {
     mockProcessEnv({ OPENAI_API_BASE_URL: 'https://process-fixture.invalid/v1' });
