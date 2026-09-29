@@ -23,7 +23,7 @@ export function getProviderType(providerId?: string): string | undefined {
     return 'file';
   }
 
-  // Handle provider formats like 'openrouter:openai/gpt-5.4' or 'azure:chat:'
+  // Handle provider formats like 'openrouter:openai/gpt-6-sol' or 'azure:chat:'
   const providerType = providerId.includes(':') ? providerId.split(':')[0] : providerId;
   if (providerType === 'https') {
     return 'http';
