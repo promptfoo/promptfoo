@@ -102,6 +102,27 @@ describe('HttpProvider with TLS Configuration', () => {
       });
     });
 
+    it('ignores a deselected JKS upload from legacy configuration', async () => {
+      const tls = {
+        certificateType: 'none',
+        jksContent: 'inert-old-upload',
+        jksPath: '/unused/client.jks',
+        keyAlias: 'old-alias',
+        rejectUnauthorized: true,
+      };
+      const provider = new HttpProvider('https://api.example.com', {
+        config: { method: 'GET', tls },
+      });
+
+      const response = await provider.callApi('Hello');
+
+      expect(response.error).toBeUndefined();
+      expect(provider.config.tls).toEqual({ rejectUnauthorized: true });
+      expect(mockReadFileSync).not.toHaveBeenCalled();
+      expect(mockFetchWithCache.mock.calls[0][1]).toMatchObject({ rejectUnauthorized: true });
+      expect(tls.jksContent).toBe('inert-old-upload');
+    });
+
     it.each([true, false])(
       'uses shared transport with explicit certificate verification %s',
       async (rejectUnauthorized) => {

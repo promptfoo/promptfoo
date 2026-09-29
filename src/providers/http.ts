@@ -811,7 +811,25 @@ export const HttpProviderConfigSchema = HttpProviderConfigFieldsSchema.strip().e
   tokenEstimation: TokenEstimationConfigSchema.optional(),
   auth: HttpAuthSchema.optional(),
   signatureAuth: HttpSignatureAuthSchema.optional().transform(preprocessSignatureAuthConfig),
-  tls: TlsCertificateSchema.optional(),
+  tls: z
+    .preprocess((value) => {
+      if (
+        value &&
+        typeof value === 'object' &&
+        'certificateType' in value &&
+        value.certificateType !== undefined &&
+        value.certificateType !== 'jks'
+      ) {
+        // Older setup exports can retain an upload after JKS was deselected.
+        const tls = { ...(value as Record<string, unknown>) };
+        delete tls.jksContent;
+        delete tls.jksPath;
+        delete tls.keyAlias;
+        return tls;
+      }
+      return value;
+    }, TlsCertificateSchema)
+    .optional(),
 });
 
 export interface HttpProviderConfig extends z.output<typeof HttpProviderConfigSchema> {
