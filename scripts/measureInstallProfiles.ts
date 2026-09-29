@@ -127,6 +127,36 @@ export function validateEvalOutput(output: unknown, expectedSuccess: boolean): E
   return rows;
 }
 
+const proxyEnvironmentKeys = [
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'ALL_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'all_proxy',
+] as const;
+
+function validateProxyEnvironment(env: NodeJS.ProcessEnv): void {
+  // Lifecycle scripts can copy their environment into retained logs and caches.
+  for (const key of proxyEnvironmentKeys) {
+    const value = env[key];
+    if (!value) {
+      continue;
+    }
+    let proxy: URL;
+    try {
+      const parsed = URL.canParse(value) ? new URL(value) : undefined;
+      proxy = parsed?.hostname ? parsed : new URL(`http://${value}`);
+    } catch {
+      throw new Error(`${key} must be a credential-free proxy URL`);
+    }
+    assert(
+      !proxy.username && !proxy.password && !proxy.search && !proxy.hash,
+      `${key} must be a credential-free proxy URL`,
+    );
+  }
+}
+
 function environment(root: string): NodeJS.ProcessEnv {
   // Deliberately do not inherit provider credentials, npm settings, NODE_PATH or NODE_OPTIONS.
   const env: NodeJS.ProcessEnv = {};
@@ -139,13 +169,8 @@ function environment(root: string): NodeJS.ProcessEnv {
     'TEMP',
     'TMPDIR',
     // Preflight permits only credential-free proxy URLs.
-    'HTTP_PROXY',
-    'HTTPS_PROXY',
-    'ALL_PROXY',
+    ...proxyEnvironmentKeys,
     'NO_PROXY',
-    'http_proxy',
-    'https_proxy',
-    'all_proxy',
     'no_proxy',
   ]) {
     if (process.env[key]) {
@@ -325,31 +350,7 @@ export async function measureInstallProfiles(args = process.argv.slice(2)): Prom
     process.platform !== 'win32',
     'Install profile measurement requires POSIX process groups to terminate command descendants',
   );
-  // Lifecycle scripts can copy their environment into retained logs and caches.
-  for (const key of [
-    'HTTP_PROXY',
-    'HTTPS_PROXY',
-    'ALL_PROXY',
-    'http_proxy',
-    'https_proxy',
-    'all_proxy',
-  ]) {
-    const value = process.env[key];
-    if (!value) {
-      continue;
-    }
-    let proxy: URL;
-    try {
-      const parsed = URL.canParse(value) ? new URL(value) : undefined;
-      proxy = parsed?.hostname ? parsed : new URL(`http://${value}`);
-    } catch {
-      throw new Error(`${key} must be a credential-free proxy URL`);
-    }
-    assert(
-      !proxy.username && !proxy.password && !proxy.search && !proxy.hash,
-      `${key} must be a credential-free proxy URL`,
-    );
-  }
+  validateProxyEnvironment(process.env);
   const scripts = values['install-scripts'] && !values['no-install-scripts'];
   const npm = npmInvocation();
   // Respect a configured registry (e.g. a company mirror) without copying any
@@ -532,10 +533,6 @@ export async function measureInstallProfiles(args = process.argv.slice(2)): Prom
       path.join(logs, 'npm-ls'),
     );
     result.dependencyTree = tree;
-    // npm ls failures remain visible and fail acceptance, while probes still explain usability.
-    if (tree.code !== 0) {
-      passed = false;
-    }
     const probes = await probeConsumer(consumer, logs, profileEnv, runs);
     Object.assign(result, probes);
     result.passed = scripts && probes.passed && tree.code === 0 && !tree.timedOut;

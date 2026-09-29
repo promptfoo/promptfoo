@@ -25,9 +25,13 @@ measurement command does not build, publish, or change the tarball. Installation
 runs lifecycle scripts by default, including supported native/browser downloads.
 `--no-install-scripts` is an explicit inventory experiment and must not be reported
 as normal installation acceptance. `--profiles default` or
-`--profiles omit-optional` selects one profile. The default registry comes from the invoking npm configuration; `--registry URL`
-selects one explicitly. Registry discovery stops after ten seconds if npm does not return. Npm workspace discovery is disabled so an ancestor workspace cannot redirect installs. Other user npm settings and credentials are not inherited. Registry URLs containing
-userinfo, query strings, or fragments are rejected before evidence is written.
+`--profiles omit-optional` selects one profile.
+
+The registry comes from the invoking npm configuration unless `--registry URL` is
+set. Discovery has a ten-second timeout. Other npm settings and credentials are
+not inherited. Workspace discovery is disabled to keep installs out of ancestor
+projects. Registry URLs with userinfo, query strings, or fragments are rejected
+before evidence is written.
 
 The tool retains its temporary consumers and cache; their path is recorded in
 `report.json`. Nothing deletes shared caches or databases. Consumer commands use
@@ -40,9 +44,8 @@ global module search paths so undeclared dependencies cannot come from the host.
 Credential-free outbound proxy settings and `NO_PROXY` host lists are preserved.
 Proxy URLs with credentials, query strings, or fragments are rejected before
 commands run or evidence is written, because lifecycle scripts can copy these
-values into retained files. Explicit
-asset-cache paths cover the documented browser/model tooling; this is not a
-sandbox for arbitrary dependency lifecycle scripts.
+values into retained files. Asset-cache paths cover the documented browser/model
+tooling; arbitrary lifecycle scripts can write elsewhere.
 
 ## Evidence
 
@@ -79,10 +82,15 @@ nonzero. Every command timeout is a failure, including a timeout that races with
 an expected exit code. Measurement requires POSIX process groups; Windows is
 rejected before running commands because successful command descendants cannot
 be contained there. Timeout, interruption, and ordinary-exit cleanup terminate
-surviving group members. Descendants that create a new session or process group escape this cleanup. Run packages with daemonizing lifecycle scripts in a disposable container or VM, and do not treat a measurement as a stable inventory while those processes can still modify it. The tool cannot detect or contain them. Unsuccessful group cleanup stops measurement before inventory.
+surviving group members. Descendants that create a new session or process group
+escape cleanup and can continue changing the measured files. The tool cannot
+detect or contain them. Measure packages with daemonizing lifecycle scripts in a
+disposable container or VM. Unsuccessful group cleanup stops measurement before
+inventory.
+
 SIGINT or SIGTERM stops measurement after the active command closes. Completed
-evidence remains available. Partial inventories after install
-failure are diagnostic; they cannot establish a smaller usable profile.
+evidence remains available. Partial inventories after install failure are
+diagnostic; they cannot establish a smaller usable profile.
 
 ## Comparison rules
 
