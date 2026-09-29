@@ -14,36 +14,6 @@ interface TraceSpanDurationValue {
   requirePresence?: boolean;
 }
 
-const PERCENTILE_LARGE_SAMPLE_THRESHOLD = 20;
-
-function buildNoMatchingSpansResult({
-  assertion,
-  inverse,
-  pattern,
-  requirePresence,
-}: Pick<AssertionParams, 'assertion' | 'inverse'> & {
-  pattern: string;
-  requirePresence: boolean;
-}): GradingResult {
-  const basePass = !requirePresence;
-  const pass = inverse ? false : basePass;
-  const baseReason = requirePresence
-    ? `No spans found matching pattern "${pattern}" with complete timing data (requirePresence: true)`
-    : `No spans found matching pattern "${pattern}" with complete timing data`;
-  const reason = inverse
-    ? requirePresence
-      ? `not-trace-span-duration: no spans matched pattern "${pattern}" while requirePresence is true`
-      : `not-trace-span-duration: no spans matched pattern "${pattern}", so the latency budget was satisfied and violates the inverse assertion`
-    : baseReason;
-
-  return {
-    pass,
-    score: pass ? 1 : 0,
-    reason,
-    assertion,
-  };
-}
-
 function calculatePercentile(
   durations: number[],
   percentile: number,
@@ -67,7 +37,7 @@ function calculatePercentile(
     return sorted[lower] + (sorted[upper] - sorted[lower]) * weight;
   }
 
-  // Nearest-rank (default): index = ceil((p/100) * N) - 1, equivalent to max for small N.
+  // Nearest-rank returns an observed duration.
   const index = Math.ceil((percentile / 100) * sorted.length) - 1;
   return sorted[Math.max(0, index)];
 }
@@ -88,9 +58,6 @@ export const handleTraceSpanDuration = ({
   }
 
   const { pattern = '*', max, percentile, method = 'nearest', requirePresence = false } = value;
-  // `method` and `percentile` only affect the percentile path, so the shared validator
-  // only enforces them when a percentile is requested (avoids rejecting a valid plain
-  // max-duration config over an unused method).
   const configError = traceSpanDurationConfigError(value);
   if (configError) {
     throw new Error(configError);
@@ -107,7 +74,13 @@ export const handleTraceSpanDuration = ({
   });
 
   if (matchingSpans.length === 0) {
-    return buildNoMatchingSpansResult({ assertion, inverse, pattern, requirePresence });
+    const pass = !inverse && !requirePresence;
+    const reason = inverse
+      ? requirePresence
+        ? `not-trace-span-duration: no spans matched pattern "${pattern}" while requirePresence is true`
+        : `not-trace-span-duration: no spans matched pattern "${pattern}", so the latency budget was satisfied`
+      : `No spans found matching pattern "${pattern}" with complete timing data${requirePresence ? ' (requirePresence: true)' : ''}`;
+    return { pass, score: pass ? 1 : 0, reason, assertion };
   }
 
   if (
@@ -149,10 +122,6 @@ export const handleTraceSpanDuration = ({
     // Check percentile
     const durations = spanDurations.map((s) => s.duration);
     const percentileValue = calculatePercentile(durations, percentile, method);
-    const smallSampleNote =
-      durations.length < PERCENTILE_LARGE_SAMPLE_THRESHOLD
-        ? ` (warning: small sample N=${durations.length}; ${percentile}th percentile is approximate, prefer max or aggregate across more rows)`
-        : '';
 
     if (percentileValue > max) {
       basePass = false;
@@ -161,10 +130,10 @@ export const handleTraceSpanDuration = ({
         .sort((a, b) => b.duration - a.duration)
         .slice(0, 3);
 
-      reason = `${percentile}th percentile duration (${percentileValue.toFixed(2)}ms, method=${method}) exceeds threshold ${max}ms${smallSampleNote}. `;
+      reason = `${percentile}th percentile duration (${percentileValue.toFixed(2)}ms, method=${method}) exceeds threshold ${max}ms. `;
       reason += `Slowest spans: ${slowestSpans.map((s) => `${s.name} (${s.duration}ms)`).join(', ')}`;
     } else {
-      reason = `${percentile}th percentile duration (${percentileValue.toFixed(2)}ms, method=${method}) is within threshold ${max}ms${smallSampleNote}`;
+      reason = `${percentile}th percentile duration (${percentileValue.toFixed(2)}ms, method=${method}) is within threshold ${max}ms`;
     }
   }
 

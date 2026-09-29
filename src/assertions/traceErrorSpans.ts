@@ -48,34 +48,6 @@ function resolveTraceErrorSpansValue(value: unknown): ResolvedTraceErrorSpansVal
   return { maxCount, maxPercentage, pattern, requirePresence };
 }
 
-function buildNoMatchingSpansResult({
-  assertion,
-  inverse,
-  pattern,
-  requirePresence,
-}: Pick<AssertionParams, 'assertion' | 'inverse'> & {
-  pattern: string;
-  requirePresence: boolean;
-}): GradingResult {
-  const basePass = !requirePresence;
-  const pass = inverse ? false : basePass;
-  const baseReason = requirePresence
-    ? `No spans found matching pattern "${pattern}" (requirePresence: true)`
-    : `No spans found matching pattern "${pattern}"`;
-  const reason = inverse
-    ? requirePresence
-      ? `not-trace-error-spans: no spans matched pattern "${pattern}" while requirePresence is true`
-      : `not-trace-error-spans: no spans matched pattern "${pattern}", so the error budget was satisfied and violates the inverse assertion`
-    : baseReason;
-
-  return {
-    pass,
-    score: pass ? 1 : 0,
-    reason,
-    assertion,
-  };
-}
-
 function isErrorSpan(span: TraceSpan): boolean {
   // Check various ways a span might indicate an error
   if (span.statusCode === 2) {
@@ -149,7 +121,13 @@ export const handleTraceErrorSpans = ({
   const matchingSpans = spans.filter((span) => matchesPattern(span.name, pattern));
 
   if (matchingSpans.length === 0) {
-    return buildNoMatchingSpansResult({ assertion, inverse, pattern, requirePresence });
+    const pass = !inverse && !requirePresence;
+    const reason = inverse
+      ? requirePresence
+        ? `not-trace-error-spans: no spans matched pattern "${pattern}" while requirePresence is true`
+        : `not-trace-error-spans: no spans matched pattern "${pattern}", so the error budget was satisfied`
+      : `No spans found matching pattern "${pattern}"${requirePresence ? ' (requirePresence: true)' : ''}`;
+    return { pass, score: pass ? 1 : 0, reason, assertion };
   }
 
   // Find error spans

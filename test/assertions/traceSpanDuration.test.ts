@@ -172,7 +172,6 @@ describe('handleTraceSpanDuration', () => {
     expect(result.score).toBe(0);
     expect(result.reason).toContain('90th percentile duration (3000.00ms, method=nearest)');
     expect(result.reason).toContain('exceeds threshold 2000ms');
-    expect(result.reason).toContain('warning: small sample N=5');
     expect(result.reason).toContain('Slowest spans: api.external (3000ms)');
     expect(result.assertion).toBe(params.assertion);
   });
@@ -197,7 +196,6 @@ describe('handleTraceSpanDuration', () => {
     expect(result.score).toBe(1);
     expect(result.reason).toContain('50th percentile duration (500.00ms, method=nearest)');
     expect(result.reason).toContain('within threshold 1500ms');
-    expect(result.reason).toContain('warning: small sample N=5');
     expect(result.assertion).toBe(params.assertion);
   });
 
@@ -536,7 +534,6 @@ describe('handleTraceSpanDuration', () => {
     expect(result.score).toBe(1);
     expect(result.reason).toContain('95th percentile duration (750.00ms, method=nearest)');
     expect(result.reason).toContain('within threshold 1000ms');
-    expect(result.reason).toContain('warning: small sample N=1');
     expect(result.assertion).toBe(params.assertion);
   });
 

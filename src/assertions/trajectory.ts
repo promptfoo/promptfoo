@@ -1,15 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import {
-  notTrajectoryToolUsedBoundsError,
-  trajectoryCountBoundsError,
-  trajectoryGoalSuccessTimeoutError,
-  trajectoryRedactArgsError,
-  trajectoryToolArgsDefaultsError,
-  trajectoryToolArgsIgnoreError,
-  trajectoryToolSequenceModeError,
-  trajectoryToolSequenceStepsError,
-} from '../contracts/validators/traceAssertionConfig';
 import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
 import { matchesPattern } from './traceUtils';
 import {
@@ -19,9 +9,7 @@ import {
   matchesTrajectoryStep,
   normalizeTrajectoryMatcher,
   summarizeTrajectoryForJudge,
-  type TrajectoryStep,
   type TrajectoryStepMatcher,
-  type TrajectoryStepType,
 } from './trajectoryUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -38,7 +26,6 @@ interface TrajectorySequenceValue {
 
 interface TrajectoryGoalSuccessValue {
   goal: string;
-  timeoutMs?: number;
 }
 
 type ToolArgsDefaults = Record<string, unknown>;
@@ -47,21 +34,9 @@ interface TrajectoryToolArgsMatchValue extends TrajectoryStepMatcher {
   args?: unknown;
   arguments?: unknown;
   mode?: 'exact' | 'partial';
-  redactArgsInFailures?: boolean;
   defaults?: ToolArgsDefaults;
   ignore?: string | string[];
 }
-
-const REDACTED_ARGS_LABEL = '[redacted]';
-const TRAJECTORY_STEP_TYPES = new Set<TrajectoryStepType>([
-  'command',
-  'message',
-  'reasoning',
-  'search',
-  'span',
-  'tool',
-]);
-const TOOL_STEP_TYPES = new Set<TrajectoryStepType>(['tool']);
 
 function getTraceOrThrow(params: AssertionParams) {
   const trace = params.assertionValueContext.trace;
@@ -83,54 +58,15 @@ function requireNamedTrajectoryMatcher(
   matcher: TrajectoryStepMatcher,
   assertionType: string,
   index?: number,
-  options: {
-    allowedTypes?: ReadonlySet<TrajectoryStepType>;
-    requireName?: boolean;
-  } = {},
 ) {
-  const { allowedTypes = TOOL_STEP_TYPES, requireName = true } = options;
+  if (matcher.pattern || matcher.name) {
+    return;
+  }
+
   const stepLabel = index === undefined ? 'object' : `step ${index + 1}`;
-  for (const field of ['name', 'pattern'] as const) {
-    const value = matcher[field] as unknown;
-    if (value !== undefined && (typeof value !== 'string' || value.trim().length === 0)) {
-      throw new Error(
-        `${assertionType} assertion ${stepLabel} ${field} must be a non-empty string`,
-      );
-    }
-  }
-
-  if (requireName && matcher.pattern === undefined && matcher.name === undefined) {
-    throw new Error(
-      `${assertionType} assertion ${stepLabel} must include a name or pattern property`,
-    );
-  }
-
-  const rawType = matcher.type as unknown;
-  const matcherTypes = Array.isArray(rawType) ? rawType : rawType === undefined ? [] : [rawType];
-  if (
-    rawType !== undefined &&
-    (matcherTypes.length === 0 ||
-      matcherTypes.some(
-        (type) => typeof type !== 'string' || !allowedTypes.has(type as TrajectoryStepType),
-      ))
-  ) {
-    throw new Error(`${assertionType} assertion ${stepLabel} has an invalid type`);
-  }
-}
-
-function resolveTrajectoryCountBounds(
-  value: Record<string, unknown>,
-  assertionType: string,
-): Pick<TrajectoryCountValue, 'min' | 'max'> {
-  const boundsError = trajectoryCountBoundsError(value, assertionType);
-  if (boundsError) {
-    throw new Error(boundsError);
-  }
-  const { min, max } = value;
-  return {
-    min: min as number | undefined,
-    max: max as number | undefined,
-  };
+  throw new Error(
+    `${assertionType} assertion ${stepLabel} must include a name or pattern property`,
+  );
 }
 
 function resolveGoalSuccessValue(value: unknown): TrajectoryGoalSuccessValue {
@@ -145,16 +81,9 @@ function resolveGoalSuccessValue(value: unknown): TrajectoryGoalSuccessValue {
     typeof (value as TrajectoryGoalSuccessValue).goal === 'string' &&
     (value as TrajectoryGoalSuccessValue).goal.trim()
   ) {
-    const objValue = value as TrajectoryGoalSuccessValue;
-    const resolved: TrajectoryGoalSuccessValue = { goal: objValue.goal.trim() };
-    const timeoutError = trajectoryGoalSuccessTimeoutError(objValue);
-    if (timeoutError) {
-      throw new Error(timeoutError);
-    }
-    if (Object.prototype.hasOwnProperty.call(objValue, 'timeoutMs')) {
-      resolved.timeoutMs = objValue.timeoutMs;
-    }
-    return resolved;
+    return {
+      goal: (value as TrajectoryGoalSuccessValue).goal.trim(),
+    };
   }
 
   throw new Error(
@@ -168,34 +97,33 @@ function resolveToolMatchers(
   | { kind: 'list'; matchers: TrajectoryStepMatcher[] }
   | { kind: 'count'; matcher: TrajectoryCountValue } {
   if (typeof value === 'string') {
-    const matcher = normalizeTrajectoryMatcher(value, 'tool');
-    requireNamedTrajectoryMatcher(matcher, 'trajectory:tool-used');
     return {
       kind: 'list',
-      matchers: [matcher],
+      matchers: [normalizeTrajectoryMatcher(value, 'tool')],
     };
   }
 
   if (Array.isArray(value) && value.every((item) => typeof item === 'string')) {
-    const matchers = value.map((item) => normalizeTrajectoryMatcher(item, 'tool'));
-    matchers.forEach((matcher, index) =>
-      requireNamedTrajectoryMatcher(matcher, 'trajectory:tool-used', index),
-    );
     return {
       kind: 'list',
-      matchers,
+      matchers: value.map((item) => normalizeTrajectoryMatcher(item, 'tool')),
     };
   }
 
   if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const rawValue = value as Record<string, unknown>;
-    const matcher = normalizeTrajectoryMatcher(rawValue as TrajectoryStepMatcher, 'tool');
-    requireNamedTrajectoryMatcher(matcher, 'trajectory:tool-used');
+    const matcher = normalizeTrajectoryMatcher(value as TrajectoryStepMatcher, 'tool');
     return {
       kind: 'count',
       matcher: {
         ...matcher,
-        ...resolveTrajectoryCountBounds(rawValue, 'trajectory:tool-used'),
+        max:
+          typeof (value as TrajectoryCountValue).max === 'number'
+            ? (value as TrajectoryCountValue).max
+            : undefined,
+        min:
+          typeof (value as TrajectoryCountValue).min === 'number'
+            ? (value as TrajectoryCountValue).min
+            : undefined,
       },
     };
   }
@@ -203,55 +131,6 @@ function resolveToolMatchers(
   throw new Error(
     'trajectory:tool-used assertion must have a string, string array, or object value',
   );
-}
-
-function handleCountedToolUsed(
-  params: AssertionParams,
-  steps: TrajectoryStep[],
-  matcher: TrajectoryCountValue,
-): GradingResult {
-  if (params.inverse) {
-    const inverseBoundsError = notTrajectoryToolUsedBoundsError(matcher);
-    if (inverseBoundsError) {
-      throw new Error(inverseBoundsError);
-    }
-  }
-  const min = matcher.min ?? (matcher.max === undefined ? 1 : 0);
-  const max = matcher.max;
-  const matchingSteps = steps.filter((step) => matchesTrajectoryStep(step, matcher));
-  const count = matchingSteps.length;
-  const matcherLabel = matcher.pattern || matcher.name || '*';
-
-  if (params.inverse) {
-    const pass = count === 0;
-    const actualTools = steps.map(formatTrajectoryStep);
-    return {
-      pass,
-      score: pass ? 1 : 0,
-      reason: pass
-        ? `Forbidden tool "${matcherLabel}" was not used. Actual tools: ${formatStepList(actualTools)}`
-        : `Forbidden tool "${matcherLabel}" was used ${count} time(s). Matches: ${matchingSteps.map(formatTrajectoryStep).join(', ')}`,
-      assertion: params.assertion,
-    };
-  }
-
-  const pass = count >= min && (max === undefined || count <= max);
-  let reason = `Matched tool "${matcherLabel}" ${count} time(s)`;
-  if (max === undefined) {
-    reason += ` (expected at least ${min})`;
-  } else {
-    reason += ` (expected ${min}-${max})`;
-  }
-  if (matchingSteps.length > 0) {
-    reason += `. Matches: ${matchingSteps.map(formatTrajectoryStep).join(', ')}`;
-  }
-
-  return {
-    pass,
-    score: pass ? 1 : 0,
-    reason,
-    assertion: params.assertion,
-  };
 }
 
 export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult => {
@@ -300,7 +179,43 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
     };
   }
 
-  return handleCountedToolUsed(params, steps, expected.matcher);
+  const matcher = expected.matcher;
+  const min = matcher.min ?? 1;
+  const max = matcher.max;
+  if (!matcher.pattern && !matcher.name) {
+    throw new Error(
+      'trajectory:tool-used assertion object must include a name or pattern property',
+    );
+  }
+
+  const matchingSteps = steps.filter((step) => matchesTrajectoryStep(step, matcher));
+  const count = matchingSteps.length;
+  const basePass = count >= min && (max === undefined || count <= max);
+  const pass = applyInverse(basePass, params.inverse);
+  const matcherLabel = matcher.pattern || matcher.name || '*';
+
+  let reason = `Matched tool "${matcherLabel}" ${count} time(s)`;
+  if (max === undefined) {
+    reason += ` (expected at least ${min})`;
+  } else {
+    reason += ` (expected ${min}-${max})`;
+  }
+  if (matchingSteps.length > 0) {
+    reason += `. Matches: ${matchingSteps.map(formatTrajectoryStep).join(', ')}`;
+  }
+
+  if (params.inverse) {
+    reason = basePass
+      ? `Tool "${matcherLabel}" matched ${count} time(s), which violates the inverse assertion`
+      : `Tool "${matcherLabel}" did not satisfy the forbidden match condition`;
+  }
+
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason,
+    assertion: params.assertion,
+  };
 };
 
 function resolveSequenceValue(value: unknown): TrajectorySequenceValue {
@@ -313,16 +228,8 @@ function resolveSequenceValue(value: unknown): TrajectorySequenceValue {
 
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const sequenceValue = value as Partial<TrajectorySequenceValue>;
-    const modeError = trajectoryToolSequenceModeError(sequenceValue);
-    if (modeError) {
-      throw new Error(modeError);
-    }
-    const stepsError = trajectoryToolSequenceStepsError(sequenceValue);
-    if (stepsError) {
-      throw new Error(stepsError);
-    }
     return {
-      mode: sequenceValue.mode === undefined ? 'in_order' : sequenceValue.mode,
+      mode: sequenceValue.mode || 'in_order',
       steps: sequenceValue.steps || [],
     };
   }
@@ -464,19 +371,34 @@ function resolveToolArgsMatchMode(
 }
 
 function resolveToolArgsMatchDefaults(defaults: unknown): ToolArgsDefaults | undefined {
-  const error = trajectoryToolArgsDefaultsError({ defaults });
-  if (error) {
-    throw new Error(error);
+  if (defaults === undefined) {
+    return undefined;
   }
-  return defaults as ToolArgsDefaults | undefined;
+
+  if (!isRecord(defaults)) {
+    throw new Error(
+      'trajectory:tool-args-match assertion defaults must be an object mapping argument names to default values',
+    );
+  }
+
+  return defaults;
 }
 
 function resolveToolArgsMatchIgnore(ignore: unknown): string[] {
-  const error = trajectoryToolArgsIgnoreError({ ignore });
-  if (error) {
-    throw new Error(error);
+  if (ignore === undefined) {
+    return [];
   }
-  return ignore === undefined ? [] : ((Array.isArray(ignore) ? ignore : [ignore]) as string[]);
+
+  const entries = Array.isArray(ignore) ? ignore : [ignore];
+  for (const entry of entries) {
+    if (typeof entry !== 'string' || entry.trim().length === 0) {
+      throw new Error(
+        'trajectory:tool-args-match assertion ignore must be a non-empty string or an array of non-empty strings',
+      );
+    }
+  }
+
+  return entries as string[];
 }
 
 function resolveToolArgsMatchValue(value: unknown) {
@@ -497,19 +419,10 @@ function resolveToolArgsMatchValue(value: unknown) {
     );
   }
 
-  // Validate the redaction toggle instead of silently coercing: a stringy value like "true"
-  // (or any non-boolean) must fail loud rather than fail open and leak traced args.
-  const redactError = trajectoryRedactArgsError(value as TrajectoryToolArgsMatchValue);
-  if (redactError) {
-    throw new Error(redactError);
-  }
-  const redactArgsInFailures = (value as TrajectoryToolArgsMatchValue).redactArgsInFailures;
-
   return {
     matcher,
     expectedArgs,
     mode: resolveToolArgsMatchMode((value as TrajectoryToolArgsMatchValue).mode),
-    redactArgsInFailures: redactArgsInFailures === true,
     defaults: resolveToolArgsMatchDefaults((value as TrajectoryToolArgsMatchValue).defaults),
     ignore: resolveToolArgsMatchIgnore((value as TrajectoryToolArgsMatchValue).ignore),
   } as const;
@@ -589,8 +502,9 @@ export const handleTrajectoryToolSequence = (params: AssertionParams): GradingRe
 export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingResult => {
   const trace = getTraceOrThrow(params);
   const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
-  const { matcher, expectedArgs, mode, redactArgsInFailures, defaults, ignore } =
-    resolveToolArgsMatchValue(params.renderedValue ?? params.assertion.value);
+  const { matcher, expectedArgs, mode, defaults, ignore } = resolveToolArgsMatchValue(
+    params.renderedValue ?? params.assertion.value,
+  );
   const matcherLabel = matcher.pattern || matcher.name || '*';
   const actualTools = toolSteps.map(formatTrajectoryStep);
   const matchingSteps = toolSteps.filter((step) => matchesTrajectoryStep(step, matcher));
@@ -600,40 +514,33 @@ export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingR
   );
   const basePass = matchedStep !== undefined;
   const pass = applyInverse(basePass, params.inverse);
-  // When enabled, redact argument values in every reason string this handler builds (pass
-  // and fail alike) so args never leak into reports/logs. The ignore/defaults suffixes are
-  // omitted under redaction as well because their key lists are part of the argument payload.
-  const formatArgs = (value: unknown) =>
-    redactArgsInFailures ? REDACTED_ARGS_LABEL : formatTrajectoryArgs(value);
-  const expectedArgsLabel = formatArgs(expectedArgs);
   const ignoredArgs = matchedStep ? stripIgnoredArgs(matchedStep.args, ignore).stripped : [];
   const ignoredDefaults = matchedStep
     ? stripDefaults(stripIgnoredArgs(matchedStep.args, ignore).cleaned, defaults).stripped
     : [];
   const ignoredArgsSuffix =
-    !redactArgsInFailures && ignoredArgs.length > 0
-      ? `. Ignored argument(s): ${ignoredArgs.join(', ')}`
-      : '';
+    ignoredArgs.length > 0 ? `. Ignored argument(s): ${ignoredArgs.join(', ')}` : '';
   const ignoredDefaultsSuffix =
-    !redactArgsInFailures && ignoredDefaults.length > 0
+    ignoredDefaults.length > 0
       ? `. Ignored default argument(s): ${ignoredDefaults.join(', ')}`
       : '';
+  const expectedArgsLabel = formatTrajectoryArgs(expectedArgs);
   const observedArgsLabel =
     stepsWithArgs.length > 0
-      ? stepsWithArgs.map((step) => formatArgs(step.args)).join(', ')
+      ? stepsWithArgs.map((step) => formatTrajectoryArgs(step.args)).join(', ')
       : '(none)';
 
   let reason: string;
   if (params.inverse) {
     if (basePass) {
-      reason = `Forbidden argument match for tool "${matcherLabel}" was observed on ${formatTrajectoryStep(matchedStep!)}. Args: ${formatArgs(matchedStep!.args)}`;
+      reason = `Forbidden argument match for tool "${matcherLabel}" was observed on ${formatTrajectoryStep(matchedStep!)}. Args: ${formatTrajectoryArgs(matchedStep!.args)}`;
     } else if (matchingSteps.length === 0) {
       reason = `Forbidden argument match for tool "${matcherLabel}" was not observed because no tool call matched it`;
     } else {
       reason = `Forbidden argument match for tool "${matcherLabel}" was not observed. Observed args: ${observedArgsLabel}`;
     }
   } else if (basePass) {
-    reason = `Tool "${matcherLabel}" matched expected arguments (${mode}) on ${formatTrajectoryStep(matchedStep!)}. Args: ${formatArgs(matchedStep!.args)}${ignoredArgsSuffix}${ignoredDefaultsSuffix}`;
+    reason = `Tool "${matcherLabel}" matched expected arguments (${mode}) on ${formatTrajectoryStep(matchedStep!)}. Args: ${formatTrajectoryArgs(matchedStep!.args)}${ignoredArgsSuffix}${ignoredDefaultsSuffix}`;
   } else if (matchingSteps.length === 0) {
     reason = `No tool call matched "${matcherLabel}". Actual tools: ${formatStepList(actualTools)}`;
   } else if (stepsWithArgs.length === 0) {
@@ -655,15 +562,17 @@ function resolveStepCountValue(value: unknown): TrajectoryCountValue {
     throw new Error('trajectory:step-count assertion must have an object value');
   }
 
-  const rawValue = value as Record<string, unknown>;
-  const matcher = normalizeTrajectoryMatcher(rawValue as TrajectoryStepMatcher);
-  requireNamedTrajectoryMatcher(matcher, 'trajectory:step-count', undefined, {
-    allowedTypes: TRAJECTORY_STEP_TYPES,
-    requireName: false,
-  });
+  const matcher = normalizeTrajectoryMatcher(value as TrajectoryStepMatcher);
   return {
     ...matcher,
-    ...resolveTrajectoryCountBounds(rawValue, 'trajectory:step-count'),
+    max:
+      typeof (value as TrajectoryCountValue).max === 'number'
+        ? (value as TrajectoryCountValue).max
+        : undefined,
+    min:
+      typeof (value as TrajectoryCountValue).min === 'number'
+        ? (value as TrajectoryCountValue).min
+        : undefined,
   };
 }
 
@@ -723,91 +632,20 @@ export const handleTrajectoryStepCount = (params: AssertionParams): GradingResul
   };
 };
 
-async function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number | undefined,
-  onTimeout: () => T,
-  afterTimeout?: () => void,
-): Promise<T> {
-  if (!timeoutMs) {
-    return promise;
-  }
-
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeoutPromise = new Promise<T>((resolve) => {
-    timer = setTimeout(() => {
-      resolve(onTimeout());
-      afterTimeout?.();
-    }, timeoutMs);
-  });
-
-  try {
-    return await Promise.race([promise, timeoutPromise]);
-  } finally {
-    if (timer) {
-      clearTimeout(timer);
-    }
-  }
-}
-
 export const handleTrajectoryGoalSuccess = async (
   params: AssertionParams,
 ): Promise<GradingResult> => {
   const trace = getTraceOrThrow(params);
-  // Imported lazily so the trajectory assertion module doesn't pull the scheduler/render
-  // (and transitively the DB) into its import graph for the non-goal-success handlers.
-  const { renderVarsInObject } = await import('../util/render');
-  const { getProviderCallExecutionContext, withProviderCallExecutionContext } = await import(
-    '../scheduler/providerCallExecutionContext'
-  );
-  const assertionValue = params.renderedValue ?? params.assertion.value;
-  const { goal, timeoutMs } = resolveGoalSuccessValue(
-    typeof assertionValue === 'object' && assertionValue !== null && !Array.isArray(assertionValue)
-      ? renderVarsInObject(assertionValue, params.assertionValueContext.vars)
-      : assertionValue,
-  );
+  const { goal } = resolveGoalSuccessValue(params.renderedValue ?? params.assertion.value);
   const trajectory = summarizeTrajectoryForJudge(trace);
-  const runJudge = () =>
-    matchesTrajectoryGoalSuccess(
-      goal,
-      trajectory,
-      params.outputString,
-      params.test.options,
-      params.assertionValueContext.vars,
-      params.assertion,
-      params.providerCallContext,
-    );
-  const timeoutController = timeoutMs === undefined ? undefined : new AbortController();
-  const outerExecutionContext = getProviderCallExecutionContext();
-  const judgePromise = timeoutController
-    ? withProviderCallExecutionContext(
-        {
-          ...outerExecutionContext,
-          abortSignal: outerExecutionContext?.abortSignal
-            ? AbortSignal.any([outerExecutionContext.abortSignal, timeoutController.signal])
-            : timeoutController.signal,
-          queuedCallAbortSignal: outerExecutionContext?.queuedCallAbortSignal
-            ? AbortSignal.any([
-                outerExecutionContext.queuedCallAbortSignal,
-                timeoutController.signal,
-              ])
-            : timeoutController.signal,
-        },
-        runJudge,
-      )
-    : runJudge();
-
-  const result = await withTimeout(
-    judgePromise,
-    timeoutMs,
-    () => ({
-      pass: false,
-      score: 0,
-      reason: `trajectory:goal-success judge timed out after ${timeoutMs}ms`,
-      assertion: params.assertion,
-      metadata: { graderError: true as const },
-    }),
-    () => timeoutController?.abort(),
+  const result = await matchesTrajectoryGoalSuccess(
+    goal,
+    trajectory,
+    params.outputString,
+    params.test.options,
+    params.assertionValueContext.vars,
+    params.assertion,
+    params.providerCallContext,
   );
 
   if (!params.inverse) {

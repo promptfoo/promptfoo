@@ -1,12 +1,4 @@
-/**
- * Value validation shared by trace assertion handlers and the Eval Creator.
- * Returns an error message or undefined. Callers validate their own structural requirements.
- */
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
+// Shared value checks for trace assertion handlers and the Eval Creator.
 function finiteNonNegativeNumberError(value: unknown, label: string): string | undefined {
   return Number.isFinite(value) && (value as number) >= 0
     ? undefined
@@ -14,25 +6,11 @@ function finiteNonNegativeNumberError(value: unknown, label: string): string | u
 }
 
 function finiteNonNegativeIntegerError(value: unknown, label: string): string | undefined {
-  return Number.isFinite(value) && Number.isInteger(value) && (value as number) >= 0
+  return Number.isInteger(value) && (value as number) >= 0
     ? undefined
     : `${label} must be a finite non-negative integer`;
 }
 
-function validRangeError(
-  min: number | undefined,
-  max: number | undefined,
-  label: string,
-): string | undefined {
-  return min !== undefined && max !== undefined && max < min
-    ? `${label} max must be greater than or equal to min`
-    : undefined;
-}
-
-/**
- * trace-span-count: requires at least one bound; `min`/`max` must be finite non-negative
- * integers with `max >= min`.
- */
 export function traceSpanCountBoundsError(value: {
   min?: unknown;
   max?: unknown;
@@ -53,18 +31,11 @@ export function traceSpanCountBoundsError(value: {
       return error;
     }
   }
-  return validRangeError(
-    min as number | undefined,
-    max as number | undefined,
-    'trace-span-count assertion',
-  );
+  return min !== undefined && max !== undefined && (max as number) < (min as number)
+    ? 'trace-span-count assertion max must be greater than or equal to min'
+    : undefined;
 }
 
-/**
- * trace-span-duration: `max` must be a finite non-negative number, `pattern` a non-empty
- * string, `requirePresence` a boolean, and (only when a `percentile` is requested) the
- * percentile 0-100 with a `nearest`/`linear` method.
- */
 export function traceSpanDurationConfigError(value: {
   pattern?: unknown;
   max?: unknown;
@@ -98,19 +69,19 @@ export function traceSpanDurationConfigError(value: {
   return undefined;
 }
 
-/**
- * trace-error-spans: a number shorthand (max error-span count) or an object with optional
- * `max_count`/`max_percentage`/`pattern`/`requirePresence`. Non-object, non-number values
- * resolve to defaults at runtime, so they are accepted here too.
- */
 export function traceErrorSpansConfigError(value: unknown): string | undefined {
   if (typeof value === 'number') {
     return finiteNonNegativeIntegerError(value, 'trace-error-spans assertion max_count');
   }
-  if (!isPlainObject(value)) {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return undefined;
   }
-  const { pattern, requirePresence, max_count: maxCount, max_percentage: maxPercentage } = value;
+  const {
+    pattern,
+    requirePresence,
+    max_count: maxCount,
+    max_percentage: maxPercentage,
+  } = value as Record<string, unknown>;
   if (pattern !== undefined && (typeof pattern !== 'string' || !pattern.trim())) {
     return 'trace-error-spans assertion pattern must be a non-empty string';
   }
@@ -136,124 +107,4 @@ export function traceErrorSpansConfigError(value: unknown): string | undefined {
     }
   }
   return undefined;
-}
-
-/**
- * trajectory:step-count / trajectory:tool-used count bounds: `min`/`max` must be finite
- * non-negative integers with `max >= min`. `assertionType` is interpolated into the
- * message so each assertion reports its own name.
- */
-export function trajectoryCountBoundsError(
-  value: { min?: unknown; max?: unknown },
-  assertionType: string,
-): string | undefined {
-  const { min, max } = value;
-  if (min !== undefined) {
-    const error = finiteNonNegativeIntegerError(min, `${assertionType} assertion min`);
-    if (error) {
-      return error;
-    }
-  }
-  if (max !== undefined) {
-    const error = finiteNonNegativeIntegerError(max, `${assertionType} assertion max`);
-    if (error) {
-      return error;
-    }
-  }
-  return validRangeError(
-    min as number | undefined,
-    max as number | undefined,
-    `${assertionType} assertion`,
-  );
-}
-
-/**
- * not-trajectory:tool-used object values are forbidden-use checks, matching not-skill-used.
- * Count ranges other than max: 0 are ambiguous after applying the `not-` prefix.
- */
-export function notTrajectoryToolUsedBoundsError(value: {
-  min?: unknown;
-  max?: unknown;
-}): string | undefined {
-  const hasExplicitMin = value.min !== undefined;
-  const hasExplicitMax = value.max !== undefined;
-  if (hasExplicitMin || (hasExplicitMax && value.max !== 0)) {
-    return 'not-trajectory:tool-used object assertions only support name/pattern with no count bounds, or max: 0';
-  }
-  return undefined;
-}
-
-/**
- * Node clamps `setTimeout` delays above 2^31 - 1 ms to 1 ms (with a
- * TimeoutOverflowWarning), so larger values would fail almost immediately while
- * claiming to have waited the full duration.
- */
-const MAX_TIMEOUT_MS = 2_147_483_647;
-
-/**
- * trajectory:goal-success: an optional `timeoutMs` must be a finite positive number no
- * greater than Node's timer ceiling.
- */
-export function trajectoryGoalSuccessTimeoutError(value: {
-  timeoutMs?: unknown;
-}): string | undefined {
-  if (!Object.prototype.hasOwnProperty.call(value, 'timeoutMs')) {
-    return undefined;
-  }
-  const { timeoutMs } = value;
-  if (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-    return 'trajectory:goal-success timeoutMs must be a finite positive number';
-  }
-  if (timeoutMs > MAX_TIMEOUT_MS) {
-    return `trajectory:goal-success timeoutMs must be at most ${MAX_TIMEOUT_MS} (Node's timer ceiling)`;
-  }
-  return undefined;
-}
-
-/**
- * trajectory:tool-sequence: an optional `mode` must be "in_order" or "exact". Only the
- * object form carries a mode (the array form defaults to "in_order").
- */
-export function trajectoryToolSequenceModeError(value: { mode?: unknown }): string | undefined {
-  const { mode } = value;
-  if (mode !== undefined && mode !== 'in_order' && mode !== 'exact') {
-    return 'trajectory:tool-sequence assertion mode must be "in_order" or "exact"';
-  }
-  return undefined;
-}
-
-/**
- * trajectory:tool-args-match: an optional `redactArgsInFailures` must be a boolean.
- * A stringy value like "true" must fail loud rather than fail open and leak traced args.
- */
-export function trajectoryRedactArgsError(value: {
-  redactArgsInFailures?: unknown;
-}): string | undefined {
-  const { redactArgsInFailures } = value;
-  if (redactArgsInFailures !== undefined && typeof redactArgsInFailures !== 'boolean') {
-    return 'trajectory:tool-args-match assertion redactArgsInFailures must be a boolean';
-  }
-  return undefined;
-}
-
-export function trajectoryToolArgsDefaultsError(value: { defaults?: unknown }): string | undefined {
-  return value.defaults !== undefined && !isPlainObject(value.defaults)
-    ? 'trajectory:tool-args-match assertion defaults must be an object mapping argument names to default values'
-    : undefined;
-}
-
-export function trajectoryToolArgsIgnoreError(value: { ignore?: unknown }): string | undefined {
-  if (value.ignore === undefined) {
-    return undefined;
-  }
-  const entries = Array.isArray(value.ignore) ? value.ignore : [value.ignore];
-  return entries.every((entry) => typeof entry === 'string' && entry.trim().length > 0)
-    ? undefined
-    : 'trajectory:tool-args-match assertion ignore must be a non-empty string or an array of non-empty strings';
-}
-
-export function trajectoryToolSequenceStepsError(value: { steps?: unknown }): string | undefined {
-  return value.steps === undefined || Array.isArray(value.steps)
-    ? undefined
-    : 'trajectory:tool-sequence assertion steps must be an array';
 }
