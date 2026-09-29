@@ -153,24 +153,40 @@ describe('LocalFileSystemProvider', () => {
     expect(fs.readFileSync(sidecarPath, 'utf8')).toBe('legacy metadata');
   });
 
-  it('keeps existing legacy sidecars until the corresponding media is deleted', async () => {
-    tempDir = createTempDir('promptfoo-media-');
-    const payload = Buffer.from('legacy media');
-    const hash = createHash('sha256').update(payload).digest('hex');
-    const key = `audio/${hash.slice(0, 12)}.wav`;
-    const sidecarPath = path.join(tempDir, `${key}.meta.json`);
-    fs.mkdirSync(path.dirname(sidecarPath), { recursive: true });
-    fs.writeFileSync(sidecarPath, 'legacy metadata', 'utf8');
-    fs.writeFileSync(path.join(tempDir, key), payload);
-    fs.writeFileSync(path.join(tempDir, 'hash-index.json'), JSON.stringify({ [hash]: key }));
-    const provider = new LocalFileSystemProvider({ basePath: tempDir });
+  it.each(['file', 'directory'])(
+    'handles a legacy sidecar %s during media deletion',
+    async (sidecarType) => {
+      tempDir = createTempDir('promptfoo-media-');
+      const payload = Buffer.from('legacy media');
+      const hash = createHash('sha256').update(payload).digest('hex');
+      const key = `audio/${hash.slice(0, 12)}.wav`;
+      const sidecarPath = path.join(tempDir, `${key}.meta.json`);
+      fs.mkdirSync(path.dirname(sidecarPath), { recursive: true });
+      if (sidecarType === 'directory') {
+        fs.mkdirSync(sidecarPath);
+      }
+      const contentPath =
+        sidecarType === 'directory' ? path.join(sidecarPath, 'kept.txt') : sidecarPath;
+      fs.writeFileSync(contentPath, 'legacy metadata', 'utf8');
+      fs.writeFileSync(path.join(tempDir, key), payload);
+      fs.writeFileSync(path.join(tempDir, 'hash-index.json'), JSON.stringify({ [hash]: key }));
+      const provider = new LocalFileSystemProvider({ basePath: tempDir });
 
-    await provider.store(payload, { contentType: 'audio/wav', mediaType: 'audio' });
+      await provider.store(payload, { contentType: 'audio/wav', mediaType: 'audio' });
 
-    expect(fs.readFileSync(sidecarPath, 'utf8')).toBe('legacy metadata');
-    await provider.delete(key);
-    expect(fs.existsSync(sidecarPath)).toBe(false);
-    await expect(provider.exists(key)).resolves.toBe(false);
-    await expect(provider.findByHash(hash)).resolves.toBeNull();
-  });
+      expect(fs.readFileSync(contentPath, 'utf8')).toBe('legacy metadata');
+      await expect(provider.getStats()).resolves.toEqual({
+        fileCount: 1,
+        totalSizeBytes: payload.length,
+      });
+      await provider.delete(key);
+      expect(fs.existsSync(sidecarPath)).toBe(sidecarType === 'directory');
+      if (sidecarType === 'directory') {
+        expect(fs.readFileSync(contentPath, 'utf8')).toBe('legacy metadata');
+      }
+      await expect(provider.getStats()).resolves.toEqual({ fileCount: 0, totalSizeBytes: 0 });
+      await expect(provider.exists(key)).resolves.toBe(false);
+      await expect(provider.findByHash(hash)).resolves.toBeNull();
+    },
+  );
 });
