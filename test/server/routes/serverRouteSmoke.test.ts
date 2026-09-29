@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
     delete: vi.fn(),
     getApiHost: vi.fn(),
     getAppUrl: vi.fn(),
+    getConfiguredAppUrl: vi.fn(),
     isEnabled: vi.fn(),
     reload: vi.fn(),
     validateAndSetApiToken: vi.fn(),
@@ -299,6 +300,7 @@ function setupDefaultMocks() {
   mocks.checkRemoteHealth.mockResolvedValue({ status: 'OK', message: 'healthy' });
   mocks.cloudConfig.getApiHost.mockReturnValue('https://api.promptfoo.dev');
   mocks.cloudConfig.getAppUrl.mockReturnValue('https://app.promptfoo.dev');
+  mocks.cloudConfig.getConfiguredAppUrl.mockReturnValue('https://app.promptfoo.dev');
   mocks.cloudConfig.isEnabled.mockReturnValue(false);
   mocks.deleteEval.mockResolvedValue(undefined);
   mocks.deleteEvals.mockReturnValue(undefined);

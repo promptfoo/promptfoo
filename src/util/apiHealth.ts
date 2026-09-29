@@ -1,7 +1,6 @@
 import { getEnvString } from '../envars';
 import { CloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
-import { isHostedCloudHost } from '../types/api/user';
 import { fetchWithTimeout } from './fetch/index';
 
 interface HealthResponse {
@@ -57,11 +56,9 @@ export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
     const data = await response.json();
 
     if (data.status === 'OK') {
-      const usingCustomEndpoint =
-        cloudConfig.isEnabled() && !isHostedCloudHost(cloudConfig.getApiHost());
       return {
         status: 'OK',
-        message: usingCustomEndpoint
+        message: cloudConfig.isEnabled()
           ? 'Cloud API is healthy (using custom endpoint)'
           : 'Cloud API is healthy',
       };

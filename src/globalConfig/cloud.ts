@@ -57,7 +57,7 @@ interface CloudTokenValidation {
 }
 
 interface CloudConfigState {
-  appUrl: string;
+  appUrl?: string;
   apiHost?: string;
   apiKey?: string;
   authHeaderName?: string;
@@ -98,7 +98,7 @@ export class CloudConfig {
   private readConfig(): CloudConfigState {
     const savedConfig = readGlobalConfig()?.cloud || {};
     return {
-      appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
+      appUrl: savedConfig.appUrl,
       apiHost: savedConfig.apiHost,
       apiKey: savedConfig.apiKey,
       authHeaderName: savedConfig.authHeaderName,
@@ -214,7 +214,11 @@ export class CloudConfig {
   }
 
   getAppUrl(): string {
-    return this.config.appUrl;
+    return this.config.appUrl || 'https://www.promptfoo.app';
+  }
+
+  getConfiguredAppUrl(): string | undefined {
+    return this.config.appUrl || undefined;
   }
 
   getSharing(): boolean | undefined {

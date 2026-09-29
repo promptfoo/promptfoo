@@ -2,6 +2,7 @@ import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import History from '@app/pages/history/History';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -34,6 +35,7 @@ beforeEach(() => {
         <MemoryRouter>
           <TooltipProvider>
             <Navigation />
+            <History data={[]} isLoading={false} error={null} />
           </TooltipProvider>
         </MemoryRouter>
       </QueryClientProvider>,
@@ -54,6 +56,11 @@ describe('cloud status navigation', () => {
     const status = page.getByRole('button', { name: /promptfoo cloud is not configured/i });
     await expect.element(status).toBeVisible();
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+    const heading = page.getByRole('heading', { name: 'Evaluation History' }).element();
+    const header = container.querySelector('header')!;
+    await expect
+      .poll(() => heading.getBoundingClientRect().top - header.getBoundingClientRect().bottom)
+      .toBeGreaterThanOrEqual(0);
 
     const controls = container.querySelectorAll('header button, header a');
     for (const control of controls) {

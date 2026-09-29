@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 
 import {
   NavigationMenu,
@@ -196,6 +196,25 @@ const browseMenuItems: MenuItem[] = [
 ];
 
 export default function Navigation() {
+  const headerRef = useRef<HTMLElement>(null);
+
+  useLayoutEffect(() => {
+    const header = headerRef.current;
+    if (!header) {
+      return;
+    }
+    const updateHeight = () => {
+      document.documentElement.style.setProperty('--nav-height', `${header.offsetHeight}px`);
+    };
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(header);
+    return () => {
+      observer.disconnect();
+      document.documentElement.style.removeProperty('--nav-height');
+    };
+  }, []);
+
   const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
   const [showApiSettingsModal, setShowApiSettingsModal] = useState<boolean>(false);
 
@@ -204,7 +223,10 @@ export default function Navigation() {
 
   return (
     <>
-      <header className="sticky top-0 z-(--z-appbar) w-full border-b border-border bg-card shadow-sm">
+      <header
+        ref={headerRef}
+        className="sticky top-0 z-(--z-appbar) w-full border-b border-border bg-card shadow-sm"
+      >
         <div className="flex min-h-14 flex-wrap items-center justify-between gap-2 px-3 py-1 sm:h-14 sm:flex-nowrap sm:px-4 sm:py-0">
           {/* Left section: Logo and Navigation */}
           <div className="flex shrink-0 items-center gap-2 sm:gap-6">

@@ -15,6 +15,7 @@ vi.mock('../../../src/globalConfig/cloud', async (importOriginal) => {
       delete: vi.fn(),
       getApiHost: vi.fn(),
       getAppUrl: vi.fn(),
+      getConfiguredAppUrl: vi.fn(),
       isEnabled: vi.fn(),
       reload: vi.fn(),
       validateAndSetApiToken: vi.fn(),
@@ -176,6 +177,7 @@ describe('User Routes', () => {
   describe('GET /api/user/cloud-config', () => {
     beforeEach(() => {
       mockedCloudConfig.getApiHost.mockReturnValue('https://api.promptfoo.app');
+      mockedCloudConfig.getConfiguredAppUrl.mockImplementation(() => mockedCloudConfig.getAppUrl());
     });
 
     it('should return configured cloud state', async () => {
@@ -219,6 +221,18 @@ describe('User Routes', () => {
         isEnabled: true,
         isEnterprise: true,
       });
+    });
+
+    it('does not use the public dashboard fallback for an enterprise API without a saved app URL', async () => {
+      mockedCloudConfig.isEnabled.mockReturnValue(true);
+      mockedCloudConfig.getApiHost.mockReturnValue('https://api.enterprise.example');
+      mockedCloudConfig.getAppUrl.mockReturnValue('https://www.promptfoo.app');
+      mockedCloudConfig.getConfiguredAppUrl.mockReturnValue(undefined);
+
+      const response = await api.get('/api/user/cloud-config');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ appUrl: null, isEnabled: true, isEnterprise: true });
     });
 
     it('should retain the hosted dashboard behind a custom API proxy', async () => {

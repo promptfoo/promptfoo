@@ -204,16 +204,17 @@ userRouter.get('/cloud-config', async (_req: Request, res: Response): Promise<vo
   try {
     cloudConfig.reload();
     const isEnabled = cloudConfig.isEnabled();
-    const appUrl = getBrowserSafeHttpUrl(cloudConfig.getAppUrl());
     const apiHost = getBrowserSafeHttpUrl(cloudConfig.getApiHost());
-    const hasEnterpriseAppUrl = appUrl !== null && !isHostedCloudHost(appUrl);
     const hasEnterpriseApiHost = apiHost !== null && !isHostedCloudHost(apiHost);
+    const appUrl = getBrowserSafeHttpUrl(
+      cloudConfig.getConfiguredAppUrl() ?? (hasEnterpriseApiHost ? null : cloudConfig.getAppUrl()),
+    );
 
     res.json(
       UserSchemas.CloudConfig.Response.parse({
         appUrl,
         isEnabled,
-        isEnterprise: appUrl ? hasEnterpriseAppUrl : hasEnterpriseApiHost,
+        isEnterprise: appUrl ? !isHostedCloudHost(appUrl) : hasEnterpriseApiHost,
       }),
     );
   } catch (error) {
