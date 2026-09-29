@@ -218,6 +218,7 @@ The provider validates top-level provider config strictly. If you mistype a prov
 | `base_url`               | string   | Custom API base URL                                                                                  | None                 |
 | `maxRetries`             | number   | Maximum scheduler retries for retryable SDK rate-limit failures                                      | 3                    |
 | `working_dir`            | string   | Directory for Codex to operate in                                                                    | Current directory    |
+| `copy_working_dir`       | boolean  | Fresh copy of `working_dir` per eval step: `true`, `'git'`, `'copy'` ([more][isolated-workspaces])   | false                |
 | `additional_directories` | string[] | Additional directories the agent can access. Relative values resolve from the config file directory. | None                 |
 | `model`                  | string   | Model to use                                                                                         | SDK default          |
 | `model_provider`         | string   | Codex model provider to route through (e.g. `amazon-bedrock`). Maps to `cli_config.model_provider`.  | `openai`             |
@@ -517,6 +518,10 @@ providers:
     config:
       skip_git_repo_check: true
 ```
+
+With `copy_working_dir`, each eval step runs in a workspace that promptfoo creates from `working_dir`. A clean git repository is cloned, so the check passes. Other directories are copied, and a copy without its own `.git` directory, such as a copy of a subdirectory of a repository, needs `skip_git_repo_check: true`. See [isolated workspaces][isolated-workspaces].
+
+[isolated-workspaces]: /docs/guides/evaluate-coding-agents#isolated-workspaces
 
 ## Sandbox Mode
 
