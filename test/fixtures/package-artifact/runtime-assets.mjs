@@ -1,25 +1,17 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
-import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+
+import { runIsolated } from './isolated.mjs';
 
 // Copy beside an installed consumer's package.json. Python and Go are required;
 // --ruby additionally requires Ruby and never silently skips an unavailable interpreter.
-const fixturePath = fileURLToPath(import.meta.url);
 const consumerRequire = createRequire(import.meta.url);
 const packageEntry = consumerRequire.resolve('promptfoo');
 const packageRequire = createRequire(packageEntry);
 const installedPackageDir = path.resolve(path.dirname(packageEntry), '..', '..');
-const platformEnv = Object.fromEntries(
-  ['PATH', 'Path', 'SystemRoot', 'WINDIR', 'COMSPEC', 'PATHEXT', 'LANG', 'LC_ALL']
-    .filter((key) => process.env[key] !== undefined)
-    .map((key) => [key, process.env[key]]),
-);
-
 async function checkProtobuf() {
   const protobuf = packageRequire('protobufjs');
   const protoDir = path.join(installedPackageDir, 'dist', 'src', 'tracing', 'proto');
@@ -202,54 +194,27 @@ if (process.argv[2] === '--child') {
   }
 } else {
   const { values } = parseArgs({ options: { ruby: { type: 'boolean', default: false } } });
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-runtime-assets-'));
-  try {
-    for (const directory of ['config', 'cache', 'go-cache', 'go-mod-cache', 'tmp']) {
-      fs.mkdirSync(path.join(stateDir, directory));
-    }
-    execFileSync(
-      process.execPath,
-      [fixturePath, '--child', stateDir, ...(values.ruby ? ['--ruby'] : [])],
-      {
-        cwd: path.dirname(fixturePath),
-        env: {
-          ...platformEnv,
-          NODE_PATH: '',
-          IS_TESTING: 'false',
-          PROMPTFOO_CONFIG_DIR: path.join(stateDir, 'config'),
-          PROMPTFOO_CACHE_PATH: path.join(stateDir, 'cache'),
-          PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
-          PROMPTFOO_DISABLE_TELEMETRY: '1',
-          PROMPTFOO_DISABLE_UPDATE: 'true',
-          PROMPTFOO_TRACING_ENABLED: 'false',
-          PROMPTFOO_ENABLE_OTEL: 'false',
-          PROMPTFOO_PYTHON: 'python3',
-          PYTHONDONTWRITEBYTECODE: '1',
-          PYTHONNOUSERSITE: '1',
-          PYTHONPATH: '',
-          PYTHONIOENCODING: 'utf-8',
-          PYTHONUTF8: '1',
-          GOCACHE: path.join(stateDir, 'go-cache'),
-          GOMODCACHE: path.join(stateDir, 'go-mod-cache'),
-          GOPATH: path.join(stateDir, 'go-path'),
-          GOPROXY: 'off',
-          GOSUMDB: 'off',
-          GOTOOLCHAIN: 'local',
-          GOTELEMETRY: 'off',
-          GOENV: 'off',
-          GOFLAGS: '-buildvcs=false',
-          GOWORK: 'off',
-          TMPDIR: path.join(stateDir, 'tmp'),
-          TEMP: path.join(stateDir, 'tmp'),
-          TMP: path.join(stateDir, 'tmp'),
-        },
-        encoding: 'utf8',
-        stdio: 'inherit',
-        timeout: 60_000,
-        maxBuffer: 8 * 1024 * 1024,
-      },
-    );
-  } finally {
-    fs.rmSync(stateDir, { recursive: true, force: true });
-  }
+  await runIsolated(import.meta.url, {
+    label: 'runtime-assets',
+    args: values.ruby ? ['--ruby'] : [],
+    directories: ['go-cache', 'go-mod-cache'],
+    env: (stateDir) => ({
+      PROMPTFOO_PYTHON: 'python3',
+      PYTHONDONTWRITEBYTECODE: '1',
+      PYTHONNOUSERSITE: '1',
+      PYTHONPATH: '',
+      PYTHONIOENCODING: 'utf-8',
+      PYTHONUTF8: '1',
+      GOCACHE: path.join(stateDir, 'go-cache'),
+      GOMODCACHE: path.join(stateDir, 'go-mod-cache'),
+      GOPATH: path.join(stateDir, 'go-path'),
+      GOPROXY: 'off',
+      GOSUMDB: 'off',
+      GOTOOLCHAIN: 'local',
+      GOTELEMETRY: 'off',
+      GOENV: 'off',
+      GOFLAGS: '-buildvcs=false',
+      GOWORK: 'off',
+    }),
+  });
 }

@@ -1,10 +1,8 @@
 # Installed package fixtures
 
-`scripts/testPackageArtifact.ts` copies these scripts into a temporary consumer
-outside the repository, installs a packed `promptfoo`, and runs its public API.
-The consumer uses the public npm registry and is isolated from the repository's
-workspaces, lockfile, overrides, and development dependencies. To select a trusted
-local mirror explicitly, pass `--registry https://your-registry.example/`.
+`scripts/testPackageArtifact.ts` installs packed `promptfoo` in a temporary consumer
+outside the repository and copies these fixtures there. Installs use the public npm
+registry with lifecycle scripts disabled. Pass `--registry URL` to use a trusted mirror.
 
 Use npm 11 as required by the repository. Older npm 10 pack implementations can
 run `prepare` despite `--ignore-scripts`. After `npm run build`, run from the
@@ -15,23 +13,18 @@ npm run test:package-artifact
 npm run test:package-artifact -- --profile omit-optional
 ```
 
-Both dependency profiles disable install scripts. They verify ESM/CommonJS root
-API evaluations, root and contracts declarations, and web asset references.
-The CommonJS fixture checks writable exports and the identity of its native Zod
-constructors. API fixtures check a pass, an assertion failure, and a provider
-error with caching disabled and isolated configuration paths. Default dependency
-resolution also runs the installed CLI against a local compressed HTTP server.
-Default CLI version aliases must report the installed version. The
-optional-omitted profile intentionally lacks native SQLite platform packages and
-checks the existing actionable CLI failure (even `--version` initializes SQLite).
-It cannot run persistence-dependent CLI evaluations.
+Both profiles check ESM/CommonJS evaluations and JSON exports, declaration types,
+and web assets. Evaluations cover success, assertion failure, and provider errors
+with caching disabled and isolated configuration paths. CommonJS also checks
+writable exports and Zod constructor identity.
 
-The TypeScript compiler is a test tool from the repository; its consumer projects
-resolve all package declarations from the isolated installation with strict
-checking enabled for consumer code. Contracts also check dependency declarations;
-root API consumers use `skipLibCheck` because the public `Eval` surface currently
-exposes Drizzle declarations with upstream errors and unrelated optional driver
-imports. This does not claim a clean root declaration closure.
+The default profile checks both CLI aliases and evaluates compressed HTTP responses
+from a local server. Without optional dependencies, native SQLite is unavailable;
+even `--version` must report the expected missing-dependency diagnostic.
+
+The repository's TypeScript compiler checks callers against the installed declarations.
+Contracts use full strict checking. Root API callers use `skipLibCheck` because `Eval`
+exposes Drizzle declarations with upstream errors and optional-driver imports.
 
 ## Validate an existing artifact
 
@@ -53,10 +46,12 @@ They still publish the same archive that passed that compatibility check.
 
 ## Runtime assets and platforms
 
-Default consumers migrate an isolated database from the first packaged migration,
-retain a nonempty legacy result/table/config byte-for-byte, export it through the
-installed CLI, and persist a new passing and failing evaluation. A second process
-reopens the database and verifies migration idempotency and stored results.
+Default consumers upgrade a database from the first packaged migration. Checks
+cover historical data and CLI exports, new passing and failing results, and
+migration idempotency after reopening.
+
+Fixtures run in supervised child processes. Temporary state is removed after the
+children exit and retained if process-tree termination fails.
 
 Select interpreter checks explicitly; missing interpreters fail the selected gate:
 
@@ -82,10 +77,8 @@ The macOS/Windows jobs use `scripts/preparePackageArtifactTest.mjs` to copy only
 the acceptance scripts/fixtures into a temporary tool package. Its two tools
 and their complete dependency graph are copied from the repository lockfile,
 including integrity hashes and optional native packages, then installed with `npm ci`.
-The installed Promptfoo consumer
-resolves dependencies independently. No repository dependency install or build is
-required on those platforms. Incremental TypeScript compiler state is excluded
-from the published archive.
+The Promptfoo consumer resolves dependencies independently. These jobs need no
+repository dependency install or build.
 
 ## Browser capability
 

@@ -204,7 +204,7 @@ jobs:
         if: matrix.node == '24.x'
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: '3.12'
+          python-version: '3.12.14'
 
       - name: Use Ruby for installed wrapper acceptance
         if: matrix.node == '24.x'

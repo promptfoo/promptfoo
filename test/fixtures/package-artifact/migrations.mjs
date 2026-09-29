@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+
+import { isolatedEnv, runIsolated } from './isolated.mjs';
 
 // Copy this fixture into an isolated installed consumer before running it. Every runtime
 // dependency and migration must resolve from that consumer's promptfoo installation.
@@ -14,99 +15,6 @@ const consumerRequire = createRequire(import.meta.url);
 const packageEntry = consumerRequire.resolve('promptfoo');
 const packageRequire = createRequire(packageEntry);
 const installedPackageDir = path.resolve(path.dirname(packageEntry), '..', '..');
-const platformEnv = Object.fromEntries(
-  ['PATH', 'Path', 'SystemRoot', 'WINDIR', 'COMSPEC', 'PATHEXT', 'LANG', 'LC_ALL']
-    .filter((key) => process.env[key] !== undefined)
-    .map((key) => [key, process.env[key]]),
-);
-
-class NativeCheckTerminationError extends Error {
-  constructor(pid, cause) {
-    super(`Could not confirm termination of migration process tree ${pid}`, { cause });
-  }
-}
-
-function killNativeTree(pid, fallback = false) {
-  const options = { stdio: 'pipe', timeout: 5_000, env: platformEnv };
-  if (process.platform === 'win32') {
-    execFileSync(
-      path.join(process.env.SystemRoot || process.env.WINDIR, 'System32', 'taskkill.exe'),
-      ['/pid', String(pid), '/t', '/f'],
-      options,
-    );
-  } else if (fallback) {
-    // Retry from a separate process if the first signal attempt failed.
-    execFileSync(
-      process.execPath,
-      ['-e', 'process.kill(-Number(process.argv[1]), "SIGKILL")', String(pid)],
-      options,
-    );
-  } else {
-    process.kill(-pid, 'SIGKILL');
-  }
-}
-
-async function runNativeCheck(tempDir, timeoutMs) {
-  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), '--check', tempDir], {
-    cwd: path.dirname(fileURLToPath(import.meta.url)),
-    env: { ...platformEnv, NODE_PATH: '' },
-    stdio: ['ignore', 'pipe', 'pipe'],
-    detached: process.platform !== 'win32',
-  });
-  child.stdout.pipe(process.stdout);
-  child.stderr.pipe(process.stderr);
-  let timedOut = false;
-  let timer;
-  try {
-    await new Promise((resolve, reject) => {
-      child.once('error', reject);
-      child.once('close', (code, signal) => {
-        if (timedOut) {
-          reject(new Error(`Installed migration check timed out after ${timeoutMs}ms`));
-        } else if (code === 0) {
-          resolve();
-        } else {
-          reject(new Error(`Installed migration check failed (${signal ?? code})`));
-        }
-      });
-      timer = setTimeout(() => {
-        timedOut = true;
-        try {
-          // Terminate the complete owned tree, including any stalled evaluation process.
-          killNativeTree(child.pid);
-        } catch (firstError) {
-          if (firstError.code === 'ESRCH') {
-            return;
-          }
-          try {
-            killNativeTree(child.pid, true);
-          } catch (secondError) {
-            // If the OS refuses both attempts, do not unlink a database that may still
-            // be open. Report the PID and retain state for diagnosis instead of hiding it.
-            // Settle first: the best-effort kill can synchronously emit an error event.
-            reject(
-              new NativeCheckTerminationError(
-                child.pid,
-                new AggregateError([firstError, secondError], 'Migration tree termination failed'),
-              ),
-            );
-            try {
-              child.kill('SIGKILL');
-            } catch {
-              /* Best effort direct-child fallback. */
-            }
-            child.stdout.destroy();
-            child.stderr.destroy();
-            child.unref();
-          }
-        }
-      }, timeoutMs);
-    });
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 async function runPersistedEvaluation() {
   const { evaluate } = await import('promptfoo');
   const outputPath = process.argv[3];
@@ -148,7 +56,6 @@ async function checkMigrations(tempDir) {
   let client;
 
   try {
-    fs.mkdirSync(configDir);
     fs.mkdirSync(path.join(oldMigrationsDir, 'meta'), { recursive: true });
     const migrationsDir = path.join(installedPackageDir, 'dist', 'drizzle');
     const journal = JSON.parse(
@@ -255,18 +162,7 @@ async function checkMigrations(tempDir) {
     const runNode = (args) =>
       execFileSync(process.execPath, args, {
         cwd: path.dirname(fileURLToPath(import.meta.url)),
-        env: {
-          ...platformEnv,
-          NODE_PATH: '',
-          IS_TESTING: 'false',
-          PROMPTFOO_CONFIG_DIR: configDir,
-          PROMPTFOO_CACHE_PATH: path.join(tempDir, 'cache'),
-          PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
-          PROMPTFOO_DISABLE_TELEMETRY: '1',
-          PROMPTFOO_DISABLE_UPDATE: 'true',
-          PROMPTFOO_TRACING_ENABLED: 'false',
-          PROMPTFOO_ENABLE_OTEL: 'false',
-        },
+        env: isolatedEnv(tempDir),
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
         timeout: 60_000,
@@ -375,7 +271,7 @@ async function checkMigrations(tempDir) {
 
 if (process.argv[2] === '--evaluate') {
   await runPersistedEvaluation();
-} else if (process.argv[2] === '--check') {
+} else if (process.argv[2] === '--child') {
   assert.equal(process.argv.length, 4, 'Expected the owned migration directory');
   await checkMigrations(process.argv[3]);
 } else {
@@ -387,27 +283,7 @@ if (process.argv[2] === '--evaluate') {
     Number.isInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 45_000,
     'Migration timeout must be an integer from 1 to 45000ms',
   );
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-artifact-migrations-'));
-  const startedAt = performance.now();
-  let safeToRemove = true;
-  try {
-    // libSQL transactions can retain native connections after client.close(). Keep every
-    // database handle in a child so Windows permits deletion when that process exits.
-    // Leave time to terminate descendants, wait for exit, and remove state before the
-    // harness's 60 second deadline. Tests may select a smaller deadline with --timeout-ms.
-    await runNativeCheck(tempDir, timeoutMs);
-  } catch (error) {
-    if (error instanceof NativeCheckTerminationError) {
-      safeToRemove = false;
-      console.error(`Retained migration state after termination failure: ${tempDir}`);
-    }
-    throw error;
-  } finally {
-    if (safeToRemove) {
-      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
-    }
-  }
-  console.log(
-    `Verified installed migration cleanup after child exit (${Math.round(performance.now() - startedAt)}ms)`,
-  );
+  // Native connections must exit before their database directory can be removed.
+  await runIsolated(import.meta.url, { label: 'migration', timeoutMs });
+  console.log('Verified installed migration cleanup after child exit');
 }
