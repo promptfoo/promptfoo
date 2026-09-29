@@ -4,7 +4,6 @@ import { isMissingPackageImportError } from '../util/packageImportErrors';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
-// Type definitions for natural package (since it's optional)
 type Stemmer = {
   stem(token: string): string;
 };
@@ -15,7 +14,10 @@ type WordNetInstance = {
   lookup(word: string, callback: (results: DataRecord[]) => void): void;
 };
 
-// Lazy load natural package to handle optional dependency
+const NATURAL_INSTALL_HELP =
+  'Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1. ' +
+  'For a global installation, use npm install -g promptfoo natural@^8.1.1.';
+
 let PorterStemmer: Stemmer | undefined;
 let WordNet: (new () => WordNetInstance) | undefined;
 
@@ -32,18 +34,14 @@ async function ensureNaturalPackage(): Promise<void> {
       throw error;
     }
     throw Object.assign(
-      new Error(
-        'The "natural" package is required for METEOR assertions. Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1. For a global installation, use npm install -g promptfoo natural@^8.1.1.',
-      ),
+      new Error(`The "natural" package is required for METEOR assertions. ${NATURAL_INSTALL_HELP}`),
       { cause: error },
     );
   }
 
   if (!semverSatisfies(metadata.version, '^8.1.1')) {
     throw new Error(
-      `METEOR requires natural@^8.1.1; found ${metadata.version}. ` +
-        'Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1. ' +
-        'For a global installation, use npm install -g promptfoo natural@^8.1.1.',
+      `METEOR requires natural@^8.1.1; found ${metadata.version}. ${NATURAL_INSTALL_HELP}`,
     );
   }
   // Natural's top-level CommonJS export does not expose named ESM exports.

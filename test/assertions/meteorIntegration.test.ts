@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Use vi.hoisted() + vi.mock() instead of vi.resetModules() + vi.doMock() + dynamic import.
-// The old pattern re-imported the entire assertions module (~90 imports) for each test,
-// which caused timeouts on Windows due to slow module resolution.
+// Reuse the assertion module to avoid slow module resolution on Windows.
 const mockHandleMeteorAssertion = vi.hoisted(() => vi.fn());
 
 vi.mock('../../src/assertions/meteor', () => ({
@@ -40,7 +38,6 @@ describe('METEOR assertion', () => {
       providerResponse: { output: 'Actual output' },
     });
 
-    // Verify the mock was called and the result is as expected
     expect(mockHandleMeteorAssertion).toHaveBeenCalledWith(expect.anything());
     expect(result.pass).toBe(true);
     expect(result.score).toBe(0.85);
@@ -64,12 +61,9 @@ describe('METEOR assertion', () => {
       providerResponse: { output: 'Actual output' },
     });
 
-    // Verify the error is handled correctly and returns a friendly message
     expect(result.pass).toBe(false);
     expect(result.score).toBe(0);
-    expect(result.reason).toBe(
-      'METEOR assertion requires the natural package. Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1. For a global installation, use npm install -g promptfoo natural@^8.1.1.',
-    );
+    expect(result.reason).toBe(message);
     expect(result.assertion).toEqual({
       type: 'meteor',
       value: 'Expected output',

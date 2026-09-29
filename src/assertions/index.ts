@@ -272,20 +272,12 @@ const ASSERTION_HANDLERS: Record<
       const { handleMeteorAssertion } = await import('./meteor.js');
       return await handleMeteorAssertion(params);
     } catch (error) {
-      if (error instanceof Error && error.message.startsWith('METEOR requires natural@')) {
-        return { pass: false, score: 0, reason: error.message, assertion: params.assertion };
-      }
       if (
         error instanceof Error &&
-        error.message.startsWith('The "natural" package is required for METEOR assertions.')
+        (error.message.startsWith('METEOR requires natural@') ||
+          error.message.startsWith('The "natural" package is required for METEOR assertions.'))
       ) {
-        return {
-          pass: false,
-          score: 0,
-          reason:
-            'METEOR assertion requires the natural package. Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1. For a global installation, use npm install -g promptfoo natural@^8.1.1.',
-          assertion: params.assertion,
-        };
+        return { pass: false, score: 0, reason: error.message, assertion: params.assertion };
       }
       throw error;
     }
