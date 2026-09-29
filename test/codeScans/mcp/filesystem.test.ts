@@ -166,8 +166,8 @@ describe('filesystem MCP launcher', () => {
     restoreEnv();
   });
 
-  it('runs the npx entrypoint installed with Node on Windows', () => {
-    mocks.existsSync.mockImplementation((file) => file === npxCli(nodeDir));
+  it('prefers the npx entrypoint installed with Node over PATH on Windows', () => {
+    mocks.existsSync.mockReturnValue(true);
 
     startFilesystemMcpServer(rootDir);
 
