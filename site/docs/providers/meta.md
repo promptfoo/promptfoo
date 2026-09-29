@@ -9,14 +9,14 @@ The [Meta Model API](https://dev.meta.ai/) (public preview) serves Meta Superint
 
 :::note
 
-This provider is for the Meta **Model** API at `api.meta.ai` (Muse models), which supersedes Meta's [Llama API](/docs/providers/llamaApi.md) (`api.llama.com`) as Meta's hosted inference service — the Llama API Public Preview was retired on July 6, 2026.
+This provider uses the Meta Model API at `api.meta.ai` for Muse models. Meta retired the separate [Llama API](/docs/providers/llamaApi.md) at `api.llama.com` on July 6, 2026.
 
 :::
 
 ## Setup
 
 1. Create an API key from the API keys tab on the [Meta Model API dashboard](https://dev.meta.ai/).
-2. Set the `MODEL_API_KEY` environment variable — Meta's official variable, the same one its SDKs and quickstart use — or specify `apiKey` (or a custom `apiKeyEnvar`) in your config.
+2. Set the `MODEL_API_KEY` environment variable, or specify `apiKey` or a custom `apiKeyEnvar` in your config.
 
 ```yaml
 providers:
@@ -186,5 +186,5 @@ npx promptfoo@latest init --example provider-meta
 ## See Also
 
 - [OpenAI Provider](/docs/providers/openai/) — compatible configuration options
-- [Llama API Provider](/docs/providers/llamaApi.md) — Meta's hosted Llama models
+- [Llama API migration guide](/docs/providers/llamaApi.md)
 - [Meta Model API docs](https://dev.meta.ai/docs/overview) and [pricing](https://dev.meta.ai/docs/pricing-rate-limits)
