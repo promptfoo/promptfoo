@@ -3,9 +3,9 @@
  *
  * For each eval step, `promptfoo eval` creates a fresh workspace from the provider's
  * `working_dir`, passes it to the provider as that call's `working_dir`, and removes it once
- * the step's assertions have run. A git repository whose working tree matches its current
- * commit is cloned, which is fast, leaves the source repository untouched, and records the
- * agent's changes as a diff. Anything else is copied.
+ * the step's assertions have run. Clean Git repositories are cloned when checkout preserves
+ * their files; otherwise the directory is copied. Clones leave the source untouched and record
+ * the agent's changes as a diff.
  *
  * A workspace keeps one call from affecting another; it is not a security sandbox.
  */
@@ -16,6 +16,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
+import { onExit } from 'signal-exit';
 import cliState from '../cliState';
 import logger from '../logger';
 import { renderVarsInObject } from '../util/render';
@@ -375,9 +376,11 @@ function registerExitCleanup(): void {
     return;
   }
   exitCleanupRegistered = true;
+  const signals = ['SIGINT', 'SIGTERM'] as const;
+  const existingListeners = new Set(signals.flatMap((signal) => process.rawListeners(signal)));
   // A call still running when the process exits (e.g. after an eval timeout) never reaches
   // its cleanup. `exit` handlers must be synchronous.
-  process.once('exit', () => {
+  onExit(() => {
     for (const root of liveWorkspaces.values()) {
       try {
         rmSync(root, { recursive: true, force: true });
@@ -386,6 +389,15 @@ function registerExitCleanup(): void {
       }
     }
   });
+  // Observe the signal before existing once-handlers remove themselves during graceful shutdown.
+  for (const signal of signals) {
+    for (const listener of process.rawListeners(signal) as NodeJS.SignalsListener[]) {
+      if (!existingListeners.has(listener)) {
+        process.removeListener(signal, listener);
+        process.prependListener(signal, listener);
+      }
+    }
+  }
 }
 
 async function copyIndexFile(

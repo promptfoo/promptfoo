@@ -1,4 +1,5 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { once } from 'node:events';
 import fs from 'node:fs';
 import { createServer } from 'node:net';
 import os from 'node:os';
@@ -120,6 +121,116 @@ describe('agent workspaces', () => {
     await Promise.all(workspaces.map((workspace) => workspace.remove()));
     cliState.basePath = restoreBasePath;
     fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  describe('process cleanup', () => {
+    it.each([
+      ['SIGINT', 'none'],
+      ['SIGTERM', 'none'],
+      ['SIGINT', 'observer-before'],
+      ['SIGTERM', 'observer-before'],
+      ['SIGINT', 'observer-after'],
+      ['SIGTERM', 'observer-after'],
+      ['SIGINT', 'removed'],
+      ['SIGTERM', 'removed'],
+      ['SIGINT', 'consume'],
+      ['SIGTERM', 'consume'],
+      ['SIGINT', 'before'],
+      ['SIGTERM', 'before'],
+      ['SIGINT', 'after'],
+      ['SIGTERM', 'after'],
+    ] as const)('cleans up on %s with a handler registered %s', async (signal, handler) => {
+      if (process.platform === 'win32') {
+        return; // Windows terminates signal-targeted processes without invoking Node handlers.
+      }
+      const source = path.join(root, 'source');
+      write(path.join(source, 'fixture.txt'), 'original\n');
+      const moduleUrl = new URL('../../src/providers/agentWorkspace.ts', import.meta.url).href;
+      const child = spawn(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          '--input-type=module',
+          '-e',
+          `
+            import fs from 'node:fs';
+            const { createAgentWorkspace } = await import(${JSON.stringify(moduleUrl)});
+            const { onExit } = await import('signal-exit');
+            const [source, signal, handler, marker] = process.argv.slice(1);
+            let workspace;
+            const handleSignal = () => {
+              process.send({ handled: true, workspaceAvailable: fs.existsSync(workspace.dir) });
+              if (handler !== 'consume') setImmediate(() => process.exit(42));
+            };
+            if (handler === 'before' || handler === 'consume') process.once(signal, handleSignal);
+            if (handler === 'observer-before') onExit(() => fs.writeFileSync(marker, 'handled'));
+            workspace = await createAgentWorkspace(source, 'copy');
+            if (handler === 'after') process.once(signal, handleSignal);
+            if (handler === 'observer-after') onExit(() => fs.writeFileSync(marker, 'handled'));
+            if (handler === 'removed') await workspace.remove();
+            setInterval(() => {}, 1000);
+            process.send({ workingDir: workspace.dir });
+          `,
+          source,
+          signal,
+          handler,
+          path.join(root, 'observer-ran'),
+        ],
+        {
+          stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+          env: {
+            ...process.env,
+            PROMPTFOO_CONFIG_DIR: path.join(root, 'config'),
+            PROMPTFOO_DISABLE_TELEMETRY: 'true',
+          },
+        },
+      );
+      let stderr = '';
+      child.stderr?.on('data', (data) => {
+        stderr += data;
+      });
+      const messages: unknown[] = [];
+      child.on('message', (message) => messages.push(message));
+      const exited = once(child, 'exit');
+      let workingDir: string | undefined;
+      try {
+        const ready = await Promise.race([
+          once(child, 'message').then(([message]) => message as { workingDir: string }),
+          exited.then(() => {
+            throw new Error(stderr || 'Child exited before creating its workspace');
+          }),
+        ]);
+        workingDir = ready.workingDir;
+        expect(fs.existsSync(workingDir)).toBe(handler !== 'removed');
+        const handled = handler === 'consume' ? once(child, 'message') : undefined;
+        expect(child.kill(signal)).toBe(true);
+        if (handled) {
+          await handled;
+          expect(fs.existsSync(workingDir)).toBe(true);
+          expect(child.kill(signal)).toBe(true);
+        }
+
+        const customExit = handler === 'before' || handler === 'after';
+        expect(await exited).toEqual(customExit ? [42, null] : [null, signal]);
+        if (customExit || handler === 'consume') {
+          expect(messages).toContainEqual({ handled: true, workspaceAvailable: true });
+        }
+        expect(fs.existsSync(workingDir)).toBe(false);
+        if (handler.startsWith('observer-')) {
+          expect(fs.readFileSync(path.join(root, 'observer-ran'), 'utf8')).toBe('handled');
+        }
+        expect(fs.readFileSync(path.join(source, 'fixture.txt'), 'utf8')).toBe('original\n');
+      } finally {
+        if (child.exitCode === null && child.signalCode === null) {
+          child.kill('SIGKILL');
+          await exited;
+        }
+        if (workingDir) {
+          fs.rmSync(path.dirname(workingDir), { recursive: true, force: true });
+        }
+      }
+    });
   });
 
   describe('git repositories', () => {
