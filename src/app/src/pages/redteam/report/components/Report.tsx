@@ -47,7 +47,7 @@ import {
 import { ResultFailureReason } from '@promptfoo/types/results';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { AlertTriangle, Filter, ListOrdered, Printer, Settings, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import FrameworkCompliance from './FrameworkCompliance';
 import { type CategoryStats, type TestResultStats } from './FrameworkComplianceUtils';
 import Overview from './Overview';

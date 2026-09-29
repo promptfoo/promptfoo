@@ -235,7 +235,7 @@ describe('AwsBedrockAgentsProvider', () => {
 
       expect(result).toEqual({
         error:
-          'Invalid knowledgeBaseConfigurations[0].retrievalConfiguration.vectorSearchConfiguration.filter: use an AWS RetrievalFilter with one operator, such as equals or andAll. Flat metadata maps are not supported.',
+          'Invalid knowledgeBaseConfigurations[0].retrievalConfiguration.vectorSearchConfiguration.filter: use an AWS RetrievalFilter with one operator, such as equals, or andAll/orAll with at least two operands. Flat metadata maps are not supported.',
       });
       expect(getClient).not.toHaveBeenCalled();
       expect(mockGet).not.toHaveBeenCalled();

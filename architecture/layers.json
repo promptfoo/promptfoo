@@ -41,6 +41,7 @@
         "src/contracts.ts",
         "src/csv.ts",
         "src/logger.ts",
+        "src/providers/bedrock/routing.ts",
         "src/providers/constants.ts",
         "src/providers/http.ts",
         "src/redteam/commands/discover.ts",
@@ -54,11 +55,12 @@
         "src/redteam/types.ts",
         "src/types/api/eval.ts",
         "src/types/api/modelAudit.ts",
+        "src/types/configDraft.ts",
         "src/types/email.ts",
+        "src/types/evalConstants.ts",
         "src/types/index.ts",
         "src/types/modelAudit.ts",
         "src/types/results.ts",
-        "src/types/evalConstants.ts",
         "src/types/standaloneEval.ts",
         "src/types/tracing.ts",
         "src/util/convertEvalResultsToTable.ts",
@@ -105,7 +107,14 @@
     {
       "name": "providers",
       "roots": ["src/providers"],
-      "allowedDependencies": ["core", "legacy-contracts", "legacy-runtime", "node", "redteam"]
+      "allowedDependencies": [
+        "contracts",
+        "core",
+        "legacy-contracts",
+        "legacy-runtime",
+        "node",
+        "redteam"
+      ]
     },
     {
       "name": "node",
