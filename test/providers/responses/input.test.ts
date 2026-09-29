@@ -11,17 +11,28 @@ describe('parseResponsesInput', () => {
   });
 
   it('rewrites chat-format text parts to input_text', () => {
-    // The Responses API rejects `type: "text"` outright (xAI 422, OpenAI 400), so a prompt
-    // authored in the chat format must be translated rather than passed through.
     expect(parse([{ role: 'user', content: [{ type: 'text', text: 'hello' }] }])).toEqual([
       { role: 'user', content: [{ type: 'input_text', text: 'hello' }] },
     ]);
   });
 
-  it('uses output_text for assistant turns', () => {
+  it('uses input_text for assistant chat history', () => {
     expect(
       parse([{ role: 'assistant', content: [{ type: 'text', text: 'prior reply' }] }]),
-    ).toEqual([{ role: 'assistant', content: [{ type: 'output_text', text: 'prior reply' }] }]);
+    ).toEqual([{ role: 'assistant', content: [{ type: 'input_text', text: 'prior reply' }] }]);
+  });
+
+  it('preserves complete output messages replayed as input', () => {
+    const input = [
+      {
+        id: 'msg_123',
+        type: 'message',
+        role: 'assistant',
+        status: 'completed',
+        content: [{ type: 'output_text', text: 'prior reply', annotations: [] }],
+      },
+    ];
+    expect(parse(input)).toEqual(input);
   });
 
   it('flattens nested chat image_url parts into input_image', () => {

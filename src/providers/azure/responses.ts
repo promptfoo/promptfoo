@@ -8,7 +8,7 @@ import {
 } from '../../util/index';
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
-import { applyGpt6AstraRequestRules, isGpt6AstraModel } from '../openai/gpt6';
+import { applyGpt6RequestRules, getGpt6ResponsesReasoning, isGpt6Model } from '../openai/gpt6';
 import { ResponsesProcessor } from '../responses/index';
 import { parseResponsesInput } from '../responses/input';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
@@ -40,9 +40,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
 
     // Initialize the shared response processor
     this.processor = new ResponsesProcessor({
-      // A deployment name is arbitrary, so an explicit `modelName` is what the price table is
-      // keyed on; the request body's `model` only names a real model when `passthrough` set it.
-      modelName: this.config.modelName ?? this.deploymentName,
+      modelName: this.deploymentName,
       providerType: 'azure',
       functionCallbackHandler: this.functionCallbackHandler,
       // The processor invokes costCalculator(modelName, data.usage, requestConfig). calculateAzureCost
@@ -50,9 +48,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       // the Responses-shaped usage object (input_tokens/output_tokens) so cost is non-zero.
       costCalculator: (modelName: string, usage: any, config?: any) =>
         calculateAzureCost(
-          typeof config?.model === 'string' && config.model !== this.deploymentName
-            ? config.model
-            : modelName,
+          config?.modelName ?? modelName,
           {
             ...config,
             passthrough: {
@@ -79,6 +75,11 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
     }
+  }
+
+  private getModelName(config: AzureChatResponsesOptions): string {
+    const model = (config.passthrough as { model?: unknown } | undefined)?.model;
+    return typeof model === 'string' ? model : (config.modelName ?? this.deploymentName);
   }
 
   private async initializeMCP(): Promise<void> {
@@ -108,7 +109,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       // GPT-5 series (reasoning by default)
       lowerName.startsWith('gpt-5') ||
       lowerName.includes('-gpt-5') ||
-      isGpt6AstraModel(lowerName) ||
+      isGpt6Model(lowerName) ||
       // DeepSeek reasoning models
       lowerName.includes('deepseek-r1') ||
       lowerName.includes('deepseek_r1') ||
@@ -136,13 +137,9 @@ export class AzureResponsesProvider extends AzureGenericProvider {
 
     const input = parseResponsesInput(prompt);
 
-    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
-    const capabilityModelName = (
-      typeof passthroughModel === 'string'
-        ? passthroughModel
-        : (config.modelName ?? this.deploymentName)
-    ).toLowerCase();
+    const capabilityModelName = this.getModelName(config).toLowerCase();
     const isReasoningModel = this.isReasoningModel(capabilityModelName);
+    const isGPT6Model = isGpt6Model(capabilityModelName);
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined
@@ -154,17 +151,25 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       config.max_output_tokens ??
       (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
 
-    const temperatureDefault = config.omitDefaults
-      ? getEnvString('OPENAI_TEMPERATURE') === undefined
-        ? undefined
-        : getEnvFloat('OPENAI_TEMPERATURE')
-      : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const temperature = this.supportsTemperature(capabilityModelName)
-      ? (config.temperature ?? temperatureDefault)
+    const temperatureDefault =
+      config.omitDefaults || isGPT6Model
+        ? getEnvString('OPENAI_TEMPERATURE') === undefined
+          ? undefined
+          : getEnvFloat('OPENAI_TEMPERATURE')
+        : getEnvFloat('OPENAI_TEMPERATURE', 0);
+    const temperature =
+      isGPT6Model || this.supportsTemperature(capabilityModelName)
+        ? (config.temperature ?? temperatureDefault)
+        : undefined;
+    const gpt6Reasoning = isGPT6Model
+      ? getGpt6ResponsesReasoning(this.config, context?.prompt?.config, (value) =>
+          renderVarsInObject(value, context?.vars),
+        )
       : undefined;
-    const reasoningEffort = isReasoningModel
-      ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
-      : undefined;
+    const reasoningEffort =
+      isReasoningModel && !isGPT6Model
+        ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
+        : undefined;
 
     const instructions = config.instructions;
 
@@ -254,7 +259,16 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...(config.passthrough || {}),
     };
 
-    applyGpt6AstraRequestRules(body, capabilityModelName, 'responses');
+    if (isGPT6Model) {
+      if (gpt6Reasoning) {
+        Object.assign(body, { reasoning: gpt6Reasoning });
+      } else {
+        delete body.reasoning;
+      }
+    }
+    applyGpt6RequestRules(body, capabilityModelName, 'responses', {
+      defaultResponsesTemperature: config.omitDefaults ? undefined : 0,
+    });
 
     logger.debug('Azure Responses API request body', { body });
     return body;
@@ -357,7 +371,11 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     logger.debug('\tAzure Responses API response', { data });
 
     // Use the shared response processor for all response processing
-    const result = await this.processor.processResponseOutput(data, body, cached);
+    const result = await this.processor.processResponseOutput(
+      data,
+      { ...body, modelName: this.getModelName({ ...this.config, ...context?.prompt?.config }) },
+      cached,
+    );
     const responseUsage = (data as any)?.usage;
     const cachedInputTokens =
       responseUsage?.prompt_tokens_details?.cached_tokens ??

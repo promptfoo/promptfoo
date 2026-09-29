@@ -1,41 +1,15 @@
 type UnknownRecord = Record<string, unknown>;
 
-/**
- * Content-part types the Responses API accepts. Anything already using one of these is passed
- * through untouched so hand-authored Responses-format prompts keep working.
- */
-const RESPONSES_PART_TYPES = new Set([
-  'input_text',
-  'output_text',
-  'input_image',
-  'input_audio',
-  'input_file',
-  'refusal',
-  'computer_screenshot',
-  'summary_text',
-  'encrypted_content',
-]);
-
-/**
- * Translate one chat-completions content part to its Responses equivalent.
- *
- * Text parts become `input_text`, except on an assistant turn where the Responses API expects
- * `output_text`. Image parts become `input_image` with a flat string `image_url` (the chat
- * format nests it as `{ url, detail }`).
- */
-function normalizeContentPart(part: unknown, role: unknown): unknown {
+/** Translate Chat Completions text and image parts, preserving Responses-native parts. */
+function normalizeContentPart(part: unknown): unknown {
   if (!part || typeof part !== 'object' || Array.isArray(part)) {
     return part;
   }
   const candidate = part as UnknownRecord;
   const { type } = candidate;
 
-  if (typeof type !== 'string' || RESPONSES_PART_TYPES.has(type)) {
-    return part;
-  }
-
   if (type === 'text' && typeof candidate.text === 'string') {
-    return { ...candidate, type: role === 'assistant' ? 'output_text' : 'input_text' };
+    return { ...candidate, type: 'input_text' };
   }
 
   if (type === 'image_url') {
@@ -57,19 +31,7 @@ function normalizeContentPart(part: unknown, role: unknown): unknown {
   return part;
 }
 
-/**
- * Normalize a Responses API `input` array authored in the chat-completions format.
- *
- * promptfoo prompts are commonly written as chat messages (`{ type: 'text' }`,
- * `{ type: 'image_url', image_url: { url } }`), but the Responses API rejects those part types
- * outright — xAI answers 422 and OpenAI 400 ("Supported values are: 'input_text',
- * 'input_image', ..."), so multimodal prompts fail on every `*:responses:*` provider. Rewriting
- * the chat parts here lets the same prompt file target both surfaces.
- *
- * Only role-bearing message objects are touched. Explicit `type: 'message'` input items are
- * messages too; other typed items (function calls, tool outputs, reasoning items) must keep
- * their shape verbatim.
- */
+/** Normalize message content while preserving tool calls, outputs, and other input items. */
 function normalizeResponsesInput(input: unknown[]): unknown[] {
   return input.map((item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
@@ -85,18 +47,12 @@ function normalizeResponsesInput(input: unknown[]): unknown[] {
     }
     return {
       ...message,
-      content: message.content.map((part) => normalizeContentPart(part, message.role)),
+      content: message.content.map(normalizeContentPart),
     };
   });
 }
 
-/**
- * Turn a prompt into the Responses API `input` field.
- *
- * A prompt that parses as a JSON array is a message list, so it is normalized; anything else (a
- * plain string, or JSON that isn't an array) is sent verbatim. Every `*:responses:*` provider
- * builds `input` through here so none of them can miss the chat-format translation.
- */
+/** Parse JSON message arrays; send plain text and other JSON values verbatim. */
 export function parseResponsesInput(prompt: string): unknown {
   try {
     const parsed = JSON.parse(prompt);
