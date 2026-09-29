@@ -83,7 +83,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
 
   it('should integrate MCP tools with FunctionCallbackHandler', async () => {
     // Wait for MCP initialization
-    await (provider as any).initializationPromise;
+    await provider.ensureInitialized();
 
     // Verify MCP client was initialized
     expect(mcpMocks.mockInitialize).toHaveBeenCalled();
@@ -96,7 +96,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
 
   it('should execute MCP tool through FunctionCallbackHandler', async () => {
     // Wait for MCP initialization
-    await (provider as any).initializationPromise;
+    await provider.ensureInitialized();
 
     const handler = (provider as any).functionCallbackHandler;
 
@@ -124,7 +124,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
 
   it('should handle MCP tool errors gracefully', async () => {
     // Wait for MCP initialization
-    await (provider as any).initializationPromise;
+    await provider.ensureInitialized();
 
     // Configure mock to return an error
     mcpMocks.mockCallTool.mockResolvedValue({
@@ -167,7 +167,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
 
   it('should prioritize MCP tools over function callbacks', async () => {
     // Wait for MCP initialization
-    await (provider as any).initializationPromise;
+    await provider.ensureInitialized();
 
     const handler = (provider as any).functionCallbackHandler;
 

@@ -6,6 +6,7 @@ import { expect, it, vi } from 'vitest';
 import { clearCache, getCache } from '../../src/cache';
 import { evaluate, runEval } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
+import { providerRegistry } from '../../src/providers/providerRegistry';
 import {
   type ApiProvider,
   type RateLimitRegistryRef,
@@ -13,10 +14,66 @@ import {
   type TestSuite,
 } from '../../src/types/index';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
+import { createDeferred } from '../util/utils';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator grading concurrency', () => {
+  it('keeps a shared grader alive until overlapping evaluations finish', async () => {
+    const entered = [createDeferred<void>(), createDeferred<void>()];
+    const release = [createDeferred<void>(), createDeferred<void>()];
+    let calls = 0;
+    const grader: ApiProvider = {
+      id: () => 'shared-grader',
+      cleanup: vi.fn(),
+      callApi: vi.fn(async () => {
+        const index = calls++;
+        entered[index].resolve();
+        await release[index].promise;
+        return { output: JSON.stringify({ pass: true, reason: 'ok' }) };
+      }),
+    };
+    const target: ApiProvider = {
+      id: () => 'target',
+      callApi: vi.fn().mockResolvedValue({ output: 'hello' }),
+    };
+    const suite = (placement: 'options' | 'assertion'): TestSuite => ({
+      providers: [target],
+      prompts: [toPrompt('hello')],
+      tests: [
+        {
+          ...(placement === 'options' ? { options: { provider: grader } } : {}),
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'Output is valid',
+              ...(placement === 'assertion' ? { provider: grader } : {}),
+            },
+          ],
+        },
+      ],
+    });
+    const firstSuite = suite('options');
+    const secondSuite = suite('assertion');
+    const firstStore = await Eval.create({}, firstSuite.prompts, { id: randomUUID() });
+    const secondStore = await Eval.create({}, secondSuite.prompts, { id: randomUUID() });
+    const first = evaluate(firstSuite, firstStore, { maxConcurrency: 1 });
+    try {
+      await entered[0].promise;
+      const second = evaluate(secondSuite, secondStore, { maxConcurrency: 1 });
+      await entered[1].promise;
+      release[0].resolve();
+      await first;
+      expect(grader.cleanup).not.toHaveBeenCalled();
+      release[1].resolve();
+      await second;
+      expect(grader.cleanup).toHaveBeenCalledOnce();
+    } finally {
+      release.forEach((gate) => gate.resolve());
+      await providerRegistry.shutdownAll();
+    }
+  });
+
   it('schedules model-graded assertion provider calls through the rate limit registry', async () => {
     const abortController = new AbortController();
     const execute = vi.fn(async (_provider: ApiProvider, callFn: () => Promise<unknown>) =>

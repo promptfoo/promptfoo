@@ -12,6 +12,7 @@ import logger from '../../../src/logger';
 import { hashAnthropicCacheValue } from '../../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { MCPClient } from '../../../src/providers/mcp/client';
+import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file';
 import { mockProcessEnv } from '../../util/utils';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -123,8 +124,8 @@ describe('AnthropicMessagesProvider', () => {
     mockProcessEnv({ ...originalEnv, ANTHROPIC_API_KEY: TEST_API_KEY }, { clear: true });
     mockMCPClient = undefined;
     mcpMocks.instances.length = 0;
-    mcpMocks.initialize.mockReset();
-    mcpMocks.cleanup.mockReset();
+    mcpMocks.initialize.mockReset().mockResolvedValue(undefined);
+    mcpMocks.cleanup.mockReset().mockResolvedValue(undefined);
     mcpMocks.callTool.mockReset();
     mcpMocks.getAllTools.mockReset();
     mcpMocks.getAllTools.mockReturnValue([]);
@@ -132,6 +133,7 @@ describe('AnthropicMessagesProvider', () => {
   });
 
   afterEach(async () => {
+    await providerRegistry.shutdownAll();
     vi.clearAllMocks();
     await clearCache();
     mockProcessEnv(originalEnv, { clear: true });
@@ -3277,32 +3279,6 @@ describe('AnthropicMessagesProvider', () => {
   });
 
   describe('cleanup', () => {
-    it('should await initialization before cleanup', async () => {
-      provider = createProvider('claude-sonnet-4-6', {
-        config: {
-          mcp: {
-            enabled: true,
-            server: {
-              command: 'npm',
-              args: ['start'],
-            },
-          },
-        },
-      });
-
-      const client = mockMCPClient;
-      expect(client).toBeDefined();
-
-      // Simulate initialization in progress
-      const initPromise = Promise.resolve();
-      provider['initializationPromise'] = initPromise;
-
-      await provider.cleanup();
-
-      // Verify cleanup was called after initialization
-      expect(client!.cleanup).toHaveBeenCalledWith();
-    });
-
     it('should handle cleanup when MCP is not enabled', async () => {
       provider = createProvider('claude-sonnet-4-6', {
         config: {
