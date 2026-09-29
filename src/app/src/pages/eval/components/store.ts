@@ -25,7 +25,7 @@ import type {
   ResultsFile,
   UnifiedConfig,
 } from '@promptfoo/types';
-import type { VisibilityState } from '@tanstack/table-core';
+import type { VisibilityState } from '@tanstack/react-table';
 
 function computeHighlightCount(table: EvaluateTable | null): number {
   if (!table) {

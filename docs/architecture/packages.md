@@ -82,6 +82,14 @@ dependency-light state implementation for embedded evaluators and focused tests.
 resume append behavior. The evaluator orchestrates evaluation behavior without
 importing the concrete `Eval` model.
 
+`src/util/envFile.ts` owns plain `.env` file loading as a Node filesystem adapter.
+The imports from `src/envars.ts` and `src/server/server.ts` replace external
+`dotenv` calls at the same startup points; the edge baseline records these two
+internal dependencies. The loader imports only Node built-ins, so early loading
+does not initialize the logger, configuration state, or database. Keeping it
+separate from `setupEnv` preserves that initialization order without duplicating
+the parser across callers.
+
 The checker also resolves cross-layer source aliases such as `@promptfoo/*`.
 The browser-only `@app/*` alias stays inside the `app` layer. Alias spelling
 does not exempt a browser import from the same layer and path checks as a
@@ -117,19 +125,17 @@ path from the allowlist. Avoid adding paths unless the dependency is
 intentionally browser-safe. Allowlist entries are exact files, not directory
 roots.
 
-## Shared Presentation Helpers
+## Shared presentation helpers
 
-`src/presentation` owns table conversion, redteam metrics, and configuration
-presentation shared by the UI and Node consumers. Import these focused modules
-directly from browser code. The old `src/util/convertEvalResultsToTable`,
-`src/redteam/metrics`, and `src/redteam/sharedFrontend` paths preserve the same
-function exports for existing source consumers.
+`src/presentation` contains table conversion, report metrics, and configuration
+formatting used by the UI and Node. Browser code imports these modules directly.
+The former paths in `src/util` and `src/redteam` preserve the same exports for
+existing Node and cloud consumers.
 
-Presentation helpers remain classified as `legacy-runtime` while their type
-dependencies include the transitional configuration/result contracts. They are
-not exports of the public contracts barrel or a new published package. Table
-conversion retains its existing result-variable mutations and logger behavior;
-Vite substitutes the browser logger, and its hash substitution remains in place.
+These modules remain in the `legacy-runtime` layer because they depend on the
+transitional configuration and result types. Table conversion still updates
+result variables and uses the logger; Vite provides the browser logger and hash
+implementations.
 
 ## Dependency Ownership Report
 
@@ -142,3 +148,7 @@ npm run deps:ownership
 
 The report is intentionally descriptive for now. It gives us the evidence needed
 to move dependencies into future packages without guessing at ownership.
+
+It includes direct, optional, and peer dependency declarations. Peers marked
+optional in `peerDependenciesMeta` appear as `optional-peer`; other peers appear
+as `peer`. These labels describe the package contract, not what is installed.

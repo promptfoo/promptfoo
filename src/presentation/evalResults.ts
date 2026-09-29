@@ -4,14 +4,7 @@ import { getActualPrompt } from '../util/providerResponse';
 
 import type { EvaluateTable, EvaluateTableRow, ResultsFile } from '../types/index';
 
-/**
- * Converts evaluation results from a ResultsFile into a table format for display.
- * Processes test results, formats variables (including pretty-printing objects/arrays as JSON),
- * handles redteam prompts, and structures data for console table and HTML output.
- *
- * @param eval_ - The results file containing evaluation data (requires version >= 4)
- * @returns An EvaluateTable with formatted headers and body rows for display
- */
+/** Convert version 4+ results to display rows and ordered variable columns. */
 export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   invariant(
     eval_.prompts,
@@ -60,7 +53,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       if (varKeys.length === 1 && varKeys[0] !== 'harmCategory') {
         result.vars[varKeys[0]] = actualPrompt;
       } else if (varKeys.length > 1) {
-        // NOTE: This is a hack. We should use config.redteam.injectVar to determine which key to update but we don't have access to the config here
+        // The injection variable is unavailable here; use the first populated prompt field.
         const targetKeys = ['prompt', 'query', 'question'];
         const keyToUpdate = targetKeys.find((key) => result.vars[key]);
         if (keyToUpdate) {
