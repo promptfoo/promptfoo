@@ -55,6 +55,8 @@ const fetchCacheKey = `fetch:v3:<request-digest>`;
   - Cache is manually cleared
 - Memory storage is used automatically when `NODE_ENV=test`
 
+OpenAI background responses also create files under `cache/claims/` to prevent separate eval processes from counting the same response's usage twice. These billing claims persist after response entries expire, so their directory can keep growing even with a finite `PROMPTFOO_CACHE_TTL`.
+
 ## Command Line
 
 If you're using the command line, call `promptfoo eval` with `--no-cache` to disable the cache, or set `{ evaluateOptions: { cache: false }}` in your config file.
@@ -102,6 +104,8 @@ The cache is configurable through environment variables:
 ## Managing the Cache
 
 ### Clearing the Cache
+
+Wait for evals using the same cache directory to finish before clearing it. A full cache clear removes both cached responses and persistent billing claims. `--no-cache` bypasses the cache and avoids creating new disk claims, but leaves existing files in place; fresh provider calls may incur additional cost.
 
 You can clear the cache in several ways:
 
