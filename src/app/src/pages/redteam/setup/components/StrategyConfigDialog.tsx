@@ -12,6 +12,7 @@ import {
 } from '@app/components/ui/dialog';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { NumberInput } from '@app/components/ui/number-input';
 import {
   Select,
   SelectContent,
@@ -561,14 +562,14 @@ export default function StrategyConfigDialog({
 
       <div className="space-y-2">
         <Label htmlFor="max-concurrency">Max Concurrency</Label>
-        <Input
+        <NumberInput
           id="max-concurrency"
-          type="number"
-          value={localConfig.maxConcurrency === undefined ? '' : Number(localConfig.maxConcurrency)}
-          onChange={(e) => {
-            const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
-            setLocalConfig({ ...localConfig, maxConcurrency: value });
-          }}
+          value={
+            localConfig.maxConcurrency === undefined
+              ? undefined
+              : Number(localConfig.maxConcurrency)
+          }
+          onChange={(maxConcurrency) => setLocalConfig({ ...localConfig, maxConcurrency })}
           placeholder="Maximum number of concurrent requests (default: 3)"
           min={1}
         />

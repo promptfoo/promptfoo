@@ -330,7 +330,7 @@ Supported config options:
 | cookies           | `string` \| `{ name: string; value: string; domain?: string; path?: string; }[]` | A string or array of cookies to set on the browser                                                                           |
 | transformResponse | `string` \| `Function`                                                           | A function receiving `(extracted, finalHtml)`, or a string expression using those variables, to parse the response.          |
 | steps             | `BrowserAction[]`                                                                | An array of actions to perform in the browser                                                                                |
-| timeoutMs         | `number`                                                                         | The maximum time in milliseconds to wait for the browser operations to complete                                              |
+| timeoutMs         | `number`                                                                         | Timeout for element waits in milliseconds (default: `30000`). Set to `0` to disable the timeout.                             |
 | persistSession    | `boolean`                                                                        | Keep the browser page open across multiple `callApi()` invocations. Required for multi-turn strategies. Defaults to `false`. |
 | connectOptions    | `object`                                                                         | Options for connecting to an existing browser (`debuggingPort`, `mode`, `wsEndpoint`)                                        |
 

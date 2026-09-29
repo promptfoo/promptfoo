@@ -73,7 +73,7 @@ const BrowserAutomationConfiguration = ({
             placeholder="30000"
           />
           <p className="text-sm text-muted-foreground">
-            Maximum time to wait for browser operations (in milliseconds)
+            Element wait timeout in milliseconds. Set to 0 to disable the timeout.
           </p>
         </div>
 
@@ -297,7 +297,7 @@ const BrowserAutomationConfiguration = ({
                           newSteps[index] = { ...step, args: { ...step.args, timeout } };
                           updateCustomTarget('steps', newSteps);
                         }}
-                        placeholder={String(selectedTarget.config.timeoutMs || 30000)}
+                        placeholder={String(selectedTarget.config.timeoutMs ?? 30000)}
                       />
                     </div>
                   </div>

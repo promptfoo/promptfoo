@@ -112,7 +112,7 @@ export class BrowserProvider implements ApiProvider {
         this.config,
       )}`,
     );
-    this.defaultTimeout = this.config.timeoutMs || 30000; // Default 30 seconds timeout
+    this.defaultTimeout = this.config.timeoutMs ?? 30000;
     this.headless = this.config.headless ?? true;
   }
 

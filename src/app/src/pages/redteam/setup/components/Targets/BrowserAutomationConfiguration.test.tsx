@@ -69,4 +69,19 @@ describe('BrowserAutomationConfiguration', () => {
       expect(input).toHaveValue(0);
     }
   });
+
+  it.each([
+    [undefined, '30000'],
+    [0, '0'],
+    [1500, '1500'],
+  ])('shows the inherited step timeout for target timeout %s', (timeoutMs, placeholder) => {
+    renderConfiguration({
+      timeoutMs,
+      steps: [{ action: 'waitForNewChildren', args: { parentSelector: '#results' } }],
+    });
+
+    const [, stepTimeout] = screen.getAllByLabelText('Timeout (ms)');
+    expect(stepTimeout).toHaveValue(null);
+    expect(stepTimeout).toHaveAttribute('placeholder', placeholder);
+  });
 });
