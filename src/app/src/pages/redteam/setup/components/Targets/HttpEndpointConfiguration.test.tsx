@@ -1,10 +1,10 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { callApi } from '@app/utils/api';
+import { mockCallApiRoutes, resetCallApiMock } from '@app/tests/apiMocks';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -32,7 +32,10 @@ const renderWithProviders = (ui: React.ReactElement) => {
 
 describe('HttpEndpointConfiguration - Generated raw requests', () => {
   beforeEach(() => {
-    vi.mocked(callApi).mockReset();
+    resetCallApiMock();
+  });
+  afterEach(() => {
+    resetCallApiMock();
   });
 
   it.each([
@@ -44,10 +47,13 @@ describe('HttpEndpointConfiguration - Generated raw requests', () => {
     [false, undefined, false],
   ])('changes HTTPS from %s to generated %s', async (initialHttps, useHttps, expectedHttps) => {
     const request = 'GET /ready HTTP/1.1\nHost: example.com\n\n';
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ id: 'http', config: { request, useHttps } }),
-    } as Response);
+    mockCallApiRoutes([
+      {
+        method: 'POST',
+        path: '/providers/http-generator',
+        response: { id: 'http', config: { request, useHttps } },
+      },
+    ]);
     let selected: ProviderOptions;
     function Harness() {
       const [target, setTarget] = React.useState<ProviderOptions>({
