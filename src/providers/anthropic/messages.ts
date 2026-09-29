@@ -179,16 +179,22 @@ function getMcpContinuationParams(
 /** Reuse the turn's container unless the caller pinned a different one. */
 function withTurnContainer(
   params: Anthropic.Messages.MessageCreateParams,
-  previous: Anthropic.Messages.Message,
+  responses: Anthropic.Messages.Message[],
 ): Anthropic.Messages.MessageCreateParams {
   const requested = params.container;
-  if (!previous.container || typeof requested === 'string' || requested?.id != null) {
+  if (typeof requested === 'string' || requested?.id != null) {
     return params;
   }
-  return {
-    ...params,
-    container: requested ? { ...requested, id: previous.container.id } : previous.container.id,
-  };
+  for (let i = responses.length - 1; i >= 0; i--) {
+    const container = responses[i].container;
+    if (container) {
+      return {
+        ...params,
+        container: requested ? { ...requested, id: container.id } : container.id,
+      };
+    }
+  }
+  return params;
 }
 
 function coerceMcpToolInput(input: unknown): Record<string, unknown> {
@@ -387,6 +393,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     };
     const send = async (requestParams: Anthropic.Messages.MessageCreateParams) => {
       signal?.throwIfAborted();
+      requestParams = withTurnContainer(requestParams, responses);
       const message = shouldStream
         ? await finalMessageWithStreamedStopDetails(
             await this.anthropic.messages.stream(requestParams, requestOptions),
@@ -415,21 +422,16 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         break;
       }
       try {
-        message = await send(
-          withTurnContainer(
+        message = await send({
+          ...params,
+          messages: [
+            ...params.messages,
             {
-              ...params,
-              messages: [
-                ...params.messages,
-                {
-                  role: 'assistant',
-                  content: turnContent as Anthropic.Messages.ContentBlockParam[],
-                },
-              ],
+              role: 'assistant',
+              content: turnContent as Anthropic.Messages.ContentBlockParam[],
             },
-            message,
-          ),
-        );
+          ],
+        });
       } catch (err) {
         signal?.throwIfAborted();
         // Keep the paused output rather than failing a row that already has a partial answer.
@@ -553,7 +555,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       ];
 
       response = await this.sendMessage(
-        withTurnContainer(getMcpContinuationParams(params, messages), response),
+        getMcpContinuationParams(params, messages),
         headers,
         shouldStream,
         responses,
