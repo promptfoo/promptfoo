@@ -1087,7 +1087,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
             content: [
               ...responses
                 .slice(0, -1)
-                .flatMap((message) => message.content.filter((block) => block.type === 'thinking')),
+                .flatMap((message) =>
+                  message.content.filter(
+                    (block) =>
+                      block.type === 'thinking' && !resolvedMessage.content.includes(block),
+                  ),
+                ),
               ...resolvedMessage.content,
             ],
           }

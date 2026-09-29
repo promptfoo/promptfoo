@@ -1734,6 +1734,7 @@ describe('AnthropicMessagesProvider', () => {
       { label: 'hidden thinking', showThinking: false },
       { label: 'structured output', structured: true },
       { label: 'an older model', model: 'claude-sonnet-4-6' },
+      { label: 'previously combined progress', combined: true },
     ])('preserves MCP progress for Sonnet 5.5 with $label', async (options) => {
       const model = options.model ?? 'claude-sonnet-5-5';
       provider = createProvider(model, {
@@ -1793,6 +1794,11 @@ describe('AnthropicMessagesProvider', () => {
           service_tier: null,
         },
       }));
+      if (options.combined) {
+        // Aggregated responses reuse blocks; distinct blocks can still have identical text.
+        messages[0].content[0] = { ...messages[1].content[0] };
+        messages[2].content.unshift(messages[1].content[0]);
+      }
       const createSpy = vi.spyOn(provider.anthropic.messages, 'create');
       const streamSpy = vi.spyOn(provider.anthropic.messages, 'stream');
       for (const message of messages) {
@@ -1805,7 +1811,7 @@ describe('AnthropicMessagesProvider', () => {
 
       const result = await provider.callApi('Find companies');
 
-      const expectedProgress = (options.model ? [2] : [0, 1, 2])
+      const expectedProgress = (options.model ? [2] : options.combined ? [1, 1, 2] : [0, 1, 2])
         .map((round) => `Thinking: Progress ${round}\nSignature: sig_${round}`)
         .join('\n\n');
       expect(result.output).toEqual(
