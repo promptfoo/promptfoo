@@ -3,7 +3,6 @@ import { convertResultsToTable } from '../../src/util/convertEvalResultsToTable'
 import { convertEvalResultToTableCell } from '../../src/util/exportToFile/index';
 import { createCompletedPrompt, createEvaluateSummaryV2 } from '../factories/eval';
 
-import type EvalResult from '../../src/models/evalResult';
 import type { EvaluateResult, EvaluateTable, ResultsFile } from '../../src/types/index';
 
 describe('convertResultsToTable', () => {
@@ -1609,7 +1608,7 @@ describe('pure table projection', () => {
       });
       const result = input.results.results[0];
       expect(convertResultsToTable(input).body[0].outputs[0]).toEqual(
-        convertEvalResultToTableCell(result as unknown as EvalResult),
+        convertEvalResultToTableCell(result),
       );
     },
   );
@@ -1628,9 +1627,7 @@ describe('pure table projection', () => {
     freeze(input);
     const cell = convertResultsToTable(input).body[0].outputs[0];
     expect(cell.id).toBe('0-0');
-    expect(cell).toEqual(
-      convertEvalResultToTableCell(input.results.results[0] as unknown as EvalResult),
-    );
+    expect(cell).toEqual(convertEvalResultToTableCell(input.results.results[0]));
     expect(cell.audio?.sampleRate).toBe(24000);
     expect(cell.video?.thumbnail).toBe('thumb');
     expect(cell.images).toEqual([{ data: 'image', mimeType: 'image/png' }]);

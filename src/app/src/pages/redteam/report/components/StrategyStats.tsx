@@ -119,7 +119,7 @@ const DrawerContent = ({
       if (Array.isArray(parsedPrompt)) {
         const lastPrompt = parsedPrompt[parsedPrompt.length - 1];
         if (typeof lastPrompt?.content === 'string' && lastPrompt.content) {
-          return lastPrompt.content || '-';
+          return lastPrompt.content;
         }
       }
     } catch {

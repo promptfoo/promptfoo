@@ -13,8 +13,7 @@ import { convertEvalResultToTableCell } from './exportToFile/index';
 export function getDisplayVars(result: Pick<EvaluateResult, 'vars' | 'response' | 'metadata'>) {
   let displayVars = result.vars ? { ...result.vars } : undefined;
 
-  // Get the actual prompt from response.prompt (provider-reported) or legacy redteamFinalPrompt
-  // Check both result.response.metadata and result.metadata for legacy compatibility
+  // Prefer the provider prompt; older results store it in metadata.
   const actualPrompt =
     getActualPrompt(result.response) || (result.metadata?.redteamFinalPrompt as string);
 
@@ -23,7 +22,7 @@ export function getDisplayVars(result: Pick<EvaluateResult, 'vars' | 'response' 
     if (varKeys.length === 1 && varKeys[0] !== 'harmCategory') {
       displayVars[varKeys[0]] = actualPrompt;
     } else if (varKeys.length > 1) {
-      // NOTE: This is a hack. We should use config.redteam.injectVar to determine which key to update but we don't have access to the config here
+      // Config is unavailable here; preserve the legacy prompt-key priority.
       const targetKeys = ['prompt', 'query', 'question'];
       const keyToUpdate = targetKeys.find((key) => displayVars?.[key]);
       if (keyToUpdate) {
@@ -32,37 +31,32 @@ export function getDisplayVars(result: Pick<EvaluateResult, 'vars' | 'response' 
     }
   }
 
-  // Copy sessionId from metadata to vars for display if not already present
-  // Multi-turn strategies (IterativeMeta, Crescendo, etc.) store multiple sessionIds in metadata.sessionIds array
-  // Single-turn strategies store a single sessionId in metadata.sessionId
+  // Session metadata supplies display values for single and multi-turn runs.
   if (!displayVars?.sessionId) {
     const metadataSessionIds = result.metadata?.sessionIds;
     if (Array.isArray(metadataSessionIds) && metadataSessionIds.length > 0) {
-      displayVars = displayVars || {};
+      displayVars ??= {};
       displayVars.sessionId = metadataSessionIds
         .filter((id) => id != null && id !== '')
         .map(String)
         .join('\n');
     } else if (result.metadata?.sessionId) {
-      displayVars = displayVars || {};
+      displayVars ??= {};
       displayVars.sessionId = result.metadata.sessionId;
     }
   }
 
-  // Copy transformDisplayVars from response metadata to vars for display
-  // This handles layer mode where embeddedInjection is set at runtime, not in test case vars
+  // Runtime transforms can add variables absent from the test case.
   const transformDisplayVars = result.response?.metadata?.transformDisplayVars as
     | Record<string, string>
     | undefined;
   if (transformDisplayVars) {
-    displayVars = displayVars || {};
+    displayVars ??= {};
     for (const [key, value] of Object.entries(transformDisplayVars)) {
-      // Use `key in` so a legitimate falsy value (empty string, 0, false)
-      // is not silently overwritten by the transform display value.
+      // Preserve existing values, including empty strings, zero, and false.
       if (!(key in displayVars)) {
         displayVars[key] = value;
       } else if (displayVars[key] !== value) {
-        // Leave a breadcrumb for users debugging a "missing" display var.
         logger.debug(
           `[convertResultsToTable] transformDisplayVars key '${key}' collides with result.vars; preserving original value`,
         );
@@ -73,14 +67,7 @@ export function getDisplayVars(result: Pick<EvaluateResult, 'vars' | 'response' 
   return displayVars;
 }
 
-/**
- * Converts evaluation results from a ResultsFile into a table format for display.
- * Processes test results, formats variables (including pretty-printing objects/arrays as JSON),
- * handles redteam prompts, and structures data for console table and HTML output.
- *
- * @param eval_ - The results file containing evaluation data (requires version >= 4)
- * @returns An EvaluateTable with formatted headers and body rows for display
- */
+/** Project display variables and output cells without changing the results file. */
 export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   invariant(
     eval_.prompts,
