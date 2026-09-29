@@ -35,7 +35,7 @@ The self-hosted app is an Express server serving the web UI and API.
 
 ### FIPS-enabled runtimes
 
-When Node reports `crypto.getFips() === 1`, including in a FIPS-enabled hardened image, Promptfoo automatically applies its FIPS runtime policy. There is no eval configuration flag to disable this policy. The standard Docker image does not enable FIPS; using this policy does not certify the entire application or its provider SDKs.
+When Node reports `crypto.getFips() === 1`, Promptfoo applies the following policy. Eval configuration cannot disable it.
 
 - Promptfoo-managed HTTP connections require TLS certificate verification. `PROMPTFOO_INSECURE_SSL=true`, `NODE_TLS_REJECT_UNAUTHORIZED=0`, and `tls.rejectUnauthorized: false` are rejected, including before shared-response cache lookups. For private endpoints, configure `PROMPTFOO_CA_CERT_PATH` or the HTTP provider's `tls.ca`/`tls.caPath`; an unreadable CA file is an error. Opaque caller-supplied dispatchers are rejected; use the HTTP provider's TLS configuration for PEM client certificates and trusted CAs.
 - HTTP signature authentication and mutual TLS accept PEM keys/certificates. JKS and PFX/PKCS12 imports are rejected before conversion. Provision PEM credentials through your organization's approved process; legacy PFX configuration that already supplies separate PEM cert/key files remains supported.
@@ -43,7 +43,7 @@ When Node reports `crypto.getFips() === 1`, including in a FIPS-enabled hardened
 
 Shared HTTP response caches use a separate FIPS namespace so they cannot reuse responses from standard mode. TLS configuration is checked before cache lookup, but cached results are not evidence of a new verified TLS connection. Use `--no-cache` when qualifying a deployment.
 
-The image must enable and enforce FIPS at Node startup (for example, with a qualified FIPS runtime and `--force-fips`). This policy does not enable FIPS itself or control cryptography in external provider SDKs, custom code, or subprocesses.
+Enable and enforce FIPS when starting Node, using a qualified runtime with `--force-fips`. The standard Docker image does not enable FIPS. This policy does not certify the application or control cryptography in provider SDKs, custom code, or subprocesses.
 
 :::warning
 **Self-hosting is not recommended for production use cases.**
