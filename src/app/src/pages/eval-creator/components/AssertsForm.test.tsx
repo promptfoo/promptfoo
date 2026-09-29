@@ -59,6 +59,14 @@ describe('AssertsForm', () => {
     await user.click(screen.getByRole('combobox', { name: 'Type' }));
     await user.click(screen.getByRole('option', { name: 'trajectory:tool-used' }));
     expect(onAdd).toHaveBeenLastCalledWith([{ type: 'trajectory:tool-used', value: ['lookup'] }]);
+    const input = screen.getByRole('textbox', { name: 'Value' });
+    expect(input).toHaveValue(JSON.stringify(['lookup'], null, 2));
+    await user.clear(input);
+    await user.paste('["lookup", "summarize"]');
+    expect(input).toHaveValue('["lookup", "summarize"]');
+    expect(onAdd).toHaveBeenLastCalledWith([
+      { type: 'trajectory:tool-used', value: ['lookup', 'summarize'] },
+    ]);
   });
 
   it.each(['similar', 'bleu', 'equals'] as const)(

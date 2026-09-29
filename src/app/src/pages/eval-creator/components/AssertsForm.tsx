@@ -124,7 +124,7 @@ function isToolSet(type: AssertionType): boolean {
   return type === 'trajectory:tool-set' || type === 'not-trajectory:tool-set';
 }
 
-function parseToolSet(value: Assertion['value']): Assertion['value'] {
+function parseArrayValue(value: Assertion['value']): Assertion['value'] {
   if (typeof value === 'string') {
     try {
       const parsed: unknown = JSON.parse(value);
@@ -140,20 +140,20 @@ function parseToolSet(value: Assertion['value']): Assertion['value'] {
 
 const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
   const [asserts, setAsserts] = useState<Assertion[]>(initialValues || []);
-  const [toolSetText, setToolSetText] = useState<(string | undefined)[]>(
+  const [arrayText, setArrayText] = useState<(string | undefined)[]>(
     () => initialValues?.map(() => undefined) ?? [],
   );
 
   const handleAdd = () => {
     const newAsserts = [...asserts, { type: 'equals' as AssertionType, value: '' }];
     setAsserts(newAsserts);
-    setToolSetText((values) => [...values, undefined]);
+    setArrayText((values) => [...values, undefined]);
     onAdd(newAsserts);
   };
 
   const handleRemoveAssert = (indexToRemove: number) => {
     const newAsserts = asserts.filter((_, index) => index !== indexToRemove);
-    setToolSetText((values) => values.filter((_, index) => index !== indexToRemove));
+    setArrayText((values) => values.filter((_, index) => index !== indexToRemove));
     setAsserts(newAsserts);
     onAdd(newAsserts);
   };
@@ -200,12 +200,12 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                             ...a,
                             type: newValue as AssertionType,
                             value: isToolSet(newValue as AssertionType)
-                              ? parseToolSet(a.value)
+                              ? parseArrayValue(a.value)
                               : a.value,
                           }
                         : a,
                     );
-                    setToolSetText((values) =>
+                    setArrayText((values) =>
                       values.map((value, i) => (i === index ? undefined : value)),
                     );
                     setAsserts(newAsserts);
@@ -238,8 +238,10 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                         : 'Enter expected value or criteria...'
                     }
                     value={
-                      isToolSet(assert.type)
-                        ? (toolSetText[index] ??
+                      isToolSet(assert.type) ||
+                      Array.isArray(assert.value) ||
+                      arrayText[index] !== undefined
+                        ? (arrayText[index] ??
                           (typeof assert.value === 'string'
                             ? assert.value
                             : (JSON.stringify(assert.value, null, 2) ?? '')))
@@ -251,12 +253,16 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                     }
                     onChange={(e) => {
                       const text = e.target.value;
-                      if (isToolSet(assert.type)) {
-                        setToolSetText((values) =>
+                      const editsArray =
+                        isToolSet(assert.type) ||
+                        Array.isArray(assert.value) ||
+                        arrayText[index] !== undefined;
+                      if (editsArray) {
+                        setArrayText((values) =>
                           values.map((value, i) => (i === index ? text : value)),
                         );
                       }
-                      const newValue = isToolSet(assert.type) ? parseToolSet(text) : text;
+                      const newValue = editsArray ? parseArrayValue(text) : text;
                       const newAsserts = asserts.map((a, i) =>
                         i === index ? { ...a, value: newValue } : a,
                       );
