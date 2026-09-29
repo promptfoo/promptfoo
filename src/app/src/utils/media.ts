@@ -7,11 +7,11 @@ import { FileIcon, ImageIcon, Music, Video } from 'lucide-react';
 
 const BLOB_URI_PREFIX = 'promptfoo://blob/';
 const STORAGE_REF_PREFIX = 'storageRef:';
-const BLOB_URI_REGEX = /promptfoo:\/\/blob\/([a-f0-9]{32,64})/gi;
+const MEDIA_URL_REGEX = /promptfoo:\/\/blob\/[a-f0-9]{32,64}|(?:https?:\/\/|\/)[^\s)'"`<>]+/gi;
 const STORAGE_REF_REGEX = /storageRef:\/?([^\s)'"`]+)/gi;
 
 const blobMediaRefreshVersions = new Map<string, number>();
-const retryingBlobMediaElements = new WeakSet<RetryableMediaElement>();
+const retryingBlobMediaElements = new WeakMap<RetryableMediaElement, number>();
 const pendingBlobMediaRetryTimers = new WeakMap<RetryableMediaElement, number>();
 const BLOB_MEDIA_RETRY_DELAY_MS = 250;
 const MAX_FAILED_MEDIA_SOURCES = 256;
@@ -63,14 +63,15 @@ export function markMediaLoadFailed(
     return;
   }
 
-  blobMediaRefreshVersions.set(source, (blobMediaRefreshVersions.get(source) ?? 0) + 1);
+  const version = blobMediaRefreshVersions.get(source) ?? 0;
+  blobMediaRefreshVersions.set(source, version + 1);
   if (blobMediaRefreshVersions.size > MAX_FAILED_MEDIA_SOURCES) {
     blobMediaRefreshVersions.delete(blobMediaRefreshVersions.keys().next().value!);
   }
   if (retryingBlobMediaElements.has(element)) {
     return;
   }
-  retryingBlobMediaElements.add(element);
+  retryingBlobMediaElements.set(element, version);
 
   const retryTimer = window.setTimeout(() => {
     pendingBlobMediaRetryTimers.delete(element);
@@ -102,8 +103,14 @@ export function markMediaLoadSucceeded(
     return;
   }
 
+  const mountedVersion = retryingBlobMediaElements.get(element);
   clearBlobMediaRetry(element);
-  blobMediaRefreshVersions.delete(source);
+  // An in-place retry keeps its original key. A replacement already has the new key.
+  if (mountedVersion === 0) {
+    blobMediaRefreshVersions.delete(source);
+  } else if (mountedVersion !== undefined) {
+    blobMediaRefreshVersions.set(source, mountedVersion);
+  }
 }
 
 /** Number of items to fetch per page in the media library */
@@ -325,14 +332,10 @@ export function resolveVideoSource(
 
 export function normalizeMediaText(text: string, evaluationId?: string): string {
   return text
-    .replace(
-      BLOB_URI_REGEX,
-      (_match, hash) => resolveBlobUri(`${BLOB_URI_PREFIX}${hash}`, evaluationId)!,
-    )
-    .replace(
-      /(?:https?:\/\/[^/\s)'"`<>]+)?\/api\/blobs\/[^\s)'"`<>]+/gi,
-      (url) => resolveBlobUri(url, evaluationId) || url,
-    )
+    .replace(MEDIA_URL_REGEX, (url) => {
+      const blobUrl = url.replace(/^promptfoo:\/\/blob\//i, BLOB_URI_PREFIX);
+      return resolveBlobUri(blobUrl, evaluationId) || url;
+    })
     .replace(STORAGE_REF_REGEX, (_match, path) => withApiBase(`/api/media/${normalizePath(path)}`));
 }
 

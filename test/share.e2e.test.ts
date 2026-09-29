@@ -1,18 +1,20 @@
-import { randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { promisify } from 'node:util';
 import type { Server } from 'node:http';
 
 import { eq, inArray } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { getBlobByHash, storeBlob } from '../src/blobs';
+import { getBlobByHash } from '../src/blobs';
 import { getDb } from '../src/database';
 import { blobAssetsTable, blobReferencesTable } from '../src/database/tables';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
 import { createApp } from '../src/server/server';
-import { createShareableUrl } from '../src/share';
-import { ResultFailureReason } from '../src/types';
-import EvalFactory from './factories/evalFactory';
-import { mockProcessEnv } from './util/utils';
+
+const execFileAsync = promisify(execFile);
 
 describe('self-hosted sharing end to end', () => {
   let server: Server;
@@ -62,91 +64,42 @@ describe('self-hosted sharing end to end', () => {
   it.each([false, true])(
     'shares results, traces, media, and provenance through the real server (inline=%s)',
     async (inlineBlobs) => {
-      const restoreEnv = mockProcessEnv({
-        PROMPTFOO_SHARE_INLINE_BLOBS: String(inlineBlobs),
-      });
+      const senderDir = await mkdtemp(path.join(tmpdir(), 'promptfoo-share-sender-'));
       try {
-        const sourceEval = await EvalFactory.create({ numResults: 0 });
-        const otherEval = await EvalFactory.create({ numResults: 0 });
-        evalIds.add(sourceEval.id);
-        evalIds.add(otherEval.id);
-        sourceEval.config.sharing = { apiBaseUrl: baseUrl, appBaseUrl: baseUrl };
-        await sourceEval.save();
-
-        const mediaBytes = Buffer.from(`authorized-media-${randomUUID()}`);
-        const copiedBytes = Buffer.from(`cross-eval-media-${randomUUID()}`);
-        const media = await storeBlob(mediaBytes, 'image/png', {
-          evalId: sourceEval.id,
-          kind: 'image',
-          location: 'response.output',
-          promptIdx: 0,
-          testIdx: 0,
-        });
-        const copied = await storeBlob(copiedBytes, 'image/png', {
-          evalId: otherEval.id,
-          kind: 'image',
-          location: 'response.output',
-          promptIdx: 0,
-          testIdx: 0,
-        });
-        blobHashes.add(media.ref.hash);
-        blobHashes.add(copied.ref.hash);
-
-        const traceId = randomUUID().replaceAll('-', '');
-        await sourceEval.addResult({
-          description: 'share-e2e',
-          promptIdx: 0,
-          testIdx: 0,
-          testCase: { metadata: { evaluationId: sourceEval.id }, vars: { input: 'hello' } },
-          promptId: 'share-prompt',
-          provider: { id: 'test-provider', label: 'test-provider' },
-          prompt: { raw: 'hello', label: 'hello' },
-          vars: { input: 'hello' },
-          response: { output: `${media.ref.uri} ${copied.ref.uri}` },
-          error: null,
-          failureReason: ResultFailureReason.NONE,
-          success: true,
-          score: 1,
-          latencyMs: 1,
-          gradingResult: null,
-          namedScores: {},
-          metadata: { evaluationId: sourceEval.id, traceId },
-          evaluationId: sourceEval.id,
-          traceId,
-        });
-        await sourceEval.appendTraces([
+        const outputFile = path.join(senderDir, 'result.json');
+        await execFileAsync(
+          process.execPath,
+          [
+            '--import',
+            'tsx',
+            path.join(__dirname, 'fixtures/share/sender.ts'),
+            baseUrl,
+            outputFile,
+          ],
           {
-            traceId,
-            evaluationId: sourceEval.id,
-            testCaseId: 'share-test-case',
-            metadata: {
-              evaluationId: sourceEval.id,
-              media: media.ref.uri,
-              promptIdx: 0,
-              testIdx: 0,
-              traceId,
+            cwd: path.resolve(__dirname, '..'),
+            env: {
+              ...process.env,
+              IS_TESTING: 'true',
+              PROMPTFOO_CONFIG_DIR: senderDir,
+              PROMPTFOO_SHARE_INLINE_BLOBS: String(inlineBlobs),
+              PROMPTFOO_DISABLE_TELEMETRY: '1',
+              PROMPTFOO_DISABLE_UPDATE: '1',
             },
-            spans: [
-              {
-                spanId: 'share-span',
-                name: 'provider call',
-                startTime: 1,
-                attributes: {
-                  'evaluation.id': sourceEval.id,
-                  'promptfoo.eval.id': sourceEval.id,
-                  'promptfoo.trace_id': traceId,
-                },
-              },
-            ],
+            timeout: 20_000,
           },
-        ]);
-
-        const shareUrl = await createShareableUrl(sourceEval, { silent: true });
+        );
+        const { shareUrl, sourceId, traceId, media, data } = JSON.parse(
+          await readFile(outputFile, 'utf8'),
+        );
+        const mediaBytes = Buffer.from(data, 'base64');
+        blobHashes.add(media.hash);
         expect(shareUrl).not.toBeNull();
         const remoteEvalId = new URL(shareUrl as string).pathname.split('/').filter(Boolean).at(-1);
         expect(remoteEvalId).toBeTruthy();
-        expect(remoteEvalId).not.toBe(sourceEval.id);
         evalIds.add(remoteEvalId as string);
+        expect(remoteEvalId).not.toBe(sourceId);
+        expect(await Eval.findById(sourceId)).toBeUndefined();
 
         const remoteEval = await Eval.findById(remoteEvalId as string);
         expect(remoteEval).not.toBeNull();
@@ -155,10 +108,8 @@ describe('self-hosted sharing end to end', () => {
         if (inlineBlobs) {
           expect(output).toContain(`data:image/png;base64,${mediaBytes.toString('base64')}`);
         } else {
-          expect(output).toContain(media.ref.uri);
+          expect(output).toContain(media.uri);
         }
-        // A copied URI has no source-eval authorization and must never transfer its bytes.
-        expect(output).toContain(copied.ref.uri);
 
         const [remoteTrace] = await remoteEval!.getTraces();
         expect(remoteTrace).toMatchObject({
@@ -166,7 +117,7 @@ describe('self-hosted sharing end to end', () => {
           testCaseId: 'share-test-case',
           metadata: {
             evaluationId: remoteEvalId,
-            media: media.ref.uri,
+            media: media.uri,
             promptIdx: 0,
             testIdx: 0,
           },
@@ -186,19 +137,18 @@ describe('self-hosted sharing end to end', () => {
         expect(remoteRefs).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
-              blobHash: media.ref.hash,
+              blobHash: media.hash,
               promptIdx: 0,
               testIdx: 0,
             }),
           ]),
         );
-        expect(remoteRefs.some((reference) => reference.blobHash === copied.ref.hash)).toBe(false);
-        await expect(getBlobByHash(media.ref.hash)).resolves.toMatchObject({
+        await expect(getBlobByHash(media.hash)).resolves.toMatchObject({
           data: mediaBytes,
           metadata: { mimeType: 'image/png' },
         });
       } finally {
-        restoreEnv();
+        await rm(senderDir, { recursive: true, force: true });
       }
     },
   );

@@ -1143,6 +1143,36 @@ describe('evaluation-scoped media URLs', () => {
     );
   });
 
+  it.each(['/promptfoo', 'https://api.example.com/promptfoo'])(
+    'normalizes complete blob URLs once with API base %s',
+    (apiBase) => {
+      vi.mocked(useApiConfig.getState).mockReturnValue(mockState(apiBase));
+      const normalized = `![x](${apiBase}${expected})`;
+      for (const source of [
+        `promptfoo://blob/${hash}`,
+        `/api/blobs/${hash}?evalId=private-eval`,
+        `${apiBase}/api/blobs/${hash}?evalId=private-eval`,
+      ]) {
+        expect(normalizeMediaText(`![x](${source})`, evalId)).toBe(normalized);
+      }
+      expect(normalizeMediaText(normalized, evalId)).toBe(normalized);
+    },
+  );
+
+  it.each(['PROMPTFOO://BLOB/', 'Promptfoo://Blob/'])(
+    'normalizes mixed-case blob prefix %s',
+    (prefix) => {
+      expect(normalizeMediaText(`![x](${prefix}${hash})`, evalId)).toBe(`![x](${expected})`);
+    },
+  );
+
+  it('leaves ordinary paths and external URLs unchanged alongside blob URLs', () => {
+    const plain = '/docs/providers/openai and https://example.com/api/blobs/example';
+    expect(normalizeMediaText(`${plain} ![x](/api/blobs/${hash})`, evalId)).toBe(
+      `${plain} ![x](${expected})`,
+    );
+  });
+
   it('carries evaluation context through each media kind', () => {
     const blobRef = { hash };
     expect(resolveAudioSource({ blobRef }, undefined, evalId)?.src).toBe(expected);

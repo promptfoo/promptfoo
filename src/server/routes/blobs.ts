@@ -71,13 +71,9 @@ blobsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
   const { context } = bodyResult.data;
   const { evalId } = context;
 
-  // Blobs are served back from this server's own origin, so a client-supplied MIME like
-  // text/html or image/svg+xml would be a stored-XSS vector. Persist only a media allowlist;
-  // everything else is downgraded to application/octet-stream (same gate as portable imports).
+  // Use the same passive-media policy as portable imports.
   const mimeType = sanitizeBlobMimeType(bodyResult.data.mimeType);
-  // Derive kind from the sanitized MIME rather than trusting the client: the media-library
-  // response only permits image/video/audio/other, so a client kind like "application" (from a
-  // non-media MIME prefix) would otherwise fail response validation and 500 the listing.
+  // The library kind must match the stored MIME, including deduplicated objects.
   const refContext = { ...context, kindFromMimeType: getKindFromMimeType };
   try {
     const db = await getDb();
@@ -307,7 +303,7 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
           // Pick one reference per blob: most recent by created_at, rowid as tiebreaker
           eq(
             blobReferencesTable.id,
-            sql`(SELECT r2.id FROM blob_references r2 WHERE r2.blob_hash = ${blobAssetsTable.hash}${evalFilterClause} ORDER BY r2.created_at DESC, r2.rowid DESC LIMIT 1)`,
+            sql`(SELECT r2.id FROM blob_references r2 WHERE r2.blob_hash = ${blobAssetsTable.hash} AND (r2.kind IS NOT NULL OR r2.location = 'import')${evalFilterClause} ORDER BY r2.created_at DESC, r2.rowid DESC LIMIT 1)`,
           ),
         ),
       )

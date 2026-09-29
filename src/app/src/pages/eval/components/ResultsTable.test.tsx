@@ -1063,6 +1063,38 @@ describe('ResultsTable Metrics Display', () => {
       expect(screen.getByText('/path/to/input.mp4 (video/mp4)')).toBeInTheDocument();
     });
 
+    it.each(['promptfoo://blob/', '/api/blobs/'])(
+      'scopes embedded Markdown variable images with prefix %s to the displayed evaluation',
+      (prefix) => {
+        const hash = 'a'.repeat(64);
+        vi.mocked(useTableStore).mockImplementation(() => ({
+          config: {},
+          evalId: 'image-eval',
+          setTable: vi.fn(),
+          table: {
+            body: [
+              {
+                outputs: [{ pass: true, score: 1, text: 'test output' }],
+                test: {},
+                vars: [`Preview: ![sample](${prefix}${hash})`],
+              },
+            ],
+            head: { prompts: [{}], vars: ['preview'] },
+          },
+          version: 4,
+          fetchEvalData: vi.fn(),
+          filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+        }));
+
+        renderWithProviders(<ResultsTable {...defaultProps} maxTextLength={1000} />);
+
+        expect(screen.getByRole('img', { name: 'sample' })).toHaveAttribute(
+          'src',
+          `/api/blobs/${hash}?evalId=image-eval`,
+        );
+      },
+    );
+
     it('scopes decoded audio previews to the displayed evaluation', () => {
       const hash = 'a'.repeat(64);
       vi.mocked(useTableStore).mockImplementation(() => ({

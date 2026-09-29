@@ -543,7 +543,10 @@ function renderVariableCell({
   }
 
   const cellContent = renderMarkdown ? (
-    <VariableMarkdownCell value={value} maxTextLength={maxTextLength} />
+    <VariableMarkdownCell
+      value={normalizeMediaText(value, evaluationId)}
+      maxTextLength={maxTextLength}
+    />
   ) : (
     <TruncatedText text={value} maxLength={maxTextLength} />
   );

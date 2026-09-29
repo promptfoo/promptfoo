@@ -317,6 +317,33 @@ describe('ChatMessages', () => {
     }
   });
 
+  it('keeps a successful replacement mounted through later refreshes and retries', () => {
+    const messages: Message[] = [
+      {
+        role: 'user',
+        content: 'Replacement blob',
+        image: { blobRef: { uri: `promptfoo://blob/${'ab'.repeat(32)}` } },
+      },
+    ];
+    const { rerender } = render(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+    const initialImage = screen.getByAltText('Input');
+    act(() => initialImage.dispatchEvent(new Event('error')));
+
+    rerender(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+    const replacement = screen.getByAltText('Input');
+    expect(replacement).not.toBe(initialImage);
+    act(() => replacement.dispatchEvent(new Event('load')));
+    rerender(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+    expect(screen.getByAltText('Input')).toBe(replacement);
+
+    act(() => {
+      replacement.dispatchEvent(new Event('error'));
+      replacement.dispatchEvent(new Event('load'));
+    });
+    rerender(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+    expect(screen.getByAltText('Input')).toBe(replacement);
+  });
+
   it('does not let a pending retry overwrite a newly rendered blob source', () => {
     const timers = useTestTimers();
     try {

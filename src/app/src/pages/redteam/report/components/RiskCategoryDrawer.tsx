@@ -402,6 +402,7 @@ const RiskCategoryDrawer = ({
           gradingResult={currentGradingResult}
         />
         <EvalOutputPromptDialog
+          evaluationId={evalId}
           open={detailsDialogOpen}
           onClose={() => setDetailsDialogOpen(false)}
           prompt={selectedTest?.result?.prompt.raw || 'Unknown'}
