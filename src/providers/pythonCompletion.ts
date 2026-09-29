@@ -176,8 +176,6 @@ function validatePythonScriptResult(
 export class PythonProvider implements ApiProvider {
   config: PythonProviderConfig;
 
-  private unprocessedConfig: PythonProviderConfig;
-  private processedConfig: PythonProviderConfig | null = null;
   private scriptPath: string;
   private functionName: string | null;
   private isInitialized: boolean = false;
@@ -198,7 +196,6 @@ export class PythonProvider implements ApiProvider {
     this.id = () => options?.id ?? `python:${this.scriptPath}:${this.functionName || 'default'}`;
     this.label = options?.label;
     this.config = options?.config ?? {};
-    this.unprocessedConfig = this.config;
   }
 
   id() {
@@ -223,14 +220,11 @@ export class PythonProvider implements ApiProvider {
 
     // Start initialization and store the promise
     this.initializationPromise = (async () => {
-      const sourceConfig =
-        this.processedConfig && this.config === this.processedConfig
-          ? this.unprocessedConfig
-          : this.config;
-      this.unprocessedConfig = sourceConfig;
       try {
-        this.config = await processConfigFileReferences(sourceConfig, sourceConfig.basePath || '');
-        this.processedConfig = this.config;
+        this.config = await processConfigFileReferences(
+          this.config,
+          this.options?.config.basePath || '',
+        );
 
         // Initialize worker pool
         const workerCount = this.getWorkerCount();
@@ -255,8 +249,6 @@ export class PythonProvider implements ApiProvider {
         logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
       } catch (error) {
         // Reset the initialization promise so future calls can retry
-        this.config = this.unprocessedConfig;
-        this.processedConfig = null;
         this.initializationPromise = null;
         throw error;
       }
@@ -435,12 +427,6 @@ export class PythonProvider implements ApiProvider {
       await this.pool.shutdown();
       this.pool = null;
     }
-    if (this.processedConfig && this.config !== this.processedConfig) {
-      this.unprocessedConfig = this.config;
-    }
-    this.config = this.unprocessedConfig;
-    this.processedConfig = null;
-    this.initializationPromise = null;
     providerRegistry.unregister(this);
     this.isInitialized = false;
   }

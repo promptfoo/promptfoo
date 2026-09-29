@@ -13,7 +13,6 @@ import {
   type TestSuite,
 } from '../types/index';
 import { filterByRange } from '../util/filterRange';
-import { warnEmptyFilterRange } from '../util/filterRangeWarn';
 import { extractFirstJsonObject, safeJsonStringify } from '../util/json';
 import { isPromptAllowed } from '../util/promptMatching';
 import { sanitizeObject } from '../util/sanitizer';
@@ -750,18 +749,15 @@ function applyFilterRangeBeforeValidationSplit(
     return { filterRangeApplied: false, testSuite };
   }
 
-  return {
-    filterRangeApplied: true,
-    testSuite: {
-      ...testSuite,
-      tests: filterByRange(testSuite.tests, filterRange, warnEmptyFilterRange),
-    },
-  };
+  const tests = filterByRange(testSuite.tests, filterRange);
+  if (tests.length === 0) {
+    throw new Error('Prompt optimization filterRange did not select any tests.');
+  }
+  return { filterRangeApplied: true, testSuite: { ...testSuite, tests } };
 }
 
 function createEvaluationOptions(
   config: Partial<UnifiedConfig>,
-  testSuite: TestSuite,
   omitFilterRange = false,
   abortSignal?: AbortSignal,
 ): InternalEvaluateOptions {
@@ -774,7 +770,6 @@ function createEvaluationOptions(
     showProgressBar: false,
     silent: true,
     suggestionsCount: undefined,
-    isRedteam: testSuite.redteam != null,
   };
   if (omitFilterRange) {
     options.filterRange = undefined;
@@ -798,16 +793,6 @@ function runOptimizationEvaluation(
   return options.maxConcurrency === undefined
     ? runEvaluation()
     : cliState.withMaxConcurrency(options.maxConcurrency, runEvaluation);
-}
-
-function assertFilterRangeSelectedOptimizationTests(
-  testSuite: TestSuite,
-  filterRangeApplied: boolean,
-): void {
-  if (!filterRangeApplied || (testSuite.tests?.length ?? 0) > 0) {
-    return;
-  }
-  throw new Error('Prompt optimization filterRange did not select any tests.');
 }
 
 function assertOptimizationEvalHasResults(evalRecord: Eval | undefined, scope: string): void {
@@ -844,7 +829,6 @@ export async function optimizePromptTestSuite(
   // range into each partition would apply absolute indices a second time.
   const { testSuite: partitionableTestSuite, filterRangeApplied } =
     applyFilterRangeBeforeValidationSplit(config, selectedTestSuite, options.validationSplit);
-  assertFilterRangeSelectedOptimizationTests(partitionableTestSuite, filterRangeApplied);
   const { searchTestSuite, validationTestSuite, searchTestCount, validationTestCount } =
     createValidationPartition(partitionableTestSuite, options.validationSplit);
 
@@ -857,7 +841,7 @@ export async function optimizePromptTestSuite(
   const baselineEval = await runOptimizationEvaluation(
     searchTestSuite,
     new Eval(optimizationConfig, { persisted: false }),
-    createEvaluationOptions(config, testSuite, filterRangeApplied, abortSignal),
+    createEvaluationOptions(config, filterRangeApplied, abortSignal),
   );
   throwIfOptimizationAborted(abortSignal);
   assertOptimizationEvalHasResults(baselineEval, 'the selected prompt/provider');
@@ -865,7 +849,7 @@ export async function optimizePromptTestSuite(
     ? await runOptimizationEvaluation(
         validationTestSuite,
         new Eval(optimizationConfig, { persisted: false }),
-        createEvaluationOptions(config, testSuite, filterRangeApplied, abortSignal),
+        createEvaluationOptions(config, filterRangeApplied, abortSignal),
       )
     : undefined;
   throwIfOptimizationAborted(abortSignal);
@@ -939,7 +923,7 @@ export async function optimizePromptTestSuite(
     const candidateEval = await runOptimizationEvaluation(
       candidateSearchSuite,
       new Eval(optimizationConfig, { persisted: false }),
-      createEvaluationOptions(config, testSuite, filterRangeApplied, abortSignal),
+      createEvaluationOptions(config, filterRangeApplied, abortSignal),
     );
     throwIfOptimizationAborted(abortSignal);
     const candidateValidationEval = validationTestSuite
@@ -951,7 +935,7 @@ export async function optimizePromptTestSuite(
             candidates,
           ),
           new Eval(optimizationConfig, { persisted: false }),
-          createEvaluationOptions(config, testSuite, filterRangeApplied, abortSignal),
+          createEvaluationOptions(config, filterRangeApplied, abortSignal),
         )
       : undefined;
     throwIfOptimizationAborted(abortSignal);

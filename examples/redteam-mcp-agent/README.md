@@ -20,8 +20,8 @@ The example includes:
 
 ## Prerequisites
 
-- Node.js 20+
-- Python 3.8+ (for the Python MCP server example)
+- Node.js >=22.22.0 (Node.js 24 LTS recommended)
+- Python 3.10+ (for the optional Python MCP server example)
 - OpenAI API key
 
 ## Environment Variables
@@ -152,11 +152,12 @@ mcpServers:
 
 ### 3. Python HTTP MCP Server
 
-To run the Python server example:
+The optional Python server needs Python 3.10 or newer and only FastMCP. The
+Node.js server does not need Python dependencies. To run the Python server:
 
 ```bash
 # Install FastMCP if not already installed
-pip install fastmcp
+python -m pip install 'fastmcp>=4.0.5,<5'
 
 # Run the server
 python server.py
@@ -167,6 +168,12 @@ Then reference it in your config:
 ```yaml
 mcpServers:
   - url: 'http://localhost:8080/mcp'
+```
+
+Check the Python tool locally without model requests:
+
+```bash
+python -m unittest discover -s . -p 'server_test.py'
 ```
 
 ## Understanding the Results
@@ -216,9 +223,9 @@ Update the model in the provider configuration:
 
 ```yaml
 config:
-  model: "gpt-4o-mini"  # More cost-effective option
+  model: 'gpt-4o-mini' # More cost-effective option
   # or
-  model: "openai:chat:gpt-5.4"      # Latest OpenAI model
+  model: 'openai:chat:gpt-5.4' # Latest OpenAI model
 ```
 
 ## Security Considerations
@@ -245,8 +252,8 @@ config:
    - Check that MCP servers are starting successfully
 
 4. **Python server not working**
-   - Install FastMCP: `pip install fastmcp`
-   - Ensure Python 3.8+ is installed
+   - Install FastMCP: `python -m pip install 'fastmcp>=4.0.5,<5'`
+   - Ensure Python 3.10+ is installed
    - Check that port 8080 is available
 
 ## Advanced Usage

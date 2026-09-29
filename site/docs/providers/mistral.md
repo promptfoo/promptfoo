@@ -17,24 +17,7 @@ keywords:
 
 # Mistral AI
 
-The [Mistral AI API](https://docs.mistral.ai/api/) provides access to cutting-edge language models that deliver exceptional performance at competitive pricing. Mistral offers a compelling alternative to OpenAI and other providers, with specialized models for reasoning, code generation, and multimodal tasks.
-
-Mistral is particularly valuable for:
-
-- **Cost-effective AI integration** with pricing up to 8x lower than competitors
-- **Advanced reasoning** with Magistral models that show step-by-step thinking
-- **Code generation excellence** with Codestral models supporting 80+ programming languages
-- **Multimodal capabilities** for text and image processing
-- **Enterprise deployments** with on-premises options requiring just 4 GPUs
-- **Multilingual applications** with native support for 12+ languages
-
-:::tip Why Choose Mistral?
-
-Mistral's current catalog spans low-cost small models, native reasoning models, and
-frontier multimodal models such as Mistral Large 3 at $0.50/$1.50 per million tokens
-(input/output).
-
-:::
+Use the [Mistral AI API](https://docs.mistral.ai/api/) for chat, reasoning, code generation, and image understanding. Check [Mistral's model catalog](https://docs.mistral.ai/getting-started/models/) for capabilities and availability.
 
 ## API Key
 
@@ -69,6 +52,7 @@ providers:
       n: 1 # Number of completions
       reasoning_effort: high # high | none on adjustable reasoning models
       prompt_mode: reasoning # reasoning | null on native reasoning models
+      prompt_cache_key: shared-prefix # Reuse Mistral's server-side prompt cache across requests
 ```
 
 `safe_prompt` is still accepted for compatibility, but Mistral now recommends inline
@@ -170,6 +154,12 @@ providers:
             action: block
 ````
 
+:::note
+
+Mistral's `config.guardrails` field enables upstream inline input guardrails, but it does not enable Promptfoo's [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails). Promptfoo sends the configuration without normalizing successful or HTTP 403 guardrail results into the required top-level response. Use a custom target or transform to assert on the native result. If `block_on_error` is enabled, distinguish a moderation-service failure from a policy violation instead of counting both as a match. Call a moderation endpoint separately for output filtering.
+
+:::
+
 ### Environment Variables Reference
 
 | Variable               | Description                     | Example                      |
@@ -186,35 +176,63 @@ You can specify which Mistral model to use in your configuration. The following 
 
 #### Current Models
 
-| Model                     | Context | Input Price | Output Price | Best For                               |
-| ------------------------- | ------- | ----------- | ------------ | -------------------------------------- |
-| `mistral-medium-3.5`      | 256k    | $1.50/1M    | $7.50/1M     | Agentic and coding-heavy workloads     |
-| `mistral-large-latest`    | 256k    | $0.50/1M    | $1.50/1M     | General-purpose multimodal tasks       |
-| `mistral-medium-latest`   | 128k    | $0.40/1M    | $2.00/1M     | Balanced multimodal workloads          |
-| `mistral-small-latest`    | 128k    | $0.10/1M    | $0.30/1M     | Cost-sensitive general tasks           |
-| `mistral-small-2603`      | 256k    | $0.15/1M    | $0.60/1M     | Hybrid instruct, reasoning, and coding |
-| `codestral-latest`        | 128k    | $0.30/1M    | $0.90/1M     | Code generation and FIM                |
-| `magistral-medium-latest` | 128k    | $2.00/1M    | $5.00/1M     | Native reasoning                       |
-| `open-mistral-nemo-2407`  | 128k    | $0.15/1M    | $0.15/1M     | Multilingual and research workloads    |
-| `ministral-14b-latest`    | 256k    | $0.20/1M    | $0.20/1M     | Compact multimodal deployments         |
+| Model                     | Context | Input Price | Output Price | Capabilities             | Best For                                 |
+| ------------------------- | ------- | ----------- | ------------ | ------------------------ | ---------------------------------------- |
+| `mistral-medium-latest`   | 256k    | $1.50/1M    | $7.50/1M     | Text, vision, reasoning¹ | Agentic and coding-heavy workloads       |
+| `mistral-large-latest`    | 256k    | $0.50/1M    | $1.50/1M     | Text, vision             | General-purpose multimodal tasks         |
+| `mistral-small-latest`    | 256k    | $0.15/1M    | $0.60/1M     | Text, vision, reasoning¹ | Hybrid instruct, reasoning, and coding   |
+| `magistral-medium-latest` | 128k    | $2.00/1M    | $5.00/1M     | Native reasoning, vision | Step-by-step reasoning                   |
+| `codestral-latest`        | 256k    | $0.30/1M    | $0.90/1M     | Code, FIM                | Code generation and completion           |
+| `devstral-medium-latest`  | 256k    | $0.40/1M    | $2.00/1M     | Code agents              | Software-engineering agents (Devstral 2) |
+| `ministral-14b-latest`    | 256k    | $0.20/1M    | $0.20/1M     | Text, vision             | Compact multimodal deployments           |
+| `ministral-8b-latest`     | 256k    | $0.15/1M    | $0.15/1M     | Text, vision             | Efficient on-prem/edge deployments       |
+| `ministral-3b-latest`     | 128k    | $0.10/1M    | $0.10/1M     | Text, vision             | Smallest multimodal deployments          |
+| `open-mistral-nemo`       | 128k    | $0.15/1M    | $0.15/1M     | Text                     | Multilingual and research workloads      |
 
-#### Legacy Models (Deprecated)
+¹ Enable adjustable reasoning with `reasoning_effort: high`.
 
-1. `open-mistral-7b`, `mistral-tiny`, `mistral-tiny-2312`
-2. `mistral-tiny-2407`, `mistral-tiny-latest`
-3. `mistral-small-2402`
-4. `mistral-medium-2312`, `mistral-medium`
-5. `mistral-large-2402`
-6. `mistral-large-2407`
-7. `codestral-2405`
-8. `codestral-mamba-2407`, `open-codestral-mamba`, `codestral-mamba-latest`
-9. `open-mixtral-8x7b`, `mistral-small`, `mistral-small-2312`
-10. `open-mixtral-8x22b`, `open-mixtral-8x22b-2404`
-11. `magistral-small-latest`, `magistral-small-2509` - deprecated after April 30, 2026
+:::note Aliases move — pin a snapshot for stability
 
-### Embedding Model
+`*-latest` and bare aliases follow whatever snapshot Mistral currently points them at, so their
+price and behavior track the resolved model. Pin a dated snapshot (e.g. `mistral-medium-2604`)
+when you need stable pricing and behavior.
+
+:::
+
+#### Model aliases and snapshots
+
+| Alias                                                                                                     | Resolves to                                |
+| --------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `mistral-medium-latest`, `mistral-medium`, `mistral-medium-3`, `mistral-medium-3-5`, `mistral-medium-3.5` | `mistral-medium-2604` (Mistral Medium 3.5) |
+| `mistral-large-latest`                                                                                    | `mistral-large-2512` (Mistral Large 3)     |
+| `mistral-small-latest`, `magistral-small-latest`                                                          | `mistral-small-2603` (Mistral Small 4)     |
+| `magistral-medium-latest`                                                                                 | `magistral-medium-2509` (Magistral Medium) |
+| `codestral-latest`, `mistral-code-latest`, `mistral-code-fim-latest`                                      | `codestral-2508` (Codestral)               |
+| `devstral-latest`, `devstral-medium-latest`, `mistral-code-agent-latest`                                  | `devstral-2512` (Devstral 2)               |
+| `open-mistral-nemo`, `mistral-tiny-latest`, `mistral-tiny-2407`                                           | `open-mistral-nemo-2407` (Mistral NeMo)    |
+
+The `magistral-small-latest` alias now resolves to Mistral Small 4 (a hybrid model), not the
+standalone Magistral Small reasoning snapshot. Enable Small 4's reasoning with
+`reasoning_effort: high`.
+
+<span id="legacy-models-deprecated-or-retired" />
+
+#### Legacy models
+
+Promptfoo retains some older prices for estimating costs from past evals. Retired models reject new requests. Check [Mistral's model catalog](https://docs.mistral.ai/getting-started/models/) before using an older snapshot.
+
+### Embedding Models
 
 - `mistral-embed` - $0.10/1M tokens - 8k context
+- `codestral-embed` (`codestral-embed-2505`) - $0.15/1M tokens - code-optimized embeddings
+
+Select an embedding model with the `mistral:embedding:` prefix:
+
+```yaml
+providers:
+  - mistral:embedding:mistral-embed
+  - mistral:embedding:codestral-embed
+```
 
 Here's an example config that compares different Mistral models:
 
@@ -230,8 +248,9 @@ providers:
 
 Mistral's **Magistral** models are specialized native reasoning models. `magistral-medium-latest`
 currently points to the 2509 generation, which uses tokenized thinking chunks and a 128k
-context window. Mistral's public model card marks `magistral-small-2509` for deprecation
-after April 30, 2026.
+context window. Mistral's public model card deprecated the standalone `magistral-small-2509`
+snapshot on 2026-04-30 (retiring 2026-07-31); the `magistral-small-latest` alias now resolves to
+Mistral Small 4, whose reasoning mode you enable with `reasoning_effort: high`.
 
 ### Key Features of Magistral Models
 
@@ -242,7 +261,8 @@ after April 30, 2026.
 
 ### Magistral Model Variants
 
-- **Magistral Medium** (`magistral-medium-latest` / `magistral-medium-2509`)
+- **Magistral Medium** (`magistral-medium-latest` / `magistral-medium-2509`) — native reasoning
+- **Mistral Small 4** (`mistral-small-latest` / `magistral-small-latest`) — hybrid model; enable reasoning with `reasoning_effort: high`
 
 ### Usage Recommendations
 
@@ -520,7 +540,7 @@ export MISTRAL_API_HOST="api.mistral.ai"
 providers:
   - id: mistral:magistral-medium-latest
     config:
-      max_tokens: 8000 # Leave room for 32k input context
+      max_tokens: 8000 # Leave room for 128k input context
       temperature: 0.7
 ```
 
@@ -568,12 +588,12 @@ Error: 429 Too Many Requests
 - Use smaller batch sizes
 - Consider upgrading your plan
 
-```yaml
-# Reduce concurrent requests
-providers:
-  - id: mistral:mistral-large-latest
-    config:
-      timeout: 30000 # Increase timeout
+The Mistral provider has no `timeout` config option. Request timeouts come from the
+`REQUEST_TIMEOUT_MS` environment variable (default 300000), and concurrency is controlled by the
+`--max-concurrency` flag:
+
+```bash
+REQUEST_TIMEOUT_MS=600000 promptfoo eval --max-concurrency 1
 ```
 
 #### Context Length Exceeded
@@ -590,7 +610,7 @@ Error: Context length exceeded
 
 ```yaml
 providers:
-  - id: mistral:mistral-medium-latest # 128k context
+  - id: mistral:mistral-medium-latest # 256k context
     config:
       max_tokens: 4000 # Leave room for input
 ```
@@ -606,7 +626,7 @@ Error: Model not found
 ```yaml
 providers:
   - mistral:mistral-large-latest # ✅ Use latest
-  # - mistral:mistral-large-2402  # ❌ Deprecated
+  # - mistral:mistral-large-2402  # ❌ Retired
 ```
 
 ### Debugging Tips
@@ -660,7 +680,7 @@ npx promptfoo@latest init --example mistral
 - **[JSON Mode](https://github.com/promptfoo/promptfoo/blob/main/examples/mistral/promptfooconfig.json-mode.yaml)** - Structured output generation
 - **[Code Generation](https://github.com/promptfoo/promptfoo/blob/main/examples/mistral/promptfooconfig.code-generation.yaml)** - Multi-language code generation with Codestral
 - **[Reasoning Tasks](https://github.com/promptfoo/promptfoo/blob/main/examples/mistral/promptfooconfig.reasoning.yaml)** - Advanced step-by-step problem solving
-- **[Multimodal](https://github.com/promptfoo/promptfoo/blob/main/examples/mistral/promptfooconfig.multimodal.yaml)** - Vision capabilities with Pixtral
+- **[Multimodal](https://github.com/promptfoo/promptfoo/blob/main/examples/mistral/promptfooconfig.multimodal.yaml)** - Vision capabilities with a current multimodal model (`mistral-large-2512`)
 
 ### Quick Start
 

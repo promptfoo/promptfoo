@@ -620,63 +620,6 @@ describe('prompt optimizer', () => {
     expect(cliState.maxConcurrency).toBeUndefined();
   });
 
-  it('uses the runtime test suite as the redteam source of truth', async () => {
-    const redteam = { plugins: [{ id: 'harmful' }] };
-    const internalEvalOptions = await collectInternalEvalOptions({
-      redteam,
-      evaluateOptions: { isRedteam: true },
-    });
-
-    for (const options of internalEvalOptions) {
-      expect(options).toEqual(
-        expect.objectContaining({
-          isRedteam: false,
-        }),
-      );
-    }
-    for (const [suite] of vi.mocked(evaluate).mock.calls) {
-      expect(suite.redteam).toBeUndefined();
-    }
-  });
-
-  it('marks internal optimizer evals as redteam for an empty runtime redteam block', async () => {
-    const internalEvalOptions = await collectInternalEvalOptions(
-      { evaluateOptions: { isRedteam: false } },
-      {
-        redteam: {},
-      },
-    );
-
-    for (const options of internalEvalOptions) {
-      expect(options).toEqual(
-        expect.objectContaining({
-          isRedteam: true,
-        }),
-      );
-    }
-  });
-
-  it('respects an explicit null runtime redteam value', async () => {
-    const internalEvalOptions = await collectInternalEvalOptions(
-      { redteam: { plugins: [{ id: 'harmful' }] } },
-      { redteam: null as unknown as TestSuite['redteam'] },
-    );
-
-    for (const options of internalEvalOptions) {
-      expect(options?.isRedteam).toBe(false);
-    }
-  });
-
-  it('does not mark internal optimizer evals as redteam for a non-redteam config', async () => {
-    const internalEvalOptions = await collectInternalEvalOptions();
-
-    expect(internalEvalOptions[0]).toEqual(
-      expect.objectContaining({
-        isRedteam: false,
-      }),
-    );
-  });
-
   it('strips outputPath from internal optimizer evals so they do not pollute the user output file', async () => {
     const provider = createMockProvider({
       id: 'optimizer-provider',
@@ -1070,21 +1013,24 @@ describe('prompt optimizer', () => {
   it.each([
     ['alone', {}],
     ['with variables', { vars: { name: 'Alice' } }],
-  ])('rejects a defaultTest-only scoring function %s when it has no assertions', async (_, rest) => {
-    const testSuite: TestSuite = {
-      providers: [createMockProvider({ id: 'target-provider' })],
-      prompts: [{ raw: 'Seed', label: 'Seed' }],
-      defaultTest: {
-        ...rest,
-        assertScoringFunction: () => ({ pass: true, score: 1, reason: 'scored' }),
-      },
-    };
+  ])(
+    'rejects a defaultTest-only scoring function %s when it has no assertions',
+    async (_, rest) => {
+      const testSuite: TestSuite = {
+        providers: [createMockProvider({ id: 'target-provider' })],
+        prompts: [{ raw: 'Seed', label: 'Seed' }],
+        defaultTest: {
+          ...rest,
+          assertScoringFunction: () => ({ pass: true, score: 1, reason: 'scored' }),
+        },
+      };
 
-    await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
-      'Prompt optimization requires at least one configured test or scenario.',
-    );
-    expect(evaluate).not.toHaveBeenCalled();
-  });
+      await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
+        'Prompt optimization requires at least one configured test or scenario.',
+      );
+      expect(evaluate).not.toHaveBeenCalled();
+    },
+  );
 
   it('throws a clear error when prompt/provider filters scope every test away from the selected pair', async () => {
     const provider = createMockProvider({

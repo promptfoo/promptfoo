@@ -1,17 +1,10 @@
 import chalk from 'chalk';
 import { Command, InvalidArgumentError } from 'commander';
-import cliState from '../cliState';
 import logger from '../logger';
 import { optimizePromptTestSuite } from '../optimizer/promptOptimizer';
 import telemetry from '../telemetry';
-import {
-  type CommandLineOptions,
-  type EvaluateOptions,
-  type TestSuite,
-  type UnifiedConfig,
-} from '../types/index';
+import { type CommandLineOptions, type EvaluateOptions, type UnifiedConfig } from '../types/index';
 import { resolveConfigs } from '../util/config/load';
-import { type FilterOptions, filterTests } from '../util/eval/filterTests';
 import { printBorder, setupEnv } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
 
@@ -45,93 +38,6 @@ function applyCommandLineEvaluateOptions(
   return Object.keys(overrides).length > 0
     ? { ...config, evaluateOptions: { ...config.evaluateOptions, ...overrides } }
     : config;
-}
-
-function hasRunnableOptimizationDefaultTest(defaultTest: TestSuite['defaultTest']): boolean {
-  if (!defaultTest || typeof defaultTest !== 'object') {
-    return false;
-  }
-  const hasAssertions = Array.isArray(defaultTest.assert) && defaultTest.assert.length > 0;
-  const hasVars = Boolean(defaultTest.vars) && Object.keys(defaultTest.vars ?? {}).length > 0;
-  if (defaultTest.assertScoringFunction && !hasAssertions) {
-    return false;
-  }
-  return hasAssertions || hasVars;
-}
-
-async function applyOptimizationTestFilters(
-  config: Partial<UnifiedConfig>,
-  testSuite: TestSuite,
-  commandLineOptions: Partial<CommandLineOptions> | undefined,
-  rowFiltersApplied: boolean,
-): Promise<{ config: Partial<UnifiedConfig>; testSuite: TestSuite }> {
-  const range = config.evaluateOptions?.filterRange;
-  const hasScenarios = Boolean(testSuite.scenarios?.length);
-  const filterOptions: FilterOptions = {
-    errorsOnly: rowFiltersApplied ? undefined : commandLineOptions?.filterErrorsOnly,
-    failing: rowFiltersApplied ? undefined : commandLineOptions?.filterFailing,
-    failingOnly: rowFiltersApplied ? undefined : commandLineOptions?.filterFailingOnly,
-    firstN: commandLineOptions?.filterFirstN,
-    metadata: rowFiltersApplied ? undefined : commandLineOptions?.filterMetadata,
-    pattern: rowFiltersApplied ? undefined : commandLineOptions?.filterPattern,
-    range: hasScenarios ? undefined : range,
-    sample: commandLineOptions?.filterSample,
-    sampleSeed: commandLineOptions?.filterSampleSeed,
-  };
-  if (Object.values(filterOptions).every((value) => value === undefined)) {
-    return { config, testSuite };
-  }
-
-  const explicitTestCount = testSuite.tests?.length ?? 0;
-  const shouldApplyFiltersToImplicitDefaultTest =
-    !rowFiltersApplied &&
-    testSuite.scenarios === undefined &&
-    explicitTestCount === 0 &&
-    hasRunnableOptimizationDefaultTest(testSuite.defaultTest);
-  if (
-    testSuite.scenarios === undefined &&
-    explicitTestCount === 0 &&
-    !shouldApplyFiltersToImplicitDefaultTest
-  ) {
-    return rowFiltersApplied
-      ? { config, testSuite: { ...testSuite, scenarios: [] } }
-      : { config, testSuite };
-  }
-  let filterableTestSuite = testSuite;
-  if (shouldApplyFiltersToImplicitDefaultTest) {
-    const defaultMetadata =
-      typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : undefined;
-    filterableTestSuite = {
-      ...testSuite,
-      tests: [defaultMetadata ? { metadata: defaultMetadata } : {}],
-    };
-  }
-
-  // resolveConfigs applies row-sensitive filters once across top-level and materialized scenario
-  // rows. This second pass applies only selection filters to top-level tests; scenario ranges stay
-  // deferred until evaluator expansion.
-  const tests = await filterTests(filterableTestSuite, filterOptions);
-  const shouldSuppressImplicitDefaultTest =
-    !hasScenarios &&
-    tests.length === 0 &&
-    (explicitTestCount > 0 || shouldApplyFiltersToImplicitDefaultTest);
-
-  return {
-    config:
-      range === undefined || hasScenarios
-        ? config
-        : { ...config, evaluateOptions: { ...config.evaluateOptions, filterRange: undefined } },
-    testSuite: {
-      ...filterableTestSuite,
-      tests,
-      ...(shouldSuppressImplicitDefaultTest ? { scenarios: [] } : {}),
-    },
-  };
-}
-
-function getOptimizationConcurrency(config: Partial<UnifiedConfig>): number | undefined {
-  const { delay, maxConcurrency } = config.evaluateOptions ?? {};
-  return typeof delay === 'number' && !Number.isNaN(delay) && delay > 0 ? 1 : maxConcurrency;
 }
 
 export async function doOptimize(options: OptimizeOptions): Promise<void> {
@@ -173,24 +79,11 @@ export async function doOptimize(options: OptimizeOptions): Promise<void> {
     resolved.config,
     resolved.commandLineOptions,
   );
-  const { config: optimizationConfig, testSuite: optimizationTestSuite } =
-    await applyOptimizationTestFilters(
-      mergedConfig,
-      resolved.testSuite,
-      resolved.commandLineOptions,
-      Boolean(resolved.rowFiltersApplied),
-    );
-  const runOptimization = () =>
-    optimizePromptTestSuite(optimizationConfig, optimizationTestSuite, {
-      promptIndex: options.promptIndex ?? 0,
-      providerIndex: options.providerIndex ?? 0,
-      validationSplit: options.validationSplit,
-    });
-  const concurrency = getOptimizationConcurrency(optimizationConfig);
-  const result =
-    concurrency === undefined
-      ? await runOptimization()
-      : await cliState.withMaxConcurrency(concurrency, runOptimization);
+  const result = await optimizePromptTestSuite(mergedConfig, resolved.testSuite, {
+    promptIndex: options.promptIndex ?? 0,
+    providerIndex: options.providerIndex ?? 0,
+    validationSplit: options.validationSplit,
+  });
 
   printBorder();
   logger.info(chalk.bold('Prompt optimization result'));

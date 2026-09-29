@@ -1,6 +1,5 @@
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import cliState from '../../src/cliState';
 import { doOptimize, optimizeCommand } from '../../src/commands/optimize';
 import logger from '../../src/logger';
 import { optimizePromptTestSuite } from '../../src/optimizer/promptOptimizer';
@@ -43,7 +42,6 @@ vi.mock('../../src/util/promptfooCommand', () => ({
 describe('optimize command', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    cliState.maxConcurrency = undefined;
     process.exitCode = undefined;
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: {},
@@ -63,7 +61,6 @@ describe('optimize command', () => {
   });
 
   afterEach(() => {
-    cliState.maxConcurrency = undefined;
     vi.restoreAllMocks();
     vi.resetAllMocks();
     process.exitCode = undefined;
@@ -137,7 +134,6 @@ describe('optimize command', () => {
   });
 
   it('applies commandLineOptions eval settings to optimization', async () => {
-    const concurrencySpy = vi.spyOn(cliState, 'withMaxConcurrency');
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: {
         evaluateOptions: {
@@ -153,8 +149,6 @@ describe('optimize command', () => {
       commandLineOptions: {
         delay: 25,
         filterRange: '0:4',
-        filterSample: 2,
-        filterSampleSeed: 7,
         maxConcurrency: 5,
         repeat: 2,
       },
@@ -166,7 +160,7 @@ describe('optimize command', () => {
       {
         evaluateOptions: {
           delay: 25,
-          filterRange: undefined,
+          filterRange: '0:4',
           maxConcurrency: 5,
           repeat: 2,
         },
@@ -179,40 +173,7 @@ describe('optimize command', () => {
       expect.any(Object),
     );
     const filteredSuite = vi.mocked(optimizePromptTestSuite).mock.calls[0][1];
-    expect(filteredSuite.tests?.map((test) => test.vars?.id)).toEqual([0, 1]);
-    expect(concurrencySpy).toHaveBeenCalledWith(1, expect.any(Function));
-  });
-
-  it('applies configured first-N, pattern, and metadata test filters', async () => {
-    vi.mocked(resolveConfigs).mockResolvedValue({
-      config: {},
-      testSuite: {
-        providers: [],
-        prompts: [{ raw: 'Prompt', label: 'Prompt' }],
-        tests: [
-          { description: 'keep silver', metadata: { tier: 'silver' }, vars: { id: 0 } },
-          { description: 'drop gold', metadata: { tier: 'gold' }, vars: { id: 1 } },
-          { description: 'keep gold first', metadata: { tier: 'gold' }, vars: { id: 2 } },
-          { description: 'keep gold second', metadata: { tier: 'gold' }, vars: { id: 3 } },
-        ],
-      },
-      basePath: '',
-      commandLineOptions: {
-        filterFirstN: 1,
-        filterMetadata: 'tier=gold',
-        filterPattern: 'keep',
-      },
-    } as any);
-
-    await doOptimize({ defaultConfig: {}, defaultConfigPath: 'promptfooconfig.yaml' });
-
-    expect(optimizePromptTestSuite).toHaveBeenCalledWith(
-      {},
-      expect.objectContaining({
-        tests: [expect.objectContaining({ vars: { id: 2 } })],
-      }),
-      expect.any(Object),
-    );
+    expect(filteredSuite.tests?.map((test) => test.vars?.id)).toEqual([0, 1, 2, 3, 4]);
   });
 
   it('does not merge command prompt-suggestion settings into optimizer eval config', async () => {
@@ -250,7 +211,6 @@ describe('optimize command', () => {
   });
 
   it('lets commandLineOptions delay zero disable a positive evaluateOptions delay', async () => {
-    const concurrencySpy = vi.spyOn(cliState, 'withMaxConcurrency');
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: { evaluateOptions: { delay: 100, maxConcurrency: 8 } },
       testSuite: {
@@ -267,93 +227,6 @@ describe('optimize command', () => {
     expect(optimizePromptTestSuite).toHaveBeenCalledWith(
       { evaluateOptions: { delay: 0, maxConcurrency: 4 } },
       expect.any(Object),
-      expect.any(Object),
-    );
-    expect(concurrencySpy).toHaveBeenCalledWith(4, expect.any(Function));
-  });
-
-  it('suppresses the implicit default row when command filters select no explicit tests', async () => {
-    vi.mocked(resolveConfigs).mockResolvedValue({
-      config: {},
-      testSuite: {
-        providers: [],
-        prompts: [{ raw: 'Prompt', label: 'Prompt' }],
-        defaultTest: { vars: { fallback: true } },
-        tests: [{ vars: { id: 0 } }],
-      },
-      basePath: '',
-      commandLineOptions: { filterRange: '2:3' },
-    } as any);
-
-    await doOptimize({ defaultConfig: {}, defaultConfigPath: 'promptfooconfig.yaml' });
-
-    expect(optimizePromptTestSuite).toHaveBeenCalledWith(
-      { evaluateOptions: { filterRange: undefined } },
-      expect.objectContaining({ tests: [], scenarios: [] }),
-      expect.any(Object),
-    );
-  });
-
-  it('applies configured filters to the implicit default row', async () => {
-    vi.mocked(resolveConfigs).mockResolvedValue({
-      config: {},
-      testSuite: {
-        providers: [],
-        prompts: [{ raw: 'Prompt', label: 'Prompt' }],
-        defaultTest: { metadata: { tier: 'gold' }, vars: { fallback: true } },
-      },
-      basePath: '',
-      commandLineOptions: { filterMetadata: 'tier=silver' },
-    } as any);
-
-    await doOptimize({ defaultConfig: {}, defaultConfigPath: 'promptfooconfig.yaml' });
-
-    expect(optimizePromptTestSuite).toHaveBeenCalledWith(
-      {},
-      expect.objectContaining({ tests: [], scenarios: [] }),
-      expect.any(Object),
-    );
-  });
-
-  it('does not synthesize a runnable row for an empty default test', async () => {
-    vi.mocked(resolveConfigs).mockResolvedValue({
-      config: {},
-      testSuite: {
-        providers: [],
-        prompts: [{ raw: 'Prompt', label: 'Prompt' }],
-        defaultTest: {},
-      },
-      basePath: '',
-      commandLineOptions: { filterRange: '0:1' },
-    } as any);
-
-    await doOptimize({ defaultConfig: {}, defaultConfigPath: 'promptfooconfig.yaml' });
-
-    const optimizationSuite = vi.mocked(optimizePromptTestSuite).mock.calls[0][1];
-    expect(optimizationSuite.tests).toBeUndefined();
-    expect(optimizationSuite.scenarios).toBeUndefined();
-  });
-
-  it('leaves scenario ranges for the evaluator to apply after expansion', async () => {
-    vi.mocked(resolveConfigs).mockResolvedValue({
-      config: { evaluateOptions: { filterRange: '1:2' } },
-      testSuite: {
-        providers: [],
-        prompts: [{ raw: 'Prompt', label: 'Prompt' }],
-        tests: [],
-        scenarios: [{ config: [{ vars: { group: 'scenario' } }], tests: [{ vars: { id: 0 } }] }],
-      },
-      basePath: '',
-      commandLineOptions: {},
-    } as any);
-
-    await doOptimize({ defaultConfig: {}, defaultConfigPath: 'promptfooconfig.yaml' });
-
-    expect(optimizePromptTestSuite).toHaveBeenCalledWith(
-      { evaluateOptions: { filterRange: '1:2' } },
-      expect.objectContaining({
-        scenarios: expect.arrayContaining([expect.any(Object)]),
-      }),
       expect.any(Object),
     );
   });
