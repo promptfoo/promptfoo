@@ -38,9 +38,9 @@ function DialogContent({
   'aria-describedby': ariaDescribedBy,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
-  /** When true (default), adds a visually hidden description to suppress Radix a11y warnings */
+  /** Adds a hidden fallback when no visible description is present. Defaults to true. */
   hideDescription?: boolean;
-  /** When true, hides the default close button (useful when providing a custom close button) */
+  /** Hides the default close button when a caller supplies its own. */
   hideCloseButton?: boolean;
 }) {
   const [contentElement, setContentElement] = React.useState<HTMLDivElement | null>(null);
