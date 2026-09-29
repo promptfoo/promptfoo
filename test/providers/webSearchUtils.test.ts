@@ -327,14 +327,37 @@ describe('webSearchUtils', () => {
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
     });
 
-    it('should return true for Anthropic provider with web_search tool', () => {
+    it.each(['web_search_20250305', 'web_search_20260209', 'web_search_20260318'])(
+      'should return true for Anthropic provider with the %s tool',
+      (toolType) => {
+        const provider: Partial<ApiProvider> = {
+          id: () => 'anthropic:messages:claude-opus-5',
+          config: {
+            tools: [{ type: toolType, name: 'web_search', max_uses: 5 }],
+          },
+        };
+        expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
+      },
+    );
+
+    it.each([
+      'web_search',
+      'web_search_',
+      'web_search_preview',
+      'web_search_2026020',
+      'web_search_202602099',
+      'web_search_20260209_extra',
+      undefined,
+      null,
+    ])('should reject invalid Anthropic web search tool type %s', (toolType) => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'anthropic:messages:claude-opus-4-6',
+        id: () => 'anthropic:messages:claude-opus-5',
         config: {
-          tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+          tools: [{ type: toolType, name: 'web_search' }],
         },
       };
-      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
+
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
     });
 
     it('should return false for Anthropic provider without web_search tool', () => {
@@ -376,7 +399,7 @@ describe('webSearchUtils', () => {
     const mockAnthropicWebSearchProvider = (): Partial<ApiProvider> => ({
       id: () => 'anthropic:messages:claude-opus-5-5',
       config: {
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+        tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 5 }],
       },
     });
     const mockOpenAiWebSearchProvider = (): Partial<ApiProvider> =>
@@ -427,7 +450,7 @@ describe('webSearchUtils', () => {
           options: expect.objectContaining({
             config: expect.objectContaining({
               tools: expect.arrayContaining([
-                expect.objectContaining({ type: 'web_search_20250305' }),
+                expect.objectContaining({ type: 'web_search_20260209' }),
               ]),
             }),
           }),
