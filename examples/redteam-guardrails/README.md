@@ -106,7 +106,7 @@ redteam:
     - guardrails-eval
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
     - multilingual
 ```
 

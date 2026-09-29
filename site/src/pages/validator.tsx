@@ -8,16 +8,16 @@ import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import { AggregateAjvError } from '@segment/ajv-human-errors';
+import { loadYaml } from '@site/src/utils/yaml';
 import Layout from '@theme/Layout';
 import Ajv from 'ajv';
-import yaml from 'js-yaml';
 
 const DEFAULT_INPUT = `prompts:
   - "Write a tweet about {{topic}}"
 
 providers:
   - openai:chat:gpt-4.1-mini
-  - anthropic:messages:claude-3-5-sonnet-20241022
+  - anthropic:messages:claude-sonnet-4-6
 
 tests:
   - vars:
@@ -60,7 +60,7 @@ const ConfigValidator = () => {
       if (value.trim().startsWith('{')) {
         parsedConfig = JSON.parse(value);
       } else {
-        parsedConfig = yaml.load(value);
+        parsedConfig = loadYaml(value);
       }
 
       const ajv = new Ajv({
@@ -117,7 +117,7 @@ const ConfigValidator = () => {
     <Layout title="Config Validator" description="Validate your promptfoo configuration">
       <Container maxWidth="lg" sx={{ mb: 4 }}>
         <Box sx={{ my: 4 }}>
-          <Typography variant="h3" gutterBottom align="center">
+          <Typography variant="h3" component="h1" gutterBottom align="center">
             Promptfoo Config Validator
           </Typography>
           <Typography variant="body1" gutterBottom align="center">

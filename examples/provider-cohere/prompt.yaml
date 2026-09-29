@@ -4,5 +4,3 @@ chat_history:
   - role: CHATBOT
     message: 'Isaac Newton'
 message: '{{question}}'
-connectors:
-  - id: web-search
