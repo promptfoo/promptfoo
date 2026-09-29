@@ -1,10 +1,11 @@
 import path from 'path';
 
+import { trace } from '@opentelemetry/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import { FunctionCallbackHandler } from '../../src/providers/functionCallbackUtils';
-import { isJavascriptFile } from '../../src/util/fileExtensions';
 
 import type { FunctionCallbackConfig } from '../../src/providers/functionCallbackTypes';
 
@@ -17,18 +18,11 @@ vi.mock('../../src/esm', async (importOriginal) => {
   };
 });
 vi.mock('../../src/logger', () => ({
-  default: { debug: vi.fn() },
+  default: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
-vi.mock('../../src/util/fileExtensions', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    isJavascriptFile: vi.fn().mockReturnValue(true),
-  };
-});
 
 const mockImportModule = vi.mocked(importModule);
 const mockLogger = vi.mocked(logger);
-vi.mocked(isJavascriptFile);
 
 describe('FunctionCallbackHandler', () => {
   let handler: FunctionCallbackHandler;
@@ -83,6 +77,163 @@ describe('FunctionCallbackHandler', () => {
         isError: false,
       });
       expect(mockCallback).toHaveBeenCalledWith('{"param": "value"}', undefined);
+    });
+
+    it('traces function callbacks with their tool call identifier', async () => {
+      const span = {
+        setAttribute: vi.fn(),
+        setStatus: vi.fn(),
+        end: vi.fn(),
+        recordException: vi.fn(),
+      };
+      const startActiveSpan = vi.fn((_name, _options, callback) => callback(span));
+      const activeSpanSpy = vi.spyOn(trace, 'getActiveSpan').mockReturnValue(span as any);
+      const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as any);
+
+      try {
+        const result = await handler.processCall(
+          { id: 'call-123', name: 'lookup_order', arguments: '{"order_id":"123"}' },
+          { lookup_order: async () => 'shipped' },
+        );
+
+        expect(result).toEqual({ output: 'shipped', isError: false });
+        expect(startActiveSpan).toHaveBeenCalledWith(
+          'execute_tool lookup_order',
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              'gen_ai.operation.name': 'execute_tool',
+              'gen_ai.tool.call.id': 'call-123',
+              'tool.arguments': '{"order_id":"123"}',
+            }),
+          }),
+          expect.any(Function),
+        );
+        expect(span.setAttribute).toHaveBeenCalledWith('tool.output', 'shipped');
+      } finally {
+        activeSpanSpy.mockRestore();
+        tracerSpy.mockRestore();
+      }
+    });
+
+    it('prefers Responses API call_id over the response item identifier', async () => {
+      const span = {
+        setAttribute: vi.fn(),
+        setStatus: vi.fn(),
+        end: vi.fn(),
+        recordException: vi.fn(),
+      };
+      const startActiveSpan = vi.fn((_name, _options, callback) => callback(span));
+      const activeSpanSpy = vi.spyOn(trace, 'getActiveSpan').mockReturnValue(span as any);
+      const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as any);
+
+      try {
+        const result = await handler.processCall(
+          {
+            id: 'response-item-123',
+            call_id: 'tool-call-456',
+            name: 'lookup_order',
+            arguments: '{}',
+          },
+          { lookup_order: async () => 'shipped' },
+        );
+
+        expect(result).toEqual({ output: 'shipped', isError: false });
+        expect(startActiveSpan).toHaveBeenCalledWith(
+          'execute_tool lookup_order',
+          expect.objectContaining({
+            attributes: expect.objectContaining({ 'gen_ai.tool.call.id': 'tool-call-456' }),
+          }),
+          expect.any(Function),
+        );
+      } finally {
+        activeSpanSpy.mockRestore();
+        tracerSpy.mockRestore();
+      }
+    });
+
+    it('records callback result serialization failures before ending the tool span', async () => {
+      const span = {
+        setAttribute: vi.fn(),
+        setStatus: vi.fn(),
+        end: vi.fn(),
+        recordException: vi.fn(),
+      };
+      const startActiveSpan = vi.fn((_name, _options, callback) => callback(span));
+      const activeSpanSpy = vi.spyOn(trace, 'getActiveSpan').mockReturnValue(span as any);
+      const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as any);
+      const call = { id: 'call-123', name: 'lookup_order', arguments: '{}' };
+
+      try {
+        const result = await handler.processCall(call, {
+          lookup_order: async () => ({ orderId: 123n }) as any,
+        });
+
+        expect(result).toEqual({ output: JSON.stringify(call), isError: true });
+        expect(span.setAttribute).toHaveBeenCalledWith('tool.is_error', true);
+        expect(span.setStatus).toHaveBeenCalledWith(
+          expect.objectContaining({ code: 2, message: expect.stringContaining('BigInt') }),
+        );
+        expect(span.end).toHaveBeenCalledOnce();
+      } finally {
+        activeSpanSpy.mockRestore();
+        tracerSpy.mockRestore();
+      }
+    });
+
+    it.each([
+      {
+        description: 'a missing callback module',
+        callback: 'file://nonexistent/function.js',
+        errorMessage: 'Module not found',
+      },
+      {
+        description: 'malformed inline callback code',
+        callback: '(() =>',
+        errorMessage: 'Unexpected',
+      },
+      {
+        description: 'an invalid callback configuration',
+        callback: 123,
+        errorMessage: 'Invalid callback configuration for lookup_order',
+      },
+    ])('records $description as a failed tool execution', async ({ callback, errorMessage }) => {
+      if (typeof callback === 'string' && callback.startsWith('file://')) {
+        mockImportModule.mockRejectedValueOnce(new Error('Module not found'));
+      }
+
+      const span = {
+        setAttribute: vi.fn(),
+        setStatus: vi.fn(),
+        end: vi.fn(),
+        recordException: vi.fn(),
+      };
+      const startActiveSpan = vi.fn((_name, _options, callback) => callback(span));
+      const activeSpanSpy = vi.spyOn(trace, 'getActiveSpan').mockReturnValue(span as any);
+      const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as any);
+      const call = { id: 'call-123', name: 'lookup_order', arguments: '{}' };
+
+      try {
+        const result = await handler.processCall(call, {
+          lookup_order: callback as FunctionCallbackConfig[string],
+        });
+
+        expect(result).toEqual({ output: JSON.stringify(call), isError: true });
+        expect(startActiveSpan).toHaveBeenCalledWith(
+          'execute_tool lookup_order',
+          expect.objectContaining({
+            attributes: expect.objectContaining({ 'gen_ai.tool.call.id': 'call-123' }),
+          }),
+          expect.any(Function),
+        );
+        expect(span.setAttribute).toHaveBeenCalledWith('tool.is_error', true);
+        expect(span.setStatus).toHaveBeenCalledWith(
+          expect.objectContaining({ code: 2, message: expect.stringContaining(errorMessage) }),
+        );
+        expect(span.end).toHaveBeenCalledOnce();
+      } finally {
+        activeSpanSpy.mockRestore();
+        tracerSpy.mockRestore();
+      }
     });
 
     it('should pass context to callback', async () => {
@@ -303,6 +454,118 @@ describe('FunctionCallbackHandler', () => {
         isError: false,
       });
       expect(mockSpecificFunction).toHaveBeenCalledWith('{}', undefined);
+    });
+
+    it('should load specific function from Windows-style external file paths', async () => {
+      const mockSpecificFunction = vi.fn().mockResolvedValue('windows result');
+      const mockModule = {
+        default: vi.fn(),
+        windowsHandler: mockSpecificFunction,
+      };
+      mockImportModule.mockResolvedValue(mockModule);
+
+      // Override the basePath so the resolved Windows path stays inside the
+      // base on both Windows (where C:/... is absolute) and POSIX (where
+      // C:/... is treated as relative). Otherwise the path-traversal guard
+      // would reject the resolved absolute path on the Windows runner.
+      const originalBasePath = cliState.basePath;
+      cliState.basePath = 'C:/';
+
+      try {
+        const callbacks: FunctionCallbackConfig = {
+          testFunction: 'file://C:/path/to/functions.js:windowsHandler',
+        };
+        const call = { name: 'testFunction', arguments: '{}' };
+
+        const result = await handler.processCall(call, callbacks);
+
+        expect(result).toEqual({
+          output: 'windows result',
+          isError: false,
+        });
+        expect(mockImportModule).toHaveBeenCalledWith(
+          path.resolve('C:/', 'C:/path/to/functions.js'),
+        );
+        expect(mockSpecificFunction).toHaveBeenCalledWith('{}', undefined);
+      } finally {
+        cliState.basePath = originalBasePath;
+      }
+    });
+
+    it('rejects path traversal attempts in external file references', async () => {
+      const callbacks: FunctionCallbackConfig = {
+        testFunction: 'file://../../../etc/passwd:handler',
+      };
+      const call = { name: 'testFunction', arguments: '{}' };
+
+      const result = await handler.processCall(call, callbacks);
+
+      // processCall swallows the load error and surfaces it as isError. The
+      // path-traversal rejection is a security event, so assert that
+      //   (a) the import was never attempted, and
+      //   (b) the failure was logged at WARN (not silently at debug).
+      expect(result.isError).toBe(true);
+      expect(mockImportModule).not.toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('[FunctionCallback] Rejected callback'),
+      );
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Path traversal rejected'),
+      );
+    });
+
+    it('should load default function from standard Windows file URLs on Windows', async () => {
+      const mockDefaultFunction = vi.fn().mockResolvedValue('windows default result');
+      mockImportModule.mockResolvedValue({ default: mockDefaultFunction });
+      const originalPlatform = process.platform;
+      const originalBasePath = cliState.basePath;
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+      cliState.basePath = 'C:/';
+
+      try {
+        const callbacks: FunctionCallbackConfig = {
+          testFunction: 'file:///C:/path/to/functions.js',
+        };
+        const result = await handler.processCall(
+          { name: 'testFunction', arguments: '{}' },
+          callbacks,
+        );
+
+        expect(result).toEqual({
+          output: 'windows default result',
+          isError: false,
+        });
+        expect(mockImportModule).toHaveBeenCalledWith(
+          path.resolve('C:/', 'C:/path/to/functions.js'),
+        );
+      } finally {
+        cliState.basePath = originalBasePath;
+        Object.defineProperty(process, 'platform', {
+          value: originalPlatform,
+          configurable: true,
+        });
+      }
+    });
+
+    it('should preserve colons in default-export external file paths', async () => {
+      const mockDefaultFunction = vi.fn().mockResolvedValue('colon path result');
+      mockImportModule.mockResolvedValue({ default: mockDefaultFunction });
+
+      const callbacks: FunctionCallbackConfig = {
+        testFunction: 'file://path/to/functions:default.js',
+      };
+      const result = await handler.processCall(
+        { name: 'testFunction', arguments: '{}' },
+        callbacks,
+      );
+
+      expect(result).toEqual({
+        output: 'colon path result',
+        isError: false,
+      });
+      expect(mockImportModule).toHaveBeenCalledWith(
+        path.resolve('/test/basePath', 'path/to/functions:default.js'),
+      );
     });
 
     it('should handle inline function strings', async () => {

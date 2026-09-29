@@ -1,8 +1,6 @@
-# google-imagen (Google Imagen)
+# google-imagen (Google Image Generation)
 
-This example demonstrates Google image generation models, including both Imagen and Gemini native image generation.
-
-You can run this example with:
+This example generates images with Gemini. The directory keeps its existing name so `init --example google-imagen` continues to work.
 
 ```bash
 npx promptfoo@latest init --example google-imagen
@@ -11,118 +9,102 @@ cd google-imagen
 
 ## Prerequisites
 
-You can use Imagen models through either Google AI Studio or Vertex AI:
+Choose Google AI Studio for the native Gemini API or Vertex AI for Google Cloud authentication.
 
-### Option 1: Google AI Studio (Quick Start, Limited Features)
+### Option 1: Google AI Studio (Quick Start)
 
-- Get an API key from [Google AI Studio](https://aistudio.google.com/apikey)
-- **Supports**: Imagen 4 models only
-- **Limitations**: No `seed` or `addWatermark` parameters
+- Get an API key from [Google AI Studio](https://aistudio.google.com/apikey).
+- Use a billing-enabled project with access to the selected image model.
 
-### Option 2: Vertex AI (Full Features)
+### Option 2: Vertex AI
 
-- Google Cloud project with billing enabled
-- Vertex AI API enabled
-- Authentication via `gcloud auth application-default login`
-- **Supports**: All Imagen models and all parameters
+- Use a Google Cloud project with billing and the Vertex AI API enabled.
+- Authenticate with `gcloud auth application-default login`.
+- Check the [Vertex Gemini 3.1 Flash Image model card](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-image) for model availability. The example uses the global endpoint.
 
 ## Setup
 
 ### For Google AI Studio:
 
 ```bash
-# Set your API key (Unix/Linux/macOS)
 export GOOGLE_API_KEY=your-api-key
 
-# For Windows Command Prompt:
+# Windows Command Prompt:
 # set GOOGLE_API_KEY=your-api-key
-
-# For Windows PowerShell:
+# Windows PowerShell:
 # $env:GOOGLE_API_KEY="your-api-key"
 ```
+
+Run without `GOOGLE_PROJECT_ID` or `GOOGLE_CLOUD_PROJECT` set: a configured project selects Vertex AI in this adapter.
 
 ### For Vertex AI:
 
 ```bash
-# Enable Vertex AI API
 gcloud services enable aiplatform.googleapis.com
-
-# Authenticate
 gcloud auth application-default login
-
-# Set project ID (Unix/Linux/macOS)
 export GOOGLE_PROJECT_ID=your-project-id
 
-# For Windows Command Prompt:
+# Windows Command Prompt:
 # set GOOGLE_PROJECT_ID=your-project-id
-
-# For Windows PowerShell:
+# Windows PowerShell:
 # $env:GOOGLE_PROJECT_ID="your-project-id"
 ```
 
 ## Environment Variables
 
-- `GOOGLE_API_KEY` - Google AI Studio API key (Option 1)
-- `GOOGLE_PROJECT_ID` - Your Google Cloud project ID (Option 2)
+- `GOOGLE_API_KEY` - Native Gemini API key.
+- `GOOGLE_PROJECT_ID` - Google Cloud project used by the Vertex example.
 
 ## Available Models
 
-### Imagen Models (use `google:image:` prefix)
+### Imagen Models (legacy `google:image:` prefix)
 
-- `imagen-4.0-ultra-generate-preview-06-06` - Ultra quality ($0.06/image)
-- `imagen-4.0-generate-preview-06-06` - Standard quality ($0.04/image)
-- `imagen-4.0-fast-generate-preview-06-06` - Fast generation ($0.02/image)
-- `imagen-3.0-generate-002` - Imagen 3.0 ($0.04/image)
+The old Imagen configurations have been migrated to Gemini image generation. Native Imagen 4 reached its [August 17, 2026 shutdown](https://ai.google.dev/gemini-api/docs/imagen). Google Cloud separately [discontinued Imagen 3 and 4 models on June 30, 2026](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/release-notes).
+
+Use `google:gemini-3.1-flash-image` for the replacement. The `google:image:` prefix selects Imagen's `predict` adapter; putting a Gemini model after that prefix does not migrate the protocol.
 
 ### Gemini Native Image Generation
 
-- `google:gemini-3.1-flash-image-preview` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K)
-- `google:gemini-3-pro-image-preview` - Gemini 3 Pro with native image generation (~$0.05/image, estimated)
-- `google:gemini-2.5-flash-image` - Gemini 2.5 Flash with image generation (~$0.04/image)
+The default config uses `google:gemini-3.1-flash-image` at 1K resolution. `promptfooconfig-gemini.yaml` compares these native Gemini API models:
+
+- `google:gemini-3.1-flash-lite-image` - 1K only; no Google Search grounding.
+- `google:gemini-3.1-flash-image` - Supports 1K, 2K, and 4K output.
+- `google:gemini-3-pro-image` - Supports 1K, 2K, and 4K output.
+- `google:gemini-2.5-flash-image` - Legacy comparison until its [October 2, 2026 native shutdown](https://ai.google.dev/gemini-api/docs/deprecations); use 3.1 Flash Image for new configs. Does not support `imageSize`.
+
+Use the stable IDs above. Google shut down the `gemini-3.1-flash-image-preview` and `gemini-3-pro-image-preview` aliases on [June 25, 2026](https://ai.google.dev/gemini-api/docs/deprecations). Check [current native pricing](https://ai.google.dev/gemini-api/docs/pricing) for the model and resolution you select; Vertex has separate pricing and availability.
 
 ## Running the Example
+
+For Google AI Studio:
 
 ```bash
 npx promptfoo@latest eval
 ```
 
+For Vertex AI, use the OAuth configuration:
+
+```bash
+npx promptfoo@latest eval -c promptfooconfig-advanced.yaml
+```
+
 ## Notes
 
-- Imagen models are available through both **Google AI Studio** and **Vertex AI**
-- **Google AI Studio**:
-  - Uses API key authentication (quick start)
-  - Only supports Imagen 4 models (4.0 preview models)
-  - Limited parameter support:
-    - No `seed` or `addWatermark` parameters
-    - Only `block_low_and_above` safety filter level
-- **Vertex AI**:
-  - Requires authentication via `gcloud auth application-default login`
-  - Supports all Imagen models (both 3.0 and 4.0)
-  - Full parameter support:
-    - All safety filter levels (`block_most`, `block_some`, `block_few`, `block_fewest`)
-    - `seed` for deterministic generation
-    - `addWatermark` control
-  - You must provide a Google Cloud project ID either via:
-    - `GOOGLE_PROJECT_ID` environment variable
-    - `projectId` in the provider config
-- Seed and watermark parameters are mutually exclusive (Vertex AI only)
+- Gemini image generation uses `generateContent` with `TEXT` and `IMAGE` response modalities.
+- Configure `imageAspectRatio` and `imageSize`. Imagen's `aspectRatio`, `safetyFilterLevel`, `seed`, `personGeneration`, and `addWatermark` options are not interchangeable with this adapter's settings.
+- Responses can contain both text and images. The assertions inspect `context.providerResponse.images` so a valid text-and-image response passes and a text-only response fails.
 
 ## Advanced Configuration
 
-See `promptfooconfig-advanced.yaml` for examples of platform-specific configurations that take advantage of each platform's unique capabilities.
+`promptfooconfig-advanced.yaml` demonstrates Vertex AI with an explicit project and 2K image generation. It sets `apiKeyRequired: false` because Google Cloud OAuth supplies authentication.
 
 ## Gemini Native Image Generation
 
-Gemini models can generate images natively using the `generateContent` API with `responseModalities` set to include images. This is different from Imagen which uses a dedicated image generation endpoint.
+For a comparison of native image models or a Google Search-grounded image, run:
 
-See `promptfooconfig-gemini.yaml` for Gemini native image generation examples.
-See `promptfooconfig-gemini-grounding.yaml` for Google Search-grounded Gemini image generation.
+```bash
+npx promptfoo@latest eval -c promptfooconfig-gemini.yaml
+npx promptfoo@latest eval -c promptfooconfig-gemini-grounding.yaml
+```
 
-Key differences from Imagen:
-
-- Uses the same `google:` provider namespace as Gemini chat (models with `-image` in the name automatically enable image generation)
-- Supports additional aspect ratios: `1:4`, `1:8`, `2:3`, `3:2`, `4:1`, `4:5`, `5:4`, `8:1`, `21:9`
-- Supports image resolution: `512px` (Gemini 3.1), `1K`, `2K`, `4K`
-- Can return both text and images in the same response
-- Uses the same authentication as Gemini chat models
-- Supports Google Search grounding via `tools: [{ googleSearch: {} }]`
+The grounding config uses `google:gemini-3.1-flash-image` with `tools: [{ googleSearch: {} }]`. See Google's [GenerateContent image guide](https://ai.google.dev/gemini-api/docs/generate-content/image-generation) for supported input, output, and grounding options.

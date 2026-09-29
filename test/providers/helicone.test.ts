@@ -10,6 +10,20 @@ describe('HeliconeGatewayProvider', () => {
       expect(provider.modelName).toBe('openai/gpt-4o');
     });
 
+    it('uses scoped credentials without storing them in serializable config', () => {
+      const provider = new HeliconeGatewayProvider('openai/gpt-4o', {
+        env: { HELICONE_API_KEY: 'scoped-helicone-secret' },
+      });
+      expect(JSON.stringify(provider.config)).not.toContain('scoped-helicone-secret');
+      expect(provider.getApiKey()).toBe('scoped-helicone-secret');
+      expect(
+        new HeliconeGatewayProvider('openai/gpt-4o', {
+          config: { apiKey: 'explicit-key' },
+          env: { HELICONE_API_KEY: 'scoped-helicone-secret' },
+        }).getApiKey(),
+      ).toBe('explicit-key');
+    });
+
     it('should use model from config when provided', () => {
       const provider = new HeliconeGatewayProvider('default-model', {
         config: {

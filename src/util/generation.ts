@@ -49,7 +49,7 @@ export async function retryWithDeduplication<T>(
 }
 
 /**
- * Randomly samples n items from an array using Fisher-Yates shuffle.
+ * Randomly samples n items from an array.
  * If n is greater than the length of the array, the entire array is returned.
  *
  * @param array The array to sample from

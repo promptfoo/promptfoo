@@ -2,6 +2,9 @@ import { asc, eq, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
+import { sanitizeTraceAttributes } from './sanitizeAttributes';
+import { isRelevantSpan, matchesSpanFilter } from './spanFilter';
+import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
 import type { TraceData } from '../types/tracing';
 
@@ -44,83 +47,6 @@ export interface AddSpansOptions {
   warnIfMissingTrace?: boolean;
 }
 
-const SENSITIVE_ATTRIBUTE_KEYS = [
-  'authorization',
-  'cookie',
-  'set-cookie',
-  'token',
-  'api_key',
-  'apikey',
-  'secret',
-  'password',
-  'passphrase',
-];
-
-const NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS = SENSITIVE_ATTRIBUTE_KEYS.map((key) =>
-  key.replace(/[^a-z0-9]/g, ''),
-);
-
-const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
-  'gen_ai.request.max_tokens',
-  'gen_ai.usage.input_tokens',
-  'gen_ai.usage.output_tokens',
-  'gen_ai.usage.total_tokens',
-  'gen_ai.usage.cached_tokens',
-  'gen_ai.usage.reasoning_tokens',
-  'gen_ai.usage.accepted_prediction_tokens',
-  'gen_ai.usage.rejected_prediction_tokens',
-  'gen_ai.usage.cache_read_input_tokens',
-  'gen_ai.usage.cache_creation_input_tokens',
-]);
-
-function isSensitiveAttributeKey(key: string): boolean {
-  const lowerKey = key.toLowerCase();
-  if (SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey)) {
-    return false;
-  }
-
-  const normalizedKey = lowerKey.replace(/[^a-z0-9]/g, '');
-
-  return SENSITIVE_ATTRIBUTE_KEYS.some((sensitiveKey, index) => {
-    return (
-      lowerKey.includes(sensitiveKey) ||
-      normalizedKey.includes(NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS[index])
-    );
-  });
-}
-
-function sanitizeAttributes(
-  attributes: Record<string, any> | null | undefined,
-): Record<string, any> {
-  if (!attributes) {
-    return {};
-  }
-
-  const sanitizeValue = (value: any): any => {
-    if (typeof value === 'string') {
-      return value.length > 400 ? `${value.slice(0, 400)}…` : value;
-    }
-    if (Array.isArray(value)) {
-      return value.map(sanitizeValue);
-    }
-    if (value && typeof value === 'object') {
-      return sanitizeAttributes(value as Record<string, any>);
-    }
-    return value;
-  };
-
-  const sanitized: Record<string, any> = {};
-  for (const [key, value] of Object.entries(attributes)) {
-    if (isSensitiveAttributeKey(key)) {
-      sanitized[key] = '<redacted>';
-      continue;
-    }
-    sanitized[key] = sanitizeValue(value);
-  }
-
-  return sanitized;
-}
-
 function serializeSpan(
   span: typeof spansTable.$inferSelect,
   shouldSanitizeAttributes = true,
@@ -135,12 +61,44 @@ function serializeSpan(
     endTime: span.endTime ?? undefined,
     attributes: rawAttributes
       ? shouldSanitizeAttributes
-        ? sanitizeAttributes(rawAttributes)
+        ? sanitizeTraceAttributes(rawAttributes)
         : rawAttributes
       : undefined,
     statusCode: span.statusCode ?? undefined,
     statusMessage: span.statusMessage ?? undefined,
   };
+}
+
+function isGraderOwnedSpan(
+  span: typeof spansTable.$inferSelect,
+  spansById: ReadonlyMap<string, typeof spansTable.$inferSelect>,
+  ownershipCache: Map<string, boolean>,
+): boolean {
+  let ancestor: typeof spansTable.$inferSelect | undefined = span;
+  const visitedSpanIds = new Set<string>();
+  let belongsToGrader = false;
+
+  while (ancestor && !visitedSpanIds.has(ancestor.spanId)) {
+    const cached = ownershipCache.get(ancestor.spanId);
+    if (cached !== undefined) {
+      belongsToGrader = cached;
+      break;
+    }
+
+    visitedSpanIds.add(ancestor.spanId);
+    if (ancestor.attributes?.[SPAN_ROLE_ATTRIBUTE] === 'grader') {
+      belongsToGrader = true;
+      break;
+    }
+
+    ancestor = ancestor.parentSpanId ? spansById.get(ancestor.parentSpanId) : undefined;
+  }
+
+  for (const spanId of visitedSpanIds) {
+    ownershipCache.set(spanId, belongsToGrader);
+  }
+
+  return belongsToGrader;
 }
 
 function sqliteTimestampFromMs(timestampMs: number): string {
@@ -187,19 +145,6 @@ function computeDepth(
   return currentDepth;
 }
 
-function deriveSpanKind(span: SpanData): string {
-  const attributes = span.attributes || {};
-  const attributeKind = (attributes['span.kind'] ||
-    attributes['otel.span.kind'] ||
-    attributes['spanKind']) as string | undefined;
-
-  if (typeof attributeKind === 'string') {
-    return attributeKind.toLowerCase();
-  }
-
-  return 'internal';
-}
-
 export class TraceStore {
   private db: Awaited<ReturnType<typeof getDb>> | null = null;
 
@@ -224,6 +169,7 @@ export class TraceStore {
           traceId: trace.traceId,
           evaluationId: trace.evaluationId,
           testCaseId: trace.testCaseId,
+          createdAt: Date.now(),
           metadata: trace.metadata,
         })
         .onConflictDoNothing({ target: tracesTable.traceId })
@@ -269,7 +215,6 @@ export class TraceStore {
         logger.debug(`[TraceStore] Trace ${traceId} found, proceeding with span insertion`);
       }
 
-      // Insert spans
       const spanRecords = spans.map((span) => {
         logger.debug(`[TraceStore] Preparing span ${span.spanId} (${span.name}) for insertion`);
         return {
@@ -290,8 +235,14 @@ export class TraceStore {
         return { stored: true };
       }
 
-      await db.insert(spansTable).values(spanRecords).run();
-      logger.debug(`[TraceStore] Successfully added ${spans.length} spans to trace ${traceId}`);
+      await db
+        .insert(spansTable)
+        .values(spanRecords)
+        .onConflictDoNothing({ target: [spansTable.traceId, spansTable.spanId] })
+        .run();
+      logger.debug(
+        `[TraceStore] Successfully added ${spanRecords.length} spans to trace ${traceId}`,
+      );
       return { stored: true };
     } catch (error) {
       logger.error(`[TraceStore] Failed to add spans: ${error}`);
@@ -383,6 +334,23 @@ export class TraceStore {
     }
   }
 
+  async getTraceMetadata(traceId: string): Promise<Record<string, any> | undefined> {
+    try {
+      logger.debug(`[TraceStore] Fetching metadata for trace ${traceId}`);
+      const db = await this.getDatabase();
+      const traces = await db
+        .select({ metadata: tracesTable.metadata })
+        .from(tracesTable)
+        .where(eq(tracesTable.traceId, traceId))
+        .limit(1);
+
+      return traces.length > 0 ? (traces[0].metadata ?? {}) : undefined;
+    } catch (error) {
+      logger.error(`[TraceStore] Failed to get trace metadata: ${error}`);
+      throw error;
+    }
+  }
+
   async deleteOldTraces(retentionDays: number): Promise<void> {
     try {
       logger.debug(`[TraceStore] Deleting traces older than ${retentionDays} days`);
@@ -390,6 +358,7 @@ export class TraceStore {
       const cutoffTime = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
       const cutoffCondition = traceCreatedBefore(cutoffTime);
 
+      // `spans.trace_id` is FK-enforced without ON DELETE CASCADE.
       await db.transaction(async (tx) => {
         await tx
           .delete(spansTable)
@@ -430,8 +399,10 @@ export class TraceStore {
         .select()
         .from(spansTable)
         .where(eq(spansTable.traceId, traceId))
-        .orderBy(asc(spansTable.startTime));
+        .orderBy(asc(spansTable.startTime), asc(spansTable.spanId));
 
+      const rowsBySpanId = new Map(rows.map((row) => [row.spanId, row]));
+      const graderOwnedSpanIds = new Map<string, boolean>();
       const spanMap = new Map<string, SpanData>();
       const depthCache = new Map<string, number>();
 
@@ -442,33 +413,33 @@ export class TraceStore {
 
         const rawAttributes = row.attributes ?? {};
 
+        if (!includeInternalSpans && isGraderOwnedSpan(row, rowsBySpanId, graderOwnedSpanIds)) {
+          continue;
+        }
+
         const spanData: SpanData = {
           spanId: row.spanId,
           parentSpanId: row.parentSpanId ?? undefined,
           name: row.name,
           startTime: row.startTime,
           endTime: row.endTime ?? undefined,
-          attributes: shouldSanitize ? sanitizeAttributes(rawAttributes) : rawAttributes,
+          attributes: shouldSanitize ? sanitizeTraceAttributes(rawAttributes) : rawAttributes,
           statusCode: row.statusCode ?? undefined,
           statusMessage: row.statusMessage ?? undefined,
         };
 
-        const spanKind = deriveSpanKind({
-          ...spanData,
-          attributes: rawAttributes,
-        });
+        const hasExplicitFilter = Boolean(spanFilter?.length);
 
-        if (!includeInternalSpans && spanKind === 'internal') {
+        if (hasExplicitFilter && !matchesSpanFilter(spanData.name, spanFilter!)) {
           continue;
         }
 
-        if (spanFilter && spanFilter.length > 0) {
-          const matchesFilter = spanFilter.some((filterName) =>
-            spanData.name.toLowerCase().includes(filterName.toLowerCase()),
-          );
-          if (!matchesFilter) {
-            continue;
-          }
+        if (
+          !includeInternalSpans &&
+          !hasExplicitFilter &&
+          !isRelevantSpan({ attributes: rawAttributes, statusCode: spanData.statusCode })
+        ) {
+          continue;
         }
 
         spanMap.set(spanData.spanId, spanData);

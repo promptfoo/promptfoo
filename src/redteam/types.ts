@@ -4,7 +4,7 @@ import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } fro
 import { isValidPolicyId } from './plugins/policy/validators';
 
 import type { EventSource } from '../types/eventSource';
-import type { ApiProvider, ProviderOptions } from '../types/providers';
+import type { ApiProvider, ProviderOptions, RemoteGenerationContext } from '../types/providers';
 
 // Re-export Inputs from shared to maintain backwards compatibility
 export { type Inputs, InputsSchema };
@@ -160,29 +160,6 @@ export const PluginConfigSchema = z.object({
   inputs: InputsSchema.optional(),
   maxCharsPerMessage: z.number().int().positive().optional(),
 
-  /**
-   * EXPERIMENTAL — controls the local hallucination plugin's persona-conditioned
-   * generation pipeline. Currently consumed only by HallucinationPlugin; the
-   * shape and field names may change before stabilizing. Has no effect on
-   * other plugins.
-   */
-  generation: z
-    .object({
-      // Upper bound is a guardrail against silent LLM-spend blowups
-      // (a value of 100 would fan out 100*n generation calls).
-      oversampleFactor: z.number().int().min(1).max(20).optional(),
-      // Floor matches the implementation's MIN_PERSONA_COUNT — single
-      // persona destroys the per-bucket diversity story.
-      personaCount: z.number().int().min(2).optional(),
-      dedup: z.enum(['llm', 'none']).optional(),
-      mutation: z.boolean().optional(),
-      // Grader version: 'v1' (default, legacy 7-criterion rubric) preserves
-      // existing pass/fail behavior. 'v2' switches to the calibrated binary
-      // MET/UNMET rubric with anchored examples. Opt-in only.
-      graderVersion: z.enum(['v1', 'v2']).optional(),
-    })
-    .optional(),
-
   // Allow for the inclusion of a nonce to prevent caching of test cases.
   __nonce: z.number().optional(),
 });
@@ -247,6 +224,9 @@ export interface PluginActionParams {
   n: number;
   delayMs: number;
   config?: PluginConfig;
+  /** Cloud target database ID used by remote task handlers to resolve target context. */
+  targetId?: string;
+  redteamGenerationContext?: RedteamGenerationContext;
 }
 
 // Context for testing multiple security contexts/states
@@ -286,11 +266,15 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   defaultConfigPath?: string;
   description?: string;
   envFile?: string;
+  filterProviders?: string;
+  filterTargets?: string;
   maxConcurrency?: number;
   output?: string;
   force?: boolean;
   write: boolean;
   inRedteamRun?: boolean;
+  /** Internal run identifier used to distinguish fresh generation from suite reuse. */
+  generationRunId?: string;
   verbose?: boolean;
   abortSignal?: AbortSignal;
   burpEscapeJson?: boolean;
@@ -309,6 +293,9 @@ export interface RedteamFileConfig extends CommonOptions {
 
 export interface SynthesizeOptions extends CommonOptions {
   abortSignal?: AbortSignal;
+  redteamGenerationContext?: RedteamGenerationContext;
+  /** Cloud target database ID used to preserve target-owned task context during generation. */
+  cloudTargetDatabaseId?: string;
   entities?: string[];
   // Multi-variable inputs for test case generation (from target)
   inputs?: Inputs;
@@ -321,6 +308,8 @@ export interface SynthesizeOptions extends CommonOptions {
   targetIds: string[];
   showProgressBar?: boolean;
 }
+
+export type RedteamGenerationContext = RemoteGenerationContext;
 
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
 
@@ -341,6 +330,7 @@ export interface RedteamRunOptions {
   verbose?: boolean;
   progressBar?: boolean;
   description?: string;
+  tags?: Record<string, string>;
   strict?: boolean;
 
   // Used by webui

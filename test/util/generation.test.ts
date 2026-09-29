@@ -71,6 +71,22 @@ describe('retryWithDeduplication', () => {
 });
 
 describe('sampleArray', () => {
+  it('gives each three-item permutation an equal share of the random input space', () => {
+    const permutations: string[] = [];
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    try {
+      for (const first of [1 / 6, 1 / 2, 5 / 6]) {
+        for (const second of [1 / 4, 3 / 4]) {
+          random.mockReturnValueOnce(first).mockReturnValueOnce(second);
+          permutations.push(sampleArray(['a', 'b', 'c'], 3).join(''));
+        }
+      }
+      expect(permutations.sort()).toEqual(['abc', 'acb', 'bac', 'bca', 'cab', 'cba']);
+    } finally {
+      random.mockRestore();
+    }
+  });
+
   it('should return n random items when n is less than array length', () => {
     const array = [1, 2, 3, 4, 5];
     const result = sampleArray(array, 3);
@@ -122,36 +138,5 @@ describe('sampleArray', () => {
     // With 100 samples, it's extremely unlikely to get the same sample every time
     // unless the randomization is not working
     expect(samples.size).toBeGreaterThan(1);
-  });
-
-  it('produces a deterministic permutation for a stubbed RNG (Fisher-Yates trace)', () => {
-    // Walks the Fisher-Yates loop with a controlled Math.random sequence so
-    // we verify the shuffle exactly, not just statistically. With input
-    // [A,B,C,D]:
-    //   i=3, r=0 → swap idx 3 with 0 → [D,B,C,A]
-    //   i=2, r=1 → swap idx 2 with 1 → [D,C,B,A]
-    //   i=1, r=0 → swap idx 1 with 0 → [C,D,B,A]
-    // floor(r * (i + 1)) selects each j; reverse-engineer r from j.
-    const seq = [
-      0 / 4, // i=3 → j=0
-      1 / 3, // i=2 → j=1
-      0 / 2, // i=1 → j=0
-    ];
-    let cursor = 0;
-    const spy = vi.spyOn(Math, 'random').mockImplementation(() => seq[cursor++]);
-    try {
-      const result = sampleArray(['A', 'B', 'C', 'D'], 4);
-      expect(result).toEqual(['C', 'D', 'B', 'A']);
-    } finally {
-      spy.mockRestore();
-    }
-  });
-
-  it('preserves invariant: every output is a permutation of the input', () => {
-    // Property test (deterministic, single trial): for any sample of n=array.length,
-    // the multiset of returned values must equal the multiset of inputs.
-    const array = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-    const sample = sampleArray(array, array.length);
-    expect(sample.slice().sort((a, b) => a - b)).toEqual(array);
   });
 });

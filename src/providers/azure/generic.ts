@@ -1,9 +1,9 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { resolveProviderApiKey } from '../credentials';
 import { throwConfigurationError } from './util';
 import type { TokenCredential } from '@azure/identity';
 
-import type { EnvVarKey } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
@@ -24,6 +24,19 @@ export class AzureGenericProvider implements ApiProvider {
   authHeaders?: Record<string, string>;
 
   protected initializationPromise: Promise<void> | null = null;
+  private authenticationPromise: Promise<void> | null = null;
+
+  /**
+   * Cached Entra ID credential initialization. Held as a promise so concurrent
+   * requests share one credential and @azure/identity can manage its own token
+   * cache; a failed initialization is evicted so the next request can retry.
+   */
+  private cachedCredential?: Promise<TokenCredential>;
+  #warnedPartialServicePrincipal = false;
+  /** Expiry of the currently cached Entra ID bearer token (ms epoch), if token auth is in use. */
+  private authTokenExpiresOnTimestamp?: number;
+  /** Refresh the bearer token when it is within this window of expiring. */
+  private static readonly TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1000;
 
   constructor(deploymentName: string, options: AzureProviderOptions = {}) {
     const { config, id, env } = options;
@@ -50,31 +63,62 @@ export class AzureGenericProvider implements ApiProvider {
     this.config = config || {};
     this.id = id ? () => id : this.id;
 
-    this.initializationPromise = this.initialize();
+    const initialization = this.initialize();
+    this.initializationPromise = initialization;
+    // Authentication starts eagerly, but a failure must not poison later
+    // requests or become an unhandled rejection before the first request.
+    void initialization.catch(() => {
+      if (this.initializationPromise === initialization) {
+        this.initializationPromise = null;
+      }
+    });
   }
 
-  async initialize() {
-    this.authHeaders = await this.getAuthHeaders();
+  initialize(): Promise<void> {
+    this.authenticationPromise ??= this.getAuthHeaders()
+      .then((headers) => {
+        this.authHeaders = headers;
+      })
+      .finally(() => {
+        this.authenticationPromise = null;
+      });
+    return this.authenticationPromise;
   }
 
   async ensureInitialized() {
     if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
+    // Subclasses can use initializationPromise for other setup (such as MCP).
+    // Always finish authentication, including a retry after an earlier failure.
+    if (!this.authHeaders) {
+      await this.initialize();
+    }
+    await this.refreshAuthTokenIfNeeded();
+  }
+
+  /**
+   * Re-mint the Entra ID bearer token when it is at/near expiry. Subclasses call
+   * ensureInitialized() at the start of every request, so this keeps long-running evals from
+   * failing with 401 once the initial token (cached once in initialize()) expires. No-op for
+   * api-key auth, and conservative when the token expiry is unknown.
+   */
+  private async refreshAuthTokenIfNeeded(): Promise<void> {
+    if (!this.authHeaders?.Authorization) {
+      return; // api-key auth (or not yet initialized) — nothing to refresh
+    }
+    const expiresAt = this.authTokenExpiresOnTimestamp;
+    if (expiresAt === undefined) {
+      return; // expiry unknown — preserve prior behavior rather than force a refetch
+    }
+    if (Date.now() < expiresAt - AzureGenericProvider.TOKEN_REFRESH_WINDOW_MS) {
+      return; // still valid
+    }
+    await this.initialize();
   }
 
   getApiKey(): string | undefined {
-    return (
-      this.config?.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.AZURE_API_KEY ||
-      getEnvString('AZURE_API_KEY') ||
-      this.env?.AZURE_OPENAI_API_KEY ||
-      getEnvString('AZURE_OPENAI_API_KEY')
-    );
+    return resolveProviderApiKey(this.config, this.env, ['AZURE_API_KEY', 'AZURE_OPENAI_API_KEY']);
   }
 
   getApiKeyOrThrow(): string {
@@ -85,7 +129,15 @@ export class AzureGenericProvider implements ApiProvider {
     return apiKey;
   }
 
-  async getAzureTokenCredential(): Promise<TokenCredential> {
+  getAzureTokenCredential(): Promise<TokenCredential> {
+    this.cachedCredential ??= this.createTokenCredential().catch((err) => {
+      this.cachedCredential = undefined;
+      throw err;
+    });
+    return this.cachedCredential;
+  }
+
+  private async createTokenCredential(): Promise<TokenCredential> {
     const clientSecret =
       this.config?.azureClientSecret ||
       this.env?.AZURE_CLIENT_SECRET ||
@@ -103,15 +155,28 @@ export class AzureGenericProvider implements ApiProvider {
       const { ClientSecretCredential, AzureCliCredential } = await import('@azure/identity');
 
       if (clientSecret && clientId && tenantId) {
-        const credential = new ClientSecretCredential(tenantId, clientId, clientSecret, {
+        logger.debug('[Azure] Using service principal credentials');
+        return new ClientSecretCredential(tenantId, clientId, clientSecret, {
           authorityHost: authorityHost || 'https://login.microsoftonline.com',
         });
-        return credential;
       }
 
-      // Fallback to Azure CLI
-      const credential = new AzureCliCredential();
-      return credential;
+      if (!clientId && !clientSecret && !tenantId) {
+        logger.debug('[Azure] Using Azure CLI credentials');
+      } else if (!this.#warnedPartialServicePrincipal) {
+        this.#warnedPartialServicePrincipal = true;
+        const missing = [
+          !clientId && 'azureClientId (AZURE_CLIENT_ID)',
+          !clientSecret && 'azureClientSecret (AZURE_CLIENT_SECRET)',
+          !tenantId && 'azureTenantId (AZURE_TENANT_ID)',
+        ].filter(Boolean);
+        logger.warn(
+          `[Azure] Service principal configuration is incomplete, missing ${missing.join(', ')}. Falling back to Azure CLI credentials.`,
+          { missing },
+        );
+      }
+
+      return new AzureCliCredential();
     } catch (err) {
       logger.error(`Error loading @azure/identity: ${err}`);
       throw new Error(
@@ -132,6 +197,7 @@ export class AzureGenericProvider implements ApiProvider {
     if (!tokenResponse) {
       throwConfigurationError('Failed to retrieve access token.');
     }
+    this.authTokenExpiresOnTimestamp = tokenResponse.expiresOnTimestamp;
     return tokenResponse.token;
   }
 
