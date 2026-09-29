@@ -172,10 +172,13 @@ export class OTLPTracingExporter implements TracingExporter {
 
   private getCustomSpanName(data: Extract<SpanData, { type: 'custom' }>): string {
     const nestedData = isRecord(data.data) ? data.data : {};
-    const sandboxOperation = nestedData['sandbox.operation'];
-
-    if (typeof sandboxOperation === 'string' && sandboxOperation) {
-      return `sandbox.${sandboxOperation}`;
+    try {
+      const sandboxOperation = nestedData['sandbox.operation'];
+      if (typeof sandboxOperation === 'string' && sandboxOperation) {
+        return `sandbox.${sandboxOperation}`;
+      }
+    } catch {
+      // An unreadable optional label must not discard this span or its siblings.
     }
 
     return data.name || 'custom';
@@ -333,18 +336,18 @@ export class OTLPTracingExporter implements TracingExporter {
       return;
     }
 
-    for (const [key, value] of Object.entries(data.data)) {
+    for (const [key, value] of structuredAttributeEntries(data.data)) {
       attributes[key] = sanitizeAttributeValue(value);
     }
 
     const command = commandToString(
-      sanitizeAttributeByKey('command', data.data.command ?? data.data.cmd),
+      sanitizeAttributeByKey('command', attributes.command ?? attributes.cmd),
     );
     if (command) {
       attributes.command = command;
     }
 
-    const exitCode = data.data.exit_code ?? data.data.exitCode;
+    const exitCode = attributes.exit_code ?? attributes.exitCode;
     if (typeof exitCode === 'number') {
       attributes['process.exit.code'] = exitCode;
     }
@@ -1086,6 +1089,7 @@ function* structuredAttributeEntries(
 
 function sanitizeAttributeValue(value: unknown): unknown {
   if (
+    value === undefined ||
     value === null ||
     typeof value === 'string' ||
     typeof value === 'number' ||

@@ -116,6 +116,43 @@ describe('OTLPTracingExporter', () => {
   );
 
   it.each(['json', 'protobuf'] as const)(
+    'keeps healthy spans when top-level custom attributes cannot be read in %s',
+    async (format) => {
+      const data: Record<string, unknown> = { result: 'ok' };
+      const keys = ['details', 'command', 'cmd', 'exit_code', 'sandbox.operation'];
+      for (const key of keys) {
+        Object.defineProperty(data, key, {
+          enumerable: true,
+          get() {
+            throw new Error('unreadable custom attribute');
+          },
+        });
+      }
+
+      const { attributes, payload } = await exportCustomData(data, format);
+      expect(attributes.result).toBe('ok');
+      for (const key of keys) {
+        expect(attributes[key]).toBe('<redacted>');
+      }
+      expect(attributes['process.exit.code']).toBeUndefined();
+      expect(payload.resourceSpans[0].scopeSpans[0].spans[0].name).toBe('lookup');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'preserves command and exit-code aliases when primary attributes are undefined in %s',
+    async (format) => {
+      const { attributes } = await exportCustomData(
+        { command: undefined, cmd: ['echo', 'ok'], exit_code: undefined, exitCode: 0 },
+        format,
+      );
+      expect(attributes.command).toBe('echo ok');
+      expect(attributes['process.exit.code']).toBe(0);
+      expect(attributes).not.toHaveProperty('exit_code');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
     'redacts credential names without hiding public metadata in %s',
     async (format) => {
       const { attributes } = await exportCustomData(
