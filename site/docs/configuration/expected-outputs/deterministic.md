@@ -1337,6 +1337,8 @@ BLEU (Bilingual Evaluation Understudy) is a **precision-oriented** metric origin
 
 BLEU also includes a brevity penalty to discourage overly short outputs. [See Wikipedia](https://en.wikipedia.org/wiki/BLEU) for more background.
 
+Empty or whitespace-only references are ignored. If every reference is blank, the BLEU score is `0`.
+
 Example:
 
 ```yaml
