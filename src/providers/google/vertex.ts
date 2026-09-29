@@ -403,12 +403,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
       messages: extractedMessages as ClaudeRequest['messages'],
     };
 
-    // Default off the *effective* thinking state, not just an explicit `thinking` block, so a
-    // thinks-by-default model (Opus 5) renders reasoning like the Anthropic path does. Today
-    // this is a no-op — those responses carry an empty thinking block because `display`
-    // defaults to `omitted`, and outputFromMessage drops empty thinking either way — but it
-    // keeps the two paths consistent if that default ever changes, as it did in 4.6 -> 4.7.
-    const showThinking = this.config.showThinking ?? thinkingConsumesTokens;
+    // Between-tool progress is visible even though it needs no up-front thinking budget.
+    const showThinking =
+      this.config.showThinking ??
+      (thinkingConsumesTokens || thinkingConfig?.type === 'between_tools');
 
     const cache = await getCache();
     const cacheKey = getVertexBodyCacheKey(

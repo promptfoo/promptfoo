@@ -40,6 +40,7 @@ import {
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isBetweenToolsLowestThinkingClaudeModel,
+  isClaudeSonnet55Model,
   isClaudeThinkingEnabled,
   isDisabledThinkingRejectedAtEffort,
   isForcedToolChoiceUnsupportedClaudeModel,
@@ -1079,8 +1080,20 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         }
       }
 
+      // Sonnet 5.5 returns progress between tool calls in thinking blocks.
+      const outputMessage = isClaudeSonnet55Model(this.modelName)
+        ? {
+            ...resolvedMessage,
+            content: [
+              ...responses
+                .slice(0, -1)
+                .flatMap((message) => message.content.filter((block) => block.type === 'thinking')),
+              ...resolvedMessage.content,
+            ],
+          }
+        : resolvedMessage;
       const response = {
-        ...this.buildMessageResponse(resolvedMessage, config, processedOutputFormat, false),
+        ...this.buildMessageResponse(outputMessage, config, processedOutputFormat, false),
         cost,
       };
       return mcpMetadata

@@ -1728,6 +1728,107 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it.each([
+      { label: 'between_tools', stream: false },
+      { label: 'streaming between_tools', stream: true },
+      { label: 'summarized adaptive thinking', adaptive: true },
+      { label: 'hidden thinking', showThinking: false },
+      { label: 'structured output', structured: true },
+      { label: 'an older model', model: 'claude-sonnet-4-6' },
+    ])('preserves MCP progress for Sonnet 5.5 with $label', async (options) => {
+      const model = options.model ?? 'claude-sonnet-5-5';
+      provider = createProvider(model, {
+        config: {
+          stream: options.stream,
+          showThinking: options.showThinking,
+          thinking: options.adaptive
+            ? { type: 'adaptive', display: 'summarized' }
+            : { type: 'between_tools' },
+          ...(options.structured && {
+            output_format: {
+              type: 'json_schema',
+              schema: { type: 'object', properties: { answer: { type: 'string' } } },
+            },
+          }),
+          mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
+        },
+      });
+      const messages: Anthropic.Messages.Message[] = [0, 1, 2].map((round) => ({
+        id: `msg_${round}`,
+        type: 'message',
+        role: 'assistant',
+        model,
+        container: null,
+        stop_details: null,
+        stop_reason: round < 2 ? 'tool_use' : 'end_turn',
+        stop_sequence: null,
+        content: [
+          { type: 'thinking', thinking: `Progress ${round}`, signature: `sig_${round}` },
+          ...(round < 2
+            ? ([
+                {
+                  type: 'tool_use',
+                  id: `toolu_${round}`,
+                  name: 'search_companies',
+                  input: { query: `query ${round}` },
+                  caller: { type: 'direct' },
+                },
+              ] satisfies Anthropic.Messages.ContentBlock[])
+            : ([
+                {
+                  type: 'text',
+                  text: options.structured ? '{"answer":"Acme Solar"}' : 'Acme Solar',
+                  citations: null,
+                },
+              ] satisfies Anthropic.Messages.ContentBlock[])),
+        ],
+        usage: {
+          input_tokens: 10,
+          output_tokens: 5,
+          cache_creation: null,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+          inference_geo: null,
+          output_tokens_details: null,
+          server_tool_use: null,
+          service_tier: null,
+        },
+      }));
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create');
+      const streamSpy = vi.spyOn(provider.anthropic.messages, 'stream');
+      for (const message of messages) {
+        createSpy.mockResolvedValueOnce(message);
+        streamSpy.mockReturnValueOnce({
+          finalMessage: async () => message,
+        } as ReturnType<typeof provider.anthropic.messages.stream>);
+      }
+      mcpMocks.callTool.mockResolvedValue({ content: 'Acme Solar' });
+
+      const result = await provider.callApi('Find companies');
+
+      const expectedProgress = (options.model ? [2] : [0, 1, 2])
+        .map((round) => `Thinking: Progress ${round}\nSignature: sig_${round}`)
+        .join('\n\n');
+      expect(result.output).toEqual(
+        options.structured
+          ? { answer: 'Acme Solar' }
+          : options.showThinking === false
+            ? 'Acme Solar'
+            : `${expectedProgress}\n\nAcme Solar`,
+      );
+      expect(result.tokenUsage).toMatchObject({ prompt: 30, completion: 15, total: 45 });
+      expect(result.metadata?.toolCalls).toHaveLength(2);
+      expect(result.error).toBeUndefined();
+      const calls = options.stream ? streamSpy.mock.calls : createSpy.mock.calls;
+      expect(calls).toHaveLength(3);
+      expect(calls[2][0].messages.slice(-4)).toMatchObject([
+        { role: 'assistant', content: messages[0].content },
+        { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_0' }] },
+        { role: 'assistant', content: messages[1].content },
+        { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1' }] },
+      ]);
+    });
+
+    it.each([
       ['cyber', 0.006],
       ['bio', 0.014],
     ] as const)(

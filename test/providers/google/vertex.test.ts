@@ -3514,6 +3514,46 @@ describe('VertexChatProvider.callClaudeApi', () => {
     expect(result.output).toBe(expected);
   });
 
+  it.each([
+    { type: 'between_tools' as const, showThinking: undefined },
+    { type: 'disabled' as const, showThinking: undefined },
+    { type: 'between_tools' as const, showThinking: false },
+  ])(
+    'renders Sonnet 5.5 between-tool progress with $type and showThinking=$showThinking',
+    async ({ type, showThinking }) => {
+      provider = new VertexChatProvider('claude-sonnet-5-5', {
+        config: { thinking: { type }, showThinking },
+      });
+      const mockRequest = vi.fn().mockResolvedValue({
+        data: {
+          content: [
+            { type: 'thinking', thinking: 'Checking the result', signature: 'sig' },
+            { type: 'text', text: 'the answer' },
+          ],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 5, output_tokens: 1 },
+        },
+      });
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: { request: mockRequest } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+      const result = await provider.callClaudeApi('test prompt');
+
+      expect(result.output).toBe(
+        showThinking === false
+          ? 'the answer'
+          : 'Thinking: Checking the result\nSignature: sig\n\nthe answer',
+      );
+      expect(mockRequest.mock.calls[0][0].data).toMatchObject({
+        thinking: { type: 'between_tools' },
+        max_tokens: 512,
+      });
+    },
+  );
+
   it('keeps the 512 default for a Claude model that does not think by default', async () => {
     provider = new VertexChatProvider('claude-opus-4-8', { config: {} });
 
