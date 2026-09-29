@@ -29,6 +29,7 @@ import {
 import { getPackageVersion } from '../../util/packageVersion';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
+import { assertIsolatedWorkingDir, clearRepositoryEnv } from '../agentWorkspace';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 import {
@@ -269,6 +270,8 @@ export interface OpenAICodexSDKConfig {
    * Defaults to process.cwd()
    */
   working_dir?: string;
+  /** Run each eval call in a fresh copy of `working_dir`, created by promptfoo eval. */
+  copy_working_dir?: boolean | 'git' | 'copy';
 
   /**
    * Additional directories the agent can access beyond the working directory.
@@ -426,6 +429,7 @@ const OpenAICodexSDKConfigShape = {
   base_url: z.string().min(1).optional(),
   maxRetries: z.number().int().nonnegative().optional(),
   working_dir: z.string().min(1).optional(),
+  copy_working_dir: z.union([z.boolean(), z.enum(['git', 'copy'])]).optional(),
   additional_directories: z.array(z.string().min(1)).optional(),
   skip_git_repo_check: z.boolean().optional(),
   codex_path_override: z.string().min(1).optional(),
@@ -2096,6 +2100,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // but runtime variable rendering must not recurse into provider methods.
     delete mergedConfig.provider;
     const config = renderVarsInObject(mergedConfig, context?.vars) as OpenAICodexSDKConfig;
+    const inIsolatedWorkspace = assertIsolatedWorkingDir(config);
 
     const requestedModel =
       typeof config.model === 'string' && config.model ? config.model : undefined;
@@ -2104,7 +2109,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // withGenAISpan handles both exceptions and { error: ... } responses
     return withGenAISpan(
       this.buildCodexSpanContext(prompt, context, requestedModel),
-      () => this.callApiInternal(prompt, context, callOptions, config),
+      () => this.callApiInternal(prompt, context, callOptions, config, inIsolatedWorkspace),
       (response) => this.extractCodexSpanResult(response, requestedModel),
     );
   }
@@ -2218,6 +2223,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     callOptions: CallApiOptionsParams | undefined,
     rawConfig: OpenAICodexSDKConfig,
+    inIsolatedWorkspace: boolean,
   ): Promise<ProviderResponse> {
     let config: OpenAICodexSDKConfig;
     try {
@@ -2252,6 +2258,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       currentTraceparent,
       apiKey,
     );
+    if (inIsolatedWorkspace) {
+      clearRepositoryEnv(env);
+    }
     const skillRootPrefixes = this.getSkillRootPrefixes(env, resolvedConfig.working_dir);
     const promptInput = this.parsePromptInput(prompt);
 
