@@ -373,7 +373,7 @@ describe('Python file references', { timeout: 15000 }, () => {
       undefined,
       false,
       0.75,
-      'Python code returned true',
+      'Custom reason',
     ],
     [
       'JSON-stringified GradingResult below threshold',
@@ -395,7 +395,7 @@ describe('Python file references', { timeout: 15000 }, () => {
       undefined,
       false,
       0.6,
-      'Python code returned true',
+      'Custom reason',
     ],
   ])(
     'should honor inverse mode for inline not-python assertions with %s results',
@@ -530,7 +530,7 @@ describe('Python file references', { timeout: 15000 }, () => {
       undefined,
       false,
       0.75,
-      'Python code returned true',
+      'Custom reason',
     ],
   ])(
     'should honor inverse mode when a file:// not-python assertion returns a %s',

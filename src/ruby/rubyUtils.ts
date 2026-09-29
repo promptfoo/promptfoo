@@ -206,14 +206,7 @@ export async function tryPath(path: string): Promise<string | null> {
   }
 }
 
-/**
- * Validates the Ruby executable for the current invocation.
- *
- * @param rubyPath - Path to the Ruby executable.
- * @param isExplicit - If true, only tries the provided path.
- * @returns Validated Ruby executable path.
- * @throws {Error} If no valid Ruby executable is found.
- */
+/** Share validation within an invocation; failed probes can be retried. */
 export async function validateRubyPath(rubyPath: string, isExplicit: boolean): Promise<string> {
   const scope = cliState.envScope;
   if (!scope) {

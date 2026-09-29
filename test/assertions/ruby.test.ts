@@ -180,7 +180,7 @@ describe('Ruby assertions', () => {
       undefined,
       false,
       0.6,
-      'Ruby code returned true',
+      'Custom reason',
     ],
     [
       'JSON-stringified GradingResult below threshold',
@@ -243,7 +243,7 @@ describe('Ruby assertions', () => {
       undefined,
       false,
       0.75,
-      'Ruby code returned true',
+      'Custom reason',
     ],
   ])(
     'should honor inverse mode when a file:// not-ruby assertion returns a %s',

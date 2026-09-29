@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from 'node:timers/promises';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -153,13 +154,25 @@ export class PythonWorker {
     this.busy = true;
     const request = new AbortController();
 
+    const execution = this.executeCall(functionName, args, request.signal);
     try {
-      return await Promise.race([
-        this.executeCall(functionName, args, request.signal),
-        this.createTimeout(),
-      ]);
+      return await Promise.race([execution, this.createTimeout()]);
     } finally {
       request.abort();
+      const pending = this.pendingRequest;
+      const workerProcess = this.process;
+      if (pending && workerProcess) {
+        // A timed-out call still owns its child and temp files until close.
+        this.pendingRequest = null;
+        this.ready = false;
+        const closed = new Promise<void>((resolve) =>
+          workerProcess.childProcess.once('close', resolve),
+        );
+        workerProcess.kill('SIGKILL');
+        await closed;
+        pending.reject(request.signal.reason);
+        await execution.catch(() => {});
+      }
       this.busy = false;
       if (this.requestTimeout) {
         clearTimeout(this.requestTimeout);
@@ -196,11 +209,9 @@ export class PythonWorker {
       if (!workerProcess || this.process !== workerProcess || !this.ready) {
         throw new Error('Worker changed while preparing request');
       }
-      workerProcess.send(command);
-
-      // Wait for DONE
       await new Promise<unknown>((resolve, reject) => {
         this.pendingRequest = { responseFile, resolve, reject };
+        workerProcess.send(command);
       });
 
       // Read response with exponential backoff retry.
@@ -212,7 +223,7 @@ export class PythonWorker {
       // Total max wait: ~18 seconds (handles severe filesystem delays)
       for (let attempt = 0, delay = 1; attempt < 16; attempt++, delay = Math.min(delay * 2, 5000)) {
         try {
-          responseData = await fs.readFile(responseFile, 'utf-8');
+          responseData = await fs.readFile(responseFile, { encoding: 'utf-8', signal });
           if (attempt > 0) {
             logger.debug(`Response file read succeeded on attempt ${attempt + 1}`);
           }
@@ -221,7 +232,7 @@ export class PythonWorker {
           lastError = error;
           if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
             // File doesn't exist yet, wait and retry with exponential backoff.
-            await new Promise((resolve) => setTimeout(resolve, delay));
+            await sleep(delay, undefined, { signal });
             continue;
           }
           // Non-ENOENT error, don't retry.

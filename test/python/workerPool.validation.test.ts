@@ -444,6 +444,80 @@ describe('Python pool executable validation', () => {
     },
   );
 
+  it('waits for a timed-out child to close and cleans its request before serving queued work', async () => {
+    const started = createDeferred<string>();
+    const cleanup = createDeferred<void>();
+    vi.spyOn(secureTempFiles, 'createSecureTempDirectory')
+      .mockResolvedValueOnce('/fixture/timed-out')
+      .mockResolvedValue('/fixture/recovered');
+    vi.spyOn(secureTempFiles, 'writeSecureTempFile').mockImplementation(
+      async (directory, name) => `${directory}/${name}`,
+    );
+    const remove = vi
+      .spyOn(secureTempFiles, 'removeSecureTempDirectory')
+      .mockImplementationOnce(() => cleanup.promise)
+      .mockResolvedValue();
+    vi.spyOn(fs, 'readFile').mockResolvedValue(
+      JSON.stringify({ type: 'result', data: 'recovered' }),
+    );
+    const pool = new PythonWorkerPool('fixture.py', 'call_api', 1, 'fixture-python', 25);
+    pools.push(pool);
+    await pool.initialize();
+    const original = shells[0];
+    const send = vi.spyOn(original, 'send').mockImplementation((command) => {
+      if (command === 'SHUTDOWN') {
+        queueMicrotask(() => original.emit('close'));
+      } else {
+        started.resolve(command);
+      }
+    });
+    const kill = vi.spyOn(original, 'kill').mockImplementation(() => {});
+    vi.useFakeTimers();
+    let settled = false;
+    const timedOut = pool.execute('call_api', ['stale']).catch((error) => {
+      settled = true;
+      return error;
+    });
+    await started.promise;
+    const recovered = pool.execute('call_api', ['current']).catch((error) => error);
+    try {
+      await vi.advanceTimersByTimeAsync(25);
+      expect(kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
+      expect(settled).toBe(false);
+      expect(remove).not.toHaveBeenCalled();
+      expect(send).toHaveBeenCalledOnce();
+      expect(shells).toHaveLength(1);
+
+      original.emit('message', 'DONE|/fixture/timed-out/response.json');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(remove).not.toHaveBeenCalled();
+      original.emit('close');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(remove).toHaveBeenCalledExactlyOnceWith('/fixture/timed-out');
+      expect(settled).toBe(false);
+      expect(shells).toHaveLength(2);
+      const replacement = shells[1];
+      const replacementSend = vi.spyOn(replacement, 'send').mockImplementation((command) => {
+        if (command === 'SHUTDOWN') {
+          queueMicrotask(() => replacement.emit('close'));
+        } else {
+          queueMicrotask(() => replacement.emit('message', `DONE|${command.split('|').at(-1)}`));
+        }
+      });
+      cleanup.resolve();
+      expect(await timedOut).toEqual(new Error('Python worker timed out after 25ms'));
+      expect(await recovered).toBe('recovered');
+      expect(replacementSend).toHaveBeenCalledOnce();
+      expect(remove).toHaveBeenLastCalledWith('/fixture/recovered');
+      expect(send).toHaveBeenCalledOnce();
+    } finally {
+      cleanup.resolve();
+      original.emit('close');
+      await pool.shutdown();
+      await Promise.all([timedOut, recovered]);
+    }
+  });
+
   it.each(['directory', 'write'] as const)(
     'does not dispatch timed-out %s preparation over a later request',
     async (stage) => {

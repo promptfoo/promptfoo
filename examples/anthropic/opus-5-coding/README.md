@@ -1,12 +1,12 @@
-# anthropic/opus-4-8-coding (Opus-Tier Advanced Coding)
+# anthropic/opus-5-coding (Opus-Tier Advanced Coding)
 
 This example runs the Opus-tier Claude models on hard coding tasks. It compares **Claude Opus 5.5**, **Claude Opus 5**, and **Claude Opus 4.8** at `xhigh` effort, and also runs Opus 5.5 at `low` so you can see how effort changes results on your own tasks.
 
 You can run this example with:
 
 ```bash
-npx promptfoo@latest init --example anthropic/opus-4-8-coding
-cd opus-4-8-coding
+npx promptfoo@latest init --example anthropic/opus-5-coding
+cd anthropic/opus-5-coding
 ```
 
 ## What This Tests

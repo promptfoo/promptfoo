@@ -237,6 +237,19 @@ describe('calculateBedrockCost', () => {
     expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
   });
 
+  it.each(['global.anthropic.claude-sonnet-5-5', 'anthropic.claude-sonnet-5-5'])(
+    'prices Sonnet 5.5 at $2/$10 for %s, with the regional premium off global',
+    (model) => {
+      // AWS price list (us-east-1, 2026-09-29): global $2 in / $10 out / $0.20 cache read /
+      // $2.50 cache write; regional 1.1x. Also guards the first-match `includes()` lookup:
+      // Sonnet 5's row must not win for `anthropic.claude-sonnet-5-5`.
+      // 1000*2 + 200*0.2 + 100*2.5 + 500*10 = 7,290 per 1e6
+      const expected = 0.00729 * (model.startsWith('global.') ? 1 : 1.1);
+      expect(calculateBedrockCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+      expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+    },
+  );
+
   it.each([
     'global.anthropic.claude-fable-5-1',
     'us.anthropic.claude-fable-5-1',

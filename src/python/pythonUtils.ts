@@ -22,17 +22,9 @@ const oneShotValidations = new WeakMap<object, Map<string, Promise<string>>>();
 import type { Options as PythonShellOptions } from 'python-shell';
 
 /**
- * Resolves the Python executable path from explicit config and environment.
- * This centralizes the fallback logic: configPath > PROMPTFOO_PYTHON env var.
- *
- * Note: Does NOT apply the final 'python' default - that's handled by
- * validatePythonPath. This preserves the distinction between "explicitly
- * configured" (should fail if invalid) and "using system default" (should
- * try fallback detection).
- *
- * @param configPath - Explicitly configured Python path from provider config
- * @param envPath - Provider override, or the current environment when omitted
- * @returns The configured path, or undefined if neither config nor env var is set
+ * Prefer explicit config over the provider or active environment's Python path.
+ * Leave an unset path undefined so validation can distinguish a required executable
+ * from a system default that permits fallback detection.
  */
 export function getConfiguredPythonPath(
   configPath?: string,
@@ -191,14 +183,7 @@ export async function tryPath(path: string): Promise<string | null> {
   }
 }
 
-/**
- * Validates the Python executable for the current invocation.
- *
- * @param pythonPath - Path to the Python executable.
- * @param isExplicit - If true, only tries the provided path.
- * @returns Validated Python executable path.
- * @throws {Error} If no valid Python executable is found.
- */
+/** Validate on every call; use fallback detection only for a system default. */
 export async function validatePythonPath(pythonPath: string, isExplicit: boolean): Promise<string> {
   const primaryPath = await tryPath(pythonPath);
   if (primaryPath) {
