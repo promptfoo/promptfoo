@@ -123,4 +123,24 @@ describe('sampleArray', () => {
     // unless the randomization is not working
     expect(samples.size).toBeGreaterThan(1);
   });
+
+  it('should sample each element with equal probability', () => {
+    // Sampling 2 of ['a', 'b', 'c'] should include 'b' 2/3 of the time. A
+    // `sort(() => 0.5 - Math.random())` "shuffle" biases toward the original
+    // order and lands near 87%, so this threshold separates uniform from biased
+    // with a wide margin at this trial count.
+    const trials = 2000;
+    let sawB = 0;
+
+    for (let i = 0; i < trials; i++) {
+      if (sampleArray(['a', 'b', 'c'], 2).includes('b')) {
+        sawB++;
+      }
+    }
+
+    const rate = sawB / trials;
+    // 0.75 sits well above the 2/3 uniform rate and well below the ~0.87 bias.
+    expect(rate).toBeGreaterThan(0.55);
+    expect(rate).toBeLessThan(0.75);
+  });
 });
