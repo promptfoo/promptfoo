@@ -601,6 +601,40 @@ describe('TestCaseGenerationProvider', () => {
       expect(callApiMock.mock.calls.filter(([path]) => path === '/providers/test')).toHaveLength(1);
     });
 
+    it('omits deselected credentials from an intercepted target preview', async () => {
+      const tls = { certificateType: 'none', jksContent: 'old-upload', keyAlias: 'old' };
+      callApiMock.mockImplementation(async (path) =>
+        createJsonResponse(
+          path === '/providers/test'
+            ? { output: 'Hello', testResult: { success: true, message: 'Hello' } }
+            : { prompt: 'Hello', context: '', metadata: {} },
+        ),
+      );
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              target: { id: 'http', config: { url: 'https://fixture.example.test', tls } },
+            }}
+          >
+            <TestConsumer testPlugin="policy" testStrategy="basic" />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await userEvent.setup().click(screen.getByTestId('test-case-generation-btn'));
+      await waitFor(() =>
+        expect(callApiMock).toHaveBeenCalledWith('/providers/test', expect.anything()),
+      );
+
+      const [, options] = callApiMock.mock.calls.find(([path]) => path === '/providers/test')!;
+      expect(JSON.parse(options!.body as string).providerOptions.config.tls).toEqual({
+        rejectUnauthorized: true,
+      });
+      expect(tls.jksContent).toBe('old-upload');
+    });
+
     it('should execute a test case against a target', async () => {
       const user = userEvent.setup();
       const testPlugin = 'harmful:hate';

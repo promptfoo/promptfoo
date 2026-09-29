@@ -16,6 +16,7 @@ import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatToolsAsJSDocs } from '@app/utils/discovery';
 import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
+import { getTargetForExecution } from '@promptfoo/redteam/sharedFrontend';
 import { AlertTriangle, CheckCircle, ChevronDown, Info, Sparkles } from 'lucide-react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
@@ -180,7 +181,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
       const response = await callApi('/providers/discover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config.target),
+        body: JSON.stringify(getTargetForExecution(config.target)),
       });
 
       if (!response.ok) {

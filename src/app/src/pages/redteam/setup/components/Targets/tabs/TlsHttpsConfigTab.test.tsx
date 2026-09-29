@@ -38,6 +38,38 @@ describe('TlsHttpsConfigTab', () => {
   });
 
   describe('Server Certificate Verification', () => {
+    it.each(['caPath', 'certPath', 'keyPath', 'jksPath', 'pfxPath'] as const)(
+      'keeps the imported %s editor while clearing and replacing its value',
+      async (field) => {
+        function EditableTarget() {
+          const [target, setTarget] = React.useState<HttpProviderOptions>({
+            id: 'http',
+            config: { tls: { rejectUnauthorized: true, [field]: '/fixture/original' } },
+          });
+          return (
+            <TlsHttpsConfigTab
+              selectedTarget={target}
+              updateCustomTarget={(key, value) =>
+                setTarget((previous) => ({
+                  ...previous,
+                  config: { ...previous.config, [key]: value },
+                }))
+              }
+            />
+          );
+        }
+        const user = userEvent.setup();
+        renderWithProviders(<EditableTarget />);
+        const input = screen.getByDisplayValue('/fixture/original');
+
+        await user.clear(input);
+        expect(input).toBeInTheDocument();
+        await user.type(input, '/fixture/replacement');
+
+        expect(screen.getByDisplayValue('/fixture/replacement')).toBe(input);
+      },
+    );
+
     it('should show the verification switch by default without any TLS config', () => {
       const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',

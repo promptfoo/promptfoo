@@ -109,11 +109,29 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
     tls?.pfxInputType ?? (tls?.pfx ? 'base64' : tls?.pfxPath ? 'path' : undefined);
 
   useEffect(() => {
-    // Export the same verification setting that the form displays.
-    if (tls?.rejectUnauthorized === undefined) {
-      updateCustomTarget('tls', { ...tls, rejectUnauthorized: true });
+    // Keep inferred selections when an imported certificate value is cleared for editing.
+    const defaults = {
+      rejectUnauthorized: tls?.rejectUnauthorized ?? true,
+      ...(certificateType && { certificateType }),
+      ...(caInputType && { caInputType }),
+      ...(certInputType && { certInputType }),
+      ...(keyInputType && { keyInputType }),
+      ...(jksInputType && { jksInputType }),
+      ...(pfxInputType && { pfxInputType }),
+    };
+    if (Object.entries(defaults).some(([key, value]) => tls?.[key] !== value)) {
+      updateCustomTarget('tls', { ...tls, ...defaults });
     }
-  }, [tls, updateCustomTarget]);
+  }, [
+    tls,
+    certificateType,
+    caInputType,
+    certInputType,
+    keyInputType,
+    jksInputType,
+    pfxInputType,
+    updateCustomTarget,
+  ]);
 
   const hasCA = !!(tls?.ca || tls?.caPath);
   const hasClientCert = !!certificateType;
