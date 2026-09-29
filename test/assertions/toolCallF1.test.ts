@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleToolCallF1 } from '../../src/assertions/toolCallF1';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 
@@ -33,6 +36,10 @@ const createParams = (
 });
 
 describe('handleToolCallF1', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   describe('F1 score calculation', () => {
     it('should return F1=1.0 when actual tools exactly match expected tools', () => {
       const output = {
@@ -372,6 +379,308 @@ describe('handleToolCallF1', () => {
       expect(result.score).toBe(0);
     });
 
+    it.each([
+      'The tool payload would be {"type":"tool_use","name":"delete_account"}',
+      '{"type":"tool_use","name":"delete_account"} is an example payload.',
+      '{\n"input":\n{"type":"tool_use","name":"delete_account"}\n} is an example payload.',
+    ])('does not count a JSON example in prose as a tool call: %s', (output) => {
+      const result = handleToolCallF1(createParams(output, ['delete_account']));
+
+      expect(result.score).toBe(0);
+    });
+
+    it.each(['{', '[', '{"broken":', '{]', '{"broken":"unfinished\\'])(
+      'recovers a complete call after an unfinished or invalid candidate: %s',
+      (prefix) => {
+        const output = `${prefix}\n${JSON.stringify(
+          { type: 'tool_use', name: 'get_weather', input: { city: 'NYC' } },
+          null,
+          2,
+        )}`;
+        const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+        expect(result).toMatchObject({ pass: true, score: 1 });
+      },
+    );
+
+    it('keeps unindented nested tool-shaped arguments inside their enclosing call', () => {
+      const output = `Calling the weather tool.\n${JSON.stringify(
+        {
+          type: 'tool_use',
+          name: 'get_weather',
+          input: [{ type: 'tool_use', name: 'delete_account', query: 'a \\" } [ b' }],
+        },
+        null,
+        2,
+      ).replace(/^ +/gm, '')}`;
+      const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+      expect(result).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it('recovers a nested call when its balanced enclosing candidate is invalid', () => {
+      const output = '{\nnot_json\n{"type":"tool_use","name":"get_weather"}\n}';
+      const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+      expect(result).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it.each([
+      ['```json', '```'],
+      ['~~~json', '~~~'],
+      ['```json', ' ```'],
+      ['   ```json', '   ````'],
+      ['   ```json', '```'],
+      ['````json', '```\n~~~\n````'],
+      ['```json', '~~~\n```'],
+      ['```json', '```json\n```'],
+    ])('ignores examples inside %s fences and preserves later calls', (opening, closing) => {
+      const output = [
+        'Example:',
+        opening,
+        '{"type":"tool_use","name":"delete_account"}',
+        closing,
+        '{"type":"tool_use","name":"get_weather"}',
+      ].join('\r\n');
+      const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+      expect(result).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it.each(['```json {"example":true} ```', '```info`invalid', '- ```info`invalid'])(
+      'keeps calls after an invalid backtick fence opener: %s',
+      (example) => {
+        const output = [
+          '{"type":"tool_use","name":"get_weather"}',
+          example,
+          '{"type":"tool_use","name":"delete_account"}',
+        ].join('\n');
+        const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+        expect(result.pass).toBe(false);
+        expect(result.score).toBeCloseTo(2 / 3);
+        expect(result.reason).toContain('Called: [delete_account, get_weather]');
+      },
+    );
+
+    it.each([
+      ['Example: {\n"payload":', '}'],
+      ['Example: [', ']'],
+    ])('ignores calls nested inside an inline example wrapper: %s', (opening, closing) => {
+      const output = [
+        '{"type":"tool_use","name":"get_weather"}',
+        opening,
+        '{"type":"tool_use","name":"delete_account"}',
+        closing,
+      ].join('\n');
+
+      expect(handleToolCallF1(createParams(output, ['get_weather']))).toMatchObject({
+        pass: true,
+        score: 1,
+      });
+    });
+
+    it('ignores an example in an unclosed fence', () => {
+      const output = 'Example:\n```json\n{"type":"tool_use","name":"delete_account"}';
+      const result = handleToolCallF1(createParams(output, ['delete_account']));
+
+      expect(result).toMatchObject({ pass: false, score: 0 });
+    });
+
+    it('does not close a top-level fence with indented content', () => {
+      const output = [
+        '```json',
+        '    ```',
+        '{"type":"tool_use","name":"delete_account"}',
+        '```',
+      ].join('\n');
+      const result = handleToolCallF1(createParams(output, ['delete_account']));
+
+      expect(result).toMatchObject({ pass: false, score: 0 });
+    });
+
+    it.each(['    ', '      ', '\t'])(
+      'ignores fenced examples nested in a Markdown list with %j indentation',
+      (indent) => {
+        const output = [
+          '  - Example:',
+          `${indent}\`\`\`json`,
+          `${indent}{"type":"tool_use","name":"delete_account"}`,
+          `${indent}\`\`\``,
+          '{"type":"tool_use","name":"get_weather"}',
+        ].join('\n');
+        const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+        expect(result).toMatchObject({ pass: true, score: 1 });
+      },
+    );
+
+    it.each([
+      ['```json', '    ```', '', '```'],
+      ['  - Example:\n    ```json', '        ```', '    ', '    ```'],
+    ])('keeps over-indented markers inside %s fences', (opening, marker, indent, closing) => {
+      const output = [
+        opening,
+        marker,
+        `${indent}{"type":"tool_use","name":"delete_account"}`,
+        closing,
+        '{"type":"tool_use","name":"get_weather"}',
+      ].join('\n');
+
+      expect(handleToolCallF1(createParams(output, ['get_weather']))).toMatchObject({
+        pass: true,
+        score: 1,
+      });
+    });
+
+    it.each(['- ', '12. '])('recognizes a fence after a %s list marker', (list) => {
+      const indent = ' '.repeat(list.length);
+      const output = [
+        `${list}\`\`\`json`,
+        `${indent}{"type":"tool_use","name":"delete_account"}`,
+        `${indent}\`\`\``,
+        '{"type":"tool_use","name":"get_weather"}',
+      ].join('\n');
+
+      expect(handleToolCallF1(createParams(output, ['get_weather']))).toMatchObject({
+        pass: true,
+        score: 1,
+      });
+    });
+
+    it.each([
+      ['Actual call: {', '}'],
+      ['Actual call: [\ninvalid', ']'],
+    ])('recovers calls from an inline malformed wrapper: %s', (opening, closing) => {
+      const output = [
+        opening,
+        '{"type":"tool_use","name":"delete_account"}',
+        closing,
+        '{"type":"tool_use","name":"get_weather"}',
+      ].join('\n');
+      const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBeCloseTo(2 / 3);
+      expect(result.reason).toContain('Called: [delete_account, get_weather]');
+    });
+
+    it('recovers unexpected calls from long malformed wrappers', () => {
+      const output = [
+        '{',
+        'x'.repeat(2_000),
+        '{"type":"tool_use","name":"delete_account"}',
+        '}',
+        '{"type":"tool_use","name":"get_weather"}',
+      ].join('\n');
+
+      const result = handleToolCallF1(createParams(output, ['get_weather']));
+      expect(result.pass).toBe(false);
+      expect(result.score).toBeCloseTo(2 / 3);
+      expect(result.reason).toContain('Called: [delete_account, get_weather]');
+    });
+
+    it('bounds parsing work for large nested invalid JSON candidates', () => {
+      const output = `${'{\n'.repeat(1_000)}${'}\n'.repeat(1_000)}`;
+      const parse = vi.spyOn(JSON, 'parse');
+      const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+      expect(result.score).toBe(0);
+      // One whole-output attempt plus a linear budget for embedded candidates.
+      const parsedCharacters = parse.mock.calls.reduce((total, [value]) => total + value.length, 0);
+      expect(parsedCharacters).toBeLessThanOrEqual(5 * output.length);
+      expect(result).toMatchObject({ pass: false, reason: expect.stringContaining('work limit') });
+    });
+
+    it.each([false, true])('fails explicitly on exhausted work with inverse=%s', (inverse) => {
+      const output =
+        '{"type":"tool_use","name":"get_weather"}\n' + '{\n'.repeat(1_000) + '}\n'.repeat(1_000);
+      const params = {
+        ...createParams(output, ['get_weather']),
+        inverse,
+        assertion: { type: 'tool-call-f1' as const, threshold: 0 },
+      };
+
+      expect(handleToolCallF1(params)).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('work limit'),
+      });
+      expect(handleToolCallF1({ ...params, output: JSON.stringify(output) })).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('work limit'),
+      });
+    });
+
+    it.each(['{', '[', '}', ']'])(
+      'fails explicitly when unmatched %s delimiters exceed the recovery limit',
+      (delimiter) => {
+        const output = '{"type":"tool_use","name":"get_weather"}\n' + delimiter.repeat(200_000);
+        for (const inverse of [false, true]) {
+          const params = {
+            ...createParams(output, ['get_weather'], { threshold: 0 }),
+            inverse,
+          };
+          expect(handleToolCallF1(params)).toMatchObject({
+            pass: false,
+            score: 0,
+            reason: expect.stringContaining('delimiter limit'),
+          });
+          expect(handleToolCallF1({ ...params, output: JSON.stringify(output) })).toMatchObject({
+            pass: false,
+            score: 0,
+            reason: expect.stringContaining('delimiter limit'),
+          });
+        }
+      },
+    );
+
+    it('recovers a call after many unmatched opening braces', () => {
+      const output = `${'{\n'.repeat(10_000)}{"type":"tool_use","name":"get_weather"}`;
+      const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+      expect(result).toMatchObject({ pass: true, score: 1 });
+    });
+
+    it('streams many JSON blocks within a small heap', () => {
+      const result = spawnSync(
+        process.execPath,
+        [
+          '--max-old-space-size=128',
+          '--import',
+          'tsx',
+          '--input-type=module',
+          '--eval',
+          String.raw`
+            import { handleToolCallF1 } from './src/assertions/toolCallF1.ts';
+            for (const prefix of ['', '{\n']) {
+              const output = prefix + '{"type":"tool_use","name":"book_flight"}\n' +
+                '{}\n'.repeat(1_250_000) +
+                '{"type":"tool_use","name":"get_weather"}';
+              const result = handleToolCallF1({
+                assertion: { type: 'tool-call-f1' },
+                output,
+                renderedValue: ['book_flight', 'get_weather'],
+                inverse: false,
+              });
+              if (!result.pass || result.score !== 1) {
+                throw new Error('Lost an early or late tool call');
+              }
+            }
+          `,
+        ],
+        {
+          cwd: fileURLToPath(new URL('../..', import.meta.url)),
+          encoding: 'utf8',
+          timeout: 20_000,
+        },
+      );
+
+      expect(result.error).toBeUndefined();
+      expect(result.status, result.stderr).toBe(0);
+    });
+
     it('should handle Anthropic output with only one tool call in string', () => {
       const output = `I'll help you with that.
 
@@ -400,101 +709,146 @@ describe('handleToolCallF1', () => {
     });
   });
 
-  describe('embedded JSON in prose', () => {
+  describe('structured wrapper extraction', () => {
     it.each([
-      ['a list of named records', 'Users: [{"name": "Alice"}, {"name": "Bob"}].'],
-      ['a named config entry', 'Config [{"name":"retries","value":3}] applied.'],
-      ['an unrelated named object', 'Metadata {"name":"session-1"} attached.'],
-    ])('does not treat %s as tool calls', (_name, prose) => {
-      const output = `${prose}\n{"tool_calls":[{"function":{"name":"get_weather"}}]}`;
-
-      const result = handleToolCallF1(createParams(output, ['get_weather']));
-
-      expect(result.reason).toContain('Called: [get_weather]');
-      expect(result.score).toBe(1);
-      expect(result.pass).toBe(true);
+      ['OpenAI', { result: { tool_calls: [{ function: { name: 'get_weather' } }] } }],
+      ['Responses', { output: [{ type: 'function_call', name: 'get_weather' }] }],
+      ['Anthropic', { message: { content: [{ type: 'tool_use', name: 'get_weather' }] } }],
+      ['Google Live', { result: { toolCall: { functionCalls: [{ name: 'get_weather' }] } } }],
+    ])('finds %s calls inside wrappers and serialized blocks', (_format, output) => {
+      for (const value of [
+        output,
+        JSON.stringify(output),
+        `Calls follow:\n${JSON.stringify(output)}`,
+      ]) {
+        expect(handleToolCallF1(createParams(value, ['get_weather']))).toMatchObject({
+          pass: true,
+          score: 1,
+        });
+      }
     });
 
-    it.each([
-      ['brace', 'Use {braces here'],
-      ['quote', 'He said "hello.'],
-      ['escaped quote', 'Model wrote \\"x\\" and'],
-      ['quoted brace', 'A "{" appears, then'],
-    ])('finds a tool call that follows an unbalanced %s', (_name, prose) => {
-      const output = `${prose}\n{"type":"tool_use","name":"get_weather"}`;
-
-      const result = handleToolCallF1(createParams(output, ['get_weather']));
-
-      expect(result.score).toBe(1);
-    });
-
-    it.each([
-      ['quote', 'He said "hello.'],
-      ['quoted brace', 'A "{" appears, then'],
-    ])('finds a later tool call when an unbalanced %s follows an earlier one', (_name, prose) => {
-      const output = `{"type":"tool_use","name":"get_weather"}\n${prose}\n{"type":"tool_use","name":"get_time"}`;
-
-      const result = handleToolCallF1(createParams(output, ['get_weather', 'get_time']));
-
-      expect(result.reason).toContain('Called: [get_time, get_weather]');
-      expect(result.score).toBe(1);
-    });
-
-    it('finds a tool call whose arguments contain a brace, after an unbalanced quote', () => {
-      const output =
-        'He said "hello.\n{"type":"tool_use","name":"get_weather","input":{"query":"{foo"}}';
-
-      expect(handleToolCallF1(createParams(output, ['get_weather'])).score).toBe(1);
-    });
-
-    it('finds a tool call wrapped in prose brackets', () => {
-      const output = 'Details [tool follows: {"type":"tool_use","name":"get_weather"}]';
-
-      expect(handleToolCallF1(createParams(output, ['get_weather'])).score).toBe(1);
-    });
-
-    it('scans brace-heavy output in linear time', () => {
-      const start = Date.now();
-      handleToolCallF1(createParams('{'.repeat(60_000), ['get_weather']));
-
-      // The previous scanner restarted at every brace, taking seconds for this input.
-      expect(Date.now() - start).toBeLessThan(1000);
-    });
-  });
-
-  describe('tool calls nested in a wrapper', () => {
-    it.each([
-      ['an OpenAI envelope', { result: { tool_calls: [{ function: { name: 'get_weather' } }] } }],
-      ['a Responses item', { output: [{ type: 'function_call', name: 'get_weather' }] }],
-      ['an Anthropic block', { message: { content: [{ type: 'tool_use', name: 'get_weather' }] } }],
-    ])('finds %s inside an outer object', (_name, output) => {
-      expect(handleToolCallF1(createParams(output, ['get_weather'])).score).toBe(1);
-      expect(handleToolCallF1(createParams(JSON.stringify(output), ['get_weather'])).score).toBe(1);
-    });
-
-    it('does not treat a tool definition as a call', () => {
+    it('ignores named data and tool definitions alongside a real call', () => {
       const output = {
+        records: [{ name: 'Alice' }],
         tools: [
-          { type: 'function', function: { name: 'get_weather', parameters: { type: 'object' } } },
+          {
+            type: 'function',
+            function: {
+              name: 'book_flight',
+              parameters: { example: { type: 'tool_use', name: 'schema_example' } },
+            },
+          },
         ],
+        result: { tool_calls: [{ function: { name: 'get_weather' } }] },
       };
-
-      expect(handleToolCallF1(createParams(output, ['get_weather'])).score).toBe(0);
-      expect(handleToolCallF1(createParams(JSON.stringify(output), ['get_weather'])).score).toBe(0);
+      expect(handleToolCallF1(createParams(output, ['get_weather']))).toMatchObject({
+        pass: true,
+        score: 1,
+      });
     });
 
-    it('grades deeply nested output instead of overflowing the stack', () => {
+    it.each([
+      {
+        tool_calls: [
+          {
+            function: {
+              name: 'get_weather',
+              arguments: { type: 'tool_use', name: 'payload_value' },
+            },
+          },
+        ],
+      },
+      {
+        toolCall: {
+          functionCalls: [
+            { name: 'get_weather', args: { functionCall: { name: 'payload_value' } } },
+          ],
+        },
+      },
+      {
+        type: 'function_call',
+        name: 'get_weather',
+        arguments: { type: 'tool_use', name: 'payload_value' },
+      },
+      { type: 'tool_use', name: 'get_weather', input: { functionCall: { name: 'payload_value' } } },
+    ])('does not interpret argument data as a second call', (call) => {
+      const output = { result: call };
+      expect(handleToolCallF1(createParams(output, ['get_weather']))).toMatchObject({
+        pass: true,
+        score: 1,
+      });
+    });
+
+    it.each([
+      {
+        type: 'function_call_output',
+        output: { tool_calls: [{ function: { name: 'get_weather' } }] },
+      },
+      { type: 'tool_result', content: [{ type: 'tool_use', name: 'get_weather' }] },
+      { role: 'tool', content: { tool_calls: [{ function: { name: 'get_weather' } }] } },
+      { functionResponse: { name: 'lookup', response: { functionCall: { name: 'get_weather' } } } },
+      {
+        toolResponse: {
+          functionResponses: [{ response: { type: 'tool_use', name: 'get_weather' } }],
+        },
+      },
+    ])('treats tool-result payloads as data and preserves sibling calls', (result) => {
+      expect(handleToolCallF1(createParams({ messages: [result] }, ['get_weather']))).toMatchObject(
+        { pass: false, score: 0 },
+      );
+      const output = { messages: [result, { type: 'function_call', name: 'book_flight' }] };
+      expect(handleToolCallF1(createParams(output, ['book_flight']))).toMatchObject({
+        pass: true,
+        score: 1,
+      });
+    });
+
+    it('does not mistake malformed call arguments for calls', () => {
+      const output = {
+        result: { type: 'tool_use', input: { type: 'tool_use', name: 'get_weather' } },
+      };
+      expect(handleToolCallF1(createParams(output, ['get_weather']))).toMatchObject({
+        pass: false,
+        score: 0,
+      });
+    });
+
+    it('finds deeply nested calls in objects and JSON without recursion limits', () => {
       const output: Record<string, unknown> = {};
       let leaf = output;
       for (let i = 0; i < 20_000; i++) {
         leaf.nested = {};
         leaf = leaf.nested as Record<string, unknown>;
       }
-      leaf.tool_calls = [{ function: { name: 'get_weather' } }];
-      // JSON.stringify would overflow on this too, so build the params around it.
-      const params = { ...createParams({}, ['get_weather']), output };
+      const call = { tool_calls: [{ function: { name: 'get_weather' } }] };
+      Object.assign(leaf, call);
+      const json = '{"nested":'.repeat(20_000) + JSON.stringify(call) + '}'.repeat(20_000);
+      // Build params separately because JSON.stringify also has a nesting limit.
+      for (const value of [output, json]) {
+        expect(
+          handleToolCallF1({ ...createParams({}, ['get_weather']), output: value }),
+        ).toMatchObject({ pass: true, score: 1 });
+      }
+    });
 
-      expect(() => handleToolCallF1(params)).not.toThrow();
+    it('recognizes a shared value in call context after visiting it as data', () => {
+      const shared = { name: 'get_weather' };
+      const output = { tool_calls: [shared], records: [shared] };
+      expect(handleToolCallF1(createParams(output, ['get_weather']))).toMatchObject({
+        pass: true,
+        score: 1,
+      });
+    });
+
+    it('visits shared and cyclic wrappers once while retaining all calls', () => {
+      const shared = { tool_calls: [{ function: { name: 'get_weather' } }] };
+      const output: Record<string, unknown> = { first: shared, second: shared };
+      output.self = output;
+      output.sibling = { parent: output, output: [{ type: 'function_call', name: 'book_flight' }] };
+      expect(
+        handleToolCallF1({ ...createParams({}, ['get_weather', 'book_flight']), output }),
+      ).toMatchObject({ pass: true, score: 1 });
     });
   });
 

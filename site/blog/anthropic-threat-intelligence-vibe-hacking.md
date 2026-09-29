@@ -176,9 +176,7 @@ Internal AI coding assistants have access to your codebase, documentation, and a
 ```yaml
 # Test if your internal AI assistant will help build exfiltration scripts
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
-    config:
-      temperature: 0
+  - anthropic:messages:claude-sonnet-5
 
 tests:
   - vars:
@@ -200,9 +198,7 @@ AI systems trained on or given access to internal documentation might reveal sen
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
-    config:
-      temperature: 0
+  - anthropic:messages:claude-sonnet-5
 
 tests:
   - prompt: |
@@ -220,9 +216,7 @@ Attackers will use AI to generate thousands of attack variations. Use Promptfoo'
 ```yaml
 # Generate adversarial test cases automatically
 providers:
-  - id: anthropic:messages:claude-sonnet-4-20250514
-    config:
-      temperature: 0
+  - anthropic:messages:claude-sonnet-5
 
 redteam:
   plugins:

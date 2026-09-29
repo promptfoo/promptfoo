@@ -2,182 +2,294 @@ import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
-/**
- * Outermost balanced `{...}` / `[...]` fragments of a string, found in a single pass.
- * Fragments inside an opener that never closes are returned too, so a stray brace in
- * prose cannot hide a tool call that follows it.
- *
- * A quote only opens a JSON string once a delimiter is open, so prose quotes cannot
- * swallow the JSON that follows them. `respectStrings: false` drops string tracking
- * altogether, which the caller runs as a second pass for prose that opens a delimiter
- * inside quotes.
- */
-function jsonFragments(text: string, respectStrings: boolean): string[] {
-  // Each open delimiter collects the spans that completed directly inside it. They are
-  // dropped when it closes, because the enclosing fragment already covers them.
-  const open: { start: number; nested: [number, number][] }[] = [];
-  const spans: [number, number][] = [];
+type JsonDelimiter = {
+  char: '{' | '[' | '}' | ']';
+  index: number;
+  startsLine: boolean;
+  endsLine: boolean;
+};
+
+function columnWidth(text: string): number {
+  let column = 0;
+  for (const char of text) {
+    column += char === '\t' ? 4 - (column % 4) : 1;
+  }
+  return column;
+}
+
+function* jsonDelimiters(text: string): Generator<JsonDelimiter | null> {
   let inString = false;
   let escaped = false;
+  let fence = '';
+  let fenceContainer = 0;
+  const containers: number[] = [];
+  let lineStart = 0;
 
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
+  while (lineStart < text.length) {
+    const offset = lineStart;
+    const newline = text.indexOf('\n', lineStart);
+    const lineEnd = newline < 0 ? text.length : newline;
+    const content = text.slice(lineStart, lineEnd).trimEnd();
+    lineStart = lineEnd + 1;
+    const firstContent = content.search(/\S/);
+    const indent = columnWidth(content.slice(0, Math.max(0, firstContent)));
+    if (fence && content && indent < fenceContainer) {
+      fence = '';
+      yield null;
+    }
+    if (fence) {
+      const marker = /^[ \t]*(`{3,}|~{3,})/.exec(content);
+      if (
+        marker &&
+        indent <= fenceContainer + 3 &&
+        marker[1][0] === fence[0] &&
+        marker[1].length >= fence.length &&
+        !content.slice(marker[0].length).trim()
+      ) {
+        fence = '';
+      }
+      continue;
+    }
+
+    while (content && containers.length && indent < containers[containers.length - 1]) {
+      containers.pop();
+    }
+    const list = /^[ \t]*(?:[-+*]|\d+[.)])[ \t]+/.exec(content);
+    if (list) {
+      containers.push(columnWidth(list[0]));
+    }
+    const container = containers[containers.length - 1] ?? 0;
+    const fenceText = list ? content.slice(list[0].length) : content;
+    const marker = /^[ \t]*(`{3,}|~{3,})/.exec(fenceText);
+    if (
+      marker &&
+      (list || indent <= container + 3) &&
+      (marker[1][0] !== '`' || !fenceText.slice(marker[0].length).includes('`'))
+    ) {
+      fence = marker[1];
+      fenceContainer = container;
+      yield null;
+      continue;
+    }
+
+    for (let column = 0; column < content.length; column++) {
+      const char = content[column];
+      const index = offset + column;
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (char === '\\') {
+          escaped = true;
+        } else if (char === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (char === '"') {
+        inString = true;
+      } else if (char === '{' || char === '[' || char === '}' || char === ']') {
+        yield {
+          char,
+          index,
+          startsLine: column === firstContent,
+          endsLine: column === content.length - 1,
+        };
+      }
+    }
+
+    // JSON strings cannot span literal newlines.
     if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (char === '\\') {
-        escaped = true;
-      } else if (char === '"') {
-        inString = false;
+      inString = false;
+      escaped = false;
+      yield null;
+    }
+  }
+}
+
+class ToolCallParseError extends Error {}
+
+const MAX_UNMATCHED_DELIMITERS = 65_536;
+
+function* jsonBlocks(
+  text: string,
+  skipRoot = false,
+): Generator<{ text: string; startsLine: boolean }> {
+  // Pop complete pairs so independent blocks do not accumulate in memory.
+  const unmatched: number[] = [];
+  let stackStart = 0;
+  for (const token of jsonDelimiters(text)) {
+    if (!token) {
+      stackStart = unmatched.length;
+    } else if (token.char === '{' || token.char === '[') {
+      unmatched.push(token.index);
+    } else if (
+      unmatched.length > stackStart &&
+      text[unmatched[unmatched.length - 1]] === (token.char === '}' ? '{' : '[')
+    ) {
+      unmatched.pop();
+    } else {
+      unmatched.push(token.index);
+      stackStart = unmatched.length;
+    }
+    if (unmatched.length > MAX_UNMATCHED_DELIMITERS) {
+      throw new ToolCallParseError(
+        `Tool Call F1 exceeded its delimiter limit (${MAX_UNMATCHED_DELIMITERS})`,
+      );
+    }
+  }
+
+  // Yield disjoint blocks; nested recovery skips the enclosing root.
+  let nextUnmatched = 0;
+  let depth = 0;
+  let start = -1;
+  let startDepth = 0;
+  let startsLine = false;
+  for (const token of jsonDelimiters(text)) {
+    if (!token) {
+      continue;
+    }
+    if (token.index === unmatched[nextUnmatched]) {
+      nextUnmatched++;
+      continue;
+    }
+    if (token.char === '{' || token.char === '[') {
+      if (start < 0 && depth === (skipRoot ? 1 : 0)) {
+        start = token.index;
+        startDepth = depth;
+        startsLine = token.startsLine;
       }
-    } else if (char === '"' && respectStrings && open.length > 0) {
-      inString = true;
-    } else if (char === '{' || char === '[') {
-      open.push({ start: i, nested: [] });
-    } else if (char === '}' || char === ']') {
-      const frame = open.pop();
-      if (frame) {
-        (open[open.length - 1]?.nested ?? spans).push([frame.start, i + 1]);
+      depth++;
+      continue;
+    }
+    depth--;
+    if (start >= 0 && depth === startDepth) {
+      if (token.endsLine) {
+        yield { text: text.slice(start, token.index + 1), startsLine };
       }
-    }
-  }
-
-  for (const frame of open) {
-    for (const span of frame.nested) {
-      spans.push(span);
-    }
-  }
-  return spans.map(([start, end]) => text.slice(start, end));
-}
-
-/**
- * The name of a single tool call, for shapes that identify themselves as one:
- * - Anthropic content block: { type: 'tool_use', name: '...' }
- * - OpenAI Responses item: { type: 'function_call', name: '...' }
- * - Google/Vertex: { functionCall: { name: '...' } }
- *
- * `{ function: { name } }` is missing on purpose: it is also the shape of an OpenAI tool
- * *definition* (`{ type: 'function', function: { name, parameters } }`), so it only counts
- * inside a list already known to hold calls.
- */
-function toolCallName(obj: Record<string, unknown>): string | undefined {
-  if ((obj.type === 'tool_use' || obj.type === 'function_call') && typeof obj.name === 'string') {
-    return obj.name;
-  }
-  const call = obj.functionCall;
-  if (call && typeof call === 'object') {
-    const { name } = call as Record<string, unknown>;
-    if (typeof name === 'string') {
-      return name;
-    }
-  }
-  return undefined;
-}
-
-/**
- * Adds names from a list whose entries are known to be tool calls, where
- * `{ function: { name } }` and a bare `{ name }` count too.
- */
-function addCallListNames(list: unknown, names: Set<string>): void {
-  if (!Array.isArray(list)) {
-    return;
-  }
-  for (const item of list) {
-    if (item && typeof item === 'object') {
-      const call = item as Record<string, unknown>;
-      const fn = call.function;
-      const fnName =
-        fn && typeof fn === 'object' ? (fn as Record<string, unknown>).name : undefined;
-      const name = toolCallName(call) ?? fnName ?? call.name;
-      if (typeof name === 'string') {
-        names.add(name);
-      }
+      start = -1;
     }
   }
 }
 
-/** Wrappers nest a few levels; the cap keeps adversarial nesting off the call stack. */
-const MAX_WRAPPER_DEPTH = 100;
-
-/**
- * Walks a parsed value and collects names from recognised tool-call shapes only.
- * Wrappers are traversed, so `{ result: { tool_calls: [...] } }` is found, but an
- * arbitrary `{ name: '...' }` object is never mistaken for a tool call.
- */
-function collectToolNames(value: unknown, names: Set<string>, depth = 0): void {
-  if (depth > MAX_WRAPPER_DEPTH) {
-    return;
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      collectToolNames(item, names, depth + 1);
+function* extractJsonBlocks(text: string): Generator<unknown> {
+  const pending = [jsonBlocks(text)];
+  let remaining = 4 * text.length;
+  while (pending.length) {
+    const next = pending[pending.length - 1].next();
+    if (next.done) {
+      pending.pop();
+      continue;
     }
-    return;
-  }
-  if (!value || typeof value !== 'object') {
-    return;
-  }
-
-  const obj = value as Record<string, unknown>;
-  const name = toolCallName(obj);
-  if (name !== undefined) {
-    names.add(name);
-    return;
-  }
-
-  // OpenAI envelope: { tool_calls: [...] }, Google Live: { toolCall: { functionCalls: [...] } }
-  addCallListNames(obj.tool_calls, names);
-  addCallListNames((obj.toolCall as Record<string, unknown> | undefined)?.functionCalls, names);
-
-  for (const nested of Object.values(obj)) {
-    collectToolNames(nested, names, depth + 1);
-  }
-}
-
-/** Parses one balanced fragment and harvests its calls; false when it is not JSON. */
-function addFragmentNames(fragment: string, names: Set<string>): boolean {
-  try {
-    collectToolNames(JSON.parse(fragment), names);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Extracts tool names from provider output, which may be an object, an array of
- * content blocks, JSON text, or JSON embedded in a prose response.
- */
-function extractToolNames(output: unknown): Set<string> {
-  const names = new Set<string>();
-
-  if (typeof output === 'string') {
+    const { text: block, startsLine } = next.value;
+    if (block.length > remaining) {
+      throw new ToolCallParseError(
+        'Tool Call F1 could not finish parsing malformed output within its work limit',
+      );
+    }
+    remaining -= block.length;
     try {
-      return extractToolNames(JSON.parse(output));
+      const parsed: unknown = JSON.parse(block);
+      if (startsLine) {
+        yield parsed;
+      }
     } catch {
-      // Not valid JSON as a whole; harvest embedded tool-call JSON instead.
+      // Each rescan is paid for by the failed parse, keeping total work linear.
+      pending.push(jsonBlocks(block, true));
     }
-    // Both passes always run and their names are merged: an earlier call must not stop
-    // the quote-insensitive pass from recovering a later one.
-    for (const respectStrings of [true, false]) {
-      for (const fragment of jsonFragments(output, respectStrings)) {
-        if (!addFragmentNames(fragment, names)) {
-          // Prose can bracket a call, e.g. `[see: {"type":"tool_use",...}]`. Unwrapping one
-          // level recovers it; retrying every level would make the scan quadratic again.
-          for (const inner of jsonFragments(fragment.slice(1, -1), respectStrings)) {
-            addFragmentNames(inner, names);
+  }
+}
+
+/** Traverse wrappers without entering call arguments or tool definitions. */
+function collectToolNames(output: unknown, names: Set<string>): void {
+  const pending = [{ value: output, callList: Array.isArray(output) }];
+  const visited = new WeakMap<object, boolean>();
+
+  while (pending.length) {
+    const { value, callList } = pending.pop()!;
+    if (!value || typeof value !== 'object') {
+      continue;
+    }
+    // A shared value can appear as ordinary data before a known call list.
+    if (visited.has(value) && (visited.get(value) || !callList)) {
+      continue;
+    }
+    visited.set(value, callList);
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        pending.push({ value: item, callList });
+      }
+      continue;
+    }
+
+    const obj = value as Record<string, unknown>;
+    if (
+      (obj.type === 'function' && !callList) ||
+      obj.type === 'function_call_output' ||
+      obj.type === 'tool_result' ||
+      obj.role === 'tool' ||
+      'functionResponse' in obj
+    ) {
+      continue;
+    }
+
+    let name: unknown;
+    if (obj.type === 'tool_use' || obj.type === 'function_call') {
+      name = obj.name;
+    } else if ('functionCall' in obj) {
+      name = (obj.functionCall as Record<string, unknown> | null)?.name;
+    } else if (callList && ('function' in obj || 'name' in obj)) {
+      name = (obj.function as Record<string, unknown> | null)?.name ?? obj.name;
+    } else {
+      for (const [key, nested] of Object.entries(obj)) {
+        if (
+          key === 'tools' ||
+          key === 'function' ||
+          key === 'toolResponse' ||
+          key === 'tool_response'
+        ) {
+          continue;
+        }
+        if (key === 'tool_calls') {
+          if (Array.isArray(nested)) {
+            pending.push({ value: nested, callList: true });
           }
+        } else if (key === 'toolCall') {
+          const calls = (nested as Record<string, unknown> | null)?.functionCalls;
+          if (Array.isArray(calls)) {
+            pending.push({ value: calls, callList: true });
+          }
+        } else {
+          pending.push({ value: nested, callList: false });
         }
       }
+      continue;
     }
-    return names;
+    // Recognized calls are terminal even when their name is missing or invalid.
+    if (typeof name === 'string') {
+      names.add(name);
+    }
   }
+}
 
+function extractToolNames(output: unknown): Set<string> {
+  const names = new Set<string>();
+  if (typeof output === 'string') {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(output);
+    } catch {
+      // Providers join serialized calls at line boundaries.
+      for (const block of extractJsonBlocks(output)) {
+        collectToolNames(block, names);
+      }
+      return names;
+    }
+    // Preserve support for JSON-encoded text as well as structured outputs.
+    return extractToolNames(parsed);
+  }
   collectToolNames(output, names);
-
-  // Simple format: the whole output is a list of calls, e.g. [{ name: '...' }].
-  addCallListNames(output, names);
-
   return names;
 }
 
@@ -232,7 +344,15 @@ export const handleToolCallF1 = ({
   }
 
   const expected = new Set(expectedTools);
-  const actual = extractToolNames(output);
+  let actual: Set<string>;
+  try {
+    actual = extractToolNames(output);
+  } catch (error) {
+    if (!(error instanceof ToolCallParseError)) {
+      throw error;
+    }
+    return { pass: false, score: 0, reason: error.message, assertion };
+  }
 
   // Compute F1 components using set intersection
   const intersection = [...expected].filter((t) => actual.has(t)).length;
