@@ -1,8 +1,8 @@
 import compression from 'compression';
 import cors from 'cors';
-import dotenv from 'dotenv';
+import { loadEnvFiles } from '../util/envFile';
 
-dotenv.config({ quiet: true });
+loadEnvFiles();
 
 import fs from 'node:fs';
 import http from 'node:http';

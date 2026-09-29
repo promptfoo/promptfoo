@@ -90,7 +90,7 @@ providers:
   - id: opencode:sdk
     config:
       provider_id: anthropic
-      model: claude-sonnet-4-6
+      model: claude-sonnet-5
 
 prompts:
   - 'Write a Python function that validates email addresses'
@@ -114,6 +114,8 @@ prompts:
 
 By default, when you specify a working directory, OpenCode SDK has access to these read-only tools: `read`, `grep`, `glob`, `list`.
 Relative `working_dir` values are resolved from the directory containing the config file.
+
+For isolated workspaces (`copy_working_dir`), unset repository-selecting Git environment variables such as `GIT_DIR`, `GIT_WORK_TREE`, and `GIT_INDEX_FILE` before starting promptfoo. OpenCode's local server inherits these variables directly, so isolated calls reject them.
 
 ### Structured Output
 
@@ -188,29 +190,30 @@ When enabling write/edit/bash tools, consider how you will reset files after eac
 
 ## Supported Parameters
 
-| Parameter           | Type    | Description                                                                | Default                                |
-| ------------------- | ------- | -------------------------------------------------------------------------- | -------------------------------------- |
-| `apiKey`            | string  | Inject API key into a spawned OpenCode server for `provider_id`            | Environment variable                   |
-| `baseUrl`           | string  | URL for an existing OpenCode server                                        | Auto-start server                      |
-| `hostname`          | string  | Server hostname when starting a new server                                 | `127.0.0.1`                            |
-| `port`              | number  | Server port when starting a new server                                     | Auto-select                            |
-| `timeout`           | number  | Server startup timeout in milliseconds                                     | `30000`                                |
-| `log_level`         | string  | OpenCode server log level (`debug`, `info`, `warn`, `error`, `off`)        | Provider default                       |
-| `working_dir`       | string  | Directory for file operations and read-only default tools                  | Temporary directory                    |
-| `workspace`         | string  | Workspace identifier for workspace-aware OpenCode requests                 | None                                   |
-| `provider_id`       | string  | LLM provider (`anthropic`, `openai`, `google`, `ollama`, etc.)             | OpenCode default                       |
-| `model`             | string  | Model ID within `provider_id`; set both for an explicit selection          | OpenCode default                       |
-| `format`            | object  | Output format, including JSON Schema structured output                     | Text                                   |
-| `variant`           | string  | Provider/model variant defined in OpenCode config                          | Default variant                        |
-| `tools`             | object  | Tool configuration                                                         | None; read-only with `working_dir`     |
-| `permission`        | object  | Permission configuration for tools                                         | No extra rules; wildcard-deny baseline |
-| `agent`             | string  | Built-in or preconfigured agent to use                                     | Default agent                          |
-| `custom_agent`      | object  | Custom agent configuration when promptfoo starts the OpenCode server       | None                                   |
-| `session_id`        | string  | Resume an existing session                                                 | Create new session                     |
-| `parent_session_id` | string  | Fork from an existing session (v2 server only); inherits compacted history | None                                   |
-| `persist_sessions`  | boolean | Reuse the same session for repeated calls with the same provider config    | `false`                                |
-| `mcp`               | object  | MCP server configuration when promptfoo starts the OpenCode server         | None                                   |
-| `cache_mcp`         | boolean | Enable caching when MCP is configured                                      | `false`                                |
+| Parameter           | Type              | Description                                                                | Default                                |
+| ------------------- | ----------------- | -------------------------------------------------------------------------- | -------------------------------------- |
+| `apiKey`            | string            | Inject API key into a spawned OpenCode server for `provider_id`            | Environment variable                   |
+| `baseUrl`           | string            | URL for an existing OpenCode server                                        | Auto-start server                      |
+| `hostname`          | string            | Server hostname when starting a new server                                 | `127.0.0.1`                            |
+| `port`              | number            | Server port when starting a new server                                     | Auto-select                            |
+| `timeout`           | number            | Server startup timeout in milliseconds                                     | `30000`                                |
+| `log_level`         | string            | OpenCode server log level (`debug`, `info`, `warn`, `error`, `off`)        | Provider default                       |
+| `working_dir`       | string            | Directory for file operations and read-only default tools                  | Temporary directory                    |
+| `copy_working_dir`  | boolean \| string | Fresh copy of `working_dir` per eval step ([details][isolated-workspaces]) | false                                  |
+| `workspace`         | string            | Workspace identifier for workspace-aware OpenCode requests                 | None                                   |
+| `provider_id`       | string            | LLM provider (`anthropic`, `openai`, `google`, `ollama`, etc.)             | OpenCode default                       |
+| `model`             | string            | Model ID within `provider_id`; set both for an explicit selection          | OpenCode default                       |
+| `format`            | object            | Output format, including JSON Schema structured output                     | Text                                   |
+| `variant`           | string            | Provider/model variant defined in OpenCode config                          | Default variant                        |
+| `tools`             | object            | Tool configuration                                                         | None; read-only with `working_dir`     |
+| `permission`        | object            | Permission configuration for tools                                         | No extra rules; wildcard-deny baseline |
+| `agent`             | string            | Built-in or preconfigured agent to use                                     | Default agent                          |
+| `custom_agent`      | object            | Custom agent configuration when promptfoo starts the OpenCode server       | None                                   |
+| `session_id`        | string            | Resume an existing session                                                 | Create new session                     |
+| `parent_session_id` | string            | Fork from an existing session (v2 server only); inherits compacted history | None                                   |
+| `persist_sessions`  | boolean           | Reuse the same session for repeated calls with the same provider config    | `false`                                |
+| `mcp`               | object            | MCP server configuration when promptfoo starts the OpenCode server         | None                                   |
+| `cache_mcp`         | boolean           | Enable caching when MCP is configured                                      | `false`                                |
 
 ## Supported Providers
 
@@ -243,7 +246,7 @@ Configure your preferred default model in OpenCode's global configuration:
 ```json title="~/.config/opencode/opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-sonnet-4-6"
+  "model": "anthropic/claude-sonnet-5"
 }
 ```
 
@@ -514,9 +517,7 @@ providers:
       custom_agent:
         description: Security-focused code reviewer
         mode: primary # 'primary', 'subagent', or 'all'
-        model: anthropic/claude-sonnet-4-6
-        temperature: 0.3
-        top_p: 0.9 # Nucleus sampling parameter
+        model: anthropic/claude-sonnet-5
         steps: 10 # Max iterations before text-only response
         color: '#ff5500' # Visual identification
         tools:
@@ -534,7 +535,7 @@ providers:
 
 `custom_agent` is applied when promptfoo starts the OpenCode server itself. If you use `baseUrl`, define that agent on the target server and use `agent` to select it.
 
-`custom_agent.model` uses OpenCode's full [`provider/model-id` format](https://opencode.ai/docs/agents/#model). For example, `anthropic/claude-sonnet-4-6` selects the Anthropic provider. Unlike the top-level `model` field, it includes the provider key; promptfoo passes this string unchanged. Omit it to use OpenCode's agent model defaults.
+`custom_agent.model` uses OpenCode's full [`provider/model-id` format](https://opencode.ai/docs/agents/#model). For example, `anthropic/claude-sonnet-5` selects the Anthropic provider. Unlike the top-level `model` field, it includes the provider key; promptfoo passes this string unchanged. Omit it to use OpenCode's agent model defaults.
 
 | Parameter     | Type    | Description                               |
 | ------------- | ------- | ----------------------------------------- |
@@ -643,7 +644,11 @@ tests:
 
 When using tools that allow side effects (write, edit, bash), consider:
 
+- **Isolated workspaces**: Set `copy_working_dir: true` to run each eval step in a fresh copy of `working_dir` (see [isolated workspaces][isolated-workspaces])
 - **Serial execution**: Set `evaluateOptions.maxConcurrency: 1` to prevent race conditions
+
+[isolated-workspaces]: /docs/guides/evaluate-coding-agents#isolated-workspaces
+
 - **Git reset**: Use git to reset files after each test
 - **Extension hooks**: Use promptfoo hooks for setup/cleanup
 - **Containers**: Run tests in containers for isolation
