@@ -247,64 +247,70 @@ describe('Eval Routes - Sharing behavior', () => {
     });
   });
 
-  it.each(['missing', 'invalid JSON', 'array', 'string', 'number', 'boolean'])(
-    'returns a generic JSON error for a %s snapshot',
-    async (failure) => {
-      mockedEvaluateWithSource.mockResolvedValueOnce({
-        id: 'eval-result-id',
-        toEvaluateSummary: vi.fn().mockResolvedValue({ results: [] }),
-      } as any);
-      const open = vi.spyOn(fs, 'openSync');
-      let snapshotPath: string | undefined;
-      let original: string | undefined;
-      let streamed: ReturnType<typeof captureStreamedLogs> | undefined;
-      try {
-        const created = await postJob(minimalTestSuite);
-        const jobUrl = `/api/eval/job/${created.body.id}`;
-        await vi.waitFor(async () => {
-          expect((await api.get(jobUrl)).body).toMatchObject({ status: 'complete' });
-        });
-        snapshotPath = open.mock.calls.find(
-          ([file]) => typeof file === 'string' && file.includes('promptfoo-job-results-'),
-        )?.[0] as string;
-        expect(snapshotPath).toBeDefined();
-        original = fs.readFileSync(snapshotPath, 'utf8');
-        if (failure === 'missing') {
-          fs.unlinkSync(snapshotPath);
-        } else {
-          const contents: Record<string, string> = {
-            'invalid JSON': 'private malformed snapshot',
-            array: '[]',
-            string: '"private snapshot text"',
-            number: '42',
-            boolean: 'true',
-          };
-          fs.writeFileSync(snapshotPath, contents[failure]);
-        }
-
-        streamed = captureStreamedLogs();
-        const response = await api.get(jobUrl).expect(500);
-        expect(response.headers['content-type']).toContain('application/json');
-        expect(response.body).toEqual({ error: 'Failed to load eval job' });
-        expect(response.text).not.toContain(snapshotPath);
-        expect(response.text).not.toContain('private malformed snapshot');
-        expect(streamed.messages.join('\n')).not.toMatch(
-          /ZodError|SyntaxError|private|readResult|ENOENT/,
-        );
-        fs.writeFileSync(snapshotPath, original, { mode: 0o600 });
-        expect((await api.get(jobUrl).expect(200)).body).toMatchObject({
-          status: 'complete',
-          result: { results: [] },
-        });
-      } finally {
-        streamed?.restore();
-        open.mockRestore();
-        if (snapshotPath && original) {
-          fs.writeFileSync(snapshotPath, original, { mode: 0o600 });
-        }
+  it.each([
+    ['missing', 'unavailable'],
+    ['invalid JSON', 'invalid-json'],
+    ['array', 'invalid-result'],
+    ['string', 'invalid-result'],
+    ['number', 'invalid-result'],
+    ['boolean', 'invalid-result'],
+  ])('returns a generic JSON error for a %s snapshot', async (failure, category) => {
+    mockedEvaluateWithSource.mockResolvedValueOnce({
+      id: 'eval-result-id',
+      toEvaluateSummary: vi.fn().mockResolvedValue({ results: [] }),
+    } as any);
+    const open = vi.spyOn(fs, 'openSync');
+    let snapshotPath: string | undefined;
+    let original: string | undefined;
+    let streamed: ReturnType<typeof captureStreamedLogs> | undefined;
+    try {
+      const created = await postJob(minimalTestSuite);
+      const jobUrl = `/api/eval/job/${created.body.id}`;
+      await vi.waitFor(async () => {
+        expect((await api.get(jobUrl)).body).toMatchObject({ status: 'complete' });
+      });
+      snapshotPath = open.mock.calls.find(
+        ([file]) => typeof file === 'string' && file.includes('promptfoo-job-results-'),
+      )?.[0] as string;
+      expect(snapshotPath).toBeDefined();
+      original = fs.readFileSync(snapshotPath, 'utf8');
+      if (failure === 'missing') {
+        fs.unlinkSync(snapshotPath);
+      } else {
+        const contents: Record<string, string> = {
+          'invalid JSON': 'private malformed snapshot',
+          array: '[]',
+          string: '"private snapshot text"',
+          number: '42',
+          boolean: 'true',
+        };
+        fs.writeFileSync(snapshotPath, contents[failure]);
       }
-    },
-  );
+
+      streamed = captureStreamedLogs();
+      const response = await api.get(jobUrl).expect(500);
+      expect(response.headers['content-type']).toContain('application/json');
+      expect(response.body).toEqual({ error: 'Failed to load eval job' });
+      expect(errorSpy).toHaveBeenCalledWith('Failed to load eval job', { error: { category } });
+      expect(streamed.messages.join('\n')).toContain('Failed to load eval job');
+      expect(response.text).not.toContain(snapshotPath);
+      expect(response.text).not.toContain('private malformed snapshot');
+      expect(streamed.messages.join('\n')).not.toMatch(
+        /ZodError|SyntaxError|private|readResult|ENOENT/,
+      );
+      fs.writeFileSync(snapshotPath, original, { mode: 0o600 });
+      expect((await api.get(jobUrl).expect(200)).body).toMatchObject({
+        status: 'complete',
+        result: { results: [] },
+      });
+    } finally {
+      streamed?.restore();
+      open.mockRestore();
+      if (snapshotPath && original) {
+        fs.writeFileSync(snapshotPath, original, { mode: 0o600 });
+      }
+    }
+  });
 
   it('publishes a job failure without storage paths when saving its snapshot fails', async () => {
     const streamed = captureStreamedLogs();

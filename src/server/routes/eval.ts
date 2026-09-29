@@ -219,8 +219,15 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
     }
 
     res.json(EvalSchemas.GetJob.Response.parse(job));
-  } catch {
-    sendError(res, 500, 'Failed to load eval job');
+  } catch (error) {
+    const category =
+      error instanceof z.ZodError
+        ? 'invalid-result'
+        : error instanceof SyntaxError
+          ? 'invalid-json'
+          : 'unavailable';
+    // Logs are shared with active jobs; omit snapshot contents and filesystem details.
+    sendError(res, 500, 'Failed to load eval job', { category });
   }
 });
 

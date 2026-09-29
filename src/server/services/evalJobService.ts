@@ -152,7 +152,7 @@ function createInitialJob(): StoredJob {
 
 function serializeResult(result: NonNullable<Job['result']>): string {
   const ancestors: unknown[] = [];
-  const serialized = JSON.stringify(result, function (_key, value) {
+  return JSON.stringify(result, function (_key, value) {
     if (typeof value === 'bigint') {
       return value.toString();
     }
@@ -167,8 +167,6 @@ function serializeResult(result: NonNullable<Job['result']>): string {
     }
     return value;
   });
-
-  return serialized;
 }
 
 function cloneJob(job: StoredJob): Job {
