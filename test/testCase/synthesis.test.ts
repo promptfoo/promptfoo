@@ -292,6 +292,11 @@ describe('extractPersonas', () => {
     expect(extractPersonas(input)).toEqual(['Researcher', 'Scientist']);
   });
 
+  it('should extract raw persona arrays wrapped in Markdown code blocks', () => {
+    const input = '```json\n["Researcher", "Scientist"]\n```';
+    expect(extractPersonas(input)).toEqual(['Researcher', 'Scientist']);
+  });
+
   it('should return empty array for unparseable or invalid content', () => {
     expect(extractPersonas('No JSON here')).toEqual([]);
     expect(extractPersonas('{"unrelated": 123}')).toEqual([]);
