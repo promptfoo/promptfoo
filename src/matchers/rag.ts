@@ -316,32 +316,32 @@ export async function matchesContextRelevance(
   // would score 1/N instead of 1.0).
   const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
   const segmentRelevant = contextIsPreSegmented ? splitIntoSentences : splitTextIntoSentences;
-  const relevantSentences = insufficientInformation
-    ? []
-    : [...new Set(segmentRelevant(resp.output))];
-  // Cap at the total so the score never exceeds 1.
-  const numerator = Math.min(relevantSentences.length, totalContextUnits);
+  const segments = insufficientInformation ? [] : segmentRelevant(resp.output);
 
-  // RAGAS CONTEXT RELEVANCE FORMULA: relevant units / total context units
-  const score = totalContextUnits > 0 ? numerator / totalContextUnits : 0;
-  const pass = score >= threshold - Number.EPSILON;
-
-  // A well-formed relevance response either reports "Insufficient Information"
-  // or echoes sentences taken verbatim from the context (the rubric forbids
-  // rewording). Nonempty output that is neither -- a refusal, an apology, an
-  // out-of-format explanation -- is a malformed grading attempt, not a genuine
-  // low-relevance verdict. Tag it as a grader error so inverse assertions
-  // cannot turn a failed grading attempt into a spurious pass.
+  // Only count segments whose sentences are quoted from the context. A grader line can
+  // join nonadjacent sentences from a chunk, but still counts as one selected unit.
+  // Dedupe on normalized text so reformatted repeats count once.
   const normalizeForComparison = (value: string) => value.toLowerCase().replace(/\s+/g, ' ').trim();
   const contextNormalized = normalizeForComparison(contextString);
-  const graderError =
-    !insufficientInformation &&
-    relevantSentences.length > 0 &&
-    !relevantSentences.some((sentence) =>
-      contextNormalized.includes(
-        normalizeForComparison(sentence.replace(/^\s*(?:\d+[.)]|[-*])\s*/, '')),
-      ),
-    );
+  const quotedSegments = new Map<string, string>();
+  for (const segment of segments) {
+    // A list marker needs following whitespace; otherwise preserve numbers like 1.2 and -5.
+    const key = normalizeForComparison(segment.replace(/^\s*(?:\d+[.)]|[-*])\s+/, ''));
+    const sentences = splitTextIntoSentences(key);
+    if (
+      sentences.length > 0 &&
+      sentences.every((sentence) => contextNormalized.includes(sentence)) &&
+      !quotedSegments.has(key)
+    ) {
+      quotedSegments.set(key, segment);
+    }
+  }
+  const relevantSentences = [...quotedSegments.values()];
+
+  // Nonempty output that quotes nothing from the context (a refusal, an apology, an
+  // out-of-format explanation) is a malformed grading attempt, not a low-relevance verdict.
+  // Tag it as a grader error so inverse assertions cannot turn it into a spurious pass.
+  const graderError = segments.length > 0 && relevantSentences.length === 0;
 
   if (graderError) {
     return {
@@ -357,6 +357,13 @@ export async function matchesContextRelevance(
       },
     };
   }
+
+  // Cap at the total so the score never exceeds 1.
+  const numerator = Math.min(relevantSentences.length, totalContextUnits);
+
+  // RAGAS CONTEXT RELEVANCE FORMULA: relevant units / total context units
+  const score = totalContextUnits > 0 ? numerator / totalContextUnits : 0;
+  const pass = score >= threshold - Number.EPSILON;
 
   const metadata = {
     graderOutputs: {

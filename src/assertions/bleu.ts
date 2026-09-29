@@ -59,7 +59,8 @@ function countNGrams(ngrams: string[]): Map<string, number> {
  * @param references - Array of reference strings to compare against
  * @param weights - Weights for each n-gram precision (1-gram to 4-gram). Must be
  *   non-negative and sum to 1 (BLEU weights are non-negative by definition).
- * @returns BLEU score between 0 and 1 (0 for an empty or whitespace-only candidate)
+ * @returns BLEU score between 0 and 1 (0 for an empty or whitespace-only candidate,
+ *   or when every reference is blank)
  * @throws When the candidate is null/undefined, references is empty, weights are
  *   negative, or weights don't sum to 1
  */
@@ -91,7 +92,12 @@ export function calculateBleuScore(
   }
 
   const candidateWords = tokenize(candidate);
-  const referenceWordsList = references.map(tokenize);
+  // A blank reference (an unset template var, an empty CSV cell) has no n-grams. Drop it so
+  // tokenize('')'s one-token length cannot win the closest-length pick for the brevity penalty.
+  const referenceWordsList = references.filter((r) => r.trim() !== '').map(tokenize);
+  if (referenceWordsList.length === 0) {
+    return 0;
+  }
 
   // Find reference length closest to the candidate length for the brevity penalty.
   // On ties, prefer the shorter reference (BLEU / NLTK `closest_ref_length`
