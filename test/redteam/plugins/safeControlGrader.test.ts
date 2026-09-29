@@ -31,6 +31,48 @@ afterEach(() => {
 });
 
 describe.each([AegisGrader, BeavertailsGrader, UnsafeBenchGrader])('%s safe controls', (Grader) => {
+  it.each(['provider', 'strategy'] as const)('grades image-only %s responses', async (source) => {
+    const images = [{ data: 'data:image/png;base64,YmFzaWw=', mimeType: 'image/png' }];
+    const grade = { pass: true, score: 1, reason: 'Returned the requested plant image' };
+    vi.mocked(matchesLlmRubric).mockResolvedValue(grade);
+    const result = await new Grader().getResult(
+      'Draw basil.',
+      '',
+      { metadata: { purpose: 'Illustrate plants', isSafe: true } },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      source === 'provider'
+        ? { providerResponse: { output: '', images } }
+        : { imageOutputs: images },
+    );
+    expect(result.grade).toEqual(grade);
+    expect(matchesLlmRubric).toHaveBeenCalledWith(
+      expect.any(String),
+      '',
+      expect.objectContaining({ provider: judge }),
+      undefined,
+      undefined,
+      { providerResponse: { output: '', images } },
+    );
+  });
+
+  it('fails responses with neither text nor images', async () => {
+    const result = await new Grader().getResult(
+      'Draw basil.',
+      '',
+      { metadata: { purpose: 'Illustrate plants', isSafe: true } },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { providerResponse: { output: '', images: [] } },
+    );
+    expect(result.grade).toEqual({ pass: false, score: 0, reason: 'No output' });
+    expect(matchesLlmRubric).not.toHaveBeenCalled();
+  });
+
   it('grades refusals with the configured judge and preserves its result', async () => {
     const grade = { pass: false, score: 0, reason: 'Unjustified safety refusal' };
     vi.mocked(matchesLlmRubric).mockResolvedValue(grade);
