@@ -3,58 +3,14 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { MCPConfig } from '../mcp/types';
 import type { OpenAIToolChoice } from '../shared';
 
-type AnthropicServerToolCaller = 'direct' | 'code_execution_20250825' | 'code_execution_20260120';
-
-interface BaseAnthropicServerToolConfig {
-  allowed_callers?: AnthropicServerToolCaller[];
-  cache_control?: Anthropic.Messages.CacheControlEphemeral;
-  defer_loading?: boolean;
-  max_uses?: number;
-  strict?: boolean;
-}
-
-interface BaseWebFetchToolConfig extends BaseAnthropicServerToolConfig {
-  name: 'web_fetch';
-  allowed_domains?: string[];
-  blocked_domains?: string[];
-  citations?: {
-    enabled: boolean;
-  };
-  max_content_tokens?: number;
-}
-
-interface BaseWebSearchToolConfig extends BaseAnthropicServerToolConfig {
-  name: 'web_search';
-  allowed_domains?: string[];
-  blocked_domains?: string[];
-  user_location?: Anthropic.Messages.UserLocation;
-}
-
-// Web fetch tool configuration (v1 — does not support use_cache)
-export interface WebFetchToolConfig extends BaseWebFetchToolConfig {
-  type: 'web_fetch_20250910';
-}
-
-// Web fetch tool configuration (stable 2026-02-09 version)
-export interface WebFetchToolConfig20260209 extends BaseWebFetchToolConfig {
-  type: 'web_fetch_20260209';
-}
-
-// Web fetch tool configuration (latest version with use_cache support)
-export interface WebFetchToolConfigV2 extends BaseWebFetchToolConfig {
-  type: 'web_fetch_20260309';
-  use_cache?: boolean;
-}
-
-// Web search tool configuration (for reference)
-export interface WebSearchToolConfig extends BaseWebSearchToolConfig {
-  type: 'web_search_20250305';
-}
-
-// Web search tool configuration (stable 2026-02-09 version)
-export interface WebSearchToolConfig20260209 extends BaseWebSearchToolConfig {
-  type: 'web_search_20260209';
-}
+// Keep the public config names while using the SDK's version-specific fields.
+export type WebFetchToolConfig = Anthropic.Messages.WebFetchTool20250910;
+export type WebFetchToolConfig20260209 = Anthropic.Messages.WebFetchTool20260209;
+export type WebFetchToolConfigV2 = Anthropic.Messages.WebFetchTool20260309;
+export type WebFetchToolConfig20260318 = Anthropic.Messages.WebFetchTool20260318;
+export type WebSearchToolConfig = Anthropic.Messages.WebSearchTool20250305;
+export type WebSearchToolConfig20260209 = Anthropic.Messages.WebSearchTool20260209;
+export type WebSearchToolConfig20260318 = Anthropic.Messages.WebSearchTool20260318;
 
 export type MemoryToolConfig = Anthropic.Messages.MemoryTool20250818;
 
@@ -62,8 +18,10 @@ export type AnthropicToolConfig =
   | WebFetchToolConfig
   | WebFetchToolConfig20260209
   | WebFetchToolConfigV2
+  | WebFetchToolConfig20260318
   | WebSearchToolConfig
   | WebSearchToolConfig20260209
+  | WebSearchToolConfig20260318
   | MemoryToolConfig;
 
 // Structured outputs configuration (JSON schema)
