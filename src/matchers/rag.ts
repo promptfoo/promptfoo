@@ -17,7 +17,6 @@ import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import {
   cosineSimilarity,
   graderFail,
-  hasValidEmbeddingPair,
   normalizeMatcherTokenUsage,
   splitIntoSentences,
   splitTextIntoSentences,
@@ -108,13 +107,7 @@ export async function matchesAnswerRelevance(
     if (resp.error || !resp.embedding) {
       return graderFail(resp.error || 'No embedding', tokensUsed);
     }
-    if (!hasValidEmbeddingPair(inputEmbedding, resp.embedding)) {
-      return graderFail('Embeddings must be nonempty, finite vectors of equal length', tokensUsed);
-    }
     const questionSimilarity = cosineSimilarity(inputEmbedding, resp.embedding);
-    if (!Number.isFinite(questionSimilarity)) {
-      return graderFail('Embedding similarity is not finite', tokensUsed);
-    }
     similarities.push(questionSimilarity);
     questionsWithScores.push({ question, similarity: questionSimilarity });
   }
@@ -200,9 +193,6 @@ export async function matchesContextRecall(
     const lowerLine = line.toLowerCase();
     return lowerLine.includes(attributedTokenLower) || lowerLine.includes(notAttributedTokenLower);
   });
-  if (sentences.length === 0) {
-    return graderFail('Context recall grader produced no attribution verdicts', resp.tokenUsage);
-  }
 
   const sentenceAttributions: { sentence: string; attributed: boolean }[] = [];
   let numerator = 0;
@@ -515,7 +505,6 @@ export async function matchesContextFaithfulness(
   if (!parsedVerdict) {
     return graderFail('Could not parse context-faithfulness verdicts', tokensUsed);
   }
-
   score = Math.min(1, Math.max(0, score));
   const pass = score >= threshold - Number.EPSILON;
   return {

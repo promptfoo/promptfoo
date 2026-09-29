@@ -244,7 +244,6 @@ Stack Trace: ${(err as Error).stack}`,
         err instanceof JavascriptAssertionValidationError ? undefined : renderedValue,
       ),
       assertion: normalizeResultAssertion(undefined, assertion),
-      metadata: { assertionError: true },
     };
   }
 };

@@ -70,17 +70,6 @@ export function invertScore(score: number): number {
   return Math.min(1, Math.max(0, 1 - (Number.isFinite(score) ? score : 0)));
 }
 
-export function hasValidEmbeddingPair(vecA: number[], vecB: number[]): boolean {
-  return (
-    Array.isArray(vecA) &&
-    Array.isArray(vecB) &&
-    vecA.length > 0 &&
-    vecA.length === vecB.length &&
-    vecA.every(Number.isFinite) &&
-    vecB.every(Number.isFinite)
-  );
-}
-
 export function cosineSimilarity(vecA: number[], vecB: number[]): number {
   if (vecA.length !== vecB.length) {
     throw new Error('Vectors must be of equal length');

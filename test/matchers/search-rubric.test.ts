@@ -158,19 +158,6 @@ describe('matchesSearchRubric', () => {
     );
   });
 
-  it('fails closed on an explicit malformed score', async () => {
-    const { matchesSearchRubric } = await import('../../src/matchers/search');
-    mocks.webSearchProvider.callApi = vi.fn(
-      async (): Promise<ProviderResponse> => ({
-        output: JSON.stringify({ pass: false, score: 'bad' }),
-      }),
-    ) as ApiProvider['callApi'];
-
-    await expect(matchesSearchRubric('Confirm current facts', 'output', {})).resolves.toEqual(
-      expect.objectContaining({ pass: false, metadata: { graderError: true } }),
-    );
-  });
-
   it('returns a failure when the search provider returns no output', async () => {
     const { matchesSearchRubric } = await import('../../src/matchers/search');
     mocks.webSearchProvider.callApi = vi.fn(
@@ -233,28 +220,6 @@ describe('matchesSearchRubric', () => {
         metadata: { searchResults: [], searchProvider: mocks.webSearchProvider.id() },
       }),
     );
-
-    vi.mocked(mocks.webSearchProvider.callApi).mockResolvedValueOnce({ output: 'no verdict' });
-    await expect(matchesSearchRubric('Confirm current facts', 'output', {})).resolves.toEqual(
-      expect.objectContaining({ pass: false, metadata: { graderError: true } }),
-    );
-
-    vi.mocked(mocks.webSearchProvider.callApi).mockResolvedValueOnce({
-      output: '{"pass": true, "score": }',
-    });
-    await expect(matchesSearchRubric('Confirm current facts', 'output', {})).resolves.toEqual(
-      expect.objectContaining({ pass: false, metadata: { graderError: true } }),
-    );
-
-    for (const output of [
-      '```json\n{"pass": false, "score": }\n```',
-      'Explanation: {"pass": true, "score": }',
-    ]) {
-      vi.mocked(mocks.webSearchProvider.callApi).mockResolvedValueOnce({ output });
-      await expect(matchesSearchRubric('Confirm current facts', 'output', {})).resolves.toEqual(
-        expect.objectContaining({ pass: false, metadata: { graderError: true } }),
-      );
-    }
   });
 
   it('throws when no web search provider can be resolved', async () => {

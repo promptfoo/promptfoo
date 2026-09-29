@@ -15,6 +15,20 @@ import {
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator assertions', () => {
+  it('rejects a dangling default fallback before calling the target', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Fixture')],
+      defaultTest: { assert: [{ type: 'equals', value: 'fixture', fallback: 'next' }] },
+      tests: [{ assert: [{ type: 'equals', value: 'fixture' }] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await expect(evaluate(testSuite, evalRecord, { maxConcurrency: 1 })).rejects.toThrow(
+      'defaultTest.assert[0]',
+    );
+    expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+  });
+
   it.each(['failed', 'aborted'])(
     'preserves completed audio output when grading is %s',
     async (outcome) => {

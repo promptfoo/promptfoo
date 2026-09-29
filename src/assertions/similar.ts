@@ -58,9 +58,6 @@ export const handleSimilar = async ({
           test.options,
           metric,
         );
-        if (result.metadata?.graderError === true) {
-          return { assertion, ...result };
-        }
         if (!result.pass) {
           return {
             assertion,
@@ -94,9 +91,6 @@ export const handleSimilar = async ({
         test.options,
         metric,
       );
-      if (result.metadata?.graderError === true) {
-        return { assertion, ...result };
-      }
       if (result.pass) {
         return {
           assertion,

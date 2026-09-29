@@ -231,12 +231,15 @@ describe('matchesFactuality', () => {
       pass: false,
       score: 0,
       reason: 'Invalid category value: Z',
-      metadata: { graderError: true },
       tokensUsed: expect.objectContaining({
         total: expect.any(Number),
         prompt: expect.any(Number),
         completion: expect.any(Number),
       }),
+      // An uninterpretable grader response is a grader failure, not evidence
+      // that the answer is not factual: inverse-aware callers
+      // (e.g. not-model-graded-factuality) must propagate it verbatim.
+      metadata: { graderError: true },
     });
   });
 

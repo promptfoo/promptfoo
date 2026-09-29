@@ -417,21 +417,28 @@ export async function matchesClosedQa(
   }
 
   invariant(typeof resp.output === 'string', 'model-graded-closedqa produced malformed response');
-  const verdictText = resp.output.trimEnd();
-  const verdict = verdictText.match(/(?:^|\s)([YN])$/)?.[1];
-  if (!verdict) {
-    return graderFail(
-      `Model grader produced a malformed response:\n${resp.output}`,
-      resp.tokenUsage,
-    );
+  try {
+    const pass = resp.output.trimEnd().endsWith('Y');
+    let reason;
+    if (pass) {
+      reason = `The submission meets the criterion:\n${resp.output}`;
+    } else if (resp.output.trimEnd().endsWith('N')) {
+      reason = `The submission does not meet the criterion:\n${resp.output}`;
+    } else {
+      return graderFail(
+        `Model grader produced a malformed response:\n${resp.output}`,
+        resp.tokenUsage,
+      );
+    }
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason,
+      tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
+    };
+  } catch (err) {
+    return graderFail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
   }
-  const pass = verdict === 'Y';
-  return {
-    pass,
-    score: pass ? 1 : 0,
-    reason: `The submission ${pass ? 'meets' : 'does not meet'} the criterion:\n${resp.output}`,
-    tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
-  };
 }
 
 /**

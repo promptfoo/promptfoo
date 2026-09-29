@@ -37,10 +37,6 @@ export async function matchesClassification(
     return graderFail('No classification scores returned');
   }
 
-  if (scores.some((score) => !Number.isFinite(score))) {
-    return graderFail('Invalid classification scores returned');
-  }
-
   let score: number;
   if (expected === undefined) {
     score = Math.max(...scores);

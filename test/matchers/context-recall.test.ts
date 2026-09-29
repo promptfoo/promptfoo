@@ -341,8 +341,9 @@ describe('matchesContextRecall', () => {
       const result = await matchesContextRecall(context, groundTruth, threshold);
 
       expect(result.score).toBe(0);
-      expect(result.metadata?.graderError).toBe(true);
+      expect(result.metadata?.totalSentences).toBe(0);
       expect(result.pass).toBe(false);
+      expect(result.metadata?.graderError).toBe(true);
     });
   });
 

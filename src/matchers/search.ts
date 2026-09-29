@@ -103,26 +103,16 @@ export async function matchesSearchRubric(
     };
   }
 
-  const output = String(resp.output).trim();
   try {
-    const firstBrace = output.indexOf('{');
-    if (firstBrace !== -1) {
-      JSON.parse(output.slice(firstBrace, output.lastIndexOf('}') + 1));
-    }
     const result = extractFirstJsonObject(String(resp.output)) as {
       pass?: boolean;
       score?: number;
       reason?: string;
       searchResults?: unknown;
     };
+
     if (typeof result.pass !== 'boolean') {
-      throw new Error('Missing search-rubric verdict');
-    }
-    if (
-      result.score !== undefined &&
-      (typeof result.score !== 'number' || !Number.isFinite(result.score))
-    ) {
-      throw new Error('Invalid search-rubric score');
+      throw new Error('Missing boolean search verdict');
     }
 
     // Apply threshold if specified

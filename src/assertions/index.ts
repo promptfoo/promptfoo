@@ -9,12 +9,7 @@ import { matchesConversationRelevance } from '../external/matchers/deepeval';
 import logger from '../logger';
 import { matchesClassification } from '../matchers/classification';
 import { matchesSelectBest } from '../matchers/comparison';
-import {
-  isGraderFailure,
-  matchesClosedQa,
-  matchesFactuality,
-  matchesLlmRubric,
-} from '../matchers/llmGrading';
+import { matchesClosedQa, matchesFactuality, matchesLlmRubric } from '../matchers/llmGrading';
 import { matchesModeration } from '../matchers/moderation';
 import {
   matchesAnswerRelevance,
@@ -30,12 +25,10 @@ import {
   getProviderCallTracingContext,
 } from '../scheduler/providerCallExecutionContext';
 import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
-import { flushOtel } from '../tracing/otelSdk';
 import { getTraceStore } from '../tracing/store';
 import {
   type ApiProvider,
   type Assertion,
-  type AssertionOrSet,
   type AssertionType,
   type AssertionValue,
   type AtomicTestCase,
@@ -52,12 +45,7 @@ import { transform } from '../util/transform';
 import { loadYaml } from '../util/yamlLoad';
 import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
-import {
-  AssertionsResult,
-  accumulateNormalizedAssertionTokenUsage,
-  DEFAULT_TOKENS_USED,
-  normalizeAssertionTokenUsage,
-} from './assertionsResult';
+import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
 import { handleClassifier } from './classifier';
 import {
@@ -113,18 +101,13 @@ import {
   handleTrajectoryToolUsed,
 } from './trajectory';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
-import {
-  hasFallback,
-  isAssertionExecutionFailure,
-  isRedteamGuardrailFailure,
-  isSpecialCompareAssertion,
-  validateFallbackChains,
-} from './validateAssertions';
+import { validateFallbackChains } from './validateAssertions';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
 
 import type {
+  AssertionOrSet,
   AssertionParams,
   AssertionValueFunctionContext,
   BaseAssertionTypes,
@@ -199,8 +182,6 @@ export function hasTraceAwareAssertions(assertions?: AssertionOrSet[]): boolean 
 }
 
 async function loadTraceData(traceId: string): Promise<TraceData | null> {
-  // Persist completed grader parents before classifying externally exported descendants.
-  await flushOtel();
   const traceStore = getTraceStore();
   const maxAttempts = Math.min(
     MAX_TRACE_FETCH_MAX_ATTEMPTS,
@@ -223,10 +204,7 @@ async function loadTraceData(traceId: string): Promise<TraceData | null> {
   let latestTrace: TraceData | null = null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    latestTrace = await traceStore.getTrace(traceId, {
-      sanitizeAttributes: false,
-      includeInternalSpans: false,
-    });
+    latestTrace = await traceStore.getTrace(traceId, { sanitizeAttributes: false });
 
     const spanCount = latestTrace?.spans?.length ?? 0;
     if (spanCount > 0) {
@@ -306,10 +284,6 @@ const ASSERTION_HANDLERS: Record<
           reason:
             'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.0',
           assertion: params.assertion,
-          // The validator itself could not execute (missing native dependency).
-          // Tag it as an assertion error so it fails closed and is not masked by
-          // a passing fallback.
-          metadata: { assertionError: true },
         };
       }
       throw error;
@@ -539,7 +513,6 @@ async function runAssertionInternal({
             score: 0,
             reason: (error as Error).message,
             assertion,
-            metadata: { assertionError: true },
           };
         }
       } else if (filePath.endsWith('.rb')) {
@@ -558,7 +531,6 @@ async function runAssertionInternal({
             score: 0,
             reason: (error as Error).message,
             assertion,
-            metadata: { assertionError: true },
           };
         }
       } else {
@@ -697,10 +669,8 @@ async function runAssertionInternal({
       result.metadata.renderedAssertionValue = renderedValue;
     }
 
-    // Metric-only assertions cannot fail, but execution errors must still stop fallback.
-    const isHardError =
-      result.metadata?.assertionError === true || result.metadata?.graderError === true;
-    if (assertion.weight === 0 && !isHardError) {
+    // If weight is 0, treat this as a metric-only assertion that can't fail
+    if (assertion.weight === 0) {
       return {
         ...result,
         pass: true, // Force pass for weight=0 assertions
@@ -732,134 +702,6 @@ export async function runAssertion(
       testIndex: tracingContext.testIndex,
     },
     () => runAssertionInternal(options),
-  );
-}
-
-/** Split flattened assertions into independent jobs and fallback chain roots. */
-function categorizeAssertions(
-  assertions: Array<{ assertion: Assertion; assertResult: AssertionsResult; index: number }>,
-): {
-  independent: number[];
-  primaryInChains: number[];
-} {
-  const independent: number[] = [];
-  const primaryInChains: number[] = [];
-
-  let i = 0;
-  while (i < assertions.length) {
-    const { assertion, assertResult } = assertions[i];
-
-    if (hasFallback(assertion)) {
-      primaryInChains.push(i);
-
-      let chainIndex = i + 1;
-      while (
-        chainIndex < assertions.length &&
-        assertions[chainIndex].assertResult === assertResult
-      ) {
-        if (!hasFallback(assertions[chainIndex].assertion)) {
-          break;
-        }
-        chainIndex++;
-      }
-
-      i = chainIndex + 1;
-    } else {
-      independent.push(i);
-      i++;
-    }
-  }
-
-  return { independent, primaryInChains };
-}
-
-/** Execute reached chain links in order; only the terminal link contributes to scoring. */
-async function executeFallbackChain(
-  asserts: Array<{ assertion: Assertion; assertResult: AssertionsResult; index: number }>,
-  startIndex: number,
-  context: {
-    prompt?: string;
-    provider?: ApiProvider;
-    providerResponse: ProviderResponse;
-    test: AtomicTestCase;
-    vars?: Record<string, VarValue>;
-    latencyMs?: number;
-    traceId?: string;
-    getTraceData: () => Promise<TraceData | null>;
-    claimStoredGradingUsage: () => boolean;
-  },
-): Promise<{
-  result: GradingResult;
-  finalIndex: number;
-  intermediates: Array<{ result: GradingResult; assertion: Assertion }>;
-}> {
-  const intermediateResults: Array<{ result: GradingResult; assertion: Assertion }> = [];
-  let currentIndex = startIndex;
-
-  while (currentIndex < asserts.length) {
-    const { assertion, index } = asserts[currentIndex];
-    const assertionHasFallback = hasFallback(assertion);
-
-    // Skipped fallbacks must not trigger trace polling.
-    const traceData =
-      context.traceId && assertionMayNeedTraceContext(assertion)
-        ? await context.getTraceData()
-        : null;
-
-    const result = await runAssertion({
-      prompt: context.prompt,
-      provider: context.provider,
-      providerResponse: context.providerResponse,
-      assertion,
-      test: context.test,
-      vars: context.vars,
-      latencyMs: context.latencyMs,
-      assertIndex: index,
-      traceId: context.traceId,
-      traceData,
-      claimStoredGradingUsage: context.claimStoredGradingUsage,
-    });
-
-    if (
-      result.pass ||
-      !assertionHasFallback ||
-      isGraderFailure(result) ||
-      isAssertionExecutionFailure(result) ||
-      isRedteamGuardrailFailure(result)
-    ) {
-      if (intermediateResults.length > 0) {
-        const links = [...intermediateResults.map((earlier) => earlier.result), result];
-        const tokensUsed = { ...DEFAULT_TOKENS_USED };
-        for (const link of links) {
-          const usage = normalizeAssertionTokenUsage(link);
-          if (usage) {
-            accumulateNormalizedAssertionTokenUsage(tokensUsed, usage);
-          }
-        }
-        result.tokensUsed = tokensUsed;
-        if (links.some((link) => link.metadata?.cachedResponse === true)) {
-          result.metadata = {
-            ...result.metadata,
-            cachedResponse: links.every((link) => link.metadata?.cachedResponse === true),
-          };
-        }
-        result.componentResults = [
-          ...intermediateResults.map(({ result: intermediate }) => intermediate),
-          ...(result.componentResults ?? []),
-        ];
-      }
-      return { result, finalIndex: currentIndex, intermediates: intermediateResults };
-    }
-
-    intermediateResults.push({
-      assertion,
-      result: { ...result, metadata: { ...result.metadata, fallbackIntermediate: true } },
-    });
-    currentIndex++;
-  }
-
-  throw new Error(
-    `Fallback chain at index ${startIndex} (type: ${asserts[startIndex]?.assertion.type}) ran past array end — validateFallbackChains should have rejected this configuration`,
   );
 }
 
@@ -933,14 +775,12 @@ export async function runAssertions({
     return AssertionsResult.noAssertsResult();
   }
 
+  validateFallbackChains(test.assert);
+
   const mainAssertResult = new AssertionsResult({
     threshold: test.threshold,
   });
   const subAssertResults: AssertionsResult[] = [];
-
-  // Validate fallback chain configuration before flattening assertion sets.
-  validateFallbackChains(test.assert);
-
   const asserts: {
     assertion: Assertion;
     assertResult: AssertionsResult;
@@ -971,35 +811,31 @@ export async function runAssertions({
     })
     .flat();
 
-  // Categorize assertions into independent and fallback chains
-  const categorized = categorizeAssertions(asserts);
-
-  // Fetch once, only if a reached assertion needs trace data.
-  let traceDataPromise: Promise<TraceData | null> | undefined;
-  const getTraceData = (): Promise<TraceData | null> => {
-    if (!traceId) {
-      return Promise.resolve(null);
+  const shouldPreloadTrace =
+    !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
+  let preloadedTraceData: TraceData | null | undefined;
+  if (shouldPreloadTrace && traceId) {
+    try {
+      preloadedTraceData = await loadTraceData(traceId);
+    } catch (error) {
+      logger.debug(`Failed to preload trace data for assertions: ${error}`);
+      preloadedTraceData = null;
     }
-    if (!traceDataPromise) {
-      traceDataPromise = loadTraceData(traceId).catch((error) => {
-        logger.debug(`Failed to load trace data for assertions: ${error}`);
-        return null;
-      });
-    }
-    return traceDataPromise;
-  };
+  }
 
-  // Serialize trace snapshots and grouped judge calls; read concurrency after config env loads.
-  const concurrency =
-    getProviderCallExecutionContext()?.providerCallQueue ||
-    (traceId && hasTraceAwareAssertions(test.assert))
-      ? 1
-      : Math.max(
-          1,
-          getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', DEFAULT_ASSERTIONS_MAX_CONCURRENCY),
-        );
+  // Serialize when the grouping queue is active: concurrent dispatch can
+  // reorder provider enqueues and split same-judge groups.
+  // Read at call time: --env-file and the config's `env:` block are applied after this module is imported.
+  // async rejects a limit below 1, which would fail every assertion.
+  const concurrency = getProviderCallExecutionContext()?.providerCallQueue
+    ? 1
+    : Math.max(
+        1,
+        getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', DEFAULT_ASSERTIONS_MAX_CONCURRENCY),
+      );
 
-  // Stored strategy usage belongs to the first reached assertion in this run.
+  // All assertions (including assertion sets) share one historical strategy cost.
+  // Keep ownership local to this run so replaying a saved response starts fresh.
   let storedGradingUsageClaimed = false;
   const claimStoredGradingUsage = () => {
     if (storedGradingUsageClaimed) {
@@ -1009,78 +845,56 @@ export async function runAssertions({
     return true;
   };
 
-  const chainStartIndexes = new Set(categorized.primaryInChains);
-  const assertionJobs = [...categorized.independent, ...categorized.primaryInChains].sort(
-    (a, b) => a - b,
-  );
-  const runAndRecordAssertion = async (assertionIndex: number) => {
-    const { assertion, assertResult, index } = asserts[assertionIndex];
-    if (isSpecialCompareAssertion(assertion)) {
-      // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
-      return;
+  const jobs: (typeof asserts)[] = [];
+  for (const entry of asserts) {
+    const previous = jobs.at(-1)?.at(-1);
+    if (previous?.assertion.fallback === 'next' && previous.assertResult === entry.assertResult) {
+      jobs.at(-1)!.push(entry);
+    } else {
+      jobs.push([entry]);
     }
+  }
 
-    if (chainStartIndexes.has(assertionIndex)) {
-      const chainResult = await executeFallbackChain(asserts, assertionIndex, {
+  const runAndRecordAssertion = async (chain: typeof asserts) => {
+    const failures: NonNullable<NonNullable<GradingResult['metadata']>['fallbackFailures']> = [];
+    for (const { assertion, assertResult, index } of chain) {
+      if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
+        // Comparison assertions run after all provider outputs are available.
+        return;
+      }
+      const result = await runAssertion({
         prompt,
         provider,
         providerResponse,
+        assertion,
         test,
         vars,
         latencyMs,
+        assertIndex: index,
         traceId,
-        getTraceData,
+        traceData: preloadedTraceData,
         claimStoredGradingUsage,
       });
-
-      const finalAssert = asserts[chainResult.finalIndex];
-      for (const {
-        result: intermediateResult,
-        assertion: configuredAssertion,
-      } of chainResult.intermediates) {
-        finalAssert.assertResult.addNamedScores({
-          result: intermediateResult,
-          metric: renderMetricName(configuredAssertion.metric, vars || test.vars || {}),
-          weight: configuredAssertion.weight,
-        });
+      if (!result.pass && assertion.fallback === 'next') {
+        failures.push({ type: assertion.type, reason: result.reason });
+        continue;
       }
-      finalAssert.assertResult.addResult({
-        index: finalAssert.index,
-        result: chainResult.result,
-        metric: renderMetricName(finalAssert.assertion.metric, vars || test.vars || {}),
-        weight: finalAssert.assertion.weight,
+      assertResult.addResult({
+        index,
+        result:
+          failures.length > 0
+            ? { ...result, metadata: { ...result.metadata, fallbackFailures: failures } }
+            : result,
+        metric: renderMetricName(assertion.metric, vars || test.vars || {}),
+        weight: assertion.weight,
       });
       return;
     }
-
-    const traceData =
-      traceId && assertionMayNeedTraceContext(assertion) ? await getTraceData() : null;
-
-    const result = await runAssertion({
-      prompt,
-      provider,
-      providerResponse,
-      assertion,
-      test,
-      vars,
-      latencyMs,
-      assertIndex: index,
-      traceId,
-      traceData,
-      claimStoredGradingUsage,
-    });
-
-    assertResult.addResult({
-      index,
-      result,
-      metric: renderMetricName(assertion.metric, vars || test.vars || {}),
-      weight: assertion.weight,
-    });
   };
 
   const activeAssertions = new Set<Promise<void>>();
   try {
-    await async.forEachOfLimit(assertionJobs, concurrency, async (entry) => {
+    await async.forEachOfLimit(jobs, concurrency, async (entry) => {
       const pending = runAndRecordAssertion(entry);
       activeAssertions.add(pending);
       try {

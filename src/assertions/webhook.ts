@@ -46,10 +46,6 @@ export async function handleWebhook({
         (typeof webhookScore === 'number' && webhookScore >= 0 && webhookScore <= 1),
       'Webhook response "score" must be a finite number between 0 and 1',
     );
-    invariant(
-      jsonResponse.reason === undefined || typeof jsonResponse.reason === 'string',
-      'Webhook response "reason" must be a string',
-    );
     const pass = jsonResponse.pass !== inverse;
     const score = webhookScore ?? (jsonResponse.pass ? 1 : 0);
 
@@ -69,7 +65,6 @@ export async function handleWebhook({
       score: 0,
       reason: `Webhook error: ${(err as Error).message}`,
       assertion,
-      metadata: { assertionError: true },
     };
   }
 }

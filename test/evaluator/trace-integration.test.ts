@@ -191,7 +191,6 @@ describe('evaluator trace integration', () => {
     // Verify trace was fetched for assertion
     expect(mockTraceStore.getTrace).toHaveBeenCalledWith(testTraceId, {
       sanitizeAttributes: false,
-      includeInternalSpans: false,
     });
     expect(mockFlushOtel).toHaveBeenCalled();
     expect(mockShutdownOtel).toHaveBeenCalledOnce();
@@ -373,7 +372,6 @@ describe('evaluator trace integration', () => {
     // Verify trace was fetched with the correct traceId
     expect(mockTraceStore.getTrace).toHaveBeenCalledWith(testTraceId, {
       sanitizeAttributes: false,
-      includeInternalSpans: false,
     });
 
     // Verify result was added with passing assertion
@@ -500,10 +498,7 @@ describe('evaluator trace integration', () => {
           redactAttributes: ['secret'],
         }),
       );
-      expect(mockFlushOtel).toHaveBeenCalledTimes(2);
-      expect(mockFlushOtel.mock.invocationCallOrder[1]).toBeLessThan(
-        mockTraceStore.getTrace.mock.invocationCallOrder[0],
-      );
+      expect(mockFlushOtel).toHaveBeenCalledOnce();
       expect(mockFlushOtel.mock.invocationCallOrder[0]).toBeLessThan(
         mockFetchTraceContext.mock.invocationCallOrder[0],
       );

@@ -13,6 +13,7 @@ import {
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
+import { validateAssertions } from './assertions/validateAssertions';
 import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
@@ -3817,11 +3818,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     updatePromptResultCounts(metrics, row);
-    const scoringComponents = row.gradingResult?.componentResults?.filter(
-      (result) => result.metadata?.fallbackIntermediate !== true,
-    );
-    metrics.assertPassCount += scoringComponents?.filter((result) => result.pass).length || 0;
-    metrics.assertFailCount += scoringComponents?.filter((result) => !result.pass).length || 0;
+    metrics.assertPassCount +=
+      row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
+    metrics.assertFailCount +=
+      row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
     metrics.totalLatencyMs += row.latencyMs || 0;
     accumulateResponseTokenUsage(metrics.tokenUsage, row.response, {
       countCachedAsRequest: (row.tokenUsage?.numRequests ?? 0) > 0,
@@ -5211,6 +5211,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       suite: testSuite,
     });
     testSuite = beforeAllOut.suite;
+    validateAssertions(testSuite.tests || [], getDefaultTest(testSuite), testSuite.scenarios);
 
     if (!(await maybeAddGeneratedPrompts(testSuite, options))) {
       return this.store.evaluation;

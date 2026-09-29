@@ -133,10 +133,7 @@ export async function selectMaxScore(
     // Filter out max-score and select-best assertions
     const relevantResults = componentResults.filter(
       (r: GradingResult) =>
-        r.assertion &&
-        r.assertion.type !== 'max-score' &&
-        r.assertion.type !== 'select-best' &&
-        r.metadata?.fallbackIntermediate !== true,
+        r.assertion && r.assertion.type !== 'max-score' && r.assertion.type !== 'select-best',
     );
 
     if (relevantResults.length === 0) {

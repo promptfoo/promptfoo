@@ -552,19 +552,16 @@ export interface GradingResult {
     renderedAssertionValue?: string;
     // Full grading prompt sent to the grading LLM (for debugging)
     renderedGradingPrompt?: string;
+    // Earlier deterministic mismatches are diagnostics, not scored components.
+    fallbackFailures?: { type: AssertionType; reason: string }[];
     // True when the complete grading response was reused without running a new task.
     cachedResponse?: boolean;
-    // Failed fallback-chain primaries are preserved for traceability but do
-    // not participate in downstream aggregate scoring such as max-score.
-    fallbackIntermediate?: true;
     // Set by LLM-grader matchers when a transport/parse failure prevents a real
     // evaluation. Callers that support inverse semantics (e.g. `not-g-eval`)
     // must not flip such results to a pass — a grader error is not evidence
     // that the criterion was or was not met. `true`-literal so the field is
     // only meaningful when present; never set `false` explicitly.
     graderError?: true;
-    // Set by assertion handlers when the validator itself could not execute.
-    assertionError?: true;
     [key: string]: any;
   };
 }
@@ -759,6 +756,9 @@ export const AssertionSchema = z.object({
   // Type of assertion
   type: AssertionTypeSchema,
 
+  // Run the next assertion only if this deterministic check fails.
+  fallback: z.literal('next').optional(),
+
   // The expected value, if applicable
   value: z.custom<AssertionValue>().optional(),
 
@@ -786,9 +786,6 @@ export const AssertionSchema = z.object({
 
   // Extract context from the output using a transform
   contextTransform: StringOrFunctionSchema.optional(),
-
-  // When enabled, a failed assertion runs the next assertion as its fallback.
-  fallback: z.union([z.literal('next'), z.literal(true)]).optional(),
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;

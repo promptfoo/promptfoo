@@ -19,7 +19,6 @@ export const handleRegex = ({
       score: 0,
       reason: `Invalid regex pattern: ${error instanceof Error ? error.message : 'unknown error'}`,
       assertion,
-      metadata: { assertionError: true },
     };
   }
   const pass = regex.test(outputString) !== inverse;

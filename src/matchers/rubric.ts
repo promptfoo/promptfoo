@@ -773,10 +773,7 @@ async function buildGradingProviderPrompt(
 function parseJsonGradingResponse(
   label: string,
   resp: ProviderResponse,
-): {
-  parsed?: Partial<GradingResult> & Pick<GradingResult, 'pass' | 'score'>;
-  failure?: Omit<GradingResult, 'assertion'>;
-} {
+): { parsed?: Partial<GradingResult>; failure?: Omit<GradingResult, 'assertion'> } {
   const failWithTokens = (reason: string) => graderFailureFromResponse(reason, resp);
 
   let jsonObjects: unknown[] = [];
@@ -805,8 +802,7 @@ function parseJsonGradingResponse(
     };
   }
 
-  const candidate = jsonObjects[0];
-  const parsed = candidate as Partial<GradingResult>;
+  const parsed = jsonObjects[0];
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return {
       failure: failWithTokens(
@@ -815,33 +811,7 @@ function parseJsonGradingResponse(
     };
   }
 
-  if (
-    (parsed.pass === undefined && parsed.score === undefined) ||
-    (parsed.pass !== undefined &&
-      typeof parsed.pass !== 'boolean' &&
-      !(
-        typeof parsed.pass === 'string' && /^(true|false|yes|no|pass|fail|y|n)$/i.test(parsed.pass)
-      )) ||
-    (parsed.reason !== undefined && typeof parsed.reason !== 'string')
-  ) {
-    return { failure: failWithTokens(`${label} produced an invalid grading verdict`) };
-  }
-  const passValue = parsed.pass ?? true;
-  const pass = typeof passValue === 'boolean' ? passValue : /^(true|yes|pass|y)$/i.test(passValue);
-  const rawScore: unknown = parsed.score;
-  const score =
-    rawScore === undefined
-      ? Number(pass)
-      : typeof rawScore === 'number'
-        ? rawScore
-        : typeof rawScore === 'string' && rawScore.trim() !== ''
-          ? Number(rawScore)
-          : NaN;
-  if (!Number.isFinite(score)) {
-    return { failure: failWithTokens(`${label} produced an invalid grading score`) };
-  }
-
-  return { parsed: { ...parsed, pass, score } };
+  return { parsed: parsed as Partial<GradingResult> };
 }
 
 function graderFailureFromResponse(
@@ -932,8 +902,15 @@ export async function runJsonGradingPrompt({
     return failure as Omit<GradingResult, 'assertion'>;
   }
 
-  let { pass } = parsed;
-  const { score } = parsed;
+  let pass = parsed.pass ?? true;
+  if (typeof pass !== 'boolean') {
+    pass = /^(true|yes|pass|y)$/i.test(String(pass));
+  }
+
+  let score = parsed.score;
+  if (typeof score !== 'number') {
+    score = Number.isFinite(Number(score)) ? Number(score) : Number(pass);
+  }
 
   const threshold =
     typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
@@ -951,13 +928,7 @@ export async function runJsonGradingPrompt({
       ? (JSON.parse(serializedMetadata) as Record<string, unknown>)
       : {};
   }
-  const {
-    cachedResponse: _untrustedCachedResponse,
-    assertionError: _untrustedAssertionError,
-    graderError: _untrustedGraderError,
-    fallbackIntermediate: _untrustedFallbackIntermediate,
-    ...trustedResponseMetadata
-  } = responseMetadata;
+  const { cachedResponse: _untrustedCachedResponse, ...trustedResponseMetadata } = responseMetadata;
 
   return {
     assertion,

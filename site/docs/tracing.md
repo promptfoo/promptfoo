@@ -106,9 +106,7 @@ Instrumented model and agent calls can include these attributes on their GenAI s
 Grading spans describe each assertion with `gen_ai.evaluation.name`,
 `gen_ai.evaluation.score.value`, and `gen_ai.evaluation.score.label`. When a grader supplies a
 reason, `gen_ai.evaluation.explanation` records a sanitized, shortened version. Any model call used
-by the grader appears in a child span. Trace assertions exclude grader spans and their descendants.
-Runs with trace-aware assertions execute assertions in order, so unfinished grading work cannot affect a trace snapshot.
-See [`is-refusal`](/docs/configuration/expected-outputs/deterministic/#is-refusal) for how provider-reported refusals and output transforms affect grading.
+by the grader appears in a child span. See [`is-refusal`](/docs/configuration/expected-outputs/deterministic/#is-refusal) for how provider-reported refusals and output transforms affect grading.
 
 ### Example Trace Output
 

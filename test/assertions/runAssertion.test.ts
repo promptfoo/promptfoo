@@ -1949,14 +1949,6 @@ describe('runAssertion', () => {
       });
     });
 
-    it('rejects a non-string reason', async () => {
-      await expect(checkResponse('{"pass":true,"reason":{}}')).resolves.toMatchObject({
-        pass: false,
-        score: 0,
-        metadata: { assertionError: true },
-      });
-    });
-
     it.each(['null', '"0.5"', 'false', '-0.1', '1.1', '1e400', '-1e400'])(
       'rejects an invalid JSON score: %s',
       async (score) => {

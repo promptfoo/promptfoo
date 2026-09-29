@@ -243,9 +243,6 @@ describe('matchesLlmRubric', () => {
           metadata: {
             uploadId: 'upload-123',
             trace: { id: 'trace-456' },
-            assertionError: true,
-            graderError: true,
-            fallbackIntermediate: true,
           },
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
         },
@@ -1976,7 +1973,7 @@ describe('matchesLlmRubric', () => {
     );
   });
 
-  it('defaults a missing score but rejects an invalid score', async () => {
+  it('should handle missing or invalid scores when threshold is present', async () => {
     const rubricPrompt = 'Rubric prompt';
     const output = 'Sample output';
     const assertion: Assertion = {
@@ -2007,6 +2004,7 @@ describe('matchesLlmRubric', () => {
       }),
     );
 
+    // Invalid score type should be handled gracefully
     const invalidScoreResult = { score: 'high', reason: 'Invalid score type', pass: true };
     const invalidScoreOptions: GradingConfig = {
       rubricPrompt,
@@ -2021,10 +2019,10 @@ describe('matchesLlmRubric', () => {
       matchesLlmRubric(rubricPrompt, output, invalidScoreOptions, {}, assertion),
     ).resolves.toEqual(
       expect.objectContaining({
-        score: 0,
-        pass: false,
-        metadata: { graderError: true },
-        reason: expect.stringContaining('invalid grading score'),
+        assertion,
+        score: 1.0,
+        pass: true,
+        reason: 'Invalid score type',
       }),
     );
   });

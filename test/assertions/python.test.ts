@@ -610,7 +610,6 @@ describe('Python file references', { timeout: 15000 }, () => {
       pass: false,
       reason: 'The Python script `call_api` function must return a dict with an `output`',
       score: 0,
-      metadata: { assertionError: true },
     });
   });
 
@@ -800,7 +799,7 @@ describe('Python file references', { timeout: 15000 }, () => {
     expect(result.reason).toContain('finite scores and weights. Got type object.');
     expect(result.reason).not.toContain('diagnostic-placeholder');
     expect(result.reason).not.toContain('requestHeaders');
-    expect(result.metadata).toEqual({ assertionError: true });
+    expect(result.metadata).toBeUndefined();
   });
 
   describe('Python threshold edge cases', () => {

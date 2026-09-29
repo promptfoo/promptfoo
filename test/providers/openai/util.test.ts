@@ -397,6 +397,7 @@ describe('calculateOpenAICost', () => {
   });
 
   it.each([
+    ['gpt-6.1-sol', 2, 10],
     ['gpt-5.6', 4, 20],
     ['gpt-5.6-sol', 4, 20],
     ['gpt-5.6-terra', 2, 12],
@@ -407,6 +408,7 @@ describe('calculateOpenAICost', () => {
   });
 
   it.each([
+    ['gpt-6.1-sol', 2, 10, 4, 15],
     ['gpt-5.6', 4, 20, 8, 30],
     ['gpt-5.6-sol', 4, 20, 8, 30],
     ['gpt-5.6-terra', 2, 12, 4, 18],
@@ -532,6 +534,11 @@ describe('calculateOpenAICost', () => {
       expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(true);
       expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(false);
     }
+  });
+
+  it('should recognize GPT-6.1 Sol for Chat Completions and Responses', () => {
+    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-6.1-sol')).toBe(true);
+    expect(OPENAI_RESPONSES_ONLY_MODELS.some((model) => model.id === 'gpt-6.1-sol')).toBe(false);
   });
 
   it('should keep GPT-5.4 and GPT-5.5 Pro out of Chat Completions routing', () => {

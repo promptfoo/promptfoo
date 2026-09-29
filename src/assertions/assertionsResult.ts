@@ -48,7 +48,7 @@ function mergeMetadata(
   };
 }
 
-export function normalizeAssertionTokenUsage(result: GradingResult) {
+function normalizeAssertionTokenUsage(result: GradingResult) {
   const tokensUsed = result.tokensUsed;
   if (!tokensUsed) {
     return undefined;
@@ -76,7 +76,7 @@ export function normalizeAssertionTokenUsage(result: GradingResult) {
   };
 }
 
-export function accumulateNormalizedAssertionTokenUsage(
+function accumulateNormalizedAssertionTokenUsage(
   target: NonNullable<GradingResult['tokensUsed']>,
   update: NonNullable<GradingResult['tokensUsed']>,
 ): void {
@@ -237,7 +237,6 @@ export class AssertionsResult {
   private totalScore: number = 0;
   private totalWeight: number = 0;
   private failedReason: string | undefined;
-  private failedHardError = false;
   private componentResults: GradingResult[] = [];
   private namedScores: Record<string, number> = Object.create(null);
   private namedScoreWeights: Record<string, number> = Object.create(null);
@@ -273,16 +272,6 @@ export class AssertionsResult {
     this.totalScore += result.score * weight;
     this.totalWeight += weight;
     this.componentResults[index] = result;
-    const hardError = [result, ...(result.componentResults ?? [])].find(
-      (component) =>
-        component.metadata?.assertionError === true || component.metadata?.graderError === true,
-    );
-    if (hardError) {
-      if (!this.failedHardError) {
-        this.failedReason = hardError.reason;
-      }
-      this.failedHardError = true;
-    }
 
     const isRedteamGuardrail =
       result.assertion?.type === 'guardrails' && result.assertion?.config?.purpose === 'redteam';
@@ -291,36 +280,6 @@ export class AssertionsResult {
       this.failedContentSafetyChecks = true;
     }
 
-    this.addNamedScores({ result, metric, weight });
-
-    const tokensUsed = normalizeAssertionTokenUsage(result);
-    if (tokensUsed) {
-      accumulateNormalizedAssertionTokenUsage(this.tokensUsed, tokensUsed);
-    }
-
-    if (result.pass) {
-      return;
-    }
-
-    if (!this.failedHardError) {
-      this.failedReason = result.reason;
-    }
-
-    if (getEnvBool('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES')) {
-      throw new Error(result.reason);
-    }
-  }
-
-  // Preserve metric observability for results that should not affect aggregate scoring.
-  addNamedScores({
-    result,
-    metric,
-    weight = 1,
-  }: {
-    result: GradingResult;
-    metric?: string;
-    weight?: number;
-  }) {
     if (metric) {
       this.namedScores[metric] = (this.namedScores[metric] ?? 0) + result.score * weight;
       this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] ?? 0) + weight;
@@ -341,6 +300,21 @@ export class AssertionsResult {
             (this.namedScoreWeights[metricName] ?? 0) + weightedIncomingWeight;
         }
       });
+    }
+
+    const tokensUsed = normalizeAssertionTokenUsage(result);
+    if (tokensUsed) {
+      accumulateNormalizedAssertionTokenUsage(this.tokensUsed, tokensUsed);
+    }
+
+    if (result.pass) {
+      return;
+    }
+
+    this.failedReason = result.reason;
+
+    if (getEnvBool('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES')) {
+      throw new Error(result.reason);
     }
   }
 
@@ -445,12 +419,6 @@ export class AssertionsResult {
         this.result.score = 0;
         this.result.reason = `Scoring function error: ${(err as Error).message}`;
       }
-    }
-
-    if (this.failedHardError) {
-      this.result.pass = false;
-      this.result.score = 0;
-      this.result.reason = this.failedReason || 'Assertion validation failed';
     }
 
     // Finite inputs can overflow when weighted or accumulated. Check the final

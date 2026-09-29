@@ -7,6 +7,7 @@ import { clearCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
+import * as llmGrading from '../../src/matchers/llmGrading';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, type TestSuite } from '../../src/types/index';
@@ -17,6 +18,7 @@ afterEach(async () => {
   resetMockProviders();
   vi.mocked(runExtensionHook).mockReset();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
   cliState.resume = false;
   cliState.basePath = '';
   cliState.webUI = false;
@@ -24,7 +26,6 @@ afterEach(async () => {
 });
 
 afterAll(() => {
-  vi.restoreAllMocks();
   vi.resetModules();
 });
 
@@ -101,6 +102,11 @@ describe('evaluator defaultTest merging', () => {
   });
 
   it('should allow test case options to override defaultTest options', async () => {
+    const grader = vi.spyOn(llmGrading, 'matchesLlmRubric').mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Fixture grading result',
+    });
     const mockProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('mock-provider'),
       callApi: vi.fn().mockResolvedValue({
@@ -143,6 +149,12 @@ describe('evaluator defaultTest merging', () => {
     expect(processedTest?.options?.provider).toBe('openai:gpt-4');
     // But other defaultTest options should still be merged
     expect(processedTest?.options?.transform).toBe('output.toUpperCase()');
+    expect(grader).toHaveBeenCalledOnce();
+    expect(grader.mock.calls[0][2]).toMatchObject({
+      provider: 'openai:gpt-4',
+      transform: 'output.toUpperCase()',
+    });
+    expect(summary.results[0]).toMatchObject({ success: true, score: 1 });
   });
 });
 
@@ -275,9 +287,8 @@ describe('Evaluator with external defaultTest', () => {
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
-    // Should throw or handle gracefully
     await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow(
-      'defaultTest.assert is not an array in test case #1',
+      'defaultTest.assert must be an array',
     );
   });
 

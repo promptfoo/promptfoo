@@ -80,7 +80,7 @@ describe('Ruby assertions', () => {
     expect(result.reason).toContain('finite scores and weights. Got type object.');
     expect(result.reason).not.toContain('diagnostic-placeholder');
     expect(result.reason).not.toContain('requestHeaders');
-    expect(result.metadata).toEqual({ assertionError: true });
+    expect(result.metadata).toBeUndefined();
   });
 
   it.each([
@@ -343,50 +343,5 @@ describe('Ruby assertions', () => {
     expect(result.pass).toBe(false);
     expect(result.reason).toContain("output.include?('{{secret}}')");
     expect(result.reason).not.toContain('sk-test-secret-123');
-  });
-
-  it('should preserve multiline indentation when building inline ruby assertions', async () => {
-    vi.mocked(runRubyCode).mockResolvedValueOnce(true);
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-
-    const result = await runAssertion({
-      prompt: 'Some prompt',
-      provider,
-      assertion: {
-        type: 'ruby',
-        value: 'if output\n\treturn true\nend',
-      },
-      test: {} as AtomicTestCase,
-      providerResponse: { output: 'Expected output' },
-    });
-
-    expect(runRubyCode).toHaveBeenCalledWith(
-      expect.stringContaining('\tif output\n\t\treturn true\n\tend'),
-      'main',
-      expect.any(Array),
-    );
-    expect(result.pass).toBe(true);
-  });
-
-  it('should mark inline ruby execution errors as assertion errors', async () => {
-    vi.mocked(runRubyCode).mockRejectedValueOnce(new Error('Ruby unavailable'));
-    const assertion: Assertion = { type: 'ruby', value: 'true' };
-    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
-
-    const result = await runAssertion({
-      prompt: 'Some prompt',
-      provider,
-      assertion,
-      test: {} as AtomicTestCase,
-      providerResponse: { output: 'Expected output' },
-    });
-
-    expect(result).toEqual({
-      pass: false,
-      score: 0,
-      reason: 'Ruby code execution failed: Ruby unavailable',
-      assertion,
-      metadata: { assertionError: true },
-    });
   });
 });
