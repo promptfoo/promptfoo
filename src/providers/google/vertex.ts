@@ -19,10 +19,12 @@ import {
   clampMaxTokensForThinkingBudget,
   claudeThinkingConsumesTokens,
   getTokenUsage,
+  isClaudeThinkingEnabled,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeClaudeThinkingConfig,
   outputFromMessage,
   parseMessages,
+  resolveClaudeSamplingParams,
 } from '../anthropic/util';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
@@ -376,14 +378,22 @@ export class VertexChatProvider extends GoogleGenericProvider {
       ? undefined
       : (this.config.top_k ?? this.config.topK);
 
+    // Vertex forwards the body verbatim, so apply the same combination rules the Anthropic
+    // API enforces (temperature vs top_p, and the limits extended thinking imposes).
+    const { sampling, warnings: samplingWarnings } = resolveClaudeSamplingParams(
+      { temperature: resolvedTemperature, top_p: resolvedTopP, top_k: resolvedTopK },
+      { thinkingEnabled: isClaudeThinkingEnabled(thinkingConfig), samplingParamsDeprecated },
+    );
+    for (const warning of samplingWarnings) {
+      logger.warn(warning);
+    }
+
     const body: ClaudeRequest = {
       anthropic_version:
         this.config.anthropicVersion || this.config.anthropic_version || 'vertex-2023-10-16',
       stream: false,
       max_tokens: maxTokens,
-      temperature: resolvedTemperature,
-      top_p: resolvedTopP,
-      top_k: resolvedTopK,
+      ...sampling,
       ...(mergedSystem ? { system: mergedSystem } : {}),
       ...(thinkingConfig ? { thinking: thinkingConfig } : {}),
       // Claude on Vertex accepts output_config.effort the same way the Anthropic API does;
