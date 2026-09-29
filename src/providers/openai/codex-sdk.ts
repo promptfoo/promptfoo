@@ -629,11 +629,9 @@ function buildCodexRateLimitResponse(
   };
 }
 
-/**
- * Helper to load the OpenAI Codex SDK ESM module
- * Uses resolvePackageEntryPoint to handle ESM-only packages with restrictive exports
- */
-async function loadCodexSDK(): Promise<any> {
+export const CODEX_SDK_VERSION_RANGE = '^0.156.1';
+
+export function resolveCodexSdkPackage(): string | null {
   const basePaths = [
     cliState.basePath ? path.resolve(cliState.basePath) : undefined,
     process.cwd(),
@@ -641,20 +639,23 @@ async function loadCodexSDK(): Promise<any> {
     path.resolve(getDirectory(), '../..'),
   ].filter((candidate): candidate is string => Boolean(candidate));
 
-  let codexPath: string | null = null;
   for (const basePath of new Set(basePaths)) {
-    codexPath = resolvePackageEntryPoint('@openai/codex-sdk', basePath);
-    if (codexPath) {
-      break;
+    const entryPoint = resolvePackageEntryPoint('@openai/codex-sdk', basePath);
+    if (entryPoint) {
+      return entryPoint;
     }
   }
+  return null;
+}
 
+async function loadCodexSDK(): Promise<any> {
+  const codexPath = resolveCodexSdkPackage();
   if (!codexPath) {
     throw new Error(
       dedent`The @openai/codex-sdk package is required but not installed.
 
       To use the OpenAI Codex SDK provider, install it with:
-        npm install promptfoo @openai/codex-sdk@^0.156.1
+        npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}
 
       Requires Node.js >=22.22.0.
 
@@ -663,9 +664,9 @@ async function loadCodexSDK(): Promise<any> {
   }
 
   const version = getPackageVersion('@openai/codex-sdk', codexPath);
-  if (!version || !semverSatisfies(version, '^0.156.1')) {
+  if (!version || !semverSatisfies(version, CODEX_SDK_VERSION_RANGE)) {
     throw new Error(
-      `The OpenAI Codex SDK provider requires @openai/codex-sdk@^0.156.1 (found ${version ?? 'unknown'}). Install it with: npm install promptfoo @openai/codex-sdk@^0.156.1`,
+      `The OpenAI Codex SDK provider requires @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE} (found ${version ?? 'unknown'}). Install it with: npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}`,
     );
   }
 
@@ -684,7 +685,7 @@ async function loadCodexSDK(): Promise<any> {
       - Corrupted installation
 
       Try reinstalling:
-        npm install promptfoo @openai/codex-sdk@^0.156.1
+        npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
     );

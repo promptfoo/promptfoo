@@ -51,7 +51,7 @@ Use Node.js `>=22.22.0`, which matches promptfoo's repo/runtime requirement and 
 
 :::note
 
-The provider checks SDK compatibility when called. The published `@openai/codex-sdk` and `@openai/codex` packages currently declare the Apache-2.0 license.
+The provider checks SDK compatibility when called. Automatic grader selection uses Codex only when the same compatible SDK is available. The published `@openai/codex-sdk` and `@openai/codex` packages currently declare the Apache-2.0 license.
 
 :::
 
