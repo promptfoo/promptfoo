@@ -117,8 +117,6 @@ providers:
     config:
       # apiKey: "{{ env.LITELLM_API_KEY }}"  # optional, overrides LITELLM_API_KEY
       max_tokens: 4096
-      # Claude 5 models reject temperature/top_p/top_k. The wrapper does not forward a
-      # top-level `effort`; send it under passthrough.output_config instead.
       passthrough:
         metadata:
           tags: [evals]

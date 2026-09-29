@@ -164,10 +164,8 @@ providers:
 
 ### Extended Thinking
 
-Enable Claude's extended thinking capabilities for complex reasoning tasks.
-
-Claude 5 and Opus 4.7+ use adaptive thinking. On Converse, reasoning depth is set through
-`additionalModelRequestFields.output_config.effort` — there is no top-level `effort` option:
+Claude 5 and Opus 4.7+ use adaptive thinking. On Converse, set reasoning depth through
+`additionalModelRequestFields.output_config.effort`:
 
 ```yaml
 providers:
@@ -177,13 +175,15 @@ providers:
       maxTokens: 20000
       thinking:
         type: adaptive
+        display: summarized
       additionalModelRequestFields:
         output_config:
           effort: high # low | medium | high | xhigh | max
       showThinking: true # Include thinking content in output
 ```
 
-Claude Opus 4.6, Sonnet 4.6, and the 4.5 generation still take a manual token budget:
+Claude 4.5 models use manual thinking budgets. Opus 4.6 and Sonnet 4.6 also accept
+them, but [adaptive thinking is recommended](https://platform.claude.com/docs/en/build-with-claude/extended-thinking#migrating-to-adaptive-thinking):
 
 ```yaml
 providers:
@@ -197,14 +197,12 @@ providers:
       showThinking: true
 ```
 
-The `thinking` configuration controls Claude's reasoning behavior:
+Manual `budget_tokens` must be at least 1024 and less than `maxTokens`. Promptfoo converts
+manual thinking to adaptive thinking on models that no longer accept manual budgets.
 
-- `type: adaptive` - Activates adaptive thinking (Claude 5, Opus 4.7/4.8); pair with `output_config.effort` on the Converse path
-- `type: enabled` - Activates manual extended thinking (Opus 4.6, Sonnet 4.6, and the 4.5 generation)
-- `budget_tokens` - Maximum tokens allocated for thinking (minimum 1024), manual thinking only
-- For Claude Opus 4.7, Opus 4.8, Opus 5, Opus 5.5, and Sonnet 5, promptfoo converts `type: enabled` to adaptive thinking because manual thinking is not accepted by those models.
-
-Use `showThinking: true` to include the model's reasoning process in the output, or `false` to only show the final response.
+`showThinking: true` includes any returned thinking summary in the output. Claude 5
+models omit summaries by default; request them with `thinking.display: summarized`.
+Set `showThinking: false` to exclude them from the eval output.
 
 :::note
 Claude rejects `temperature` and `topK` with extended thinking, needs a `topP` of at least 0.95,
@@ -231,14 +229,15 @@ and logs a warning, including the default `temperature` the InvokeModel path wou
 
 ### Performance Configuration
 
-Optimize for latency or cost:
+Configure latency and service tier. [Latency optimization](https://docs.aws.amazon.com/bedrock/latest/userguide/latency-optimized-inference.html)
+is available only for supported models:
 
 ```yaml
 providers:
   - id: bedrock:converse:us.anthropic.claude-sonnet-5
     config:
       performanceConfig:
-        latency: optimized # or 'standard'
+        latency: standard
       serviceTier:
         type: priority # or 'default', 'flex'
 ```
@@ -942,7 +941,8 @@ The InvokeModel path exposes no reasoning-effort field. To set the depth, use
 `bedrock:converse:` with `additionalModelRequestFields.output_config.effort`, or the
 [Anthropic provider](/docs/providers/anthropic), which takes a top-level `effort`.
 
-Opus 4.6, Sonnet 4.6, and the 4.5 generation take a manual token budget instead:
+Claude 4.5 models use manual budgets. Opus 4.6 and Sonnet 4.6 still accept them,
+but also support adaptive thinking:
 
 ```yaml
 config:
@@ -953,16 +953,9 @@ config:
   showThinking: true
 ```
 
-:::tip
-
-The `showThinking` parameter controls whether thinking content is included in the response output:
-
-- When set to `true` (default), thinking content will be included in the output
-- When set to `false`, thinking content will be excluded from the output
-
-This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
-
-:::
+`showThinking` defaults to `true` and includes summaries the API returns. On Claude 5,
+set `thinking.display: summarized` to request them; `showThinking` alone does not enable
+summaries. Set it to `false` to exclude thinking content from the eval output.
 
 ### Titan Models
 

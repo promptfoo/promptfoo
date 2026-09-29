@@ -1,7 +1,7 @@
 ---
 title: Anthropic
 sidebar_position: 2
-description: "Deploy Anthropic's Claude models including Opus, Sonnet, and Haiku for advanced reasoning and conversational AI applications"
+description: 'Configure Anthropic Claude models in Promptfoo: authentication, tool use, thinking, effort, structured outputs, prompt caching, and model-graded assertions.'
 ---
 
 # Anthropic
@@ -169,6 +169,12 @@ Claude models are available across multiple platforms. Here's how the model name
 | headers         | -                     | Additional headers to be sent with the API request                                                                                                                                    |
 | extra_body      | -                     | Additional parameters to be included in the API request body                                                                                                                          |
 
+For [MCP tools](#model-context-protocol-mcp), set `mcp.enabled: true`. The
+`max_tool_calls` option caps MCP tool executions per request (default: `8`).
+
+Sampling support varies by model. Promptfoo omits unsupported `temperature`,
+`top_p`, and `top_k` settings; see the model notes below.
+
 ### Prompt Template
 
 To allow for compatibility with the OpenAI prompt template, the following format is supported:
@@ -186,50 +192,28 @@ To allow for compatibility with the OpenAI prompt template, the following format
 ]
 ```
 
-If the role `system` is specified, it will be automatically added to the API request.
-All `user` or `assistant` roles will be automatically converted into the right format for the API request.
-Currently, only type `text` is supported.
+Promptfoo extracts `system` messages into the API's system prompt and forwards `user` and
+`assistant` messages. Set `system_message` and `question` in your test's `vars`.
 
-The `system_message` and `question` are example variables that can be set with the `var` directive.
+:::warning Assistant prefill
 
-:::warning Assistant prefill is not supported on current models
-
-Ending a prompt with an `assistant` message ("prefilling" Claude's reply) returns a 400 —
-`This model does not support assistant message prefill` — on every model from the 4.6
-generation onward, including Opus 5.5, Opus 5, Sonnet 5, and the Fable/Mythos 5 families. Only
-the 4.5 generation (Opus 4.5, Sonnet 4.5, Haiku 4.5) and older still accept it. Use
-[structured outputs](#structured-outputs) or a system-prompt instruction to constrain the
-response format instead.
+Claude 4.6 and later models reject prompts ending with an `assistant` message. End
+with a `user` message instead. To constrain the response format, use
+[structured outputs](#structured-outputs) or a system instruction. The 4.5 models
+still accept assistant prefill.
 
 :::
 
 ### Options
 
-The Anthropic provider supports several options to customize the behavior of the model. These include:
-
-- `temperature`: Controls the randomness of the output.
-- `max_tokens`: The maximum length of the generated text.
-- `top_p`: Controls nucleus sampling, affecting the randomness of the output.
-- `top_k`: Only sample from the top K options for each subsequent token.
-- `tools`: An array of tool or function definitions for the model to call.
-- `tool_choice`: An object specifying the tool to call.
-- `stop_sequences`: An array of strings that stop generation when encountered.
-- `metadata`: Request metadata (e.g., `user_id`) passed to the API.
-- `extra_body`: Additional parameters to pass directly to the Anthropic API request body.
-- `mcp`: Connect to one or more [Model Context Protocol](#model-context-protocol-mcp) servers. Tools exposed by the server become callable by Claude.
-- `max_tool_calls`: Maximum number of MCP tool executions promptfoo will perform per request before aborting the loop. Defaults to `8` and is only relevant when `mcp.enabled` is `true`.
-
-Example configuration with options and prompts:
+Set [supported parameters](#supported-parameters) under `config`:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: anthropic:messages:claude-sonnet-5
     config:
-      # Sonnet 5 rejects temperature/top_p/top_k — use `effort` for the
-      # quality/cost tradeoff instead. See Supported Parameters above.
       effort: medium
-      # Sonnet 5 thinks by default, and thinking shares this budget with the answer.
-      max_tokens: 2048
+      max_tokens: 2048 # Includes thinking and the final answer
 prompts:
   - file://prompt.json
 ```
@@ -329,46 +313,43 @@ providers:
           max_content_tokens: 50000
 ```
 
-Promptfoo also supports the stable `web_fetch_20260209` variant, `web_fetch_20260309` (adds `use_cache` for controlling whether cached content is used), and the newest `web_fetch_20260318` (adds `response_inclusion`):
+Use one fetch version per request. `web_fetch_20260209` adds dynamic filtering,
+`web_fetch_20260309` adds cache control, and `web_fetch_20260318` adds response inclusion control:
 
 ```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-5
     config:
       tools:
-        - type: web_fetch_20260209
-          name: web_fetch
-          max_uses: 3
-          defer_loading: true
-        - type: web_fetch_20260309
-          name: web_fetch
-          max_uses: 3
-          use_cache: false # Bypass cache for fresh content
         - type: web_fetch_20260318
           name: web_fetch
           max_uses: 3
-          # 'excluded' drops the fetched page from the response transcript, keeping
-          # large documents out of the output. 'full' (the default) keeps them.
+          use_cache: false
           response_inclusion: excluded
 ```
 
+`response_inclusion: excluded` omits nested tool-use/result pairs consumed by a
+completed code-execution call. Direct fetches and paused calls still return their
+full results. See Anthropic's [web fetch documentation](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-fetch-tool).
+
 **Web Fetch Tool Configuration Options:**
 
-| Parameter            | Type     | Description                                                                                                                                                                           |
-| -------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `type`               | string   | `web_fetch_20250910` (beta), `web_fetch_20260209`, `web_fetch_20260309` (adds `use_cache`), or `web_fetch_20260318` (adds `response_inclusion`)                                       |
-| `name`               | string   | Must be `web_fetch`                                                                                                                                                                   |
-| `max_uses`           | number   | Maximum number of web fetches per request (optional)                                                                                                                                  |
-| `allowed_callers`    | string[] | Restrict which tool callers may invoke the server tool (optional)                                                                                                                     |
-| `allowed_domains`    | string[] | List of domains to allow fetching from (optional, mutually exclusive with `blocked_domains`)                                                                                          |
-| `blocked_domains`    | string[] | List of domains to block fetching from (optional, mutually exclusive with `allowed_domains`)                                                                                          |
-| `defer_loading`      | boolean  | Load the tool lazily instead of including it in the initial system prompt (optional)                                                                                                  |
-| `citations`          | object   | Enable citations with `{ enabled: true }` (optional)                                                                                                                                  |
-| `max_content_tokens` | number   | Maximum tokens for web content (optional)                                                                                                                                             |
-| `cache_control`      | object   | Apply Anthropic cache control to the tool definition (optional)                                                                                                                       |
-| `strict`             | boolean  | Enable strict schema validation for tool names and inputs (optional)                                                                                                                  |
-| `use_cache`          | boolean  | Whether to use cached content (`web_fetch_20260309` and `web_fetch_20260318`, optional)                                                                                               |
-| `response_inclusion` | string   | `full` (default) or `excluded` — `excluded` drops the tool-use/result pair from the response, keeping large fetched pages out of the transcript (`web_fetch_20260318` only, optional) |
+| Parameter            | Type     | Description                                                                                                                                                  |
+| -------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `type`               | string   | `web_fetch_20250910` (beta), `web_fetch_20260209`, `web_fetch_20260309` (adds `use_cache`), or `web_fetch_20260318` (adds `response_inclusion`)              |
+| `name`               | string   | Must be `web_fetch`                                                                                                                                          |
+| `max_uses`           | number   | Maximum number of web fetches per request (optional)                                                                                                         |
+| `allowed_callers`    | string[] | Restrict which tool callers may invoke the server tool (optional)                                                                                            |
+| `allowed_domains`    | string[] | List of domains to allow fetching from (optional, mutually exclusive with `blocked_domains`)                                                                 |
+| `blocked_domains`    | string[] | List of domains to block fetching from (optional, mutually exclusive with `allowed_domains`)                                                                 |
+| `defer_loading`      | boolean  | Load the tool lazily instead of including it in the initial system prompt (optional)                                                                         |
+| `citations`          | object   | Enable citations with `{ enabled: true }` (optional)                                                                                                         |
+| `max_content_tokens` | number   | Maximum tokens for web content (optional)                                                                                                                    |
+| `cache_control`      | object   | Apply Anthropic cache control to the tool definition (optional)                                                                                              |
+| `strict`             | boolean  | Enable strict schema validation for tool names and inputs (optional)                                                                                         |
+| `url_sources`        | object   | Limit fetchable URLs by source: `user_input`, `client_tool_results`, or `server_tool_results`, each with a tagged filter such as `{ type: none }` (optional) |
+| `use_cache`          | boolean  | Whether to use cached content (`web_fetch_20260309` and `web_fetch_20260318`, optional)                                                                      |
+| `response_inclusion` | string   | `full` (default) or `excluded`; applies to completed nested code-execution calls (`web_fetch_20260318` only)                                                 |
 
 ##### Web Search Tool
 
@@ -386,23 +367,23 @@ providers:
 
 **Web Search Tool Configuration Options:**
 
-| Parameter            | Type     | Description                                                                                               |
-| -------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
-| `type`               | string   | `web_search_20250305` (beta), `web_search_20260209`, or `web_search_20260318` (adds `response_inclusion`) |
-| `name`               | string   | Must be `web_search`                                                                                      |
-| `max_uses`           | number   | Maximum number of searches per request (optional)                                                         |
-| `allowed_callers`    | string[] | Restrict which tool callers may invoke the server tool (optional)                                         |
-| `allowed_domains`    | string[] | Restrict results to specific domains (optional, mutually exclusive with `blocked_domains`)                |
-| `blocked_domains`    | string[] | Exclude domains from results (optional, mutually exclusive with `allowed_domains`)                        |
-| `cache_control`      | object   | Apply Anthropic cache control to the tool definition (optional)                                           |
-| `defer_loading`      | boolean  | Load the tool lazily instead of including it in the initial system prompt (optional)                      |
-| `strict`             | boolean  | Enable strict schema validation for tool names and inputs (optional)                                      |
-| `response_inclusion` | string   | `full` (default) or `excluded` — see the web fetch table above (`web_search_20260318` only, optional)     |
-| `user_location`      | object   | Approximate user location to improve search relevance (optional)                                          |
+| Parameter            | Type     | Description                                                                                           |
+| -------------------- | -------- | ----------------------------------------------------------------------------------------------------- |
+| `type`               | string   | `web_search_20250305`, `web_search_20260209`, or `web_search_20260318` (adds `response_inclusion`)    |
+| `name`               | string   | Must be `web_search`                                                                                  |
+| `max_uses`           | number   | Maximum number of searches per request (optional)                                                     |
+| `allowed_callers`    | string[] | Restrict which tool callers may invoke the server tool (optional)                                     |
+| `allowed_domains`    | string[] | Restrict results to specific domains (optional, mutually exclusive with `blocked_domains`)            |
+| `blocked_domains`    | string[] | Exclude domains from results (optional, mutually exclusive with `allowed_domains`)                    |
+| `cache_control`      | object   | Apply Anthropic cache control to the tool definition (optional)                                       |
+| `defer_loading`      | boolean  | Load the tool lazily instead of including it in the initial system prompt (optional)                  |
+| `strict`             | boolean  | Enable strict schema validation for tool names and inputs (optional)                                  |
+| `response_inclusion` | string   | `full` (default) or `excluded` — see the web fetch table above (`web_search_20260318` only, optional) |
+| `user_location`      | object   | Approximate user location to improve search relevance (optional)                                      |
 
 ##### Combined Web Search and Web Fetch
 
-You can use both tools together for comprehensive web information gathering:
+Use web search to find URLs and web fetch to read their contents:
 
 ```yaml
 providers:
@@ -493,7 +474,7 @@ The disk response cache is skipped while `mcp.enabled` is `true`, because tool r
 
 See the [MCP integration guide](/docs/integrations/mcp/) for full server configuration options (auth, timeouts, multiple servers, etc.) and the [Anthropic MCP example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/mcp).
 
-See the [Anthropic Tool Use Guide](https://platform.claude.com/docs/en/build-with-claude/tool-use) for more information on how to define tools and the tool use example [here](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-tool-use).
+See the [Anthropic Tool Use Guide](https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview) for more information on how to define tools and the tool use example [here](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-tool-use).
 
 ### Images / Vision
 
@@ -501,16 +482,14 @@ All current Claude models accept images in the prompt.
 
 See the [Claude vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vision).
 
-One important note: the Claude API only supports base64 representations of images.
-This is different from how OpenAI's vision works, as it supports grabbing images from a URL. As a result, if you are comparing Claude and OpenAI vision capabilities, you will need separate prompts for each.
-
-See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-vision) to understand the differences.
+Claude accepts base64 images and image URLs. Use Anthropic `image` content blocks;
+their shape differs from OpenAI's `image_url` blocks. See the
+[vision API guide](https://platform.claude.com/docs/en/build-with-claude/vision) for request examples.
 
 ### Prompt Caching
 
-Claude supports prompt caching to optimize API usage and reduce costs for repetitive tasks. This feature caches portions of your prompts to avoid reprocessing identical content in subsequent requests.
-
-Supported on every current Claude model, including the Claude 5 family. Basic example:
+Prompt caching reuses unchanged prompt prefixes and is supported by current Claude
+models. Mark the prefix to cache with `cache_control`:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -716,16 +695,12 @@ providers:
 
 ### Claude Sonnet 5 notes
 
-Sonnet 5 is the most agentic Sonnet model, with a 1M-token context window and support
-for [effort levels](#effort-level) (`low` through `xhigh`). Unlike Sonnet 4.5/4.6 —
-but like the Opus 4.7/4.8 and Fable 5 generation — it deprecates manual sampling
-controls at the model level:
+Sonnet 5 has a 1M-token context window and supports [effort levels](#effort-level)
+from `low` through `max`. It does not support manual sampling controls:
 
-- **Sampling controls are managed for you.** Sonnet 5 rejects `temperature`, `top_p`,
-  and `top_k` with a 400; promptfoo omits all three from every request (including its
-  built-in `temperature: 0` default). Setting any of them in config or
-  `ANTHROPIC_TEMPERATURE` logs a one-time heads-up. This suppression also applies when
-  you reach Sonnet 5 through AWS Bedrock, GCP Vertex, or Azure AI Foundry.
+- **Sampling controls:** Promptfoo omits `temperature`, `top_p`, and `top_k`,
+  including its default temperature. Explicit settings trigger a one-time warning.
+  The parameters are also omitted through AWS Bedrock, GCP Vertex, and Azure AI Foundry.
 - **Manual thinking budgets convert to adaptive.** A legacy
   `thinking: { type: 'enabled', budget_tokens: N }` config is converted to
   `thinking: { type: 'adaptive' }`; use `effort` to control reasoning depth.
@@ -734,7 +709,7 @@ Sonnet 5 uses a 1M-token context window billed at **$2 per million input / $10 p
 
 ### Claude Opus 4.8 notes
 
-Opus 4.8 is Anthropic's most capable model and builds directly on Opus 4.7 — it supports the same feature set, so the Opus 4.7 guidance below applies unchanged. Promptfoo handles the model-level differences automatically:
+Opus 4.8 uses the same sampling and thinking settings as Opus 4.7:
 
 - **Sampling controls are managed for you.** Like Opus 4.7, Opus 4.8 samples adaptively and rejects `temperature`, `top_p`, and `top_k` (any of them returns a 400); promptfoo omits all three from every request. Setting any of them in config or `ANTHROPIC_TEMPERATURE` logs a one-time heads-up so you can clean the values out of your eval.
 - **Adaptive thinking is opt-in.** Set `thinking: { type: 'adaptive' }` to let the model decide how much to reason per request. Without an explicit `thinking` block the model runs **without** extended thinking, even at high effort. Manual budget-based thinking (`thinking: { type: 'enabled', budget_tokens: N }`) is rejected with a 400.
@@ -744,7 +719,7 @@ The same suppression applies when you reach Opus 4.8 through AWS Bedrock, GCP Ve
 
 ### Claude Opus 4.7 notes
 
-Opus 4.7 is designed around adaptive thinking and runs with the reasoning stack always on. Promptfoo handles the key differences from earlier Opus models automatically:
+Opus 4.7 supports adaptive thinking when explicitly enabled:
 
 - **Temperature is managed for you.** Opus 4.7 samples adaptively and does not accept `temperature`; promptfoo omits the field from every request. Passing `temperature` in config or `ANTHROPIC_TEMPERATURE` logs a one-time heads-up so you can clean the value out of your eval.
 - **Adaptive thinking is opt-in.** Set `thinking: { type: 'adaptive' }` to let the model choose how much to reason per request; leaving `thinking` unset runs Opus 4.7 **without** extended thinking, even at high effort. (Opus 5 is the model where an omitted block means adaptive.) Budget-based modes from older models aren't used on 4.7.
@@ -755,11 +730,12 @@ The same guidance applies when you reach Opus 4.7 through AWS Bedrock, GCP Verte
 
 ### Extended Thinking
 
-Claude supports an extended thinking capability that allows you to see the model's internal reasoning process before it provides the final answer. This can be configured using the `thinking` parameter:
+Use `thinking` to configure reasoning before the final answer. When available,
+`display: summarized` returns a summary of that reasoning:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  # Adaptive thinking — the current mechanism on every Claude 4.6+ model
+  # Adaptive thinking
   - id: anthropic:messages:claude-opus-5
     config:
       max_tokens: 20000
@@ -779,7 +755,7 @@ providers:
 
 The thinking configuration has three possible values:
 
-1. Adaptive thinking (recommended — the only supported on-mode for Claude 4.6 and newer):
+1. Adaptive thinking (supported on Claude 4.6 and later):
 
 ```yaml
 thinking:
@@ -788,22 +764,17 @@ thinking:
 
 In adaptive mode, Claude decides when and how much to think based on the complexity of the request. Control depth with [`effort`](#effort-level) rather than a token budget.
 
-2. Enabled thinking (**legacy** — Opus 4.6 / Sonnet 4.6 and older):
+2. Manual thinking budgets (Claude 4.5 and 4.6):
 
 ```yaml
 thinking:
   type: 'enabled'
-  budget_tokens: number # Must be ≥1024 and less than max_tokens
+  budget_tokens: 16000 # Must be at least 1024 and less than max_tokens
 ```
 
-Fable 5/5.1, Mythos 5/5.1, Opus 5.5, Opus 5, Sonnet 5, and Opus 4.7/4.8 reject this with a 400
-(`"thinking.type.enabled" is not supported for this model`); on those models promptfoo
-converts an `enabled` budget to `{ type: 'adaptive' }` and warns once.
-
-Opus 4.6, Sonnet 4.6, and the 4.5 generation still **accept** a manual budget, and
-promptfoo passes it through unchanged — so a precise thinking-token ceiling remains
-available there. It is deprecated on 4.6, so write new configs against `adaptive` +
-`effort`.
+Claude 4.5 and 4.6 accept manual budgets; this mode is deprecated on 4.6. On
+adaptive-only models, Promptfoo converts `enabled` to `adaptive`, removes the
+budget, and logs a warning.
 
 3. Disabled thinking:
 
@@ -817,16 +788,15 @@ nor on Opus 5 above `effort: high`. Promptfoo omits it in both cases and warns.
 
 #### Thinking `display`
 
-The `display` field controls whether the reasoning text is returned. Thinking happens — and
-is billed — identically under every setting:
+`display` controls the reasoning text returned by the API. Omitting that text does
+not disable thinking or remove its token cost:
 
 | Value          | Behavior                                                                                                                                                                             |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `'omitted'`    | **Default** on Fable 5/5.1, Mythos 5/5.1, Opus 5.5, Opus 5, Opus 4.7/4.8, and Sonnet 5. The `thinking` block is returned with empty text plus a signature for multi-turn continuity. |
-| `'summarized'` | Returns a readable summary of the reasoning. Default on Opus 4.6 and Sonnet 4.6 only.                                                                                                |
+| `'summarized'` | Returns a readable summary of the reasoning. Default on Claude 4.6 and earlier.                                                                                                      |
 
-Because `'omitted'` is the default on current models, set `display` explicitly when you want
-to assert against Claude's reasoning:
+Set `display: summarized` to request a readable summary:
 
 ```yaml
 thinking:
@@ -834,17 +804,17 @@ thinking:
   display: summarized
 ```
 
-When thinking is enabled or adaptive:
+Thinking tokens count toward `max_tokens` in both modes. Only manual thinking
+requires `budget_tokens`, which must be at least 1,024 and below `max_tokens`.
 
-- Responses will include `thinking` content blocks showing Claude's reasoning process
-- Requires a minimum budget of 1,024 tokens
-- The budget_tokens value must be less than the max_tokens parameter
-- The tokens used for thinking count towards your max_tokens limit
-- A specialized 28 or 29 token system prompt is automatically included
-- Previous turn thinking blocks are ignored and not counted as input tokens
-- `temperature` and `top_k` are incompatible with thinking and will be omitted with a warning
-- `top_p` is clamped to the range [0.95, 1.0] when thinking is enabled
-- Forced tool use (`tool_choice` type `any` or `tool`) is incompatible with `thinking: { type: 'enabled' }` (a manual budget) and with Claude Fable 5.1, Mythos 5.1, and Opus 5.5; in those cases it is omitted with a warning, so use `auto` instead. Adaptive thinking on other models accepts a forced `tool_choice`.
+Promptfoo omits `temperature` and `top_k` when thinking is enabled, and clamps
+`top_p` to `[0.95, 1.0]` on models that support it. On models without sampling
+controls, all three parameters are omitted.
+
+Forced tool use (`tool_choice` type `any` or `tool`) is incompatible with manual
+thinking and with Opus 5.5, Fable 5.1, and Mythos 5.1. Promptfoo omits it with a
+warning in those cases; use `auto` or `none`. Other adaptive models accept forced
+tool use.
 
 Example response with thinking enabled:
 
@@ -866,13 +836,10 @@ Example response with thinking enabled:
 
 #### Controlling Thinking Output
 
-Two separate controls decide whether you see reasoning. The API's `thinking.display`
-decides whether Claude returns any reasoning text; on Fable 5/5.1, Mythos 5/5.1, Opus 5.5, Opus 5,
-Opus 4.7/4.8, and Sonnet 5 it defaults to `omitted`, so you must set
-`display: 'summarized'` first. (Opus 4.6 and Sonnet 4.6 already default to `summarized`
-and need no opt-in.) Promptfoo's `showThinking` then decides whether returned reasoning is
-rendered into the output (default `true`). Setting `showThinking: true` cannot reveal
-reasoning that `display: 'omitted'` never returned.
+`thinking.display` controls what the API returns; `showThinking` controls whether
+Promptfoo includes that text in the output (default: `true`). It cannot reveal
+reasoning omitted by the API. For example, request a summary but exclude it from
+the output being graded:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -883,8 +850,6 @@ providers:
         display: 'summarized'
       showThinking: false # Exclude thinking content from the output
 ```
-
-When `showThinking` is set to `false`, the thinking content will be excluded from the output, and only the final response will be returned. This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
 
 #### Redacted Thinking
 
@@ -909,7 +874,7 @@ Redacted thinking blocks are automatically decrypted when passed back to the API
 
 #### Extended Output with Thinking
 
-Claude 4 models provide enhanced output capabilities and extended thinking support:
+For longer responses, raise `max_tokens` and enable streaming:
 
 ```yaml
 providers:
@@ -936,9 +901,9 @@ See [Anthropic's Extended Thinking Guide](https://platform.claude.com/docs/en/bu
 
 ### Effort Level
 
-The `effort` parameter controls the reasoning-depth/cost tradeoff and replaces manual thinking
-budgets on current models. Higher effort produces more thorough responses but costs more and takes
-longer. It defaults to `high`, so setting `effort: high` is the same as omitting it.
+`effort` controls how many tokens Claude spends on a response, including thinking
+and tool calls. Higher settings can increase quality, cost, and latency. It is not
+a sampling-temperature control or a hard token limit.
 
 ```yaml
 providers:
@@ -949,18 +914,16 @@ providers:
 
 Support varies by model — sending an unsupported level returns a 400:
 
-| Model                                                              | Supported levels                            |
-| ------------------------------------------------------------------ | ------------------------------------------- |
-| Fable 5, Fable 5.1, Opus 5.5, Opus 5, Sonnet 5, Opus 4.7, Opus 4.8 | `low`, `medium`, `high`, `xhigh`, `max`     |
-| Opus 4.6, Sonnet 4.6                                               | `low`, `medium`, `high`, `max` (no `xhigh`) |
-| Opus 4.5                                                           | `low`, `medium`, `high`                     |
-| Sonnet 4.5, Haiku 4.5                                              | Not supported — omit `effort`               |
+| Model                                                            | Supported levels                            |
+| ---------------------------------------------------------------- | ------------------------------------------- |
+| Fable/Mythos 5 and 5.1, Opus 5.5, Opus 5, Sonnet 5, Opus 4.7/4.8 | `low`, `medium`, `high`, `xhigh`, `max`     |
+| Opus 4.6, Sonnet 4.6                                             | `low`, `medium`, `high`, `max` (no `xhigh`) |
+| Opus 4.5                                                         | `low`, `medium`, `high`                     |
+| Sonnet 4.5, Haiku 4.5                                            | Not supported — omit `effort`               |
 
-`xhigh` sits between `high` and `max` and was introduced with Claude Opus 4.7. For coding and
-agentic use cases, Anthropic recommends starting at `high` or `xhigh`, then sweeping downward —
-`low` and `medium` are the main cost and latency lever on Opus 5.5, Opus 5, and Sonnet 5.
-
-When `effort` is unset, the API uses `high` on most models but `medium` on Claude Opus 5.5.
+The API defaults to `medium` on Opus 5.5 and `high` on the other models that support
+effort. Set it explicitly when comparing models. See Anthropic's
+[effort guide](https://platform.claude.com/docs/en/build-with-claude/effort) for model-specific guidance.
 
 This can be combined with other features like structured outputs:
 
@@ -983,13 +946,10 @@ providers:
 
 ### Structured Outputs
 
-Structured outputs constrain Claude's responses to a JSON schema. Supported on every current
-Claude model — Fable 5/5.1, Opus 5.5, Opus 5, Sonnet 5, Opus 4.6–4.8, Sonnet 4.6, and the 4.5 generation
-(Opus 4.5, Sonnet 4.5, Haiku 4.5).
-
-Promptfoo's `output_format` config key maps to the API's `output_config.format` and adds the
-`structured-outputs-2025-11-13` beta header for you — you do not set the deprecated top-level
-`output_format` request parameter yourself.
+Structured outputs constrain responses to a JSON schema and are supported by
+current Claude models. Promptfoo maps `config.output_format` to the API's
+`output_config.format` and adds the `structured-outputs-2025-11-13` beta flag to
+the `anthropic-beta` header.
 
 #### JSON Outputs
 

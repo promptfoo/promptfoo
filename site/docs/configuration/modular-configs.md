@@ -46,13 +46,13 @@ defaultTest: file://configs/default-test.yaml
 
 ```yaml title="configs/providers.yaml"
 # Providers configuration
-- id: gpt-5.2
-  provider: openai:gpt-5.2
+- id: openai:gpt-5.2
+  label: gpt-5.2
   config:
     temperature: 0.7
     max_tokens: 1000
-- id: claude-sonnet
-  provider: anthropic:claude-sonnet-5
+- id: anthropic:claude-sonnet-5
+  label: claude-sonnet
   config:
     max_tokens: 1000
 ```
@@ -116,14 +116,14 @@ env: file://configs/env-prod.yaml
 
 ```yaml title="configs/providers-prod.yaml"
 # Production providers with rate limiting
-- id: gpt-5.2-prod
-  provider: openai:gpt-5.2
+- id: openai:gpt-5.2
+  label: gpt-5.2-prod
   config:
     temperature: 0.1
     max_tokens: 500
     requestsPerMinute: 100
-- id: claude-sonnet-prod
-  provider: anthropic:claude-sonnet-5
+- id: anthropic:claude-sonnet-5
+  label: claude-sonnet-prod
   config:
     max_tokens: 500
     requestsPerMinute: 50

@@ -25,7 +25,7 @@ OrcaRouter's full live catalog is at [orcarouter.ai/models](https://www.orcarout
 | `orcarouter/auto`             | Adaptive router — picks an upstream per request based on workspace policy. |
 | `openai/gpt-4o`               | OpenAI general-purpose chat.                                               |
 | `openai/gpt-4o-mini`          | Cheaper / faster OpenAI option.                                            |
-| `anthropic/claude-opus-5`     | Anthropic reasoning model (`temperature` is stripped — see note below).    |
+| `anthropic/claude-opus-5`     | Anthropic reasoning model.                                                 |
 | `anthropic/claude-haiku-4.5`  | Anthropic small / fast option.                                             |
 | `google/gemini-2.5-pro`       | Google general-purpose.                                                    |
 | `google/gemini-3-pro-preview` | Google reasoning preview.                                                  |
@@ -97,9 +97,7 @@ providers:
       showThinking: false # Hide thinking content from output (default: true)
 ```
 
-:::note
-Several reasoning families reject `temperature` outright: `anthropic/claude-opus-4.x` and later (including Opus 5), OpenAI `gpt-5*` and `o`-series, and `deepseek/deepseek-reasoner` / `deepseek-r1`. The provider strips `temperature` from outbound requests for these models — both the default `temperature: 0` and any explicit value in your config — so the field never reaches the upstream and you do not need to remember to omit it yourself. For other vendors' reasoning previews not on this list, use `omitDefaults: true` or set `temperature: undefined` to suppress the default.
-:::
+Promptfoo omits `temperature` for Claude Opus 4 and later, OpenAI GPT-5 and o-series, and DeepSeek Reasoner/R1 models. For other models that do not support sampling parameters, set `omitDefaults: true` and leave sampling parameters unset in your config and environment.
 
 ## Features
 

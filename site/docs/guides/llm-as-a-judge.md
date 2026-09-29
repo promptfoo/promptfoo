@@ -1115,12 +1115,12 @@ paths, TTLs, and explicit cache clearing.
 
 ### Grader model selection
 
-| Provider ID                          | Reliability | Cost   | Use for                     |
-| ------------------------------------ | ----------- | ------ | --------------------------- |
-| `openai:responses:gpt-5.4`           | High        | Higher | Production, complex rubrics |
-| `openai:responses:gpt-5-mini`        | Medium      | Low    | Development, simple checks  |
-| `anthropic:messages:claude-sonnet-5` | High        | Medium | Production                  |
-| `anthropic:messages:claude-opus-5-5` | High        | Higher | Production, complex rubrics |
+Compare candidate graders against human-labeled examples from your task. Measure agreement, cost, and latency before choosing a production grader.
+
+| Provider  | Example grader IDs                                                         |
+| --------- | -------------------------------------------------------------------------- |
+| OpenAI    | `openai:responses:gpt-5.4`, `openai:responses:gpt-5-mini`                  |
+| Anthropic | `anthropic:messages:claude-sonnet-5`, `anthropic:messages:claude-opus-5-5` |
 
 Override via CLI:
 
@@ -1158,7 +1158,7 @@ judge to treat candidate output as untrusted data. See [LLM judge prompt templat
 
 ### What is the best LLM judge model?
 
-`openai:responses:gpt-5.4` and `anthropic:messages:claude-sonnet-5` are reliable for production, and `anthropic:messages:claude-opus-5-5` for the most demanding rubrics. Use `openai:responses:gpt-5-mini` for development. The judge should be at least as capable as the system under test.
+Choose a model that agrees with human judgments on your rubric. Test it on both clear-cut and borderline cases, then compare its error rate, cost, and latency with other candidates. See [Grader model selection](#grader-model-selection) for example provider IDs.
 
 ### How do you do majority vote LLM judging?
 

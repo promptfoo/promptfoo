@@ -47,11 +47,16 @@ To route requests through your local Helicone AI Gateway:
 ```yaml
 providers:
   - helicone:openai/gpt-5-mini
-  - helicone:anthropic/claude-sonnet-5
+  - id: helicone:anthropic/claude-sonnet-5
+    config:
+      omitDefaults: true
   - helicone:groq/llama-3.1-8b-instant
 ```
 
 The model format is `provider/model` as supported by the Helicone AI Gateway.
+
+For Claude 5, `omitDefaults: true` omits Promptfoo's default `temperature: 0`.
+Leave sampling parameters unset in your config and environment; explicit values still apply.
 
 ### Custom Configuration
 
@@ -84,15 +89,6 @@ providers:
     config:
       router: development
 ```
-
-:::note Claude 5 models on this gateway
-
-This provider extends promptfoo's OpenAI-compatible request builder, which sends
-`temperature: 0` unless you set `omitDefaults: true`. Claude 5 models
-(`claude-opus-5*`, `claude-sonnet-5`, `claude-fable-5*`) reject `temperature`,
-`top_p`, and `top_k` with a 400, so add `omitDefaults: true` to their config.
-
-:::
 
 ## Configuration Options
 
@@ -172,7 +168,7 @@ providers:
 
   - id: helicone:anthropic/claude-sonnet-5
     config:
-      omitDefaults: true # Claude 5 rejects the gateway's default temperature
+      omitDefaults: true
       tags: ['anthropic', 'claude']
       properties:
         model_family: 'claude-5'

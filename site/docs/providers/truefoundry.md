@@ -29,15 +29,6 @@ export TRUEFOUNDRY_API_KEY=your_api_key_here
 
 Alternatively, you can specify the `apiKey` in the provider configuration (see below).
 
-:::note Claude 5 models on this gateway
-
-This provider extends promptfoo's OpenAI-compatible request builder, which sends
-`temperature: 0` unless you set `omitDefaults: true`. Claude 5 models
-(`claude-opus-5`, `claude-sonnet-5`, `claude-fable-5*`) reject `temperature`,
-`top_p`, and `top_k` with a 400, so add `omitDefaults: true` to their config.
-
-:::
-
 ## Configuration
 
 Configure the TrueFoundry provider in your promptfoo configuration file. The model name should follow the format `provider-account/model-name` (e.g., `openai-main/gpt-5`):
@@ -129,10 +120,17 @@ providers:
 
 ### Anthropic Models
 
+For Claude 5, set `omitDefaults: true` to omit Promptfoo's default `temperature: 0`.
+Leave sampling parameters unset in your config and environment; explicit values still apply.
+
 ```yaml
 providers:
-  - truefoundry:anthropic-main/claude-sonnet-5
-  - truefoundry:anthropic-main/claude-opus-5
+  - id: truefoundry:anthropic-main/claude-sonnet-5
+    config:
+      omitDefaults: true
+  - id: truefoundry:anthropic-main/claude-opus-5
+    config:
+      omitDefaults: true
   - truefoundry:anthropic-main/claude-haiku-4-5
 ```
 
@@ -312,8 +310,6 @@ providers:
   - id: truefoundry:anthropic-main/claude-sonnet-5
     label: 'Claude Sonnet 5 via TrueFoundry'
     config:
-      # TrueFoundry inherits the OpenAI-compatible body builder, which sends
-      # `temperature: 0` unless defaults are omitted. Claude 5 rejects it.
       omitDefaults: true
       max_tokens: 1000
       metadata:

@@ -84,9 +84,7 @@ providers:
       streaming: true
 ```
 
-:::note
-Claude 5 models (`anthropic/claude-sonnet-5`, `anthropic/claude-opus-5`) reject `temperature`, `topP`, and `topK`. Omit those three when routing to them through the gateway.
-:::
+When using Claude 5, omit `temperature`, `topP`, and `topK`.
 
 ### Configuration Parameters
 

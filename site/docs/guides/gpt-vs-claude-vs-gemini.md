@@ -45,7 +45,7 @@ providers:
   - google:gemini-3.1-pro-preview
 ```
 
-You can optionally set parameters like temperature and max tokens for each model. Claude 5 models reject `temperature`, `top_p`, and `top_k` — use `effort` instead if you need to tune reasoning depth:
+Configure token limits separately for each model. Claude Sonnet 5 uses `effort` to control reasoning depth and does not support `temperature`, `top_p`, or `top_k`:
 
 ```yaml
 providers:

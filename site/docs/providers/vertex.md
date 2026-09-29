@@ -75,11 +75,9 @@ Anthropic's Claude models are available with the following versions:
 - `vertex:claude-fable-5-1` - Claude Fable 5.1 with always-on adaptive thinking and $0.25/MTok cache reads
 - `vertex:claude-mythos-5-1` - Claude Mythos 5.1 (provider approval required)
 - `vertex:claude-fable-5` - Claude Fable 5 with a 1M-token context window and always-on adaptive thinking
-- `vertex:claude-opus-5` - Claude Opus 5, the Opus-tier Claude 5 model for complex agentic coding and long-horizon work, with a 1M-token context window and the full `low`–`max` effort ladder. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Thinking is on by default, and `thinking: { type: 'disabled' }` is only accepted at `effort` `high` or below.
-- `vertex:claude-sonnet-5` - Claude Sonnet 5, the most agentic Sonnet, with a 1M-token context window and the full effort ladder. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project.
 
 Promptfoo omits unsupported `temperature`, `top_p`, and `top_k` values for the adaptive-only
-Claude models — Fable 5, Mythos 5, Opus 5.5, Opus 5, Sonnet 5, and Opus 4.7/4.8 (see their entries below).
+Claude models, including Fable/Mythos 5, Opus 5.5, Opus 5, Sonnet 5, and Opus 4.7/4.8.
 For the other Claude models it applies the rules the Anthropic API enforces, with a warning: no
 `temperature` alongside `top_p`, and with extended thinking no `temperature` or `top_k` and a `top_p`
 of at least 0.95.
@@ -114,11 +112,13 @@ and the model ID because Google does not publish one in its public model catalog
 
 **Claude Opus 5:**
 
-- `vertex:claude-opus-5` - Claude Opus 5, the Opus-tier Claude 5 model for complex agentic coding and long-horizon work, with a 1M-token context window and the full `low`–`max` effort ladder. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Like Opus 4.7/4.8, promptfoo automatically omits `temperature`, `top_p`, and `top_k` (deprecated for this model). Thinking is on by default, and `thinking: { type: 'disabled' }` is only accepted at `effort` `high` or below.
+- `vertex:claude-opus-5` - 1M-token context window and `low`, `medium`, `high`, `xhigh`, and `max` effort levels. Thinking is on by default; it can be disabled only at `high` effort or below.
 
 **Claude Sonnet 5:**
 
-- `vertex:claude-sonnet-5` - Claude Sonnet 5, the most agentic Sonnet, with a 1M-token context window and effort levels. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Like Opus 4.7/4.8, promptfoo automatically omits `temperature`, `top_p`, and `top_k` (deprecated for this model).
+- `vertex:claude-sonnet-5` - 1M-token context window with adaptive thinking on by default. Set `config.effort` to `low`, `medium`, `high`, `xhigh`, or `max`.
+
+For both models, use `config.region: global` or an enabled US/EU multi-region endpoint.
 
 **Claude 4.7:**
 
@@ -151,7 +151,8 @@ and the model ID because Google does not publish one in its public model catalog
 Claude models require explicit access enablement through the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers). Navigate to the Model Garden, search for "Claude", and enable the specific models you need.
 :::
 
-Note: Claude context limits vary by model. Fable 5, Mythos 5, Opus 5.5, Opus 5, and Sonnet 5 support up to 1 million input tokens.
+Claude context limits vary by model. Fable 5, Mythos 5, Opus 5.5, Opus 5, and Sonnet 5
+have a 1M-token context window.
 
 ### Llama Models
 
@@ -551,7 +552,7 @@ Example configuration with specific region:
 providers:
   - id: vertex:claude-sonnet-5
     config:
-      region: global # Claude 5 models route through the global endpoint
+      region: global
       projectId: my-project-id
 ```
 

@@ -51,14 +51,8 @@ You can omit the type to default to chat mode:
 aimlapi:<model_name>
 ```
 
-:::note Claude 5 models on this gateway
-
-This provider extends promptfoo's OpenAI-compatible request builder, which sends
-`temperature: 0` unless you set `omitDefaults: true`. Claude 5 models
-(`claude-opus-5*`, `claude-sonnet-5`, `claude-fable-5*`) reject `temperature`,
-`top_p`, and `top_k` with a 400, so add `omitDefaults: true` to their config.
-
-:::
+For Claude 5, set `omitDefaults: true` to omit Promptfoo's default `temperature: 0`.
+Leave sampling parameters unset in your config and environment; explicit values still apply.
 
 ## Configuration
 
@@ -121,7 +115,7 @@ providers:
   - aimlapi:chat:openai/gpt-5.6-luna
   - id: aimlapi:chat:anthropic/claude-sonnet-5
     config:
-      omitDefaults: true # Claude 5 rejects the default temperature promptfoo sends
+      omitDefaults: true
 
 prompts:
   - 'Explain {{concept}} in simple terms'

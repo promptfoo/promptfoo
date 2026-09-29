@@ -43,11 +43,11 @@ HLE addresses benchmark saturation - the phenomenon where advanced models achiev
 - Questions resist simple web search solutions
 - Focuses on verifiable, closed-ended problems
 
-**Model performance as of early 2026 (from the [Scale AI leaderboard](https://scale.com/leaderboard/humanitys_last_exam)). Newer releases such as Claude Opus 5 and Claude Sonnet 5 are not in this snapshot — check the leaderboard for current numbers:**
+**Model performance as of early 2026. See the [Scale AI leaderboard](https://scale.com/leaderboard/humanitys_last_exam) for current results:**
 
 | Model                          | Accuracy | Notes                  |
 | ------------------------------ | -------- | ---------------------- |
-| Gemini 3 Pro Preview           | 37.5%    | Current leader         |
+| Gemini 3 Pro Preview           | 37.5%    | Highest in this table  |
 | Claude Opus 4.6 (Thinking Max) | 34.4%    | Extended thinking mode |
 | GPT-5 Pro                      | 31.6%    | Reasoning model        |
 | GPT-5.2                        | 27.8%    | Standard model         |
@@ -190,8 +190,8 @@ This automated approach scales well for large evaluations while maintaining accu
 
 **Key settings:**
 
-- **Reasoning effort (Claude)**: `effort` trades cost against reasoning depth on adaptive-thinking models - higher levels may improve accuracy
-- **4K max tokens**: Allows detailed explanations without truncation
+- **3K thinking tokens (Claude)**: The linked example uses a 3,000-token thinking budget on Claude Sonnet 4.6
+- **4K max tokens**: The example's output budget, including Claude's thinking tokens
 - **50 questions**: Sample size chosen for this demonstration - scale up for production evals
 - **Custom prompts**: Can be further optimized for specific models and question types
 
@@ -212,6 +212,8 @@ providers:
 ```
 
 **Increase reasoning depth:**
+
+For Claude Sonnet 5, use adaptive thinking with `effort`:
 
 ```yaml
 providers:

@@ -48,6 +48,7 @@ providers:
 
   - id: openrouter:anthropic/claude-opus-5
     config:
+      omitDefaults: true
       max_tokens: 2000
 
   - id: openrouter:google/gemini-2.5-flash

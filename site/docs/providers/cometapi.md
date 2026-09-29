@@ -47,7 +47,9 @@ Choose a model that supports the selected endpoint. CometAPI's [GPT-6 Astra tool
 ```yaml
 providers:
   - cometapi:chat:gpt-5-mini
-  - cometapi:chat:claude-sonnet-5
+  - id: cometapi:chat:claude-sonnet-5
+    config:
+      omitDefaults: true # Omit Promptfoo's default temperature for Claude 5
   - cometapi:chat:your-chat-model
   # Or use default chat mode
   - cometapi:gpt-5-mini

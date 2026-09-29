@@ -135,7 +135,7 @@ pipelines:
             script:
               - npm ci
               - npm install -g promptfoo
-              - npx promptfoo eval --providers.0.config.model=gpt-4
+              - npx promptfoo eval --providers openai:gpt-4 -o promptfoo-results-gpt4.json
             artifacts:
               - promptfoo-results-gpt4.json
         - step:
@@ -143,7 +143,7 @@ pipelines:
             script:
               - npm ci
               - npm install -g promptfoo
-              - npx promptfoo eval --providers.0.config.model=claude-opus-5
+              - npx promptfoo eval --providers anthropic:claude-opus-5 -o promptfoo-results-claude.json
             artifacts:
               - promptfoo-results-claude.json
 ```

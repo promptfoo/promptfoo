@@ -514,7 +514,7 @@ providers:
       custom_agent:
         description: Security-focused code reviewer
         mode: primary # 'primary', 'subagent', or 'all'
-        model: anthropic/claude-sonnet-5 # Claude 5 rejects temperature/top_p/top_k
+        model: anthropic/claude-sonnet-5
         steps: 10 # Max iterations before text-only response
         color: '#ff5500' # Visual identification
         tools:
