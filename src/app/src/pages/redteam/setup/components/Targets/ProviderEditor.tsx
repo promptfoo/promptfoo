@@ -4,9 +4,9 @@ import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { getProviderType } from './helpers';
 import ProviderConfigEditor from './ProviderConfigEditor';
 import ProviderTypeSelector from './ProviderTypeSelector';
+import { getProviderEditorType } from './providerCatalog';
 
 import type { ProviderOptions } from '../../types';
 
@@ -71,7 +71,7 @@ export default function ProviderEditor({
   const [validationErrors, setValidationErrors] = useState<string | null>(null);
   const [shouldValidate, setShouldValidate] = useState<boolean>(false);
   const [providerType, setProviderType] = useState<string | undefined>(
-    getProviderType(provider?.id) ?? availableProviderIds?.[0],
+    getProviderEditorType(provider?.id) ?? availableProviderIds?.[0],
   );
 
   const handleValidationRequest = useCallback((validator: () => boolean) => {
@@ -80,7 +80,7 @@ export default function ProviderEditor({
 
   // Sync providerType with provider changes
   useEffect(() => {
-    const inferredType = getProviderType(provider?.id) ?? availableProviderIds?.[0];
+    const inferredType = getProviderEditorType(provider?.id) ?? availableProviderIds?.[0];
     setProviderType((currentType) =>
       currentType === 'openinterpreter' && inferredType !== 'openinterpreter'
         ? currentType

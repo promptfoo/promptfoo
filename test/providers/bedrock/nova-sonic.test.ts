@@ -57,30 +57,49 @@ const encodeChunk = (obj: any) => ({
 });
 
 function createMockStreamResponse(responseObjects: any[]) {
-  const chunks = responseObjects.map(encodeChunk);
-
   return {
-    body: {
-      [Symbol.asyncIterator]: () => ({
-        current: 0,
-        isDone: false,
-
-        async next() {
-          if (this.isDone || this.current >= chunks.length) {
-            return { done: true, value: undefined };
-          }
-
-          const chunk = chunks[this.current++];
-
-          if (this.current >= chunks.length) {
-            this.isDone = true;
-          }
-
-          return { done: false, value: chunk };
-        },
-      }),
-    },
+    body: (async function* () {
+      for (const event of responseObjects) {
+        yield encodeChunk(event);
+      }
+    })(),
   };
+}
+
+function captureSonicRequest(mockSend: Mock, responseObjects: any[] = standardTextResponse) {
+  const events: any[] = [];
+  mockSend.mockImplementation(async ({ body }) => {
+    const input = body[Symbol.asyncIterator]();
+    let audioContentName: string | undefined;
+    while (true) {
+      const { value, done } = await input.next();
+      if (done) {
+        throw new Error('Sonic request ended before audio input');
+      }
+      const event = JSON.parse(new TextDecoder().decode(value.chunk.bytes)).event;
+      events.push(event);
+      if (event.contentStart?.type === 'AUDIO') {
+        audioContentName = event.contentStart.contentName;
+      }
+      if (audioContentName && event.contentEnd?.contentName === audioContentName) {
+        break;
+      }
+    }
+    return {
+      body: (async function* () {
+        for (const response of responseObjects) {
+          yield encodeChunk(response);
+          if ('toolUse' in response.event) {
+            for (let i = 0; i < 3; i++) {
+              const { value } = await input.next();
+              events.push(JSON.parse(new TextDecoder().decode(value.chunk.bytes)).event);
+            }
+          }
+        }
+      })(),
+    };
+  });
+  return events;
 }
 
 const standardTextResponse = [
@@ -126,7 +145,7 @@ const _audioResponse = [
   },
 ];
 
-const _functionCallResponse = [
+const functionCallResponse = [
   {
     event: {
       textOutput: {
@@ -140,19 +159,19 @@ const _functionCallResponse = [
       toolUse: {
         toolName: 'get_weather',
         toolUseId: 'tool-123',
-        parameters: {
-          location: 'New York',
-        },
+        content: JSON.stringify({ location: 'New York' }),
       },
     },
   },
   {
     event: {
       contentEnd: {
-        stopReason: 'END_TURN',
+        type: 'TOOL',
+        stopReason: 'TOOL_USE',
       },
     },
   },
+  ...standardTextResponse,
 ];
 
 describe('NovaSonic Provider', () => {
@@ -205,6 +224,7 @@ describe('NovaSonic Provider', () => {
     enableCache();
     vi.clearAllMocks();
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   describe('Initialization', () => {
@@ -316,6 +336,62 @@ describe('NovaSonic Provider', () => {
 
       expect(createSessionSpy).toHaveBeenCalledWith('mocked-session-id');
     });
+
+    it.each([
+      [
+        'documented configuration',
+        { inferenceConfiguration: { maxTokens: 2048, temperature: 0.4, topP: 0.8 } },
+        { maxTokens: 2048, temperature: 0.4, topP: 0.8 },
+      ],
+      [
+        'short alias',
+        { inferenceConfig: { maxTokens: 2048, temperature: 0.4, topP: 0.8 } },
+        { maxTokens: 2048, temperature: 0.4, topP: 0.8 },
+      ],
+      [
+        'legacy snake case',
+        { interfaceConfig: { max_new_tokens: 2048, temperature: 0.4, top_p: 0.8 } },
+        { maxTokens: 2048, temperature: 0.4, topP: 0.8 },
+      ],
+      [
+        'legacy camel case',
+        { interfaceConfig: { maxTokens: 2048, temperature: 0.4, topP: 0.8 } },
+        { maxTokens: 2048, temperature: 0.4, topP: 0.8 },
+      ],
+      [
+        'documented spelling precedence',
+        {
+          inferenceConfiguration: { temperature: 0 },
+          inferenceConfig: { temperature: 0.2 },
+          interfaceConfig: { temperature: 0.3 },
+        },
+        { maxTokens: 1024, temperature: 0, topP: 0.9 },
+      ],
+      [
+        'short alias precedence',
+        { inferenceConfig: { temperature: 0 }, interfaceConfig: { temperature: 0.3 } },
+        { maxTokens: 1024, temperature: 0, topP: 0.9 },
+      ],
+      [
+        'partial legacy configuration',
+        { interfaceConfig: { top_p: 0 } },
+        { maxTokens: 1024, temperature: 0.7, topP: 0 },
+      ],
+      ['defaults', {}, { maxTokens: 1024, temperature: 0.7, topP: 0.9 }],
+    ])('encodes %s in the session request', async (_label, config, expected) => {
+      vi.useFakeTimers();
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      const events = captureSonicRequest(mockSend);
+      const configuredProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', { config });
+
+      const request = configuredProvider.callApi('AA==');
+      await vi.runAllTimersAsync();
+      const result = await request;
+
+      expect(events[0]).toEqual({ sessionStart: { inferenceConfiguration: expected } });
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('This is a test response\n');
+    });
   });
 
   describe('Response Handling', () => {
@@ -355,48 +431,37 @@ describe('NovaSonic Provider', () => {
       });
     });
 
-    it('should handle function calls correctly', async () => {
+    it('sends an explicit tool error with matching stream event identifiers', async () => {
+      vi.useFakeTimers();
       vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      const events = captureSonicRequest(mockSend, functionCallResponse);
 
-      const toolProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
-        config: {
-          toolConfig: {
-            tools: [
-              {
-                name: 'get_weather',
-                description: 'Get weather information',
-                schema: {
-                  type: 'object',
-                  properties: {
-                    location: { type: 'string' },
-                  },
-                  required: ['location'],
-                },
-              },
-            ],
-          },
-        },
+      const request = provider.callApi('AA==');
+      await vi.runAllTimersAsync();
+      const result = await request;
+      const toolStartIndex = events.findIndex((event) => event.contentStart?.type === 'TOOL');
+      const [start, toolResult, end] = events.slice(toolStartIndex, toolStartIndex + 3);
+
+      expect(start.contentStart).toMatchObject({
+        role: 'TOOL',
+        toolResultInputConfiguration: { toolUseId: 'tool-123', type: 'TEXT' },
       });
-
-      vi.spyOn(toolProvider, 'callApi').mockResolvedValue({
-        output: 'I will check the weather for you\n',
-        tokenUsage: { total: 0, prompt: 0, completion: 0 },
-        cached: false,
-        metadata: {
-          functionCallOccurred: true,
-        },
+      expect(toolResult.toolResult).toEqual({
+        promptName: start.contentStart.promptName,
+        contentName: start.contentStart.contentName,
+        content: JSON.stringify({
+          error: 'Tool use is not supported by the Nova Sonic provider.',
+          toolName: 'get_weather',
+          toolUseId: 'tool-123',
+        }),
       });
-
-      const result = await toolProvider.callApi("What's the weather in New York?");
-
-      expect(result).toEqual({
-        output: 'I will check the weather for you\n',
-        tokenUsage: { total: 0, prompt: 0, completion: 0 },
-        cached: false,
-        metadata: {
-          functionCallOccurred: true,
-        },
+      expect(end.contentEnd).toEqual({
+        promptName: start.contentStart.promptName,
+        contentName: start.contentStart.contentName,
       });
+      expect(result.error).toBeUndefined();
+      expect(result.output).toContain('This is a test response');
+      expect(result.metadata?.functionCallOccurred).toBe(true);
     });
   });
 

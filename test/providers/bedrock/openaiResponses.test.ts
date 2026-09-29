@@ -1,25 +1,34 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
+import logger from '../../../src/logger';
 import {
-  isBedrockGrokModel,
-  isBedrockMantleResponsesModel,
-  isBedrockOpenAiResponsesModel,
-} from '../../../src/providers/bedrock/mantle';
-import {
+  BedrockGptOssResponsesProvider,
   BedrockGrokResponsesProvider,
   BedrockOpenAiResponsesProvider,
   createBedrockOpenAiResponsesProvider,
+  DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION,
   getBedrockMantleBaseUrl,
+  getBedrockMantleResponsesBaseUrl,
 } from '../../../src/providers/bedrock/openaiResponses';
+import {
+  isBedrockGptOssResponsesModel,
+  isBedrockGrokModel,
+  isBedrockMantleResponsesModel,
+  isBedrockOpenAiResponsesModel,
+} from '../../../src/providers/bedrock/routing';
 import { calculateOpenAIUsageCost } from '../../../src/providers/openai/billing';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
-import { ResponsesProcessor } from '../../../src/providers/responses/processor';
-import { readResponsesStream } from '../../../src/providers/responses/stream';
+import { fetchWithRetries } from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/cache')>()),
   fetchWithCache: vi.fn(),
+}));
+
+vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/util/fetch/index')>()),
+  fetchWithRetries: vi.fn(),
 }));
 
 const GPT_5_6_MODELS = [
@@ -30,8 +39,16 @@ const GPT_5_6_MODELS = [
 
 describe('bedrock openaiResponses helper', () => {
   let restoreEnv: (() => void) | undefined;
+  let restoreRegionEnv: (() => void) | undefined;
 
   beforeEach(() => {
+    // Keep default-region assertions deterministic when this file runs under shuffled test
+    // order or a developer shell that has AWS region variables configured.
+    restoreRegionEnv = mockProcessEnv({
+      AWS_BEDROCK_REGION: undefined,
+      AWS_REGION: undefined,
+      AWS_DEFAULT_REGION: undefined,
+    });
     vi.mocked(fetchWithCache)
       .mockReset()
       .mockResolvedValue({
@@ -56,6 +73,8 @@ describe('bedrock openaiResponses helper', () => {
   afterEach(() => {
     restoreEnv?.();
     restoreEnv = undefined;
+    restoreRegionEnv?.();
+    restoreRegionEnv = undefined;
     vi.resetAllMocks();
   });
 
@@ -118,23 +137,88 @@ describe('bedrock openaiResponses helper', () => {
     });
   });
 
-  describe('createBedrockOpenAiResponsesProvider', () => {
-    it('throws a helpful error when no Bedrock API key is configured', () => {
-      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
-      expect(() => createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {})).toThrow(
-        /AWS_BEARER_TOKEN_BEDROCK/,
+  describe('GPT OSS mantle Responses', () => {
+    it('classifies only the short mantle GPT OSS ids', () => {
+      expect(isBedrockGptOssResponsesModel('openai.gpt-oss-120b')).toBe(true);
+      expect(isBedrockGptOssResponsesModel('openai.gpt-oss-20b')).toBe(true);
+      expect(isBedrockGptOssResponsesModel('openai.gpt-oss-120b-1:0')).toBe(false);
+      expect(isBedrockGptOssResponsesModel('openai.gpt-oss-safeguard-120b')).toBe(false);
+    });
+
+    it('builds the standard /v1 mantle base URL', () => {
+      expect(getBedrockMantleResponsesBaseUrl('us-east-1')).toBe(
+        'https://bedrock-mantle.us-east-1.api.aws/v1',
       );
     });
 
-    it('treats an unresolved {{env.*}} apiKey template as missing (helpful error)', () => {
-      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
-      // Simulates the env var being unset: the template literal must NOT be sent as a bearer
-      // token (which would 401); the user should get the actionable missing-key error.
-      expect(() =>
-        createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-          config: { apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' },
+    it('defaults GPT OSS Responses to the standard mantle region', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-oss-120b', {});
+
+      expect(DEFAULT_BEDROCK_MANTLE_RESPONSES_REGION).toBe('us-east-1');
+      expect((provider.config as any).apiBaseUrl).toBe(
+        'https://bedrock-mantle.us-east-1.api.aws/v1',
+      );
+    });
+
+    it('uses the standard mantle endpoint and preserves GPT OSS reasoning controls', async () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-oss-120b', {
+        config: {
+          region: 'us-east-1',
+          reasoning_effort: 'high',
+          temperature: 0.3,
+          top_p: 0.8,
+        } as any,
+      });
+
+      expect(provider).toBeInstanceOf(BedrockGptOssResponsesProvider);
+      expect((provider.config as any).apiBaseUrl).toBe(
+        'https://bedrock-mantle.us-east-1.api.aws/v1',
+      );
+      expect((provider as any).getCapabilityModelName()).toBe('gpt-oss-120b');
+      expect((provider as any).isReasoningModel()).toBe(true);
+
+      const { body } = await (provider as any).getOpenAiBody('What is 17*23?');
+      expect(body.model).toBe('openai.gpt-oss-120b');
+      expect(body.reasoning).toEqual({ effort: 'high' });
+      expect(body.temperature).toBe(0.3);
+      expect(body.top_p).toBe(0.8);
+    });
+
+    it('posts GPT OSS calls to /v1/responses with the Bedrock API key', async () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-oss-120b', {
+        config: { region: 'us-east-1' },
+      });
+
+      await provider.callApi('hello');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://bedrock-mantle.us-east-1.api.aws/v1/responses',
+        expect.objectContaining({
+          getAuthHeaders: expect.any(Function),
         }),
-      ).toThrow(/AWS_BEARER_TOKEN_BEDROCK/);
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
+      );
+    });
+  });
+
+  describe('createBedrockOpenAiResponsesProvider', () => {
+    it('allows AWS credential-chain auth when no Bedrock API key is configured', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+      expect(() => createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {})).not.toThrow();
+    });
+
+    it('does not preserve an unresolved {{env.*}} apiKey template as a bearer token', () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
+        config: { apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' },
+      });
+      expect((provider.config as any).apiKey).toBe('{{env.AWS_BEARER_TOKEN_BEDROCK}}');
     });
 
     it('falls back to the env var when apiKey is an unresolved template but the env is set', () => {
@@ -142,7 +226,7 @@ describe('bedrock openaiResponses helper', () => {
       const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
         config: { apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' },
       });
-      expect((provider.config as any).apiKey).toBe('real-key');
+      expect(provider.getApiKey()).toBe('real-key');
     });
 
     it('targets the mantle endpoint for the configured region with config.apiKey', () => {
@@ -169,7 +253,7 @@ describe('bedrock openaiResponses helper', () => {
       expect((provider.config as any).apiBaseUrl).toBe(
         'https://bedrock-mantle.us-east-2.api.aws/openai/v1',
       );
-      expect((provider.config as any).apiKey).toBe('env-bedrock-key');
+      expect(provider.getApiKey()).toBe('env-bedrock-key');
     });
 
     it.each(GPT_5_6_MODELS)('uses the shared GA default region for %s', (modelId) => {
@@ -187,31 +271,210 @@ describe('bedrock openaiResponses helper', () => {
       );
     });
 
-    it.each([
-      ['openai.gpt-5.6-sol', 'us-east-1'],
-      ['openai.gpt-5.6-sol', 'us-east-2'],
-      ['openai.gpt-5.6-terra', 'us-west-2'],
-      ['openai.gpt-5.6-luna', 'us-west-2'],
-    ])('accepts the GA region %s / %s', (modelId, region) => {
-      const provider = createBedrockOpenAiResponsesProvider(modelId, {
-        config: { apiKey: 'bedrock-key', region },
+    it('defaults GPT-6 Astra to us-west-2 in the factory and direct constructor', async () => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+        config: { apiKey: 'bedrock-key' },
+      });
+      const direct = new BedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+        config: { apiKey: 'bedrock-key' },
       });
 
-      expect((provider.config as any).apiBaseUrl).toBe(
-        `https://bedrock-mantle.${region}.api.aws/openai/v1`,
+      expect(provider.getApiUrl()).toBe('https://bedrock-mantle.us-west-2.api.aws/openai/v1');
+      expect(direct.getApiUrl()).toBe('https://bedrock-mantle.us-west-2.api.aws/openai/v1');
+
+      await provider.callApi('hello');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://bedrock-mantle.us-west-2.api.aws/openai/v1/responses',
+        expect.objectContaining({ body: expect.stringContaining('"model":"openai.gpt-6-astra"') }),
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
       );
     });
 
     it.each([
-      ['openai.gpt-5.6-sol', 'us-west-2', 'us-east-1, us-east-2'],
-      ['openai.gpt-5.6-terra', 'eu-west-1', 'us-east-1, us-east-2, us-west-2'],
-      ['openai.gpt-5.6-luna', 'ap-southeast-2', 'us-east-1, us-east-2, us-west-2'],
-    ])('rejects the unsupported GA region %s / %s before auth', (modelId, region, supported) => {
-      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
-
-      expect(() => createBedrockOpenAiResponsesProvider(modelId, { config: { region } })).toThrow(
-        `Supported Regions: ${supported}`,
+      ['AWS_BEDROCK_REGION', 'eu-west-1'],
+      ['AWS_REGION', 'us-east-1'],
+      ['AWS_DEFAULT_REGION', 'ap-southeast-2'],
+    ])('uses %s for GPT-6 Astra when configured', async (envVar, region) => {
+      restoreEnv = mockProcessEnv({ [envVar]: region });
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+        config: { apiKey: 'bedrock-key' },
+      });
+      await provider.callApi('hello');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        `https://bedrock-mantle.${region}.api.aws/openai/v1/responses`,
+        expect.anything(),
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
       );
+    });
+
+    it.each([
+      ['openai.gpt-6-astra', 'us-east-1'],
+      ['openai.gpt-6-sol', 'us-west-2'],
+      ['openai.gpt-6-luna', 'us-east-2'],
+      ['openai.gpt-5.6-sol', 'us-gov-west-1'],
+      ['openai.gpt-5.6-terra', 'eu-west-1'],
+      ['openai.gpt-5.6-luna', 'ap-southeast-2'],
+    ])('uses an explicitly configured region for %s / %s', async (modelId, region) => {
+      const provider = createBedrockOpenAiResponsesProvider(modelId, {
+        config: { apiKey: 'bedrock-key', region },
+      });
+
+      await provider.callApi('hello');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        `https://bedrock-mantle.${region}.api.aws/openai/v1/responses`,
+        expect.anything(),
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
+      );
+    });
+
+    describe('Mantle region hints', () => {
+      let errorSpy: ReturnType<typeof vi.spyOn>;
+
+      const mockMantleResponse = (model: string, status = 404) => {
+        const data = {
+          error: {
+            code: status === 404 ? 'not_found_error' : 'invalid_request_error',
+            message: `The model '${model}' does not exist`,
+            param: null,
+            type: 'invalid_request_error',
+          },
+        };
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data,
+          cached: false,
+          status,
+          statusText: status === 404 ? 'Not Found' : 'Bad Request',
+        });
+        return data;
+      };
+
+      beforeEach(() => {
+        errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+      });
+
+      afterEach(() => {
+        errorSpy.mockRestore();
+      });
+
+      it.each([
+        ['openai.gpt-6-astra', 'us-east-1', 'us-west-2'],
+        ['openai.gpt-6-sol', 'us-east-2', 'us-east-1'],
+        ['openai.gpt-5.6-sol', 'us-west-2', 'us-east-1, us-east-2'],
+        ['openai.gpt-5.5', 'us-west-2', 'us-east-1, us-east-2'],
+        [
+          'openai.gpt-5.6-luna',
+          'eu-west-1',
+          'us-east-1, us-east-2, us-west-2, us-gov-west-1, us-gov-east-1',
+        ],
+      ])('explains a Mantle 404 for %s in an unlisted region %s', async (model, region, listed) => {
+        restoreEnv = mockProcessEnv({ AWS_REGION: region });
+        const body = mockMantleResponse(model);
+        const provider = createBedrockOpenAiResponsesProvider(model, {
+          config: { apiKey: 'bedrock-key' },
+        });
+
+        const first = await provider.callApi('hello');
+        const second = await provider.callApi('hello');
+
+        const hint =
+          `Amazon Bedrock does not list ${model} on the Mantle endpoint in ${region}. ` +
+          `Set config.region or AWS_BEDROCK_REGION to a listed Region: ${listed}.`;
+        expect(first.error).toBe(`API error: 404 Not Found\n${JSON.stringify(body)}\n\n${hint}`);
+        expect(second.error).toBe(first.error);
+        expect(first.metadata?.http?.status).toBe(404);
+        // Logged once per provider, since concurrent eval rows can all hit the same 404.
+        expect(errorSpy).toHaveBeenCalledTimes(1);
+        expect(errorSpy).toHaveBeenCalledWith(hint);
+      });
+
+      it('points an explicit Mantle apiBaseUrl at a listed region', async () => {
+        mockMantleResponse('openai.gpt-6-astra');
+        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+          config: {
+            apiKey: 'bedrock-key',
+            region: 'us-west-2',
+            apiBaseUrl: 'https://bedrock-mantle.us-east-1.api.aws/openai/v1',
+          },
+        });
+
+        const result = await provider.callApi('hello');
+
+        expect(result.error).toContain(
+          'Amazon Bedrock does not list openai.gpt-6-astra on the Mantle endpoint in us-east-1. ' +
+            'Point config.apiBaseUrl at a listed Region: us-west-2.',
+        );
+      });
+
+      it('does not turn a 404 refusal into an error', async () => {
+        restoreEnv = mockProcessEnv({ AWS_REGION: 'us-east-1' });
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: { error: { code: 'invalid_prompt', message: 'Invalid prompt' } },
+          cached: false,
+          status: 404,
+          statusText: 'Not Found',
+        });
+        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-6-astra', {
+          config: { apiKey: 'bedrock-key' },
+        });
+
+        const result = await provider.callApi('hello');
+
+        expect(result.isRefusal).toBe(true);
+        expect(result.error).toBeUndefined();
+        expect(errorSpy).not.toHaveBeenCalled();
+      });
+
+      it('uses the regions of a prompt-level model override', async () => {
+        mockMantleResponse('openai.gpt-6-sol');
+        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-terra', {
+          config: { apiKey: 'bedrock-key', region: 'us-east-2' },
+        });
+
+        const result = await provider.callApi('hello', {
+          vars: {},
+          prompt: {
+            raw: 'hello',
+            label: 'hello',
+            config: { passthrough: { model: 'openai.gpt-6-sol' } },
+          },
+        });
+
+        expect(result.error).toContain(
+          'Amazon Bedrock does not list openai.gpt-6-sol on the Mantle endpoint in us-east-2. ' +
+            'Set config.region or AWS_BEDROCK_REGION to a listed Region: us-east-1.',
+        );
+      });
+
+      it.each([
+        ['a listed region', 'openai.gpt-5.6-terra', { region: 'us-west-2' }, 404],
+        ['an unlisted model', 'openai.gpt-5.5-2026-04-23', { region: 'us-west-2' }, 404],
+        [
+          'a custom endpoint',
+          'openai.gpt-6-astra',
+          { region: 'us-east-1', apiBaseUrl: 'https://proxy.example.test/openai/v1' },
+          404,
+        ],
+        ['a non-404 error', 'openai.gpt-6-astra', { region: 'us-east-1' }, 400],
+      ])('leaves the error unchanged for %s', async (_, model, config, status) => {
+        mockMantleResponse(model, status);
+        const provider = createBedrockOpenAiResponsesProvider(model, {
+          config: { apiKey: 'bedrock-key', ...config },
+        });
+
+        const result = await provider.callApi('hello');
+
+        expect(result.error).toMatch(/^API error: \d{3} [A-Za-z ]+\n\{.*\}$/);
+        expect(errorSpy).not.toHaveBeenCalled();
+      });
     });
 
     it('respects an explicit apiBaseUrl override', () => {
@@ -222,7 +485,7 @@ describe('bedrock openaiResponses helper', () => {
       expect((provider.config as any).apiBaseUrl).toBe('https://example.test/openai/v1');
     });
 
-    it('normalizes an explicit apiBaseUrl and does not apply regional availability to custom endpoints', () => {
+    it('normalizes an explicit apiBaseUrl', () => {
       const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
         config: {
           apiKey: 'bedrock-key',
@@ -324,6 +587,21 @@ describe('bedrock openaiResponses helper', () => {
       ).toBeCloseTo((800 * input + 200 * cachedInput + 500 * output) / 1e6, 10);
     });
 
+    it.each([
+      ['openai.gpt-5.6-terra', 'us-gov-east-1', 2.64, 15.84],
+      ['openai.gpt-5.6-terra', 'us-gov-west-1', 2.64, 15.84],
+      ['openai.gpt-5.6-luna', 'us-gov-east-1', 0.264, 1.584],
+      ['openai.gpt-5.6-luna', 'us-gov-west-1', 0.264, 1.584],
+    ])('prices %s in %s through the Responses provider', async (modelId, region, input, output) => {
+      const provider = createBedrockOpenAiResponsesProvider(modelId, {
+        config: { apiKey: 'bedrock-key', region },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.cost).toBeCloseTo((10 * input + 5 * output) / 1e6, 10);
+    });
+
     it('applies Bedrock regional rates through a custom proxy', async () => {
       const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-terra', {
         config: { apiKey: 'bedrock-key', apiBaseUrl: 'http://localhost:15571/openai/v1' },
@@ -332,6 +610,36 @@ describe('bedrock openaiResponses helper', () => {
       const result = await provider.callApi('hello');
 
       expect(result.cost).toBeCloseTo((10 * 2.2 + 5 * 13.2) / 1e6, 10);
+    });
+
+    it.each([
+      ['AWS_BEDROCK_REGION', { AWS_BEDROCK_REGION: 'us-gov-west-1' }, undefined],
+      ['AWS_REGION', { AWS_REGION: 'us-gov-east-1' }, undefined],
+      ['providerOptions.env', {}, { AWS_BEDROCK_REGION: 'us-gov-west-1' }],
+    ])(
+      'uses the resolved %s for GovCloud pricing through a custom proxy',
+      async (_, processEnv, env) => {
+        restoreEnv = mockProcessEnv(processEnv);
+        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-terra', {
+          config: { apiKey: 'bedrock-key', apiBaseUrl: 'http://localhost:15571/openai/v1' },
+          env,
+        });
+
+        const result = await provider.callApi('hello');
+
+        expect(result.cost).toBeCloseTo((10 * 2.64 + 5 * 15.84) / 1e6, 10);
+      },
+    );
+
+    it('uses the resolved region for GovCloud pricing when constructed directly', async () => {
+      const provider = new BedrockOpenAiResponsesProvider('openai.gpt-5.6-luna', {
+        config: { apiKey: 'bedrock-key', apiBaseUrl: 'http://localhost:15571/openai/v1' },
+        env: { AWS_REGION: 'us-gov-west-1' },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.cost).toBeCloseTo((10 * 0.264 + 5 * 1.584) / 1e6, 10);
     });
 
     it.each([
@@ -474,6 +782,34 @@ describe('bedrock openaiResponses helper', () => {
       expect(body.temperature).toBeUndefined();
     });
 
+    it.each(['openai.gpt-6-sol', 'openai.gpt-6-luna'])(
+      'treats %s as a reasoning model like GPT-5',
+      async (model) => {
+        restoreEnv = mockProcessEnv({
+          AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',
+          OPENAI_MAX_TOKENS: undefined,
+          OPENAI_MAX_COMPLETION_TOKENS: undefined,
+          OPENAI_TEMPERATURE: undefined,
+        });
+
+        // These models reject promptfoo's default temperature 0, so it must not be added.
+        const { body: defaults } = await (
+          createBedrockOpenAiResponsesProvider(model) as any
+        ).getOpenAiBody('hello');
+        expect(defaults.model).toBe(model);
+        expect(defaults.temperature).toBeUndefined();
+        expect(defaults.max_output_tokens).toBeUndefined();
+
+        const { body } = await (
+          createBedrockOpenAiResponsesProvider(model, {
+            config: { reasoning_effort: 'high', verbosity: 'low' } as any,
+          }) as any
+        ).getOpenAiBody('hello');
+        expect(body.reasoning).toEqual({ effort: 'high' });
+        expect(body.text?.verbosity).toBe('low');
+      },
+    );
+
     it('honors AWS_BEARER_TOKEN_BEDROCK and AWS_REGION supplied via promptfoo env overrides', () => {
       restoreEnv = mockProcessEnv({
         AWS_BEARER_TOKEN_BEDROCK: undefined,
@@ -484,7 +820,7 @@ describe('bedrock openaiResponses helper', () => {
       const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.4', {
         env: { AWS_BEARER_TOKEN_BEDROCK: 'override-key', AWS_REGION: 'us-west-2' } as any,
       });
-      expect((provider.config as any).apiKey).toBe('override-key');
+      expect(provider.getApiKey()).toBe('override-key');
       expect((provider.config as any).apiBaseUrl).toBe(
         'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
       );
@@ -508,8 +844,8 @@ describe('bedrock openaiResponses helper', () => {
       expect(fetchWithCache).toHaveBeenCalledWith(
         'https://bedrock-mantle.us-east-2.api.aws/openai/v1/responses',
         expect.objectContaining({
+          getAuthHeaders: expect.any(Function),
           headers: {
-            Authorization: 'Bearer env-bedrock-key',
             'Content-Type': 'application/json',
             'x-custom-header': 'preserved',
           },
@@ -530,7 +866,7 @@ describe('bedrock openaiResponses helper', () => {
       expect(fetchWithCache).toHaveBeenCalledWith(
         'https://bedrock-mantle.us-east-2.api.aws/openai/v1/responses',
         expect.objectContaining({
-          headers: expect.objectContaining({ Authorization: 'Bearer env-bedrock-key' }),
+          getAuthHeaders: expect.any(Function),
         }),
         expect.any(Number),
         'json',
@@ -569,22 +905,25 @@ describe('bedrock openaiResponses helper', () => {
             output_tokens_details: { reasoning_tokens: 5 },
           },
         };
-        vi.mocked(fetchWithCache).mockResolvedValueOnce({
-          data: [
-            'event: response.output_text.delta',
-            'data: {"type":"response.output_text.delta","delta":"streamed "}',
-            '',
-            'event: response.completed',
-            `data: ${JSON.stringify({ type: 'response.completed', response: completed })}`,
-            '',
-            'data: [DONE]',
-            '',
-          ].join('\n'),
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-          headers: { 'content-type': 'text/event-stream', 'x-request-id': 'r1' },
-        });
+        vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+          new Response(
+            [
+              'event: response.output_text.delta',
+              'data: {"type":"response.output_text.delta","delta":"streamed "}',
+              '',
+              'event: response.completed',
+              `data: ${JSON.stringify({ type: 'response.completed', response: completed })}`,
+              '',
+              'data: [DONE]',
+              '',
+            ].join('\n'),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: { 'content-type': 'text/event-stream', 'x-request-id': 'r1' },
+            },
+          ),
+        );
         const provider = createBedrockOpenAiResponsesProvider(modelId, {
           config: {
             stream: true,
@@ -595,15 +934,13 @@ describe('bedrock openaiResponses helper', () => {
 
         const result = await provider.callApi('hello');
 
-        expect(fetchWithCache).toHaveBeenCalledWith(
+        expect(fetchWithRetries).toHaveBeenCalledWith(
           'https://bedrock-mantle.us-east-2.api.aws/openai/v1/responses',
           expect.objectContaining({
-            headers: expect.objectContaining({ Authorization: 'Bearer env-bedrock-key' }),
+            getAuthHeaders: expect.any(Function),
             body: expect.stringContaining(`"model":"${modelId}"`),
           }),
           expect.any(Number),
-          'stream',
-          true,
           undefined,
         );
         expect(result.output).toBe('streamed answer');
@@ -629,13 +966,12 @@ describe('bedrock openaiResponses helper', () => {
     );
 
     it('surfaces a streamed Bedrock error without attempting to parse it as SSE', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: JSON.stringify({ error: { code: 'model_not_found', message: 'not enabled' } }),
-        cached: false,
-        status: 404,
-        statusText: 'Not Found',
-        headers: { 'content-type': 'application/json' },
-      });
+      vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ error: { code: 'model_not_found', message: 'not enabled' } }),
+          { status: 404, statusText: 'Not Found', headers: { 'content-type': 'application/json' } },
+        ),
+      );
       const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-luna', {
         config: { apiKey: 'bedrock-key', stream: true },
       });
@@ -649,20 +985,19 @@ describe('bedrock openaiResponses helper', () => {
     it.each(GPT_5_6_MODELS)(
       'fails closed on a terminal SSE error after partial output for %s',
       async (modelId) => {
-        vi.mocked(fetchWithCache).mockResolvedValueOnce({
-          data: [
-            'event: response.output_text.delta',
-            'data: {"type":"response.output_text.delta","delta":"partial answer"}',
-            '',
-            'event: error',
-            'data: {"type":"error","code":"server_error","message":"capacity exhausted"}',
-            '',
-          ].join('\n'),
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-          headers: { 'content-type': 'text/event-stream' },
-        });
+        vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+          new Response(
+            [
+              'event: response.output_text.delta',
+              'data: {"type":"response.output_text.delta","delta":"partial answer"}',
+              '',
+              'event: error',
+              'data: {"type":"error","code":"server_error","message":"capacity exhausted"}',
+              '',
+            ].join('\n'),
+            { status: 200, statusText: 'OK', headers: { 'content-type': 'text/event-stream' } },
+          ),
+        );
         const provider = createBedrockOpenAiResponsesProvider(modelId, {
           config: { apiKey: 'bedrock-key', stream: true },
         });
@@ -675,3071 +1010,16 @@ describe('bedrock openaiResponses helper', () => {
       },
     );
 
-    it.each(GPT_5_6_MODELS)(
-      'preserves streamed text when a response is incomplete for %s',
-      async (modelId) => {
-        vi.mocked(fetchWithCache).mockResolvedValueOnce({
-          data: [
-            'event: response.output_text.delta',
-            'data: {"type":"response.output_text.delta","delta":"partial answer"}',
-            '',
-            'event: response.incomplete',
-            `data: ${JSON.stringify({
-              type: 'response.incomplete',
-              response: {
-                id: 'resp_incomplete',
-                model: modelId,
-                status: 'incomplete',
-                output: [{ id: 'rs_incomplete', type: 'reasoning', summary: [] }],
-                usage: { input_tokens: 2, output_tokens: 3, total_tokens: 5 },
-              },
-            })}`,
-            '',
-          ].join('\n'),
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-          headers: { 'content-type': 'text/event-stream' },
-        });
-        const provider = createBedrockOpenAiResponsesProvider(modelId, {
-          config: { apiKey: 'bedrock-key', stream: true },
-        });
-
-        const result = await provider.callApi('hello');
-
-        expect(result.error).toBeUndefined();
-        expect(result.output).toBe('partial answer');
-        expect(result.tokenUsage).toMatchObject({ prompt: 2, completion: 3, total: 5 });
-      },
-    );
-
-    it.each(GPT_5_6_MODELS)(
-      'preserves all deltas when an incomplete response contains partial text for %s',
-      async (modelId) => {
-        vi.mocked(fetchWithCache).mockResolvedValueOnce({
-          data: [
-            'event: response.output_text.delta',
-            'data: {"type":"response.output_text.delta","delta":"partial "}',
-            '',
-            'event: response.output_text.delta',
-            'data: {"type":"response.output_text.delta","delta":"answer"}',
-            '',
-            'event: response.incomplete',
-            `data: ${JSON.stringify({
-              type: 'response.incomplete',
-              response: {
-                id: 'resp_incomplete_partial',
-                model: modelId,
-                status: 'incomplete',
-                output: [
-                  {
-                    id: 'msg_incomplete',
-                    type: 'message',
-                    role: 'assistant',
-                    content: [{ type: 'output_text', text: 'partial ' }],
-                  },
-                ],
-                usage: { input_tokens: 2, output_tokens: 3, total_tokens: 5 },
-              },
-            })}`,
-            '',
-          ].join('\n'),
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-          headers: { 'content-type': 'text/event-stream' },
-        });
-        const provider = createBedrockOpenAiResponsesProvider(modelId, {
-          config: { apiKey: 'bedrock-key', stream: true },
-        });
-
-        const result = await provider.callApi('hello');
-
-        expect(result.error).toBeUndefined();
-        expect(result.output).toBe('partial answer');
-      },
-    );
-
-    it.each(GPT_5_6_MODELS)(
-      'preserves mixed indexed and unindexed deltas in an incomplete response for %s',
-      async (modelId) => {
-        vi.mocked(fetchWithCache).mockResolvedValueOnce({
-          data: [
-            'event: response.output_text.delta',
-            'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"partial "}',
-            '',
-            'event: response.output_text.delta',
-            'data: {"type":"response.output_text.delta","delta":"answer"}',
-            '',
-            'event: response.incomplete',
-            `data: ${JSON.stringify({
-              type: 'response.incomplete',
-              response: {
-                id: 'resp_incomplete_mixed_indices',
-                model: modelId,
-                status: 'incomplete',
-                output: [
-                  {
-                    id: 'msg_incomplete_mixed_indices',
-                    type: 'message',
-                    role: 'assistant',
-                    content: [{ type: 'output_text', text: 'partial ' }],
-                  },
-                ],
-              },
-            })}`,
-            '',
-          ].join('\n'),
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-          headers: { 'content-type': 'text/event-stream' },
-        });
-        const provider = createBedrockOpenAiResponsesProvider(modelId, {
-          config: { apiKey: 'bedrock-key', stream: true },
-        });
-
-        const result = await provider.callApi('hello');
-
-        expect(result.error).toBeUndefined();
-        expect(result.output).toBe('partial answer');
-      },
-    );
-
-    it('recovers completed output text when an incomplete response contains truncated terminal text', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.done',
-          'data: {"type":"response.output_text.done","output_index":0,"content_index":0,"text":"full answer"}',
-          '',
-          'event: response.incomplete',
-          `data: ${JSON.stringify({
-            type: 'response.incomplete',
-            response: {
-              id: 'resp_incomplete_text_done',
-              model: 'openai.gpt-5.5',
-              status: 'incomplete',
-              output: [
-                {
-                  type: 'message',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'partial' }],
-                },
-              ],
-            },
-          })}`,
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('full answer');
-    });
-
-    it('keeps a completed terminal authoritative over an omitted streamed output item', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"FIRST"}',
-          '',
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":1,"content_index":0,"delta":"SECOND"}',
-          '',
-          'event: response.completed',
-          `data: ${JSON.stringify({
-            type: 'response.completed',
-            response: {
-              id: 'resp_completed_missing_item',
-              model: 'openai.gpt-5.5',
-              status: 'completed',
-              output: [
-                {
-                  type: 'message',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'FIRST' }],
-                },
-              ],
-            },
-          })}`,
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('FIRST');
-      expect(JSON.stringify(result)).not.toContain('SECOND');
-    });
-
-    it('preserves finalized text when a completed response redacts an earlier streamed draft', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"unsafe draft that must not survive"}',
-          '',
-          'event: response.completed',
-          `data: ${JSON.stringify({
-            type: 'response.completed',
-            response: {
-              id: 'resp_completed_redacted',
-              model: 'openai.gpt-5.5',
-              status: 'completed',
-              output: [
-                {
-                  type: 'message',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'safe final' }],
-                },
-              ],
-            },
-          })}`,
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('safe final');
-    });
-
-    it('does not restore filtered streamed text from an incomplete terminal response', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
-          '',
-          'event: response.output_text.done',
-          'data: {"type":"response.output_text.done","output_index":0,"content_index":0,"text":"SECRET OR UNSAFE DRAFT"}',
-          '',
-          'event: response.incomplete',
-          'data: {"type":"response.incomplete","response":{"id":"resp_filtered","model":"openai.gpt-5.5","status":"incomplete","incomplete_details":{"reason":"content_filter"},"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"[filtered]"}]}]}}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('I cannot help with that request. Response blocked.');
-      expect(result.output).not.toContain('SECRET OR UNSAFE DRAFT');
-      expect(result.isRefusal).toBe(true);
-    });
-
-    it('returns a refusal for a failed content-filter stream without discarding usage', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
-          '',
-          'event: response.failed',
-          'data: {"type":"response.failed","response":{"id":"resp_failed_filter","model":"openai.gpt-5.5","status":"failed","error":{"code":"content_filter","message":"blocked by safety system"},"output":[],"usage":{"input_tokens":3,"output_tokens":2,"total_tokens":5}}}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('I cannot help with that request. Response blocked.');
-      expect(result.output).not.toContain('SECRET OR UNSAFE DRAFT');
-      expect(result.isRefusal).toBe(true);
-      expect(result.tokenUsage).toEqual({
-        total: 5,
-        prompt: 3,
-        completion: 2,
-        numRequests: 1,
-      });
-    });
-
-    it('cancels an oversized live Responses stream before fully buffering it', async () => {
-      const encoder = new TextEncoder();
-      const chunk = `: ${'x'.repeat(1_024 * 1_024)}\n`;
-      let cancelled = false;
-      let pulls = 0;
-      const stream = new ReadableStream({
-        pull(controller) {
-          pulls++;
-          controller.enqueue(encoder.encode(chunk));
-          if (pulls === 24) {
-            controller.close();
-          }
-        },
-        cancel() {
-          cancelled = true;
-        },
-      });
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: new Response(stream, {
-          status: 200,
-          headers: { 'content-type': 'text/event-stream' },
-        }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toMatch(/streaming response exceeded.*(?:output|event)/i);
-      expect(cancelled).toBe(true);
-      expect(pulls).toBeLessThan(24);
-    });
-
-    it('does not append a streamed draft to a completed terminal refusal', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
-          '',
-          'event: response.completed',
-          'data: {"type":"response.completed","response":{"id":"resp_refused","model":"openai.gpt-5.5","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"refusal","refusal":"I cannot help with that."}]}]}}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).not.toContain('SECRET OR UNSAFE DRAFT');
-      expect(JSON.stringify(result.raw)).not.toContain('SECRET OR UNSAFE DRAFT');
-    });
-
-    it('does not repopulate intentionally empty completed terminal text from a streamed draft', async () => {
-      const body = [
-        'event: response.output_text.delta',
-        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
-        '',
-        'event: response.completed',
-        'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":""}]}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output[0].content[0].text).toBe('');
-      expect(JSON.stringify(result.output)).not.toContain('SECRET OR UNSAFE DRAFT');
-    });
-
-    it.each(['', 'SAFE'])(
-      'does not restore malformed-index drafts after completed terminal text %j',
-      async (text) => {
-        const body = [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":"attacker-controlled","content_index":0,"delta":"UNSAFE DRAFT"}',
-          '',
-          'event: response.completed',
-          `data: ${JSON.stringify({ type: 'response.completed', response: { status: 'completed', output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] }] } })}`,
-          '',
-        ].join('\n');
-
-        const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-        expect(result.output).toEqual([
-          expect.objectContaining({
-            content: [expect.objectContaining({ type: 'output_text', text })],
-          }),
-        ]);
-        expect(JSON.stringify(result.output)).not.toContain('UNSAFE DRAFT');
-      },
-    );
-
-    it.each([
-      { name: 'without content', message: { type: 'message', role: 'assistant', refusal: 'No.' } },
-      {
-        name: 'with empty content',
-        message: { type: 'message', role: 'assistant', content: [], refusal: 'No.' },
-      },
-    ])(
-      'does not recover a streamed draft into a top-level terminal refusal $name',
-      async ({ message }) => {
-        const body = [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
-          '',
-          'event: response.completed',
-          `data: ${JSON.stringify({ type: 'response.completed', response: { status: 'completed', output: [message] } })}`,
-          '',
-        ].join('\n');
-
-        const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-        expect(JSON.stringify(result.output)).not.toContain('SECRET OR UNSAFE DRAFT');
-      },
-    );
-
-    it.each([
-      {
-        name: 'failed content-filter error',
-        event: 'response.failed',
-        response: {
-          status: 'failed',
-          error: { code: 'content_filter', message: 'blocked' },
-          output: [],
-        },
-      },
-      {
-        name: 'incomplete safety reason',
-        event: 'response.incomplete',
-        response: { status: 'incomplete', incomplete_details: { reason: 'safety' }, output: [] },
-      },
-      {
-        name: 'failed safety message',
-        event: 'response.failed',
-        response: {
-          status: 'failed',
-          error: { code: 'server_error', message: 'blocked by safety system' },
-          output: [],
-        },
-      },
-    ])('does not recover a streamed draft after a $name', async ({ event, response }) => {
-      const body = [
-        'event: response.output_text.delta',
-        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
-        '',
-        `event: ${event}`,
-        `data: ${JSON.stringify({ type: event, response })}`,
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(JSON.stringify(result.output)).not.toContain('SECRET OR UNSAFE DRAFT');
-    });
-
-    it('uses finalized output text when a stream ends before its terminal response event', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"unsafe draft"}',
-          '',
-          'event: response.output_text.done',
-          'data: {"type":"response.output_text.done","output_index":0,"content_index":0,"text":"safe final"}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('safe final');
-    });
-
-    it('drops an unindexed draft once indexed output text is finalized', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","delta":"Hel"}',
-          '',
-          'event: response.output_text.done',
-          'data: {"type":"response.output_text.done","output_index":0,"content_index":0,"text":"Hello"}',
-          '',
-          'event: response.incomplete',
-          `data: ${JSON.stringify({
-            type: 'response.incomplete',
-            response: {
-              id: 'resp_finalized_pending',
-              model: 'openai.gpt-5.5',
-              status: 'incomplete',
-              output: [
-                {
-                  type: 'message',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'H' }],
-                },
-              ],
-            },
-          })}`,
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('Hello');
-    });
-
-    it('drops an unindexed draft once malformed-index output text is finalized', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","delta":"Hel"}',
-          '',
-          'event: response.output_text.done',
-          'data: {"type":"response.output_text.done","output_index":1000000000,"content_index":0,"text":"Hello"}',
-          '',
-          'event: response.incomplete',
-          'data: {"type":"response.incomplete","response":{"id":"resp_finalized_invalid_pending","model":"openai.gpt-5.5","status":"incomplete","output":[]}}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('Hello');
-    });
-
-    it('does not restore superseded indexed drafts when leading unindexed text is present', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","delta":"leading "}',
-          '',
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":1,"content_index":0,"delta":"UNSAFE DRAFT"}',
-          '',
-          'event: response.output_text.done',
-          'data: {"type":"response.output_text.done","output_index":1,"content_index":0,"text":"safe final"}',
-          '',
-          'event: response.incomplete',
-          'data: {"type":"response.incomplete","response":{"id":"resp_finalized_leading","model":"openai.gpt-5.5","status":"incomplete","output":[]}}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toContain('leading ');
-      expect(result.output).toContain('safe final');
-      expect(result.output).not.toContain('UNSAFE DRAFT');
-    });
-
-    it('honors an empty finalized output-text event that replaces an unsafe draft', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
-          '',
-          'event: response.output_text.done',
-          'data: {"type":"response.output_text.done","output_index":0,"content_index":0,"text":""}',
-          '',
-          'event: response.incomplete',
-          'data: {"type":"response.incomplete","response":{"id":"resp_empty_finalized","model":"openai.gpt-5.5","status":"incomplete","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":""}]}]}}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('');
-    });
-
-    it.each([
-      { name: 'non-empty', text: 'safe final' },
-      { name: 'empty', text: '' },
-    ])('ignores a late indexed delta after $name output text is finalized', async ({ text }) => {
-      const body = [
-        'event: response.output_text.delta',
-        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
-        '',
-        'event: response.output_text.done',
-        `data: ${JSON.stringify({ type: 'response.output_text.done', output_index: 0, content_index: 0, text })}`,
-        '',
-        'event: response.output_text.delta',
-        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"LATE UNSAFE TEXT"}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(JSON.stringify(result.output)).not.toContain('SECRET OR UNSAFE DRAFT');
-      expect(JSON.stringify(result.output)).not.toContain('LATE UNSAFE TEXT');
-      expect(result.output[0].content[0].text).toBe(text);
-    });
-
-    it('ignores a late unindexed delta after output text is finalized', async () => {
-      const body = [
-        'event: response.output_text.delta',
-        'data: {"type":"response.output_text.delta","delta":"SECRET OR UNSAFE DRAFT"}',
-        '',
-        'event: response.output_text.done',
-        'data: {"type":"response.output_text.done","text":"SAFE"}',
-        '',
-        'event: response.output_text.delta',
-        'data: {"type":"response.output_text.delta","delta":"LATE UNSAFE TEXT"}',
-        '',
-        'event: response.incomplete',
-        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"SAFE"}]}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output).toEqual([
-        { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'SAFE' }] },
-      ]);
-    });
-
-    it.each([
-      { name: 'indexed', index: { output_index: 0, content_index: 0 } },
-      { name: 'unindexed', index: {} },
-    ])('ignores a duplicate $name output-text completion event', async ({ index }) => {
-      const body = [
-        'event: response.output_text.done',
-        `data: ${JSON.stringify({ type: 'response.output_text.done', ...index, text: 'SAFE' })}`,
-        '',
-        'event: response.output_text.done',
-        `data: ${JSON.stringify({ type: 'response.output_text.done', ...index, text: 'UNSAFE LATE' })}`,
-        '',
-        'event: response.incomplete',
-        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"SAFE"}]}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output).toEqual([
-        { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'SAFE' }] },
-      ]);
-    });
-
-    it('does not resurrect a streamed draft replaced by completed tool output', async () => {
-      const body = [
-        'event: response.output_text.delta',
-        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"UNSAFE DRAFT"}',
-        '',
-        'event: response.completed',
-        'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"function_call","name":"lookup","arguments":"{}","call_id":"c"}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output).toEqual([
-        { type: 'function_call', name: 'lookup', arguments: '{}', call_id: 'c' },
-      ]);
-    });
-
-    it('accepts unindexed text for an output item that starts after finalized text', async () => {
-      const body = [
-        'event: response.output_text.done',
-        'data: {"type":"response.output_text.done","text":"FIRST"}',
-        '',
-        'event: response.output_item.added',
-        'data: {"type":"response.output_item.added","item":{"type":"message","role":"assistant","content":[]}}',
-        '',
-        'event: response.output_text.delta',
-        'data: {"type":"response.output_text.delta","delta":"SECOND"}',
-        '',
-        'event: response.output_text.done',
-        'data: {"type":"response.output_text.done","text":"SECOND"}',
-        '',
-        'event: response.incomplete',
-        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output).toEqual([
-        { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'FIRST' }] },
-        { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'SECOND' }] },
-      ]);
-    });
-
-    it('accepts a new unindexed content part after output text is finalized', async () => {
-      const body = [
-        'event: response.output_text.done',
-        'data: {"type":"response.output_text.done","text":"FIRST"}',
-        '',
-        'event: response.content_part.added',
-        'data: {"type":"response.content_part.added","part":{"type":"output_text","text":""}}',
-        '',
-        'event: response.output_text.delta',
-        'data: {"type":"response.output_text.delta","delta":"SECOND"}',
-        '',
-        'event: response.output_text.done',
-        'data: {"type":"response.output_text.done","text":"SECOND"}',
-        '',
-        'event: response.incomplete',
-        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output).toEqual([
-        { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'FIRST' }] },
-        { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'SECOND' }] },
-      ]);
-    });
-
-    it.each([false, true])(
-      'honors empty finalized unindexed text when a terminal snapshot exists: %s',
-      async (withTerminalSnapshot) => {
-        const body = [
-          ...(withTerminalSnapshot
-            ? [
-                'event: response.created',
-                'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
-                '',
-              ]
-            : []),
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","delta":"SECRET OR UNSAFE DRAFT"}',
-          '',
-          'event: response.output_text.done',
-          'data: {"type":"response.output_text.done","text":""}',
-          '',
-        ].join('\n');
-
-        const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-        expect(JSON.stringify(result.output)).not.toContain('SECRET OR UNSAFE DRAFT');
-      },
-    );
-
-    it('treats an unindexed completion after indexed text as finalized', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"safe"}',
-          '',
-          'event: response.output_text.done',
-          'data: {"type":"response.output_text.done","text":"safe final"}',
-          '',
-          'event: response.incomplete',
-          'data: {"type":"response.incomplete","response":{"id":"resp_unindexed_done","model":"openai.gpt-5.5","status":"incomplete","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"SECRET OR UNSAFE TERMINAL DRAFT"}]}]}}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('safe final');
-    });
-
-    it.each([
-      { name: 'unindexed', index: {} },
-      { name: 'malformed-index', index: { output_index: 1_000_000_000, content_index: 0 } },
-    ])(
-      'honors finalized $name stream text over an incomplete terminal draft',
-      async ({ index }) => {
-        vi.mocked(fetchWithCache).mockResolvedValueOnce({
-          data: [
-            'event: response.output_text.delta',
-            `data: ${JSON.stringify({ type: 'response.output_text.delta', ...index, delta: 'SECRET OR UNSAFE DRAFT' })}`,
-            '',
-            'event: response.output_text.done',
-            `data: ${JSON.stringify({ type: 'response.output_text.done', ...index, text: 'SAFE' })}`,
-            '',
-            'event: response.incomplete',
-            'data: {"type":"response.incomplete","response":{"id":"resp_unindexed_final","model":"openai.gpt-5.5","status":"incomplete","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"SECRET OR UNSAFE TERMINAL DRAFT"}]}]}}',
-            '',
-          ].join('\n'),
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-          headers: { 'content-type': 'text/event-stream' },
-        });
-        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-          config: { apiKey: 'bedrock-key', stream: true },
-        });
-
-        const result = await provider.callApi('hello');
-
-        expect(result.error).toBeUndefined();
-        expect(result.output).toBe('SAFE');
-      },
-    );
-
-    it('honors an empty finalized event without a preceding delta', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.done',
-          'data: {"type":"response.output_text.done","output_index":0,"content_index":0,"text":""}',
-          '',
-          'event: response.incomplete',
-          'data: {"type":"response.incomplete","response":{"id":"resp_empty_done","model":"openai.gpt-5.5","status":"incomplete","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"SECRET OR UNSAFE TERMINAL DRAFT"}]}]}}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('');
-    });
-
-    it('prefers the complete streamed delta over a partial in-progress snapshot', async () => {
-      const body = [
-        'event: response.output_text.delta',
-        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"complete text"}',
-        '',
-        'event: response.in_progress',
-        'data: {"type":"response.in_progress","response":{"status":"in_progress","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"complete"}]}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output[0].content[0].text).toBe('complete text');
-    });
-
-    it.each([
-      {
-        name: 'content_part.done',
-        initial: { status: 'in_progress', output: [] },
-        final: {
-          type: 'response.content_part.done',
-          output_index: 0,
-          content_index: 0,
-          part: { type: 'output_text', text: 'safe final' },
-        },
-      },
-      {
-        name: 'output_item.done',
-        initial: {
-          status: 'in_progress',
-          output: [
-            {
-              type: 'message',
-              role: 'assistant',
-              content: [{ type: 'output_text', text: 'S' }],
-            },
-          ],
-        },
-        final: {
-          type: 'response.output_item.done',
-          output_index: 0,
-          item: {
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'output_text', text: 'safe final' }],
-          },
-        },
-      },
-    ])('honors finalized $name text when a stream ends early', async ({ initial, final }) => {
-      const body = [
-        'event: response.in_progress',
-        `data: ${JSON.stringify({ type: 'response.in_progress', response: initial })}`,
-        '',
-        'event: response.output_text.delta',
-        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
-        '',
-        `event: ${final.type}`,
-        `data: ${JSON.stringify(final)}`,
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output[0].content[0].text).toBe('safe final');
-    });
-
-    it.each([
-      {
-        name: 'content_part.done',
-        final: {
-          type: 'response.content_part.done',
-          output_index: 0,
-          content_index: 0,
-          part: { type: 'refusal', refusal: 'No.' },
-        },
-      },
-      {
-        name: 'output_item.done',
-        final: {
-          type: 'response.output_item.done',
-          output_index: 0,
-          item: {
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'refusal', refusal: 'No.' }],
-          },
-        },
-      },
-    ])('does not recover a streamed draft after a finalized $name refusal', async ({ final }) => {
-      const body = [
-        'event: response.created',
-        'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
-        '',
-        'event: response.output_text.delta',
-        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
-        '',
-        `event: ${final.type}`,
-        `data: ${JSON.stringify(final)}`,
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(JSON.stringify(result.output)).not.toContain('SECRET OR UNSAFE DRAFT');
-    });
-
-    it('does not recover a streamed draft after a response.refusal.done event', async () => {
-      const body = [
-        'event: response.created',
-        'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
-        '',
-        'event: response.output_text.delta',
-        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SECRET OR UNSAFE DRAFT"}',
-        '',
-        'event: response.refusal.done',
-        'data: {"type":"response.refusal.done","output_index":0,"content_index":0,"refusal":"I cannot help with that."}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(JSON.stringify(result.output)).not.toContain('SECRET OR UNSAFE DRAFT');
-    });
-
-    it('drops preceding function calls when reconstructing a finalized refusal', async () => {
-      const body = [
-        'event: response.output_item.done',
-        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","name":"lookup","arguments":"{}","call_id":"call_1"}}',
-        '',
-        'event: response.refusal.done',
-        'data: {"type":"response.refusal.done","output_index":1,"content_index":0,"refusal":"I cannot help with that."}',
-        '',
-        'event: response.incomplete',
-        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[{"type":"function_call","name":"lookup","arguments":"{}","call_id":"call_1"}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output).toEqual([
-        expect.objectContaining({
-          type: 'message',
-          content: [
-            expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that.' }),
-          ],
-        }),
-      ]);
-    });
-
-    it('preserves a finalized refusal when an incomplete terminal safety response has empty output', async () => {
-      const body = [
-        'event: response.refusal.done',
-        'data: {"type":"response.refusal.done","output_index":0,"content_index":0,"refusal":"I cannot help with that."}',
-        '',
-        'event: response.incomplete',
-        'data: {"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"content_filter"},"output":[]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-      const processor = new ResponsesProcessor({
-        modelName: 'test',
-        providerType: 'openai',
-        functionCallbackHandler: { processCalls: vi.fn() } as any,
-        costCalculator: vi.fn(),
-      });
-      const processed = await processor.processResponseOutput(result, {}, false);
-
-      expect(result.output).toEqual([
-        expect.objectContaining({
-          content: [
-            expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that.' }),
-          ],
-        }),
-      ]);
-      expect(processed.isRefusal).toBe(true);
-    });
-
-    it('preserves a finalized message with a top-level refusal field when a stream terminates early', async () => {
-      const body = [
-        'event: response.output_item.done',
-        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","refusal":"I cannot help with that."}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-      const processor = new ResponsesProcessor({
-        modelName: 'test',
-        providerType: 'openai',
-        functionCallbackHandler: { processCalls: vi.fn() } as any,
-        costCalculator: vi.fn(),
-      });
-      const processed = await processor.processResponseOutput(result, {}, false);
-
-      expect(result.output).toEqual([
-        expect.objectContaining({ type: 'message', refusal: 'I cannot help with that.' }),
-      ]);
-      expect(processed.isRefusal).toBe(true);
-    });
-
-    it('preserves a finalized top-level refusal when merging an incomplete terminal message', async () => {
-      const body = [
-        'event: response.output_item.done',
-        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","refusal":"I cannot help with that."}}',
-        '',
-        'event: response.incomplete',
-        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"SECRET OR UNSAFE TERMINAL DRAFT"}]}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-      const processor = new ResponsesProcessor({
-        modelName: 'test',
-        providerType: 'openai',
-        functionCallbackHandler: { processCalls: vi.fn() } as any,
-        costCalculator: vi.fn(),
-      });
-      const processed = await processor.processResponseOutput(result, {}, false);
-
-      expect(result.output).toEqual([
-        expect.objectContaining({
-          type: 'message',
-          content: [
-            expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that.' }),
-          ],
-        }),
-      ]);
-      expect(JSON.stringify(processed.raw)).not.toContain('SECRET OR UNSAFE TERMINAL DRAFT');
-      expect(processed.isRefusal).toBe(true);
-    });
-
-    it('keeps an earlier finalized refusal authoritative over a completed terminal answer', async () => {
-      const body = [
-        'event: response.refusal.done',
-        'data: {"type":"response.refusal.done","output_index":0,"content_index":0,"refusal":"draft refusal"}',
-        '',
-        'event: response.completed',
-        'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"safe final answer"}]}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output).toEqual([
-        expect.objectContaining({
-          content: [expect.objectContaining({ type: 'refusal', refusal: 'draft refusal' })],
-        }),
-      ]);
-    });
-
-    it('scrubs preceding assistant messages when reconstructing an indexed refusal', async () => {
-      const body = [
-        'event: response.output_item.done',
-        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"SAFE CONTEXT"}]}}',
-        '',
-        'event: response.refusal.done',
-        'data: {"type":"response.refusal.done","output_index":1,"content_index":0,"refusal":"I cannot help with that."}',
-        '',
-        'event: response.incomplete',
-        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"SAFE CONTEXT"}]}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output).toEqual([
-        expect.objectContaining({
-          content: [
-            expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that.' }),
-          ],
-        }),
-      ]);
-      expect(JSON.stringify(result.output)).not.toContain('SAFE CONTEXT');
-    });
-
-    it('preserves every indexed refusal when a stream ends before its terminal response', async () => {
-      const body = [
-        'event: response.created',
-        'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
-        '',
-        'event: response.refusal.done',
-        'data: {"type":"response.refusal.done","output_index":0,"content_index":0,"refusal":"First refusal."}',
-        '',
-        'event: response.refusal.done',
-        'data: {"type":"response.refusal.done","output_index":1,"content_index":0,"refusal":"Second refusal."}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output).toEqual([
-        expect.objectContaining({
-          content: [expect.objectContaining({ type: 'refusal', refusal: 'First refusal.' })],
-        }),
-        expect.objectContaining({
-          content: [expect.objectContaining({ type: 'refusal', refusal: 'Second refusal.' })],
-        }),
-      ]);
-    });
-
-    it('scrubs finalized assistant text when a refusal shares the same output message', async () => {
-      const body = [
-        'event: response.created',
-        'data: {"type":"response.created","response":{"id":"resp_mixed_refusal","status":"in_progress","output":[]}}',
-        '',
-        'event: response.output_text.delta',
-        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"Safe context. "}',
-        '',
-        'event: response.output_text.done',
-        'data: {"type":"response.output_text.done","output_index":0,"content_index":0,"text":"Safe context. "}',
-        '',
-        'event: response.refusal.delta',
-        'data: {"type":"response.refusal.delta","output_index":0,"content_index":1,"delta":"Cannot provide secrets."}',
-        '',
-        'event: response.content_part.done',
-        'data: {"type":"response.content_part.done","output_index":0,"content_index":1,"part":{"type":"refusal","refusal":"Cannot provide secrets."}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output).toEqual([
-        expect.objectContaining({
-          type: 'message',
-          content: [
-            expect.objectContaining({ type: 'refusal', refusal: 'Cannot provide secrets.' }),
-          ],
-        }),
-      ]);
-      expect(JSON.stringify(result.output)).not.toContain('Safe context. ');
-    });
-
-    it('does not duplicate finalized refusal parts when the completed output item arrives', async () => {
-      const body = [
-        'event: response.content_part.done',
-        'data: {"type":"response.content_part.done","output_index":0,"content_index":0,"part":{"type":"refusal","refusal":"First reason."}}',
-        '',
-        'event: response.content_part.done',
-        'data: {"type":"response.content_part.done","output_index":0,"content_index":1,"part":{"type":"refusal","refusal":"Second reason."}}',
-        '',
-        'event: response.output_item.done',
-        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","content":[{"type":"refusal","refusal":"First reason."},{"type":"refusal","refusal":"Second reason."}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output).toHaveLength(1);
-      expect(result.output[0].content).toEqual([
-        expect.objectContaining({ type: 'refusal', refusal: 'First reason.' }),
-        expect.objectContaining({ type: 'refusal', refusal: 'Second reason.' }),
-      ]);
-    });
-
-    it.each([true, false])(
-      'preserves finalized tool calls when a stream closes early (assistant text: %s)',
-      async (withAssistantText) => {
-        const events = [
-          'event: response.created',
-          'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
-          '',
-          'event: response.output_item.done',
-          'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","name":"lookup","arguments":"{}","call_id":"call_1"}}',
-          '',
-          ...(withAssistantText
-            ? [
-                'event: response.output_item.done',
-                'data: {"type":"response.output_item.done","output_index":1,"item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}}',
-                '',
-              ]
-            : []),
-        ];
-
-        const result = await readResponsesStream(new Response(events.join('\n')), 'test', {
-          debug: vi.fn(),
-        });
-
-        expect(result.output[0]).toEqual(
-          expect.objectContaining({ type: 'function_call', call_id: 'call_1' }),
-        );
-        if (withAssistantText) {
-          expect(result.output[1]).toEqual(
-            expect.objectContaining({ content: [expect.objectContaining({ text: 'done' })] }),
-          );
-        }
-      },
-    );
-
-    it('preserves output-index order when a finalized tool call follows assistant text', async () => {
-      const body = [
-        'event: response.created',
-        'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
-        '',
-        'event: response.output_item.done',
-        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"before tool"}]}}',
-        '',
-        'event: response.output_item.done',
-        'data: {"type":"response.output_item.done","output_index":1,"item":{"type":"function_call","name":"lookup","arguments":"{}","call_id":"call_1"}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output).toEqual([
-        expect.objectContaining({ content: [expect.objectContaining({ text: 'before tool' })] }),
-        expect.objectContaining({ type: 'function_call', call_id: 'call_1' }),
-      ]);
-    });
-
-    it('does not execute finalized tool calls after an incomplete terminal safety decision', async () => {
-      const body = [
-        'event: response.output_item.done',
-        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","name":"lookup","arguments":"{}","call_id":"call_1"}}',
-        '',
-        'event: response.incomplete',
-        'data: {"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"content_filter"},"output":[]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-      const processCalls = vi.fn().mockResolvedValue('executed');
-      const processor = new ResponsesProcessor({
-        modelName: 'test',
-        providerType: 'openai',
-        functionCallbackHandler: { processCalls } as any,
-        costCalculator: vi.fn(),
-      });
-
-      const processed = await processor.processResponseOutput(result, {}, false);
-
-      expect(result.output).toEqual([
-        expect.objectContaining({
-          content: [expect.objectContaining({ type: 'refusal' })],
-        }),
-      ]);
-      expect(processed.isRefusal).toBe(true);
-      expect(processCalls).not.toHaveBeenCalled();
-    });
-
-    it('does not execute tool calls included in an incomplete terminal safety snapshot', async () => {
-      const body = [
-        'event: response.incomplete',
-        'data: {"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"content_filter"},"output":[{"type":"function_call","name":"lookup","arguments":"{\\"q\\":\\"unsafe\\"}","call_id":"call_1"}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-      const processCalls = vi.fn().mockResolvedValue('executed');
-      const processor = new ResponsesProcessor({
-        modelName: 'test',
-        providerType: 'openai',
-        functionCallbackHandler: { processCalls } as any,
-        costCalculator: vi.fn(),
-      });
-
-      const processed = await processor.processResponseOutput(result, {}, false);
-
-      expect(result.output).toEqual([
-        expect.objectContaining({
-          content: [expect.objectContaining({ type: 'refusal' })],
-        }),
-      ]);
-      expect(processed.isRefusal).toBe(true);
-      expect(processCalls).not.toHaveBeenCalled();
-    });
-
-    it('does not execute tool calls nested in an incomplete terminal safety message', async () => {
-      const body = [
-        'event: response.incomplete',
-        'data: {"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"content_filter"},"output":[{"type":"message","role":"assistant","content":[{"type":"tool_use","name":"lookup","arguments":"{\\"q\\":\\"unsafe\\"}"}]}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-      const processCalls = vi.fn().mockResolvedValue('executed');
-      const processor = new ResponsesProcessor({
-        modelName: 'test',
-        providerType: 'openai',
-        functionCallbackHandler: { processCalls } as any,
-        costCalculator: vi.fn(),
-      });
-
-      const processed = await processor.processResponseOutput(result, {}, false);
-
-      expect(result.output).toEqual([
-        expect.objectContaining({ content: [expect.objectContaining({ type: 'refusal' })] }),
-      ]);
-      expect(processed.isRefusal).toBe(true);
-      expect(processCalls).not.toHaveBeenCalled();
-    });
-
-    it('does not execute finalized tool calls when a streamed refusal terminates early', async () => {
-      const body = [
-        'event: response.created',
-        'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
-        '',
-        'event: response.output_item.done',
-        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","name":"dangerous_action","arguments":"{\\"path\\":\\"/tmp/secret\\"}","call_id":"call_1"}}',
-        '',
-        'event: response.refusal.done',
-        'data: {"type":"response.refusal.done","output_index":1,"content_index":0,"refusal":"I cannot help with that"}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-      const processCalls = vi.fn().mockResolvedValue('executed');
-      const processor = new ResponsesProcessor({
-        modelName: 'test',
-        providerType: 'openai',
-        functionCallbackHandler: { processCalls } as any,
-        costCalculator: vi.fn(),
-      });
-
-      await processor.processResponseOutput(result, {}, false);
-
-      expect(result.output).toEqual([
-        expect.objectContaining({
-          content: [
-            expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that' }),
-          ],
-        }),
-      ]);
-      expect(processCalls).not.toHaveBeenCalled();
-    });
-
-    it('does not execute finalized tool calls when a streamed refusal delta terminates early', async () => {
-      const body = [
-        'event: response.created',
-        'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
-        '',
-        'event: response.output_item.done',
-        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","name":"dangerous_action","arguments":"{\\"path\\":\\"/tmp/secret\\"}","call_id":"call_1"}}',
-        '',
-        'event: response.refusal.delta',
-        'data: {"type":"response.refusal.delta","output_index":1,"content_index":0,"delta":"I cannot "}',
-        '',
-        'event: response.refusal.delta',
-        'data: {"type":"response.refusal.delta","output_index":1,"content_index":0,"delta":"help with that"}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-      const processCalls = vi.fn().mockResolvedValue('executed');
-      const processor = new ResponsesProcessor({
-        modelName: 'test',
-        providerType: 'openai',
-        functionCallbackHandler: { processCalls } as any,
-        costCalculator: vi.fn(),
-      });
-      const processed = await processor.processResponseOutput(result, {}, false);
-
-      expect(result.output).toEqual([
-        expect.objectContaining({
-          content: [
-            expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that' }),
-          ],
-        }),
-      ]);
-      expect(processed.isRefusal).toBe(true);
-      expect(processCalls).not.toHaveBeenCalled();
-    });
-
-    it('does not execute completed tool calls after a finalized streamed refusal', async () => {
-      const body = [
-        'event: response.output_item.done',
-        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","content":[{"type":"refusal","refusal":"I cannot help with that"}]}}',
-        '',
-        'event: response.completed',
-        'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"function_call","name":"dangerous_action","arguments":"{\\"path\\":\\"/tmp/secret\\"}","call_id":"call_1"}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-      const processCalls = vi.fn().mockResolvedValue('executed');
-      const processor = new ResponsesProcessor({
-        modelName: 'test',
-        providerType: 'openai',
-        functionCallbackHandler: { processCalls } as any,
-        costCalculator: vi.fn(),
-      });
-      const processed = await processor.processResponseOutput(result, {}, false);
-
-      expect(result.output).toEqual([
-        expect.objectContaining({
-          content: [
-            expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that' }),
-          ],
-        }),
-      ]);
-      expect(processed.isRefusal).toBe(true);
-      expect(processCalls).not.toHaveBeenCalled();
-    });
-
-    it('keeps finalized refusal evidence authoritative when a completed response has text and a tool call', async () => {
-      const body = [
-        'event: response.refusal.done',
-        'data: {"type":"response.refusal.done","output_index":0,"content_index":0,"refusal":"I cannot help with that"}',
-        '',
-        'event: response.completed',
-        'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Some context."}]},{"type":"function_call","name":"dangerous_action","arguments":"{\\"path\\":\\"/tmp/secret\\"}","call_id":"call_1"}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-      const processCalls = vi.fn().mockResolvedValue('executed');
-      const processor = new ResponsesProcessor({
-        modelName: 'test',
-        providerType: 'openai',
-        functionCallbackHandler: { processCalls } as any,
-        costCalculator: vi.fn(),
-      });
-      const processed = await processor.processResponseOutput(result, {}, false);
-
-      expect(result.output).toEqual([
-        expect.objectContaining({
-          content: [
-            expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that' }),
-          ],
-        }),
-      ]);
-      expect(processed.isRefusal).toBe(true);
-      expect(processCalls).not.toHaveBeenCalled();
-    });
-
-    it.each(['truncated', 'completed'])(
-      'normalizes a standalone refusal item from a %s Responses stream',
-      async (streamState) => {
-        const body =
-          streamState === 'truncated'
-            ? [
-                'event: response.output_item.done',
-                'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"refusal","refusal":"Blocked by policy"}}',
-                '',
-              ].join('\n')
-            : [
-                'event: response.completed',
-                'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"refusal","refusal":"Blocked by policy"}]}}',
-                '',
-              ].join('\n');
-
-        const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-        const processor = new ResponsesProcessor({
-          modelName: 'test',
-          providerType: 'openai',
-          functionCallbackHandler: { processCalls: vi.fn() } as any,
-          costCalculator: vi.fn(),
-        });
-        const processed = await processor.processResponseOutput(result, {}, false);
-
-        expect(result.output).toEqual([
-          expect.objectContaining({
-            type: 'message',
-            content: [expect.objectContaining({ type: 'refusal', refusal: 'Blocked by policy' })],
-          }),
-        ]);
-        expect(processed.isRefusal).toBe(true);
-      },
-    );
-
-    it('prefers finalized tool arguments over an incomplete terminal snapshot', async () => {
-      const terminalResponse = {
-        status: 'incomplete',
-        output: [{ type: 'function_call', name: 'lookup', arguments: '{"q":', call_id: 'call_1' }],
-      };
-      const body = [
-        'event: response.output_item.done',
-        `data: ${JSON.stringify({ type: 'response.output_item.done', output_index: 0, item: { type: 'function_call', name: 'lookup', arguments: '{"q":"complete"}', call_id: 'call_1' } })}`,
-        '',
-        'event: response.incomplete',
-        `data: ${JSON.stringify({ type: 'response.incomplete', response: terminalResponse })}`,
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output[0]).toEqual(
-        expect.objectContaining({ type: 'function_call', arguments: '{"q":"complete"}' }),
-      );
-    });
-
-    it('does not execute finalized arguments that lack an independently observed call_id', async () => {
-      const body = [
-        'event: response.function_call_arguments.done',
-        'data: {"type":"response.function_call_arguments.done","output_index":0,"item_id":"fc_1","name":"lookup","arguments":"{\\"path\\":\\"final\\"}"}',
-        '',
-        'event: response.incomplete',
-        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{\\"path\\":\\"draft\\"}"}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-      const processCalls = vi.fn().mockResolvedValue('executed');
-      const processor = new ResponsesProcessor({
-        modelName: 'test',
-        providerType: 'openai',
-        functionCallbackHandler: { processCalls } as any,
-        costCalculator: vi.fn(),
-      });
-      await processor.processResponseOutput(result, {}, false);
-
-      expect(result.output).not.toEqual(
-        expect.arrayContaining([expect.objectContaining({ type: 'function_call' })]),
-      );
-      expect(processCalls).not.toHaveBeenCalled();
-    });
-
-    it('preserves an added function-call call_id when finalized arguments arrive before truncation', async () => {
-      const body = [
-        'event: response.output_item.added',
-        'data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":""}}',
-        '',
-        'event: response.function_call_arguments.done',
-        'data: {"type":"response.function_call_arguments.done","output_index":0,"item_id":"fc_1","name":"lookup","arguments":"{\\"path\\":\\"final\\"}"}',
-        '',
-        'event: response.incomplete',
-        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{\\"path\\":","status":"in_progress"}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output).toEqual([
-        expect.objectContaining({
-          type: 'function_call',
-          id: 'fc_1',
-          call_id: 'call_1',
-          name: 'lookup',
-          arguments: '{"path":"final"}',
-        }),
-      ]);
-    });
-
-    it('keeps completed terminal tool output authoritative over an earlier finalized item', async () => {
-      const body = [
-        'event: response.output_item.done',
-        `data: ${JSON.stringify({ type: 'response.output_item.done', output_index: 0, item: { type: 'function_call', name: 'lookup', arguments: '{"q":"draft"}', call_id: 'call_1' } })}`,
-        '',
-        'event: response.completed',
-        `data: ${JSON.stringify({ type: 'response.completed', response: { status: 'completed', output: [{ type: 'function_call', name: 'lookup', arguments: '{"q":"authoritative"}', call_id: 'call_1' }] } })}`,
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output[0]).toEqual(
-        expect.objectContaining({ type: 'function_call', arguments: '{"q":"authoritative"}' }),
-      );
-    });
-
-    it('does not restore a finalized tool call omitted by an authoritative completed response', async () => {
-      const body = [
-        'event: response.output_item.done',
-        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","name":"dangerous_action","arguments":"{\\"path\\":\\"/tmp/secret\\"}","call_id":"call_1"}}',
-        '',
-        'event: response.completed',
-        'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Action was not approved."}]}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-      const processCalls = vi.fn().mockResolvedValue('executed');
-      const processor = new ResponsesProcessor({
-        modelName: 'test',
-        providerType: 'openai',
-        functionCallbackHandler: { processCalls } as any,
-        costCalculator: vi.fn(),
-      });
-
-      await processor.processResponseOutput(result, {}, false);
-
-      expect(result.output).toEqual([
-        expect.objectContaining({
-          type: 'message',
-          content: [expect.objectContaining({ text: 'Action was not approved.' })],
-        }),
-      ]);
-      expect(processCalls).not.toHaveBeenCalled();
-    });
-
-    it('does not restore a finalized tool call when a completed response omits status', async () => {
-      const body = [
-        'event: response.output_item.done',
-        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","name":"dangerous_action","arguments":"{\\"path\\":\\"/tmp/secret\\"}","call_id":"call_1"}}',
-        '',
-        'event: response.completed',
-        'data: {"type":"response.completed","response":{"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Action was not approved."}]}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-      const processCalls = vi.fn().mockResolvedValue('executed');
-      const processor = new ResponsesProcessor({
-        modelName: 'test',
-        providerType: 'openai',
-        functionCallbackHandler: { processCalls } as any,
-        costCalculator: vi.fn(),
-      });
-
-      await processor.processResponseOutput(result, {}, false);
-
-      expect(result.output).toEqual([
-        expect.objectContaining({
-          type: 'message',
-          content: [expect.objectContaining({ text: 'Action was not approved.' })],
-        }),
-      ]);
-      expect(processCalls).not.toHaveBeenCalled();
-    });
-
-    it('preserves finalized tool calls when earlier unindexed text cannot be assigned', async () => {
-      const body = [
-        'event: response.created',
-        'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
-        '',
-        'event: response.output_text.delta',
-        'data: {"type":"response.output_text.delta","delta":"leading text"}',
-        '',
-        'event: response.output_text.delta',
-        'data: {"type":"response.output_text.delta","output_index":1,"content_index":0,"delta":" answer"}',
-        '',
-        'event: response.output_item.done',
-        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","name":"lookup","arguments":"{}","call_id":"call_1"}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ type: 'function_call', call_id: 'call_1' }),
-        ]),
-      );
-    });
-
-    it('bounds aggregate finalized tool and refusal items on a truncated stream', async () => {
-      const events = [
-        'event: response.created',
-        'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
-        '',
-      ];
-      for (let index = 0; index < 512; index++) {
-        events.push(
-          'event: response.output_item.done',
-          `data: ${JSON.stringify({ type: 'response.output_item.done', output_index: index, item: { type: 'function_call', name: 'lookup', arguments: '{}', call_id: `call_${index}` } })}`,
-          '',
-        );
-      }
-      for (let index = 512; index < 1_025; index++) {
-        events.push(
-          'event: response.refusal.done',
-          `data: ${JSON.stringify({ type: 'response.refusal.done', output_index: index, content_index: 0, refusal: `Refusal ${index}` })}`,
-          '',
-        );
-      }
-
-      const result = await readResponsesStream(new Response(events.join('\n')), 'test', {
-        debug: vi.fn(),
-      });
-
-      expect(result.output.length).toBeLessThanOrEqual(1_024);
-      expect(result.output.every((item: any) => item.type === 'message')).toBe(true);
-      expect(result.output.at(-1)).toEqual(expect.objectContaining({ type: 'message' }));
-    });
-
-    it.each(['done', 'delta'])(
-      'preserves a refusal %s after the finalized-output key limit without executing tool calls',
-      async (refusalEvent) => {
-        const events = [
-          'event: response.created',
-          'data: {"type":"response.created","response":{"status":"in_progress","output":[]}}',
-          '',
-        ];
-        for (let outputIndex = 0; outputIndex < 1_024; outputIndex++) {
-          events.push(
-            'event: response.output_item.done',
-            `data: ${JSON.stringify({ type: 'response.output_item.done', output_index: outputIndex, item: { type: 'function_call', name: 'dangerous_action', arguments: '{}', call_id: `call_${outputIndex}` } })}`,
-            '',
-          );
-        }
-        events.push(
-          `event: response.refusal.${refusalEvent}`,
-          `data: ${JSON.stringify({ type: `response.refusal.${refusalEvent}`, output_index: 1_024, content_index: 0, [refusalEvent === 'done' ? 'refusal' : 'delta']: 'I cannot help with that' })}`,
-          '',
-        );
-
-        const result = await readResponsesStream(new Response(events.join('\n')), 'test', {
-          debug: vi.fn(),
-        });
-        const processCalls = vi.fn().mockResolvedValue('executed');
-        const processor = new ResponsesProcessor({
-          modelName: 'test',
-          providerType: 'openai',
-          functionCallbackHandler: { processCalls } as any,
-          costCalculator: vi.fn(),
-        });
-
-        const processed = await processor.processResponseOutput(result, {}, false);
-
-        expect(result.output).toEqual([
-          expect.objectContaining({
-            content: [
-              expect.objectContaining({ type: 'refusal', refusal: 'I cannot help with that' }),
-            ],
-          }),
-        ]);
-        expect(processed.isRefusal).toBe(true);
-        expect(processCalls).not.toHaveBeenCalled();
-      },
-    );
-
-    it.each([
-      { name: 'object', content: { type: 'output_text', text: 'partial' } },
-      { name: 'string', content: 'partial' },
-      { name: 'refusal object', content: { type: 'refusal', refusal: 'No.' } },
-      { name: 'null', content: null },
-      { name: 'null entry', content: [null] },
-      { name: 'string entry', content: ['partial'] },
-    ])(
-      'ignores malformed output_item.done $name content before a valid terminal response',
-      async ({ content }) => {
-        const body = [
-          'event: response.output_item.done',
-          `data: ${JSON.stringify({ type: 'response.output_item.done', output_index: 0, item: { type: 'message', content } })}`,
-          '',
-          'event: response.completed',
-          'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"valid final answer"}]}]}}',
-          '',
-        ].join('\n');
-
-        const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-        expect(result.output[0].content[0].text).toBe('valid final answer');
-      },
-    );
-
-    it('preserves interleaved output boundaries when a stream ends before its terminal event', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"A"}',
-          '',
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":1,"content_index":0,"delta":"B"}',
-          '',
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"C"}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('AC\nB');
-    });
-
-    it('replaces an incomplete terminal placeholder with finalized output text', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"Hi"}',
-          '',
-          'event: response.output_text.done',
-          'data: {"type":"response.output_text.done","output_index":0,"content_index":0,"text":"Hi"}',
-          '',
-          'event: response.incomplete',
-          `data: ${JSON.stringify({
-            type: 'response.incomplete',
-            response: {
-              id: 'resp_incomplete_placeholder',
-              model: 'openai.gpt-5.5',
-              status: 'incomplete',
-              output: [
-                {
-                  type: 'message',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: '[truncated]' }],
-                },
-              ],
-            },
-          })}`,
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('Hi');
-    });
-
-    it('keeps an empty completed terminal authoritative over sparse streamed indices', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":1024,"content_index":0,"delta":"hello"}',
-          '',
-          'event: response.completed',
-          'data: {"type":"response.completed","response":{"id":"resp_sparse","model":"openai.gpt-5.5","status":"completed","output":[]}}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toContain('Invalid response format: Missing output array');
-      expect(result.output).toBeUndefined();
-      expect(JSON.stringify(result)).not.toContain('hello');
-    });
-
-    it('restores out-of-order indexed outputs in output-index order', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":2,"content_index":0,"delta":"THIRD"}',
-          '',
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":1,"content_index":0,"delta":"SECOND"}',
-          '',
-          'event: response.incomplete',
-          'data: {"type":"response.incomplete","response":{"id":"resp_out_of_order","model":"openai.gpt-5.5","status":"incomplete","output":[]}}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('SECOND\nTHIRD');
-    });
-
-    it('restores missing out-of-order indexed outputs after an existing non-message item', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":2,"content_index":0,"delta":"SECOND"}',
-          '',
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":1,"content_index":0,"delta":"FIRST"}',
-          '',
-          'event: response.incomplete',
-          'data: {"type":"response.incomplete","response":{"id":"resp_out_of_order_existing","model":"openai.gpt-5.5","status":"incomplete","output":[{"type":"reasoning","summary":[]}]}}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('FIRST\nSECOND');
-    });
-
-    it('keeps an empty completed terminal output authoritative over streamed text', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.done',
-          'data: {"type":"response.output_text.done","output_index":0,"content_index":0,"text":"FIRST"}',
-          '',
-          'event: response.output_text.done',
-          'data: {"type":"response.output_text.done","output_index":1,"content_index":0,"text":"SECOND"}',
-          '',
-          'event: response.completed',
-          'data: {"type":"response.completed","response":{"id":"resp_completed_empty","model":"openai.gpt-5.5","status":"completed","output":[]}}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toContain('Invalid response format: Missing output array');
-      expect(result.output).toBeUndefined();
-      expect(JSON.stringify(result)).not.toContain('FIRST');
-      expect(JSON.stringify(result)).not.toContain('SECOND');
-    });
-
-    it('preserves leading unindexed delta order when an incomplete response has no terminal output', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","delta":"hello "}',
-          '',
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"world"}',
-          '',
-          'event: response.incomplete',
-          'data: {"type":"response.incomplete","response":{"id":"resp_incomplete_empty","model":"openai.gpt-5.5","status":"incomplete","output":[]}}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('hello world');
-    });
-
-    it('prepends a leading unindexed delta to the first partially emitted output item', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","delta":"hello "}',
-          '',
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"world"}',
-          '',
-          'event: response.incomplete',
-          `data: ${JSON.stringify({
-            type: 'response.incomplete',
-            response: {
-              id: 'resp_incomplete_leading_partial',
-              model: 'openai.gpt-5.5',
-              status: 'incomplete',
-              output: [
-                {
-                  type: 'message',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'wor' }],
-                },
-              ],
-            },
-          })}`,
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('hello world');
-    });
-
-    it('keeps a leading unindexed prefix with the first of multiple indexed outputs', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","delta":"A0"}',
-          '',
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"A1"}',
-          '',
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":1,"content_index":0,"delta":"B1"}',
-          '',
-          'event: response.incomplete',
-          `data: ${JSON.stringify({
-            type: 'response.incomplete',
-            response: {
-              id: 'resp_incomplete_leading_interleaved',
-              model: 'openai.gpt-5.5',
-              status: 'incomplete',
-              output: [
-                {
-                  type: 'message',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'A' }],
-                },
-                {
-                  type: 'message',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'B' }],
-                },
-              ],
-            },
-          })}`,
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('A0A1\nB1');
-    });
-
-    it('keeps distinct invalidly indexed completed output items', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.done',
-          'data: {"type":"response.output_text.done","output_index":1000000000,"content_index":0,"text":"FIRST"}',
-          '',
-          'event: response.output_text.done',
-          'data: {"type":"response.output_text.done","output_index":1000000001,"content_index":0,"text":"SECOND"}',
-          '',
-          'event: response.incomplete',
-          'data: {"type":"response.incomplete","response":{"id":"resp_incomplete_invalid_items","model":"openai.gpt-5.5","status":"incomplete","output":[]}}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('FIRST\nSECOND');
-    });
-
-    it('preserves identical text from distinct invalidly indexed output items', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.done',
-          'data: {"type":"response.output_text.done","output_index":1000000000,"content_index":0,"text":"SAME"}',
-          '',
-          'event: response.output_text.done',
-          'data: {"type":"response.output_text.done","output_index":1000000001,"content_index":0,"text":"SAME"}',
-          '',
-          'event: response.incomplete',
-          'data: {"type":"response.incomplete","response":{"id":"resp_invalid_identical","model":"openai.gpt-5.5","status":"incomplete","output":[]}}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('SAME\nSAME');
-    });
-
-    it('preserves repeated text from distinct streamed indices that collide with non-message items', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"OK"}',
-          '',
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":1,"content_index":0,"delta":"OK"}',
-          '',
-          'event: response.incomplete',
-          `data: ${JSON.stringify({
-            type: 'response.incomplete',
-            response: {
-              id: 'resp_incomplete_repeated_collision',
-              model: 'openai.gpt-5.5',
-              status: 'incomplete',
-              output: [
-                { type: 'reasoning', summary: [] },
-                { type: 'reasoning', summary: [] },
-              ],
-            },
-          })}`,
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('OK\nOK');
-    });
-
-    it.each([
-      { field: 'content_index', value: 1_000_000_000 },
-      { field: 'output_index', value: 100_000_000 },
-    ])('safely handles an oversized streamed $field', async ({ field, value }) => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          `data: ${JSON.stringify({
-            type: 'response.output_text.delta',
-            output_index: 0,
-            content_index: 0,
-            [field]: value,
-            delta: 'safe fallback',
-          })}`,
-          '',
-          'event: response.incomplete',
-          `data: ${JSON.stringify({
-            type: 'response.incomplete',
-            response: {
-              id: 'resp_incomplete_oversized_index',
-              model: 'openai.gpt-5.5',
-              status: 'incomplete',
-              output: [{ id: 'reason', type: 'reasoning', summary: [] }],
-            },
-          })}`,
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('safe fallback');
-    });
-
-    it('does not retain attacker-sized malformed stream-index keys', async () => {
-      const oversizedIndex = `OVERSIZED-INDEX-${'x'.repeat(512 * 1_024)}`;
-      const body = [
-        'event: response.output_text.delta',
-        `data: ${JSON.stringify({ type: 'response.output_text.delta', output_index: oversizedIndex, content_index: 0, delta: 'safe' })}`,
-        '',
-      ].join('\n');
-      const retainedKeyLengths: number[] = [];
-      const originalSet = Map.prototype.set;
-      const setSpy = vi.spyOn(Map.prototype, 'set').mockImplementation(function (
-        this: Map<unknown, unknown>,
-        key,
-        value,
-      ) {
-        if (typeof key === 'string' && key.includes('OVERSIZED-INDEX')) {
-          retainedKeyLengths.push(key.length);
-        }
-        return originalSet.call(this, key, value);
-      });
-
-      try {
-        const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-        expect(result.output[0].content[0].text).toBe('safe');
-        expect(Math.max(0, ...retainedKeyLengths)).toBeLessThan(256);
-      } finally {
-        setSpy.mockRestore();
-      }
-    });
-
-    it('bounds the number of distinct malformed streamed output indices', async () => {
-      const malformedEvents = Array.from({ length: 1_100 }, (_, index) => [
-        'event: response.output_text.delta',
-        `data: ${JSON.stringify({ type: 'response.output_text.delta', output_index: 1_000_000_000 + index, content_index: 0, delta: `item-${index}` })}`,
-        '',
-      ]).flat();
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          ...malformedEvents,
-          'event: response.incomplete',
-          'data: {"type":"response.incomplete","response":{"id":"resp_many_invalid","model":"openai.gpt-5.5","status":"incomplete","output":[]}}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect((result.raw as any).output.length).toBeLessThanOrEqual(1_024);
-    });
-
-    it('bounds the aggregate number of distinct valid streamed content keys', async () => {
-      const indexedEvents = Array.from({ length: 1_100 }, (_, index) => [
-        'event: response.output_text.delta',
-        `data: ${JSON.stringify({ type: 'response.output_text.delta', output_index: Math.floor(index / 40), content_index: index % 40, delta: 'x' })}`,
-        '',
-      ]).flat();
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          ...indexedEvents,
-          'event: response.incomplete',
-          'data: {"type":"response.incomplete","response":{"id":"resp_many_valid","model":"openai.gpt-5.5","status":"incomplete","output":[]}}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-      const contentCount = (result.raw as any).output.reduce(
-        (count: number, item: any) =>
-          count + (Array.isArray(item.content) ? item.content.length : 0),
-        0,
-      );
-
-      expect(result.error).toBeUndefined();
-      expect(contentCount).toBeLessThanOrEqual(1_024);
-    });
-
-    it('does not expand sparse streamed content indices into placeholder objects', async () => {
-      const sparseEvents = Array.from({ length: 1_024 }, (_, index) => [
-        'event: response.output_text.delta',
-        `data: ${JSON.stringify({ type: 'response.output_text.delta', output_index: index, content_index: 1_024, delta: 'x' })}`,
-        '',
-      ]).flat();
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          ...sparseEvents,
-          'event: response.incomplete',
-          'data: {"type":"response.incomplete","response":{"id":"resp_sparse_content","model":"openai.gpt-5.5","status":"incomplete","output":[]}}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-      const contentCount = (result.raw as any).output.reduce(
-        (count: number, item: any) =>
-          count + (Array.isArray(item.content) ? item.content.length : 0),
-        0,
-      );
-
-      expect(result.error).toBeUndefined();
-      expect(contentCount).toBeLessThanOrEqual(1_024);
-    });
-
-    it('bounds aggregate streamed output even when all deltas reuse one key', async () => {
-      const delta = 'x'.repeat(1_024 * 1_024);
-      const body = Array.from({ length: 17 }, () => [
-        'event: response.output_text.delta',
-        `data: ${JSON.stringify({ type: 'response.output_text.delta', output_index: 0, content_index: 0, delta })}`,
-        '',
-      ])
-        .flat()
-        .join('\n');
-
-      await expect(
-        readResponsesStream(new Response(body), 'test', { debug: vi.fn() }),
-      ).rejects.toThrow(/streaming response exceeded.*output/i);
-    });
-
-    it('bounds finalized tool-call arguments on a truncated stream', async () => {
-      const argumentsText = 'x'.repeat(17 * 1_024 * 1_024);
-      const body = [
-        'event: response.output_item.done',
-        `data: ${JSON.stringify({ type: 'response.output_item.done', output_index: 0, item: { type: 'function_call', name: 'lookup', arguments: argumentsText, call_id: 'call_1' } })}`,
-        '',
-      ].join('\n');
-
-      await expect(
-        readResponsesStream(new Response(body), 'test', { debug: vi.fn() }),
-      ).rejects.toThrow(/streaming response exceeded.*output/i);
-    });
-
-    it('bounds finalized tool-call arguments across multiple output items', async () => {
-      const argumentsText = 'x'.repeat(2 * 1_024 * 1_024);
-      const body = Array.from({ length: 9 }, (_, outputIndex) => [
-        'event: response.output_item.done',
-        `data: ${JSON.stringify({ type: 'response.output_item.done', output_index: outputIndex, item: { type: 'function_call', name: 'lookup', arguments: argumentsText, call_id: `call_${outputIndex}` } })}`,
-        '',
-      ])
-        .flat()
-        .join('\n');
-
-      await expect(
-        readResponsesStream(new Response(body), 'test', { debug: vi.fn() }),
-      ).rejects.toThrow(/streaming response exceeded.*output/i);
-    });
-
-    it('bounds output in a completed terminal response snapshot', async () => {
-      const text = 'x'.repeat(17 * 1_024 * 1_024);
-      const body = [
-        'event: response.completed',
-        `data: ${JSON.stringify({ type: 'response.completed', response: { status: 'completed', output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] }] } })}`,
-        '',
-        '',
-      ].join('\n');
-
-      await expect(
-        readResponsesStream(new Response(body), 'test', { debug: vi.fn() }),
-      ).rejects.toThrow(/streaming response exceeded.*output/i);
-    });
-
-    it('bounds reconstructed output across finalized items and an incomplete terminal snapshot', async () => {
-      const argumentsText = 'x'.repeat(8 * 1_024 * 1_024);
-      const text = 'y'.repeat(9 * 1_024 * 1_024);
-      const body = [
-        'event: response.output_item.done',
-        `data: ${JSON.stringify({ type: 'response.output_item.done', output_index: 0, item: { type: 'function_call', name: 'lookup', arguments: argumentsText, call_id: 'call_1' } })}`,
-        '',
-        'event: response.incomplete',
-        `data: ${JSON.stringify({
-          type: 'response.incomplete',
-          response: {
-            status: 'incomplete',
-            output: [
-              { type: 'function_call', name: 'lookup', arguments: '{}', call_id: 'call_1' },
-              { type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] },
-            ],
-          },
-        })}`,
-        '',
-        '',
-      ].join('\n');
-
-      await expect(
-        readResponsesStream(new Response(body), 'test', { debug: vi.fn() }),
-      ).rejects.toThrow(/streaming response exceeded.*output/i);
-    });
-
-    it('cancels an unterminated SSE event once the buffered-event limit is exceeded', async () => {
-      const encoder = new TextEncoder();
-      const chunk = `: ${'x'.repeat(1_024 * 1_024)}\n`;
-      let cancelled = false;
-      let pulls = 0;
-      const stream = new ReadableStream({
-        pull(controller) {
-          pulls++;
-          controller.enqueue(encoder.encode(chunk));
-          if (pulls === 18) {
-            controller.close();
-          }
-        },
-        cancel() {
-          cancelled = true;
-        },
-      });
-
-      await expect(
-        readResponsesStream(new Response(stream), 'test', { debug: vi.fn() }),
-      ).rejects.toThrow(/streaming response exceeded.*(?:output|event)/i);
-      expect(cancelled).toBe(true);
-    });
-
-    it('cancels a terminated oversized ignored SSE event before parsing it', async () => {
-      const encoder = new TextEncoder();
-      const junk = 'x'.repeat(17 * 1_024 * 1_024);
-      let pulls = 0;
-      let cancelled = false;
-      const stream = new ReadableStream({
-        pull(controller) {
-          pulls++;
-          if (pulls === 1) {
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({ type: 'ignored.event', ignored: junk })}\n\n`,
-              ),
-            );
-            return;
-          }
-          controller.enqueue(
-            encoder.encode(
-              'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}]}}\n\n',
-            ),
-          );
-          controller.close();
-        },
-        cancel() {
-          cancelled = true;
-        },
-      });
-
-      await expect(
-        readResponsesStream(new Response(stream), 'test', { debug: vi.fn() }),
-      ).rejects.toThrow(/streaming response exceeded.*output/i);
-      expect(cancelled).toBe(true);
-    });
-
-    it('cancels the response stream when finalized tool-call arguments exceed the output limit', async () => {
-      const encoder = new TextEncoder();
-      const argumentsText = 'x'.repeat(17 * 1_024 * 1_024);
-      let cancelled = false;
-      const stream = new ReadableStream({
-        pull(controller) {
-          controller.enqueue(
-            encoder.encode(
-              `event: response.output_item.done\ndata: ${JSON.stringify({ type: 'response.output_item.done', output_index: 0, item: { type: 'function_call', name: 'lookup', arguments: argumentsText, call_id: 'call_1' } })}\n\n`,
-            ),
-          );
-        },
-        cancel() {
-          cancelled = true;
-        },
-      });
-
-      await expect(
-        readResponsesStream(new Response(stream), 'test', { debug: vi.fn() }),
-      ).rejects.toThrow(/streaming response exceeded.*output/i);
-      expect(cancelled).toBe(true);
-    });
-
-    it('cancels the response stream when the aggregate output limit is exceeded', async () => {
-      const encoder = new TextEncoder();
-      const delta = 'x'.repeat(1_024 * 1_024);
-      let cancelled = false;
-      const stream = new ReadableStream({
-        pull(controller) {
-          controller.enqueue(
-            encoder.encode(
-              `event: response.output_text.delta\ndata: ${JSON.stringify({ type: 'response.output_text.delta', output_index: 0, content_index: 0, delta })}\n\n`,
-            ),
-          );
-        },
-        cancel() {
-          cancelled = true;
-        },
-      });
-
-      await expect(
-        readResponsesStream(new Response(stream), 'test', { debug: vi.fn() }),
-      ).rejects.toThrow(/streaming response exceeded.*output/i);
-      expect(cancelled).toBe(true);
-    });
-
-    it('keeps an oversized indexed delta separate from the preceding output', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SAFE"}',
-          '',
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":1000000000,"content_index":0,"delta":"WRONG-ITEM"}',
-          '',
-          'event: response.incomplete',
-          `data: ${JSON.stringify({
-            type: 'response.incomplete',
-            response: {
-              id: 'resp_incomplete_mixed_validity',
-              model: 'openai.gpt-5.5',
-              status: 'incomplete',
-              output: [
-                {
-                  id: 'msg_safe',
-                  type: 'message',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'SAFE' }],
-                },
-              ],
-            },
-          })}`,
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('SAFE\nWRONG-ITEM');
-    });
-
-    it('preserves an indexed delta that collides with a non-message terminal item', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"LOST"}',
-          '',
-          'event: response.incomplete',
-          `data: ${JSON.stringify({
-            type: 'response.incomplete',
-            response: {
-              id: 'resp_incomplete_non_message_collision',
-              model: 'openai.gpt-5.5',
-              status: 'incomplete',
-              output: [
-                { id: 'reason', type: 'reasoning', summary: [] },
-                {
-                  type: 'message',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'KEPT' }],
-                },
-              ],
-            },
-          })}`,
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('KEPT\nLOST');
-    });
-
-    it('does not duplicate oversized-index text already present in the terminal output', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SAFE"}',
-          '',
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":1000000000,"content_index":0,"delta":"WRONG"}',
-          '',
-          'event: response.incomplete',
-          `data: ${JSON.stringify({
-            type: 'response.incomplete',
-            response: {
-              id: 'resp_incomplete_duplicate_invalid',
-              model: 'openai.gpt-5.5',
-              status: 'incomplete',
-              output: [
-                {
-                  type: 'message',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'SAFE' }],
-                },
-                {
-                  type: 'message',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'WRONG' }],
-                },
-              ],
-            },
-          })}`,
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('SAFE\nWRONG');
-    });
-
-    it('preserves distinct oversized-index text that is a substring of another output', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"SAFE WRONG SAFE"}',
-          '',
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":1000000000,"content_index":0,"delta":"WRONG"}',
-          '',
-          'event: response.incomplete',
-          `data: ${JSON.stringify({
-            type: 'response.incomplete',
-            response: {
-              id: 'resp_incomplete_distinct_invalid',
-              model: 'openai.gpt-5.5',
-              status: 'incomplete',
-              output: [
-                {
-                  type: 'message',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'SAFE WRONG SAFE' }],
-                },
-              ],
-            },
-          })}`,
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('SAFE WRONG SAFE\nWRONG');
-    });
-
-    it('preserves unindexed deltas when an incomplete response has multiple text outputs', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","delta":"first remainder"}',
-          '',
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","delta":"second remainder"}',
-          '',
-          'event: response.incomplete',
-          `data: ${JSON.stringify({
-            type: 'response.incomplete',
-            response: {
-              id: 'resp_incomplete_unindexed_multiple',
-              model: 'openai.gpt-5.5',
-              status: 'incomplete',
-              output: [
-                {
-                  type: 'message',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'first ' }],
-                },
-                {
-                  type: 'message',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'second ' }],
-                },
-              ],
-            },
-          })}`,
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('first \nsecond \nfirst remaindersecond remainder');
-    });
-
-    it('does not duplicate complete unindexed text split across terminal messages', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","delta":"ABC"}',
-          '',
-          'event: response.incomplete',
-          `data: ${JSON.stringify({
-            type: 'response.incomplete',
-            response: {
-              id: 'resp_incomplete_unindexed_split',
-              model: 'openai.gpt-5.5',
-              status: 'incomplete',
-              output: [
-                {
-                  type: 'message',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'A' }],
-                },
-                {
-                  type: 'message',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'BC' }],
-                },
-              ],
-            },
-          })}`,
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('A\nBC');
-    });
-
-    it('keeps a leading unindexed delta out of a later indexed output', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","delta":"FIRST"}',
-          '',
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","output_index":1,"content_index":0,"delta":"SECOND"}',
-          '',
-          'event: response.incomplete',
-          `data: ${JSON.stringify({
-            type: 'response.incomplete',
-            response: {
-              id: 'resp_incomplete_leading_unindexed',
-              model: 'openai.gpt-5.5',
-              status: 'incomplete',
-              output: [
-                {
-                  type: 'message',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'F' }],
-                },
-                {
-                  type: 'message',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'S' }],
-                },
-              ],
-            },
-          })}`,
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.5', {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
-
-      const result = await provider.callApi('hello');
-
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('FIRST\nSECOND');
-    });
-
-    it('does not attach a trailing unindexed delta to the previous indexed output', async () => {
-      const body = [
-        'event: response.output_text.delta',
-        'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"FIRST"}',
-        '',
-        'event: response.output_text.delta',
-        'data: {"type":"response.output_text.delta","delta":"SECOND"}',
-        '',
-        'event: response.incomplete',
-        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"FIRST"}]},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"SECOND"}]}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output).toEqual([
-        expect.objectContaining({ content: [expect.objectContaining({ text: 'FIRST' })] }),
-        expect.objectContaining({ content: [expect.objectContaining({ text: 'SECOND' })] }),
-      ]);
-    });
-
-    it.each(GPT_5_6_MODELS)(
-      'preserves interleaved output boundaries in an incomplete response for %s',
-      async (modelId) => {
-        vi.mocked(fetchWithCache).mockResolvedValueOnce({
-          data: [
-            'event: response.output_text.delta',
-            'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"A1"}',
-            '',
-            'event: response.output_text.delta',
-            'data: {"type":"response.output_text.delta","output_index":1,"content_index":0,"delta":"B1"}',
-            '',
-            'event: response.output_text.delta',
-            'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"A2"}',
-            '',
-            'event: response.incomplete',
-            `data: ${JSON.stringify({
-              type: 'response.incomplete',
-              response: {
-                id: 'resp_incomplete_interleaved',
-                model: modelId,
-                status: 'incomplete',
-                output: [
-                  {
-                    id: 'msg_a',
-                    type: 'message',
-                    role: 'assistant',
-                    content: [{ type: 'output_text', text: 'A1' }],
-                  },
-                  {
-                    id: 'msg_b',
-                    type: 'message',
-                    role: 'assistant',
-                    content: [{ type: 'output_text', text: 'B1' }],
-                  },
-                ],
-                usage: { input_tokens: 2, output_tokens: 3, total_tokens: 5 },
-              },
-            })}`,
-            '',
-          ].join('\n'),
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-          headers: { 'content-type': 'text/event-stream' },
-        });
-        const provider = createBedrockOpenAiResponsesProvider(modelId, {
-          config: { apiKey: 'bedrock-key', stream: true },
-        });
-
-        const result = await provider.callApi('hello');
-
-        expect(result.error).toBeUndefined();
-        expect(result.output).toBe('A1A2\nB1');
-      },
-    );
-
-    it.each(GPT_5_6_MODELS)(
-      'reconstructs missing indexed output content in an incomplete response for %s',
-      async (modelId) => {
-        vi.mocked(fetchWithCache).mockResolvedValueOnce({
-          data: [
-            'event: response.output_text.delta',
-            'data: {"type":"response.output_text.delta","output_index":1,"content_index":0,"delta":"A1"}',
-            '',
-            'event: response.output_text.delta',
-            'data: {"type":"response.output_text.delta","output_index":2,"content_index":0,"delta":"B1"}',
-            '',
-            'event: response.output_text.delta',
-            'data: {"type":"response.output_text.delta","output_index":1,"content_index":0,"delta":"A2"}',
-            '',
-            'event: response.incomplete',
-            `data: ${JSON.stringify({
-              type: 'response.incomplete',
-              response: {
-                id: 'resp_incomplete_empty_content',
-                model: modelId,
-                status: 'incomplete',
-                output: [{ id: 'reason', type: 'reasoning', summary: [] }],
-                usage: { input_tokens: 2, output_tokens: 3, total_tokens: 5 },
-              },
-            })}`,
-            '',
-          ].join('\n'),
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-          headers: { 'content-type': 'text/event-stream' },
-        });
-        const provider = createBedrockOpenAiResponsesProvider(modelId, {
-          config: { apiKey: 'bedrock-key', stream: true },
-        });
-
-        const result = await provider.callApi('hello');
-
-        expect(result.error).toBeUndefined();
-        expect(result.output).toBe('A1A2\nB1');
-      },
-    );
-
-    it.each(GPT_5_6_MODELS)(
-      'reconstructs an output_text item that omits text in an incomplete response for %s',
-      async (modelId) => {
-        vi.mocked(fetchWithCache).mockResolvedValueOnce({
-          data: [
-            'event: response.output_text.delta',
-            'data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"partial answer"}',
-            '',
-            'event: response.incomplete',
-            `data: ${JSON.stringify({
-              type: 'response.incomplete',
-              response: {
-                id: 'resp_incomplete_missing_text',
-                model: modelId,
-                status: 'incomplete',
-                output: [
-                  {
-                    id: 'msg_missing_text',
-                    type: 'message',
-                    role: 'assistant',
-                    content: [{ type: 'output_text' }],
-                  },
-                ],
-                usage: { input_tokens: 2, output_tokens: 3, total_tokens: 5 },
-              },
-            })}`,
-            '',
-          ].join('\n'),
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-          headers: { 'content-type': 'text/event-stream' },
-        });
-        const provider = createBedrockOpenAiResponsesProvider(modelId, {
-          config: { apiKey: 'bedrock-key', stream: true },
-        });
-
-        const result = await provider.callApi('hello');
-
-        expect(result.error).toBeUndefined();
-        expect(result.output).toBe('partial answer');
-      },
-    );
-
-    it('falls back to the base OpenAI URL when constructed directly without apiBaseUrl', () => {
-      // The factory always sets config.apiBaseUrl, so the `|| super.getApiUrl()` fallback in the
-      // override is only reachable by a direct caller. Exercise it: with no apiBaseUrl, getApiUrl()
-      // must delegate to the base provider (never the mantle endpoint).
+    it('pins directly constructed providers to Bedrock without apiBaseUrl', () => {
       restoreEnv = mockProcessEnv({
-        OPENAI_API_HOST: undefined,
-        OPENAI_BASE_URL: undefined,
-        OPENAI_API_BASE_URL: undefined,
+        OPENAI_API_HOST: 'unrelated.example',
+        OPENAI_BASE_URL: 'https://unrelated.example/v1',
+        OPENAI_API_BASE_URL: 'https://unrelated.example/v1',
       });
       const direct = new BedrockOpenAiResponsesProvider('openai.gpt-5.5', {
         config: { apiKey: 'k' },
       });
-      expect(direct.getApiUrl()).not.toContain('bedrock-mantle');
-      expect(direct.getApiUrl()).toBe(
-        new OpenAiResponsesProvider('gpt-5.5', { config: { apiKey: 'k' } }).getApiUrl(),
-      );
+      expect(direct.getApiUrl()).toBe('https://bedrock-mantle.us-east-2.api.aws/openai/v1');
     });
   });
 
@@ -3771,21 +1051,12 @@ describe('bedrock openaiResponses helper', () => {
       expect((provider.config as any).apiBaseUrl).toBe(
         'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
       );
-      expect((provider.config as any).apiKey).toBe('env-bedrock-key');
+      expect(provider.getApiKey()).toBe('env-bedrock-key');
     });
 
-    it('reuses the missing-key error path', () => {
+    it('allows Grok to use the AWS credential chain without a configured bearer token', () => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
-      expect(() => createBedrockOpenAiResponsesProvider('xai.grok-4.3', {})).toThrow(
-        /AWS_BEARER_TOKEN_BEDROCK/,
-      );
-    });
-
-    it('links Grok missing-key errors to the Grok docs section', () => {
-      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
-      expect(() => createBedrockOpenAiResponsesProvider('xai.grok-4.3', {})).toThrow(
-        'https://www.promptfoo.dev/docs/providers/aws-bedrock/#xai-grok-models',
-      );
+      expect(() => createBedrockOpenAiResponsesProvider('xai.grok-4.3', {})).not.toThrow();
     });
 
     it('treats Grok as a reasoning model but does NOT mark it GPT-5', () => {
@@ -3848,75 +1119,13 @@ describe('bedrock openaiResponses helper', () => {
       expect(fetchWithCache).toHaveBeenCalledWith(
         'https://bedrock-mantle.us-west-2.api.aws/openai/v1/responses',
         expect.objectContaining({
-          headers: expect.objectContaining({ Authorization: 'Bearer env-bedrock-key' }),
+          getAuthHeaders: expect.any(Function),
         }),
         expect.any(Number),
         'json',
         true,
         undefined,
       );
-    });
-
-    it.each([
-      {
-        name: 'malformed finalized message id',
-        events: [
-          {
-            type: 'response.output_item.done',
-            output_index: 0,
-            item: { type: 'message', id: 1, content: [{ type: 'output_text', text: 'secret' }] },
-          },
-        ],
-      },
-      {
-        name: 'unindexed identified text',
-        events: [{ type: 'response.output_text.done', item_id: 'm_secret', text: 'secret' }],
-      },
-    ])('does not positionally recover $name', async ({ events }) => {
-      const body = [
-        ...events.flatMap((event) => [
-          `event: ${event.type}`,
-          `data: ${JSON.stringify(event)}`,
-          '',
-        ]),
-        'event: response.incomplete',
-        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[{"type":"message","id":"m_safe","role":"assistant","content":[{"type":"output_text","text":"safe"}]}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output[0].content[0].text).toBe('safe');
-    });
-
-    it('drops annotations with invalid supplied item ids', async () => {
-      const body = [
-        'event: response.output_text.annotation.added',
-        'data: {"type":"response.output_text.annotation.added","output_index":0,"content_index":0,"item_id":1,"annotation":{"type":"url_citation","url":"https://example.com"}}',
-        '',
-        'event: response.incomplete',
-        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[{"type":"message","id":"m_safe","role":"assistant","content":[{"type":"output_text","text":"safe"}]}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output[0].content[0].annotations).toBeUndefined();
-    });
-
-    it('applies finalized EOF text before nested tool filtering', async () => {
-      const body = [
-        'event: response.output_text.done',
-        'data: {"type":"response.output_text.done","output_index":0,"content_index":1,"item_id":"m_1","text":"final"}',
-        '',
-        'event: response.output_item.done',
-        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"m_1","role":"assistant","content":[{"type":"function_call","name":"lookup","arguments":"{}"},{"type":"output_text","text":"stale"}]}}',
-        '',
-      ].join('\n');
-
-      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
-
-      expect(result.output[0].content).toEqual([{ type: 'output_text', text: 'final' }]);
     });
   });
 });
