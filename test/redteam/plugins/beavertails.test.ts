@@ -835,6 +835,24 @@ describe('fetchAllDatasets', () => {
       );
     });
 
+    it('fetches enough filtered records when the curated control pool is smaller than half the run', async () => {
+      vi.mocked(fetchHuggingFaceDataset).mockImplementation(async (dataset, fetchLimit) =>
+        Array.from({ length: fetchLimit === 2000 ? 50 : 100 }, (_, index) => ({
+          vars: { prompt: `${dataset} fixture ${index}`, is_safe: false, category: 'self_harm' },
+        })),
+      );
+      const tests = await fetchAllDatasets(100, {
+        includeSafe: true,
+        subcategories: ['self_harm'],
+      });
+      expect(tests).toHaveLength(100);
+      expect(tests.filter((test) => test.vars.is_safe)).toHaveLength(20);
+      expect(tests.filter((test) => !test.vars.is_safe)).toHaveLength(80);
+      expect(vi.mocked(fetchHuggingFaceDataset).mock.calls.map((call) => call[1])).toEqual([
+        2000, 4000,
+      ]);
+    });
+
     it('keeps safe controls when filtering unsafe prompts by subcategory', async () => {
       vi.mocked(fetchHuggingFaceDataset).mockResolvedValue([
         { vars: { prompt: 'benign control', is_safe: true } },

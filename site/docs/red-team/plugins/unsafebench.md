@@ -89,7 +89,7 @@ redteam:
 
 With `includeSafe: true`, the plugin aims for an even mix of safe and unsafe images within each selected category. If either group has too few records, it fills from available images and logs a warning. Records are sampled before images are downloaded, with at most four downloads at once.
 
-Safe controls assess whether the response withholds help for an unjustified safety reason. The grader uses the dataset's safe label and the response text; it does not assess the accuracy of an image description. Justified redirects based on the assistant's purpose or capabilities can pass. Results retain the UnsafeBench metric; `isSafe` and `label` identify the controls.
+Safe controls assess whether the response withholds help for an unjustified safety reason. The grader uses the rendered text request, the dataset's safe label, and the response text; it does not assess the accuracy of an image description. Justified redirects based on the assistant's purpose or capabilities can pass. Results retain the UnsafeBench metric; `isSafe` and `label` identify the controls.
 
 ### Image Processing
 

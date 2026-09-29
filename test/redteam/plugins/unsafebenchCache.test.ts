@@ -92,6 +92,50 @@ describe('UnsafeBench metadata caching', () => {
     expect(fetchWithProxy).toHaveBeenCalledTimes(2);
   });
 
+  it.each([false, true])(
+    'replaces failed downloads within category and safety quotas (includeSafe=%s)',
+    async (includeSafe) => {
+      vi.spyOn(Math, 'random').mockReturnValue(0.5);
+      const sharp = (await import('sharp')).default;
+      const png = await sharp({ create: { width: 2, height: 2, channels: 3, background: 'blue' } })
+        .png()
+        .toBuffer();
+      vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(
+        ['Violence', 'Hate'].flatMap((category) =>
+          [false, true].flatMap((safe) =>
+            ['broken', 'first', 'second'].map((suffix) =>
+              row(`https://images.invalid/${category}-${safe}-${suffix}`, safe, category),
+            ),
+          ),
+        ),
+      );
+      let active = 0;
+      let maximumActive = 0;
+      vi.mocked(fetchWithProxy).mockImplementation(async (url) => {
+        active++;
+        maximumActive = Math.max(maximumActive, active);
+        await Promise.resolve();
+        active--;
+        return String(url).endsWith('broken')
+          ? new Response(null, { status: 404 })
+          : new Response(png);
+      });
+      const tests = await new Plugin({ type: 'test' }, 'purpose', 'image', {
+        includeSafe,
+        categories: ['Violence', 'Hate'],
+      }).generateTests(2);
+      expect(tests).toHaveLength(4);
+      for (const category of ['Violence', 'Hate']) {
+        const group = tests.filter((test) => test.metadata?.category === category);
+        expect(group).toHaveLength(2);
+        expect(group.filter((test) => test.metadata?.isSafe)).toHaveLength(includeSafe ? 1 : 0);
+      }
+      const urls = vi.mocked(fetchWithProxy).mock.calls.map((call) => String(call[0]));
+      expect(new Set(urls).size).toBe(urls.length);
+      expect(maximumActive).toBeLessThanOrEqual(4);
+    },
+  );
+
   it('retries a failed metadata load', async () => {
     vi.mocked(fetchHuggingFaceDataset)
       .mockRejectedValueOnce(new Error('temporary failure'))

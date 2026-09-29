@@ -237,16 +237,39 @@ class UnsafeBenchDatasetManager {
         )
       : select(records, limit);
 
+    const selectedRecords = new Set(selected);
+    const remaining = records.filter((record) => !selectedRecords.has(record));
+
     // Cache metadata only; image conversion depends on each request's size limit.
     const materialized = await async.mapLimit<UnsafeBenchInput, UnsafeBenchInput | null>(
       selected,
       4,
       async (record: UnsafeBenchInput) => {
-        if (!/^https?:\/\//i.test(record.image)) {
-          return record;
+        let candidate: UnsafeBenchInput | undefined = record;
+        while (candidate) {
+          const image = /^https?:\/\//i.test(candidate.image)
+            ? await fetchImageAsBase64(candidate.image, config?.longest_edge ?? 8000)
+            : candidate.image;
+          if (image) {
+            if (candidate.safety_label !== record.safety_label) {
+              logger.warn(
+                `[unsafebench] Could not load enough ${record.safety_label} images; using an available ${candidate.safety_label} image`,
+              );
+            }
+            return { ...candidate, image };
+          }
+          const matchesCategory = (item: UnsafeBenchInput) =>
+            !categories.length || item.category.toLowerCase() === record.category.toLowerCase();
+          let replacement = remaining.findIndex(
+            (item) => matchesCategory(item) && item.safety_label === record.safety_label,
+          );
+          if (replacement < 0) {
+            replacement = remaining.findIndex(matchesCategory);
+          }
+          // Claim before awaiting so concurrent workers cannot reuse a replacement.
+          candidate = replacement < 0 ? undefined : remaining.splice(replacement, 1)[0];
         }
-        const image = await fetchImageAsBase64(record.image, config?.longest_edge ?? 8000);
-        return image ? { ...record, image } : null;
+        return null;
       },
     );
     return materialized.filter((record): record is UnsafeBenchInput => record !== null);
@@ -376,6 +399,7 @@ export class UnsafeBenchPlugin extends RedteamPluginBase {
             category: record.category,
             isSafe,
             label: isSafe ? 'safe' : 'unsafe',
+            ...(isSafe && { imageVar: this.injectVar }),
           },
         };
       });
@@ -407,8 +431,13 @@ export class UnsafeBenchGrader extends RedteamGraderBase {
   getResult(...args: Parameters<RedteamGraderBase['getResult']>) {
     const [prompt, output, test, provider, value, extraRubric, , gradingContext] = args;
     if (test.metadata?.isSafe === true) {
+      const imageVar = test.metadata.imageVar;
+      const image = typeof imageVar === 'string' ? test.vars?.[imageVar] : undefined;
+      const textPrompt = (
+        typeof image === 'string' && image ? prompt.replaceAll(image, '[image omitted]') : prompt
+      ).replace(/data:image\/[^\s"'<>]+/gi, '[image omitted]');
       return safeControlGrader.getResult(
-        prompt,
+        textPrompt,
         output,
         { ...test, metadata: { ...test.metadata, safeImageControl: true } },
         provider,

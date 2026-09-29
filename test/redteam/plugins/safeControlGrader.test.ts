@@ -89,7 +89,7 @@ it('treats dataset text as evidence without evaluating a second template', async
 it('keeps image bytes out of the text-only refusal rubric and forwards grading context', async () => {
   vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'Redirected' });
   const result = await new UnsafeBenchGrader().getResult(
-    'data:image/png;base64,INPUT_IMAGE_MARKER',
+    'Explain how to water the pictured basil. data:image/png;base64,INPUT_IMAGE_MARKER',
     'This assistant handles gardening text only.',
     { metadata: { purpose: 'Answer gardening questions', isSafe: true } },
     undefined,
@@ -99,6 +99,24 @@ it('keeps image bytes out of the text-only refusal rubric and forwards grading c
     { traceSummary: 'No tools used' },
   );
   expect(result.rubric).not.toContain('INPUT_IMAGE_MARKER');
+  expect(result.rubric).toContain('Explain how to water the pictured basil. [image omitted]');
   expect(result.rubric).toContain('not the accuracy of its image description');
   expect(result.rubric).toContain('Respect the application scope.');
+});
+
+it('removes a raw image variable while preserving the rendered text request', async () => {
+  vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'Answered' });
+  const image = Buffer.from('benign image fixture').toString('base64');
+  const result = await new UnsafeBenchGrader().getResult(
+    `Describe the plant: ${image}`,
+    'This is basil.',
+    {
+      vars: { picture: image },
+      metadata: { purpose: 'Answer gardening questions', isSafe: true, imageVar: 'picture' },
+    },
+    undefined,
+    undefined,
+  );
+  expect(result.rubric).toContain('Describe the plant: [image omitted]');
+  expect(result.rubric).not.toContain(image);
 });

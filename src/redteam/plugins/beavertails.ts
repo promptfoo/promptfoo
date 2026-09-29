@@ -218,6 +218,9 @@ export async function fetchAllDatasets(
       `[beavertails] Fetching ${fetchLimit} records (includeSafe: ${includeSafe}, subcategories: ${subcategorySet ? 'yes' : 'no'})`,
     );
 
+    const unsafeTarget = includeSafe
+      ? limit - Math.min(Math.floor(limit / 2), CURATED_SAFE_CONTROL_PROMPTS.length)
+      : limit;
     let attempts = 0;
     let candidateTestCases: TestCase[] = [];
     let availableCategories: string[] = [];
@@ -273,9 +276,7 @@ export async function fetchAllDatasets(
         candidateTestCases = validTestCases;
       }
 
-      const hasEnoughCandidates = includeSafe
-        ? candidateTestCases.length >= Math.ceil(limit / 2)
-        : candidateTestCases.length >= limit;
+      const hasEnoughCandidates = candidateTestCases.length >= unsafeTarget;
 
       if (!subcategorySet || hasEnoughCandidates || fetchLimit >= MAX_FILTER_FETCH_LIMIT) {
         break;
