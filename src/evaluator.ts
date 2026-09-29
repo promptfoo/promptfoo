@@ -21,7 +21,11 @@ import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from 
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
-import { getResultIndexKey, sanitizeResultForJsonlArtifact } from './models/evalResult';
+import {
+  getResultIndexKey,
+  sanitizeProvider,
+  sanitizeResultForJsonlArtifact,
+} from './models/evalResult';
 import { generateIdFromPrompt } from './models/prompt';
 import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
 import { CIProgressReporter } from './progress/ciProgressReporter';
@@ -101,7 +105,7 @@ import {
   sanitizeProviderIdForLog,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
-import { REDACTED } from './util/sanitizer';
+import { REDACTED, sanitizeObject } from './util/sanitizer';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
@@ -2969,21 +2973,36 @@ function markComparisonRows(
   }
 }
 
-function restoreComparisonCredentials(saved: unknown, configured: unknown): unknown {
+const COMPARISON_RESUME_ERROR =
+  'Cannot resume select-best with this grader configuration. Supply a grader configuration matching the saved result, or rerun the evaluation.';
+
+function restoreComparisonCredentials(
+  saved: unknown,
+  configured: unknown,
+  canRestore: boolean,
+): unknown {
   if (saved === REDACTED) {
-    return configured ?? saved;
+    invariant(configured != null && configured !== REDACTED && canRestore, COMPARISON_RESUME_ERROR);
+    return configured;
   }
-  if (!saved || typeof saved !== 'object' || saved === configured || configured == null) {
+  if (!saved || typeof saved !== 'object' || saved === configured) {
     return saved;
   }
-  const current = typeof configured === 'object' ? (configured as Record<string, unknown>) : {};
+  const current =
+    configured && typeof configured === 'object' ? (configured as Record<string, unknown>) : {};
   if (Array.isArray(saved)) {
-    return saved.map((value, index) => restoreComparisonCredentials(value, current[index]));
+    return saved.map((value, index) =>
+      restoreComparisonCredentials(value, current[index], canRestore),
+    );
   }
   return Object.fromEntries(
     Object.entries(saved).map(([key, value]) => [
       key,
-      restoreComparisonCredentials(value, Object.hasOwn(current, key) ? current[key] : undefined),
+      restoreComparisonCredentials(
+        value,
+        Object.hasOwn(current, key) ? current[key] : undefined,
+        canRestore,
+      ),
     ]),
   );
 }
@@ -2998,33 +3017,98 @@ function comparisonProviderId(provider: GradingConfig['provider']): string | und
   return typeof id === 'string' ? providerToIdentifier(id) : undefined;
 }
 
+function comparisonProviderSettings(provider: GradingConfig['provider']) {
+  const options = isApiProvider(provider) ? sanitizeProvider(provider) : provider;
+  // Compare every nonsecret option, including endpoint/account settings and env overrides.
+  // Strip functions and undefined fields exactly as persistence does.
+  return JSON.parse(
+    safeJsonStringify(
+      sanitizeObject(
+        { ...options, id: comparisonProviderId(provider), label: undefined },
+        { maxDepth: Number.POSITIVE_INFINITY, sanitizeUrls: true, throwOnError: true },
+      ),
+    )!,
+  );
+}
+
 function restoreComparisonProvider(
   saved: GradingConfig['provider'],
   configured: GradingConfig['provider'],
+  currentResult: boolean,
 ): GradingConfig['provider'] {
-  if (!saved || !configured || isApiProvider(saved)) {
+  if (!saved || isApiProvider(saved)) {
     return saved;
   }
   const configuredText = isProviderTypeMap(configured) ? configured.text : configured;
   if (isProviderTypeMap(saved)) {
-    return { ...saved, text: restoreComparisonProvider(saved.text, configuredText) };
+    return { ...saved, text: restoreComparisonProvider(saved.text, configuredText, currentResult) };
   }
   const savedId = comparisonProviderId(saved);
-  // Older persisted runtime providers omit their ID or replace it with a function/class marker.
-  if (!savedId || savedId.startsWith('[Function] ') || /^\[.+ Instance\]$/.test(savedId)) {
-    return configuredText ?? saved;
+  invariant(
+    savedId && !savedId.startsWith('[Function] ') && !/^\[.+ Instance\]$/.test(savedId),
+    'Cannot resume select-best because the saved runtime grader has no provider ID. Rerun the evaluation.',
+  );
+  if (savedId !== comparisonProviderId(configuredText)) {
+    return restoreComparisonCredentials(saved, undefined, false);
   }
-  return savedId === comparisonProviderId(configuredText)
-    ? restoreComparisonCredentials(saved, configuredText)
-    : saved;
+  const canRestore =
+    currentResult ||
+    isDeepStrictEqual(
+      comparisonProviderSettings(saved),
+      comparisonProviderSettings(configuredText),
+    );
+  if (isApiProvider(configuredText)) {
+    invariant(canRestore, COMPARISON_RESUME_ERROR);
+    return configuredText;
+  }
+  return restoreComparisonCredentials(saved, configuredText, canRestore);
 }
 
-function getComparisonProviders(test: AtomicTestCase) {
+function snapshotComparisonProvider(
+  provider: GradingConfig['provider'],
+  seen = new WeakMap<object, GradingConfig['provider']>(),
+): GradingConfig['provider'] {
+  if (!provider || typeof provider !== 'object' || isApiProvider(provider)) {
+    return provider;
+  }
+  const prototype = Object.getPrototypeOf(provider);
+  if (!Array.isArray(provider) && prototype !== Object.prototype && prototype !== null) {
+    return provider;
+  }
+  if (seen.has(provider)) {
+    return seen.get(provider);
+  }
+  const snapshot = Array.isArray(provider) ? new Array(provider.length) : {};
+  seen.set(provider, snapshot);
+  for (const [key, value] of Object.entries(provider)) {
+    Object.defineProperty(snapshot, key, {
+      value: snapshotComparisonProvider(value, seen),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+  return snapshot;
+}
+
+function persistComparisonProvider(provider: GradingConfig['provider']): GradingConfig['provider'] {
+  if (isApiProvider(provider)) {
+    return sanitizeProvider(provider);
+  }
+  if (isProviderTypeMap(provider)) {
+    return { ...provider, text: persistComparisonProvider(provider.text) };
+  }
+  return provider;
+}
+
+function getComparisonProviders(test: AtomicTestCase, currentResult = false) {
   return {
-    provider: test.options?.provider,
-    assertionProvider: test.assert?.find(
-      (assertion): assertion is Assertion => assertion.type === 'select-best',
-    )?.provider,
+    provider: snapshotComparisonProvider(test.options?.provider),
+    assertionProvider: snapshotComparisonProvider(
+      test.assert?.find((assertion): assertion is Assertion => assertion.type === 'select-best')
+        ?.provider,
+    ),
+    currentResult,
   };
 }
 
@@ -3555,8 +3639,30 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   private async persistEvalRow(row: EvaluateResult): Promise<void> {
-    // Capture grader references before a later hook can replace shared nested test fields.
-    this.comparisonProviders.set(getResultIndexKey(row), getComparisonProviders(row.testCase));
+    if (row.testCase.assert?.some((assertion) => assertion.type === 'select-best')) {
+      // Capture grader references before a later hook can replace shared nested test fields.
+      this.comparisonProviders.set(
+        getResultIndexKey(row),
+        getComparisonProviders(row.testCase, true),
+      );
+      row.testCase = {
+        ...row.testCase,
+        ...(row.testCase.options && {
+          options: {
+            ...row.testCase.options,
+            provider: persistComparisonProvider(row.testCase.options.provider),
+          },
+        }),
+        assert: row.testCase.assert?.map((assertion) =>
+          assertion.type === 'select-best'
+            ? {
+                ...assertion,
+                provider: persistComparisonProvider((assertion as Assertion).provider),
+              }
+            : assertion,
+        ),
+      };
+    }
     try {
       await this.store.appendResult(row);
     } catch (error) {
@@ -4388,47 +4494,73 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     const firstResult = resultsToCompare[0];
-    const providers = this.comparisonProviders.get(getResultIndexKey(firstResult));
     const savedTest = firstResult.testCase;
-    // Persisted rows retain each column's hook-adjusted criteria and vars. Only grader
-    // references and redacted credentials need to come from the current configuration.
-    const comparisonTestCase = {
-      ...savedTest,
-      options: {
-        ...savedTest.options,
-        provider: restoreComparisonProvider(savedTest.options?.provider, providers?.provider),
-      },
-    };
     const assertion = savedTest.assert?.find((a): a is Assertion => a.type === 'select-best');
     if (!assertion) {
       return;
     }
-    const compareAssertion = {
-      ...assertion,
-      provider: restoreComparisonProvider(assertion.provider, providers?.assertionProvider),
-    };
-
-    const repeatCacheContext = repeatCacheContextByTestIdx.get(testIdx);
-    const outputs = resultsToCompare.map((r) => r.response?.output || '');
-    const gradingResults = await withCacheNamespace(
-      repeatCacheContext
-        ? getRepeatCacheNamespace(
-            repeatCacheContext.repeatIndex,
-            repeatCacheContext.evaluateOptions,
-          )
-        : undefined,
-      () =>
-        withProviderCallExecutionContext(
-          { abortSignal: providerAbortSignal, rateLimitRegistry: this.rateLimitRegistry },
-          () =>
-            runCompareAssertion(
-              comparisonTestCase,
-              compareAssertion,
-              outputs,
-              this.getComparisonCallApiContext(resultsToCompare[0], repeatCacheContext),
-            ),
+    let gradingResults: GradingResult[];
+    try {
+      const providers = this.comparisonProviders.get(getResultIndexKey(firstResult));
+      // Persisted rows retain each column's hook-adjusted criteria and vars. Only grader
+      // references and redacted credentials need to come from the current configuration.
+      const comparisonTestCase = {
+        ...savedTest,
+        options: {
+          ...savedTest.options,
+          provider: restoreComparisonProvider(
+            savedTest.options?.provider,
+            providers?.provider,
+            providers?.currentResult ?? false,
+          ),
+        },
+      };
+      const compareAssertion = {
+        ...assertion,
+        provider: restoreComparisonProvider(
+          assertion.provider,
+          providers?.assertionProvider,
+          providers?.currentResult ?? false,
         ),
-    );
+      };
+
+      const repeatCacheContext = repeatCacheContextByTestIdx.get(testIdx);
+      const outputs = resultsToCompare.map((r) => r.response?.output || '');
+      gradingResults = await withCacheNamespace(
+        repeatCacheContext
+          ? getRepeatCacheNamespace(
+              repeatCacheContext.repeatIndex,
+              repeatCacheContext.evaluateOptions,
+            )
+          : undefined,
+        () =>
+          withProviderCallExecutionContext(
+            { abortSignal: providerAbortSignal, rateLimitRegistry: this.rateLimitRegistry },
+            () =>
+              runCompareAssertion(
+                comparisonTestCase,
+                compareAssertion,
+                outputs,
+                this.getComparisonCallApiContext(resultsToCompare[0], repeatCacheContext),
+              ),
+          ),
+      );
+    } catch (error) {
+      if (providerAbortSignal?.aborted && isAbortError(error)) {
+        throw error;
+      }
+      const graderId = comparisonProviderId(assertion.provider ?? savedTest.options?.provider);
+      const reason = `Error grading select-best${graderId ? ` (${graderId})` : ''}: ${error instanceof Error ? error.message : String(error)}`;
+      gradingResults = resultsToCompare.map((result) => {
+        result.error = reason;
+        return {
+          pass: false,
+          score: 0,
+          reason,
+          assertion: { type: assertion.type, value: assertion.value },
+        };
+      });
+    }
 
     for (let index = 0; index < resultsToCompare.length; index++) {
       await this.applySelectBestGradingResult({

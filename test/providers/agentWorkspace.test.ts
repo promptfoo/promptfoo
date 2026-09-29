@@ -335,6 +335,57 @@ describe('agent workspaces', () => {
       }
     });
 
+    it('copies ident fixtures without expanding their contents in automatic mode', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source, { '.gitattributes': '*.txt ident\n', 'fixture.txt': '$Id$\n' });
+      expect(git(source, 'status', '--porcelain')).toBe('');
+
+      const workspace = await create(source);
+
+      expect(workspace.strategy).toBe('copy');
+      expect(fs.readFileSync(path.join(workspace.dir, 'fixture.txt'), 'utf8')).toBe('$Id$\n');
+      const clone = await create(source, 'git');
+      expect(clone.strategy).toBe('git');
+      expect(fs.readFileSync(path.join(clone.dir, 'fixture.txt'), 'utf8')).toMatch(/^\$Id: /);
+    });
+
+    it.each(['.gitattributes', '.git/info/attributes'])(
+      'copies encoded fixture bytes with attributes in %s',
+      async (attributePath) => {
+        const source = path.join(root, 'repo');
+        makeRepository(source);
+        write(path.join(source, attributePath), '*.txt working-tree-encoding=ISO-8859-1\n');
+        const contents = Buffer.from('caf\xe9\n', 'latin1');
+        fs.writeFileSync(path.join(source, 'fixture.txt'), contents);
+        git(source, 'add', '-A');
+        git(source, 'commit', '-q', '-m', 'encoded fixture');
+        expect(git(source, 'status', '--porcelain')).toBe('');
+
+        const workspace = await create(source);
+
+        expect(workspace.strategy).toBe('copy');
+        expect(fs.readFileSync(path.join(workspace.dir, 'fixture.txt'))).toEqual(contents);
+        const clone = await create(source, 'git');
+        expect(clone.strategy).toBe('git');
+        expect(fs.readFileSync(path.join(clone.dir, 'fixture.txt'))).toEqual(
+          attributePath === '.gitattributes' ? contents : Buffer.from('caf\u00e9\n'),
+        );
+      },
+    );
+
+    it('still clones files with explicitly unset checkout transformations', async () => {
+      const source = path.join(root, 'repo');
+      makeRepository(source, {
+        '.gitattributes': '*.txt -filter -ident -working-tree-encoding\n',
+        'fixture.txt': '$Id$\n',
+      });
+
+      const workspace = await create(source);
+
+      expect(workspace.strategy).toBe('git');
+      expect(fs.readFileSync(path.join(workspace.dir, 'fixture.txt'), 'utf8')).toBe('$Id$\n');
+    });
+
     it.each(['staged', 'committed'])(
       'includes newly %s ignored files in its diff',
       async (state) => {

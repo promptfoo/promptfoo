@@ -210,19 +210,28 @@ async function getCloneableRepository(
     const trackedPaths = trackedEntries
       .map((entry) => entry.slice(entry.indexOf('\t') + 1))
       .join('\0');
-    const attributes = await git(['check-attr', '-z', '--stdin', 'filter'], {
-      cwd: source,
-      input: trackedPaths,
-      signal,
-    });
-    if (
-      attributes
-        .split('\0')
-        .some((value, index) => index % 3 === 2 && value !== 'unspecified' && value !== 'unset')
-    ) {
-      throw new UnsupportedGitFilterError(
-        "copy_working_dir: 'git' does not support tracked Git filter attributes; use 'copy' or true to preserve materialized files.",
-      );
+    const attributes = (
+      await git(['check-attr', '-z', '--stdin', 'filter', 'ident', 'working-tree-encoding'], {
+        cwd: source,
+        input: trackedPaths,
+        signal,
+      })
+    ).split('\0');
+    for (let index = 0; index + 2 < attributes.length; index += 3) {
+      const attribute = attributes[index + 1];
+      const value = attributes[index + 2];
+      if (value === 'unspecified' || value === 'unset') {
+        continue;
+      }
+      if (attribute === 'filter') {
+        throw new UnsupportedGitFilterError(
+          "copy_working_dir: 'git' does not support tracked Git filter attributes; use 'copy' or true to preserve materialized files.",
+        );
+      }
+      // Ident expansion and encoding conversion can change bytes without dirtying Git status.
+      if (!allowIgnored) {
+        return undefined;
+      }
     }
     if (!allowIgnored) {
       const endings = await git(['ls-files', '--eol', '-z'], { cwd: source, signal });

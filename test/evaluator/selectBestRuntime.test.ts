@@ -273,6 +273,13 @@ describeEvaluator('select-best runtime grading configuration', () => {
       await evaluate(suite, record, { maxConcurrency: 1 });
       cliState.resume = true;
       await evaluate(suite, record, { maxConcurrency: 1 });
+      for (const row of await record.fetchResultsByTestIdx(0)) {
+        expect(row.success).toBe(false);
+        expect(row.error).toContain('Supply a grader configuration matching the saved result');
+      }
+      expect(seenConfigs).toHaveLength(1);
+      (suite.tests![0].assert![0] as Assertion).provider = { id: 'echo', config: hookConfig };
+      await evaluate(suite, record, { maxConcurrency: 1 });
 
       expect(seenConfigs).toHaveLength(2);
       for (const config of seenConfigs) {
@@ -324,6 +331,160 @@ describeEvaluator('select-best runtime grading configuration', () => {
     } finally {
       changedGrader.mockRestore();
     }
+  });
+
+  it.each([0, 10000])(
+    'snapshots shared inline grader keys with timeoutMs=%s',
+    async (timeoutMs) => {
+      const { suite } = makeSuite();
+      const provider = { id: 'echo', config: { apiKey: 'initial' } };
+      (suite.tests![0].assert![0] as Assertion).provider = provider;
+      let column = 0;
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+        if (hookName === 'beforeEach' && 'test' in context) {
+          provider.config.apiKey = `column-key-${column++}`;
+        }
+        return context;
+      });
+      const keys: string[] = [];
+      const call = vi.spyOn(EchoProvider.prototype, 'callApi').mockImplementation(async function (
+        this: EchoProvider,
+      ) {
+        keys.push(this.config.apiKey);
+        return { output: '0' };
+      });
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      try {
+        await evaluate(suite, record, { maxConcurrency: 1, timeoutMs });
+        expect(keys).toEqual(['column-key-0']);
+        expect(provider.config.apiKey).toBe('column-key-1');
+      } finally {
+        call.mockRestore();
+      }
+    },
+  );
+
+  it.each(['changed endpoint', 'redacted credential'])(
+    'refuses credential restoration with a %s',
+    async (change) => {
+      const { suite } = makeSuite();
+      const assertion = suite.tests![0].assert![0] as Assertion;
+      assertion.provider = {
+        id: 'echo',
+        config: { apiBaseUrl: 'https://old.example/v1', apiKey: 'old-key' },
+      };
+      const call = vi.spyOn(EchoProvider.prototype, 'callApi').mockResolvedValue({ output: '0' });
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      try {
+        await evaluate(suite, record, { maxConcurrency: 1 });
+        assertion.provider = {
+          id: 'echo',
+          config:
+            change === 'changed endpoint'
+              ? { apiBaseUrl: 'https://new.example/v1', apiKey: 'new-key' }
+              : { apiBaseUrl: 'https://old.example/v1', apiKey: '[REDACTED]' },
+        };
+        cliState.resume = true;
+        await evaluate(suite, record, { maxConcurrency: 1 });
+        for (const row of await record.fetchResultsByTestIdx(0)) {
+          expect(row.success).toBe(false);
+          expect(row.error).toContain('Supply a grader configuration matching the saved result');
+        }
+        expect(call).toHaveBeenCalledTimes(1);
+      } finally {
+        call.mockRestore();
+      }
+    },
+  );
+
+  it('retains nonsecret hook overrides without inheriting removed settings on resume', async () => {
+    const { suite } = makeSuite();
+    (suite.tests![0].assert![0] as Assertion).provider = {
+      id: 'echo',
+      config: { temperature: 0, apiBaseUrl: 'https://original.example/v1', max_tokens: 100 },
+    };
+    const configs: Record<string, unknown>[] = [];
+    const call = vi.spyOn(EchoProvider.prototype, 'callApi').mockImplementation(async function (
+      this: EchoProvider,
+    ) {
+      configs.push(this.config);
+      return { output: '0' };
+    });
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName !== 'beforeEach' || !('test' in context)) {
+        return context;
+      }
+      return {
+        ...context,
+        test: {
+          ...context.test,
+          assert: [
+            {
+              type: 'select-best',
+              value: 'choose the best',
+              provider: {
+                id: 'echo',
+                config: { temperature: 1, apiBaseUrl: 'https://hook.example/v1' },
+              },
+            },
+          ],
+        },
+      };
+    });
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    try {
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      cliState.resume = true;
+      await evaluate(suite, record, { maxConcurrency: 1 });
+      expect(configs).toHaveLength(2);
+      for (const config of configs) {
+        expect(config).toMatchObject({ temperature: 1, apiBaseUrl: 'https://hook.example/v1' });
+        expect(config.max_tokens).toBeUndefined();
+      }
+    } finally {
+      call.mockRestore();
+    }
+  });
+
+  it('persists a hook-selected runtime grader identity and requires its handle to resume', async () => {
+    const { grader, suite } = makeSuite();
+    const hookGrader: ApiProvider = {
+      id: () => 'hook-runtime-grader',
+      config: { apiKey: secret },
+      callApi: vi.fn(async () => ({ output: '0' })),
+    };
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName !== 'beforeEach' || !('test' in context)) {
+        return context;
+      }
+      return {
+        ...context,
+        test: {
+          ...context.test,
+          assert: [{ type: 'select-best', value: 'choose the best', provider: hookGrader }],
+        },
+      };
+    });
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    const [saved] = await record.fetchResultsByTestIdx(0);
+    expect((saved.testCase.assert![0] as Assertion).provider).toMatchObject({
+      id: 'hook-runtime-grader',
+      config: { apiKey: '[REDACTED]' },
+    });
+    cliState.resume = true;
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    for (const row of await record.fetchResultsByTestIdx(0)) {
+      expect(row.success).toBe(false);
+      expect(row.error).toContain('hook-runtime-grader');
+      expect(row.error).toContain('Supply a grader configuration matching the saved result');
+    }
+    expect(grader.callApi).not.toHaveBeenCalled();
+    expect(hookGrader.callApi).toHaveBeenCalledTimes(1);
+    (suite.tests![0].assert![0] as Assertion).provider = hookGrader;
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    expect(hookGrader.callApi).toHaveBeenCalledTimes(2);
+    expect(grader.callApi).not.toHaveBeenCalled();
   });
 
   it('uses the original grader key without exposing it in returned grading results', async () => {
