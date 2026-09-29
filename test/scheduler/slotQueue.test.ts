@@ -1,34 +1,9 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SlotQueue } from '../../src/scheduler/slotQueue';
 
 import type { ParsedRateLimitHeaders } from '../../src/scheduler/headerParser';
 
 describe('SlotQueue', () => {
-  // Scoped unhandledRejection handler - saves and restores original listeners
-  // Vitest may still report these as unhandled errors. Strict handling fails
-  // the overall run even when every assertion passes.
-  let originalListeners: NodeJS.UnhandledRejectionListener[];
-
-  beforeAll(() => {
-    originalListeners = process.listeners(
-      'unhandledRejection',
-    ) as NodeJS.UnhandledRejectionListener[];
-    process.removeAllListeners('unhandledRejection');
-    process.on('unhandledRejection', (reason: unknown) => {
-      if (reason instanceof Error && reason.message === 'Queue disposed') {
-        return; // Suppress expected dispose errors
-      }
-      throw reason;
-    });
-  });
-
-  afterAll(() => {
-    process.removeAllListeners('unhandledRejection');
-    for (const listener of originalListeners) {
-      process.on('unhandledRejection', listener);
-    }
-  });
-
   let queue: SlotQueue;
   beforeEach(() => {
     vi.useFakeTimers();
