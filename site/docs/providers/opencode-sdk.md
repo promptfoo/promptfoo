@@ -90,7 +90,7 @@ providers:
   - id: opencode:sdk
     config:
       provider_id: anthropic
-      model: claude-sonnet-4-6
+      model: claude-sonnet-5
 
 prompts:
   - 'Write a Python function that validates email addresses'
@@ -243,7 +243,7 @@ Configure your preferred default model in OpenCode's global configuration:
 ```json title="~/.config/opencode/opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "anthropic/claude-sonnet-4-6"
+  "model": "anthropic/claude-sonnet-5"
 }
 ```
 
@@ -424,6 +424,17 @@ and includes the loaded `SKILL.md` path when OpenCode returns the skill director
 in its result metadata. Those errored entries remain available for diagnostics,
 but they do not count as successful `skill-used` matches.
 
+Because OpenCode is multi-turn, the `skill` tool is usually invoked before the
+final response, so its tool part is absent from that response. To catch those
+calls, promptfoo fetches the session message history after each prompt and
+collects the parts between the user message that triggered the prompt and the
+assistant message it returned. This costs one extra `session.messages` call per
+prompt and is skipped whenever the `skill` tool is disabled — which includes the
+default `tools` config — so evals that never opt into skills pay nothing. If
+either boundary message is missing from the returned history (a truncated or
+paginated response, for example), promptfoo falls back to the final message's
+parts rather than risk attributing another prompt's skill calls to this one.
+
 ## Session Management
 
 ### Ephemeral Sessions (Default)
@@ -503,9 +514,7 @@ providers:
       custom_agent:
         description: Security-focused code reviewer
         mode: primary # 'primary', 'subagent', or 'all'
-        model: anthropic/claude-sonnet-4-6
-        temperature: 0.3
-        top_p: 0.9 # Nucleus sampling parameter
+        model: anthropic/claude-sonnet-5
         steps: 10 # Max iterations before text-only response
         color: '#ff5500' # Visual identification
         tools:
@@ -523,7 +532,7 @@ providers:
 
 `custom_agent` is applied when promptfoo starts the OpenCode server itself. If you use `baseUrl`, define that agent on the target server and use `agent` to select it.
 
-`custom_agent.model` uses OpenCode's full [`provider/model-id` format](https://opencode.ai/docs/agents/#model). For example, `anthropic/claude-sonnet-4-6` selects the Anthropic provider. Unlike the top-level `model` field, it includes the provider key; promptfoo passes this string unchanged. Omit it to use OpenCode's agent model defaults.
+`custom_agent.model` uses OpenCode's full [`provider/model-id` format](https://opencode.ai/docs/agents/#model). For example, `anthropic/claude-sonnet-5` selects the Anthropic provider. Unlike the top-level `model` field, it includes the provider key; promptfoo passes this string unchanged. Omit it to use OpenCode's agent model defaults.
 
 | Parameter     | Type    | Description                               |
 | ------------- | ------- | ----------------------------------------- |

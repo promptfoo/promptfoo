@@ -208,6 +208,20 @@ describe('OpenAICodexAppServerProvider', () => {
     });
   });
 
+  it.each([false, true])('honors inherit_process_env=%s for file defaults', (inheritProcessEnv) => {
+    const provider = new OpenAICodexAppServerProvider({ config: {} });
+    cliState.withEnvFileOverrides({ PATH: 'file-path', PROMPTFOO_REVIEW_ENV_PROBE: 'file' }, () => {
+      const env = (provider as any).prepareEnvironment({ inherit_process_env: inheritProcessEnv });
+      expect(env.PATH).toBe('file-path');
+      expect(env.PROMPTFOO_REVIEW_ENV_PROBE).toBe(inheritProcessEnv ? 'file' : undefined);
+      const explicit = (provider as any).prepareEnvironment({
+        inherit_process_env: inheritProcessEnv,
+        cli_env: { PROMPTFOO_REVIEW_ENV_PROBE: 'explicit' },
+      });
+      expect(explicit.PROMPTFOO_REVIEW_ENV_PROBE).toBe('explicit');
+    });
+  });
+
   it('routes native app-server spans to the receiver configured for the active eval', async () => {
     const provider = new OpenAICodexAppServerProvider({
       config: { deep_tracing: true },
@@ -4890,7 +4904,7 @@ describe('OpenAICodexAppServerProvider', () => {
           command: 'cat env_dump.txt',
           cwd: process.cwd(),
           status: 'completed',
-          aggregatedOutput: 'PROMPTFOO_SYNTHETIC_VALUE=synthetic-value',
+          aggregatedOutput: 'PROMPTFOO_SYNTHETIC_SECRET=synthetic-value',
           exitCode: 0,
           durationMs: 1,
         },
@@ -4983,7 +4997,7 @@ describe('OpenAICodexAppServerProvider', () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: 'command_execution',
-          aggregated_output: 'PROMPTFOO_SYNTHETIC_VALUE=synthetic-value',
+          aggregated_output: 'PROMPTFOO_SYNTHETIC_SECRET=%5BREDACTED%5D',
           exit_code: 0,
         }),
         expect.objectContaining({

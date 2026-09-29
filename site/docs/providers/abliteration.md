@@ -121,7 +121,9 @@ only. This image example disables reasoning with `none`.
       { "type": "text", "text": "{{question}}" },
       {
         "type": "image_url",
-        "image_url": { "url": "https://abliteration.ai/stonehenge.jpg" }
+        "image_url": {
+          "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Stonehenge2007_07_30.jpg/1280px-Stonehenge2007_07_30.jpg"
+        }
       }
     ]
   }

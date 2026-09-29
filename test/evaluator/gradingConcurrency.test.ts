@@ -883,7 +883,7 @@ describeEvaluator('evaluator grading concurrency', () => {
   });
 
   it('keeps parallel assertion dispatch when the grouping queue is NOT active', async () => {
-    // Regression guard for the `? 1 : ASSERTIONS_MAX_CONCURRENCY` ternary in
+    // Regression guard for the `? 1 : PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY` ternary in
     // runAssertions. Without the queue present (non-deferred concurrent eval),
     // per-test assertions must still fan out so we don't silently 3x-throttle
     // normal eval users.

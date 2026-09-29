@@ -132,6 +132,20 @@ describe('EvalResult', () => {
   });
 
   describe('createFromEvaluateResult', () => {
+    it('preserves URL test inputs while redacting provider URL credentials', async () => {
+      const url = 'https://cdn.example/image?X-Amz-Signature=short-secret&q=hello world';
+      const vars = { image: url, imageUrl: url };
+      const provider: ProviderOptions = { id: 'test-provider', config: { apiBaseUrl: url } };
+      const result = await EvalResult.createFromEvaluateResult('url-inputs', {
+        ...mockEvaluateResult,
+        testCase: { ...mockTestCase, vars },
+        provider,
+      });
+      const saved = await EvalResult.findById(result.id);
+      expect(saved?.testCase.vars).toEqual(vars);
+      expect(saved?.provider.config?.apiBaseUrl).not.toContain('short-secret');
+    });
+
     it('should create and persist an EvalResult', async () => {
       const evalId = 'test-eval-id';
       const result = await EvalResult.createFromEvaluateResult(evalId, mockEvaluateResult);
@@ -507,7 +521,7 @@ describe('EvalResult', () => {
           PGPASSWORD: '[REDACTED]',
           AUTHORIZATION: '[REDACTED]',
           SLACK_WEBHOOK_URL: '[REDACTED]',
-          HTTPS_PROXY: '[REDACTED]',
+          HTTPS_PROXY: 'http://***:***@proxy.example:8080/',
           MUSE_AUTH_PATH: '/tmp/muse-auth.json',
           PUBLIC_SETTING: 'keep-me',
         });

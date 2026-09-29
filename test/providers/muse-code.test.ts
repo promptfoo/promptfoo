@@ -703,7 +703,8 @@ describe('MuseCodeProvider', () => {
   it('omits split raw journal credentials repeated in the terminal event', async () => {
     const apiKey = 'split-secret';
     const events = structuredClone(fixtureEvents);
-    events.at(-2)!.payload.text = 'split-';
+    events.at(-3)!.payload.text = 'split-';
+    events.at(-2)!.payload.text = 'secret';
     events.at(-1)!.payload.text = apiKey;
     onSpawn = (child) => {
       child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));

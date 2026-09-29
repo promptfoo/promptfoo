@@ -8,10 +8,10 @@ sidebar_position: 42
 
 The `muse-code` provider runs [Meta's Muse Code](https://dev.meta.ai/docs/muse-code) coding agent through `muse exec --json`. It evaluates the installed agent, including its file tools and project context. For direct model requests, use the [Meta Model API provider](./meta.md).
 
-Requires Muse Code 1.0.2 or later on macOS or Linux. Install and authenticate before running an eval:
+Requires Muse Code 1.0.2 or later. Install and authenticate before running an eval. On macOS or Linux:
 
 ```bash
-curl -fsSL https://dev.meta.ai/install.sh | bash
+curl -fsSL https://dev.meta.ai/install.sh | sh
 muse --version
 export META_API_KEY="your-api-key"
 ```
@@ -102,11 +102,15 @@ The response contains:
 - `sessionId` and `metadata.runId`: native identifiers for the session and run.
 - `raw`: the parsed Muse Code JSONL journal, including available task and tool events.
 
-Promptfoo redacts literal occurrences of credential values from response fields and journal data before tracing or export. This includes the supplied Meta API key, child environment values with credential names such as `GITHUB_PAT`, `DATABASE_PASSWORD`, or `PGPASSWORD`, authorization token components, authentication in proxy or service URLs, and Slack/Discord webhook tokens in URL paths. Original URL encodings are included in that matching. These credentials are also redacted in config exports, persisted provider records, and shared eval configs.
+Promptfoo redacts known credential values before tracing, saving, or sharing results.
+This covers the child environment, credentials in URLs, and credentials from earlier
+turns of a resumed session. Raw journal data is omitted when credentials span fields
+or events, when historical credentials appear, or when prompt/output stripping is enabled.
 
-Simple references to environment or test variables, including `trim` and `urlencode` filters, remain in saved configs. Credential-file paths, such as `GOOGLE_APPLICATION_CREDENTIALS`, `AWS_SHARED_CREDENTIALS_FILE`, and `CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE`, are also preserved. Literal credentials embedded in template expressions are redacted.
-
-`base_url` must not contain credentials because Muse receives that option through process arguments. Supply authentication through `apiKey`, `META_API_KEY`, or an existing Muse Code login.
+Saved configs preserve simple variable references, including `trim` and `urlencode`
+filters, and credential-file paths. Literal credentials and template fallbacks are
+redacted. Keep credentials out of `base_url`, which is passed in process arguments;
+use `apiKey`, `META_API_KEY`, or an existing Muse Code login.
 
 Nonzero exits, failed or cancelled terminal events, malformed JSONL, and missing completion events produce provider errors. Intermediate output and subagent completions do not count as a completed root run. An agent completing successfully does not prove its answer or code is correct; use assertions and project tests to check the result.
 
