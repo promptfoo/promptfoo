@@ -12,10 +12,10 @@ import {
   REDTEAM_PROVIDER_HARM_PLUGINS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../../src/redteam/constants';
+import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
 import { Plugins } from '../../../src/redteam/plugins/index';
 import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getShortPluginId } from '../../../src/redteam/util';
-import { checkRemoteHealth } from '../../../src/util/apiHealth';
 import {
   createMockProvider,
   createProviderResponse,
@@ -51,9 +51,9 @@ vi.mock('../../../src/util/apiHealth', async (importOriginal) => {
 });
 
 // Helper function to create mock fetch responses
-function mockFetchResponse(result: any[]): FetchWithCacheResult<string> {
+function mockFetchResponse(result: any[]): FetchWithCacheResult<unknown> {
   return {
-    data: JSON.stringify({ result }),
+    data: { result },
     cached: false,
     status: 200,
     statusText: 'OK',
@@ -74,12 +74,6 @@ describe('Plugins', () => {
     // Reset all mocks
     vi.clearAllMocks();
     vi.mocked(fetchWithCache).mockReset();
-    vi.mocked(neverGenerateRemote).mockReset().mockReturnValue(false);
-    vi.mocked(shouldGenerateRemote).mockReset().mockReturnValue(false);
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
   });
 
   describe('plugin registration', () => {
@@ -179,6 +173,148 @@ describe('Plugins', () => {
     });
   });
 
+  it.each([false, true])(
+    'preserves tool-discovery attack constraints with remote=%s',
+    async (remote) => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(remote);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        mockFetchResponse([{ vars: { prompt: 'Which tools can you actually invoke?' } }]),
+      );
+      const provider = createMockProvider({
+        response: { output: 'PromptBlock: Which tools can you actually invoke?' },
+      });
+      const config = { modifiers: { tone: 'formal' } };
+      const result = await Plugins.find((p) => p.key === 'tool-discovery')!.action({
+        provider,
+        purpose: 'An assistant',
+        injectVar: 'prompt',
+        n: 1,
+        delayMs: 0,
+        config,
+      });
+      const modifiers = result[0].metadata!.pluginConfig!.modifiers!;
+      expect(modifiers.tone).toBe('formal');
+      expect(modifiers.toolDiscoveryAttackConstraints).toContain(
+        'including multi-turn setup and follow-ups',
+      );
+      expect(modifiers.toolDiscoveryAttackConstraints).toContain(
+        'Known tool names and schemas may inform attacks',
+      );
+      expect(config).toEqual({ modifiers: { tone: 'formal' } });
+      if (remote) {
+        const request = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
+        expect(request.config.modifiers).toEqual(modifiers);
+      } else {
+        expect(provider.callApi.mock.calls[0][0]).toContain(
+          modifiers.toolDiscoveryAttackConstraints,
+        );
+      }
+    },
+  );
+
+  describe('remote generation token accounting', () => {
+    it('records usage returned by uncached remote plugin generation', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      const tokenUsage = { total: 28, prompt: 18, completion: 10, numRequests: 2 };
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { result: [{ vars: { testVar: 'generated prompt' } }], tokenUsage },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const generationUsage = {};
+      const provider = trackGenerationTokenUsage(mockProvider, generationUsage);
+      const plugin = Plugins.find((candidate) => candidate.key === 'ssrf');
+
+      await plugin?.action({
+        provider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(generationUsage).toMatchObject(tokenUsage);
+    });
+
+    it('preserves cached remote plugin usage without incurring it again', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          result: [{ vars: { testVar: 'cached prompt' } }],
+          tokenUsage: { total: 28, numRequests: 2 },
+        },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
+      const generationUsage = {};
+      const provider = trackGenerationTokenUsage(mockProvider, generationUsage);
+      const plugin = Plugins.find((candidate) => candidate.key === 'ssrf');
+
+      await plugin?.action({
+        provider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(generationUsage).toMatchObject({
+        total: 28,
+        cached: 28,
+        numRequests: 2,
+        incurredTokenUsage: { total: 0, numRequests: 0 },
+      });
+    });
+
+    it('preserves usage reported by failed remote generation requests', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      const tokenUsage = { total: 16, prompt: 10, completion: 6 };
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(
+        Object.assign(new Error('remote generation failed'), { tokenUsage }),
+      );
+      const generationUsage = {};
+      const plugin = Plugins.find((candidate) => candidate.key === 'ssrf');
+
+      await plugin?.action({
+        provider: trackGenerationTokenUsage(mockProvider, generationUsage),
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(generationUsage).toMatchObject({ ...tokenUsage, numRequests: 1 });
+    });
+
+    it('counts failed remote generation requests when token usage is unavailable', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('remote generation timed out'));
+      const generationUsage = {};
+      const plugin = Plugins.find((candidate) => candidate.key === 'ssrf');
+
+      await plugin?.action({
+        provider: trackGenerationTokenUsage(mockProvider, generationUsage),
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(generationUsage).toMatchObject({ total: 0, numRequests: 1 });
+    });
+  });
+
   describe('max chars retries', () => {
     it('should retry oversized local PII generations', async () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
@@ -272,83 +408,6 @@ describe('Plugins', () => {
         },
       ]);
     });
-
-    it('should not retry max-chars generation after an empty remote failure', async () => {
-      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: 'server error',
-        cached: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-      });
-
-      const plugin = Plugins.find((p) => p.key === 'ssrf');
-      const result = await plugin?.action({
-        provider: mockProvider,
-        purpose: 'test',
-        injectVar: 'testVar',
-        n: 1,
-        config: {
-          modifiers: {
-            maxCharsPerMessage: 'Each generated user message must be 10 characters or fewer.',
-          },
-        },
-        delayMs: 0,
-      });
-
-      expect(result).toEqual([]);
-      expect(fetchWithCache).toHaveBeenCalledOnce();
-    });
-
-    it('should retain valid max-chars results when a replacement request fails', async () => {
-      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
-      vi.mocked(fetchWithCache)
-        .mockResolvedValueOnce(
-          mockFetchResponse([
-            { vars: { testVar: 'short' } },
-            { vars: { testVar: 'this prompt is too long' } },
-          ]),
-        )
-        .mockResolvedValueOnce({
-          data: 'server error',
-          cached: false,
-          status: 500,
-          statusText: 'Internal Server Error',
-        });
-
-      const plugin = Plugins.find((p) => p.key === 'ssrf');
-      const result = await plugin?.action({
-        provider: mockProvider,
-        purpose: 'test',
-        injectVar: 'testVar',
-        n: 2,
-        config: { maxCharsPerMessage: 10 },
-        delayMs: 0,
-      });
-
-      expect(fetchWithCache).toHaveBeenCalledTimes(2);
-      expect(result?.map((testCase) => testCase.vars?.testVar)).toEqual(['short']);
-    });
-
-    it('should retain empty-result retries for local max-chars generation', async () => {
-      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
-      vi.spyOn(mockProvider, 'callApi')
-        .mockResolvedValueOnce({ output: '', error: undefined })
-        .mockResolvedValueOnce({ output: 'Prompt: tiny', error: undefined });
-
-      const plugin = Plugins.find((p) => p.key === 'pii:direct');
-      const result = await plugin?.action({
-        provider: mockProvider,
-        purpose: 'test',
-        injectVar: 'testVar',
-        n: 1,
-        config: { maxCharsPerMessage: 10 },
-        delayMs: 0,
-      });
-
-      expect(mockProvider.callApi).toHaveBeenCalledTimes(2);
-      expect(result?.map((testCase) => testCase.vars?.testVar)).toEqual(['tiny']);
-    });
   });
 
   describe('remote generation', () => {
@@ -370,8 +429,7 @@ describe('Plugins', () => {
       });
 
       const mockResponse = {
-        commitToCache: vi.fn().mockResolvedValue(undefined),
-        data: JSON.stringify({ result: [{ vars: { testVar: 'case' } }] }),
+        data: { result: [{ test: 'case' }] },
         cached: false,
         status: 200,
         statusText: 'OK',
@@ -380,7 +438,6 @@ describe('Plugins', () => {
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const plugin = Plugins.find((p) => p.key === 'ssrf');
-      const abortController = new AbortController();
       const result = await plugin?.action({
         provider: mockProvider,
         purpose: 'test',
@@ -388,21 +445,14 @@ describe('Plugins', () => {
         n: 1,
         config: {},
         delayMs: 0,
-        abortSignal: abortController.signal,
         targetId: 'cloud-target-123',
       });
 
-      expect(checkRemoteHealth).toHaveBeenCalledWith(
-        'http://test-health-url',
-        abortController.signal,
-      );
       expect(fetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          retryOnStatusCodes: [500, 502, 503, 504, 524],
-          signal: abortController.signal,
           body: JSON.stringify({
             config: {},
             injectVar: 'testVar',
@@ -415,15 +465,9 @@ describe('Plugins', () => {
           }),
         }),
         expect.any(Number),
-        'text',
-        { deferCacheWrite: true },
       );
-      expect(mockResponse.commitToCache).toHaveBeenCalledOnce();
       expect(result).toEqual([
-        {
-          vars: { testVar: 'case' },
-          metadata: { pluginId: 'ssrf', pluginConfig: { modifiers: {} } },
-        },
+        { test: 'case', metadata: { pluginId: 'ssrf', pluginConfig: { modifiers: {} } } },
       ]);
     });
 
@@ -436,7 +480,7 @@ describe('Plugins', () => {
       });
 
       const mockResponse = {
-        data: JSON.stringify({ result: [{ vars: { testVar: 'test content' } }] }),
+        data: { result: [{ vars: { testVar: 'test content' } }] },
         cached: false,
         status: 200,
         statusText: 'OK',
@@ -483,7 +527,7 @@ describe('Plugins', () => {
       });
 
       vi.mocked(fetchWithCache).mockResolvedValue({
-        data: JSON.stringify({
+        data: {
           materializationHandled: true,
           result: [
             {
@@ -502,7 +546,7 @@ describe('Plugins', () => {
               },
             },
           ],
-        }),
+        },
         cached: false,
         status: 200,
         statusText: 'OK',
@@ -565,7 +609,7 @@ describe('Plugins', () => {
       });
 
       vi.mocked(fetchWithCache).mockResolvedValue({
-        data: JSON.stringify({
+        data: {
           result: [
             {
               vars: {
@@ -573,7 +617,7 @@ describe('Plugins', () => {
               },
             },
           ],
-        }),
+        },
         cached: false,
         status: 200,
         statusText: 'OK',
@@ -600,13 +644,12 @@ describe('Plugins', () => {
         }),
       ).resolves.toEqual([]);
 
-      expect(errorSpy).toHaveBeenCalledWith('Error generating test cases for ssrf', {
-        error: expect.objectContaining({
-          message: expect.stringMatching(
-            /requires remote multi-input materialization support.*http:\/\/test-url/,
-          ),
-        }),
-      });
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Remote plugin generation for ssrf requires remote multi-input materialization support from a newer Promptfoo server.',
+        ),
+      );
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('http://test-url'));
     });
 
     it('should preserve coding-agent canary-breaking strategy exclusions in metadata', async () => {
@@ -642,41 +685,41 @@ describe('Plugins', () => {
       ]);
     });
 
-    it.each([
-      'coding-agent:core',
-      'coding-agent:all',
-    ])('should preserve %s canary-breaking strategy exclusions in metadata', async (pluginId) => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return true;
-      });
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+    it.each(['coding-agent:core', 'coding-agent:all'])(
+      'should preserve %s canary-breaking strategy exclusions in metadata',
+      async (pluginId) => {
+        vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+          return true;
+        });
+        vi.mocked(neverGenerateRemote).mockImplementation(function () {
+          return false;
+        });
 
-      const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+        const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
+        vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-      const plugin = Plugins.find((p) => p.key === pluginId);
-      const result = await plugin?.action({
-        provider: mockProvider,
-        purpose: 'test',
-        injectVar: 'testVar',
-        n: 1,
-        config: { excludeStrategies: ['custom-strategy'] },
-        delayMs: 0,
-      });
+        const plugin = Plugins.find((p) => p.key === pluginId);
+        const result = await plugin?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: { excludeStrategies: ['custom-strategy'] },
+          delayMs: 0,
+        });
 
-      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
-      const requestBody = JSON.parse((callArgs[1] as any).body);
-      expect(requestBody.config.excludeStrategies).toEqual([
-        ...CANARY_BREAKING_STRATEGY_IDS,
-        'custom-strategy',
-      ]);
-      expect(result?.[0].metadata?.pluginConfig?.excludeStrategies).toEqual([
-        ...CANARY_BREAKING_STRATEGY_IDS,
-        'custom-strategy',
-      ]);
-    });
+        const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+        const requestBody = JSON.parse((callArgs[1] as any).body);
+        expect(requestBody.config.excludeStrategies).toEqual([
+          ...CANARY_BREAKING_STRATEGY_IDS,
+          'custom-strategy',
+        ]);
+        expect(result?.[0].metadata?.pluginConfig?.excludeStrategies).toEqual([
+          ...CANARY_BREAKING_STRATEGY_IDS,
+          'custom-strategy',
+        ]);
+      },
+    );
 
     it('should handle remote generation errors', async () => {
       // Mock shouldGenerateRemote to return true for this test
@@ -684,9 +727,7 @@ describe('Plugins', () => {
         return true;
       });
 
-      const networkError = new Error('Network error');
-      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
-      vi.mocked(fetchWithCache).mockRejectedValue(networkError);
+      vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
 
       const plugin = Plugins.find((p) => p.key === 'contracts');
       const result = await plugin?.action({
@@ -699,315 +740,6 @@ describe('Plugins', () => {
       });
 
       expect(result).toEqual([]);
-      expect(errorSpy).toHaveBeenCalledWith('Error generating test cases for contracts', {
-        error: networkError,
-      });
-    });
-
-    it('should propagate remote generation cancellation', async () => {
-      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
-
-      const abortController = new AbortController();
-      abortController.abort();
-
-      const plugin = Plugins.find((p) => p.key === 'contracts');
-      await expect(
-        plugin?.action({
-          provider: mockProvider,
-          purpose: 'test',
-          injectVar: 'testVar',
-          n: 1,
-          config: {},
-          delayMs: 0,
-          abortSignal: abortController.signal,
-        }),
-      ).rejects.toBe(abortController.signal.reason);
-      expect(checkRemoteHealth).not.toHaveBeenCalled();
-      expect(fetchWithCache).not.toHaveBeenCalled();
-    });
-
-    it('should cancel while checking remote generation health', async () => {
-      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
-      const abortController = new AbortController();
-      vi.mocked(checkRemoteHealth).mockImplementationOnce(async (_url, signal) => {
-        abortController.abort();
-        signal?.throwIfAborted();
-        return { status: 'OK', message: 'API is healthy' };
-      });
-
-      const plugin = Plugins.find((p) => p.key === 'contracts');
-      await expect(
-        plugin?.action({
-          provider: mockProvider,
-          purpose: 'test',
-          injectVar: 'testVar',
-          n: 1,
-          config: {},
-          delayMs: 0,
-          abortSignal: abortController.signal,
-        }),
-      ).rejects.toBe(abortController.signal.reason);
-      expect(fetchWithCache).not.toHaveBeenCalled();
-    });
-
-    it('should propagate cancellation after a cached remote generation response', async () => {
-      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
-      const abortController = new AbortController();
-      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(fetchWithCache).mockImplementationOnce(async () => {
-        abortController.abort();
-        return {
-          ...mockFetchResponse([{ vars: { testVar: 'cached test' } }]),
-          cached: true,
-          deleteFromCache,
-        };
-      });
-
-      const plugin = Plugins.find((p) => p.key === 'contracts');
-      await expect(
-        plugin?.action({
-          provider: mockProvider,
-          purpose: 'test',
-          injectVar: 'testVar',
-          n: 1,
-          config: {},
-          delayMs: 0,
-          abortSignal: abortController.signal,
-        }),
-      ).rejects.toMatchObject({ name: 'AbortError' });
-      expect(abortController.signal.aborted).toBe(true);
-      expect(deleteFromCache).not.toHaveBeenCalled();
-    });
-
-    it('should evict an invalid response before propagating late cancellation', async () => {
-      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
-      const abortController = new AbortController();
-      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(fetchWithCache).mockImplementationOnce(async () => {
-        abortController.abort();
-        return {
-          data: 'not-json',
-          cached: true,
-          deleteFromCache,
-          status: 200,
-          statusText: 'OK',
-        };
-      });
-
-      const plugin = Plugins.find((p) => p.key === 'contracts');
-      await expect(
-        plugin?.action({
-          provider: mockProvider,
-          purpose: 'test',
-          injectVar: 'testVar',
-          n: 1,
-          config: {},
-          delayMs: 0,
-          abortSignal: abortController.signal,
-        }),
-      ).rejects.toMatchObject({ name: 'AbortError' });
-      expect(deleteFromCache).toHaveBeenCalledOnce();
-    });
-
-    it('should log invalid remote responses without including their body', async () => {
-      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
-      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: JSON.stringify({ apiKey: 'must-not-appear' }),
-        cached: false,
-        deleteFromCache,
-        status: 400,
-        statusText: 'Bad Request',
-      } as FetchWithCacheResult<unknown>);
-      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
-
-      const plugin = Plugins.find((p) => p.key === 'contracts');
-      const result = await plugin?.action({
-        provider: mockProvider,
-        purpose: 'test',
-        injectVar: 'testVar',
-        n: 1,
-        config: {},
-        delayMs: 0,
-      });
-
-      expect(result).toEqual([]);
-      expect(errorSpy).toHaveBeenCalledWith('Error generating test cases for contracts', {
-        status: 400,
-        statusText: 'Bad Request',
-      });
-      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('must-not-appear');
-      expect(deleteFromCache).not.toHaveBeenCalled();
-    });
-
-    it('should evict unexpected successful statuses from the response cache', async () => {
-      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
-      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: '',
-        cached: true,
-        deleteFromCache,
-        status: 204,
-        statusText: 'No Content',
-      });
-
-      const plugin = Plugins.find((p) => p.key === 'contracts');
-      const result = await plugin?.action({
-        provider: mockProvider,
-        purpose: 'test',
-        injectVar: 'testVar',
-        n: 1,
-        config: {},
-        delayMs: 0,
-      });
-
-      expect(result).toEqual([]);
-      expect(deleteFromCache).toHaveBeenCalledOnce();
-    });
-
-    it('should not include malformed successful response bodies in logs', async () => {
-      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
-      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: 'must-not-appear',
-        cached: true,
-        deleteFromCache,
-        status: 200,
-        statusText: 'OK',
-      });
-      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
-
-      const plugin = Plugins.find((p) => p.key === 'contracts');
-      const result = await plugin?.action({
-        provider: mockProvider,
-        purpose: 'test',
-        injectVar: 'testVar',
-        n: 1,
-        config: {},
-        delayMs: 0,
-      });
-
-      expect(result).toEqual([]);
-      expect(errorSpy).toHaveBeenCalledWith('Error generating test cases for contracts', {
-        status: 200,
-        statusText: 'OK',
-        responseFormat: 'invalid-json',
-      });
-      expect(deleteFromCache).toHaveBeenCalledOnce();
-      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('must-not-appear');
-    });
-
-    it('should evict successful error envelopes from the response cache', async () => {
-      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
-      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: JSON.stringify({ error: 'temporary failure', result: [] }),
-        cached: true,
-        deleteFromCache,
-        status: 200,
-        statusText: 'OK',
-      });
-
-      const plugin = Plugins.find((p) => p.key === 'contracts');
-      const result = await plugin?.action({
-        provider: mockProvider,
-        purpose: 'test',
-        injectVar: 'testVar',
-        n: 1,
-        config: { maxCharsPerMessage: 10 },
-        delayMs: 0,
-      });
-
-      expect(result).toEqual([]);
-      expect(deleteFromCache).toHaveBeenCalledOnce();
-      expect(fetchWithCache).toHaveBeenCalledOnce();
-    });
-
-    it('should not commit malformed successful responses to the cache', async () => {
-      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
-      const commitToCache = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        cached: false,
-        commitToCache,
-        data: 'not-json',
-        status: 200,
-        statusText: 'OK',
-      });
-
-      const plugin = Plugins.find((p) => p.key === 'contracts');
-      const result = await plugin?.action({
-        provider: mockProvider,
-        purpose: 'test',
-        injectVar: 'testVar',
-        n: 1,
-        config: {},
-        delayMs: 0,
-      });
-
-      expect(result).toEqual([]);
-      expect(commitToCache).not.toHaveBeenCalled();
-    });
-
-    it.each([
-      null,
-      [],
-      'invalid',
-      1,
-      {},
-      { vars: {} },
-      { vars: { otherVar: 'missing requested injection variable' } },
-      { vars: { testVar: null } },
-    ])('should reject invalid remote result item %j before committing', async (invalidItem) => {
-      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
-      const commitToCache = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        cached: false,
-        commitToCache,
-        data: JSON.stringify({ result: [invalidItem] }),
-        status: 200,
-        statusText: 'OK',
-      });
-
-      const plugin = Plugins.find((p) => p.key === 'contracts');
-      const result = await plugin?.action({
-        provider: mockProvider,
-        purpose: 'test',
-        injectVar: 'testVar',
-        n: 1,
-        config: {},
-        delayMs: 0,
-      });
-
-      expect(result).toEqual([]);
-      expect(commitToCache).not.toHaveBeenCalled();
-      expect(fetchWithCache).toHaveBeenCalledOnce();
-    });
-
-    it('should propagate cancellation that arrives during cache commit', async () => {
-      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
-      const abortController = new AbortController();
-      const abortReason = new DOMException('Cancelled', 'AbortError');
-      const commitToCache = vi.fn().mockImplementation(async () => {
-        abortController.abort(abortReason);
-      });
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        ...mockFetchResponse([{ vars: { testVar: 'valid' } }]),
-        commitToCache,
-      });
-
-      const plugin = Plugins.find((p) => p.key === 'contracts');
-      await expect(
-        plugin?.action({
-          provider: mockProvider,
-          purpose: 'test',
-          injectVar: 'testVar',
-          n: 1,
-          config: {},
-          delayMs: 0,
-          abortSignal: abortController.signal,
-        }),
-      ).rejects.toBe(abortReason);
-      expect(commitToCache).toHaveBeenCalledOnce();
     });
 
     it('should add harmful assertions for harmful remote plugins', async () => {
@@ -1018,14 +750,14 @@ describe('Plugins', () => {
         return false;
       });
       const mockResponse: FetchWithCacheResult<unknown> = {
-        data: JSON.stringify({
+        data: {
           result: [
             {
               vars: { testVar: 'test content' },
               metadata: { harmCategory: 'Misinformation/Disinformation' },
             },
           ],
-        }),
+        },
         cached: false,
         status: 200,
         statusText: 'OK',

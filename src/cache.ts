@@ -12,28 +12,25 @@ import { getRequestTimeoutMs } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
 import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
+import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
 import {
-  type FetchOptions,
-  fetchWithRetries,
-  getEffectiveFetchSignal,
-  getFetchWithProxyHeaders,
-  normalizeRetryOnStatusCodes,
-} from './util/fetch/index';
-import {
+  getCloudAuthHeaderName,
   getCloudBearerToken,
   getCloudTaskTeamId,
   getRequestUrlString,
   PROMPTFOO_TEAM_ID_HEADER,
+  preserveCloudAuthRedirects,
 } from './util/fetch/monkeyPatchFetch';
-import { resolveFetchRetryMaxRetries } from './util/fetch/retryContext';
-import { isSecretField, looksLikeSecret, sanitizeUrl } from './util/sanitizer';
+import { isSecretField, looksLikeSecret, sanitizeUrlForLogging } from './util/sanitizer';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
 
 import type { CacheOptions } from './types/cache';
+import type { FetchOptions } from './util/fetch/types';
 
 let cacheInstance: Cache | undefined;
 const namespacedCacheInstances = new Map<string, Cache>();
+let cacheClearGeneration = 0;
 
 const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
 const cacheEnabledStorage = new AsyncLocalStorage<{ enabled: boolean }>();
@@ -50,7 +47,7 @@ const DEFAULT_CACHE_TTL_SECONDS = 60 * 60 * 24 * 14;
  * Get the cache TTL in milliseconds.
  * Reads from PROMPTFOO_CACHE_TTL environment variable (in seconds) or uses default.
  */
-function getCacheTtlMs(): number {
+export function getCacheTtlMs(): number {
   return getEnvInt('PROMPTFOO_CACHE_TTL', DEFAULT_CACHE_TTL_SECONDS) * 1000;
 }
 
@@ -117,6 +114,12 @@ function getCacheInstance() {
       ttl: getCacheTtlMs(),
       refreshThreshold: 0, // Disable background refresh
     });
+    const clear = cacheInstance.clear.bind(cacheInstance);
+    cacheInstance.clear = async () => {
+      const result = await clear();
+      cacheClearGeneration += 1;
+      return result;
+    };
   }
   return cacheInstance;
 }
@@ -186,6 +189,10 @@ export function getScopedCacheKey(cacheKey: string, namespace = getCurrentCacheN
   return namespace ? `${namespace}:${cacheKey}` : cacheKey;
 }
 
+export function getCacheClearGeneration() {
+  return cacheClearGeneration;
+}
+
 function getUnscopedCacheKey(cacheKey: string, namespace: string) {
   const namespacePrefix = `${namespace}:`;
   return cacheKey.startsWith(namespacePrefix) ? cacheKey.slice(namespacePrefix.length) : cacheKey;
@@ -225,6 +232,7 @@ async function clearNamespacedCache(cache: Cache, namespace: string) {
     }
   }
 
+  cacheClearGeneration += 1;
   return true;
 }
 
@@ -282,12 +290,19 @@ function getEffectiveCacheEnabled() {
 export type FetchWithCacheResult<T> = {
   data: T;
   cached: boolean;
+  /** Another concurrent caller owns the upstream request that produced this response. */
+  coalesced?: boolean;
   status: number;
   statusText: string;
   headers?: Record<string, string>;
   latencyMs?: number;
-  commitToCache?: () => Promise<void>;
   deleteFromCache?: () => Promise<void>;
+  updateCache?: (
+    data: unknown,
+    status: number,
+    statusText: string,
+    headers?: Record<string, string>,
+  ) => Promise<void>;
 };
 
 type SerializedFetchResponse = string;
@@ -295,15 +310,12 @@ type SerializedFetchResponse = string;
 type PreparedFetchResponse = {
   response: SerializedFetchResponse;
   cacheable: boolean;
-  requestOrder?: number;
 };
 
-const inflightFetchResponses = new Map<string, Promise<PreparedFetchResponse>>();
-const fetchCacheMutationTails = new Map<string, Promise<void>>();
-const fetchCacheProcessId = crypto.randomUUID();
-let nextFetchRequestOrder = 0;
-const FETCH_CACHE_ORDER_METADATA_KEY = '__promptfooFetchCacheOrder';
+const inflightFetchResponses = new Map<string, Promise<SerializedFetchResponse>>();
+const claimedCacheKeys = new Set<string>();
 const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
+const IGNORED_FETCH_CACHE_HEADERS = new Set(['traceparent', 'tracestate']);
 const FETCH_CACHE_SECRET_HMAC_CONTEXT = 'promptfoo:fetch-cache-secret-key';
 // A fixed, compiled-in salt (NOT a secret). It must be deterministic across
 // processes so that a request carrying a static secret — or a binary body —
@@ -419,15 +431,28 @@ function getUrlForFetchCacheKey(url: RequestInfo) {
   }
 }
 
-function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
+export function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
   const headers = new Headers(getFetchWithProxyHeaders(url, options));
 
-  // Mirror monkeyPatchFetch so the cache key reflects the Authorization header that
-  // will actually be sent: fold in the cloud bearer token for cloud-bound requests,
-  // without overriding a caller-supplied Authorization.
+  // Mirror monkeyPatchFetch so the cache key reflects the auth header that will
+  // actually be sent: fold in the cloud bearer token for cloud-bound requests, under
+  // whatever header name is configured, without overriding a caller-supplied header.
   const cloudAuth = getCloudBearerToken(url);
-  if (cloudAuth && !headers.has('Authorization')) {
-    headers.set('Authorization', cloudAuth);
+  // Whenever a cloud credential resolves for this request, its header name is
+  // sensitive and must be fingerprinted below — whether this function injects it
+  // (headers.set) or a caller already set it explicitly beforehand (e.g.
+  // resolveGuardrailsApi via cloudConfig.getAuthHeaders()). A custom header name
+  // and/or a short on-prem token can both evade the generic
+  // isSecretField/looksLikeSecret heuristics used for ordinary headers, so this
+  // must not depend on whether headers.set() actually ran here. Lowercased once
+  // at capture because Headers.entries() below always yields lowercase names.
+  let cloudAuthHeaderNameForFingerprint: string | undefined;
+  if (cloudAuth) {
+    const cloudAuthHeaderName = getCloudAuthHeaderName();
+    cloudAuthHeaderNameForFingerprint = cloudAuthHeaderName.toLowerCase();
+    if (!headers.has(cloudAuthHeaderName)) {
+      headers.set(cloudAuthHeaderName, cloudAuth);
+    }
   }
 
   const cloudTaskTeamId = getCloudTaskTeamId(url);
@@ -436,11 +461,17 @@ function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
   }
 
   return Array.from(headers.entries())
+    .filter(([name]) => !IGNORED_FETCH_CACHE_HEADERS.has(name))
     .sort(([nameA, valueA], [nameB, valueB]) => {
       const nameComparison = nameA.localeCompare(nameB);
       return nameComparison === 0 ? valueA.localeCompare(valueB) : nameComparison;
     })
-    .map(([name, value]) => [name, getStringForFetchCacheKey(value, name)]);
+    .map(([name, value]) => [
+      name,
+      name === cloudAuthHeaderNameForFingerprint
+        ? fingerprintFetchCacheSecret(value)
+        : getStringForFetchCacheKey(value, name),
+    ]);
 }
 
 function hashFetchCacheKey(identity: unknown) {
@@ -495,7 +526,7 @@ function getBodyForFetchCacheKey(body: RequestInit['body'] | ReadableStream | nu
   return { cacheable: false, identity: undefined };
 }
 
-function getOptionsForFetchCacheKey(options: FetchOptions, bodyIdentity: unknown) {
+function getOptionsForFetchCacheKey(options: RequestInit, bodyIdentity: unknown) {
   const identity: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(options).sort(([keyA], [keyB]) =>
@@ -507,10 +538,6 @@ function getOptionsForFetchCacheKey(options: FetchOptions, bodyIdentity: unknown
 
     if (key === 'body') {
       identity.body = bodyIdentity;
-      continue;
-    }
-
-    if (key === 'retryOnStatusCodes') {
       continue;
     }
 
@@ -531,7 +558,7 @@ function getOptionsForFetchCacheKey(options: FetchOptions, bodyIdentity: unknown
 
 function getFetchCacheKey(
   url: RequestInfo,
-  options: FetchOptions,
+  options: RequestInit,
   method: string,
   format: 'json' | 'text',
   repeatIndex?: number,
@@ -569,85 +596,43 @@ function getAbortSignalId(signal: AbortSignal) {
   return signalId;
 }
 
-async function withFetchCacheMutation<T>(
-  cacheKey: string,
-  operation: () => Promise<T>,
-): Promise<T> {
-  const previous = fetchCacheMutationTails.get(cacheKey) ?? Promise.resolve();
-  let release: () => void = () => {};
-  const current = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const tail = previous.then(() => current);
-  fetchCacheMutationTails.set(cacheKey, tail);
-
-  await previous;
-  try {
-    return await operation();
-  } finally {
-    release();
-    if (fetchCacheMutationTails.get(cacheKey) === tail) {
-      fetchCacheMutationTails.delete(cacheKey);
-    }
-  }
+function getInflightFetchCacheKey(cacheKey: string, url: RequestInfo, options: RequestInit) {
+  const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
+  return signal ? `${cacheKey}:signal:${getAbortSignalId(signal)}` : cacheKey;
 }
 
-function getFetchCacheOrderMetadata(response: SerializedFetchResponse | undefined):
-  | {
-      processId: string;
-      requestOrder: number;
-    }
-  | undefined {
-  if (response === undefined) {
-    return undefined;
+/**
+ * Atomically claim a cache-scoped one-time action. Disk-backed claims use an exclusive file so
+ * separate eval processes cannot both attribute the same background response's usage.
+ */
+export function claimCacheKeyOnce(cacheKey: string): boolean {
+  const scopedCacheKey = getScopedCacheKey(cacheKey);
+  if (claimedCacheKeys.has(scopedCacheKey)) {
+    return false;
   }
 
-  try {
-    const metadata = JSON.parse(response)?.[FETCH_CACHE_ORDER_METADATA_KEY];
-    if (
-      typeof metadata?.processId === 'string' &&
-      Number.isSafeInteger(metadata.requestOrder) &&
-      metadata.requestOrder >= 0
-    ) {
-      return metadata;
+  if (cacheType === 'disk' && getEffectiveCacheEnabled()) {
+    const cachePath =
+      getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
+    const claimsPath = path.join(cachePath, 'claims');
+    try {
+      fs.mkdirSync(claimsPath, { recursive: true });
+      const handle = fs.openSync(path.join(claimsPath, sha256(scopedCacheKey)), 'wx');
+      fs.closeSync(handle);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+        claimedCacheKeys.add(scopedCacheKey);
+        return false;
+      }
+      logger.warn(
+        `[Cache] Failed to persist a one-time cache claim: ${(error as Error).message}. ` +
+          'Using a process-local claim instead.',
+      );
     }
-  } catch {
-    // Legacy or externally written cache entries have no ordering metadata.
   }
-  return undefined;
-}
 
-async function commitFetchResponse(
-  cache: Cache,
-  cacheKey: string,
-  preparedResponse: PreparedFetchResponse,
-): Promise<boolean> {
-  return withFetchCacheMutation(cacheKey, async () => {
-    const requestOrder = preparedResponse.requestOrder ?? 0;
-    const currentResponse = await cache.get<SerializedFetchResponse>(cacheKey);
-    const currentOrder = getFetchCacheOrderMetadata(currentResponse);
-    if (
-      currentOrder?.processId === fetchCacheProcessId &&
-      requestOrder < currentOrder.requestOrder
-    ) {
-      return false;
-    }
-    await cache.set(cacheKey, preparedResponse.response);
-    return true;
-  });
-}
-
-function getInflightFetchCacheKey(
-  cacheKey: string,
-  url: RequestInfo,
-  options: FetchOptions,
-  maxRetries: number,
-  deferCacheWrite: boolean,
-) {
-  const signal = getEffectiveFetchSignal(url, options);
-  const retryStatusKey = options.retryOnStatusCodes?.join(',') ?? '';
-  const retryKey = `${cacheKey}:maxRetries:${maxRetries}:retryOnStatusCodes:${retryStatusKey}:deferCacheWrite:${deferCacheWrite}`;
-  return signal ? `${retryKey}:signal:${getAbortSignalId(signal)}` : retryKey;
+  claimedCacheKeys.add(scopedCacheKey);
+  return true;
 }
 
 function serializeFetchResponse(
@@ -656,7 +641,6 @@ function serializeFetchResponse(
   statusText: string,
   headers: Record<string, string>,
   latencyMs: number | undefined,
-  requestOrder?: number,
 ): SerializedFetchResponse {
   return JSON.stringify({
     data,
@@ -664,14 +648,6 @@ function serializeFetchResponse(
     statusText,
     headers,
     latencyMs,
-    ...(requestOrder === undefined
-      ? {}
-      : {
-          [FETCH_CACHE_ORDER_METADATA_KEY]: {
-            processId: fetchCacheProcessId,
-            requestOrder,
-          },
-        }),
   });
 }
 
@@ -680,7 +656,6 @@ function deserializeFetchResponse<T>(
   cached: boolean,
   cache: Cache,
   cacheKey: string,
-  commitToCache?: () => Promise<void>,
 ) {
   const parsedResponse = JSON.parse(response);
   return {
@@ -690,23 +665,28 @@ function deserializeFetchResponse<T>(
     statusText: parsedResponse.statusText,
     headers: parsedResponse.headers,
     latencyMs: parsedResponse.latencyMs,
-    commitToCache,
     deleteFromCache: async () => {
-      await withFetchCacheMutation(cacheKey, async () => {
-        const currentResponse = await cache.get<SerializedFetchResponse>(cacheKey);
-        if (currentResponse !== response) {
-          return;
-        }
-        await cache.del(cacheKey);
-        logger.debug(`Evicted from cache: ${cacheKey}`);
-      });
+      await cache.del(cacheKey);
+      logger.debug(`Evicted from cache: ${cacheKey}`);
+    },
+    updateCache: async (
+      data: unknown,
+      status: number,
+      statusText: string,
+      headers?: Record<string, string>,
+    ) => {
+      await cache.set(
+        cacheKey,
+        serializeFetchResponse(data, status, statusText, headers ?? {}, parsedResponse.latencyMs),
+      );
+      logger.debug(`Updated cached response: ${cacheKey}`);
     },
   };
 }
 
 async function fetchAndReadBody(
   url: RequestInfo,
-  options: RequestInit,
+  options: FetchOptions,
   timeout: number,
   maxRetries: number | undefined,
   isIdempotent: boolean,
@@ -745,7 +725,7 @@ async function fetchAndReadBody(
       // actionable diagnostics instead of a bare platform error. Sanitize the URL so
       // credential-bearing userinfo / query params are not leaked into logs.
       const wrappedError = new Error(
-        `Error reading response body from ${sanitizeUrl(getRequestUrlString(url))}: ${
+        `Error reading response body from ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${
           (err as Error).message
         }. HTTP ${resp.status} ${resp.statusText}`,
       ) as Error & { cause?: unknown };
@@ -764,9 +744,7 @@ async function prepareFetchResponse(
   maxRetries: number | undefined,
   isIdempotent: boolean,
   format: 'json' | 'text',
-  requestOrder: number,
 ): Promise<PreparedFetchResponse> {
-  const sanitizedUrl = sanitizeUrl(getRequestUrlString(url));
   const result = await fetchAndReadBody(url, options, timeout, maxRetries, isIdempotent);
   const response = result.resp;
   const responseText = result.respText;
@@ -775,6 +753,14 @@ async function prepareFetchResponse(
 
   try {
     const parsedData = format === 'json' ? JSON.parse(responseText) : responseText;
+    const serializedResponse = serializeFetchResponse(
+      parsedData,
+      response.status,
+      response.statusText,
+      headers,
+      fetchLatencyMs,
+    );
+
     if (!response.ok) {
       return {
         response:
@@ -786,48 +772,31 @@ async function prepareFetchResponse(
                 headers,
                 fetchLatencyMs,
               )
-            : serializeFetchResponse(
-                parsedData,
-                response.status,
-                response.statusText,
-                headers,
-                fetchLatencyMs,
-              ),
+            : serializedResponse,
         cacheable: false,
       };
     }
 
     if (format === 'json' && parsedData?.error) {
-      logger.debug('[Cache] Not caching response because it contains an error key', {
-        url: sanitizedUrl,
-      });
+      logger.debug(
+        `Not caching ${sanitizeUrlForLogging(getRequestUrlString(url))} because it contains an 'error' key: ${parsedData.error}`,
+      );
       return {
-        response: serializeFetchResponse(
-          parsedData,
-          response.status,
-          response.statusText,
-          headers,
-          fetchLatencyMs,
-        ),
+        response: serializedResponse,
         cacheable: false,
       };
     }
 
+    logger.debug(
+      `Storing ${sanitizeUrlForLogging(getRequestUrlString(url))} response in cache with latencyMs=${fetchLatencyMs}: ${serializedResponse}`,
+    );
     return {
-      response: serializeFetchResponse(
-        parsedData,
-        response.status,
-        response.statusText,
-        headers,
-        fetchLatencyMs,
-        requestOrder,
-      ),
+      response: serializedResponse,
       cacheable: true,
-      requestOrder,
     };
   } catch (err) {
     throw new Error(
-      `Error parsing response from ${url}: ${
+      `Error parsing response from ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${
         (err as Error).message
       }. HTTP ${response.status} ${response.statusText}. Received text: ${responseText}`,
     );
@@ -877,32 +846,41 @@ export async function fetchWithCache<T = unknown>(
   bustOrOptions: boolean | CacheOptions | undefined = false,
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
-  const requestOptions: FetchOptions = {
-    ...options,
-    retryOnStatusCodes: normalizeRetryOnStatusCodes(options.retryOnStatusCodes),
-  };
+  const fetchOptions = preserveCloudAuthRedirects(url, options);
   const cacheOptions: CacheOptions =
     typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
-  const { bust = false, deferCacheWrite = false, repeatIndex } = cacheOptions;
+  const { bust = false, repeatIndex, cacheKey: providedCacheKey } = cacheOptions;
 
   // Only retry body-read for idempotent methods to avoid double-submitting
   // POST/PATCH requests (the server already processed the request once
   // headers arrived; only the response body stream failed).
   const method = (
-    requestOptions.method ?? (url instanceof Request ? url.method : 'GET')
+    fetchOptions.method ?? (url instanceof Request ? url.method : 'GET')
   ).toUpperCase();
   const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
 
   const cacheEnabled = getEffectiveCacheEnabled();
+  if (cacheEnabled && !bust && fetchOptions.getAuthHeaders && !providedCacheKey) {
+    throw new Error(
+      'Request-time authentication requires cache bypass or an explicit principal-scoped cache key.',
+    );
+  }
+  const repeatSuffix = shouldApplyRepeatCacheSuffix(repeatIndex) ? `:repeat${repeatIndex}` : '';
+  // Caller-provided keys must not reuse responses accepted without Cloud redirect protection.
+  const providedKeyPrefix = fetchOptions.restrictCloudAuthRedirects
+    ? 'fetch:cloud-auth:v3'
+    : 'fetch:v3';
   const cacheKey =
     cacheEnabled && !bust
-      ? getFetchCacheKey(url, requestOptions, method, format, repeatIndex)
+      ? providedCacheKey
+        ? getScopedCacheKey(`${providedKeyPrefix}:${providedCacheKey}${repeatSuffix}`)
+        : getFetchCacheKey(url, fetchOptions, method, format, repeatIndex)
       : null;
 
   if (!cacheEnabled || bust || cacheKey == null) {
     const { respText, resp, fetchLatencyMs } = await fetchAndReadBody(
       url,
-      requestOptions,
+      fetchOptions,
       timeout,
       maxRetries,
       isIdempotent,
@@ -921,7 +899,7 @@ export async function fetchWithCache<T = unknown>(
       };
     } catch (err) {
       throw new Error(
-        `Error parsing response from ${url}: ${
+        `Error parsing response from ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${
           (err as Error).message
         }. HTTP ${resp.status} ${resp.statusText}. Received text: ${respText}`,
       );
@@ -932,66 +910,38 @@ export async function fetchWithCache<T = unknown>(
 
   const cachedResponse = await cache.get<SerializedFetchResponse>(cacheKey);
   if (cachedResponse != null) {
-    logger.debug('[Cache] Returning cached response', {
-      url: sanitizeUrl(getRequestUrlString(url)),
-    });
+    logger.debug(
+      `Returning cached response for ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${cachedResponse}`,
+    );
     return deserializeFetchResponse<T>(cachedResponse, true, cache, cacheKey);
   }
 
-  const inflightCacheKey = getInflightFetchCacheKey(
-    cacheKey,
-    url,
-    requestOptions,
-    resolveFetchRetryMaxRetries(maxRetries),
-    deferCacheWrite,
-  );
+  const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, fetchOptions);
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
+  const coalesced = inflightResponse !== undefined;
   if (!inflightResponse) {
-    const requestOrder = ++nextFetchRequestOrder;
     inflightResponse = (async () => {
       const preparedResponse = await prepareFetchResponse(
         url,
-        requestOptions,
+        fetchOptions,
         timeout,
         maxRetries,
         isIdempotent,
         format,
-        requestOrder,
       );
-      if (preparedResponse.cacheable && !deferCacheWrite) {
-        const committed = await commitFetchResponse(cache, cacheKey, preparedResponse);
-        if (committed) {
-          logger.debug('[Cache] Stored response in cache', {
-            url: sanitizeUrl(getRequestUrlString(url)),
-          });
-        }
+      if (preparedResponse.cacheable) {
+        await cache.set(cacheKey, preparedResponse.response);
       }
-      return preparedResponse;
+      return preparedResponse.response;
     })().finally(() => {
       inflightFetchResponses.delete(inflightCacheKey);
     });
     inflightFetchResponses.set(inflightCacheKey, inflightResponse);
   }
 
-  const preparedResponse = await inflightResponse;
-  const commitToCache =
-    deferCacheWrite && preparedResponse.cacheable
-      ? async () => {
-          const committed = await commitFetchResponse(cache, cacheKey, preparedResponse);
-          if (committed) {
-            logger.debug('[Cache] Committed validated response to cache', {
-              url: sanitizeUrl(getRequestUrlString(url)),
-            });
-          }
-        }
-      : undefined;
-  return deserializeFetchResponse<T>(
-    preparedResponse.response,
-    false,
-    cache,
-    cacheKey,
-    commitToCache,
-  );
+  const response = await inflightResponse;
+  const result = deserializeFetchResponse<T>(response, false, cache, cacheKey);
+  return coalesced ? { ...result, coalesced: true } : result;
 }
 
 /**
@@ -1040,9 +990,15 @@ export function disableCache() {
  */
 export async function clearCache() {
   inflightFetchResponses.clear();
-  fetchCacheMutationTails.clear();
   namespacedCacheInstances.clear();
-  return getCacheInstance().clear();
+  const result = await getCacheInstance().clear();
+  claimedCacheKeys.clear();
+  if (cacheType === 'disk') {
+    const cachePath =
+      getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
+    fs.rmSync(path.join(cachePath, 'claims'), { force: true, recursive: true });
+  }
+  return result;
 }
 
 /**

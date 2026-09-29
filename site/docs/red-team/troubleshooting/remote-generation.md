@@ -44,18 +44,33 @@ If this request fails or times out, it likely means your network is blocking acc
    promptfoo eval
    ```
 
-## Transient Service Errors
+## Why Are Fewer Tests Generated Than Requested?
 
-Remote plugin test-case requests sent through Promptfoo's task endpoint use the shared HTTP retry
-budget. Network errors, HTTP 500 task failures, and gateway 502, 503, 504, and 524 responses retry
-with jittered waits. A valid `Retry-After` value on a retryable response sets the wait up to the
-60-second transient-delay cap; otherwise Promptfoo uses exponential backoff. Rate limits use
-server-provided timing when available, otherwise a default wait, with jitter. By default, other 4xx
-responses besides rate limits, unselected 5xx responses, and malformed successful responses fail
-immediately;
-`PROMPTFOO_RETRY_5XX=true` opts into retries for every 5xx response. See
-[Rate Limits and Concurrency](/docs/configuration/rate-limits/) for retry defaults and backoff
-configuration.
+When plugins request a specific number of tests but only generate a subset or none at all, the most common causes are:
+
+1. **Model refusals**: The configured redteam provider model is refusing to generate adversarial content. Some models have safety filters that block generation of harmful test cases.
+2. **Rate limiting**: The API you're using has rate limits that throttle or reject requests when exceeded.
+3. **Missing API keys**: Some plugins require external API keys (noted in the setup UI). If these are missing or invalid, generation can fail or return partial results.
+
+To diagnose, run with `--verbose` to see detailed logs of any generation failures or refusals.
+
+## Is Test Generation Capped?
+
+No. `numTests` accepts any positive integer — there is no fixed upper bound in the config schema.
+
+It is worth understanding what the number means before raising it. Each test case is a _seed_, and strategies expand each seed into many attack attempts: `jailbreak:hydra` branches across conversation paths, and `jailbreak:meta` iterates through attack approaches. A small number of seeds therefore still produces broad coverage, and raising `numTests` multiplies generation cost and scan time.
+
+The [default is 5 per plugin](/docs/red-team/configuration/#configuration-fields), and it can be set globally or per plugin:
+
+```yaml
+redteam:
+  numTests: 5 # applies to every plugin
+  plugins:
+    - id: harmful:hate
+      numTests: 10 # override for one plugin
+```
+
+If you are hitting generation failures, lowering the count is a reasonable first step.
 
 ## Alternative Options
 

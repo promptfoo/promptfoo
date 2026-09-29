@@ -1,7 +1,6 @@
 import { getEnvString } from '../envars';
 import { CloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
-import { isAbortError } from './fetch/errors';
 import { fetchWithTimeout } from './fetch/index';
 
 interface HealthResponse {
@@ -12,14 +11,9 @@ interface HealthResponse {
 /**
  * Checks the health of the remote API.
  * @param url - The URL to check.
- * @param signal - Optional cancellation signal.
  * @returns A promise that resolves to the health check response.
  */
-export async function checkRemoteHealth(
-  url: string,
-  signal?: AbortSignal,
-): Promise<HealthResponse> {
-  signal?.throwIfAborted();
+export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
   logger.debug(
     `[CheckRemoteHealth] Checking API health: ${JSON.stringify({
       url,
@@ -41,7 +35,6 @@ export async function checkRemoteHealth(
       headers: {
         'Content-Type': 'application/json',
       },
-      signal,
     };
 
     const response = await fetchWithTimeout(url, requestOptions, 5000);
@@ -83,12 +76,6 @@ export async function checkRemoteHealth(
       message: data.message || 'Unknown error',
     };
   } catch (err) {
-    if (signal?.aborted) {
-      signal.throwIfAborted();
-    }
-    if (isAbortError(err)) {
-      throw err;
-    }
     // Type guard for Error objects
     const error = err instanceof Error ? err : new Error(String(err));
 

@@ -9,184 +9,48 @@ import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
-import { parseRateLimitHeaders, parseRetryAfter } from '../../scheduler/headerParser';
+import { parseRateLimitHeaders } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
-import { sleep, sleepWithAbort } from '../../util/time';
-import { sanitizeUrl } from '../sanitizer';
+import { sleep } from '../../util/time';
+import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
+import { CloudAuthRedirectError } from './cloudAuthRedirects';
 import {
   extractRateLimitErrorCode,
+  extractRateLimitErrorType,
   HttpRateLimitError,
-  isHardQuotaCode,
   type SystemError,
 } from './errors';
-import { monkeyPatchFetch } from './monkeyPatchFetch';
-import { getFetchRetryContextMaxRetries, resolveFetchRetryMaxRetries } from './retryContext';
+import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
+import { getFetchRetryContextMaxRetries } from './retryContext';
 import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
 import type { FetchOptions } from './types';
 
-const DEFAULT_REQUEST_BACKOFF_MS = 5000;
-const MAX_RETRY_DELAY_MS = 60_000;
+// Credential failures are not transient HTTP failures and must not be retried by this layer.
+class RequestAuthenticationError extends Error {}
 
-export function normalizeRetryOnStatusCodes(value: unknown): readonly number[] {
-  if (value === undefined) {
-    return [];
-  }
-  const statusCodes = Array.isArray(value) ? Array.from(value) : undefined;
-  if (
-    !statusCodes ||
-    !statusCodes.every(
-      (status) =>
-        Number.isInteger(status) && Number.isFinite(status) && status >= 100 && status <= 599,
-    )
-  ) {
-    throw new TypeError(
-      'retryOnStatusCodes must be an array of HTTP status codes from 100 through 599',
+async function resolveAuthenticationHeaders(
+  getAuthHeaders: NonNullable<FetchOptions['getAuthHeaders']>,
+  explicitHeaders: HeadersInit | undefined,
+  signal: AbortSignal | null | undefined,
+): Promise<Record<string, string>> {
+  signal?.throwIfAborted();
+  let headers: Headers;
+  try {
+    headers = new Headers(await getAuthHeaders(signal ?? undefined));
+  } catch (error) {
+    signal?.throwIfAborted();
+    throw Object.assign(
+      new RequestAuthenticationError(
+        error instanceof Error ? error.message : 'Request authentication failed',
+      ),
+      { cause: error },
     );
   }
-  return [...new Set(statusCodes)].sort((a, b) => a - b);
-}
-
-function getAbortError(signal: AbortSignal, fallback: unknown): unknown {
-  if (signal.reason instanceof Error) {
-    return signal.reason;
-  }
-  if (fallback instanceof Error && fallback.name === 'AbortError') {
-    return fallback;
-  }
-  return new DOMException('The operation was aborted', 'AbortError');
-}
-
-async function sleepForRetry(ms: number, signal?: AbortSignal | null): Promise<void> {
-  if (!signal) {
-    await sleep(ms);
-    return;
-  }
-
-  signal.throwIfAborted();
-  try {
-    await sleepWithAbort(ms, signal);
-  } catch (error) {
-    if (signal.aborted) {
-      throw getAbortError(signal, error);
-    }
-    throw error;
-  }
-}
-
-function getRetryDelayMs(attempt: number, configuredBackoffMs: number): number {
-  const backoffMs =
-    Number.isFinite(configuredBackoffMs) && configuredBackoffMs >= 0
-      ? Math.min(configuredBackoffMs, MAX_RETRY_DELAY_MS)
-      : DEFAULT_REQUEST_BACKOFF_MS;
-  const random = Math.random();
-  const delayMs = Math.pow(2, attempt) * (backoffMs + 1000 * random);
-  if (Number.isFinite(delayMs) && delayMs <= MAX_RETRY_DELAY_MS) {
-    return delayMs;
-  }
-  // Apply downward jitter at the cap so concurrent callers do not re-synchronize.
-  return MAX_RETRY_DELAY_MS - 1000 * random;
-}
-
-function getBoundedRetryAfterDelayMs(value: string): number | undefined {
-  const retryAfterMs = parseRetryAfter(value);
-  if (retryAfterMs === null) {
-    return undefined;
-  }
-  const jitter = Math.floor(Math.random() * 1000);
-  const delayWithJitter = retryAfterMs + jitter;
-  return Math.min(delayWithJitter, MAX_RETRY_DELAY_MS);
-}
-
-function discardResponseBody(response: Response): void {
-  try {
-    const cancellation = response.body?.cancel();
-    void cancellation?.catch((error) => {
-      logger.debug('[fetch] Failed to discard retryable response body', { error });
-    });
-  } catch (error) {
-    logger.debug('[fetch] Failed to discard retryable response body', { error });
-  }
-}
-
-function shouldRetryHttpResponse(
-  response: Response,
-  disableTransientRetries: boolean | undefined,
-  retryOnStatusCodes: readonly number[],
-  hasReplayableBody: boolean,
-): boolean {
-  return (
-    disableTransientRetries !== true &&
-    hasReplayableBody &&
-    retryOnStatusCodes.includes(response.status)
-  );
-}
-
-function isReplayableRequestBody(body: RequestInit['body'] | null | undefined): boolean {
-  if (body == null) {
-    return true;
-  }
-  if (typeof ReadableStream !== 'undefined' && body instanceof ReadableStream) {
-    return false;
-  }
-  return !(typeof body === 'object' && Symbol.asyncIterator in body);
-}
-
-function hasReplayableRequestBody(url: RequestInfo, options: RequestInit): boolean {
-  const request = url instanceof Request ? url : undefined;
-  return isReplayableRequestBody(options.body ?? request?.body);
-}
-
-function wasFetchAborted(signal: AbortSignal | null | undefined, error: unknown): boolean {
-  return signal?.aborted === true || (error instanceof Error && error.name === 'AbortError');
-}
-
-function throwIfFetchAborted(signal: AbortSignal | null | undefined, error: unknown): void {
-  if (wasFetchAborted(signal, error)) {
-    throw signal?.aborted ? getAbortError(signal, error) : error;
-  }
-}
-
-async function waitForTransientResponseRetry({
-  attempt,
-  backoff,
-  maxRetries,
-  response,
-  signal,
-  url,
-}: {
-  attempt: number;
-  backoff: number;
-  maxRetries: number;
-  response: Response;
-  signal?: AbortSignal | null;
-  url: RequestInfo;
-}): Promise<void> {
-  discardResponseBody(response);
-  const retryAfter = response.headers.get('Retry-After');
-  const retryAfterDelayMs = retryAfter ? getBoundedRetryAfterDelayMs(retryAfter) : undefined;
-  if (retryAfterDelayMs !== undefined) {
-    logger.debug('[fetch] Transient HTTP response using bounded Retry-After delay', {
-      url: urlForLog(url),
-      status: response.status,
-      statusText: response.statusText,
-      attempt: attempt + 1,
-      maxAttempts: maxRetries + 1,
-      waitTime: retryAfterDelayMs,
-    });
-    await sleepForRetry(retryAfterDelayMs, signal);
-    return;
-  }
-  const waitTime = getRetryDelayMs(attempt, backoff);
-  logger.debug('[fetch] Transient HTTP response, retrying', {
-    url: urlForLog(url),
-    status: response.status,
-    statusText: response.statusText,
-    attempt: attempt + 1,
-    maxAttempts: maxRetries + 1,
-    waitTime,
-  });
-  await sleepForRetry(waitTime, signal);
+  signal?.throwIfAborted();
+  // Never mutate the original headers: a retry must not inherit the previous attempt's token.
+  new Headers(explicitHeaders).forEach((value, name) => headers.set(name, value));
+  return Object.fromEntries(headers);
 }
 
 // Cached agents to avoid recreating on every request.
@@ -210,8 +74,9 @@ const cachedProxyAgents: Map<string, Dispatcher> = new Map();
 function getConnectionPoolSize(): number {
   const envConnections = getEnvString('PROMPTFOO_FETCH_CONNECTIONS');
   if (envConnections != null) {
-    const parsed = parseInt(envConnections, 10);
-    if (!isNaN(parsed)) {
+    const normalized = envConnections.trim();
+    const parsed = Number(normalized);
+    if (/^\d+$/.test(normalized) && Number.isSafeInteger(parsed) && parsed > 0) {
       return parsed;
     }
   }
@@ -339,7 +204,7 @@ function getFetchUrlString(url: RequestInfo): string | undefined {
   return undefined;
 }
 
-export function getEffectiveFetchSignal(
+function getEffectiveFetchSignal(
   url: RequestInfo,
   options: Pick<RequestInit, 'signal'>,
 ): AbortSignal | null | undefined {
@@ -351,6 +216,7 @@ export async function fetchWithProxy(
   options: FetchOptions = {},
   abortSignal?: AbortSignal,
 ): Promise<Response> {
+  options = preserveCloudAuthRedirects(url, options);
   let finalUrl = url;
   let finalUrlString = getFetchUrlString(url);
 
@@ -358,18 +224,18 @@ export async function fetchWithProxy(
     throw new Error('Invalid URL');
   }
 
-  // Explicit init.signal (including null) overrides a Request-carried signal, matching fetch.
-  // The separate abortSignal parameter is always composed with that effective signal.
-  const effectiveSignal = getEffectiveFetchSignal(url, options);
+  // An explicit init.signal, including null, overrides the Request's signal.
+  const requestSignal = getEffectiveFetchSignal(url, options);
   const combinedSignal = abortSignal
-    ? effectiveSignal
-      ? AbortSignal.any([effectiveSignal, abortSignal])
+    ? requestSignal
+      ? AbortSignal.any([requestSignal, abortSignal])
       : abortSignal
-    : effectiveSignal;
+    : requestSignal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
+  const { getAuthHeaders, ...requestOptions } = options;
   const finalOptions: FetchOptions & { dispatcher?: any } = {
-    ...options,
+    ...requestOptions,
     headers: getFetchWithProxyHeaders(url, options),
     signal: combinedSignal,
   };
@@ -378,27 +244,35 @@ export async function fetchWithProxy(
     try {
       const parsedUrl = new URL(url);
       if (parsedUrl.username || parsedUrl.password) {
-        if (
-          finalOptions.headers &&
-          'Authorization' in (finalOptions.headers as Record<string, string>)
-        ) {
+        const headers = (finalOptions.headers ?? {}) as Record<string, string>;
+        // Header names are case-insensitive, and a Headers instance or array lowercases them.
+        // Matching only `Authorization` would add a second value that servers receive combined.
+        if (Object.keys(headers).some((name) => name.toLowerCase() === 'authorization')) {
           logger.warn(
             'Both URL credentials and Authorization header present - URL credentials will be ignored',
           );
         } else {
-          // Move credentials to Authorization header
-          const username = parsedUrl.username || '';
-          const password = parsedUrl.password || '';
-          const credentials = Buffer.from(`${username}:${password}`).toString('base64');
+          // Userinfo percent-encodes reserved characters, and HTTP clients decode it before
+          // Basic auth, so a password written as p%40ss must authenticate as p@ss. A malformed
+          // escape has no decoding and stays as written.
+          const credentials = [parsedUrl.username, parsedUrl.password]
+            .map((part) => {
+              try {
+                return decodeURIComponent(part);
+              } catch {
+                return part;
+              }
+            })
+            .join(':');
           finalOptions.headers = {
-            ...(finalOptions.headers as Record<string, string>),
-            Authorization: `Basic ${credentials}`,
+            ...headers,
+            Authorization: `Basic ${Buffer.from(credentials).toString('base64')}`,
           };
         }
         parsedUrl.username = '';
         parsedUrl.password = '';
         finalUrl = parsedUrl.toString();
-        finalUrlString = finalUrl.toString();
+        finalUrlString = finalUrl;
       }
     } catch (e) {
       logger.debug(`URL parsing failed in fetchWithProxy: ${e}`);
@@ -441,14 +315,26 @@ export async function fetchWithProxy(
   const maxTransientRetries = disableTransientRetries ? 0 : 3;
 
   for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
-    const response = await monkeyPatchFetch(finalUrl, finalOptions);
+    combinedSignal?.throwIfAborted();
+    let attemptOptions = finalOptions;
+    if (getAuthHeaders) {
+      attemptOptions = {
+        ...finalOptions,
+        headers: await resolveAuthenticationHeaders(
+          getAuthHeaders,
+          finalOptions.headers,
+          combinedSignal,
+        ),
+      };
+    }
+    const response = await monkeyPatchFetch(finalUrl, attemptOptions);
 
     if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
       const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
       logger.debug(
         `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
       );
-      await sleepForRetry(backoffMs, combinedSignal);
+      await sleepWithAbort(backoffMs, combinedSignal);
       continue;
     }
 
@@ -467,11 +353,9 @@ export function fetchWithTimeout(
   return new Promise((resolve, reject) => {
     const timeoutController = new AbortController();
 
-    // Combine timeout signal with the effective init/Request signal.
-    // The composite signal will abort if EITHER signal aborts
-    const effectiveSignal = getEffectiveFetchSignal(url, options);
-    const signal = effectiveSignal
-      ? AbortSignal.any([effectiveSignal, timeoutController.signal])
+    const requestSignal = getEffectiveFetchSignal(url, options);
+    const signal = requestSignal
+      ? AbortSignal.any([requestSignal, timeoutController.signal])
       : timeoutController.signal;
 
     const timeoutId = setTimeout(() => {
@@ -513,18 +397,17 @@ export function isRateLimited(response: Response): boolean {
 
 /**
  * Compute how long to wait after a rate-limited response.
- * Reads `Retry-After`, `X-RateLimit-Reset`, and OpenAI-style reset headers.
+ * Reads `retry-after-ms`, `Retry-After`, `X-RateLimit-Reset`, and OpenAI-style reset headers.
  * Default: 60s.
  */
 export function computeRateLimitWaitMs(response: Response): number {
+  const parsedHeaders = parseRateLimitHeaders(Object.fromEntries(response.headers.entries()));
   const rateLimitReset = response.headers.get('X-RateLimit-Reset');
-  const retryAfter = response.headers.get('Retry-After');
   const openaiReset =
     response.headers.get('x-ratelimit-reset-requests') ||
     response.headers.get('x-ratelimit-reset-tokens');
 
   if (openaiReset) {
-    const parsedHeaders = parseRateLimitHeaders(Object.fromEntries(response.headers.entries()));
     if (parsedHeaders.resetAt !== undefined) {
       return Math.max(parsedHeaders.resetAt - Date.now(), 0);
     }
@@ -537,7 +420,7 @@ export function computeRateLimitWaitMs(response: Response): number {
     }
   }
 
-  return retryAfter ? (parseRetryAfter(retryAfter) ?? 60_000) : 60_000;
+  return parsedHeaders.retryAfterMs ?? 60_000;
 }
 
 /**
@@ -551,14 +434,49 @@ const RATE_LIMIT_JITTER_MS = 1000;
  * uniform random jitter to avoid synchronized retry storms when many
  * concurrent requests hit the same rate limit.
  */
-export async function handleRateLimit(response: Response, signal?: AbortSignal): Promise<void> {
+function getAbortError(signal: AbortSignal): Error {
+  const reason = signal.reason;
+  if (reason instanceof Error && reason.name === 'AbortError') {
+    return reason;
+  }
+  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+async function sleepWithAbort(waitTime: number, signal?: AbortSignal | null): Promise<void> {
+  if (!signal) {
+    await sleep(waitTime);
+    return;
+  }
+  if (signal.aborted) {
+    throw getAbortError(signal);
+  }
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, waitTime);
+    const onAbort = () => {
+      clearTimeout(timeout);
+      signal.removeEventListener('abort', onAbort);
+      reject(getAbortError(signal));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+export async function handleRateLimit(
+  response: Response,
+  signal?: AbortSignal | null,
+): Promise<void> {
   const waitTime = computeRateLimitWaitMs(response);
   const jitter = Math.floor(Math.random() * RATE_LIMIT_JITTER_MS);
   const totalWait = waitTime + jitter;
   logger.debug(
     `Rate limited, waiting ${totalWait}ms (base ${waitTime}ms + ${jitter}ms jitter) before retry`,
   );
-  await sleepForRetry(totalWait, signal);
+  await sleepWithAbort(totalWait, signal);
 }
 
 /**
@@ -586,34 +504,38 @@ const RATE_LIMIT_BODY_PEEK_BYTES = 64 * 1024;
  */
 async function peekRateLimitBody(
   response: Response,
-): Promise<{ body: unknown; code: string | undefined }> {
+): Promise<{ body: unknown; code: string | undefined; type: string | undefined }> {
   let cloned: Response;
   try {
     cloned = response.clone();
   } catch (err) {
     logger.debug(`[fetch] peekRateLimitBody: clone failed, skipping body code lookup: ${err}`);
-    return { body: undefined, code: undefined };
+    return { body: undefined, code: undefined, type: undefined };
   }
 
   let text: string;
   try {
-    text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES);
+    text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES, { requireStream: true });
   } catch (err) {
     logger.debug(`[fetch] peekRateLimitBody: body read failed: ${err}`);
-    return { body: undefined, code: undefined };
+    return { body: undefined, code: undefined, type: undefined };
   }
 
   if (!text) {
-    return { body: undefined, code: undefined };
+    return { body: undefined, code: undefined, type: undefined };
   }
 
   try {
     const json = JSON.parse(text);
-    return { body: json, code: extractRateLimitErrorCode(json) };
+    return {
+      body: json,
+      code: extractRateLimitErrorCode(json),
+      type: extractRateLimitErrorType(json),
+    };
   } catch {
     // Keep the raw bytes for diagnostics; no code is extractable.
     logger.debug('[fetch] peekRateLimitBody: response body was not JSON');
-    return { body: text, code: undefined };
+    return { body: text, code: undefined, type: undefined };
   }
 }
 
@@ -621,15 +543,18 @@ async function peekRateLimitBody(
  * Drain a Response's body into a string, but stop reading once `maxBytes`
  * have been collected. Each streamed chunk is bounded to the remaining
  * budget *before* it enters the in-memory buffer, so a single oversized
- * chunk cannot exceed `maxBytes` of retained memory. Falls back to
- * `.text()` when the body stream isn't available (some Response polyfills);
- * in that path we consult `Content-Length` first to skip materializing
- * very large bodies entirely.
+ * chunk cannot exceed `maxBytes` of retained memory. `requireStream` skips
+ * streamless polyfills to guarantee bounded buffering for rate-limit peeking.
+ * Other callers retain the legacy text fallback, which buffers before truncation.
  */
-async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
+export async function readBoundedText(
+  response: Response,
+  maxBytes: number,
+  options: { requireStream?: boolean } = {},
+): Promise<string> {
   if (!response.body) {
     const contentLength = Number.parseInt(response.headers?.get?.('content-length') ?? '', 10);
-    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    if (options.requireStream || (Number.isFinite(contentLength) && contentLength > maxBytes)) {
       return '';
     }
     const text = await response.text();
@@ -667,10 +592,24 @@ async function readBoundedText(response: Response, maxBytes: number): Promise<st
   return new TextDecoder().decode(merged);
 }
 
+/**
+ * Retry-After / reset timing from a rate-limit response's headers, for callers
+ * that build an {@link HttpRateLimitError} from an SDK error rather than a
+ * `Response`. Keeps the header parsing in one place.
+ */
+export function rateLimitTimingFromHeaders(headers: Record<string, string>): {
+  retryAfterMs?: number;
+  resetAt?: number;
+} {
+  const parsed = parseRateLimitHeaders(headers);
+  return { retryAfterMs: parsed.retryAfterMs, resetAt: parsed.resetAt };
+}
+
 function buildHttpRateLimitError(
   response: Response,
   body: unknown,
   code: string | undefined,
+  type: string | undefined,
 ): HttpRateLimitError {
   const headers = Object.fromEntries(response.headers.entries());
   const parsed = parseRateLimitHeaders(headers);
@@ -680,6 +619,7 @@ function buildHttpRateLimitError(
     retryAfterMs: parsed.retryAfterMs,
     resetAt: parsed.resetAt,
     code,
+    type,
     headers,
     body,
   });
@@ -731,7 +671,7 @@ export type { FetchOptions } from './types';
  */
 function urlForLog(url: RequestInfo): string {
   const raw = typeof url === 'string' ? url : url.url;
-  return sanitizeUrl(raw);
+  return sanitizeUrlForLogging(raw);
 }
 
 async function handleRateLimitedResponse(
@@ -739,7 +679,7 @@ async function handleRateLimitedResponse(
   url: RequestInfo,
   attempt: number,
   maxRetries: number,
-  signal?: AbortSignal,
+  signal?: AbortSignal | null,
 ): Promise<void> {
   // Only the 429 path produces a structured error. A 200 OK with
   // `X-RateLimit-Remaining=0` is a soft hint that we're approaching a limit —
@@ -747,29 +687,35 @@ async function handleRateLimitedResponse(
   // error on retry exhaustion would be misleading and pointlessly buffers a
   // 64 KB body peek on every successful call.
   const isHardRateLimit = response.status === 429;
-  const { body, code } = isHardRateLimit
-    ? await peekRateLimitBody(response)
-    : { body: undefined, code: undefined };
   const safeUrl = urlForLog(url);
 
-  // Hard quota codes (e.g. insufficient_quota) won't resolve on retry. Fail
+  // Classify a 429 up front: `HttpRateLimitError` derives `kind` from the body
+  // code / type and the Retry-After downgrade, so the fail-fast decision below
+  // sees the same classification callers do.
+  let rateLimitError: HttpRateLimitError | undefined;
+  if (isHardRateLimit) {
+    const { body, code, type } = await peekRateLimitBody(response);
+    rateLimitError = buildHttpRateLimitError(response, body, code, type);
+  }
+
+  // Hard quota failures (e.g. insufficient_quota) won't resolve on retry. Fail
   // fast with a structured error so the caller can stop instead of amplifying
   // load against an exhausted account.
-  if (isHardRateLimit && isHardQuotaCode(code)) {
+  if (rateLimitError?.kind === 'quota') {
     logger.debug(
-      `Quota exhausted on URL ${safeUrl}: HTTP ${response.status} (code: ${code}), failing fast.`,
+      `Quota exhausted on URL ${safeUrl}: HTTP ${response.status} (code: ${rateLimitError.code}), failing fast.`,
     );
-    throw buildHttpRateLimitError(response, body, code);
+    throw rateLimitError;
   }
 
   if (attempt >= maxRetries) {
-    if (isHardRateLimit) {
+    if (rateLimitError) {
       // No retries remain: throw a structured error instead of a bare string
       // so callers can read Retry-After / reset / code without re-parsing.
       logger.debug(
         `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
       );
-      throw buildHttpRateLimitError(response, body, code);
+      throw rateLimitError;
     }
     throw new Error(
       `Rate limited: ${response.status} ${response.statusText} after ${maxRetries + 1} attempts`,
@@ -782,14 +728,16 @@ async function handleRateLimitedResponse(
   await handleRateLimit(response, signal);
 }
 
-function formatFetchErrorMessage(error: unknown): string {
+function formatFetchErrorMessage(error: unknown, url: RequestInfo): string {
   if (!(error instanceof Error)) {
     return String(error);
   }
   const typedError = error as SystemError;
-  let message = `${typedError.name}: ${typedError.message}`;
+  const rawUrl = typeof url === 'string' ? url : url.url;
+  const redactUrl = (value: string) => value.split(rawUrl).join(urlForLog(url));
+  let message = `${typedError.name}: ${redactUrl(typedError.message)}`;
   if (typedError.cause) {
-    message += ` (Cause: ${typedError.cause})`;
+    message += ` (Cause: ${redactUrl(String(typedError.cause))})`;
   }
   if (typedError.code) {
     message += ` (Code: ${typedError.code})`;
@@ -803,16 +751,13 @@ export async function fetchWithRetries(
   timeout: number,
   maxRetries?: number,
 ): Promise<Response> {
-  const { retryOnStatusCodes: configuredRetryStatusCodes, ...requestOptions } = options;
-  const retryOnStatusCodes = normalizeRetryOnStatusCodes(configuredRetryStatusCodes);
-  const signal = getEffectiveFetchSignal(url, requestOptions);
-  const effectiveRequestOptions =
-    signal === undefined ? requestOptions : { ...requestOptions, signal };
-  maxRetries = resolveFetchRetryMaxRetries(maxRetries);
-  const hasReplayableBody = hasReplayableRequestBody(url, effectiveRequestOptions);
+  options = preserveCloudAuthRedirects(url, options);
+  const contextMaxRetries = getFetchRetryContextMaxRetries();
+  maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
 
   let lastErrorMessage: string | undefined;
-  const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', DEFAULT_REQUEST_BACKOFF_MS);
+  const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
+  const signal = getEffectiveFetchSignal(url, options);
 
   for (let i = 0; i <= maxRetries; i++) {
     let response;
@@ -820,57 +765,46 @@ export async function fetchWithRetries(
       // Disable transient retries in fetchWithProxy to avoid double-retrying
       response = await fetchWithTimeout(
         url,
-        { ...effectiveRequestOptions, disableTransientRetries: true },
+        { ...options, disableTransientRetries: true },
         timeout,
       );
-
-      if (isRateLimited(response)) {
-        await handleRateLimitedResponse(response, url, i, maxRetries, signal ?? undefined);
-        continue;
-      }
-
-      const isRetryableStatus = shouldRetryHttpResponse(
-        response,
-        options.disableTransientRetries,
-        retryOnStatusCodes,
-        hasReplayableBody,
-      );
-      if (isRetryableStatus && i < maxRetries) {
-        await waitForTransientResponseRetry({
-          attempt: i,
-          backoff,
-          maxRetries,
-          response,
-          signal,
-          url,
-        });
-        continue;
-      }
 
       if (getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600) {
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
       }
 
+      if (response && isRateLimited(response)) {
+        await handleRateLimitedResponse(response, url, i, maxRetries, signal);
+        continue;
+      }
+
       return response;
     } catch (error) {
       // Don't retry on abort - propagate immediately
-      throwIfFetchAborted(signal, error);
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+      if (signal?.aborted) {
+        throw getAbortError(signal);
+      }
 
-      // Structured rate-limit errors are already final (quota fail-fast or
-      // retries exhausted) and carry retry-after / reset metadata. Don't
-      // swallow them in the generic retry path.
-      if (error instanceof HttpRateLimitError) {
+      // Do not retry policy rejections, credential failures, or already-final rate-limit errors.
+      if (
+        error instanceof CloudAuthRedirectError ||
+        error instanceof HttpRateLimitError ||
+        error instanceof RequestAuthenticationError
+      ) {
         throw error;
       }
 
-      const errorMessage = formatFetchErrorMessage(error);
+      const errorMessage = formatFetchErrorMessage(error, url);
 
       logger.debug(
         `Request to ${urlForLog(url)} failed (attempt #${i + 1}), retrying: ${errorMessage}`,
       );
       if (i < maxRetries) {
-        const waitTime = getRetryDelayMs(i, backoff);
-        await sleepForRetry(waitTime, signal);
+        const waitTime = Math.pow(2, i) * (backoff + 1000 * Math.random());
+        await sleepWithAbort(waitTime, signal);
       }
       lastErrorMessage = errorMessage;
     }
