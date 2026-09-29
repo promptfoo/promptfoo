@@ -907,8 +907,9 @@ async function main(): Promise<void> {
       );
     }
   } finally {
-    console.log('Removing installed consumer...');
+    console.log('Removing temporary artifact consumer...');
     await fs.promises.rm(tempDir, { recursive: true, force: true });
+    console.log('Removed temporary artifact consumer');
   }
   console.log(`Verified installed package artifact (${values.profile})`);
 }
