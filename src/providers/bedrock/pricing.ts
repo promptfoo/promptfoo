@@ -6,6 +6,7 @@ import {
   isClaudeOpus55Model,
   isClaudeRegionalPremiumModel,
   isClaudeSonnet5Model,
+  isClaudeSonnet55Model,
 } from '../anthropic/util';
 
 export type BedrockServiceTier = {
@@ -67,6 +68,10 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'anthropic.claude-opus-4-5': { input: 5, output: 25 },
   // Claude Opus 4/4.1
   'anthropic.claude-opus-4': { input: 15, output: 75 },
+  // Claude Sonnet 5.5 ($2/$10 global, $2.20/$11 regional per the AWS price list on 2026-09-29).
+  // Must precede Sonnet 5: lookup is first-match `includes()`, and `anthropic.claude-sonnet-5-5`
+  // contains `anthropic.claude-sonnet-5`.
+  'anthropic.claude-sonnet-5-5': { input: 2, output: 10 },
   // Claude Sonnet 5 (standard list pricing; full 1M context bills at the standard rate)
   'anthropic.claude-sonnet-5': { input: 3, output: 15 },
   // Claude Sonnet 4.x — the point releases must precede the bare `-4` prefix: lookup is first-match-wins
@@ -487,7 +492,7 @@ export function calculateBedrockCost(
  * reported Claude 5 cost. Keep that fail-closed behavior for legacy Runtime models instead of
  * emitting a plausible but incorrect cost.
  *
- * Claude 5 models (Fable 5, Mythos 5, Opus 5, Opus 5.5, and Sonnet 5) have verified Runtime rates, so they
+ * Claude 5 models (Fable 5, Mythos 5, Opus 5, Opus 5.5, Sonnet 5, and Sonnet 5.5) have verified Runtime rates, so they
  * report cost on the default `bedrock:` InvokeModel path — without this, `bedrock:anthropic.claude-opus-5`
  * reports token usage but `cost: 0`. Legacy Claude (e.g. Sonnet/Opus 4.x) stays fail-closed.
  */
@@ -504,6 +509,7 @@ export function calculateBedrockInvokeModelCost(
     !isClaudeFableOrMythos5Model(normalizedModelId) &&
     !isClaudeOpus5Model(normalizedModelId) &&
     !isClaudeOpus55Model(normalizedModelId) &&
+    !isClaudeSonnet55Model(normalizedModelId) &&
     !isClaudeSonnet5Model(normalizedModelId) &&
     !BEDROCK_INVOKE_PRICING_MODEL_PREFIXES.some((prefix) => normalizedModelId.includes(prefix))
   ) {
