@@ -75,15 +75,26 @@ describe('TraceStore span persistence', () => {
     const initial = { spanId: 'shared-span', name: 'fixture operation', startTime: 1 };
     await traceStore.addSpans('external-refresh', [initial]);
     await traceStore.addSpans('separate-trace', [initial]);
-    await traceStore.addSpans('external-refresh', [{
-      ...initial, endTime: 2, statusCode: 1, attributes: { 'fixture.detail': 'completed' },
-    }], { updateExisting: true });
+    await traceStore.addSpans(
+      'external-refresh',
+      [
+        {
+          ...initial,
+          endTime: 2,
+          statusCode: 1,
+          attributes: { 'fixture.detail': 'completed' },
+        },
+      ],
+      { updateExisting: true },
+    );
     await traceStore.addSpans('external-refresh', [initial], { updateExisting: true });
 
     const refreshed = await traceStore.getSpans('external-refresh');
     expect(refreshed).toHaveLength(1);
     expect(refreshed[0]).toMatchObject({
-      endTime: 2, statusCode: 1, attributes: { 'fixture.detail': 'completed' },
+      endTime: 2,
+      statusCode: 1,
+      attributes: { 'fixture.detail': 'completed' },
     });
     expect((await traceStore.getSpans('separate-trace'))[0].endTime).toBeUndefined();
   });
