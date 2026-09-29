@@ -1135,8 +1135,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
+    const responses: Anthropic.Messages.Message[] = [];
     try {
-      const responses: Anthropic.Messages.Message[] = [];
       const signal = options?.abortSignal;
       const initialMessage = await this.sendMessage(
         params,
@@ -1202,14 +1202,20 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       logger.error(
         `Anthropic Messages API call error: ${err instanceof Error ? err.message : String(err)}`,
       );
+      let error = `API call error: ${err instanceof Error ? err.message : String(err)}`;
       if (err instanceof APIError && err.error) {
         const errorDetails = err.error as { error: { message: string; type: string } };
-        return {
-          error: `API call error: ${errorDetails.error.message}, status ${err.status}, type ${errorDetails.error.type}`,
-        };
+        error = `API call error: ${errorDetails.error.message}, status ${err.status}, type ${errorDetails.error.type}`;
       }
+      const lastResponse = responses.at(-1);
       return {
-        error: `API call error: ${err instanceof Error ? err.message : String(err)}`,
+        error,
+        ...(lastResponse
+          ? {
+              tokenUsage: getTokenUsage(withMergedAnthropicUsage(lastResponse, responses), false),
+              cost: getAnthropicCostFromCalls(this.modelName, config, responses),
+            }
+          : {}),
       };
     }
   }

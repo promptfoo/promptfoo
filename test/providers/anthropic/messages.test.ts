@@ -2818,6 +2818,9 @@ describe('AnthropicMessagesProvider', () => {
         abortSignal: controller.signal,
       });
       expect(cancelled.error).toContain('Evaluation cancelled');
+      expect(cancelled.output).toBeUndefined();
+      expect(cancelled.tokenUsage).toMatchObject({ prompt: 1000, completion: 100, total: 1100 });
+      expect(cancelled.cost).toBeCloseTo(0.0045, 10);
       expect(create).toHaveBeenCalledTimes(1);
 
       const retried = await provider.callApi('Research solar capacity');
@@ -2827,25 +2830,81 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('passes cancellation to an active resume instead of returning a partial success', async () => {
+      enableCache();
       provider = createProvider('claude-sonnet-4-6');
       const controller = new AbortController();
       const warn = vi.spyOn(logger, 'warn');
       const create = vi.spyOn(provider.anthropic.messages, 'create');
-      create.mockResolvedValueOnce(pausedTurn).mockImplementationOnce((_params, options) => {
-        expect(options?.signal).toBe(controller.signal);
-        controller.abort(new Error('Resume cancelled'));
-        return Promise.reject(controller.signal.reason) as ReturnType<
-          typeof provider.anthropic.messages.create
-        >;
-      });
+      create
+        .mockResolvedValueOnce(pausedTurn)
+        .mockResolvedValueOnce({
+          ...pausedTurn,
+          usage: {
+            ...pausedTurn.usage,
+            input_tokens: 400,
+            output_tokens: 40,
+            cache_read_input_tokens: 300,
+            cache_creation_input_tokens: 200,
+          },
+        })
+        .mockImplementationOnce((_params, options) => {
+          expect(options?.signal).toBe(controller.signal);
+          controller.abort(new Error('Resume cancelled'));
+          return Promise.reject(controller.signal.reason) as ReturnType<
+            typeof provider.anthropic.messages.create
+          >;
+        })
+        .mockResolvedValueOnce(finishedTurn);
 
       const result = await provider.callApi('Research solar capacity', undefined, {
         abortSignal: controller.signal,
       });
 
       expect(result.error).toContain('Resume cancelled');
-      expect(create).toHaveBeenCalledTimes(2);
+      expect(result.output).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 1900,
+        completion: 140,
+        total: 2040,
+        completionDetails: { cacheReadInputTokens: 300, cacheCreationInputTokens: 200 },
+      });
+      expect(result.cost).toBeCloseTo(0.00714, 10);
+      expect(create).toHaveBeenCalledTimes(3);
       expect(warn).not.toHaveBeenCalled();
+
+      const retried = await provider.callApi('Research solar capacity');
+      expect(retried.cached).not.toBe(true);
+      expect(retried.output).toBe('Solar leads new capacity.');
+      expect(create).toHaveBeenCalledTimes(4);
+    });
+
+    it('retains completed request usage when a streamed resume is cancelled', async () => {
+      provider = createProvider('claude-sonnet-4-6', { config: { stream: true } });
+      const controller = new AbortController();
+      const stream = vi
+        .spyOn(provider.anthropic.messages, 'stream')
+        .mockReturnValueOnce({
+          finalMessage: vi.fn().mockResolvedValue(pausedTurn),
+        } as unknown as ReturnType<typeof provider.anthropic.messages.stream>)
+        .mockImplementationOnce((_params, options) => {
+          expect(options?.signal).toBe(controller.signal);
+          return {
+            finalMessage: async () => {
+              controller.abort(new Error('Stream cancelled'));
+              throw controller.signal.reason;
+            },
+          } as unknown as ReturnType<typeof provider.anthropic.messages.stream>;
+        });
+
+      const result = await provider.callApi('Research solar capacity', undefined, {
+        abortSignal: controller.signal,
+      });
+
+      expect(result.error).toContain('Stream cancelled');
+      expect(result.output).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({ prompt: 1000, completion: 100, total: 1100 });
+      expect(result.cost).toBeCloseTo(0.0045, 10);
+      expect(stream).toHaveBeenCalledTimes(2);
     });
 
     it('parses only the final JSON while retaining files from the whole resumed turn', async () => {
