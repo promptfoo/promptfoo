@@ -81,7 +81,7 @@ We particularly welcome contributions in the following areas:
    npm run dev
    ```
 
-   This will run the express server on port 18601 and the web UI on port 15500.
+   This will run the express server on port 15500 and the web UI on port 15501.
    Both the API and UI will be automatically reloaded when you make changes.
 
    :::info
@@ -122,7 +122,7 @@ When opening a pull request:
 - Ensure test coverage for new code or bug fixes.
 - Provide clear instructions on how to reproduce the problem or test the new feature.
 - Be responsive to feedback and be prepared to make changes if requested.
-- Ensure your tests are passing and your code is properly linted and formatted. You can do this by running `npm run lint -- --fix` and `npm run format` respectively.
+- Ensure your tests are passing and your code is properly linted and formatted. You can do this by running `npm run format` and `npm run lint`.
 
 :::tip
 
@@ -136,7 +136,7 @@ Don't hesitate to ask for help. We're here to support you. If you're worried abo
 
 ### Running Tests
 
-We use both Vitest and Jest. To run the test suite:
+We use Vitest. To run the test suite:
 
 ```bash
 npm test
@@ -151,11 +151,7 @@ npm run test:watch
 You can also run specific tests with:
 
 ```bash
-# Vitest
 npx vitest [pattern]
-
-# Jest
-npx jest [pattern]
 
 # Example:
 # Runs all provider tests
@@ -166,10 +162,10 @@ npx vitest providers
 
 When writing tests, please:
 
-- **Use Vitest for new test files.** When modifying existing files, use whichever framework that file uses.
+- **Use Vitest for tests in `test/`, `src/app/`, and `site/`.**
 - Ensure proper test isolation by:
   - Using `beforeEach` and `afterEach` to set up and clean up mocks
-  - Calling `vi.clearAllMocks()` or `vi.restoreAllMocks()` for Vitest (or `jest.clearAllMocks()` for Jest)
+  - Calling `vi.clearAllMocks()` or `vi.restoreAllMocks()`
   - Avoiding shared state between tests
 - Check the coverage report to ensure your changes are covered.
 - Avoid adding additional logs to the console.
@@ -183,7 +179,7 @@ npm run format
 npm run lint
 ```
 
-It's a good idea to run the lint command as `npm run lint -- --fix` to automatically fix some linting errors.
+It's a good idea to run `npm run format` first to automatically fix formatting issues before running `npm run lint`.
 
 ## Building the Project
 
@@ -358,7 +354,7 @@ To run the web UI in dev mode:
 npm run dev
 ```
 
-This will host the web UI at http://localhost:15500. This allows you to hack on the React app quickly (with fast refresh). If you want to run the web UI without the express server, you can run:
+This will host the web UI at http://localhost:15501. This allows you to hack on the React app quickly (with fast refresh). If you want to run the web UI without the express server, you can run:
 
 ```bash
 npm run dev:app

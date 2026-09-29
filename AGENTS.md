@@ -69,8 +69,8 @@ npx vitest path/to/test    # Run a specific backend test file
 
 # Development
 npm run dev                # Start both server and app
-npm run dev:app            # Start only frontend (localhost:15500)
-npm run dev:server         # Start only server/API (localhost:18601)
+npm run dev:app            # Start only frontend (localhost:15501)
+npm run dev:server         # Start only server/API (localhost:15500)
 npm run local -- eval      # Test with local build
 
 # Database
@@ -100,7 +100,7 @@ npm run local eval --max-concurrency 1     # Wrong - flags go to npm
 
 **Don't run `npm run local -- view`** unless explicitly asked. Assume the user already has `npm run dev` running. The `view` command serves static production builds without hot reload.
 
-When starting `npm run dev`, keep it attached in a live terminal session; backgrounding with `&`/`nohup` can exit silently in agent shells. The expected local URLs are `http://localhost:15500/` for the Web UI and `http://localhost:18601` for the server/API. Do not assume Vite's default `5173`; confirm the actual ports from startup output or with `lsof -nP -iTCP:15500 -iTCP:18601 -sTCP:LISTEN`.
+When starting `npm run dev`, keep it attached in a live terminal session; backgrounding with `&`/`nohup` can exit silently in agent shells. The expected local URLs are `http://localhost:15501/` for the Web UI and `http://localhost:15500` for the server/API. Do not assume Vite's default `5173`; confirm the actual ports from startup output or with `lsof -nP -iTCP:15501 -iTCP:15500 -sTCP:LISTEN`.
 
 ### Using Environment Variables
 
@@ -203,7 +203,7 @@ LOG_LEVEL=debug npm run local -- eval -c config.yaml
 npm run local -- eval -c config.yaml --no-cache
 ```
 
-**View results in web UI:** First check if the Web UI is running on port 15500, then ask user before starting. Use `npm run dev` for localhost:15500.
+**View results in web UI:** First check if the Web UI is running on port 15501, then ask user before starting. Use `npm run dev` for localhost:15501.
 
 **Cache:** Located at `~/.promptfoo/cache` by default, unless overridden with
 `PROMPTFOO_CACHE_PATH` or `PROMPTFOO_CONFIG_DIR`. **NEVER delete or clear the cache
@@ -338,7 +338,7 @@ See `test/AGENTS.md` for testing patterns.
 ## Project Conventions
 
 - **ESM modules** (type: "module" in package.json)
-- **Node.js ^20.20.0 || >=22.22.0** - Before `npm`/`vite`/`vitest`, run `source ~/.nvm/nvm.sh && nvm use` so `node -v` matches `.nvmrc`. If you're using npm, upgrade to `npm@11` so the repo's release-age policy is applied consistently. `.npmrc` sets `engine-strict=true`
+- **Node.js >=22.22.0** - Before `npm`/`vite`/`vitest`, run `source ~/.nvm/nvm.sh && nvm use` so `node -v` matches `.nvmrc`. If you're using npm, upgrade to `npm@11` so the repo's release-age policy is applied consistently. `.npmrc` sets `engine-strict=true`
 - **Alternative package managers** (pnpm, yarn) are supported
 - **File structure:** core logic in `src/`, tests in `test/`
 - **Examples** belong in `examples/` with clear README.md
@@ -354,6 +354,18 @@ See `test/AGENTS.md` for testing patterns.
 - **Reuse patterns** from similar files in the codebase
 - **Test both success and error cases** for all functionality
 - **Document provider configurations** following examples in existing code
+
+## Knip (dead-code CI check)
+
+CI runs a full Knip audit (`npm run knip -- --no-progress --reporter github-actions`) in the Style Check job. It fails the build on unused files, exports, and dependencies, and annotates the offending lines on the PR.
+
+When it fails on your PR:
+
+- **Actually dead?** Delete the code. That's the point of the check.
+- **Loaded by convention or path string** (worker, browser replacement, fixture)? Add an `entry` in `knip.jsonc` with a comment stating the loading mechanism.
+- **Consumed by promptfoo-cloud?** The cloud repo compiles `@promptfoo/*` directly from this repo's `src/`, so an export can be load-bearing with zero references here. Add it to the appropriate allowlist in `knip.jsonc` with a comment naming the consuming cloud path.
+
+Every allowlist entry in `knip.jsonc` must have a comment explaining why it exists — never remove an entry (or a "dead" export it protects) without checking its stated consumer first. Config-drift hints are not enforced in CI; maintainers can audit them periodically with `npm run knip -- --treat-config-hints-as-errors`.
 
 ## Adversarial and Redteam Bias
 

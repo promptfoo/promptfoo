@@ -23,7 +23,10 @@ This handles API base URL differences between dev and production.
 - Lucide React for icons
 - **Vitest** for testing
 - Zustand for state management
-- React Router v7
+- React Router v8 (Data Mode; routes are defined in `src/routes.tsx`)
+
+React Router v8 requires React/React DOM >=19.2.7 and ESM imports, including in test mocks.
+The Docusaurus site still uses Router v5; preserve the root `react-router-config` override.
 
 ## Modern React 19 Patterns
 
@@ -79,7 +82,7 @@ src/app/src/
 If `vite` or `vitest` fails to start, run `source ~/.nvm/nvm.sh && nvm use` so `node -v` matches `.nvmrc`. If you're using npm, upgrade to `npm@11` so install behavior matches CI.
 
 ```bash
-npm run dev:app    # From root, runs on localhost:15500
+npm run dev:app    # From root, runs on localhost:15501
 ```
 
 ## Testing with Vitest
@@ -89,6 +92,11 @@ npm run test       # From src/app/
 npm run test:app   # From project root
 npm run test:app -- src/pages/path/to/test.test.tsx --run   # Single frontend test from repo root
 ```
+
+Vitest 5 browser matcher types differ from the jest-dom matchers used by jsdom tests.
+Keep `*.browser.ts` and `*.browser.tsx` in `tsconfig.browser.json`; `tsconfig.app.json`
+checks app code and jsdom tests. `tsc -b` checks both projects. Run real browser tests
+with `npm run test:browser --workspace=src/app` from the repository root.
 
 See `src/app/src/hooks/usePageMeta.test.ts` for patterns. Use `vi.fn()` for mocks, `vi.mock()` for modules.
 
@@ -112,7 +120,11 @@ import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 
 ## UI Guidelines
 
-See `UI_GUIDELINES.md` for the 9 rules on writing React components:
+Read the full [UI guidelines](./UI_GUIDELINES.md) before writing React components:
+
+@UI_GUIDELINES.md
+
+The guidelines cover:
 
 1. Typography with semantic HTML
 2. Small, composable components

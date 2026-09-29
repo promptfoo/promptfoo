@@ -28,10 +28,6 @@ export function getDefaultPort(): number {
   return getEnvInt('API_PORT', 15500);
 }
 
-export function getDevApiPort(): number {
-  return getEnvInt('API_PORT', 18601);
-}
-
 // Maximum width for terminal outputs.
 export const TERMINAL_MAX_WIDTH =
   process?.stdout?.isTTY && process?.stdout?.columns && process?.stdout?.columns > 10
@@ -42,7 +38,7 @@ export const CLOUD_PROVIDER_PREFIX = 'promptfoo://provider/';
 
 // Re-export HUMAN_ASSERTION_TYPE from providers/constants for backward compatibility
 // (providers/constants is browser-safe, constants.ts is not due to envars import)
-export { HUMAN_ASSERTION_TYPE, type HumanAssertionType } from './providers/constants';
+export { HUMAN_ASSERTION_TYPE } from './providers/constants';
 
 export const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
 export const EVENTS_ENDPOINT = 'https://a.promptfoo.app';

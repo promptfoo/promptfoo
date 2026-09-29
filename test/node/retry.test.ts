@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import { getEnvBool } from '../../src/envars';
 import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
@@ -16,7 +17,7 @@ import { resolveConfigs } from '../../src/util/config/load';
 import { writeMultipleOutputs } from '../../src/util/output';
 import { shouldShareResults } from '../../src/util/sharing';
 
-import type { TestSuite, UnifiedConfig } from '../../src/types/index';
+import type { EnvOverrides, TestSuite, UnifiedConfig } from '../../src/types/index';
 
 const dbMocks = vi.hoisted(() => {
   const errorRows: Array<{ id: string }> = [];
@@ -264,6 +265,208 @@ describe('retryCommand', () => {
       'Skipping result with invalid promptIdx: 99',
       expect.objectContaining({ resultId: 'invalid-prompt-result' }),
     );
+    expect(prompts[0].metrics).not.toHaveProperty('incurredCost');
+  });
+
+  it.each([
+    {
+      label: 'cached result without actual cost',
+      costs: [{ logical: 0.5, incurred: 0, cached: true }],
+      expectedLogicalCost: 0.5,
+      expectedIncurredCost: 0,
+    },
+    {
+      label: 'legacy cached result without incurred cost',
+      costs: [{ logical: 0.5, cached: true }],
+      expectedLogicalCost: 0.5,
+      expectedIncurredCost: 0,
+    },
+    {
+      label: 'fresh legacy result before a cached result',
+      costs: [
+        { logical: 0.25, cached: false },
+        { logical: 0.5, incurred: 0, cached: true },
+      ],
+      expectedLogicalCost: 0.75,
+      expectedIncurredCost: 0.25,
+    },
+    {
+      label: 'fresh legacy result after a cached result',
+      costs: [
+        { logical: 0.5, incurred: 0, cached: true },
+        { logical: 0.25, cached: false },
+      ],
+      expectedLogicalCost: 0.75,
+      expectedIncurredCost: 0.25,
+    },
+    {
+      label: 'legacy cached result before a newer cached result',
+      costs: [
+        { logical: 0.5, cached: true },
+        { logical: 0.25, incurred: 0, cached: true },
+      ],
+      expectedLogicalCost: 0.75,
+      expectedIncurredCost: 0,
+    },
+    {
+      label: 'legacy cached result after a newer cached result',
+      costs: [
+        { logical: 0.25, incurred: 0, cached: true },
+        { logical: 0.5, cached: true },
+      ],
+      expectedLogicalCost: 0.75,
+      expectedIncurredCost: 0,
+    },
+    {
+      label: 'partially incurred composite result',
+      costs: [{ logical: 0.5, incurred: 0.25, cached: true }],
+      expectedLogicalCost: 0.5,
+      expectedIncurredCost: 0.25,
+    },
+  ])(
+    'preserves logical and incurred cost when retrying a $label',
+    async ({ costs, expectedLogicalCost, expectedIncurredCost }) => {
+      const prompts = [{}] as any[];
+      const evalRecord = createEval({
+        persisted: true,
+        prompts,
+        fetchResultsBatched: vi.fn(async function* () {
+          yield costs.map(({ logical, incurred, cached }, index) => ({
+            id: `retried-result-${index}`,
+            promptIdx: 0,
+            success: true,
+            score: 1,
+            cost: logical,
+            namedScores: {},
+            response: {
+              cached,
+              ...(incurred !== undefined && { incurredCost: incurred }),
+            },
+          })) as any[];
+        }),
+      });
+
+      await recalculatePromptMetrics(evalRecord);
+
+      expect(prompts[0].metrics).toMatchObject({
+        cost: expectedLogicalCost,
+        incurredCost: expectedIncurredCost,
+      });
+      expect(evalRecord.addPrompts).toHaveBeenCalledWith(prompts);
+    },
+  );
+
+  it.each([
+    {
+      label: 'cached target and fresh grader',
+      response: {
+        cached: true,
+        tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+      },
+      gradingResult: {
+        tokensUsed: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+      },
+      expected: {
+        total: 100,
+        cached: 100,
+        numRequests: 1,
+        assertions: { total: 37, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 0,
+          numRequests: 0,
+          assertions: { total: 37, numRequests: 1 },
+        },
+      },
+    },
+    {
+      label: 'fresh target and cached grader',
+      response: {
+        tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+      },
+      gradingResult: {
+        metadata: { cachedResponse: true },
+        tokensUsed: { total: 37, prompt: 23, completion: 14, cached: 37, numRequests: 1 },
+      },
+      expected: {
+        total: 100,
+        numRequests: 1,
+        assertions: { total: 37, cached: 37, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 100,
+          numRequests: 1,
+          assertions: { total: 0, numRequests: 0 },
+        },
+      },
+    },
+    {
+      label: 'mixed cached and fresh graders',
+      response: {
+        tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+      },
+      gradingResult: {
+        tokensUsed: {
+          total: 60,
+          prompt: 38,
+          completion: 22,
+          cached: 37,
+          numRequests: 2,
+          completionDetails: { reasoning: 13 },
+          incurredTokenUsage: {
+            total: 23,
+            prompt: 15,
+            completion: 8,
+            numRequests: 1,
+            completionDetails: { reasoning: 4 },
+          },
+        },
+      },
+      expected: {
+        total: 100,
+        numRequests: 1,
+        assertions: {
+          total: 60,
+          cached: 37,
+          numRequests: 2,
+          completionDetails: { reasoning: 13 },
+        },
+        incurredTokenUsage: {
+          total: 100,
+          numRequests: 1,
+          assertions: {
+            total: 23,
+            numRequests: 1,
+            completionDetails: { reasoning: 4 },
+          },
+        },
+      },
+    },
+  ])('preserves logical and incurred accounting when retrying $label', async (scenario) => {
+    const prompts = [{}] as any[];
+    const evalRecord = createEval({
+      prompts,
+      fetchResultsBatched: vi.fn(async function* () {
+        yield [
+          {
+            id: 'retried-result',
+            promptIdx: 0,
+            success: true,
+            score: 1,
+            namedScores: {},
+            response: scenario.response,
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'passed',
+              ...scenario.gradingResult,
+            },
+          },
+        ] as any[];
+      }),
+    });
+
+    await recalculatePromptMetrics(evalRecord);
+
+    expect(prompts[0].metrics.tokenUsage).toMatchObject(scenario.expected);
   });
 
   it('logs and rethrows metric recalculation and persistence failures', async () => {
@@ -470,6 +673,44 @@ describe('retryCommand', () => {
     expect(retriedEval.resultPersistenceFailed).toBe(true);
     expect(dbMocks.deleteRun).not.toHaveBeenCalled();
   });
+
+  it.each([false, true])(
+    'keeps retry output redaction scoped with persistence failure=%j',
+    async (failed) => {
+      const previousConfig = cliState.config;
+      const env: EnvOverrides = { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' };
+      const originalEval = createEval({ config: { outputPath: 'results.jsonl' } as UnifiedConfig });
+      const retriedEval = createEval({ resultPersistenceFailed: failed });
+      vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+      dbMocks.errorRows.push({ id: 'error-result-1' });
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        basePath: '/workspace',
+        config: { prompts: [], env },
+        testSuite: { ...testSuite, env },
+      });
+      vi.mocked(evaluate).mockImplementation(async () => {
+        cliState.config = { env: { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'false' } };
+        return retriedEval;
+      });
+      const flags: boolean[] = [];
+      vi.mocked(writeMultipleOutputs).mockImplementation(async () => {
+        await Promise.resolve();
+        flags.push(getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false));
+      });
+      try {
+        const result = retryCommand(originalEval.id, {});
+        if (failed) {
+          await expect(result).rejects.toThrow('Retry results failed to persist');
+        } else {
+          await expect(result).resolves.toBe(retriedEval);
+        }
+        expect(flags).toEqual([true]);
+        expect(getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT')).toBe(false);
+      } finally {
+        cliState.config = previousConfig;
+      }
+    },
+  );
 
   it('warns when JSONL restoration and post-retry rewriting fail', async () => {
     const originalEval = createEval({

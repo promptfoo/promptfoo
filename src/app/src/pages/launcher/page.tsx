@@ -11,18 +11,10 @@ import { usePageMeta } from '@app/hooks/usePageMeta';
 import { cn } from '@app/lib/utils';
 import useApiConfig from '@app/stores/apiConfig';
 import { CheckCircle } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import ThemeSelector from '../../components/ThemeSelector';
 
 const DEFAULT_LOCAL_API_URL = 'http://localhost:15500';
-
-function getDisplayApiUrl(apiBaseUrl: string) {
-  try {
-    return new URL(apiBaseUrl).host;
-  } catch {
-    return apiBaseUrl;
-  }
-}
 
 export default function LauncherPage() {
   const [isConnecting, setIsConnecting] = useState(true);
@@ -34,8 +26,6 @@ export default function LauncherPage() {
     refetch: checkHealth,
   } = useApiHealth();
   const { apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl } = useApiConfig();
-  const localApiUrl = apiBaseUrl || DEFAULT_LOCAL_API_URL;
-  const displayApiUrl = getDisplayApiUrl(localApiUrl);
   usePageMeta({ title: 'Launcher', description: 'Connect to your API server' });
 
   useEffect(() => {
@@ -131,7 +121,7 @@ export default function LauncherPage() {
         >
           {isConnecting ? (
             <>
-              Connecting to Promptfoo on {displayApiUrl}
+              Connecting to Promptfoo on localhost:15500
               <Spinner size="sm" />
             </>
           ) : (
@@ -152,15 +142,15 @@ export default function LauncherPage() {
             <h2 className="text-xl font-light">Getting Started</h2>
           </div>
           <p className="mb-4 leading-relaxed text-muted-foreground">
-            This app will proxy requests to <code className="text-sm">{displayApiUrl}</code> by
+            This app will proxy requests to <code className="text-sm">localhost:15500</code> by
             default. You can also visit{' '}
             <a
-              href={localApiUrl}
+              href={DEFAULT_LOCAL_API_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline"
             >
-              {displayApiUrl}
+              localhost:15500
             </a>{' '}
             directly.
           </p>

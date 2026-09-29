@@ -1,6 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
-import useApiConfig from '@app/stores/apiConfig';
 import {
   mockMatchMedia as installMatchMedia,
   mockBrowserProperty,
@@ -9,7 +8,7 @@ import {
 import { useTestTimers } from '@app/tests/timers';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LauncherPage from './page';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
@@ -46,9 +45,6 @@ vi.mock('@app/hooks/useApiHealth', () => ({
 describe('LauncherPage', () => {
   beforeEach(() => {
     mockFetch.mockReset();
-    act(() => {
-      useApiConfig.setState({ apiBaseUrl: '', persistApiBaseUrl: false, fetchingPromise: null });
-    });
     mockLocalStorage.getItem.mockReset();
     mockLocalStorage.removeItem.mockReset();
     mockLocalStorage.setItem.mockReset();
@@ -74,22 +70,6 @@ describe('LauncherPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/Connecting to Promptfoo on localhost:15500/)).toBeInTheDocument();
       expect(screen.getByRole('progressbar')).toBeInTheDocument();
-    });
-  });
-
-  it('shows the configured API base URL when one is set', async () => {
-    act(() => {
-      useApiConfig.setState({ apiBaseUrl: 'http://localhost:18601' });
-    });
-
-    renderLauncher();
-
-    await waitFor(() => {
-      expect(screen.getByText(/Connecting to Promptfoo on localhost:18601/)).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'localhost:18601' })).toHaveAttribute(
-        'href',
-        'http://localhost:18601',
-      );
     });
   });
 

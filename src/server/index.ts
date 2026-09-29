@@ -1,4 +1,4 @@
-import { getDefaultPort, getDevApiPort } from '../constants';
+import { getDefaultPort } from '../constants';
 import logger from '../logger';
 import { formatLibsqlBindingErrorMessage } from '../util/libsqlBindingErrors';
 import { BrowserBehavior, checkServerRunning } from '../util/server';
@@ -6,7 +6,7 @@ import { ServerError } from './errors';
 import { startServer } from './server';
 
 async function main() {
-  const port = process.argv.includes('--dev-api') ? getDevApiPort() : getDefaultPort();
+  const port = getDefaultPort();
   const isRunning = await checkServerRunning(port);
   if (isRunning) {
     logger.info(`Promptfoo server already running at http://localhost:${port}`);

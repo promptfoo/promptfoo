@@ -5,7 +5,6 @@ import {
   DEFAULT_QUERY_LIMIT,
   getDefaultPort,
   getDefaultShareViewBaseUrl,
-  getDevApiPort,
   getShareApiBaseUrl,
   getShareViewBaseUrl,
   TERMINAL_MAX_WIDTH,
@@ -90,22 +89,6 @@ describe('constants', () => {
     it('should handle invalid API_PORT value', () => {
       mockProcessEnv({ API_PORT: 'invalid' });
       expect(getDefaultPort()).toBe(15500);
-    });
-  });
-
-  describe('getDevApiPort', () => {
-    it('should return 18601 by default', () => {
-      expect(getDevApiPort()).toBe(18601);
-    });
-
-    it('should return API_PORT if set', () => {
-      mockProcessEnv({ API_PORT: '3000' });
-      expect(getDevApiPort()).toBe(3000);
-    });
-
-    it('should handle invalid API_PORT value', () => {
-      mockProcessEnv({ API_PORT: 'invalid' });
-      expect(getDevApiPort()).toBe(18601);
     });
   });
 
