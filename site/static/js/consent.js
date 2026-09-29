@@ -19,6 +19,7 @@
 (function () {
   var COOKIE = 'pf_consent';
   var DAYS = 365;
+  var resumeConsentOnClose = false;
 
   // Countries with opt-in defaults
   // EU-27 + EEA (IS, LI, NO) + UK + Switzerland + Brazil + Canada
@@ -189,12 +190,14 @@
     return 'v1.' + r + '.' + (analytics ? 1 : 0) + '.' + (marketing ? 1 : 0);
   }
 
-  function publishConsent(consent) {
+  function publishConsent(consent, revokeManual) {
     window.__pf_consent = consent;
-    window.dispatchEvent(new CustomEvent('pf_consent_change'));
+    window.dispatchEvent(
+      new CustomEvent('pf_consent_change', { detail: { revokeManual: !!revokeManual } }),
+    );
   }
 
-  function saveConsent(analytics, marketing, region) {
+  function saveConsent(analytics, marketing, region, revokeManual) {
     var consent = {
       analytics: analytics ? 1 : 0,
       marketing: marketing && !navigator.globalPrivacyControl ? 1 : 0,
@@ -202,15 +205,17 @@
     setCookie(COOKIE, serializeConsent(consent.analytics, consent.marketing, region));
     if (!consent.analytics) clearVendorCookies(ANALYTICS_COOKIE_PATTERNS);
     if (!consent.marketing) clearVendorCookies(MARKETING_COOKIE_PATTERNS);
-    publishConsent(consent);
+    publishConsent(consent, revokeManual);
     return consent;
   }
 
   function applyConsent(analytics, marketing) {
-    var consent = saveConsent(analytics, marketing);
+    var revokeManual = !marketing;
+    var consent = saveConsent(analytics, marketing, undefined, revokeManual);
     if (
       (!consent.analytics && window.__pf_analytics_loaded) ||
-      (!consent.marketing && (window.__pf_marketing_loaded || window.__pf_third_party_loaded))
+      (!consent.marketing && window.__pf_marketing_loaded) ||
+      (revokeManual && window.__pf_third_party_loaded)
     ) {
       window.location.reload();
       return;
@@ -498,11 +503,15 @@
       }
     }
 
-    function closePrefs() {
+    function closePrefs(saved) {
       var el = document.getElementById('cc-overlay');
       if (el) el.remove();
       document.removeEventListener('keydown', onKeydown);
       if (opener && opener.isConnected && typeof opener.focus === 'function') opener.focus();
+      if (resumeConsentOnClose) {
+        resumeConsentOnClose = false;
+        if (saved !== true) init();
+      }
     }
 
     document.getElementById('cc-prefs-close').addEventListener('click', closePrefs);
@@ -519,17 +528,17 @@
     document.getElementById('cc-save').addEventListener('click', function () {
       var a = document.getElementById('cc-analytics').checked ? 1 : 0;
       var m = document.getElementById('cc-marketing').checked ? 1 : 0;
-      closePrefs();
+      closePrefs(true);
       applyConsent(a, m);
     });
 
     document.getElementById('cc-reject-all').addEventListener('click', function () {
-      closePrefs();
+      closePrefs(true);
       applyConsent(0, 0);
     });
 
     document.getElementById('cc-accept-all').addEventListener('click', function () {
-      closePrefs();
+      closePrefs(true);
       applyConsent(1, 1);
     });
   }
@@ -585,6 +594,7 @@
 
   function showPreferencesFromHash() {
     if (window.location.hash !== '#manage-cookies') return false;
+    resumeConsentOnClose = true;
     publishConsent(null);
     onReady(checkHash);
     return true;

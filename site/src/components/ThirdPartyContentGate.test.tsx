@@ -37,6 +37,24 @@ describe('ThirdPartyContentGate', () => {
     expect(screen.getByText('Embedded content')).toBeInTheDocument();
   });
 
+  it('preserves manually entered content on non-withdrawal consent updates', () => {
+    (window as any).__pf_consent = { analytics: 0, marketing: 0 };
+    render(
+      <ThirdPartyContentGate description="Signup" serviceName="Example" title="Signup">
+        <input aria-label="Email" />
+      </ThirdPartyContentGate>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Load Example' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Email' }), {
+      target: { value: 'reader@example.test' },
+    });
+    (window as any).__pf_consent = { analytics: 1, marketing: 0 };
+    fireEvent(window, new CustomEvent('pf_consent_change', { detail: { revokeManual: false } }));
+    expect(screen.getByRole('textbox', { name: 'Email' })).toHaveValue('reader@example.test');
+    fireEvent(window, new CustomEvent('pf_consent_change', { detail: { revokeManual: true } }));
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  });
+
   it('renders the child content when marketing consent is enabled', () => {
     (window as any).__pf_consent = { analytics: 1, marketing: 1 };
 

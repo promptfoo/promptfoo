@@ -1148,6 +1148,60 @@ describe('consent.js', () => {
       expect((window as any).__pf_marketing_loaded).toBe(false);
     });
 
+    it('keeps a manually activated embed when Accept All is restricted by GPC', () => {
+      setCookie('pf_country', 'DE');
+      Object.defineProperty(navigator, 'globalPrivacyControl', { value: true, configurable: true });
+      runConsent();
+      (window as any).__pf_third_party_loaded = true;
+      const listener = vi.fn();
+      window.addEventListener('pf_consent_change', listener);
+      document.getElementById('cc-accept')!.click();
+      expect(window.location.reload).not.toHaveBeenCalled();
+      expect((listener.mock.calls[0][0] as CustomEvent).detail.revokeManual).toBe(false);
+      expect((window as any).__pf_consent).toEqual({ analytics: 1, marketing: 0 });
+      window.removeEventListener('pf_consent_change', listener);
+    });
+
+    it.each(['close', 'escape', 'outside'])(
+      'restores saved opt-in choices after %s cancellation',
+      (action) => {
+        setCookie('pf_country', 'DE');
+        setCookie('pf_consent', 'v1.i.1.1');
+        window.location.hash = '#manage-cookies';
+        runConsent();
+        // The fixture's replaceState does not update its mocked location.
+        window.location.hash = '';
+        expect((window as any).__pf_consent).toBeNull();
+        if (action === 'escape')
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        else document.getElementById(action === 'close' ? 'cc-prefs-close' : 'cc-overlay')!.click();
+        expect((window as any).__pf_consent).toEqual({ analytics: 1, marketing: 1 });
+        expect((window as any).__pf_analytics_loaded).toBe(true);
+        expect((window as any).__pf_marketing_loaded).toBe(true);
+      },
+    );
+
+    it.each([
+      { country: 'DE', cookie: 'v1.i.1.1', gpc: true, expected: { analytics: 1, marketing: 0 } },
+      { country: 'DE', cookie: 'v1.o.1.1', gpc: false, expected: null },
+    ])(
+      'applies current region and GPC rules when cancelling a direct privacy link: $cookie, GPC=$gpc',
+      ({ country, cookie, gpc, expected }) => {
+        setCookie('pf_country', country);
+        setCookie('pf_consent', cookie);
+        Object.defineProperty(navigator, 'globalPrivacyControl', {
+          value: gpc,
+          configurable: true,
+        });
+        window.location.hash = '#manage-cookies';
+        runConsent();
+        window.location.hash = '';
+        document.getElementById('cc-prefs-close')!.click();
+        expect((window as any).__pf_consent).toEqual(expected);
+        expect((window as any).__pf_marketing_loaded).toBe(false);
+      },
+    );
+
     it('reloads when revoking a manually activated embed', () => {
       setCookie('pf_country', 'DE');
       runConsent();

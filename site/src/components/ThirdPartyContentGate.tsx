@@ -33,8 +33,15 @@ export default function ThirdPartyContentGate({
   const [enabled, setEnabled] = React.useState<boolean | null>(null);
 
   React.useEffect(() => {
-    const refreshEnabledState = () =>
-      setEnabled((window as PrivacyWindow).__pf_consent?.marketing === 1);
+    let previousMarketing = (window as PrivacyWindow).__pf_consent?.marketing;
+    const refreshEnabledState = (event?: Event) => {
+      const marketing = (window as PrivacyWindow).__pf_consent?.marketing;
+      const withdrew =
+        (event as CustomEvent | undefined)?.detail?.revokeManual ||
+        (previousMarketing === 1 && marketing !== 1);
+      previousMarketing = marketing;
+      setEnabled((current) => marketing === 1 || (!withdrew && current === true));
+    };
     refreshEnabledState();
     window.addEventListener('pf_consent_change', refreshEnabledState);
     return () => window.removeEventListener('pf_consent_change', refreshEnabledState);
