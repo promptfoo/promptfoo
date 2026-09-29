@@ -11,6 +11,7 @@ import path from 'path';
 import logger from '../../logger';
 import { getMediaStorage, storeMedia } from '../../storage';
 import { getConfigDirectoryPath } from '../../util/config/manage';
+import { sanitizeUrl } from '../../util/sanitizer';
 import { ellipsize } from '../../util/text';
 
 import type { MediaMetadata, MediaStorageRef } from '../../storage/types';
@@ -55,15 +56,49 @@ export function generateVideoCacheKey(params: {
   model: string;
   size: string;
   seconds: number;
-  inputReference?: string | null;
+  inputReference?: string | { file_id: string } | { image_url: string } | null;
+  characters?: Array<{ id: string }>;
+  cacheScope?: Record<string, string>;
 }): string {
+  const rawReference =
+    typeof params.inputReference === 'string'
+      ? params.inputReference
+      : params.inputReference && 'image_url' in params.inputReference
+        ? params.inputReference.image_url
+        : undefined;
+  let inputReference: typeof params.inputReference = rawReference || params.inputReference || null;
+
+  if (rawReference && /^https?:\/\//i.test(rawReference)) {
+    const safeReference = sanitizeUrl(rawReference);
+    try {
+      const safeUrl = new URL(safeReference);
+      for (const key of Array.from(safeUrl.searchParams.keys())) {
+        if (
+          /^(?:x-amz-|x-goog-|awsaccesskeyid$|googleaccessid$|expires$|sig(?:nature)?$|policy$|key-pair-id$|st$|se$|sp$|sv$|sr$|si$|ss$|srt$|spr$|sip$|ses$|sdd$|saoid$|suoid$|scid$|skoid$|sktid$|skt$|ske$|sks$|skv$|rscc$|rscd$|rsce$|rscl$|rsct$)/i.test(
+            key,
+          )
+        ) {
+          safeUrl.searchParams.set(key, '[REDACTED]');
+        }
+      }
+      safeUrl.searchParams.sort();
+      inputReference = safeUrl.toString();
+    } catch {
+      inputReference = safeReference;
+    }
+  }
+
   const hashInput = JSON.stringify({
     provider: params.provider,
     prompt: params.prompt,
     model: params.model,
     size: params.size,
     seconds: params.seconds,
-    inputReference: params.inputReference || null,
+    inputReference,
+    ...(params.characters?.length ? { characters: params.characters } : {}),
+    ...(params.cacheScope && Object.keys(params.cacheScope).length > 0
+      ? { cacheScope: params.cacheScope }
+      : {}),
   });
 
   return crypto.createHash('sha256').update(hashInput).digest('hex').slice(0, 12);

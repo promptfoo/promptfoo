@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { looksLikeSecret, redactAzureBlobSasTokens } from '../../../util/sanitizer';
+import {
+  looksLikeSecret,
+  redactAzureBlobSasTokens,
+  sanitizeUrlForLogging,
+} from '../../../util/sanitizer';
 
 import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../../types/index';
 
@@ -51,6 +55,14 @@ const HEADER_CREDENTIAL_NAMES = new Set([
   'x_honeycomb_team',
   'proxy_authorization',
   'x_amz_security_token',
+]);
+const SAFE_TRACING_PROVIDER_HEADER_NAMES = new Set([
+  'accept',
+  'content_type',
+  'x_org_id',
+  'x_organization_id',
+  'x_scope_org_id',
+  'x_tenant_id',
 ]);
 // Bare parameter aliases are credential carriers only in HTTP request data
 // (query params, form bodies, and multipart fields).
@@ -109,12 +121,12 @@ const looksLikeCredential = (name: string): boolean => {
   );
 };
 
-const looksLikeCredentialHeader = (headerName: string): boolean => {
+export const looksLikeCredentialHeader = (headerName: string): boolean => {
   const normalized = normalizeCredentialName(headerName);
   return HEADER_CREDENTIAL_NAMES.has(normalized) || looksLikeCredential(headerName);
 };
 
-const looksLikeRequestCredentialParameter = (name: string): boolean =>
+export const looksLikeRequestCredentialParameter = (name: string): boolean =>
   BARE_CREDENTIAL_PARAMETER_NAMES.has(normalizeCredentialName(name)) || looksLikeCredential(name);
 
 const URL_USERINFO = /^((?:webhook:)?[a-z][a-z0-9+.-]*:\/\/)([^/?#@\r\n]+)@/i;
@@ -297,7 +309,7 @@ const scrubProviderUrl = (value: string, templatePaths?: Set<string>): string =>
     : scrubbed;
 };
 
-const looksLikeCredentialValue = (value: string, templatePaths?: Set<string>): boolean =>
+export const looksLikeCredentialValue = (value: string, templatePaths?: Set<string>): boolean =>
   !isTemplatedCredentialReference(value) &&
   (looksLikeSecret(value.trim()) || scrubProviderUrl(value, templatePaths) !== value);
 
@@ -492,6 +504,12 @@ const omitOpaqueToolCredentials = (tool: unknown, templatePaths?: Set<string>): 
   };
 };
 
+/**
+ * Redacts credentials while cloning one persisted configuration subtree.
+ *
+ * `inHttpBody` broadens credential-name matching for request payloads.
+ * `credentialEnvSelectors` identifies env values declared as provider credentials.
+ */
 const walkValue = (
   value: unknown,
   parentKey: string | undefined,
@@ -653,7 +671,7 @@ const omitReferencedProviderEnv = (
   );
 };
 
-const omitProviderCredentials = (
+export const omitProviderCredentials = (
   value: unknown,
   parentKey?: string,
   templatePaths?: Set<string>,
@@ -691,29 +709,56 @@ const PROVIDER_OPTION_KEYS = new Set([
 const scrubProviderIdentifier = (value: string, templatePaths?: Set<string>): string =>
   scrubProviderUrl(redactAzureBlobSasTokens(value), templatePaths);
 
+// A provider can be supplied as an options-map keyed by the provider id —
+// `{ '<provider-id>': { ...options } }` — where the id key itself may embed
+// credentials (URL userinfo, an Azure SAS token). Those keys are scrubbed via
+// scrubProviderIdentifier; the values are sanitized via omitProviderCredentials.
+// Only an unambiguous map takes this path: at least one key outside the known
+// option fields AND every value a record. A provider OBJECT with a stray
+// non-record field (e.g. `{ id, apiKey: '...' }` or a top-level headers bag)
+// must take the normal walk instead, which drops credential-named keys and
+// applies parent-key semantics (headers, opaque tool schemas, raw requests,
+// env indirection) that the map path would bypass.
 const isProviderOptionsMap = (value: unknown): value is Record<string, unknown> =>
   isRecord(value) &&
   Object.keys(value).some((key) => !PROVIDER_OPTION_KEYS.has(key)) &&
   Object.values(value).every(isRecord);
 
+// walkValue never rewrites object keys, so after the walk the surviving
+// top-level keys are scrubbed here. This covers a credential-bearing id key on
+// a malformed map that failed the strict shape check above (e.g. paired with a
+// non-record sibling); keys whose name already matches the credential patterns
+// were dropped by the walk itself. Plain field names are untouched.
+const scrubRecordKeys = (value: unknown, templatePaths?: Set<string>): unknown =>
+  isRecord(value)
+    ? Object.fromEntries(
+        Object.entries(value).map(([key, nested]) => [
+          scrubProviderIdentifier(key, templatePaths),
+          nested,
+        ]),
+      )
+    : value;
+
+const omitConfiguredProviderCredentials = (
+  provider: unknown,
+  templatePaths?: Set<string>,
+): unknown =>
+  isProviderOptionsMap(provider)
+    ? Object.fromEntries(
+        Object.entries(provider).map(([id, options]) => [
+          scrubProviderIdentifier(id, templatePaths),
+          omitProviderCredentials(options, undefined, templatePaths),
+        ]),
+      )
+    : scrubRecordKeys(omitProviderCredentials(provider, undefined, templatePaths), templatePaths);
+
 const omitConfiguredProvidersCredentials = (
   providers: unknown,
   templatePaths?: Set<string>,
-): unknown => {
-  if (!Array.isArray(providers)) {
-    return omitProviderCredentials(providers, undefined, templatePaths);
-  }
-  return providers.map((provider) =>
-    isProviderOptionsMap(provider)
-      ? Object.fromEntries(
-          Object.entries(provider).map(([id, options]) => [
-            scrubProviderIdentifier(id, templatePaths),
-            omitProviderCredentials(options, undefined, templatePaths),
-          ]),
-        )
-      : omitProviderCredentials(provider, undefined, templatePaths),
-  );
-};
+): unknown =>
+  Array.isArray(providers)
+    ? providers.map((provider) => omitConfiguredProviderCredentials(provider, templatePaths))
+    : omitConfiguredProviderCredentials(providers, templatePaths);
 
 const omitAssertionProviderCredentials = (
   assertions: unknown,
@@ -736,7 +781,7 @@ const omitAssertionProviderCredentials = (
         ? { value: scrubProviderUrl(redactAzureBlobSasTokens(assertion.value), templatePaths) }
         : {}),
       ...(hasOwn(assertion, 'provider')
-        ? { provider: omitProviderCredentials(assertion.provider, undefined, templatePaths) }
+        ? { provider: omitConfiguredProviderCredentials(assertion.provider, templatePaths) }
         : {}),
       ...(hasOwn(assertion, 'config')
         ? { config: omitProviderCredentials(assertion.config, undefined, templatePaths) }
@@ -793,15 +838,13 @@ const omitTestCaseProviderCredentials = (
   return {
     ...testCase,
     ...(hasOwn(testCase, 'provider')
-      ? { provider: omitProviderCredentials(testCase.provider, undefined, templatePaths) }
+      ? { provider: omitConfiguredProviderCredentials(testCase.provider, templatePaths) }
       : {}),
-    ...(Array.isArray(testCase.providers)
+    ...(hasOwn(testCase, 'providers')
       ? {
-          providers: testCase.providers.map((provider) =>
-            typeof provider === 'string'
-              ? scrubProviderIdentifier(provider, templatePaths)
-              : provider,
-          ),
+          // Raw-editor YAML can carry a single (non-array) provider here despite the
+          // schema; redact it the same way so no shape bypasses persistence scrubbing.
+          providers: omitConfiguredProvidersCredentials(testCase.providers, templatePaths),
         }
       : {}),
     ...(hasOwn(testCase, 'options')
@@ -879,7 +922,7 @@ const omitRedteamProviderCredentials = (redteam: unknown, templatePaths?: Set<st
   return {
     ...redteam,
     ...(hasOwn(redteam, 'provider')
-      ? { provider: omitProviderCredentials(redteam.provider, undefined, templatePaths) }
+      ? { provider: omitConfiguredProviderCredentials(redteam.provider, templatePaths) }
       : {}),
     ...(Array.isArray(redteam.plugins)
       ? {
@@ -933,15 +976,69 @@ const omitPromptCredentials = (prompts: unknown, templatePaths?: Set<string>): u
   };
 };
 
-// OTLP trace forwarding can carry an `Authorization` header. The rest of the
-// tracing block is non-secret runtime config.
+// OTLP forwarding and external trace providers can both contain credentials.
 const omitTracingCredentials = (tracing: unknown, templatePaths?: Set<string>): unknown => {
-  if (!isRecord(tracing) || !isRecord(tracing.forwarding)) {
+  if (!isRecord(tracing)) {
     return tracing;
   }
+
+  const sanitizedProvider = isRecord(tracing.provider)
+    ? (omitProviderCredentials(tracing.provider, undefined, templatePaths) as Record<
+        string,
+        unknown
+      >)
+    : undefined;
+  if (sanitizedProvider && typeof sanitizedProvider.endpoint === 'string') {
+    const providerEndpoint = sanitizedProvider.endpoint;
+    try {
+      const endpoint = new URL(providerEndpoint);
+      if (endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
+        endpoint.username = '';
+        endpoint.password = '';
+        endpoint.search = '';
+        endpoint.hash = '';
+        sanitizedProvider.endpoint = endpoint.toString();
+      }
+      const safeEndpoint = sanitizeUrlForLogging(endpoint.toString());
+      if (safeEndpoint !== endpoint.toString()) {
+        sanitizedProvider.endpoint = safeEndpoint;
+      }
+    } catch {
+      sanitizedProvider.endpoint = scrubProviderUrl(providerEndpoint, templatePaths);
+    }
+  }
+  if (sanitizedProvider && isRecord(sanitizedProvider.headers)) {
+    sanitizedProvider.headers = Object.fromEntries(
+      Object.entries(sanitizedProvider.headers).filter(([name, value]) => {
+        if (typeof value !== 'string') {
+          return false;
+        }
+        const knownSafeHeader = SAFE_TRACING_PROVIDER_HEADER_NAMES.has(
+          normalizeCredentialName(name),
+        );
+        if (isTemplatedCredentialReference(value)) {
+          if (!knownSafeHeader) {
+            preserveCredentialTemplate(value, templatePaths);
+          }
+          return true;
+        }
+        return knownSafeHeader && !looksLikeHeaderCredential(name, value, templatePaths);
+      }),
+    );
+  }
+
+  const sanitizedTracing = {
+    ...tracing,
+    ...(sanitizedProvider ? { provider: sanitizedProvider } : {}),
+  };
+
+  if (!isRecord(tracing.forwarding)) {
+    return sanitizedTracing;
+  }
+
   const forwarding = tracing.forwarding;
   return {
-    ...tracing,
+    ...sanitizedTracing,
     forwarding: {
       ...forwarding,
       ...(typeof forwarding.endpoint === 'string'
@@ -1253,6 +1350,7 @@ export const useStore = create<EvalConfigState>()(
           providers: config.providers,
           scenarios: config.scenarios,
           tests: config.tests || [], // This is what was 'testCases' before
+          tracing: config.tracing,
           evaluateOptions: config.evaluateOptions,
           defaultTest: config.defaultTest,
           derivedMetrics: config.derivedMetrics,

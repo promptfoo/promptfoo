@@ -1,9 +1,9 @@
-import dotenv from 'dotenv';
-import { getEnvOverrides } from './envOverrides';
+import { getEnvOverridesProvider } from './envOverrides';
+import { loadEnvFiles } from './util/envFile';
 
 import type { EnvOverrides } from './types/env';
 
-dotenv.config({ quiet: true });
+loadEnvFiles();
 
 // Define the supported environment variables and their types
 type EnvVars = {
@@ -20,6 +20,14 @@ type EnvVars = {
   //=========================================================================
   PROMPTFOO_CACHE_ENABLED?: boolean;
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
+  /**
+   * Disables the path-traversal guard applied to `file://` callback
+   * references (e.g. `functionToolCallbacks`). When unset (default), callback
+   * paths must resolve inside the config's basePath. Setting this to `true`
+   * restores the legacy unguarded behavior — NOT recommended outside of
+   * legacy compatibility scenarios.
+   */
+  PROMPTFOO_DISABLE_CALLBACK_PATH_GUARD?: boolean;
   PROMPTFOO_DISABLE_CONVERSATION_VAR?: boolean;
   /** Disable formula-injection escaping of exported eval/redteam result CSVs. */
   PROMPTFOO_DISABLE_CSV_FORMULA_ESCAPING?: boolean;
@@ -58,6 +66,8 @@ type EnvVars = {
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
   PROMPTFOO_PYTHON_DEBUG_ENABLED?: boolean;
   PROMPTFOO_RETRY_5XX?: boolean;
+  PROMPTFOO_OFFICIAL_DOCKER_IMAGE?: boolean;
+  PROMPTFOO_RUNNING_IN_DOCKER?: boolean;
   PROMPTFOO_SELF_HOSTED?: boolean;
   PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES?: boolean;
   PROMPTFOO_STRICT_FILES?: boolean;
@@ -109,6 +119,7 @@ type EnvVars = {
   PROMPTFOO_CACHE_TTL?: number;
   PROMPTFOO_CACHE_TYPE?: 'memory' | 'disk';
   PROMPTFOO_CLOUD_API_URL?: string;
+  PROMPTFOO_CLOUD_AUTH_HEADER?: string;
   PROMPTFOO_CONFIG_DIR?: string;
   PROMPTFOO_CSV_DELIMITER?: string;
   PROMPTFOO_CSV_STRICT?: boolean;
@@ -242,6 +253,9 @@ type EnvVars = {
 
   // Anthropic
   ANTHROPIC_API_KEY?: string;
+  // Extra headers the Anthropic SDK attaches to every request
+  // (newline-separated `Name: value` lines).
+  ANTHROPIC_CUSTOM_HEADERS?: string;
   ANTHROPIC_MAX_TOKENS?: number;
   ANTHROPIC_STOP?: string;
   ANTHROPIC_TEMPERATURE?: number;
@@ -250,6 +264,7 @@ type EnvVars = {
   ATLASCLOUD_API_KEY?: string;
 
   // AWS Bedrock
+  AWS_ACCESS_KEY_ID?: string;
   AWS_BEARER_TOKEN_BEDROCK?: string;
   AWS_BEDROCK_FREQUENCY_PENALTY?: string;
   AWS_BEDROCK_MAX_GEN_LEN?: number;
@@ -261,6 +276,11 @@ type EnvVars = {
   AWS_BEDROCK_STOP?: string;
   AWS_BEDROCK_TEMPERATURE?: number;
   AWS_BEDROCK_TOP_P?: string;
+  AWS_DEFAULT_REGION?: string;
+  AWS_PROFILE?: string;
+  AWS_REGION?: string;
+  AWS_SECRET_ACCESS_KEY?: string;
+  AWS_SESSION_TOKEN?: string;
 
   // AWS Bedrock Agents
   AWS_BEDROCK_AGENT_ID?: string;
@@ -325,6 +345,7 @@ type EnvVars = {
   HYPERBOLIC_API_KEY?: string;
 
   // Langfuse
+  LANGFUSE_BASE_URL?: string;
   LANGFUSE_HOST?: string;
   LANGFUSE_PUBLIC_KEY?: string;
   LANGFUSE_SECRET_KEY?: string;
@@ -339,6 +360,9 @@ type EnvVars = {
   LOCALAI_BASE_URL?: string;
   LOCALAI_TEMPERATURE?: number;
 
+  // Meta Model API (Muse); MODEL_API_KEY is Meta's official env var
+  MODEL_API_KEY?: string;
+
   // Mistral
   MISTRAL_MAX_TOKENS?: string;
   MISTRAL_TEMPERATURE?: string;
@@ -347,6 +371,9 @@ type EnvVars = {
 
   // MiniMax
   MINIMAX_API_KEY?: string;
+
+  // Moonshot AI (Kimi)
+  MOONSHOT_API_KEY?: string;
 
   // n8n
   N8N_API_KEY?: string;
@@ -455,6 +482,27 @@ type EnvVars = {
 // Allow string access to any key for environment variables not explicitly listed
 export type EnvVarKey = keyof EnvVars;
 
+/** Reads one config layer without mixing in process.env; a missing or failed provider is unset. */
+export function getEnvOverrides(layer: 'suite' | 'file' = 'suite'): EnvOverrides | undefined {
+  try {
+    return getEnvOverridesProvider()?.(layer);
+  } catch {
+    // All environment reads must still fall back normally when registration fails.
+    return undefined;
+  }
+}
+
+/** Environment inherited by child processes, including invocation-local file values. */
+export function getProcessEnv(): NodeJS.ProcessEnv {
+  const fileEnv = getEnvOverrides('file');
+  return fileEnv
+    ? {
+        ...process.env,
+        ...Object.fromEntries(Object.entries(fileEnv).filter(([, value]) => value !== undefined)),
+      }
+    : process.env;
+}
+
 /**
  * Get an environment variable.
  * @param key The name of the environment variable.
@@ -472,8 +520,7 @@ export function getEnvString(key: EnvVarKey, defaultValue?: string): string | un
     }
   }
 
-  // Fallback to process.env
-  const value = process.env[key as string];
+  const value = getEnvOverrides('file')?.[key as string] ?? process.env[key as string];
   if (value === undefined) {
     return defaultValue;
   }
@@ -487,7 +534,11 @@ export function getEnvString(key: EnvVarKey, defaultValue?: string): string | un
  * @returns The boolean value of the environment variable, or the default value if provided.
  */
 export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
-  const value = getEnvString(key) || defaultValue;
+  return parseEnvBool(getEnvString(key), defaultValue);
+}
+
+export function parseEnvBool(input: string | undefined, defaultValue?: boolean): boolean {
+  const value = input || defaultValue;
   if (typeof value === 'boolean') {
     return value;
   }
@@ -495,6 +546,17 @@ export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
     return ['1', 'true', 'yes', 'yup', 'yeppers'].includes(value.toLowerCase());
   }
   return Boolean(defaultValue);
+}
+
+/** Suite flags can restrict template access to process.env, but cannot lift operator restrictions. */
+export function isTemplateProcessEnvDisabled(): boolean {
+  const disabled = (env: Record<string, string | undefined>) =>
+    parseEnvBool(env.PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS, parseEnvBool(env.PROMPTFOO_SELF_HOSTED));
+  return (
+    disabled(process.env) ||
+    disabled(getEnvOverrides('file') ?? {}) ||
+    disabled(getEnvOverrides() ?? {})
+  );
 }
 
 /**
@@ -538,192 +600,23 @@ export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | und
 }
 
 /**
- * Default multiplier applied to REQUEST_TIMEOUT_MS for standard evaluations.
- * This permits retries without making ordinary stalled evals effectively unbounded.
- */
-export const EVAL_TIMEOUT_MULTIPLIER = 5;
-
-/**
- * Redteam tests may execute many attack/target turns within a single test case.
- */
-export const REDTEAM_EVAL_TIMEOUT_MULTIPLIER = 15;
-
-/**
  * Get the timeout in milliseconds for each individual test case/provider API call.
  * When this timeout is reached, that specific test is marked as an error.
- *
- * Default behavior: If not explicitly set, standard evals use REQUEST_TIMEOUT_MS * 5
- * (1,500,000ms / 25 minutes by default); redteam evals use REQUEST_TIMEOUT_MS * 15
- * (4,500,000ms / 75 minutes by default) for multi-turn strategies.
- *
- * Set PROMPTFOO_EVAL_TIMEOUT_MS=0 to explicitly disable the timeout.
- *
- * @param defaultValue Optional override default. If undefined, uses calculated default.
- * @param isRedteam Whether the test is part of a redteam evaluation.
- * @returns The timeout value in milliseconds.
+ * @param defaultValue Optional default value if the environment variable is not set. Defaults to 0 (no timeout).
+ * @returns The timeout value in milliseconds, or the default value if not set.
  */
-export function getEvalTimeoutMs(defaultValue?: number, isRedteam: boolean = false): number {
-  // Check if PROMPTFOO_EVAL_TIMEOUT_MS is explicitly set (including 0)
-  const explicitValue = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS');
-  if (explicitValue !== undefined) {
-    return explicitValue;
-  }
-
-  // If a default was passed in by the caller, use it
-  if (defaultValue !== undefined) {
-    return defaultValue;
-  }
-
-  // REQUEST_TIMEOUT_MS defaults to 300,000ms (5 minutes).
-  const requestTimeout = getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
-  return requestTimeout * (isRedteam ? REDTEAM_EVAL_TIMEOUT_MULTIPLIER : EVAL_TIMEOUT_MULTIPLIER);
+export function getEvalTimeoutMs(defaultValue: number = 0): number {
+  return getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', defaultValue);
 }
 
 /**
  * Get the maximum total runtime in milliseconds for the entire evaluation process.
  * When this timeout is reached, all remaining tests are marked as errors and the evaluation ends.
- *
- * Note: For most use cases, prefer `getDefaultMaxEvalTimeMs()` which auto-calculates a reasonable
- * default based on eval characteristics. This function is useful when you need direct access to
- * the env var value without auto-calculation.
- *
  * @param defaultValue Optional default value if the environment variable is not set. Defaults to 0 (no limit).
  * @returns The max duration in milliseconds, or the default value if not set.
  */
 export function getMaxEvalTimeMs(defaultValue: number = 0): number {
   return getEnvInt('PROMPTFOO_MAX_EVAL_TIME_MS', defaultValue);
-}
-
-/**
- * Expected time per test for regular evaluations (1 minute).
- * Most API calls complete in seconds, but we allow buffer for slower responses.
- */
-export const EXPECTED_TIME_PER_TEST_MS = 60_000;
-
-/**
- * Expected time per test for redteam evaluations (5 minutes).
- * Redteam strategies involve multiple turns/iterations and API calls per test.
- */
-export const EXPECTED_TIME_PER_REDTEAM_TEST_MS = 300_000;
-
-/**
- * Safety multiplier for regular evaluations.
- * Applied to expected time to provide buffer for slow tests.
- */
-export const MAX_EVAL_TIME_SAFETY_MULTIPLIER = 3;
-
-/**
- * Safety multiplier for redteam evaluations.
- * Lower than regular because expected time is already padded for multi-turn strategies.
- */
-export const MAX_EVAL_TIME_REDTEAM_SAFETY_MULTIPLIER = 2;
-
-/**
- * Buffer time added to max eval time calculations (1 minute).
- * Accounts for setup, teardown, and overhead.
- */
-export const MAX_EVAL_TIME_BUFFER_MS = 60_000;
-
-/**
- * Calculate a reasonable default maximum evaluation time based on eval characteristics.
- *
- * This provides a final safety layer to prevent
- * evaluations from running indefinitely. The calculation considers:
- * - Number of eval steps and concurrency (determines batch count)
- * - Expected time per test (longer for redteam due to multi-turn strategies)
- * - Safety multiplier (provides buffer for slow tests)
- * - Per-test timeout (caps the worst case)
- *
- * @param totalEvalSteps Total number of evaluation steps (tests × providers × prompts × repeat)
- * @param maxConcurrency Maximum concurrent test executions
- * @param testCaseTimeoutMs Timeout per individual test case
- * @param isRedteam Whether this is a redteam evaluation
- * @param serialEvalSteps Number of eval steps that must execute serially
- * @param comparisonEvalSteps Number of post-target comparison grading steps
- * @returns Calculated max eval time in milliseconds
- */
-export function calculateDefaultMaxEvalTimeMs(
-  totalEvalSteps: number,
-  maxConcurrency: number,
-  testCaseTimeoutMs: number,
-  isRedteam: boolean = false,
-  serialEvalSteps: number = 0,
-  comparisonEvalSteps: number = 0,
-): number {
-  const normalizedSerialSteps = Math.min(Math.max(0, serialEvalSteps), totalEvalSteps);
-  const normalizedComparisonSteps = Math.max(0, comparisonEvalSteps);
-  const concurrentEvalSteps = totalEvalSteps - normalizedSerialSteps;
-  const batchCount =
-    normalizedSerialSteps +
-    normalizedComparisonSteps +
-    Math.ceil(concurrentEvalSteps / Math.max(1, maxConcurrency));
-
-  // Expected time per test - longer for redteam due to multi-turn strategies
-  const expectedTimePerTest = isRedteam
-    ? EXPECTED_TIME_PER_REDTEAM_TEST_MS
-    : EXPECTED_TIME_PER_TEST_MS;
-
-  // Safety multiplier - lower for redteam since expected time is already padded
-  const safetyMultiplier = isRedteam
-    ? MAX_EVAL_TIME_REDTEAM_SAFETY_MULTIPLIER
-    : MAX_EVAL_TIME_SAFETY_MULTIPLIER;
-
-  // Calculate expected total time with safety margin
-  const expectedTime = batchCount * expectedTimePerTest;
-  const safeMaxTime = expectedTime * safetyMultiplier + MAX_EVAL_TIME_BUFFER_MS;
-
-  if (testCaseTimeoutMs <= 0) {
-    return safeMaxTime;
-  }
-
-  // Cap at worst case (all tests timeout), plus the same setup/teardown buffer used
-  // for expected runtime so max-duration does not race an individual per-test timeout.
-  const worstCase = batchCount * testCaseTimeoutMs + MAX_EVAL_TIME_BUFFER_MS;
-  const minimumActiveBatchTime = testCaseTimeoutMs + MAX_EVAL_TIME_BUFFER_MS;
-
-  return Math.min(Math.max(safeMaxTime, minimumActiveBatchTime), worstCase);
-}
-
-/**
- * Get the default maximum evaluation time, calculating if not explicitly set.
- *
- * Priority:
- * 1. PROMPTFOO_MAX_EVAL_TIME_MS env var (if set, including 0 to disable)
- * 2. Calculated default based on eval characteristics
- *
- * Set PROMPTFOO_MAX_EVAL_TIME_MS=0 to explicitly disable the max eval time limit.
- *
- * @param totalEvalSteps Total number of evaluation steps
- * @param maxConcurrency Maximum concurrent test executions
- * @param testCaseTimeoutMs Timeout per individual test case
- * @param isRedteam Whether this is a redteam evaluation
- * @param serialEvalSteps Number of eval steps that must execute serially
- * @param comparisonEvalSteps Number of post-target comparison grading steps
- * @returns Max eval time in milliseconds, or 0 if disabled
- */
-export function getDefaultMaxEvalTimeMs(
-  totalEvalSteps: number,
-  maxConcurrency: number,
-  testCaseTimeoutMs: number,
-  isRedteam: boolean = false,
-  serialEvalSteps: number = 0,
-  comparisonEvalSteps: number = 0,
-): number {
-  // Check if explicitly set (including 0 to disable)
-  const explicitValue = getEnvInt('PROMPTFOO_MAX_EVAL_TIME_MS');
-  if (explicitValue !== undefined) {
-    return explicitValue;
-  }
-
-  // Calculate default based on eval characteristics
-  return calculateDefaultMaxEvalTimeMs(
-    totalEvalSteps,
-    maxConcurrency,
-    testCaseTimeoutMs,
-    isRedteam,
-    serialEvalSteps,
-    comparisonEvalSteps,
-  );
 }
 
 /**
