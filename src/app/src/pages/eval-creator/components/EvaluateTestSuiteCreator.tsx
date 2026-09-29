@@ -92,6 +92,7 @@ const EvaluateTestSuiteCreator = () => {
   const [pendingImport, setPendingImport] = useState<ConfigDraft | null>(null);
   const fileReaderRef = React.useRef<FileReader | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const uploadButtonRef = React.useRef<HTMLButtonElement>(null);
 
   const { config, setConfig, updateConfig, reset } = useStore();
   const { providers = [], prompts = [] } = config;
@@ -271,7 +272,11 @@ const EvaluateTestSuiteCreator = () => {
 
               <div className="flex flex-wrap items-center gap-2">
                 {!hasCustomConfig && <ConfigureEnvButton />}
-                <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+                <Button
+                  ref={uploadButtonRef}
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                >
                   <Upload className="size-4 mr-2" />
                   Upload YAML
                 </Button>
@@ -744,7 +749,12 @@ const EvaluateTestSuiteCreator = () => {
         open={pendingImport !== null}
         onOpenChange={(open) => !open && setPendingImport(null)}
       >
-        <DialogContent>
+        <DialogContent
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            uploadButtonRef.current?.focus();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Replace evaluation configuration?</DialogTitle>
             <DialogDescription>

@@ -623,14 +623,20 @@ describe('EvaluateTestSuiteCreator', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(editor).toHaveValue('description: Unsaved draft');
     expect(useStore.getState().config).toBe(previous);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Upload YAML' })).toHaveFocus());
 
     await user.upload(screen.getByLabelText('Upload YAML configuration'), file);
     await user.click(await screen.findByRole('button', { name: 'Replace configuration' }));
     expect(useStore.getState().config).toEqual({ description: 'Imported draft' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Upload YAML' })).toHaveFocus());
     expect(
       (screen.getByLabelText('YAML configuration editor') as HTMLTextAreaElement).value,
     ).toContain('description: Imported draft');
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    await user.upload(screen.getByLabelText('Upload YAML configuration'), file);
+    await screen.findByRole('dialog', { name: 'Replace evaluation configuration?' });
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Upload YAML' })).toHaveFocus());
   });
 
   it('asks before replacing edits made while an upload is still reading', async () => {
