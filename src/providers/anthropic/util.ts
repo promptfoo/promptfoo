@@ -7,8 +7,10 @@ import type {
   AnthropicToolConfig,
   ClaudeEffort,
   WebFetchToolConfig,
+  WebFetchToolConfig20260318,
   WebFetchToolConfigV2,
   WebSearchToolConfig,
+  WebSearchToolConfig20260318,
 } from './types';
 
 // Model definitions with cost information
@@ -23,6 +25,15 @@ export const ANTHROPIC_MODELS = [
       },
     }),
   ),
+  // Claude Opus 5.5 — 1M context billed at a flat rate. Fast mode ($8/$40, Claude API only)
+  // is a separate research-preview rate that is intentionally not encoded here.
+  ...['claude-opus-5-5'].map((model) => ({
+    id: model,
+    cost: {
+      input: 4 / 1e6, // $4 / MTok
+      output: 20 / 1e6, // $20 / MTok
+    },
+  })),
   // Claude Opus 5 — the Opus-tier Claude 5 model. 1M context window (both the default
   // and the maximum) with the full low→max effort ladder, at the same list pricing as
   // Opus 4.8 ($5/$25), so it is a drop-in cost swap. The full 1M context bills at this
@@ -112,6 +123,10 @@ export const ANTHROPIC_MODELS = [
   ...[
     'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
+    // Not an Anthropic alias — the Models API 404s on it — but Vertex recognises it (see
+    // VERTEX_CLAUDE_SONNET_4_5_MODELS in google/vertex.ts) and passes the name through to
+    // calculateAnthropicCost, so dropping the row would silently blank Vertex costs.
+    'claude-sonnet-4-5-latest',
     // Retired on the Anthropic API; still served by Bedrock in every region.
     'claude-sonnet-4-20250514',
   ].map((model) => ({
@@ -186,7 +201,10 @@ export const ANTHROPIC_MODELS = [
 // `claude-opus-4-8-20260528`.
 const CLAUDE_FABLE_MYTHOS_5_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5(?![a-z0-9])/i;
 const CLAUDE_FABLE_MYTHOS_51_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5-1(?![a-z0-9])/i;
-const CLAUDE_OPUS_5_PATTERN = /(^|[^a-z0-9])claude-opus-5(?![a-z0-9])/i;
+const CLAUDE_OPUS_55_PATTERN = /(^|[^a-z0-9])claude-opus-5-5(?![a-z0-9])/i;
+// `claude-opus-5-5` must not read as Opus 5: a single-digit `-N` suffix is a point release, not
+// a dated snapshot, so it is excluded while `claude-opus-5-20260801`-style suffixes still match.
+const CLAUDE_OPUS_5_PATTERN = /(^|[^a-z0-9])claude-opus-5(?!-[0-9](?![0-9]))(?![a-z0-9])/i;
 const CLAUDE_SONNET_5_PATTERN = /(^|[^a-z0-9])claude-sonnet-5(?![a-z0-9])/i;
 const CLAUDE_OPUS_48_PATTERN = /(^|[^a-z0-9])claude-opus-4-8(?![0-9])/i;
 const CLAUDE_OPUS_47_PATTERN = /(^|[^a-z0-9])claude-opus-4-7(?![0-9])/i;
@@ -228,6 +246,8 @@ interface ClaudeModelFamily {
   disabledThinkingEffortCapped?: boolean;
   /** 10% premium on Bedrock regional / Vertex regional+multi-region endpoints vs global. */
   regionalPremium?: boolean;
+  /** Cache-read price as a fraction of the input rate, when it differs from the usual 0.1. */
+  cacheReadMultiplier?: number;
 }
 
 /**
@@ -245,6 +265,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     alwaysOnAdaptiveThinking: true,
     forcedToolChoiceUnsupported: true,
     regionalPremium: true,
+    cacheReadMultiplier: 0.025,
   },
   {
     match: CLAUDE_FABLE_MYTHOS_5_PATTERN,
@@ -252,6 +273,18 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     samplingParamsDeprecated: true,
     alwaysOnAdaptiveThinking: true,
     regionalPremium: true,
+  },
+  // Opus 5.5 always thinks, like Fable/Mythos 5.1: `thinking: { type: 'disabled' }` and manual
+  // budgets are rejected at every effort level, as are forced `tool_choice` values (verified
+  // live). Unlike Opus 5, lowering `effort` is the only way to reduce thinking.
+  {
+    match: CLAUDE_OPUS_55_PATTERN,
+    warningName: 'Claude Opus 5.5',
+    samplingParamsDeprecated: true,
+    alwaysOnAdaptiveThinking: true,
+    forcedToolChoiceUnsupported: true,
+    regionalPremium: true,
+    cacheReadMultiplier: 0.05,
   },
   // Opus 5 thinks by default (omitting `thinking` runs adaptive, unlike Opus 4.7/4.8) and
   // still accepts `disabled`, but only at effort `high` or below.
@@ -302,7 +335,12 @@ function hasClaudeCapability(modelId: string, capability: ClaudeCapability): boo
   return CLAUDE_MODEL_FAMILIES.some((family) => family[capability] && family.match.test(modelId));
 }
 
-/** Matches Claude Opus 5 model IDs (not `claude-opus-4-5`, not `claude-opus-50`). */
+/** Matches Claude Opus 5.5 model IDs. */
+export function isClaudeOpus55Model(modelId: string): boolean {
+  return CLAUDE_OPUS_55_PATTERN.test(modelId);
+}
+
+/** Matches Claude Opus 5 model IDs (not `claude-opus-4-5`, `-5-5`, or `-50`). */
 export function isClaudeOpus5Model(modelId: string): boolean {
   return CLAUDE_OPUS_5_PATTERN.test(modelId);
 }
@@ -457,6 +495,74 @@ export function isSamplingParamsDeprecatedClaudeModel(
   );
 }
 
+/** Whether a Claude thinking config turns extended thinking on. */
+export function isClaudeThinkingEnabled(thinking: { type?: string } | undefined): boolean {
+  return thinking?.type === 'enabled' || thinking?.type === 'adaptive';
+}
+
+export interface ClaudeSamplingParams {
+  temperature?: number;
+  top_p?: number;
+  top_k?: number;
+}
+
+/**
+ * The sampling controls Claude accepts for one request, shared by every provider that sends
+ * Claude a Messages body (Anthropic, Vertex, Bedrock). Claude rejects `temperature` together
+ * with `top_p`; with thinking on it rejects `temperature` and `top_k` and needs `top_p` of at
+ * least 0.95; models that deprecate sampling reject all three. `defaultTemperature` fills in
+ * only where a temperature is allowed. Returns what to send and a warning per dropped value.
+ */
+export function resolveClaudeSamplingParams(
+  { temperature, top_p, top_k }: ClaudeSamplingParams,
+  {
+    thinkingEnabled,
+    samplingParamsDeprecated,
+    defaultTemperature,
+  }: { thinkingEnabled: boolean; samplingParamsDeprecated: boolean; defaultTemperature?: number },
+): { sampling: ClaudeSamplingParams; warnings: string[] } {
+  // Callers already warn once per model about deprecated sampling controls.
+  if (samplingParamsDeprecated) {
+    return { sampling: {}, warnings: [] };
+  }
+  const warnings: string[] = [];
+  if (thinkingEnabled) {
+    if (top_k != null) {
+      warnings.push(
+        'top_k is incompatible with extended thinking and will be omitted. Remove top_k from your config or disable thinking.',
+      );
+    }
+    if (temperature != null) {
+      warnings.push(
+        'temperature is incompatible with extended thinking and will be omitted. Remove temperature from your config or disable thinking.',
+      );
+    }
+    if (top_p == null) {
+      return { sampling: {}, warnings };
+    }
+    if (top_p < 0.95 || top_p > 1) {
+      warnings.push(
+        `top_p must be between 0.95 and 1.0 with extended thinking (got ${top_p}). Clamping to valid range.`,
+      );
+    }
+    return { sampling: { top_p: Math.max(0.95, Math.min(1, top_p)) }, warnings };
+  }
+  if (top_p != null && temperature != null) {
+    warnings.push(
+      'temperature is incompatible with top_p on Claude and will be omitted. Remove one of these parameters.',
+    );
+  }
+  const resolvedTemperature = top_p == null ? (temperature ?? defaultTemperature) : undefined;
+  return {
+    sampling: {
+      ...(resolvedTemperature == null ? {} : { temperature: resolvedTemperature }),
+      ...(top_p == null ? {} : { top_p }),
+      ...(top_k == null ? {} : { top_k }),
+    },
+    warnings,
+  };
+}
+
 /**
  * Normalize a Claude thinking config for models that deprecate manual
  * budget-based thinking: an `enabled` budget converts to adaptive thinking
@@ -511,34 +617,57 @@ export function applyClaudeRegionalPremium(modelName: string, config: any): any 
   return { ...config, regionalPremiumMultiplier: CLAUDE_REGIONAL_ENDPOINT_PREMIUM };
 }
 
-export function outputFromMessage(message: Anthropic.Messages.Message, showThinking: boolean) {
-  const hasToolUse = message.content.some((block) => block.type === 'tool_use');
-  const hasThinking = message.content.some(
-    (block) => block.type === 'thinking' || block.type === 'redacted_thinking',
-  );
-
-  if (hasToolUse || hasThinking) {
-    return message.content
-      .map((block) => {
-        if (block.type === 'text') {
-          return block.text;
-        } else if (block.type === 'thinking' && showThinking && block.thinking.trim() !== '') {
-          return `Thinking: ${block.thinking}\nSignature: ${block.signature}`;
-        } else if (block.type === 'redacted_thinking' && showThinking) {
-          return `Redacted Thinking: ${block.data}`;
-        } else if (block.type !== 'thinking' && block.type !== 'redacted_thinking') {
-          return JSON.stringify(block);
-        }
-        return '';
-      })
-      .filter((text) => text !== '')
-      .join('\n\n');
+export function getFileReferences(
+  block: Anthropic.Messages.ContentBlock,
+): { type: string; file_id: string }[] {
+  if (block.type === 'container_upload') {
+    return [{ type: block.type, file_id: block.file_id }];
   }
-  return message.content
-    .map((block) => {
-      return (block as Anthropic.Messages.TextBlock).text;
-    })
-    .join('\n\n');
+  if (
+    (block.type === 'code_execution_tool_result' ||
+      block.type === 'bash_code_execution_tool_result') &&
+    'content' in block.content
+  ) {
+    return block.content.content.map(({ type, file_id }) => ({ type, file_id }));
+  }
+  return [];
+}
+
+export function outputFromMessage(message: Anthropic.Messages.Message, showThinking: boolean) {
+  const segments: string[] = [];
+  let previousBlockWasText = false;
+  for (const block of message.content) {
+    if (block.type === 'text') {
+      // Citation boundaries can split a sentence or table row across text blocks.
+      if (previousBlockWasText) {
+        segments[segments.length - 1] += block.text;
+      } else {
+        segments.push(block.text);
+      }
+      previousBlockWasText = true;
+      continue;
+    }
+    previousBlockWasText = false;
+    if (block.type === 'thinking' && showThinking && block.thinking.trim() !== '') {
+      segments.push(`Thinking: ${block.thinking}\nSignature: ${block.signature}`);
+    } else if (block.type === 'redacted_thinking' && showThinking) {
+      segments.push(`Redacted Thinking: ${block.data}`);
+    } else if (
+      block.type === 'tool_use' ||
+      (message.stop_reason === 'pause_turn' &&
+        block.type !== 'thinking' &&
+        block.type !== 'redacted_thinking')
+    ) {
+      segments.push(JSON.stringify(block));
+    } else {
+      // Keep generated files without including execution logs or encrypted payloads.
+      for (const file of getFileReferences(block)) {
+        segments.push(JSON.stringify(file));
+      }
+    }
+    // Omit other completed server-tool blocks so they cannot obscure the answer.
+  }
+  return segments.filter((segment) => segment !== '').join('\n\n');
 }
 
 /**
@@ -653,8 +782,8 @@ export function parseMessages(messages: string): {
 /**
  * Compute input cost with Anthropic cache pricing applied.
  * Anthropic docs: input_tokens is the non-cached portion; cache_read and cache_creation are additive.
- * Cache reads cost 2.5% of base rate on Fable/Mythos 5.1 and 10% on other models.
- * Five-minute cache writes cost 125% of base rate (25% surcharge).
+ * Cache reads cost 10% of base rate unless the model's family sets `cacheReadMultiplier`
+ * (e.g. Fable/Mythos 5.1). Five-minute cache writes cost 125% of base rate (25% surcharge).
  */
 export function calculateCacheInputCost(
   baseInputRate: number,
@@ -663,7 +792,10 @@ export function calculateCacheInputCost(
   cacheCreation: number,
   modelId = '',
 ): number {
-  const cacheReadMultiplier = CLAUDE_FABLE_MYTHOS_51_PATTERN.test(modelId) ? 0.025 : 0.1;
+  const cacheReadMultiplier =
+    CLAUDE_MODEL_FAMILIES.find(
+      (family) => family.cacheReadMultiplier !== undefined && family.match.test(modelId),
+    )?.cacheReadMultiplier ?? 0.1;
   return (
     uncachedInputTokens * baseInputRate +
     cacheRead * baseInputRate * cacheReadMultiplier +
@@ -812,11 +944,7 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   return {};
 }
 
-/**
- * Config fields copied onto the SDK tool object, in the order they are written. Order is
- * significant only in that it fixes the key order of the emitted object; the `satisfies`
- * clauses keep these lists honest against the config interfaces.
- */
+// Fields forwarded to each server-tool version.
 const WEB_FETCH_FIELDS = [
   'allowed_callers',
   'max_uses',
@@ -827,7 +955,18 @@ const WEB_FETCH_FIELDS = [
   'cache_control',
   'defer_loading',
   'strict',
+  'url_sources',
 ] as const satisfies readonly (keyof WebFetchToolConfig)[];
+
+const WEB_FETCH_20260309_FIELDS = [
+  ...WEB_FETCH_FIELDS,
+  'use_cache',
+] as const satisfies readonly (keyof WebFetchToolConfigV2)[];
+
+const WEB_FETCH_20260318_FIELDS = [
+  ...WEB_FETCH_20260309_FIELDS,
+  'response_inclusion',
+] as const satisfies readonly (keyof WebFetchToolConfig20260318)[];
 
 const WEB_SEARCH_FIELDS = [
   'allowed_callers',
@@ -839,6 +978,32 @@ const WEB_SEARCH_FIELDS = [
   'strict',
   'user_location',
 ] as const satisfies readonly (keyof WebSearchToolConfig)[];
+
+const WEB_SEARCH_20260318_FIELDS = [
+  ...WEB_SEARCH_FIELDS,
+  'response_inclusion',
+] as const satisfies readonly (keyof WebSearchToolConfig20260318)[];
+
+/** SDK fields on a server tool that its field list would drop without warning. */
+type UnforwardedToolFields<Tool, Fields extends readonly string[]> = Exclude<
+  keyof Tool,
+  'name' | 'type' | Fields[number]
+>;
+
+// Fail type-checking if an SDK update adds a field these lists would silently drop.
+type _ServerToolFieldsAreForwarded<T extends never> = T;
+type _AllServerToolFieldsForwarded = _ServerToolFieldsAreForwarded<
+  | UnforwardedToolFields<Anthropic.Messages.WebFetchTool20250910, typeof WEB_FETCH_FIELDS>
+  | UnforwardedToolFields<Anthropic.Messages.WebFetchTool20260209, typeof WEB_FETCH_FIELDS>
+  | UnforwardedToolFields<Anthropic.Messages.WebFetchTool20260309, typeof WEB_FETCH_20260309_FIELDS>
+  | UnforwardedToolFields<Anthropic.Messages.WebFetchTool20260318, typeof WEB_FETCH_20260318_FIELDS>
+  | UnforwardedToolFields<Anthropic.Messages.WebSearchTool20250305, typeof WEB_SEARCH_FIELDS>
+  | UnforwardedToolFields<Anthropic.Messages.WebSearchTool20260209, typeof WEB_SEARCH_FIELDS>
+  | UnforwardedToolFields<
+      Anthropic.Messages.WebSearchTool20260318,
+      typeof WEB_SEARCH_20260318_FIELDS
+    >
+>;
 
 interface ServerToolSpec {
   /** Tool name the API expects; always overrides whatever `name` the user config carried. */
@@ -861,17 +1026,13 @@ const SERVER_TOOL_SPECS = new Map<string, ServerToolSpec>([
     { name: 'web_fetch', fields: WEB_FETCH_FIELDS, betaFeature: 'web-fetch-2025-09-10' },
   ],
   ['web_fetch_20260209', { name: 'web_fetch', fields: WEB_FETCH_FIELDS }],
-  // The 20260309 version is the only one that supports use_cache.
-  [
-    'web_fetch_20260309',
-    {
-      name: 'web_fetch',
-      fields: [...WEB_FETCH_FIELDS, 'use_cache' satisfies keyof WebFetchToolConfigV2],
-    },
-  ],
+  // use_cache arrived in 20260309; response_inclusion in 20260318.
+  ['web_fetch_20260309', { name: 'web_fetch', fields: WEB_FETCH_20260309_FIELDS }],
+  ['web_fetch_20260318', { name: 'web_fetch', fields: WEB_FETCH_20260318_FIELDS }],
   // Web search needs no beta header in the current SDK.
   ['web_search_20250305', { name: 'web_search', fields: WEB_SEARCH_FIELDS }],
   ['web_search_20260209', { name: 'web_search', fields: WEB_SEARCH_FIELDS }],
+  ['web_search_20260318', { name: 'web_search', fields: WEB_SEARCH_20260318_FIELDS }],
 ]);
 
 /**

@@ -22,16 +22,19 @@ import {
 } from '../../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import {
+  getClaudeModelWarningName,
   isAlwaysOnAdaptiveThinkingClaudeModel,
+  isClaudeThinkingEnabled,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeClaudeThinkingConfig,
+  resolveClaudeSamplingParams,
 } from '../anthropic/util';
 import {
   executeProviderFunctionCallback,
   loadProviderCallbackFromFileUrl,
 } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
-import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
+import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
 import {
   isOpenAIToolArray,
@@ -233,41 +236,6 @@ function transformMCPToolsToBedrockConverse(tools: MCPTool[]): BedrockConverseTo
   return result;
 }
 
-function normalizeMCPToolContent(content: unknown): string {
-  if (content == null) {
-    return '';
-  }
-  if (typeof content === 'string') {
-    return content;
-  }
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === 'string') {
-          return part;
-        }
-        if (part && typeof part === 'object') {
-          if ('text' in part && (part as { text?: unknown }).text != null) {
-            return String((part as { text?: unknown }).text);
-          }
-          if ('json' in part) {
-            return JSON.stringify((part as { json?: unknown }).json);
-          }
-          if ('data' in part) {
-            return JSON.stringify((part as { data?: unknown }).data);
-          }
-          logger.debug('[Bedrock Converse] Unknown MCP content shape, serializing as JSON', {
-            keys: Object.keys(part as object),
-          });
-          return JSON.stringify(part);
-        }
-        return String(part);
-      })
-      .join('\n');
-  }
-  return JSON.stringify(content);
-}
-
 /**
  * Extract a printable message from an unknown thrown value without losing
  * non-`Error` payloads to `[object Object]`.
@@ -327,7 +295,12 @@ function joinMcpErrors(errors: string[]): string | undefined {
 }
 
 function formatMcpToolResult(name: string, content: unknown): string {
-  return `MCP Tool Result (${name}): ${normalizeMCPToolContent(content)}`;
+  const normalizedContent = normalizeMcpToolContent(content, (part) => {
+    logger.debug('[Bedrock Converse] Unknown MCP content shape, serializing as JSON', {
+      keys: Object.keys(part),
+    });
+  });
+  return `MCP Tool Result (${name}): ${normalizedContent}`;
 }
 
 function formatMcpToolError(name: string, message: string): string {
@@ -890,8 +863,28 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // ValidationException. Drop both regardless of where they came from (config
     // or AWS_BEDROCK_TEMPERATURE / AWS_BEDROCK_TOP_P).
     const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
-    const temperature = reasoningEnabled || samplingParamsDeprecated ? undefined : temperatureValue;
-    const topP = reasoningEnabled || samplingParamsDeprecated ? undefined : topPValue;
+    let temperature = reasoningEnabled || samplingParamsDeprecated ? undefined : temperatureValue;
+    let topP = reasoningEnabled || samplingParamsDeprecated ? undefined : topPValue;
+    // Converse relays Claude's own rules as ValidationExceptions: no temperature with topP,
+    // and with extended thinking no temperature and a topP of at least 0.95. Other model
+    // families accept both, so only Claude models go through the shared resolver.
+    if (this.modelName.includes('anthropic.claude')) {
+      const rawThinking = this.config.additionalModelRequestFields?.thinking as
+        | { type?: string }
+        | undefined;
+      const { sampling, warnings } = resolveClaudeSamplingParams(
+        { temperature, top_p: topP },
+        {
+          thinkingEnabled: isClaudeThinkingEnabled(this.config.thinking ?? rawThinking),
+          samplingParamsDeprecated,
+        },
+      );
+      for (const warning of warnings) {
+        logger.warn(warning);
+      }
+      temperature = sampling.temperature;
+      topP = sampling.top_p;
+    }
 
     // Only return config if at least one field is set
     if (
@@ -969,7 +962,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       ('any' in requestedToolChoice || 'tool' in requestedToolChoice);
     if (dropForcedToolChoice && !this.forcedToolChoiceRemovalWarned) {
       logger.warn(
-        'Forced tool choice (any/tool) is incompatible with the always-on adaptive thinking of Claude Fable 5 and Claude Mythos 5 and has been omitted. The model decides when to call tools; remove toolChoice to silence this warning.',
+        `Forced tool choice (any/tool) is incompatible with the always-on adaptive thinking of ${getClaudeModelWarningName(this.modelName) ?? 'this Claude model'} and has been omitted. The model decides when to call tools; remove toolChoice to silence this warning.`,
       );
       this.forcedToolChoiceRemovalWarned = true;
     }

@@ -291,6 +291,17 @@ describe('BLEU score calculation', () => {
     const score = calculateBleuScore(candidate, references);
     expect(score).toBeGreaterThan(0.999);
   });
+
+  it.each([[['']], [['   ']], [['', '\n\t']]])(
+    'scores 0 when every reference is blank (%j)',
+    (refs) => {
+      expect(calculateBleuScore('the cat sat on the mat', refs)).toBe(0);
+    },
+  );
+
+  it('ignores a blank reference when picking the brevity-penalty length', () => {
+    expect(calculateBleuScore('hello', ['', 'hello world'])).toBeCloseTo(Math.exp(-1));
+  });
 });
 
 describe('handleBleuScore', () => {
@@ -462,5 +473,16 @@ describe('handleBleuScore', () => {
     } as AssertionParams);
     expect(result.pass).toBe(true);
     expect(result.score).toBe(1);
+  });
+
+  it('should not let a blank reference lift a short output past the threshold', () => {
+    const result = handleBleuScore({
+      assertion: { type: 'bleu', threshold: 0.9 },
+      renderedValue: ['', 'hello world'],
+      outputString: 'hello',
+      inverse: false,
+    });
+    expect(result.pass).toBe(false);
+    expect(result.score).toBeCloseTo(Math.exp(-1));
   });
 });

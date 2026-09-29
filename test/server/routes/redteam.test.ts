@@ -895,6 +895,17 @@ describe('Redteam Routes', () => {
       expect(runArgs).not.toHaveProperty('maxConcurrency');
     });
 
+    it('should ignore a request-supplied filesystem base path', async () => {
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'test', basePath: '../private' } });
+
+      expect(response.status).toBe(200);
+      expect(mockedDoRedteamRun.mock.calls[0][0].liveRedteamConfig).toEqual({
+        purpose: 'test',
+      });
+    });
+
     it('should return 400 when config is missing', async () => {
       const response = await request(app).post('/api/redteam/run').send({});
 

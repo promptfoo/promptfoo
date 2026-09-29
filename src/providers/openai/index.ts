@@ -1,6 +1,6 @@
 import { getEnvString } from '../../envars';
 import { resolveProviderApiKey } from '../credentials';
-import { isGpt6AstraModel } from './gpt6';
+import { isGpt6Model } from './gpt6';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -9,6 +9,7 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { FetchOptions } from '../../util/fetch/types';
 import type { OpenAiSharedOptions } from './types';
 
 export const OPENAI_ORIGINATOR_HEADER = 'X-OpenAI-Originator';
@@ -142,6 +143,15 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   /**
+   * Optional HTTP-attempt authentication, including retries, polling, and cancellation.
+   * Static-key providers use getApiKey(). Adapters opting in must separately define cache
+   * isolation via shouldBustCache(); authentication alone does not establish a cache identity.
+   */
+  protected getRequestAuthentication(): FetchOptions['getAuthHeaders'] {
+    return undefined;
+  }
+
+  /**
    * Model id used for OpenAI capability and billing lookups. Subclasses can strip a vendor
    * prefix while retaining the real request model in {@link modelName}.
    */
@@ -165,7 +175,7 @@ export class OpenAiGenericProvider implements ApiProvider {
       model.includes('/o4') ||
       /(^|\/)gpt-daybreak-(?:blue|red)-latest$/.test(model) ||
       this.isGPT5Model(model) ||
-      isGpt6AstraModel(model)
+      isGpt6Model(model)
     );
   }
 

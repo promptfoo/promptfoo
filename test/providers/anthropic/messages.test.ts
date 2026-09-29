@@ -142,6 +142,45 @@ describe('AnthropicMessagesProvider', () => {
     expect(provider['getGenAISystem']()).toBe('anthropic');
   });
 
+  it('keeps cache policy independent of transport-managed authentication', async () => {
+    class TransportAuthenticatedProvider extends AnthropicMessagesProvider {
+      protected override validateAuthentication(): void {}
+    }
+    const restore = mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+    try {
+      enableCache();
+      const provider = new TransportAuthenticatedProvider('claude-3-5-sonnet-20241022', {
+        config: { stream: false },
+      });
+      const create = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Paris' }],
+        usage: { input_tokens: 2, output_tokens: 1 },
+      } as Anthropic.Messages.Message);
+      await withCacheNamespace('transport-auth-policy', async () => {
+        expect((await provider.callApi('Capital?')).output).toBe('Paris');
+        expect((await provider.callApi('Capital?')).cached).toBe(true);
+      });
+      expect(create).toHaveBeenCalledTimes(1);
+    } finally {
+      restore();
+    }
+  });
+
+  it('still validates credentials when an adapter disables response caching', async () => {
+    class UncachedProvider extends AnthropicMessagesProvider {
+      protected override shouldCacheResponses(): boolean {
+        return false;
+      }
+    }
+    const restore = mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+    try {
+      const provider = new UncachedProvider('claude-3-5-sonnet-20241022');
+      await expect(provider.callApi('hello')).rejects.toThrow('Anthropic API key is not set');
+    } finally {
+      restore();
+    }
+  });
+
   describe('callApi', () => {
     const tools: Anthropic.Tool[] = [
       {
@@ -1686,6 +1725,40 @@ describe('AnthropicMessagesProvider', () => {
       ]);
     });
 
+    it.each([
+      ['cyber', 0.006],
+      ['bio', 0.014],
+    ] as const)(
+      'prices each MCP request separately when the final request refuses %s',
+      async (category, cost) => {
+        provider = createProvider('claude-opus-5-5', {
+          config: { mcp: { enabled: true, server: { command: 'npm', args: ['start'] } } },
+        });
+        mcpMocks.callTool.mockResolvedValueOnce({ content: 'Company details' });
+        vi.spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValueOnce({
+            content: [
+              { type: 'tool_use', id: 'toolu_search', name: 'search_companies', input: {} },
+            ],
+            stop_reason: 'tool_use',
+            usage: { input_tokens: 1000, output_tokens: 100 },
+          } as Anthropic.Messages.Message)
+          .mockResolvedValueOnce({
+            content: [],
+            model: 'claude-opus-5-5',
+            stop_reason: 'refusal',
+            stop_details: { type: 'refusal', category, explanation: null },
+            usage: { input_tokens: 2000, output_tokens: 0 },
+          } as unknown as Anthropic.Messages.Message);
+
+        const result = await provider.callApi('Find companies');
+
+        expect(result.cost).toBeCloseTo(cost, 10);
+        expect(result.tokenUsage).toMatchObject({ prompt: 3000, completion: 100, total: 3100 });
+        expect(result.finishReason).toBe('content_filter');
+      },
+    );
+
     it('sums thinking tokens across MCP continuation rounds', async () => {
       provider = createProvider('claude-sonnet-4-6', {
         config: {
@@ -2588,7 +2661,133 @@ describe('AnthropicMessagesProvider', () => {
         name: 'Alice',
         age: 30,
       });
+      expect(result.metadata?.fileReferences).toBeUndefined();
     });
+
+    it('should preserve structured JSON and generated files in fresh and cached responses', async () => {
+      enableCache();
+      const provider = createProvider('claude-sonnet-5', {
+        config: {
+          showThinking: true,
+          output_format: {
+            type: 'json_schema',
+            schema: {
+              type: 'object',
+              properties: { status: { type: 'string' } },
+              required: ['status'],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+      const fileReferences = [
+        { type: 'container_upload', file_id: 'file_upload' },
+        { type: 'bash_code_execution_output', file_id: 'file_bash' },
+        { type: 'code_execution_output', file_id: 'file_python' },
+        { type: 'code_execution_output', file_id: 'file_encrypted' },
+      ] as const;
+      const create = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [
+          { type: 'thinking', thinking: 'Checking generated files.', signature: 'signature' },
+          { type: 'text', text: '{"status":"com', citations: null },
+          fileReferences[0],
+          {
+            type: 'bash_code_execution_tool_result',
+            tool_use_id: 'srvtoolu_bash',
+            content: {
+              type: 'bash_code_execution_result',
+              stdout: 'Bash execution log',
+              stderr: '',
+              return_code: 0,
+              content: [fileReferences[1]],
+            },
+          },
+          {
+            type: 'code_execution_tool_result',
+            tool_use_id: 'srvtoolu_python',
+            content: {
+              type: 'code_execution_result',
+              stdout: 'Python execution log',
+              stderr: '',
+              return_code: 0,
+              content: [fileReferences[2]],
+            },
+          },
+          {
+            type: 'code_execution_tool_result',
+            tool_use_id: 'srvtoolu_encrypted',
+            content: {
+              type: 'encrypted_code_execution_result',
+              encrypted_stdout: 'Encrypted execution log',
+              stderr: '',
+              return_code: 0,
+              content: [fileReferences[3]],
+            },
+          },
+          { type: 'text', text: 'plete"}', citations: null },
+        ] satisfies Anthropic.Messages.ContentBlock[],
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 10, output_tokens: 8 },
+      } as Anthropic.Messages.Message);
+
+      const fresh = await provider.callApi('Create reports and return their status');
+      const cached = await provider.callApi('Create reports and return their status');
+
+      for (const response of [fresh, cached]) {
+        expect(response.output).toEqual({ status: 'complete' });
+        expect(response.metadata).toEqual({ fileReferences });
+      }
+      expect(fresh.cached).not.toBe(true);
+      expect(cached.cached).toBe(true);
+      expect(create).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      {
+        stopReason: 'tool_use',
+        block: {
+          type: 'tool_use',
+          id: 'toolu_report',
+          name: 'create_report',
+          input: {},
+        },
+      },
+      {
+        stopReason: 'pause_turn',
+        block: {
+          type: 'server_tool_use',
+          id: 'srvtoolu_report',
+          name: 'code_execution',
+          input: {},
+        },
+      },
+    ] as const)(
+      'should preserve pending $stopReason tool blocks with structured JSON text',
+      async ({ stopReason, block }) => {
+        const provider = createProvider('claude-sonnet-5', {
+          config: {
+            output_format: {
+              type: 'json_schema',
+              schema: {
+                type: 'object',
+                properties: { status: { type: 'string' } },
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+        const text = '{"status":"pending"}';
+        vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+          content: [{ type: 'text', text, citations: null }, block],
+          stop_reason: stopReason,
+          usage: { input_tokens: 10, output_tokens: 8 },
+        } as Anthropic.Messages.Message);
+
+        const result = await provider.callApi('Create a report');
+
+        expect(result.output).toBe(`${text}\n\n${JSON.stringify(block)}`);
+      },
+    );
 
     it('should handle JSON parsing errors gracefully', async () => {
       const provider = createProvider('claude-sonnet-4-5-20250929', {
@@ -3148,64 +3347,6 @@ describe('AnthropicMessagesProvider', () => {
           temperature: 0.1,
         }),
         {},
-      );
-    });
-  });
-
-  describe('Opus 4.6 prefill warning', () => {
-    it('should warn when assistant prefilling is used with claude-opus-4-6', async () => {
-      const provider = createProvider('claude-opus-4-6', { config: {} });
-      const mockResp = {
-        content: [{ type: 'text', text: 'Output' }],
-        model: 'claude-opus-4-6',
-        id: 'test-id',
-        role: 'assistant',
-        stop_reason: 'end_turn',
-        stop_details: null,
-        stop_sequence: null,
-        type: 'message',
-        usage: { input_tokens: 10, output_tokens: 5 },
-      } as Anthropic.Messages.Message;
-      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
-      const warnSpy = vi.spyOn(logger, 'warn');
-
-      await provider.callApi(
-        JSON.stringify([
-          { role: 'user', content: 'Hello' },
-          { role: 'assistant', content: 'I will' },
-        ]),
-      );
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Assistant message prefilling is not supported on Claude Opus 4.6'),
-      );
-    });
-
-    it('should not warn for non-Opus 4.6 models with prefilling', async () => {
-      const provider = createProvider('claude-sonnet-4-6', { config: {} });
-      const mockResp = {
-        content: [{ type: 'text', text: 'Output' }],
-        model: 'claude-sonnet-4-6',
-        id: 'test-id',
-        role: 'assistant',
-        stop_reason: 'end_turn',
-        stop_details: null,
-        stop_sequence: null,
-        type: 'message',
-        usage: { input_tokens: 10, output_tokens: 5 },
-      } as Anthropic.Messages.Message;
-      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
-      const warnSpy = vi.spyOn(logger, 'warn');
-
-      await provider.callApi(
-        JSON.stringify([
-          { role: 'user', content: 'Hello' },
-          { role: 'assistant', content: 'I will' },
-        ]),
-      );
-
-      expect(warnSpy).not.toHaveBeenCalledWith(
-        expect.stringContaining('Assistant message prefilling is not supported'),
       );
     });
   });
@@ -3934,6 +4075,35 @@ describe('AnthropicMessagesProvider', () => {
   });
 
   describe('refusal stop_details handling', () => {
+    it.each([
+      ['bio', 0, 0.004],
+      ['frontier_llm', 0, 0.004],
+      ['reasoning_extraction', 0, 0.004],
+      ['cyber', 0, 0],
+      ['general_harms', 0, 0],
+      [null, 0, 0],
+      ['cyber', 100, 0.006],
+      ['bio', 100, 0.006],
+    ] as const)(
+      'prices %s refusals with %i output tokens at $%s',
+      async (category, outputTokens, cost) => {
+        const provider = createProvider('claude-opus-5-5', { config: {} });
+        vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+          content: [],
+          model: 'claude-opus-5-5',
+          stop_reason: 'refusal',
+          stop_details: { type: 'refusal', category, explanation: null },
+          usage: { input_tokens: 1000, output_tokens: outputTokens },
+        } as unknown as Anthropic.Messages.Message);
+
+        const result = await provider.callApi('Refused request');
+
+        expect(result.cost).toBeCloseTo(cost, 10);
+        expect(result.finishReason).toBe('content_filter');
+        expect(result.tokenUsage?.prompt).toBe(1000);
+      },
+    );
+
     it('should include guardrails in response when stop_reason is refusal', async () => {
       const provider = createProvider('claude-sonnet-4-6', { config: {} });
       const refusalResponse = {
@@ -4044,6 +4214,7 @@ describe('AnthropicMessagesProvider', () => {
 
       const result = await provider.callApi('Hack something');
       expect(result.cached).toBe(true);
+      expect(result.cost).toBe(0);
       expect(result.guardrails).toEqual({
         flagged: true,
         reason: expect.stringContaining('category: cyber'),
@@ -4081,6 +4252,7 @@ describe('AnthropicMessagesProvider', () => {
 
       const result = await provider.callApi('Dangerous request');
 
+      expect(result.cost).toBeCloseTo(0.00003, 10);
       expect(result.guardrails).toEqual({
         flagged: true,
         reason: expect.stringContaining('category: bio'),
@@ -4114,112 +4286,124 @@ describe('AnthropicMessagesProvider', () => {
     });
   });
 
-  describe.each(['claude-fable-5', 'claude-mythos-5', 'claude-fable-5-1', 'claude-mythos-5-1'])(
-    '%s model',
-    (model) => {
-      const mockResponse = (modelName: string) =>
-        ({
-          content: [{ type: 'text', text: 'Response' }],
-          model: modelName,
-          id: 'test-id',
-          role: 'assistant',
-          stop_reason: 'end_turn',
-          stop_details: null,
-          stop_sequence: null,
-          type: 'message',
-          usage: { input_tokens: 10, output_tokens: 5 },
-        }) as Anthropic.Messages.Message;
+  describe.each([
+    'claude-fable-5',
+    'claude-mythos-5',
+    'claude-fable-5-1',
+    'claude-mythos-5-1',
+    'claude-opus-5-5',
+  ])('%s model', (model) => {
+    const mockResponse = (modelName: string) =>
+      ({
+        content: [{ type: 'text', text: 'Response' }],
+        model: modelName,
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_details: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }) as Anthropic.Messages.Message;
 
-      it('is accepted as a known model and uses adaptive-safe request parameters', async () => {
+    it('is accepted as a known model and uses adaptive-safe request parameters', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const provider = createProvider(model, {
+        config: {
+          max_tokens: 4096,
+          temperature: 0.5,
+          top_p: 0.9,
+          top_k: 40,
+          thinking: { type: 'enabled', budget_tokens: 2048, display: 'summarized' },
+        },
+      });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue(mockResponse(model));
+
+      await provider.callApi('Test prompt');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params.model).toBe(model);
+      expect(params.thinking).toEqual({ type: 'adaptive', display: 'summarized' });
+      expect(params).not.toHaveProperty('temperature');
+      expect(params).not.toHaveProperty('top_p');
+      expect(params).not.toHaveProperty('top_k');
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Using unknown'));
+      // The per-call thinking-incompatibility warnings ("temperature/top_k is
+      // incompatible with extended thinking...") must not fire when sampling
+      // params are deprecated at the model level — the deduped model-level
+      // warning below covers the omission instead.
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('incompatible with extended thinking'),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `temperature, top_p, and top_k are not supported on Claude ${
+            model === 'claude-opus-5-5' ? 'Opus 5.5' : 'Fable'
+          }`,
+        ),
+      );
+    });
+
+    it('omits unsupported disabled thinking and treats adaptive thinking as always on', async () => {
+      const provider = createProvider(model, { config: { thinking: { type: 'disabled' } } });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue(mockResponse(model));
+
+      await provider.callApi('Test prompt');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).not.toHaveProperty('thinking');
+      expect(params).not.toHaveProperty('temperature');
+      expect(params.max_tokens).toBe(2048);
+    });
+  });
+
+  describe.each(['claude-fable-5-1', 'claude-mythos-5-1', 'claude-opus-5-5'])(
+    '%s tool choice',
+    (model) => {
+      it.each([
+        { type: 'any' as const },
+        { type: 'tool' as const, name: 'get_weather' },
+        { type: 'auto' as const },
+        { type: 'none' as const },
+      ])('omits only unsupported forced tool choice: %j', async (tool_choice) => {
         const warnSpy = vi.spyOn(logger, 'warn');
         const provider = createProvider(model, {
           config: {
-            max_tokens: 4096,
-            temperature: 0.5,
-            top_p: 0.9,
-            top_k: 40,
-            thinking: { type: 'enabled', budget_tokens: 2048, display: 'summarized' },
+            tools: [{ name: 'get_weather', input_schema: { type: 'object', properties: {} } }],
+            tool_choice,
+            thinking: { type: 'adaptive' },
           },
         });
-        const createSpy = vi
-          .spyOn(provider.anthropic.messages, 'create')
-          .mockResolvedValue(mockResponse(model));
+        const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+          id: 'msg-51',
+          type: 'message',
+          role: 'assistant',
+          model,
+          content: [{ type: 'text', text: 'ok' }],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: { input_tokens: 10, output_tokens: 5 },
+        } as Anthropic.Messages.Message);
 
-        await provider.callApi('Test prompt');
+        await provider.callApi('Check the weather');
 
-        const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
-        expect(params.model).toBe(model);
-        expect(params.thinking).toEqual({ type: 'adaptive', display: 'summarized' });
-        expect(params).not.toHaveProperty('temperature');
-        expect(params).not.toHaveProperty('top_p');
-        expect(params).not.toHaveProperty('top_k');
-        expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Using unknown'));
-        // The per-call thinking-incompatibility warnings ("temperature/top_k is
-        // incompatible with extended thinking...") must not fire when sampling
-        // params are deprecated at the model level — the deduped model-level
-        // warning below covers the omission instead.
-        expect(warnSpy).not.toHaveBeenCalledWith(
-          expect.stringContaining('incompatible with extended thinking'),
-        );
-        expect(warnSpy).toHaveBeenCalledWith(
-          expect.stringContaining(
-            'temperature, top_p, and top_k are not supported on Claude Fable',
-          ),
-        );
-      });
-
-      it('omits unsupported disabled thinking and treats adaptive thinking as always on', async () => {
-        const provider = createProvider(model, { config: { thinking: { type: 'disabled' } } });
-        const createSpy = vi
-          .spyOn(provider.anthropic.messages, 'create')
-          .mockResolvedValue(mockResponse(model));
-
-        await provider.callApi('Test prompt');
-
-        const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
-        expect(params).not.toHaveProperty('thinking');
-        expect(params).not.toHaveProperty('temperature');
-        expect(params.max_tokens).toBe(2048);
+        const params = createSpy.mock.calls[0][0];
+        expect(params.tools).toHaveLength(1);
+        if (tool_choice.type === 'any' || tool_choice.type === 'tool') {
+          expect(params).not.toHaveProperty('tool_choice');
+          expect(warnSpy).toHaveBeenCalledWith(
+            expect.stringContaining('(forced tool use) is not supported on Claude'),
+          );
+        } else {
+          expect(params.tool_choice).toEqual(tool_choice);
+        }
       });
     },
   );
-
-  describe.each(['claude-fable-5-1', 'claude-mythos-5-1'])('%s tool choice', (model) => {
-    it.each([
-      { type: 'any' as const },
-      { type: 'tool' as const, name: 'get_weather' },
-      { type: 'auto' as const },
-      { type: 'none' as const },
-    ])('omits only unsupported forced tool choice: %j', async (tool_choice) => {
-      const provider = createProvider(model, {
-        config: {
-          tools: [{ name: 'get_weather', input_schema: { type: 'object', properties: {} } }],
-          tool_choice,
-          thinking: { type: 'adaptive' },
-        },
-      });
-      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
-        id: 'msg-51',
-        type: 'message',
-        role: 'assistant',
-        model,
-        content: [{ type: 'text', text: 'ok' }],
-        stop_reason: 'end_turn',
-        stop_sequence: null,
-        usage: { input_tokens: 10, output_tokens: 5 },
-      } as Anthropic.Messages.Message);
-
-      await provider.callApi('Check the weather');
-
-      const params = createSpy.mock.calls[0][0];
-      expect(params.tools).toHaveLength(1);
-      if (tool_choice.type === 'any' || tool_choice.type === 'tool') {
-        expect(params).not.toHaveProperty('tool_choice');
-      } else {
-        expect(params.tool_choice).toEqual(tool_choice);
-      }
-    });
-  });
 
   describe('Claude Code OAuth authentication', () => {
     const validCredential = () => ({

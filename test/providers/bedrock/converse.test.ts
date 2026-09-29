@@ -726,6 +726,39 @@ describe('AwsBedrockConverseProvider', () => {
       );
     });
 
+    it('preserves the unknown MCP block diagnostic and normalized result envelope', async () => {
+      using debugSpy = vi.spyOn(logger, 'debug');
+      mcpMocks.mockCallTool.mockResolvedValueOnce({
+        content: [{ text: 'known' }, { json: { count: 2 } }, { unknown: 'value' }],
+      });
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('', {
+          toolUse: { id: 'tool-123', name: 'list_resources', input: {} },
+          stopReason: 'tool_use',
+        }),
+      );
+
+      const result = await provider.callApi('List resources');
+
+      expect(result.output).toBe(
+        'MCP Tool Result (list_resources): known\n{"count":2}\n{"unknown":"value"}',
+      );
+      expect(result.error).toBeUndefined();
+      expect(debugSpy).toHaveBeenCalledWith(
+        '[Bedrock Converse] Unknown MCP content shape, serializing as JSON',
+        { keys: ['unknown'] },
+      );
+    });
+
     it('should return MCP tool errors', async () => {
       mcpMocks.mockCallTool.mockResolvedValueOnce({
         content: 'MCP server failed',
@@ -1643,7 +1676,8 @@ Third line`;
 
   describe('inference configuration', () => {
     it('should use config values for inference parameters', async () => {
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+      // A non-Claude model: Claude rejects temperature together with topP (see below).
+      const provider = new AwsBedrockConverseProvider('amazon.nova-lite-v1:0', {
         config: {
           region: 'us-east-1',
           maxTokens: 2048,
@@ -1671,6 +1705,49 @@ Third line`;
         }),
       );
     });
+
+    // Converse relays Claude's own sampling rules as ValidationExceptions (verified live on
+    // Haiku 4.5 and Sonnet 4.5), so the provider applies them before sending.
+    it.each([
+      [
+        'temperature with topP',
+        { temperature: 0.5, topP: 0.9 },
+        { topP: 0.9 },
+        'temperature is incompatible with top_p',
+      ],
+      [
+        'temperature with thinking',
+        { temperature: 0, thinking: { type: 'enabled', budget_tokens: 1024 } },
+        {},
+        'temperature is incompatible with extended thinking',
+      ],
+      [
+        'a low topP with thinking',
+        { topP: 0.5, thinking: { type: 'enabled', budget_tokens: 1024 } },
+        { topP: 0.95 },
+        'top_p must be between 0.95 and 1.0',
+      ],
+    ] as const)(
+      'sends Claude only the sampling it accepts: %s',
+      async (_, sampling, expected, warning) => {
+        const warnSpy = vi.spyOn(logger, 'warn');
+        const provider = new AwsBedrockConverseProvider(
+          'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+          { config: { region: 'us-east-1', maxTokens: 2048, ...sampling } },
+        );
+        mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+        await provider.callApi('Test');
+
+        const { ConverseCommand } = (await import(
+          '@aws-sdk/client-bedrock-runtime'
+        )) as unknown as MockBedrockModule;
+        expect(ConverseCommand).toHaveBeenCalledWith(
+          expect.objectContaining({ inferenceConfig: { maxTokens: 2048, ...expected } }),
+        );
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(warning));
+      },
+    );
 
     it('should use environment variables as fallback', async () => {
       mockProcessEnv({ AWS_BEDROCK_MAX_TOKENS: '4096' });
@@ -1946,6 +2023,35 @@ Third line`;
         /Forced tool choice/.test(String(call[0] ?? '')),
       );
       expect(forcedToolChoiceWarnings).toHaveLength(1);
+      expect(String(forcedToolChoiceWarnings[0][0])).toContain(
+        'Claude Fable 5 and Claude Mythos 5',
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('drops forced tool choice for Claude Opus 5.5 and names the model in the warning', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const provider = new AwsBedrockConverseProvider('global.anthropic.claude-opus-5-5', {
+        config: {
+          region: 'us-east-1',
+          tools: [{ name: 'test_tool', description: 'Test' }],
+          toolChoice: 'any' as any,
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      const request = (
+        ConverseCommand as unknown as { mock: { calls: unknown[][] } }
+      ).mock.calls.at(-1)?.[0] as { toolConfig?: Record<string, unknown> };
+      expect(request.toolConfig).not.toHaveProperty('toolChoice');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('always-on adaptive thinking of Claude Opus 5.5'),
+      );
       warnSpy.mockRestore();
     });
 

@@ -21,7 +21,6 @@ import type { Assertion, GradingConfig } from '../../src/types/index';
 vi.mock('../../src/esm', () => ({
   importModule: vi.fn(),
 }));
-vi.mock('../../src/cliState');
 vi.mock('../../src/remoteGrading', () => ({
   doRemoteGrading: vi.fn(),
 }));
