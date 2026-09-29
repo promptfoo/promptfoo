@@ -331,8 +331,12 @@ async function fetchBaseBranch(baseBranch: string, githubToken: string): Promise
 
   try {
     const basicAuth = Buffer.from(`x-access-token:${githubToken}`).toString('base64');
-    const gitPath =
-      process.platform === 'win32' ? 'C:\\Program Files\\Git\\cmd\\git.exe' : '/usr/bin/git';
+    const gitPath = resolveSafePathExecutables(
+      process.platform === 'win32' ? ['git.exe'] : ['git'],
+    ).next().value?.executable;
+    if (!gitPath) {
+      throw new Error('Git not found outside the checkout; install Git and add it to PATH');
+    }
     await exec.exec(`"${gitPath}"`, ['fetch', 'origin', `${baseBranch}:${baseBranch}`], {
       env: {
         ...process.env,
@@ -498,17 +502,13 @@ function resolveSafeNpmCliCandidate(
   return undefined;
 }
 
-function resolveNpmCliPath(): string {
-  const actionNodeDir = path.dirname(process.execPath);
-  for (const candidate of getNpmCliCandidates(actionNodeDir)) {
-    if (fs.existsSync(candidate)) {
-      return fs.realpathSync(candidate);
-    }
-  }
-
+function* resolveSafePathExecutables(executableNames: string[]): Generator<{
+  directory: string;
+  executable: string;
+  canonicalWorkspace: string;
+}> {
   const workspace = path.resolve(process.env.GITHUB_WORKSPACE || process.cwd());
   const canonicalWorkspace = fs.realpathSync(workspace);
-  const executableNames = process.platform === 'win32' ? ['npm.cmd', 'npm.exe', 'npm'] : ['npm'];
   const visited = new Set<string>();
 
   for (const directory of (process.env.PATH || '').split(path.delimiter)) {
@@ -517,16 +517,15 @@ function resolveNpmCliPath(): string {
     }
     visited.add(directory);
 
-    // PATH often contains checkout-derived bins. A PR must not gain npm-code
-    // execution merely by placing a lookalike npm-cli.js under one of them.
+    // Credentialed tools must not resolve through the checkout.
     if (isPathWithinDirectory(workspace, directory)) {
       continue;
     }
 
-    const npmExecutable = executableNames
+    const executable = executableNames
       .map((executableName) => path.join(directory, executableName))
       .find((candidate) => fs.existsSync(candidate));
-    if (!npmExecutable) {
+    if (!executable) {
       continue;
     }
 
@@ -534,7 +533,7 @@ function resolveNpmCliPath(): string {
     let canonicalExecutable: string;
     try {
       canonicalDirectory = fs.realpathSync(directory);
-      canonicalExecutable = fs.realpathSync(npmExecutable);
+      canonicalExecutable = fs.realpathSync(executable);
     } catch {
       continue;
     }
@@ -546,6 +545,24 @@ function resolveNpmCliPath(): string {
       continue;
     }
 
+    yield { directory, executable: canonicalExecutable, canonicalWorkspace };
+  }
+}
+
+function resolveNpmCliPath(): string {
+  const actionNodeDir = path.dirname(process.execPath);
+  for (const candidate of getNpmCliCandidates(actionNodeDir)) {
+    if (fs.existsSync(candidate)) {
+      return fs.realpathSync(candidate);
+    }
+  }
+
+  const executableNames = process.platform === 'win32' ? ['npm.cmd', 'npm.exe', 'npm'] : ['npm'];
+  for (const {
+    directory,
+    executable: canonicalExecutable,
+    canonicalWorkspace,
+  } of resolveSafePathExecutables(executableNames)) {
     // Unix npm shims are normally symlinks directly to npm-cli.js.
     if (path.basename(canonicalExecutable) === 'npm-cli.js') {
       return canonicalExecutable;

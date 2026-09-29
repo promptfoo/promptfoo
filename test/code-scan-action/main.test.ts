@@ -273,7 +273,11 @@ function setupMocks() {
   // so tests can assert the exact npm args without touching disk.
   mocks.fs.mkdtempSync.mockReturnValue(MOCK_INSTALL_DIR);
   mocks.fs.existsSync.mockImplementation((candidate: PathLike) => {
-    return String(candidate) === MOCK_NPM_CLI_PATH;
+    return (
+      String(candidate) === MOCK_NPM_CLI_PATH ||
+      (path.isAbsolute(String(candidate)) &&
+        path.basename(String(candidate)) === (process.platform === 'win32' ? 'git.exe' : 'git'))
+    );
   });
   mocks.fs.readFileSync.mockReturnValue(
     JSON.stringify({ bin: { promptfoo: 'dist/src/entrypoint.js' } }),
@@ -548,9 +552,7 @@ describe('code-scan-action main', () => {
       const fetchCall = mocks.exec.exec.mock.calls.find(
         ([, callArgs]) => callArgs?.[0] === 'fetch',
       );
-      expect(fetchCall?.[0]).toBe(
-        process.platform === 'win32' ? '"C:\\Program Files\\Git\\cmd\\git.exe"' : '"/usr/bin/git"',
-      );
+      expect(fetchCall?.[0]).toMatch(/git(?:\.exe)?"$/);
       expect(fetchCall?.[2]?.env).toMatchObject({
         GIT_CONFIG_COUNT: '3',
         GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
@@ -560,6 +562,24 @@ describe('code-scan-action main', () => {
         GIT_CONFIG_KEY_2: 'core.hooksPath',
         GIT_CONFIG_VALUE_2: '/dev/null',
       });
+    });
+
+    it('resolves a Git installation outside the checkout through PATH', async () => {
+      const workspace = path.resolve('/test/workspace');
+      const localBin = path.join(workspace, 'bin');
+      const redirectedBin = path.resolve('/test/redirected-bin');
+      const systemBin = path.resolve('/test/Portable Git/bin');
+      const executable = process.platform === 'win32' ? 'git.exe' : 'git';
+      mockProcessEnv({ PATH: [localBin, redirectedBin, systemBin].join(path.delimiter) });
+      mocks.fs.realpathSync.mockImplementation((candidate: string) =>
+        candidate.startsWith(redirectedBin)
+          ? candidate.replace(redirectedBin, localBin)
+          : candidate,
+      );
+      await importActionAndGetPromptfooCall();
+      const fetchCall = mocks.exec.exec.mock.calls.find(([, args]) => args?.[0] === 'fetch');
+      expect(fetchCall?.[0]).toBe(`"${path.join(systemBin, executable)}"`);
+      expect(mocks.fs.existsSync).not.toHaveBeenCalledWith(path.join(localBin, executable));
     });
 
     it('passes untrusted-looking refs and paths as single argv values', async () => {
