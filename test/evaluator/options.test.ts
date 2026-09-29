@@ -56,6 +56,52 @@ describeEvaluator('evaluator options and hooks', () => {
     },
   );
 
+  it('aborts an active peer before clearing the deadline when a row callback fails', async () => {
+    let peerStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      peerStarted = resolve;
+    });
+    let peerAborted = false;
+    const failure = new Error('fixture progress failed');
+    const provider: ApiProvider = {
+      id: () => 'concurrent-cleanup-fixture',
+      async callApi(prompt, _context, options) {
+        if (prompt === 'finish') {
+          await started;
+          return { output: 'Completed first row' };
+        }
+        return new Promise((_resolve, reject) => {
+          options?.abortSignal?.addEventListener(
+            'abort',
+            () => {
+              peerAborted = true;
+              reject(new DOMException('Aborted', 'AbortError'));
+            },
+            { once: true },
+          );
+          peerStarted();
+        });
+      },
+    };
+    const suite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('{{request}}')],
+      tests: [{ vars: { request: 'finish' } }, { vars: { request: 'wait' } }],
+    };
+    await expect(
+      evaluate(suite, new Eval({}), {
+        timeoutMs: 0,
+        maxEvalTimeMs: 60_000,
+        maxConcurrency: 2,
+        silent: true,
+        progressCallback: () => {
+          throw failure;
+        },
+      }),
+    ).rejects.toBe(failure);
+    expect(peerAborted).toBe(true);
+  });
+
   it.each(['timeoutMs', 'maxEvalTimeMs'] as const)(
     'rejects invalid %s values before running providers or starting timers',
     async (name) => {

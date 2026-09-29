@@ -3614,6 +3614,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   private readonly comparisonProviders = new Map<string, ComparisonProviders>();
   private readonly currentResultKeys = new Set<string>();
   private cancelEvalTimeout?: () => void;
+  private evaluationAbortController?: AbortController;
   private readonly retryErrorResultIds = new Set(
     cliState.retryMode ? cliState._retryErrorResultIds : [],
   );
@@ -5186,6 +5187,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     if (maxEvalTimeMs > 0) {
       globalAbortController = new AbortController();
+      this.evaluationAbortController = globalAbortController;
       // Providers need timeout signal to cancel long-running requests
       providerAbortSignal = providerAbortSignal
         ? AbortSignal.any([providerAbortSignal, globalAbortController.signal])
@@ -5462,10 +5464,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return await this._runEvaluation();
     } catch (error) {
       evaluationError = error;
+      this.evaluationAbortController?.abort();
       throw error;
     } finally {
       this.cancelEvalTimeout?.();
       this.cancelEvalTimeout = undefined;
+      this.evaluationAbortController = undefined;
       // Close the JSONL writers first, before the (possibly multi-second) OTEL / provider
       // teardown below, so the streamed file is fully flushed before the post-run rewrite
       // reads it back and the file handle is released promptly. allSettled so one writer's
