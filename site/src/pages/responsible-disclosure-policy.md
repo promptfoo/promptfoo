@@ -24,13 +24,13 @@ Treat Promptfoo configuration files and everything they reference or evaluate ag
 
 Promptfoo OSS is a local eval runner, not a sandbox for adversarial eval content. Adversarial data flowing through the configured template engine and eval pipeline (e.g., model output in grading prompts, variable values rendered through Nunjucks) is normal operation. However, if a code path outside the configured template engine or user-configured code-executing fields promotes runtime data to code, that is a vulnerability.
 
-**In scope for OSS:** unexpected code execution; broken isolation, access, or sharing controls; and data or credentials sent somewhere the user did not configure.
+**In scope for OSS:** runtime data executed as code outside the configured template engine and code-executing fields; bypasses of documented isolation, access, or sharing controls; and data or credentials sent somewhere the user did not configure.
 
 **Out of scope for OSS:** adversarial eval content flowing through the configured template engine and eval pipeline; code execution from explicitly configured custom code or templates in fields that execute code; direct local API or browser access to the OSS local server (`promptfoo view`); and issues requiring users to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges.
 
 When you share an eval, Promptfoo sends its snapshot to your Cloud organization, on-premises deployment, or configured self-hosted endpoint. Your account or config may also enable automatic sharing. A snapshot can include prompts, test vars, model outputs, grading results, traces, configuration, and media.
 
-`PROMPTFOO_STRIP_*` flags reduce data in certain results, exports, and views. They do not turn off sharing or guarantee that shared evals, traces, and media omit the same fields. If a flag hides a field in one output but that field appears in a share sent to its intended recipients, we treat that as a product or privacy issue, not a security vulnerability.
+Saved `PROMPTFOO_STRIP_*` settings remove their documented fields from eval results, exports, and shared snapshots, including shared traces. They do not disable sharing or redact arbitrary content in other fields. Failures of documented redactions or exclusions remain in scope.
 
 Sharing remains in scope if it bypasses a documented control, reaches the wrong destination, exposes another tenant's data, or includes fields or credentials the feature promises to protect. Data confined to your local account is a hardening or privacy issue unless a promised security or redaction control fails.
 
@@ -115,7 +115,7 @@ The following are out-of-scope:
 - Adversarial eval content flowing through the configured template engine and eval pipeline (e.g., model output in grading prompts or reports)
 - Issues requiring users to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges
 - Data that remains in your own local logs, databases, caches, reports, exports, or views, unless a promised security or redaction control fails
-- Eval snapshots sent to their intended recipients while sharing is enabled, including fields that a `PROMPTFOO_STRIP_*` flag removes elsewhere. Sharing-control bypasses, broken redaction promises, unauthorized access, cross-tenant disclosure, and exposed provider credentials remain in scope
+- Eval snapshots sent to their intended recipients while sharing is enabled. Sharing-control bypasses, failed documented redactions or exclusions, unauthorized access, cross-tenant disclosure, and exposed provider credentials remain in scope
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Social engineering, phishing, or physical attacks
 - Volumetric denial of service

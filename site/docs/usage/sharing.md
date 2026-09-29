@@ -10,7 +10,7 @@ Share your eval results with others using the `share` command or the web interfa
 
 Sharing uploads the snapshot needed to view an eval. That snapshot may contain prompts, test vars, model outputs, traces, metadata, configuration, media, and other results. Depending on your Cloud account and config, evals may also be shared automatically.
 
-`PROMPTFOO_STRIP_*` flags reduce data in some results and exports. They do not turn off sharing or guarantee that shared snapshots omit those fields. Keep secrets out of evals you plan to share. See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for details.
+Saved `PROMPTFOO_STRIP_*` settings also apply to shared results and traces. They remove the fields each setting names; they do not disable sharing or remove sensitive content from other fields. See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for details.
 
 ## Quick Start (Cloud)
 
@@ -80,6 +80,12 @@ promptfoo auth login --host https://your-company.promptfoo.app -k YOUR_API_KEY
 # Share your eval
 promptfoo share
 ```
+
+If your gateway reserves `Authorization` for its own authentication, add `--auth-header-name X-Promptfoo-Api-Key` to the API-key login command. Configure the gateway to copy that header into `Authorization` before forwarding to Promptfoo; its value remains `Bearer <token>`. Supply the gateway's own credential separately—this option only moves the Promptfoo credential.
+
+The saved header name takes precedence over `PROMPTFOO_CLOUD_AUTH_HEADER` and persists when you change hosts. Use `promptfoo auth whoami` to inspect the effective API URL and header, or log in with `--auth-header-name Authorization` to reset it. Web login uses the saved setting or the server's environment variable; it cannot select a header in the form.
+
+Custom-header Cloud requests follow same-origin redirects, but reject redirects that change the scheme, host, or port. Use the final gateway API URL with `--host` if a redirect is rejected.
 
 Enterprise sharing includes additional features:
 
@@ -166,7 +172,7 @@ For multi-tenant environments, reducing the chunk size on the client is usually 
 
 ## Disabling Sharing
 
-Use `--no-share` to stop sharing for one eval or model-audit run. For evals, set `sharing: false` to turn off automatic sharing and any self-hosted destination defined by that setting. You can share the results later after signing in to Cloud or configuring a self-hosted destination.
+Use `--no-share` to stop sharing for one eval or model-audit run. For evals, `sharing: false` disables automatic sharing unless `--share` or `commandLineOptions.share: true` explicitly enables it. To share later, sign in to Cloud or configure a self-hosted destination.
 
 To block all eval and model-audit sharing while a process runs, set `PROMPTFOO_DISABLE_SHARING=true`. This also prevents associated media from being uploaded. Media remains available locally and can be shared later if you remove the setting.
 
