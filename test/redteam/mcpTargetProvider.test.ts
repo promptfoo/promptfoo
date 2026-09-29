@@ -522,6 +522,7 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     expect(response).toMatchObject({
       error: expect.stringContaining('Remote MCP materialization failed'),
       tokenUsage: {
+        numRequests: 0,
         attacker: { total: 16, prompt: 12, completion: 4, numRequests: 1 },
       },
     });
