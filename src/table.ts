@@ -18,12 +18,14 @@ function formatAssertionGroups(result: GradingResult | null | undefined): string
       component.assertion?.type ||
       'assertion';
     const threshold = set?.threshold;
-    const score = component.score.toFixed(2);
-    let detail = `score ${score}`;
+    const hasScore = typeof component.score === 'number' && Number.isFinite(component.score);
+    let detail = hasScore ? `score ${component.score.toFixed(2)}` : 'score unavailable';
     if (set?.type === 'assert-set') {
       detail +=
         typeof threshold === 'number' && Number.isFinite(threshold)
-          ? ` ${component.score >= threshold ? '>=' : '<'} ${threshold}`
+          ? hasScore
+            ? ` ${component.score >= threshold ? '>=' : '<'} ${threshold}`
+            : `; threshold ${threshold}`
           : '; all assertions must pass';
     }
     return `${'  '.repeat(depth)}[${component.pass ? 'PASS' : 'FAIL'}] ${label} (${detail})`;

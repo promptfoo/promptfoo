@@ -171,6 +171,39 @@ describe('table', () => {
       expect(cell).toContain('Hello');
     });
 
+    it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+      'renders persisted non-finite child score %s without changing pass/fail',
+      (score) => {
+        const gradingResult: GradingResult = JSON.parse(
+          JSON.stringify({
+            pass: false,
+            score: 0,
+            reason: 'fixture',
+            componentResults: [
+              {
+                pass: false,
+                score: 0,
+                reason: 'fixture',
+                metadata: { assertionSet: { type: 'assert-set', threshold: 1 } },
+                componentResults: [
+                  { pass: false, score, reason: 'fixture', assertion: { type: 'search-rubric' } },
+                ],
+              },
+            ],
+          }),
+        );
+        const table = createEvaluateTable({
+          body: [
+            createEvaluateTableRow({ outputs: [createEvaluateTableOutput({ gradingResult })] }),
+          ],
+        });
+        generateTable(table, 500);
+        const cell = mockTableInstances[0].push.mock.calls[0][0].at(-1);
+        expect(cell).toContain('[FAIL] search-rubric (score unavailable)');
+        expect(cell).toContain('[FAIL] assert-set (score 0.00 < 1)');
+      },
+    );
+
     it.each([undefined, 0, 1])(
       'shows group requirements for threshold %s within the existing cell bound',
       (threshold) => {
