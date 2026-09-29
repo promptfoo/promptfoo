@@ -47,13 +47,13 @@ export class TurnDetector extends EventEmitter {
     this.emit('turn_start');
   }
 
-  onSpeechEnd(): void {
+  onSpeechEnd(responseComplete = false): void {
     if (!this.isSpeaking) {
       return;
     }
 
     // Check minimum turn duration
-    if (this.turnStartTime !== null) {
+    if (!responseComplete && this.turnStartTime !== null) {
       const duration = Date.now() - this.turnStartTime;
       if (duration < this.config.minTurnDurationMs) {
         // Too short: schedule the end for the earliest valid turn boundary.

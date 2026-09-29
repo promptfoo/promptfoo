@@ -62,7 +62,7 @@ tests:
 
 The `instructions` field tells the simulated caller who they are and what they're trying to accomplish. Use Nunjucks templating to vary caller personas per test.
 
-OpenAI PCM16 transport uses 24 kHz; G.711 uses 8 kHz. The recording is resampled to `sampleRate` without changing the transport rate. Provider `env` overrides apply to both connections; explicit endpoint keys take precedence.
+OpenAI PCM16 transport uses 24 kHz; G.711 uses 8 kHz. The recording is resampled to `sampleRate` without changing the transport rate. `sampleRate` must be a positive integer no greater than 192000 Hz. Provider `env` overrides apply to both connections; explicit endpoint keys take precedence.
 
 ## Output
 

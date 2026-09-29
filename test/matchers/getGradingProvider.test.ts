@@ -145,52 +145,58 @@ describe('getGradingProvider', () => {
       expect(result).toBe(azureProvider);
     });
 
-    it('should skip defaultTest.provider when it is promptfoo:simulated-user', async () => {
-      const defaultProvider = createMockProvider({ id: 'default-provider' });
+    it.each(['promptfoo:simulated-user', 'promptfoo:simulated-voice-user', 'simulated-voice-user'])(
+      'should skip defaultTest.provider when it is %s',
+      async (id) => {
+        const defaultProvider = createMockProvider({ id: 'default-provider' });
 
-      (cliState as any).config = {
-        defaultTest: {
-          provider: {
-            id: 'promptfoo:simulated-user',
-            config: {
-              maxTurns: 3,
+        (cliState as any).config = {
+          defaultTest: {
+            provider: {
+              id,
+              config: {
+                maxTurns: 3,
+              },
             },
           },
-        },
-      };
+        };
 
-      const result = await getGradingProvider('text', undefined, defaultProvider);
+        const result = await getGradingProvider('text', undefined, defaultProvider);
 
-      expect(loadApiProvider).not.toHaveBeenCalled();
-      expect(result).toBe(defaultProvider);
-    });
+        expect(loadApiProvider).not.toHaveBeenCalled();
+        expect(result).toBe(defaultProvider);
+      },
+    );
 
-    it('should fall back to defaultTest.options.provider when defaultTest.provider is promptfoo:simulated-user', async () => {
-      const azureProvider = createMockProvider({ id: 'azureopenai:chat:gpt-4' });
+    it.each(['promptfoo:simulated-user', 'promptfoo:simulated-voice-user'])(
+      'should use the configured grader when defaultTest.provider is %s',
+      async (id) => {
+        const azureProvider = createMockProvider({ id: 'azureopenai:chat:gpt-4' });
 
-      (cliState as any).config = {
-        defaultTest: {
-          provider: {
-            id: 'promptfoo:simulated-user',
-            config: {
-              maxTurns: 3,
+        (cliState as any).config = {
+          defaultTest: {
+            provider: {
+              id,
+              config: {
+                maxTurns: 3,
+              },
+            },
+            options: {
+              provider: 'azureopenai:chat:gpt-4',
             },
           },
-          options: {
-            provider: 'azureopenai:chat:gpt-4',
-          },
-        },
-      };
+        };
 
-      vi.mocked(loadApiProvider).mockResolvedValue(azureProvider);
+        vi.mocked(loadApiProvider).mockResolvedValue(azureProvider);
 
-      const result = await getGradingProvider('text', undefined, null);
+        const result = await getGradingProvider('text', undefined, null);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('azureopenai:chat:gpt-4', {
-        basePath: undefined,
-      });
-      expect(result).toBe(azureProvider);
-    });
+        expect(loadApiProvider).toHaveBeenCalledWith('azureopenai:chat:gpt-4', {
+          basePath: undefined,
+        });
+        expect(result).toBe(azureProvider);
+      },
+    );
 
     it('should use defaultTest.options.provider.text when specified', async () => {
       const azureProvider = createMockProvider({ id: 'azureopenai:chat:gpt-4' });

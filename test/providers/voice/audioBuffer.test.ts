@@ -13,6 +13,30 @@ import {
 import type { AudioChunk } from '../../../src/providers/voice/types';
 
 describe('AudioBuffer', () => {
+  it('resamples continuous chunks without losing phase at chunk boundaries', () => {
+    const agent = new AudioBuffer('pcm16', 16000);
+    const user = new AudioBuffer('pcm16', 16000);
+    const pcm = Buffer.alloc(3072);
+    for (let i = 0; i < 1536; i++) {
+      pcm.writeInt16LE(i + 100, i * 2);
+    }
+    for (let i = 0; i < 3; i++) {
+      agent.append({
+        data: pcm.subarray(i * 1024, (i + 1) * 1024).toString('base64'),
+        timestamp: ((i * 512) / 24000) * 1000,
+        duration: (512 / 24000) * 1000,
+        sampleRate: 24000,
+        format: 'pcm16',
+      });
+    }
+    const expected = resamplePcm16(pcm, 24000, 16000);
+    expect(agent.toWav().subarray(44)).toEqual(expected);
+    const stereo = createStereoWav(agent, user);
+    for (let i = 0; i < 1024; i++) {
+      expect(stereo.readInt16LE(44 + i * 4)).toBe(expected.readInt16LE(i * 2));
+    }
+  });
+
   let audioBuffer: AudioBuffer;
 
   beforeEach(() => {

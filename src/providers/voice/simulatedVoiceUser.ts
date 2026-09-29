@@ -131,6 +131,13 @@ Speak naturally and respond to the agent. Say "${STOP_MARKER}" when your goal is
     ) {
       return 'Simulated voice conversations support OpenAI Realtime endpoints only.';
     }
+    const sampleRate = this.voiceConfig.sampleRate;
+    if (
+      sampleRate !== undefined &&
+      (!Number.isInteger(sampleRate) || sampleRate <= 0 || sampleRate > 192000)
+    ) {
+      return 'Voice recording sampleRate must be a positive integer at most 192000 Hz.';
+    }
     return undefined;
   }
 
@@ -194,21 +201,16 @@ Speak naturally and respond to the agent. Say "${STOP_MARKER}" when your goal is
     let abortHandler: (() => void) | undefined;
     try {
       const conversation = orchestrator.start();
-      const result = abortSignal
-        ? await Promise.race([
-            conversation,
-            new Promise<ConversationResult>((_, reject) => {
-              abortHandler = () => {
-                void orchestrator.stop('user_hangup');
-                reject(new Error('Voice conversation aborted'));
-              };
-              abortSignal.addEventListener('abort', abortHandler, { once: true });
-              if (abortSignal.aborted) {
-                abortHandler();
-              }
-            }),
-          ])
-        : await conversation;
+      if (abortSignal) {
+        abortHandler = () => {
+          void orchestrator.stop('user_hangup');
+        };
+        abortSignal.addEventListener('abort', abortHandler, { once: true });
+        if (abortSignal.aborted) {
+          abortHandler();
+        }
+      }
+      const result = await conversation;
       return result.stopReason === 'user_hangup'
         ? { error: 'Voice conversation aborted', tokenUsage: result.tokenUsage }
         : this.formatResult(result);
@@ -259,7 +261,9 @@ Speak naturally and respond to the agent. Say "${STOP_MARKER}" when your goal is
       tokenUsage: result.tokenUsage,
       ...(result.stopReason === 'error'
         ? { error: result.error || 'Voice conversation failed before completion' }
-        : {}),
+        : result.stopReason === 'timeout' && result.turns.length === 0
+          ? { error: 'Voice conversation timed out before a turn completed' }
+          : {}),
       metadata: {
         turns: result.turns,
         turnCount: result.turnCount,

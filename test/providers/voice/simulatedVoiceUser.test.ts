@@ -6,7 +6,7 @@ import { mockProcessEnv } from '../../util/utils';
 const { mocks } = vi.hoisted(() => {
   class MockOrchestrator {
     static instances: MockOrchestrator[] = [];
-    start = vi.fn(() => mocks.start(this));
+    start = vi.fn(async () => mocks.start(this));
     stop = vi.fn(async (_reason?: string) => {});
     on = vi.fn();
     constructor(public config: any) {
@@ -143,6 +143,25 @@ describe('SimulatedVoiceUser', () => {
     });
   });
 
+  it.each([-1, 0, 1.5, Number.NaN, 192001])(
+    'rejects invalid recording rate %s before setup',
+    async (sampleRate) => {
+      const response = await new SimulatedVoiceUser({ config: { sampleRate } }).callApi('Agent');
+      expect(response.error).toContain('sampleRate must be a positive integer');
+      expect(mocks.start).not.toHaveBeenCalled();
+    },
+  );
+
+  it('reports a setup timeout as an error when no turn completed', async () => {
+    mocks.start.mockResolvedValue(
+      result({ success: false, stopReason: 'timeout', turns: [], turnCount: 0 }),
+    );
+    expect(await new SimulatedVoiceUser({}).callApi('Agent')).toMatchObject({
+      error: 'Voice conversation timed out before a turn completed',
+      output: '',
+    });
+  });
+
   it('stops every active conversation during evaluator cleanup', async () => {
     mocks.start.mockImplementation(
       (orchestrator) =>
@@ -177,7 +196,10 @@ describe('SimulatedVoiceUser', () => {
     const provider = new SimulatedVoiceUser({});
     const pending = provider.callApi('one', undefined, { abortSignal: controller.signal });
     controller.abort();
-    expect((await pending).error).toBe('Voice conversation aborted');
+    expect(await pending).toMatchObject({
+      error: 'Voice conversation aborted',
+      tokenUsage: result().tokenUsage,
+    });
     expect(mocks.MockOrchestrator.instances[0].stop).toHaveBeenCalledOnce();
     await provider.callApi('two', undefined, { abortSignal: controller.signal });
     expect(mocks.start).toHaveBeenCalledOnce();

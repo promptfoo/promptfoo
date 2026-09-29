@@ -191,7 +191,7 @@ export class VoiceConversationOrchestrator extends EventEmitter {
 
   private markAudioDoneForTurnDetection(speaker: 'target' | 'user'): void {
     if (this.activeTurnDetectorSpeaker === speaker) {
-      this.turnDetector.onSpeechEnd();
+      this.turnDetector.onSpeechEnd(true);
     }
   }
 
@@ -552,17 +552,6 @@ export class VoiceConversationOrchestrator extends EventEmitter {
       timestamp: turn.timestamp,
     }));
 
-    // Create individual mono tracks
-    const shouldRecordAudio = this.config.recordFullAudio !== false;
-    const targetAudio = shouldRecordAudio ? this.targetAudioBuffer.toWav() : undefined;
-    const simulatedUserAudio = shouldRecordAudio
-      ? this.simulatedUserAudioBuffer.toWav()
-      : undefined;
-
-    const combinedAudio = shouldRecordAudio
-      ? createStereoWav(this.targetAudioBuffer, this.simulatedUserAudioBuffer)
-      : undefined;
-
     const result: ConversationResult = {
       success: reason === 'goal_achieved',
       stopReason: reason,
@@ -572,9 +561,6 @@ export class VoiceConversationOrchestrator extends EventEmitter {
       turnCount: this.turnCount,
       duration: endTime - this.startTime,
       tokenUsage: { ...this.tokenUsage },
-      targetAudio,
-      simulatedUserAudio,
-      combinedAudio,
       metadata: {
         targetProvider: this.config.targetConfig.provider,
         simulatedUserProvider: this.config.simulatedUserConfig.provider,
@@ -582,6 +568,21 @@ export class VoiceConversationOrchestrator extends EventEmitter {
         timeoutMs: this.config.timeoutMs || DEFAULT_TIMEOUT_MS,
       },
     };
+
+    try {
+      if (this.config.recordFullAudio !== false) {
+        result.targetAudio = this.targetAudioBuffer.toWav();
+        result.simulatedUserAudio = this.simulatedUserAudioBuffer.toWav();
+        result.combinedAudio = createStereoWav(
+          this.targetAudioBuffer,
+          this.simulatedUserAudioBuffer,
+        );
+      }
+    } catch (encodingError) {
+      result.success = false;
+      result.stopReason = 'error';
+      result.error = `Failed to encode voice recording: ${encodingError instanceof Error ? encodingError.message : String(encodingError)}`;
+    }
 
     logger.debug('[Orchestrator] Conversation completed:', {
       reason,

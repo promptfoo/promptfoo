@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AudioBuffer } from '../../../src/providers/voice/audioBuffer';
 import { STOP_MARKER } from '../../../src/providers/voice/transcriptAccumulator';
 
 import type {
@@ -113,6 +114,52 @@ describe('VoiceConversationOrchestrator', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('settles and disconnects when recording encoding fails', async () => {
+    const orchestrator = new VoiceConversationOrchestrator(config());
+    const { result, target, user } = await startConversation(orchestrator);
+    target.emit('usage', { total: 3, prompt: 1, completion: 2 });
+    vi.spyOn(AudioBuffer.prototype, 'toWav').mockImplementationOnce(() => {
+      throw new Error('fixture encoding failure');
+    });
+    await orchestrator.stop('max_turns');
+    await expect(result).resolves.toMatchObject({
+      stopReason: 'error',
+      success: false,
+      error: 'Failed to encode voice recording: fixture encoding failure',
+      tokenUsage: { total: 3 },
+    });
+    expect(target.disconnect).toHaveBeenCalledOnce();
+    expect(user.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('starts a fresh timeout when a short response hands off to the next speaker', async () => {
+    vi.useFakeTimers();
+    const orchestrator = new VoiceConversationOrchestrator(
+      config({
+        turnDetection: {
+          ...config().turnDetection,
+          minTurnDurationMs: 100,
+          maxTurnDurationMs: 200,
+        },
+      }),
+    );
+    const { result, target, user } = await startConversation(orchestrator);
+    target.emit('audio_delta', chunk(0));
+    await vi.advanceTimersByTimeAsync(10);
+    target.emit('audio_done');
+    target.emit('transcript_done', 'Hello');
+    user.emit('audio_delta', chunk(0));
+    await vi.advanceTimersByTimeAsync(190);
+    expect(target.cancelResponse).not.toHaveBeenCalled();
+    expect(user.cancelResponse).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(target.cancelResponse).not.toHaveBeenCalled();
+    expect(user.cancelResponse).toHaveBeenCalledOnce();
+    await orchestrator.stop();
+    await result;
   });
 
   it('routes target and simulated user turns until the stop marker completes the goal', async () => {
@@ -386,13 +433,10 @@ describe('VoiceConversationOrchestrator', () => {
     user.emit('audio_delta', chunk(1));
     user.emit('transcript_done', STOP_MARKER);
 
-    await expect(result).resolves.toEqual(
-      expect.objectContaining({
-        combinedAudio: undefined,
-        simulatedUserAudio: undefined,
-        targetAudio: undefined,
-      }),
-    );
+    const completed = await result;
+    expect(completed.combinedAudio).toBeUndefined();
+    expect(completed.simulatedUserAudio).toBeUndefined();
+    expect(completed.targetAudio).toBeUndefined();
   });
 
   it('resets accumulated state when a one-shot orchestrator is run again', async () => {

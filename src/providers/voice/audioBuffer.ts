@@ -2,6 +2,41 @@ import { BYTES_PER_SAMPLE, SAMPLE_RATES } from './types';
 
 import type { AudioChunk, AudioFormat } from './types';
 
+// Resample uninterrupted audio together so network chunk boundaries do not reset sample phase.
+function resampleChunks(chunks: AudioChunk[], outputRate: number) {
+  const segments: Array<{
+    data: Buffer[];
+    timestamp: number;
+    sampleRate: number;
+    samples: number;
+  }> = [];
+  for (const chunk of chunks) {
+    const data = audioDataToPcm16(base64ToBuffer(chunk.data), chunk.format);
+    const previous = segments.at(-1);
+    if (
+      previous &&
+      previous.sampleRate === chunk.sampleRate &&
+      Math.abs(
+        previous.timestamp + (previous.samples / previous.sampleRate) * 1000 - chunk.timestamp,
+      ) < 1e-6
+    ) {
+      previous.data.push(data);
+      previous.samples += data.length / 2;
+    } else {
+      segments.push({
+        data: [data],
+        timestamp: chunk.timestamp,
+        sampleRate: chunk.sampleRate,
+        samples: data.length / 2,
+      });
+    }
+  }
+  return segments.map((segment) => ({
+    timestamp: segment.timestamp,
+    data: resamplePcm16(Buffer.concat(segment.data), segment.sampleRate, outputRate),
+  }));
+}
+
 export class AudioBuffer {
   private chunks: AudioChunk[] = [];
   private readonly format: AudioFormat;
@@ -77,13 +112,7 @@ export class AudioBuffer {
 
   private toPcm16Buffer(): Buffer {
     return Buffer.concat(
-      this.chunks.map((chunk) =>
-        resamplePcm16(
-          audioDataToPcm16(base64ToBuffer(chunk.data), chunk.format),
-          chunk.sampleRate,
-          this.sampleRate,
-        ),
-      ),
+      resampleChunks(this.chunks, this.sampleRate).map((segment) => segment.data),
     );
   }
 }
@@ -241,13 +270,9 @@ function placeStereoChunks(
   const bytesPerSample = 2; // PCM16 after format-aware decoding
   const bytesPerFrame = 4; // Stereo: 2 bytes x 2 channels
 
-  for (const chunk of chunks) {
-    const pcmData = resamplePcm16(
-      audioDataToPcm16(base64ToBuffer(chunk.data), chunk.format),
-      chunk.sampleRate,
-      sampleRate,
-    );
-    const startPosition = Math.round(((chunk.timestamp - startTime) / 1000) * sampleRate);
+  for (const segment of resampleChunks(chunks, sampleRate)) {
+    const pcmData = segment.data;
+    const startPosition = Math.round(((segment.timestamp - startTime) / 1000) * sampleRate);
     const numSamples = pcmData.length / bytesPerSample;
 
     for (let i = 0; i < numSamples; i++) {

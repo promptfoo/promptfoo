@@ -135,7 +135,11 @@ async function loadFromProviderOptions(provider: ProviderOptions) {
 
 function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boolean {
   if (typeof provider === 'string') {
-    return provider === 'promptfoo:simulated-user';
+    return (
+      provider === 'promptfoo:simulated-user' ||
+      provider === 'promptfoo:simulated-voice-user' ||
+      provider === 'simulated-voice-user'
+    );
   }
 
   if (!provider || typeof provider !== 'object' || Array.isArray(provider)) {
@@ -143,12 +147,12 @@ function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boo
   }
 
   if (typeof (provider as ApiProvider).id === 'function') {
-    return (provider as ApiProvider).id() === 'promptfoo:simulated-user';
+    return isSimulatedUserProviderConfig((provider as ApiProvider).id());
   }
 
   const providerId = (provider as ProviderOptions).id;
   if (typeof providerId === 'string') {
-    return providerId === 'promptfoo:simulated-user';
+    return isSimulatedUserProviderConfig(providerId);
   }
 
   return Object.values(provider as ProviderTypeMap).some((providerTypeConfig) =>
