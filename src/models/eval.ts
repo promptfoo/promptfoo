@@ -1,10 +1,8 @@
 import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
-import { collectBlobHashes } from '../blobs/blobRefs';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
 import {
-  blobReferencesTable,
   datasetsTable,
   evalResultsTable,
   evalsTable,
@@ -12,11 +10,8 @@ import {
   evalsToPromptsTable,
   evalsToTagsTable,
   promptsTable,
-  spansTable,
   tagsTable,
-  tracesTable,
 } from '../database/tables';
-import { getEnvBool } from '../envars';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
@@ -39,17 +34,17 @@ import {
   type ResultsFile,
   type UnifiedConfig,
 } from '../types/index';
-import {
-  calculateFilteredMetrics,
-  calculateMetricsForResults,
-} from '../util/calculateFilteredMetrics';
+import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
-import { accumulateNamedMetric } from '../util/namedMetrics';
-import { sanitizeRuntimeOptions, sanitizeTracingConfigForPersistence } from '../util/sanitizer';
+import {
+  sanitizeConfigForOutput,
+  sanitizeRuntimeOptions,
+  sanitizeTracingConfigForPersistence,
+} from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGenerationTokenUsage,
@@ -68,8 +63,11 @@ import {
 } from './evalPerformance';
 import EvalResult, {
   getResultIndexKey,
+  getStripFlags,
   PROMPTFOO_METADATA_KEY,
   persistTraceMetadata,
+  projectPrompt,
+  projectTracesForOutput,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
 
@@ -1393,156 +1391,7 @@ export default class Eval {
   }
 
   async setResults(results: EvalResult[]) {
-    if (this.persisted) {
-      const db = await getDb();
-      const prompts = await db.transaction(async (tx) => {
-        const stored = await tx
-          .select({ prompts: evalsTable.prompts })
-          .from(evalsTable)
-          .where(eq(evalsTable.id, this.id))
-          .get();
-        invariant(stored, `Evaluation ${this.id} not found`);
-        const storedPrompts = stored.prompts ?? [];
-        await tx.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
-        // Legacy rows may have eval-level traces without per-row linkage. Missing
-        // linkage is not evidence of removal; an empty replacement still clears all.
-        if (results.every((result) => result.traceId)) {
-          const retainedTraceIds = JSON.stringify(
-            results.flatMap((r) => (r.traceId ? [r.traceId] : [])),
-          );
-          const obsoleteTraces = and(
-            eq(tracesTable.evaluationId, this.id),
-            sql`${tracesTable.traceId} NOT IN (SELECT value FROM json_each(${retainedTraceIds}))`,
-          );
-          // Traces and spans have no result-row cascade; delete children first.
-          await tx
-            .delete(spansTable)
-            .where(sql`${spansTable.traceId} IN (
-            SELECT ${tracesTable.traceId} FROM ${tracesTable} WHERE ${obsoleteTraces}
-          )`)
-            .run();
-          await tx.delete(tracesTable).where(obsoleteTraces).run();
-        }
-        const retainedTraces = await tx
-          .select({ metadata: tracesTable.metadata })
-          .from(tracesTable)
-          .where(eq(tracesTable.evaluationId, this.id));
-        const retainedSpans = await tx
-          .select({ attributes: spansTable.attributes })
-          .from(spansTable)
-          .innerJoin(tracesTable, eq(spansTable.traceId, tracesTable.traceId))
-          .where(eq(tracesTable.evaluationId, this.id));
-        const retainedBlobHashes = JSON.stringify([
-          ...collectBlobHashes({
-            results,
-            config: this.config,
-            prompts: storedPrompts,
-            traces: retainedTraces,
-            spans: retainedSpans,
-          }),
-        ]);
-        // Retain existing authorization for all surviving data, including trace-only media.
-        await tx
-          .delete(blobReferencesTable)
-          .where(
-            and(
-              eq(blobReferencesTable.evalId, this.id),
-              sql`${blobReferencesTable.blobHash} NOT IN (SELECT value FROM json_each(${retainedBlobHashes}))`,
-            ),
-          )
-          .run();
-        if (results.length > 0) {
-          await tx
-            .insert(evalResultsTable)
-            .values(
-              results.map((r) => ({
-                ...r,
-                metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
-                evalId: this.id,
-              })),
-            )
-            .run();
-        }
-        const metrics = await calculateMetricsForResults(
-          {
-            evalId: this.id,
-            numPrompts: storedPrompts.length,
-            whereSql: eq(evalResultsTable.evalId, this.id),
-          },
-          tx,
-        );
-        // Row-level SQL counts cannot recover multiple assertions contributing to
-        // one metric; use the same weighting and rendered names as live evaluation.
-        for (const promptMetrics of metrics) {
-          promptMetrics.namedScores = {};
-          promptMetrics.namedScoresCount = {};
-          promptMetrics.namedScoreWeights = {};
-        }
-        const derivedMetrics = (this.config.derivedMetrics ?? []).map((derived) => {
-          invariant(
-            typeof derived.value === 'string',
-            `Cannot replace results: derived metric '${derived.name}' requires its original evaluation callback`,
-          );
-          return { name: derived.name, value: derived.value };
-        });
-        const math = derivedMetrics.length > 0 ? await import('mathjs') : null;
-        const promptEvalCounts = metrics.map(() => 0);
-        for (const result of results) {
-          const promptMetrics = metrics[result.promptIdx];
-          if (!promptMetrics) {
-            continue;
-          }
-          for (const [metricName, metricValue] of Object.entries(result.namedScores ?? {})) {
-            accumulateNamedMetric(promptMetrics, {
-              metricName,
-              metricValue,
-              gradingResult: result.gradingResult,
-              testVars: result.testCase?.vars ?? {},
-            });
-          }
-          if (math) {
-            // Replay the live evaluator's per-row order. A fallback introduced on
-            // one row becomes available to dependent expressions on later rows.
-            const context: Record<string, number> = {
-              ...promptMetrics.namedScores,
-              __count: ++promptEvalCounts[result.promptIdx],
-            };
-            for (const derived of derivedMetrics) {
-              promptMetrics.namedScores[derived.name] ??= 0;
-              try {
-                const value = math.evaluate(derived.value, context);
-                promptMetrics.namedScores[derived.name] = value;
-                context[derived.name] = value;
-              } catch (error) {
-                logger.debug(
-                  `Could not evaluate derived metric '${derived.name}': ${(error as Error).message}`,
-                );
-              }
-            }
-          }
-        }
-        // Empty prompts have no rows on which to evaluate their derived scores.
-        for (const promptMetrics of metrics) {
-          for (const derived of derivedMetrics) {
-            promptMetrics.namedScores[derived.name] ??= 0;
-          }
-        }
-        const prompts = storedPrompts.map((prompt, i) => ({ ...prompt, metrics: metrics[i] }));
-        await tx.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
-        return prompts;
-      });
-      this.prompts = prompts;
-      notifyEvaluationChanged(this.id);
-    }
-    this.results = results;
-    this._resultsLoaded = true;
-  }
-
-  async appendResults(results: EvalResult[]) {
-    if (results.length === 0) {
-      return;
-    }
-    if (this.persisted) {
+    if (this.persisted && results.length > 0) {
       const db = await getDb();
       await db
         .insert(evalResultsTable)
@@ -1555,10 +1404,12 @@ export default class Eval {
         )
         .run();
       notifyEvaluationChanged(this.id);
-      this.results = [];
-      this._resultsLoaded = false;
+    }
+    if (this.persisted) {
+      // Upload chunks append in storage; reload the complete set on the next read.
+      this.clearResults();
     } else {
-      this.results.push(...results);
+      this.results = results;
       this._resultsLoaded = true;
     }
   }
@@ -1628,20 +1479,15 @@ export default class Eval {
     }
 
     const stats = await this.getStats();
-    const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
+    const stripFlags = getStripFlags(this.config.env);
 
-    const prompts = shouldStripPromptText
-      ? this.prompts.map((p) => ({
-          ...p,
-          raw: '[prompt stripped]',
-        }))
-      : this.prompts;
+    const prompts = this.prompts.map((p) => projectPrompt(p, stripFlags.shouldStripPromptText));
 
     return {
       version: 3,
       timestamp: new Date(this.createdAt).toISOString(),
       prompts,
-      results: this.results.map((r) => r.toEvaluateResult()),
+      results: this.results.map((r) => r.toEvaluateResult(stripFlags)),
       stats,
     };
   }
@@ -1693,17 +1539,20 @@ export default class Eval {
 
   async toResultsFile(): Promise<ResultsFile> {
     const traces = await this.getTraces();
+    const stripFlags = getStripFlags(this.config.env);
 
     const results: ResultsFile = {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
       results: await this.toEvaluateSummary(),
-      config: sanitizeTracingConfigForPersistence(this.config),
+      config: sanitizeConfigForOutput(this.config, stripFlags),
       author: this.author || null,
-      prompts: this.getPrompts(),
+      prompts: this.getPrompts().map((prompt) =>
+        projectPrompt(prompt, stripFlags.shouldStripPromptText),
+      ),
       ...(this.vars.length > 0 && { vars: [...this.vars] }),
       datasetId: this.datasetId || null,
-      ...(traces.length > 0 && { traces }),
+      ...(traces.length > 0 && { traces: projectTracesForOutput(traces, stripFlags) }),
     };
 
     return results;

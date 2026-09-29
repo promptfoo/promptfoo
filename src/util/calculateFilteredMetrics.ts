@@ -239,22 +239,8 @@ function getFilteredTokenUsage(row: FilteredBasicMetricsRow): PromptMetrics['tok
 }
 
 /**
- * Calculates metrics for filtered results using optimized SQL aggregation.
- * Uses a SINGLE GROUP BY query to aggregate all prompts at once.
- *
- * SECURITY: Uses parameterized SQL queries via Drizzle's sql template strings.
- * The whereSql parameter is a SQL fragment, not a raw string, ensuring all
- * user-provided values are properly escaped.
- *
- * This is the core performance optimization - instead of making 2-3 queries
- * per prompt (which would be 30 queries for 10 prompts), we make 3-4 total queries:
- * 1. Count check (OOM protection)
- * 2. Basic metrics + token usage (GROUP BY prompt_idx)
- * 3. Named scores (GROUP BY prompt_idx, metric_name)
- * 4. Assertions (GROUP BY prompt_idx)
- *
- * @param opts - Options including WHERE clause SQL fragment
- * @returns Array of PromptMetrics, one per prompt
+ * Aggregate filtered rows across all prompts. The count limit bounds the query;
+ * three grouped queries collect row metrics, named scores, and assertion counts.
  */
 export async function calculateFilteredMetrics(
   opts: FilteredMetricsOptions,
@@ -271,10 +257,9 @@ export async function calculateFilteredMetrics(
       throw new Error(`Result count ${countResult} exceeds maximum ${MAX_RESULTS_FOR_METRICS}`);
     }
 
-    // Calculate metrics using optimized approach
-    return await calculateMetricsForResults(opts, await getDb());
+    return await calculateWithOptimizedQuery(opts);
   } catch (error) {
-    logger.error('Failed to calculate filtered metrics with optimized query', { error });
+    logger.error('Failed to calculate filtered metrics', { error });
 
     // Fallback: Return empty metrics
     return createEmptyMetricsArray(numPrompts);
@@ -298,20 +283,10 @@ async function getResultCount(whereSql: SQL<unknown>): Promise<number> {
   return result?.count || 0;
 }
 
-/**
- * Calculate persisted row metrics using the supplied database or transaction.
- * Errors propagate so mutation callers can roll back rather than persist empty metrics.
- *
- * OPTIMIZED: Single GROUP BY query aggregating ALL prompts at once.
- * This is the key performance improvement from the audit.
- *
- * SECURITY: Uses parameterized SQL queries via Drizzle's sql template strings.
- */
-export async function calculateMetricsForResults(
-  opts: FilteredMetricsOptions,
-  db: Pick<Awaited<ReturnType<typeof getDb>>, 'all'>,
-): Promise<PromptMetrics[]> {
+/** Aggregate all prompts together using parameterized SQL. */
+async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promise<PromptMetrics[]> {
   const { numPrompts, whereSql } = opts;
+  const db = await getDb();
 
   // Initialize empty metrics
   const metrics = createEmptyMetricsArray(numPrompts);
@@ -461,10 +436,10 @@ export async function calculateMetricsForResults(
   }
 
   // ===== QUERY 2: Named scores (SQL JSON aggregation) =====
-  await aggregateNamedScores(metrics, whereSql, db);
+  await aggregateNamedScores(metrics, whereSql);
 
   // ===== QUERY 3: Assertion counts (SQL JSON aggregation) =====
-  await aggregateAssertions(metrics, whereSql, db);
+  await aggregateAssertions(metrics, whereSql);
 
   logger.debug('Filtered metrics calculated', {
     numPrompts,
@@ -486,8 +461,9 @@ export async function calculateMetricsForResults(
 async function aggregateNamedScores(
   metrics: PromptMetrics[],
   whereSql: SQL<unknown>,
-  db: Pick<Awaited<ReturnType<typeof getDb>>, 'all'>,
 ): Promise<void> {
+  const db = await getDb();
+
   // Use SQLite's json_each to parse JSON in database. When newer results include
   // grading_result.namedScoreWeights, row-level named scores are weighted averages, so we
   // multiply them back into weighted totals before aggregating prompt metrics.
@@ -566,8 +542,9 @@ async function aggregateNamedScores(
 async function aggregateAssertions(
   metrics: PromptMetrics[],
   whereSql: SQL<unknown>,
-  db: Pick<Awaited<ReturnType<typeof getDb>>, 'all'>,
 ): Promise<void> {
+  const db = await getDb();
+
   // SQLite query to count assertions from nested JSON
   // This is complex but avoids fetching all results into memory
   const query = sql`

@@ -42,7 +42,7 @@ import { evaluate } from 'promptfoo';
 
 const evalRecord = await evaluate({
   prompts: ['Summarize: {{ article }}'],
-  providers: ['openai:chat:gpt-5.5', 'anthropic:messages:claude-opus-4-7', 'azure:chat:gpt-5.4'],
+  providers: ['openai:chat:gpt-5.5', 'anthropic:messages:claude-opus-5', 'azure:chat:gpt-5.4'],
   tests: [
     {
       vars: { article: 'Long article text...' },
@@ -193,7 +193,7 @@ import { assertions, loadApiProviders } from 'promptfoo';
 
 async function batchTestProviders() {
   const providers = await loadApiProviders(
-    ['openai:chat:gpt-5.5', 'anthropic:messages:claude-opus-4-7', 'vertex:claude-opus-4-7'],
+    ['openai:chat:gpt-5.5', 'anthropic:messages:claude-opus-5', 'vertex:claude-opus-5'],
     {
       env: {
         OPENAI_API_KEY: process.env.OPENAI_API_KEY,
@@ -519,7 +519,7 @@ const evalRecord = await evaluate({
           2. Captures key points
           3. Grammatically correct
           Score 1-5.`,
-          provider: 'anthropic:messages:claude-opus-4-7',
+          provider: 'anthropic:messages:claude-opus-5',
           threshold: 4,
         },
       ],
@@ -569,7 +569,7 @@ import { evaluate } from 'promptfoo';
 const evalRecord = await evaluate(
   {
     prompts: ['Prompt 1', 'Prompt 2', 'Prompt 3'],
-    providers: ['openai:chat:gpt-5.5', 'anthropic:messages:claude-opus-4-7'],
+    providers: ['openai:chat:gpt-5.5', 'anthropic:messages:claude-opus-5'],
     tests: hugeTestArray,
   },
   {
