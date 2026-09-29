@@ -26,9 +26,10 @@ class Example:
     minimums: bool = False
     seed: tuple[str, ...] = ()
     check_dependencies: bool = True
+    extra_requirements: tuple[str, ...] = ()
 
 
-# Register deterministic tests here; keep example-specific assertions beside the example.
+# Keep small helpers beside examples and larger CLI harnesses under scripts/tests.
 EXAMPLES = {
     "docker-sandbox": Example(
         "examples/integration-docker/code-generation-sandbox",
@@ -59,6 +60,93 @@ EXAMPLES = {
         ("3.14",),
         ((".", "dependencies_test.py"),),
         minimums=True,
+    ),
+    "redteam-langchain": Example(
+        "examples/redteam-langchain",
+        ("3.10", "3.14"),
+        ((".", "*_test.py"),),
+    ),
+    "openai-agents": Example(
+        "examples/openai-agents",
+        ("3.12", "3.14"),
+        (
+            ("tests", "test_sdk.py"),
+            (".", "*_test.py"),
+            ("../../.github/scripts/tests/openai_agents", "test_cli.py"),
+        ),
+        node=True,
+    ),
+    "openai-agents-minimums": Example(
+        "examples/openai-agents",
+        ("3.10",),
+        (
+            ("tests", "test_sdk.py"),
+            (".", "*_test.py"),
+            ("../../.github/scripts/tests/openai_agents", "test_cli.py"),
+        ),
+        node=True,
+        minimums=True,
+        extra_requirements=("openai>=3.0,<4",),
+    ),
+    "openai-agents-otel": Example(
+        "examples/openai-agents",
+        ("3.12",),
+        (
+            ("tests", "test_sdk.py"),
+            (".", "*_test.py"),
+            ("../../.github/scripts/tests/openai_agents", "test_cli.py"),
+        ),
+        node=True,
+        minimums=True,
+        extra_requirements=(
+            "opentelemetry-api>=1.44,<2",
+            "opentelemetry-sdk>=1.44,<2",
+            "opentelemetry-exporter-otlp-proto-http>=1.44,<2",
+        ),
+    ),
+    "langgraph": Example(
+        "examples/integration-langgraph",
+        ("3.10", "3.14"),
+        ((".", "agent_test.py"),),
+    ),
+    "rag-pdf": Example(
+        "examples/eval-rag-full",
+        ("3.10",),
+        (("tests", "test_*.py"),),
+    ),
+    "rag-pdf-cli": Example(
+        "examples/eval-rag-full",
+        ("3.14",),
+        (("tests", "test_*.py"), ("tests", "smoke_cli.py")),
+        node=True,
+    ),
+    "f-score": Example(
+        "examples/eval-f-score",
+        ("3.10", "3.14"),
+        ((".", "dependencies_test.py"),),
+    ),
+    "google-adk": Example(
+        "examples/integration-google-adk",
+        ("3.12", "3.14"),
+        ((".", "*_test.py"), ("../../.github/scripts/tests/google_adk", "test_cli.py")),
+        node=True,
+    ),
+    "google-adk-minimums": Example(
+        "examples/integration-google-adk",
+        ("3.10",),
+        ((".", "*_test.py"), ("../../.github/scripts/tests/google_adk", "test_cli.py")),
+        node=True,
+        minimums=True,
+    ),
+    "google-adk-litellm": Example(
+        "examples/integration-google-adk",
+        ("3.12",),
+        (
+            (".", "*_test.py"),
+            ("../../.github/scripts/tests/google_adk", "test_litellm.py"),
+        ),
+        node=True,
+        extra_requirements=("litellm>=1.101,<2",),
     ),
 }
 
@@ -174,7 +262,9 @@ def run_example(name: str) -> None:
         python = environment / (
             "Scripts/python.exe" if os.name == "nt" else "bin/python"
         )
-        env = dict(os.environ, PROMPTFOO_PYTHON=str(python))
+        env = dict(
+            os.environ, PROMPTFOO_PYTHON=str(python), PROMPTFOO_EXAMPLE_PROFILE=name
+        )
 
         def run(*command: str) -> None:
             print(f"+ {shlex.join(command)}", flush=True)
@@ -184,10 +274,17 @@ def run_example(name: str) -> None:
         if example.seed:
             run(*pip, *example.seed)
         requirements = ROOT / example.directory / "requirements.txt"
-        install = [*pip, "-r", str(requirements)]
+        # Resolve optional adapters together with the example's own bounds.
+        install = [*pip, "-r", str(requirements), *example.extra_requirements]
         if example.minimums:
             constraints = Path(temporary) / "minimums.txt"
-            constraints.write_text(minimum_constraints(requirements.read_text()))
+            constraints.write_text(
+                minimum_constraints(
+                    requirements.read_text()
+                    + "\n"
+                    + "\n".join(example.extra_requirements)
+                )
+            )
             install.extend(("-c", str(constraints)))
         run(*install)
         if example.check_dependencies:

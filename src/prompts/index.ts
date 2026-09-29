@@ -1,4 +1,5 @@
 import { stat } from 'fs/promises';
+import path from 'path';
 
 import { globSync } from 'glob';
 import logger from '../logger';
@@ -152,13 +153,13 @@ async function processPrompt(
     const prompts: Prompt[] = [];
     for (const globbedFilePath of globbedPath) {
       const rawPath = functionName ? `${globbedFilePath}:${functionName}` : globbedFilePath;
+      const relativePath = path.relative(basePath, globbedFilePath).replace(/\\/g, '/');
       const processedPrompts = await processPrompt(
         {
           ...prompt,
           raw: rawPath,
-          // A glob can expand to multiple files. Keep the caller-provided label while
-          // retaining a distinct identity for each expanded prompt.
-          label: prompt.label ? `${prompt.label}: ${globbedFilePath}` : undefined,
+          id: prompt.id && `${prompt.id}:${relativePath}`,
+          label: prompt.label && `${prompt.label}: ${relativePath}`,
         },
         basePath,
         maxRecursionDepth - 1,

@@ -1,11 +1,10 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 
-import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
-import { CheckCircle, Edit, HelpCircle, Search, X } from 'lucide-react';
+import { CheckCircle, HelpCircle, Search, X } from 'lucide-react';
 import { allProviderOptions, createDefaultProvider } from './providerCatalog';
 import { hasSpecificDocumentation } from './providerDocumentationMap';
 
@@ -33,7 +32,6 @@ export default function ProviderTypeSelector({
   );
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedTag, setSelectedTag] = useState<string | undefined>();
-  const [isExpanded, setIsExpanded] = useState<boolean>(true);
 
   useEffect(() => {
     setSelectedProviderType(providerType);
@@ -50,9 +48,6 @@ export default function ProviderTypeSelector({
 
   // Handle tag filter toggle
   const handleTagToggle = (tag: string) => {
-    if (disableModelSelection) {
-      return;
-    }
     setSelectedTag(tag);
 
     // Track tag filter usage
@@ -85,22 +80,6 @@ export default function ProviderTypeSelector({
     setProvider(createDefaultProvider(value, currentLabel), value);
   };
 
-  // Handle edit/change button click
-  const handleEditSelection = () => {
-    if (disableModelSelection) {
-      return;
-    }
-    setIsExpanded(true);
-    setSearchTerm(''); // Clear search when expanding
-    setSelectedTag(undefined); // Clear tag filter when expanding
-
-    // Track when user changes their provider selection
-    recordEvent('feature_used', {
-      feature: 'redteam_provider_selection_changed',
-      previous_provider_type: selectedProviderType,
-    });
-  };
-
   // Filter available options if availableProviderIds is provided, by search term, and by tag
   const filteredProviderOptions = useMemo(() => {
     const normalizedSearch = searchTerm.toLowerCase();
@@ -116,65 +95,6 @@ export default function ProviderTypeSelector({
     });
   }, [searchTerm, selectedTag, availableProviderIds]);
 
-  // Get the selected provider option for collapsed view
-  const selectedOption = selectedProviderType
-    ? allProviderOptions.find((option) => option.value === selectedProviderType)
-    : undefined;
-
-  // Show collapsed view when a provider is selected and not in expanded mode
-  if (selectedOption && !isExpanded) {
-    return (
-      <div>
-        <div className="flex w-full flex-col gap-3 rounded-lg border-2 border-primary bg-primary/5 p-4 sm:flex-row sm:items-center">
-          <CheckCircle className="mr-4 size-5 shrink-0 text-primary" />
-
-          <div className="min-w-0 flex-1">
-            <div className="mb-1 flex items-center gap-2">
-              <p className="font-semibold text-primary">{selectedOption.label}</p>
-              {selectedOption.recommended && (
-                <span className="rounded bg-secondary px-1.5 py-0.5 text-xs text-secondary-foreground">
-                  Popular
-                </span>
-              )}
-            </div>
-            <p className="overflow-hidden text-ellipsis text-sm text-muted-foreground">
-              {selectedOption.description}
-            </p>
-          </div>
-
-          <div className="flex shrink-0 items-center self-end sm:ml-4 sm:self-auto">
-            {/* Documentation link */}
-            {hasSpecificDocumentation(selectedOption.value) && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <a
-                    href={selectedOption.docs}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mr-2 text-muted-foreground hover:text-foreground"
-                  >
-                    <HelpCircle className="size-4" />
-                  </a>
-                </TooltipTrigger>
-                <TooltipContent>View {selectedOption.label} documentation</TooltipContent>
-              </Tooltip>
-            )}
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleEditSelection}
-              disabled={disableModelSelection}
-            >
-              <Edit className="mr-1 size-4" />
-              Change
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // Calculate counts for each tag
   const getTagCount = (tagKey: TagKey | undefined) => {
     if (tagKey === undefined) {
@@ -188,7 +108,6 @@ export default function ProviderTypeSelector({
     ).length;
   };
 
-  // Show expanded view (original full list)
   return (
     <div className="space-y-4">
       {/* Filter bar - chips on left, search on right */}

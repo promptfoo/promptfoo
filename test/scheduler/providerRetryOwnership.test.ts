@@ -28,9 +28,10 @@ const throttled = () =>
 describe('provider operation retry ownership', () => {
   let registry: RateLimitRegistry;
   beforeEach(() => {
+    // Fake timers keep jittered retries fast without mocking Math.random, which
+    // source-map also uses to choose quicksort pivots while formatting SDK errors.
     vi.useFakeTimers();
     vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', 'false');
-    vi.spyOn(Math, 'random').mockReturnValue(0);
     registry = new RateLimitRegistry({ maxConcurrency: 4 });
   });
   afterEach(() => {
@@ -371,8 +372,8 @@ describe('provider operation retry ownership', () => {
     expect(fetch).toHaveBeenCalledTimes(4);
   });
 
-  it.each(['POST', 'PATCH'] as const)(
-    'does not replay a stateful n8n %s with request-local zero retries',
+  it.each(['GET', 'HEAD', 'PUT', 'POST', 'PATCH'] as const)(
+    'does not replay a stateful n8n webhook %s with request-local zero retries',
     async (method) => {
       const fetch = vi.fn().mockImplementation(async () => throttled());
       vi.stubGlobal('fetch', fetch);
@@ -389,7 +390,6 @@ describe('provider operation retry ownership', () => {
     vi.stubGlobal('fetch', fetch);
     const config = { apiKey: 'fixture', apiBaseUrl: 'https://retry.fixture.test', maxRetries: 1 };
     const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', { config });
-    // runAllTimersAsync intermittently recurses through the SDK retry loop on macOS.
     const result = await invoke(provider, 120_000);
     expect(result.error).toContain('429');
     // The SDK's two retries and the scheduler's one retry remain separate.

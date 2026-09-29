@@ -270,6 +270,14 @@ describe('readLayerConfig', () => {
     );
   });
 
+  it('rejects leaf layers that are not an array', () => {
+    writeConfig({ publicFacade: 'src/index.ts', leafLayers: 'core', layers: [coreLayer()] });
+
+    expect(() => readLayerConfig(repoRoot)).toThrow(
+      'leafLayers must be an array of unique layer names.',
+    );
+  });
+
   it('rejects duplicate layer names', () => {
     writeConfig({ publicFacade: 'src/index.ts', layers: [coreLayer(), coreLayer()] });
 

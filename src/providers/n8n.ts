@@ -1,7 +1,8 @@
 import { createHash } from 'crypto';
 
-import { fetchWithCache } from '../cache';
 import logger from '../logger';
+import { fetchWithRetries } from '../util/fetch';
+import { isHttpRateLimitError } from '../util/fetch/errors';
 import { getNunjucksEngine } from '../util/templates';
 import { getRequestTimeoutMs } from './shared';
 
@@ -22,7 +23,7 @@ export interface N8nProviderConfig {
   /**
    * HTTP method to use (default: POST)
    */
-  method?: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'OPTIONS' | 'DELETE';
+  method?: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH';
 
   /**
    * Additional headers to include in requests
@@ -327,11 +328,9 @@ function getSafeProviderId(url: string, config?: N8nProviderConfig): string {
  */
 export class N8nProvider implements ApiProvider {
   get handlesOwnRetries(): boolean {
-    // Preserve the webhook's existing no-replay policy for stateful methods.
-    // Idempotent methods still need scheduler recovery for parsed body errors.
-    return !['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(
-      (this.config.method || 'POST').toUpperCase(),
-    );
+    // A webhook workflow can perform side effects for any HTTP method, even
+    // methods that are nominally idempotent. Never let the scheduler replay it.
+    return true;
   }
 
   private webhookUrl: string;
@@ -538,10 +537,7 @@ export class N8nProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // Normalize method to upper-case so `method: get` (or `Post`) in YAML
-    // doesn't bypass the GET / non-idempotent branches downstream — both the
-    // GET-vs-body decision and the maxRetries policy depend on exact case
-    // matches against the standard verb spelling.
+    // Normalize before deciding whether to send a body or query parameters.
     const method = (this.config.method || 'POST').toUpperCase();
     const timeout = this.config.timeout || getRequestTimeoutMs();
 
@@ -569,46 +565,32 @@ export class N8nProvider implements ApiProvider {
 
     let data: any;
     let rawText = '';
-    let cached = false;
     let latencyMs: number | undefined;
 
     try {
-      // n8n webhooks for non-idempotent methods (POST/PATCH) are stateful —
-      // the workflow may have already accepted the request and dispatched
-      // side-effects (sending messages, writing to a database) before the
-      // transport-level failure surfaces. The default `fetchWithRetries`
-      // budget of 4 would silently re-deliver those side-effects. Pass
-      // maxRetries=0 for non-idempotent methods so transient failures fail
-      // through to the caller (who can re-run the eval if appropriate).
-      // Idempotent methods (GET/HEAD/OPTIONS/PUT/DELETE) keep the default
-      // retry budget.
-      const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
-      const maxRetries = isIdempotent ? undefined : 0;
-
-      // Webhook URLs and session-bearing requests can be sensitive and stateful.
-      const response = await fetchWithCache<string>(
-        url,
-        fetchOptions,
-        timeout,
-        'text',
-        true,
-        maxRetries,
-      );
-
-      rawText =
-        typeof response.data === 'string' ? response.data : JSON.stringify(response.data ?? '');
-      data = parseN8nResponseBody(response.data);
-      cached = response.cached;
-      latencyMs = response.latencyMs;
+      // Every webhook method can dispatch side effects. Never cache or replay it.
+      const startedAt = Date.now();
+      const response = await fetchWithRetries(url, fetchOptions, timeout, 0);
+      latencyMs = Date.now() - startedAt;
+      try {
+        rawText = await response.text();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Error reading n8n response body: ${message}. HTTP ${response.status} ${response.statusText}`,
+        );
+      }
+      data = parseN8nResponseBody(rawText);
 
       if (response.status < 200 || response.status >= 300) {
         return {
           error: `n8n webhook call error: HTTP ${response.status} ${response.statusText}`,
           metadata: {
+            rateLimitRetryable: false,
             http: {
               status: response.status,
               statusText: response.statusText,
-              headers: response.headers,
+              headers: Object.fromEntries(response.headers.entries()),
             },
           },
         };
@@ -623,8 +605,12 @@ export class N8nProvider implements ApiProvider {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       logger.error(`[n8n] Request failed: ${errorMessage}`);
+      const http = isHttpRateLimitError(err)
+        ? { status: err.status, statusText: err.statusText, headers: err.headers }
+        : undefined;
       return {
         error: `n8n webhook call error: ${errorMessage}`,
+        ...(http && { metadata: { http, rateLimitRetryable: false } }),
       };
     }
 
@@ -641,7 +627,7 @@ export class N8nProvider implements ApiProvider {
     // Build response
     const response: ProviderResponse = {
       output,
-      cached,
+      cached: false,
       latencyMs,
       raw: data,
     };
@@ -659,7 +645,6 @@ export class N8nProvider implements ApiProvider {
     }
 
     logger.debug(`[n8n] Response received`, {
-      cached,
       latencyMs,
       hasToolCalls: !!toolCalls,
       hasSessionId: !!sessionId,

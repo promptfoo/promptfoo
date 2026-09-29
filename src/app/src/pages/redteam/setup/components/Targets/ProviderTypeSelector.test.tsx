@@ -2,7 +2,7 @@ import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import ProviderTypeSelector from './ProviderTypeSelector';
@@ -32,9 +32,14 @@ describe('ProviderTypeSelector', () => {
       />,
     );
 
-    await user.click(screen.getByText('Anthropic', { exact: true }).closest('[role="button"]')!);
+    const providerCard = screen.getByText('Anthropic', { exact: true }).closest('[role="button"]')!;
+    await user.click(providerCard);
+    fireEvent.keyDown(providerCard, { key: 'Enter' });
+    fireEvent.keyDown(providerCard, { key: ' ' });
 
     expect(setProvider).not.toHaveBeenCalled();
+    expect(providerCard).toHaveAttribute('aria-disabled', 'true');
+    expect(providerCard).toHaveAttribute('tabindex', '-1');
     expect(screen.getByLabelText('Search providers')).toBeDisabled();
   });
 
@@ -502,7 +507,7 @@ describe('ProviderTypeSelector', () => {
     );
   });
 
-  it('should initialize selectedProviderType from the providerType prop when provided, and show the corresponding provider as selected in the collapsed view', () => {
+  it('marks the providerType prop as selected', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'file:///path/to/your/script.go',
@@ -762,8 +767,6 @@ describe('ProviderTypeSelector', () => {
       provider_tag: 'agents',
     });
   });
-
-  // Test removed - collapsed view and Change button no longer exist
 
   it('should update selectedProviderType and call setProvider with the correct file path format when an agent provider is selected', async () => {
     const user = userEvent.setup();
