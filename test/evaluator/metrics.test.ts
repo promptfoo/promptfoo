@@ -12,7 +12,55 @@ import { createDeferred } from '../util/utils';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
+vi.mock('../../src/assertions/redteam', () => ({
+  handleRedteam: vi
+    .fn()
+    .mockResolvedValue({ pass: true, score: 1, reason: 'Fixture category only' }),
+}));
+
 describeEvaluator('evaluator metrics and scoring', () => {
+  it.each([
+    ['promptfoo:redteam:pii', 'promptfoo:redteam:pii'],
+    ['promptfoo:redteam:policy', 'promptfoo:redteam:policy'],
+    ['promptfoo:redteam:fixture-private-label', 'custom'],
+  ])('preserves only registered assertion category %s', async (type, category) => {
+    const record = vi.spyOn(telemetry, 'record');
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Hello fixture')],
+      tests: [{ assert: [{ type: type as 'promptfoo:redteam:pii' }] }],
+    };
+    const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, evalRecord, {});
+    const event = record.mock.calls.find(([name]) => name === 'eval_ran')?.[1];
+    expect(event).toMatchObject({ assertionTypes: [category] });
+    expect(JSON.stringify(event)).not.toContain('fixture-private');
+    record.mockRestore();
+  });
+
+  it('retains the built-in category for assertion sets', async () => {
+    const record = vi.spyOn(telemetry, 'record');
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Hello fixture')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [{ type: 'contains', value: 'Test' }],
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, evalRecord, {});
+    const event = record.mock.calls.find(([name]) => name === 'eval_ran')?.[1];
+    expect(event).toMatchObject({ assertionTypes: ['assert-set'], numPasses: 1 });
+    record.mockRestore();
+  });
+
   it('emits bounded provider and assertion categories without changing evaluation counters', async () => {
     const record = vi.spyOn(telemetry, 'record');
     const providers = [

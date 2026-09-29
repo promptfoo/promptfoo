@@ -33,6 +33,7 @@ import { type AgentWorkspace, createAgentWorkspaceForConfig } from './providers/
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
+import { GRADERS } from './redteam/graders';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
@@ -3651,6 +3652,8 @@ const PROVIDER_CATEGORIES = new Set([
 ]);
 
 const TELEMETRY_ASSERTION_TYPES = new Set<string>([
+  'assert-set',
+  ...Object.keys(GRADERS),
   ...BaseAssertionTypesSchema.options,
   ...BaseAssertionTypesSchema.options.map((type) => `not-${type}`),
   ...SpecialAssertionTypesSchema.options,
