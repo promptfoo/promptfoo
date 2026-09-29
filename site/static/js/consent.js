@@ -374,16 +374,14 @@
     var consent = parseConsent(getCookie(COOKIE));
     var region = getRegion();
 
-    // Opt-in regions must start from an unselected state.
-    var analyticsDefault = region === 'opt_in' ? 0 : 1;
-    var marketingDefault = region === 'opt_in' ? 0 : 1;
-    // GPC: marketing defaults OFF
-    if (navigator.globalPrivacyControl) {
-      marketingDefault = 0;
-    }
-
-    var analyticsChecked = consent ? consent.analytics : analyticsDefault;
-    var marketingChecked = consent ? consent.marketing : marketingDefault;
+    var restoreConsent = consent && (region !== 'opt_in' || consent.region === 'i');
+    var defaultChecked = region === 'opt_in' ? 0 : 1;
+    var analyticsChecked = restoreConsent ? consent.analytics : defaultChecked;
+    var marketingChecked = navigator.globalPrivacyControl
+      ? 0
+      : restoreConsent
+        ? consent.marketing
+        : defaultChecked;
 
     var overlay = document.createElement('div');
     overlay.id = 'cc-overlay';
@@ -420,11 +418,16 @@
       '<label class="cc-toggle">' +
       '<input type="checkbox" id="cc-marketing" aria-labelledby="cc-marketing-label" aria-describedby="cc-marketing-desc cc-marketing-tools"' +
       (marketingChecked ? ' checked' : '') +
+      (navigator.globalPrivacyControl ? ' disabled' : '') +
       '>' +
       '<span class="cc-toggle-track"></span>' +
       '</label>' +
       '</div>' +
-      '<div class="cc-cat-desc" id="cc-marketing-desc">Advertising &amp; visitor identification.</div>' +
+      '<div class="cc-cat-desc" id="cc-marketing-desc">' +
+      (navigator.globalPrivacyControl
+        ? "Disabled by your browser's privacy signal."
+        : 'Advertising &amp; visitor identification.') +
+      '</div>' +
       '<div class="cc-cat-tools" id="cc-marketing-tools">Google Ads, Vector, Reo</div>' +
       '</div>' +
       '<div class="cc-prefs-btns">' +
@@ -554,14 +557,12 @@
 
   function handleOptIn(consent) {
     var nextConsent = consent;
-    // Invalidate consent obtained under a less-strict region (e.g. US opt-out).
-    // The user must re-consent under opt-in rules.
+    // Suspend grants from another region, retaining saved refusals for a return visit.
     if (
       nextConsent &&
       nextConsent.region !== 'i' &&
       (nextConsent.analytics || nextConsent.marketing)
     ) {
-      deleteCookie(COOKIE);
       clearVendorCookies();
       nextConsent = null;
     }

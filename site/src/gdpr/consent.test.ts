@@ -766,13 +766,38 @@ describe('consent.js', () => {
       expect((window as any).__pf_analytics_loaded).toBe(false);
     });
 
-    it('deletes the old cookie when invalidating cross-region consent', () => {
-      setCookie('pf_country', 'DE');
-      setCookie('pf_consent', 'v1.o.1.1');
-      runConsent();
+    it.each(['v1.o.1.0', 'v1.o.0.1', 'v1.n.1.0'])(
+      'preserves partial choices while suspending grants: %s',
+      (consent) => {
+        setCookie('pf_country', 'DE');
+        setCookie('pf_consent', consent);
+        runConsent();
+        expect(getCookie('pf_consent')).toBe(consent);
+        expect(document.querySelectorAll('script[src]')).toHaveLength(0);
+        document.getElementById('cc-manage')!.click();
+        expect(getByRole(document.body, 'checkbox', { name: 'Analytics' })).not.toBeChecked();
+        expect(getByRole(document.body, 'checkbox', { name: 'Marketing' })).not.toBeChecked();
+        document.getElementById('cc-prefs-close')!.click();
+        setCookie('pf_country', 'US');
+        runConsent();
+        expect(getCookie('pf_consent')).toBe(consent);
+        expect((window as any).__pf_consent).toEqual({
+          analytics: Number(consent.split('.')[2]),
+          marketing: Number(consent.split('.')[3]),
+        });
+      },
+    );
 
-      // The old v1.o cookie should be deleted
-      expect(getCookie('pf_consent')).toBeNull();
+    it.each(['US', 'DE'])('shows GPC on a direct privacy link in %s', (country) => {
+      setCookie('pf_country', country);
+      setCookie('pf_consent', 'v1.i.1.1');
+      Object.defineProperty(navigator, 'globalPrivacyControl', { value: true, configurable: true });
+      window.location.hash = '#manage-cookies';
+      runConsent();
+      const marketing = getByRole(document.body, 'checkbox', { name: 'Marketing' });
+      expect(marketing).not.toBeChecked();
+      expect(marketing).toBeDisabled();
+      expect(document.querySelectorAll('script[src]')).toHaveLength(0);
     });
 
     it('preserves valid opt-in consent in opt-in region', () => {
