@@ -1,5 +1,4 @@
 import { and, desc, eq, inArray } from 'drizzle-orm';
-import { LRUCache } from 'lru-cache';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
@@ -18,9 +17,9 @@ import {
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
+import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
-  type CompletedPrompt,
   type EvaluateSummaryV2,
   type EvaluateTable,
   type EvalWithMetadata,
@@ -32,7 +31,18 @@ import {
 } from '../types/index';
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
-import { restoreAzureBlobSasTokens } from './sanitizer';
+import { restoreAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './sanitizer';
+import {
+  getCachedStandaloneEvals,
+  getStandaloneEvalCacheKey,
+  setCachedStandaloneEvals,
+} from './standaloneEvalCache';
+
+import type { StandaloneEval } from './standaloneEvalCache';
+
+export { clearStandaloneEvalCache } from './standaloneEvalCache';
+
+export type { StandaloneEval };
 
 export async function writeResultsToDatabase(
   results: EvaluateSummaryV2,
@@ -51,7 +61,7 @@ export async function writeResultsToDatabase(
         createdAt: createdAt.getTime(),
         author: getAuthor(),
         description: config.description,
-        config,
+        config: sanitizeTracingConfigForPersistence(config),
         results,
         isRedteam: config.redteam !== undefined,
       })
@@ -151,6 +161,8 @@ export async function writeResultsToDatabase(
     }
   });
 
+  notifyEvaluationChanged(evalId);
+
   return evalId;
 }
 
@@ -201,7 +213,7 @@ export async function updateResult(
 }
 
 async function getPromptsWithPredicate(
-  predicate: (result: ResultsFile) => boolean,
+  predicate: (eval_: Eval) => boolean,
   limit: number,
 ): Promise<PromptWithMetadata[]> {
   // TODO(ian): Make this use a proper database query
@@ -211,13 +223,10 @@ async function getPromptsWithPredicate(
 
   for (const eval_ of evals_) {
     const createdAt = new Date(eval_.createdAt).toISOString();
-    const resultWrapper: ResultsFile = await eval_.toResultsFile();
-    if (predicate(resultWrapper)) {
+    if (predicate(eval_)) {
+      const datasetId = sha256(JSON.stringify(eval_.config.tests || []));
       for (const prompt of eval_.getPrompts()) {
         const promptId = sha256(prompt.raw);
-        const datasetId = resultWrapper.config.tests
-          ? sha256(JSON.stringify(resultWrapper.config.tests))
-          : '-';
         if (promptId in groupedPrompts) {
           groupedPrompts[promptId].recentEvalDate = new Date(
             Math.max(
@@ -258,8 +267,8 @@ export function getPromptsForTestCasesHash(
   testCasesSha256: string,
   limit: number = DEFAULT_QUERY_LIMIT,
 ) {
-  return getPromptsWithPredicate((result) => {
-    const testsJson = JSON.stringify(result.config.tests);
+  return getPromptsWithPredicate((eval_) => {
+    const testsJson = JSON.stringify(eval_.config.tests || []);
     const hash = sha256(testsJson);
     return hash === testCasesSha256;
   }, limit);
@@ -292,7 +301,7 @@ async function getTestCasesWithPredicate(
         logger.warn('Skipping TestGeneratorConfig object in database storage');
         continue;
       }
-      const datasetId = sha256(JSON.stringify(storableTestCases));
+      const datasetId = sha256(JSON.stringify(eval_.config.tests || []));
 
       if (datasetId in groupedTestCases) {
         groupedTestCases[datasetId].recentEvalDate = new Date(
@@ -445,6 +454,7 @@ export async function deleteEval(evalId: string) {
       throw new Error(`Eval with ID ${evalId} not found`);
     }
   });
+  notifyEvaluationsDeleted([evalId]);
 }
 
 /**
@@ -452,6 +462,11 @@ export async function deleteEval(evalId: string) {
  * @param ids - The IDs of the evals to delete.
  */
 export async function deleteEvals(ids: string[]): Promise<void> {
+  // Deleting zero evals must not emit a delete signal: the watcher would broadcast an empty
+  // deletedEvalIds list, which clients interpret as "all evals deleted" and reload/clear.
+  if (ids.length === 0) {
+    return;
+  }
   const db = await getDb();
   await db.transaction(async (tx) => {
     await deleteTraceRecordsForEvals(tx, ids);
@@ -461,6 +476,7 @@ export async function deleteEvals(ids: string[]): Promise<void> {
     await tx.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids)).run();
     await tx.delete(evalsTable).where(inArray(evalsTable.id, ids)).run();
   });
+  notifyEvaluationsDeleted(ids);
 }
 
 /**
@@ -479,32 +495,7 @@ export async function deleteAllEvals(): Promise<void> {
     await tx.delete(evalsToTagsTable).run();
     await tx.delete(evalsTable).run();
   });
-}
-
-export type StandaloneEval = CompletedPrompt & {
-  evalId: string;
-  description: string | null;
-  datasetId: string | null;
-  promptId: string | null;
-  isRedteam: boolean;
-  createdAt: number;
-
-  pluginFailCount: Record<string, number>;
-  pluginPassCount: Record<string, number>;
-  uuid: string;
-};
-
-const standaloneEvalCache = new LRUCache<string, StandaloneEval[]>({
-  ttl: 60 * 60 * 2 * 1000, // 2 hours in milliseconds
-  // Cache entries are keyed by (limit, tag, description) filter combinations.
-  // 2000 handles heavy automation scenarios while keeping memory bounded (~few MB).
-  // On eviction, the next request simply re-queries the DB with minimal latency impact.
-  max: 2000,
-});
-
-/** Clears the standalone eval LRU cache. Intended for tests that mutate evals. */
-export function clearStandaloneEvalCache(): void {
-  standaloneEvalCache.clear();
+  notifyEvaluationsDeleted();
 }
 
 export async function getStandaloneEvals({
@@ -516,8 +507,8 @@ export async function getStandaloneEvals({
   tag?: { key: string; value: string };
   description?: string;
 } = {}): Promise<StandaloneEval[]> {
-  const cacheKey = `standalone_evals_${limit}_${tag?.key}_${tag?.value}_${description}`;
-  const cachedResult = standaloneEvalCache.get(cacheKey);
+  const cacheKey = getStandaloneEvalCacheKey({ limit, tag, description });
+  const cachedResult = getCachedStandaloneEvals(cacheKey);
 
   if (cachedResult) {
     return cachedResult;
@@ -611,6 +602,6 @@ export async function getStandaloneEvals({
     uuid: crypto.randomUUID(),
   }));
 
-  standaloneEvalCache.set(cacheKey, withUUIDs);
+  setCachedStandaloneEvals(cacheKey, withUUIDs);
   return withUUIDs;
 }

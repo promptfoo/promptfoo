@@ -198,9 +198,13 @@ For best signal, expose one or more of these surfaces from your coding-agent pro
 - A sidecar verifier JSON report with `status` or `exitCode` for checks that are expensive to re-run inside the grader.
 - A per-row workspace identifier or reset marker so reviewers can confirm tests did not share mutated state.
 
+Stored tool evidence supports common `input`/`arguments` aliases, output content blocks, Claude tool-call metadata, and OpenCode tool parts. Separate shell commands remain separate. File-edit tools contribute authored content; note and comment tools do not. Explicit errors and unfinished statuses prevent file inputs from being treated as completed artifacts. Older records without execution status retain their previous interpretation and need review against the transcript.
+
+Structured payload conversion is limited to 32 nesting levels, 4,096 visited values, and one million input characters per field. Oversized or malformed portions can be omitted from deterministic matching; no match still proceeds to rubric grading. Native Codex `file_change` records, structured writes through external symlinks, and Windows path case matching are not fully supported by these checks.
+
 ## Interpreting Failures
 
-A failed row means the target agent crossed the test's security boundary. Inspect the agent transcript, raw provider events, trace, changed files, and sidecar report before deciding whether the issue belongs in model training, provider configuration, sandbox policy, verifier design, or the surrounding CI harness.
+A failed row records the grader's assessment, which may use heuristics or a model rubric. Inspect the agent transcript, raw provider events, trace, changed files, and sidecar report before deciding whether the issue belongs in model training, provider configuration, sandbox policy, verifier design, or the surrounding CI harness.
 
 Common fixes include removing ambient secrets from the subprocess environment, running agents in disposable checkouts, reducing `additional_directories`, failing closed on sandbox setup errors, protecting verifier scripts outside the writable workspace, and making tests detect behavioral regressions instead of only snapshots.
 

@@ -516,46 +516,61 @@ function getString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
-// Tool-use / tool-result payloads on provider wrappers are commonly object-
-// or array-shaped. This generic conversion is suitable for tool results and
-// other evidence that represents produced text. File-edit inputs use the
-// narrower authoredFileToolPayload() below so removed code is not treated as
-// newly generated code.
-//
-// Strategy:
-//   - already a non-empty string: keep as-is.
-//   - array of content blocks (`{type, text}` or similar): join their
-//     converted values.
-//   - text-only content block: retain its text directly.
-//   - other object: JSON.stringify so sibling evidence is not discarded.
-//   - anything else: undefined.
-function coerceToolPayload(value: unknown): string | undefined {
-  if (value == null) {
+const MAX_TOOL_PAYLOAD_DEPTH = 32;
+const MAX_TOOL_PAYLOAD_NODES = 4096;
+const MAX_TOOL_PAYLOAD_CHARACTERS = 1_000_000;
+
+/** Bound structured payload conversion before it reaches the evidence matchers. */
+function coerceToolPayload(
+  value: unknown,
+  depth = 0,
+  budget = { nodes: MAX_TOOL_PAYLOAD_NODES, characters: MAX_TOOL_PAYLOAD_CHARACTERS },
+): string | undefined {
+  if (depth > MAX_TOOL_PAYLOAD_DEPTH || budget.nodes-- <= 0 || value == null) {
     return undefined;
   }
   if (typeof value === 'string') {
-    return value.trim() ? value : undefined;
+    budget.characters -= value.length;
+    return budget.characters >= 0 && value.trim() ? value : undefined;
   }
   if (Array.isArray(value)) {
     const parts: string[] = [];
     for (const item of value) {
-      const text = coerceToolPayload(item);
+      if (budget.nodes <= 0 || budget.characters <= 0) {
+        break;
+      }
+      const text = coerceToolPayload(item, depth + 1, budget);
       if (text) {
         parts.push(text);
       }
     }
-    const joined = parts.join('\n').trim();
-    return joined ? joined : undefined;
+    return parts.join('\n').trim() || undefined;
   }
   if (typeof value === 'object') {
-    const obj = value as Record<string, unknown>;
-    // Common content-block shape: { type: 'text', text: '...' }.
-    const inlineText = getString(obj.text);
-    if (inlineText && Object.keys(obj).every((key) => key === 'type' || key === 'text')) {
-      return inlineText;
-    }
     try {
-      const serialized = JSON.stringify(value);
+      const obj = value as Record<string, unknown>;
+      const inlineText = getString(obj.text);
+      if (inlineText && Object.keys(obj).every((key) => key === 'type' || key === 'text')) {
+        return coerceToolPayload(inlineText, depth + 1, budget);
+      }
+      const depths = new WeakMap<object, number>();
+      const serialized = JSON.stringify(value, function (key, part) {
+        if (--budget.nodes < 0) {
+          throw new Error('Tool payload node limit exceeded');
+        }
+        budget.characters -= key.length + (typeof part === 'string' ? part.length : 0);
+        if (budget.characters < 0) {
+          throw new Error('Tool payload character limit exceeded');
+        }
+        if (part !== null && typeof part === 'object') {
+          const nextDepth = (depths.get(this) ?? depth) + 1;
+          if (nextDepth > MAX_TOOL_PAYLOAD_DEPTH) {
+            throw new Error('Tool payload depth limit exceeded');
+          }
+          depths.set(part, nextDepth);
+        }
+        return part;
+      });
       return serialized && serialized !== '{}' && serialized !== '[]' ? serialized : undefined;
     } catch {
       return undefined;
@@ -601,7 +616,19 @@ function isShellToolName(toolName: string): boolean {
 }
 
 const FILE_WRITE_TOOL_SEGMENT_PATTERN = /(?:^|_)(?:edit|editor|patch|write)(?:_|$)/;
-const FILE_CREATE_OR_REPLACE_TOOL_PATTERN = /(?:^|_)(?:create_file|replace(?:_in)?_file)(?:_|$)/;
+const FILE_WRITE_TOOL_NAMES = new Set([
+  'apply_patch',
+  'create_file',
+  'edit',
+  'edit_file',
+  'multi_edit',
+  'patch',
+  'replace_file',
+  'replace_in_file',
+  'str_replace_editor',
+  'write',
+  'write_file',
+]);
 const NETWORK_TOOL_SEGMENT_PATTERN =
   /(?:^|_)(?:fetch|http|https|webhook|webfetch)(?:_|$)|(?:^|_)browser_navigate(?:_|$)/;
 const READ_ONLY_TOOL_NAMES = new Set(['glob', 'grep', 'ls', 'read', 'read_file']);
@@ -609,11 +636,17 @@ const OPENCODE_READ_ONLY_TOOL_NAMES = new Set([...READ_ONLY_TOOL_NAMES, 'list'])
 const FILE_READ_TOOL_NAMES = new Set(['grep', 'read', 'read_file']);
 const FILE_READ_PATH_KEYS = ['file', 'file_path', 'filePath', 'path', 'paths'] as const;
 
-function isFileWriteToolName(toolName: string): boolean {
+function isFileWriteToolName(toolName: string, toolInput?: unknown): boolean {
   const normalizedToolName = normalizeToolName(toolName);
+  if (FILE_WRITE_TOOL_NAMES.has(normalizedToolName)) {
+    return true;
+  }
+  const input = getObject(parseProviderRaw(toolInput));
   return (
-    FILE_WRITE_TOOL_SEGMENT_PATTERN.test(normalizedToolName) ||
-    FILE_CREATE_OR_REPLACE_TOOL_PATTERN.test(normalizedToolName)
+    FILE_WRITE_TOOL_SEGMENT_PATTERN.test(normalizedToolName) &&
+    input !== undefined &&
+    (FILE_READ_PATH_KEYS.some((key) => getString(input[key])) ||
+      FILE_PATCH_KEYS.some((key) => getString(input[key])))
   );
 }
 
@@ -640,8 +673,11 @@ function fileReadPathPayload(toolInput: unknown, acceptStringInput: boolean): st
 
 function fileReadToolCommand(toolName: string, toolInput: unknown): string | undefined {
   const normalizedToolName = normalizeToolName(toolName);
+  const commands = getToolCommands(toolInput);
   const isEditorView =
-    isFileWriteToolName(toolName) && getToolCommand(toolInput)?.trim().toLowerCase() === 'view';
+    isFileWriteToolName(toolName, toolInput) &&
+    commands.length === 1 &&
+    commands[0].trim().toLowerCase() === 'view';
   if (!FILE_READ_TOOL_NAMES.has(normalizedToolName) && !isEditorView) {
     return undefined;
   }
@@ -689,9 +725,16 @@ function addedPatchPayload(value: unknown): string | undefined {
   return additions || undefined;
 }
 
-function authoredFileContentParts(inputObject: Record<string, unknown>): string[] {
+function authoredFileContentParts(
+  inputObject: Record<string, unknown>,
+  depth = 0,
+  budget = { nodes: MAX_TOOL_PAYLOAD_NODES, characters: MAX_TOOL_PAYLOAD_CHARACTERS },
+): string[] {
+  if (depth > MAX_TOOL_PAYLOAD_DEPTH || budget.nodes-- <= 0) {
+    return [];
+  }
   const authoredParts = AUTHORED_FILE_CONTENT_KEYS.flatMap((key) => {
-    const value = coerceToolPayload(inputObject[key]);
+    const value = coerceToolPayload(inputObject[key], depth + 1, budget);
     return value ? [value] : [];
   });
 
@@ -704,9 +747,12 @@ function authoredFileContentParts(inputObject: Record<string, unknown>): string[
 
   const edits = Array.isArray(inputObject.edits) ? inputObject.edits : [];
   for (const edit of edits) {
+    if (budget.nodes <= 0 || budget.characters <= 0) {
+      break;
+    }
     const editObject = getObject(parseProviderRaw(edit));
     if (editObject) {
-      authoredParts.push(...authoredFileContentParts(editObject));
+      authoredParts.push(...authoredFileContentParts(editObject, depth + 1, budget));
     }
   }
 
@@ -793,23 +839,34 @@ function authoredFileToolPath(toolInput: unknown): string | undefined {
   return fileReadPathPayload(toolInput, false);
 }
 
-function getToolCommand(toolInput: unknown): string | undefined {
+function getToolCommands(toolInput: unknown): string[] {
   const inputObject = getObject(parseProviderRaw(toolInput));
   if (!inputObject) {
-    return getString(toolInput);
+    const command = getString(toolInput);
+    return command ? [command] : [];
   }
 
   const directCommand = getString(inputObject.command) ?? getString(inputObject.cmd);
   if (directCommand) {
-    return directCommand;
+    return [directCommand];
   }
 
   const commands = Array.isArray(inputObject.commands) ? inputObject.commands : [];
-  const joinedCommands = commands
+  return commands
     .map((command) => getString(command)?.trim())
-    .filter((command): command is string => Boolean(command))
-    .join('; ');
-  return joinedCommands || undefined;
+    .filter((command): command is string => Boolean(command));
+}
+
+function hasUnsuccessfulToolState(item: Record<string, unknown>): boolean {
+  const status = getString(item.status)?.toLowerCase();
+  return (
+    item.is_error === true ||
+    item.isError === true ||
+    Boolean(item.error) ||
+    getObject(item.result)?.isError === true ||
+    getObject(item.output)?.isError === true ||
+    (status !== undefined && !['completed', 'success', 'succeeded'].includes(status))
+  );
 }
 
 function escapeRegExp(value: string): string {
@@ -1023,34 +1080,32 @@ function providerRawToolInputEvidence(
 ): TargetEvidence[] {
   const toolName = providerRawToolName(itemObject);
   const functionCall = getObject(itemObject.function);
-  const rawToolInput =
-    itemObject.input ??
-    itemObject.arguments ??
-    itemObject.args ??
-    itemObject.parameters ??
-    itemObject.params ??
-    functionCall?.arguments ??
-    functionCall?.input ??
-    itemObject.content ??
-    itemObject.text;
-  const toolCommand = isShellToolName(toolName) ? getToolCommand(rawToolInput) : undefined;
-  const authoredInput = isFileWriteToolName(toolName)
-    ? authoredFileToolPayload(rawToolInput)
-    : undefined;
-  const patchArtifacts = isFileWriteToolName(toolName) ? patchFileToolArtifacts(rawToolInput) : [];
+  const rawToolInput = [
+    itemObject.input,
+    itemObject.arguments,
+    itemObject.args,
+    itemObject.parameters,
+    itemObject.params,
+    functionCall?.arguments,
+    functionCall?.input,
+    itemObject.content,
+    itemObject.text,
+  ].find((value) => coerceToolPayload(value) !== undefined);
+  const toolCommands = isShellToolName(toolName) ? getToolCommands(rawToolInput) : [];
+  const isFileTool = isFileWriteToolName(toolName, rawToolInput);
+  const isCompletedFileTool = isFileTool && !hasUnsuccessfulToolState(itemObject);
+  const authoredInput = isCompletedFileTool ? authoredFileToolPayload(rawToolInput) : undefined;
+  const patchArtifacts = isCompletedFileTool ? patchFileToolArtifacts(rawToolInput) : [];
   const genericInput = coerceToolPayload(rawToolInput);
   const fileReadCommand = fileReadToolCommand(toolName, rawToolInput);
-  const artifactPath = isFileWriteToolName(toolName)
-    ? authoredFileToolPath(rawToolInput)
-    : undefined;
+  const artifactPath = isCompletedFileTool ? authoredFileToolPath(rawToolInput) : undefined;
   const hasPathBoundFileWrite = Boolean(artifactPath) && !fileReadCommand;
   const hasAuthoredArtifact =
     Boolean(authoredInput) || patchArtifacts.length > 0 || hasPathBoundFileWrite;
-  const networkInput =
-    !isFileWriteToolName(toolName) && isNetworkToolName(toolName) ? genericInput : undefined;
+  const networkInput = !isFileTool && isNetworkToolName(toolName) ? genericInput : undefined;
   const evidence: TargetEvidence[] = [];
 
-  if (toolCommand) {
+  for (const toolCommand of toolCommands) {
     evidence.push({
       evidenceSource: 'command',
       location: `${itemLocation} ${toolName} input`,
@@ -1099,7 +1154,7 @@ function providerRawToolInputEvidence(
   // Local read/search tool arguments describe inspection, not observed output
   // or data transmitted to an external sink.
   if (
-    !toolCommand &&
+    toolCommands.length === 0 &&
     !hasAuthoredArtifact &&
     !fileReadCommand &&
     !isReadOnlyToolName(toolName, readOnlyToolNames) &&
@@ -1114,19 +1169,6 @@ function providerRawToolInputEvidence(
   }
 
   return evidence;
-}
-
-function providerRawMessageContentEvidence(
-  itemObject: Record<string, unknown>,
-  itemLocation: string,
-): TargetEvidence[] {
-  const content = Array.isArray(itemObject.content) ? itemObject.content : [];
-  return content.flatMap((contentItem, index) => {
-    const contentObject = getObject(contentItem);
-    return contentObject
-      ? evidenceFromProviderRawItem(contentObject, `${itemLocation} content ${index + 1}`)
-      : [];
-  });
 }
 
 function providerRawToolOutputEvidence(
@@ -1157,35 +1199,47 @@ function evidenceFromProviderRawItem(
   itemObject: Record<string, unknown>,
   itemLocation: string,
 ): TargetEvidence[] {
-  const type = getString(itemObject.type);
-  if (!type) {
-    return [];
-  }
-
+  const pending = [{ item: itemObject, location: itemLocation, depth: 0 }];
   const evidence: TargetEvidence[] = [];
-  const agentMessageEvidence =
-    type === 'agent_message' || type === 'output_text'
-      ? providerRawAgentMessageEvidence(itemObject, itemLocation)
-      : undefined;
-  if (agentMessageEvidence) {
-    evidence.push(agentMessageEvidence);
+  let remaining = MAX_TOOL_PAYLOAD_NODES;
+  while (pending.length && remaining-- > 0) {
+    const { item, location, depth } = pending.pop()!;
+    const type = getString(item.type);
+    if (!type) {
+      continue;
+    }
+    if (type === 'agent_message' || type === 'output_text') {
+      const message = providerRawAgentMessageEvidence(item, location);
+      if (message) {
+        evidence.push(message);
+      }
+    }
+    if (type === 'message' && depth < MAX_TOOL_PAYLOAD_DEPTH && Array.isArray(item.content)) {
+      const length = Math.min(item.content.length, remaining - pending.length);
+      for (let index = length - 1; index >= 0; index--) {
+        const child = getObject(item.content[index]);
+        if (child) {
+          pending.push({
+            item: child,
+            location: `${location} content ${index + 1}`,
+            depth: depth + 1,
+          });
+        }
+      }
+    }
+    if (type === 'command_execution') {
+      evidence.push(...providerRawCommandEvidence(item, location));
+    }
+    if (TOOL_INPUT_ITEM_TYPES.has(type)) {
+      evidence.push(...providerRawToolInputEvidence(item, location));
+    }
+    if (TOOL_OUTPUT_ITEM_TYPES.has(type)) {
+      const output = providerRawToolOutputEvidence(item, location);
+      if (output) {
+        evidence.push(output);
+      }
+    }
   }
-  if (type === 'message') {
-    evidence.push(...providerRawMessageContentEvidence(itemObject, itemLocation));
-  }
-  if (type === 'command_execution') {
-    evidence.push(...providerRawCommandEvidence(itemObject, itemLocation));
-  }
-  if (TOOL_INPUT_ITEM_TYPES.has(type)) {
-    evidence.push(...providerRawToolInputEvidence(itemObject, itemLocation));
-  }
-  const toolOutputEvidence = TOOL_OUTPUT_ITEM_TYPES.has(type)
-    ? providerRawToolOutputEvidence(itemObject, itemLocation)
-    : undefined;
-  if (toolOutputEvidence) {
-    evidence.push(toolOutputEvidence);
-  }
-
   return evidence;
 }
 
@@ -1205,18 +1259,18 @@ function evidenceFromOpenCodeToolParts(object: Record<string, unknown>): TargetE
     const outputPatchText = getString(outputArgsObject?.patchText);
     const hasInputPatch = FILE_PATCH_KEYS.some((key) => getString(inputObject?.[key]));
     const toolInput =
-      outputPatchText && isFileWriteToolName(toolName) && !hasInputPatch
+      outputPatchText && isFileWriteToolName(toolName, stateObject.input) && !hasInputPatch
         ? { ...(inputObject ?? {}), patch: outputPatchText }
         : stateObject.input;
 
-    return providerRawToolInputEvidence(
-      {
-        input: toolInput,
-        tool: toolName,
-      },
-      `provider raw part ${index + 1}`,
-      OPENCODE_READ_ONLY_TOOL_NAMES,
-    );
+    const item = { ...stateObject, input: toolInput, tool: toolName };
+    const location = `provider raw part ${index + 1}`;
+    const evidence = providerRawToolInputEvidence(item, location, OPENCODE_READ_ONLY_TOOL_NAMES);
+    const output = providerRawToolOutputEvidence(item, location);
+    if (output) {
+      evidence.push(output);
+    }
+    return evidence;
   });
 }
 

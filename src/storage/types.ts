@@ -69,11 +69,6 @@ export interface LocalStorageConfig {
 }
 
 /**
- * Storage configuration
- */
-export type StorageConfig = LocalStorageConfig;
-
-/**
  * Storage provider interface
  *
  * Implementations must handle:

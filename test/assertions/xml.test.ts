@@ -22,6 +22,125 @@ describe('validateXml', () => {
     });
   });
 
+  it('should validate well-formed XML edge cases', () => {
+    for (const valid of [
+      '<root/>',
+      '  <root/>\n',
+      '\uFEFF<root/>',
+      '\n<!-- before --><root/>',
+      '<!-- before --><root/><!-- after -->',
+      '<𐀀>astral name</𐀀>',
+      '<!DOCTYPE root><root/>',
+      '<!DOCTYPE 𐀀><𐀀/>',
+    ]) {
+      expect(validateXml(valid)).toEqual({
+        isValid: true,
+        reason: 'XML is valid and contains all required elements',
+      });
+    }
+  });
+
+  it('should invalidate non-well-formed XML the lenient parser accepts', () => {
+    for (const malformed of [
+      '<a></b>', // mismatched tags
+      '<a><b></a></b>', // improperly nested
+      '<a>text</a><b>more</b>', // multiple root elements
+      '<a attr=unquoted>x</a>', // unquoted attribute value
+      '<a/><b/>', // multiple self-closing root elements
+      '<a/>trailing', // text outside the root element
+      '<root><!-- bad -- comment --></root>', // invalid comment body
+      '<root attr="1" attr="2"/>', // duplicate attributes
+      '<p:root/>', // unbound namespace prefix
+      '<root xmlns:xml="wrong"/>', // invalid reserved namespace binding
+      '<root xmlns:a="urn:x" xmlns:b="urn:x" a:id="1" b:id="2"/>', // duplicate expanded attributes
+      '<root>&undefined;</root>', // undeclared entity
+      '<!DOCTYPE root><root>&undefined;</root>', // bare doctype cannot declare entities
+      '<root>\u0001</root>', // disallowed XML character
+      '', // missing root element
+      '"<a/>"', // quoted XML output
+      '```xml\n<a/>\n```', // fenced XML output
+    ]) {
+      expect(validateXml(malformed)).toEqual({
+        isValid: false,
+        reason: expect.stringContaining('XML parsing failed'),
+      });
+    }
+  });
+
+  it('should reject DTD internal subsets that cannot be fully validated', () => {
+    for (const xml of [
+      '<!DOCTYPE root [<!ENTITY writer "Donald">]><root>&writer;</root>',
+      '<!DOCTYPE root [<!ENTITY logo SYSTEM "logo.png" NDATA png>]><root>&logo;</root>',
+      '<!DOCTYPE root [<!ENTITY bad "<a>">]><root>&bad;</root>',
+      '<!DOCTYPE root [<!ELEMENT root (child>]><root/>',
+    ]) {
+      // A DTD internal subset is a deliberate policy rejection, so the reason
+      // is reported verbatim rather than wrapped as an "XML parsing failed" error.
+      expect(validateXml(xml)).toEqual({
+        isValid: false,
+        reason: 'DTD internal subsets are not supported by is-xml validation',
+      });
+    }
+  });
+
+  it('should accept external DOCTYPEs whose quoted system identifiers contain brackets', () => {
+    // The `[` lives inside a quoted SYSTEM literal, so it must not be
+    // mistaken for the start of an internal subset and rejected.
+    for (const xml of [
+      '<!DOCTYPE root SYSTEM "weird[name].dtd"><root/>',
+      '<!DOCTYPE root PUBLIC "-//x//EN" "weird[bracket].dtd"><root/>',
+    ]) {
+      expect(validateXml(xml)).toEqual({
+        isValid: true,
+        reason: 'XML is valid and contains all required elements',
+      });
+    }
+  });
+
+  it('should accept external DOCTYPE entity references without loading external resources', () => {
+    for (const xml of [
+      '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><body>&nbsp;</body></html>',
+      '<?xml version="1.0" standalone="no"?><!DOCTYPE root SYSTEM "entities.dtd"><root>&external;</root>',
+    ]) {
+      expect(validateXml(xml)).toEqual({
+        isValid: true,
+        reason: 'XML is valid and contains all required elements',
+      });
+    }
+  });
+
+  it('should reject undeclared external entities in standalone documents', () => {
+    expect(
+      validateXml(
+        '<?xml version="1.0" standalone="yes"?><!DOCTYPE root SYSTEM "entities.dtd"><root>&external;</root>',
+      ),
+    ).toEqual({
+      isValid: false,
+      reason: expect.stringContaining('XML parsing failed'),
+    });
+  });
+
+  it('should reject malformed external DOCTYPE declarations', () => {
+    for (const xml of [
+      '<!DOCTYPE><root/>',
+      '<!DOCTYPEroot><root/>',
+      '<!DOCTYPE 123><root/>',
+      '<!DOCTYPE root junk><root/>',
+      '<!DOCTYPE root SYSTEM><root/>',
+      '<!DOCTYPE root SYSTEM "sys.dtd" junk><root/>',
+      '<!DOCTYPE root SYSTEM "sys.dtd#fragment"><root/>',
+      '<!DOCTYPE root PUBLIC "-//x//EN"><root/>',
+      '<!DOCTYPE root PUBLIC "-//x//EN" "sys.dtd#fragment"><root/>',
+      '<!DOCTYPE root PUBLIC "-//x//[invalid]//EN" "sys.dtd"><root/>',
+      '<!DOCTYPE root PUBLIC "-//x//\tinvalid//EN" "sys.dtd"><root/>',
+    ]) {
+      expect(validateXml(xml)).toEqual({
+        isValid: false,
+        reason: 'XML parsing failed: Malformed DOCTYPE declaration',
+      });
+    }
+  });
+
   it('should validate XML with attributes', () => {
     expect(validateXml('<root><child id="1">Content</child></root>')).toEqual({
       isValid: true,
@@ -171,6 +290,31 @@ describe('validateXml', () => {
       reason: 'XML is valid and contains all required elements',
     });
   });
+
+  it('should reject the example XML structure when a required element is missing', () => {
+    const xml = dedent`
+      <analysis>
+        <classification>T-shirt/top</classification>
+        <color>White with black print</color>
+        <style>Modern, casual streetwear</style>
+        <confidence>9</confidence>
+        <reasoning>The image clearly shows a short-sleeved garment with a round neckline, which is characteristic of a T-shirt.</reasoning>
+      </analysis>
+    `;
+    expect(
+      validateXml(xml, [
+        'analysis.classification',
+        'analysis.color',
+        'analysis.features',
+        'analysis.style',
+        'analysis.confidence',
+        'analysis.reasoning',
+      ]),
+    ).toEqual({
+      isValid: false,
+      reason: 'XML is missing required elements: analysis.features',
+    });
+  });
 });
 
 describe('containsXml', () => {
@@ -231,6 +375,24 @@ describe('containsXml', () => {
     const input = 'Text <élément>Content</élément> more';
 
     expect(containsXml(input, ['élément'])).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
+  it('should find valid XML with non-ASCII text content', () => {
+    const input = 'Text <root><child>Café 東京 مرحبا</child></root> more';
+
+    expect(containsXml(input, ['root.child'])).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
+  it('should find valid XML with non-ASCII attribute values', () => {
+    const input = 'Text <root><child label="Crème brûlée 東京">Content</child></root> more';
+
+    expect(containsXml(input, ['root.child.@_label'])).toEqual({
       isValid: true,
       reason: 'XML is valid and contains all required elements',
     });

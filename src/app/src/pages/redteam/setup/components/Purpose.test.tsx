@@ -17,6 +17,11 @@ vi.mock('../hooks/useRedTeamConfig', () => ({
   useRedTeamConfig: () => mockUseRedTeamConfig(),
   DEFAULT_HTTP_TARGET: { id: 'http', config: {} },
 }));
+vi.mock('../hooks/useRedTeamTargetConfigValidation', () => ({
+  useRedTeamTargetConfigValidation: () => ({
+    targetConfigError: mockUseRedTeamConfig()?.targetConfigError ?? null,
+  }),
+}));
 
 vi.mock('@app/hooks/useTelemetry', () => ({
   useTelemetry: () => ({
@@ -224,6 +229,31 @@ describe('Purpose Component', () => {
   });
 
   describe('Target Purpose Discovery', () => {
+    it('blocks auto-discovery when the saved target configuration has an invalid JSON edit', async () => {
+      const user = userEvent.setup();
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          applicationDefinition: { purpose: 'A test purpose to enable the next button' },
+          target: {
+            id: 'openinterpreter',
+            config: { sandbox_mode: 'danger-full-access' },
+          },
+          testGenerationInstructions: '',
+        },
+        targetConfigError: 'Invalid JSON configuration',
+        updateApplicationDefinition: mockUpdateApplicationDefinition,
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderComponent({ onNext: vi.fn() });
+
+      const discoverButton = screen.getByRole('button', { name: /discover/i });
+      expect(discoverButton).toBeDisabled();
+      expect(screen.getByText('Invalid JSON configuration')).toBeInTheDocument();
+      await user.click(discoverButton);
+      expect(callApi).not.toHaveBeenCalledWith('/providers/discover', expect.anything());
+    });
+
     it('should display an error message when the target purpose discovery API call fails', async () => {
       const user = userEvent.setup();
       const errorMessage = 'Failed to discover target purpose';
