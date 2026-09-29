@@ -24,7 +24,7 @@ export class AzureGenericProvider implements ApiProvider {
 
   authHeaders?: Record<string, string>;
 
-  protected initializationPromise: Promise<void> | null = null;
+  private authInitializationPromise: Promise<void> | null = null;
   private authenticationPromise: Promise<void> | null = null;
 
   /**
@@ -65,12 +65,12 @@ export class AzureGenericProvider implements ApiProvider {
     this.id = id ? () => id : this.id;
 
     const initialization = this.initialize();
-    this.initializationPromise = initialization;
+    this.authInitializationPromise = initialization;
     // Authentication starts eagerly, but a failure must not poison later
     // requests or become an unhandled rejection before the first request.
     void initialization.catch(() => {
-      if (this.initializationPromise === initialization) {
-        this.initializationPromise = null;
+      if (this.authInitializationPromise === initialization) {
+        this.authInitializationPromise = null;
       }
     });
   }
@@ -88,11 +88,10 @@ export class AzureGenericProvider implements ApiProvider {
 
   async ensureInitialized(signal?: AbortSignal) {
     signal?.throwIfAborted();
-    if (this.initializationPromise != null) {
-      await awaitWithAbort(this.initializationPromise, signal);
+    if (this.authInitializationPromise != null) {
+      await awaitWithAbort(this.authInitializationPromise, signal);
     }
-    // Subclasses can use initializationPromise for other setup (such as MCP).
-    // Always finish authentication, including a retry after an earlier failure.
+    // Retry authentication if its eager initialization failed.
     if (!this.authHeaders) {
       await awaitWithAbort(this.initialize(), signal);
     }
