@@ -49,6 +49,10 @@ function strings(value: unknown): string[] | null {
   return Array.isArray(value) ? value.filter((item): item is string => text(item) !== null) : null;
 }
 
+function scopePaths(value: unknown): string[] | null {
+  return Array.isArray(value) && value.every((item) => text(item) !== null) ? value : null;
+}
+
 function operation(value: unknown): CodexSecurityResult['operation'] {
   switch (value) {
     case 'security-scan':
@@ -172,8 +176,8 @@ function scope(value: unknown): CodexSecurityResult['scope'] {
   }
   const input = record(value);
   return {
-    includePaths: strings(input.includePaths),
-    excludePaths: strings(input.excludePaths),
+    includePaths: scopePaths(input.includePaths),
+    excludePaths: scopePaths(input.excludePaths),
     summary: text(input.summary),
     limitations: strings(input.limitations) ?? [],
   };

@@ -25,6 +25,64 @@ const responseData = {
   },
 };
 
+describe('GPT-6.1 Sol Responses with Ultrafast', () => {
+  it.each([
+    { reported: 'ultrafast', cost: undefined },
+    { reported: undefined, cost: undefined },
+    { reported: 'default', cost: 0.003 },
+  ])('forwards Ultrafast and bills the actual tier $reported', async ({ reported, cost }) => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      data: {
+        ...responseData,
+        model: 'gpt-6.1-sol',
+        service_tier: reported,
+        usage: { input_tokens: 1000, output_tokens: 100, total_tokens: 1100 },
+      },
+    });
+    const result = await new OpenAiResponsesProvider('gpt-6.1-sol', {
+      config: { apiKey: 'test-key', service_tier: 'ultrafast', reasoning_effort: 'high' },
+    }).callApi('Say ready.');
+
+    const [, options] = vi.mocked(cache.fetchWithCache).mock.calls[0];
+    expect(JSON.parse(options?.body as string)).toMatchObject({
+      model: 'gpt-6.1-sol',
+      service_tier: 'ultrafast',
+      reasoning: { effort: 'high' },
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Ready.');
+    if (cost === undefined) {
+      expect(result.cost).toBeUndefined();
+    } else {
+      expect(result.cost).toBeCloseTo(cost, 10);
+    }
+  });
+
+  it('surfaces a model or account rejection of Ultrafast from Responses', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 400,
+      statusText: 'Bad Request',
+      data: {
+        error: {
+          message: 'Ultrafast is unavailable for this model or account.',
+          type: 'invalid_request_error',
+          code: 'unsupported_value',
+          param: 'service_tier',
+        },
+      },
+    });
+    const result = await new OpenAiResponsesProvider('gpt-6.1-sol', {
+      config: { apiKey: 'test-key', service_tier: 'ultrafast' },
+    }).callApi('Say ready.');
+    expect(result.error).toContain('Ultrafast is unavailable for this model or account.');
+    expect(result.output).toBeUndefined();
+  });
+});
+
 describe('GPT-6 Astra Responses billing', () => {
   it.each([
     { model: 'gpt-6-astra', requestModel: 'gpt-6-astra' },

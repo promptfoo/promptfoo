@@ -41,11 +41,19 @@ const scopeKey = (scope) => {
 };
 
 export function completedScan(_output, context) {
-  const status = context.metadata?.codexSecurity?.status ?? 'unknown';
+  const result = context.metadata?.codexSecurity;
+  const status = result?.status ?? 'unknown';
+  const pass =
+    status === 'completed' &&
+    [null, 'security-scan', 'deep-security-scan', 'security-diff-scan'].includes(
+      result.operation,
+    ) &&
+    result.findings != null &&
+    result.validation == null;
   return {
-    pass: status === 'completed',
-    score: Number(status === 'completed'),
-    reason: `Recorded scan status: ${status}`,
+    pass,
+    score: Number(pass),
+    reason: pass ? 'Recorded scan completed.' : `No completed scan evidence (status: ${status}).`,
   };
 }
 

@@ -91,6 +91,32 @@ describe('Codex Security replay evidence validation', () => {
   });
 
   it.each(['raw scan', 'replay envelope'] as const)(
+    'rejects malformed scope lists instead of accepting narrower metadata in a %s',
+    async (format) => {
+      for (const paths of [
+        ['src', 7],
+        ['src', ''],
+        ['src', '  '],
+      ]) {
+        const original = scanPayload();
+        const result = normalizeCodexSecurityResult(original, { source: { kind: 'sdk' } });
+        const payload = {
+          ...original,
+          manifest: {
+            ...original.manifest,
+            scan: { ...original.manifest.scan, scope: { includePaths: paths, excludePaths: [] } },
+          },
+        };
+        const input =
+          format === 'raw scan'
+            ? payload
+            : { ...createCodexSecurityReplayHeader(payload, result), payload };
+        await expect(load(input)).rejects.toThrow('must contain a serialized ScanResult');
+      }
+    },
+  );
+
+  it.each(['raw scan', 'replay envelope'] as const)(
     'rejects duplicate finding IDs in a %s even when payload and metadata agree',
     async (format) => {
       const payload = scanPayload();

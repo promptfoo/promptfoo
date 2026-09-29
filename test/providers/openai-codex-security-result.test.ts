@@ -106,6 +106,17 @@ describe('normalizeCodexSecurityResult', () => {
     expect(CodexSecurityResultSchema.safeParse(result).success).toBe(true);
   });
 
+  it.each([['src', 7], ['src', ''], ['src', '  '], 'src', null])(
+    'keeps malformed scope lists unknown instead of narrowing them: %j',
+    (paths) => {
+      const raw = { manifest: { scan: { scope: { includePaths: paths, excludePaths: paths } } } };
+      const before = structuredClone(raw);
+      const result = normalizeCodexSecurityResult(raw, { source: { kind: 'saved-report' } });
+      expect(result.scope).toMatchObject({ includePaths: null, excludePaths: null });
+      expect(raw).toEqual(before);
+    },
+  );
+
   it.each([
     {},
     { startedAt: 'invalid', completedAt: 'invalid' },

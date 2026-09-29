@@ -8,6 +8,8 @@ import { normalizeCodexSecurityResult } from './codex-security-result';
 
 import type { CodexSecurityReplay, CodexSecurityResult } from '../../contracts/codexSecurity';
 
+const ScopePathsSchema = z.array(z.string().refine((value) => value.trim().length > 0));
+
 const ScanReportSchema = z.object({
   manifest: z.object({
     documentType: z.literal('codex-security.scan-manifest'),
@@ -15,6 +17,13 @@ const ScanReportSchema = z.object({
     scan: z.object({
       id: z.string().min(1),
       status: z.enum(['completed', 'failed', 'canceled', 'interrupted']),
+      scope: z
+        .object({
+          includePaths: ScopePathsSchema.nullable().optional(),
+          excludePaths: ScopePathsSchema.nullable().optional(),
+        })
+        .nullable()
+        .optional(),
     }),
   }),
   findings: z.object({

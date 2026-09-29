@@ -148,7 +148,7 @@ After those labels exist, distinguish the metrics you intend to compare:
 
 Keep missing expected findings in the recall denominator when coverage is partial; otherwise, a smaller review scope could misleadingly improve the score. Display the coverage limitation alongside the misses. If ground truth, revision, or scope is not established, leave the quality comparison unscored rather than inventing a denominator. A zero denominator is undefined, not a perfect score.
 
-The included configuration checks completion and coverage. SDK `failure_severity` records a threshold; it does not create a Promptfoo assertion or establish recall/precision.
+The included configuration checks scan completion and coverage. Completed validation reports do not count as completed scans. Malformed scope path lists are rejected during import. SDK `failure_severity` records a threshold; it does not create a Promptfoo assertion or establish recall/precision.
 
 ### Add a curated-recall assertion
 

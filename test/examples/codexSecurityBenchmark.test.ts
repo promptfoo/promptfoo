@@ -10,6 +10,7 @@ import type { GradingResult } from '../../src/types/index';
 
 let helper: {
   evidenceHash: (value: unknown) => string;
+  completedScan: (output: unknown, context: unknown) => GradingResult;
   gradeBenchmark: (output: unknown, context: unknown) => GradingResult;
 };
 const reportHash = 'a'.repeat(64);
@@ -110,6 +111,24 @@ describe('Codex Security example benchmark grading', () => {
       namedScores: { CuratedRecall: 0.5, PrecisionLower: 1, PrecisionUpper: 1 },
       metadata: { quality: { status: 'scored', expectedCount: 2 } },
     });
+  });
+
+  it('does not count a completed validation as a completed scan', () => {
+    const f = fixture();
+    expect(helper.completedScan(f.output, f.context)).toMatchObject({ pass: true, score: 1 });
+    for (const invalid of [
+      { operation: 'validation' },
+      { validation: { disposition: 'reportable' } },
+      { findings: null },
+      { status: 'failed' },
+    ]) {
+      expect(
+        helper.completedScan(f.output, {
+          metadata: { codexSecurity: { ...f.context.metadata.codexSecurity, ...invalid } },
+        }),
+      ).toMatchObject({ pass: false, score: 0 });
+    }
+    expect(helper.completedScan(null, {})).toMatchObject({ pass: false, score: 0 });
   });
 
   it('leaves validation results with extra findings and matching review evidence unscored', () => {
