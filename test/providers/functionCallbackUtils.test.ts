@@ -8,6 +8,7 @@ import logger from '../../src/logger';
 import { FunctionCallbackHandler } from '../../src/providers/functionCallbackUtils';
 
 import type { FunctionCallbackConfig } from '../../src/providers/functionCallbackTypes';
+import type { McpToolCallEntry } from '../../src/providers/mcp/types';
 
 // Mock dependencies
 vi.mock('../../src/cliState', () => ({ default: { basePath: '/test/basePath' } }));
@@ -705,6 +706,54 @@ describe('FunctionCallbackHandler', () => {
         callTool: vi.fn(),
       };
       handler = new FunctionCallbackHandler(mockMCPClient as any);
+    });
+
+    it.each([false, true])(
+      'records parsed null arguments when the tool fails=%s',
+      async (fails) => {
+        mockMCPClient.getAllTools.mockReturnValue([{ name: 'local_tool' }]);
+        if (fails) {
+          mockMCPClient.callTool.mockRejectedValue(new Error('Fixture tool failure'));
+        } else {
+          mockMCPClient.callTool.mockResolvedValue({ content: 'Fixture result' });
+        }
+        const toolCalls: McpToolCallEntry[] = [];
+
+        await handler.processCall(
+          { id: 'call-null', name: 'local_tool', arguments: 'null' },
+          undefined,
+          undefined,
+          { toolCalls },
+        );
+
+        expect(mockMCPClient.callTool).toHaveBeenCalledWith('local_tool', null);
+        expect(toolCalls).toEqual([
+          {
+            id: 'call-null',
+            name: 'local_tool',
+            input: null,
+            output: fails ? 'Fixture tool failure' : 'Fixture result',
+            is_error: fails,
+          },
+        ]);
+      },
+    );
+
+    it('records raw arguments when JSON parsing fails', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([{ name: 'local_tool' }]);
+      const toolCalls: McpToolCallEntry[] = [];
+
+      await handler.processCall(
+        { name: 'local_tool', arguments: 'invalid JSON' },
+        undefined,
+        undefined,
+        { toolCalls },
+      );
+
+      expect(mockMCPClient.callTool).not.toHaveBeenCalled();
+      expect(toolCalls).toEqual([
+        expect.objectContaining({ name: 'local_tool', input: 'invalid JSON', is_error: true }),
+      ]);
     });
 
     it('should execute MCP tool when tool name matches available MCP tools', async () => {

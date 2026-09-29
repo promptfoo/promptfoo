@@ -119,17 +119,7 @@ export function throwConfigurationError(message: string): never {
   `);
 }
 
-/**
- * Resolve the model an Azure deployment actually serves.
- *
- * Azure separates the connection (the deployment name that goes in the URL) from the
- * model behind it, so capability heuristics and cost lookups must not read the
- * deployment name directly: an explicit `passthrough.model` — what is sent on the wire —
- * wins, then `modelName`, and only then the deployment name.
- *
- * Case is preserved so the id stays what the user configured; every consumer that matches
- * on it (the capability heuristics, `calculateAzureCost`) lower-cases for itself.
- */
+/** Resolve the served model in config order, preserving its casing for requests and cost. */
 export function resolveAzureModelName(
   config: { modelName?: string; passthrough?: object } | undefined,
   deploymentName: string,
@@ -165,10 +155,7 @@ export function calculateAzureCost(
     return undefined;
   }
 
-  // Matched case-insensitively: the table is keyed on the vendor's own casing
-  // (`DeepSeek-R1`, `Meta-Llama-3-8B-Instruct`), which users rarely reproduce exactly, and
-  // every other Azure model heuristic already lower-cases before matching. The rate lookups
-  // below key off `model.id` so they stay aligned with the entry that matched.
+  // Use the catalog's casing for auxiliary rate lookups after a case-insensitive match.
   const lowerModelName = modelName.toLowerCase();
   const model = AZURE_MODELS.find((entry) => entry.id.toLowerCase() === lowerModelName);
   if (!model) {

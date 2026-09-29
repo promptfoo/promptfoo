@@ -1,7 +1,10 @@
+import { getProcessEnv } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
+import { sanitizeObject } from '../../util/sanitizer';
+import { normalizeRenderedOAuthScopes } from './auth';
 
 import type { VarValue } from '../../types/shared';
 import type {
@@ -13,6 +16,46 @@ import type {
 } from './types';
 
 export type { OAuthTokenResult };
+
+export function sanitizeMcpToolData<T>(value: T): T {
+  return sanitizeObject(value, { context: 'MCP tool data', sanitizeUrls: true });
+}
+
+export function normalizeMcpToolContent(
+  content: unknown,
+  onUnknownContent?: (part: object) => void,
+): string {
+  if (content == null) {
+    return '';
+  }
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') {
+          return part;
+        }
+        if (part && typeof part === 'object') {
+          if ('text' in part && (part as { text?: unknown }).text != null) {
+            return String((part as { text: unknown }).text);
+          }
+          if ('json' in part) {
+            return JSON.stringify((part as { json: unknown }).json);
+          }
+          if ('data' in part) {
+            return JSON.stringify((part as { data: unknown }).data);
+          }
+          onUnknownContent?.(part);
+          return JSON.stringify(part);
+        }
+        return String(part);
+      })
+      .join('\n');
+  }
+  return JSON.stringify(content);
+}
 
 export function isMcpToolNameFilter(tools: unknown): tools is string | string[] {
   const isPlainToolName = (tool: unknown): tool is string =>
@@ -42,42 +85,6 @@ export function getMcpErrorMessage(result: MCPToolResult): string {
 }
 
 /**
- * Normalize an MCP tool result's content to a readable string, so a structured
- * content block never reaches the eval output as `[object Object]`.
- */
-export function normalizeMcpContent(content: unknown): string {
-  if (content == null) {
-    return '';
-  }
-  if (typeof content === 'string') {
-    return content;
-  }
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === 'string') {
-          return part;
-        }
-        if (part && typeof part === 'object') {
-          if ('text' in part && part.text != null) {
-            return String(part.text);
-          }
-          if ('json' in part) {
-            return JSON.stringify(part.json);
-          }
-          if ('data' in part) {
-            return JSON.stringify(part.data);
-          }
-          return JSON.stringify(part);
-        }
-        return String(part);
-      })
-      .join('\n');
-  }
-  return JSON.stringify(content);
-}
-
-/**
  * Render environment variables in server config auth fields.
  * Supports {{VAR_NAME}} syntax for variable substitution.
  */
@@ -90,7 +97,7 @@ export function renderAuthVars(
   }
 
   // Use process.env as default vars if none provided
-  const renderVars = vars || (process.env as Record<string, string>);
+  const renderVars = vars || (getProcessEnv() as Record<string, string>);
 
   return {
     ...server,
@@ -115,7 +122,7 @@ function getOAuthCacheKey(
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
   tokenUrl: string,
 ): string {
-  return `${tokenUrl}:${auth.grantType}:${'clientId' in auth ? auth.clientId : ''}:${'username' in auth ? auth.username : ''}:${auth.scopes?.join(' ') ?? ''}`;
+  return `${tokenUrl}:${auth.grantType}:${'clientId' in auth ? auth.clientId : ''}:${'username' in auth ? auth.username : ''}:${normalizeRenderedOAuthScopes(auth.scopes)?.join(' ') ?? ''}`;
 }
 
 // Cache for discovered token endpoints
@@ -225,7 +232,7 @@ export async function getOAuthTokenWithExpiry(
     clientSecret: auth.clientSecret,
     username: 'username' in auth ? auth.username : undefined,
     password: 'password' in auth ? auth.password : undefined,
-    scopes: auth.scopes,
+    scopes: normalizeRenderedOAuthScopes(auth.scopes),
   });
 
   // Cache the token

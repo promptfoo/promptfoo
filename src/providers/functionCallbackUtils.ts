@@ -4,7 +4,7 @@ import {
   loadCallbackFromFileUrl,
   wrapError,
 } from '../util/functions/loadFunction';
-import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpContent } from './mcp/util';
+import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from './mcp/util';
 import { withGenAIToolSpan } from './tracing';
 
 import type {
@@ -368,11 +368,10 @@ export class FunctionCallbackHandler {
     callId?: string,
     toolCalls?: McpToolCallEntry[],
   ): Promise<FunctionCallResult> {
-    // Declared outside the try so the catch below can still report the arguments;
-    // parsing stays inside it, so malformed JSON keeps failing the call as before.
-    let parsedArgs: any;
+    // Preserve raw input only when argument parsing fails.
+    let input = args;
     const record = (output: unknown, is_error: boolean) => {
-      toolCalls?.push({ id: callId, name: toolName, input: parsedArgs ?? args, output, is_error });
+      toolCalls?.push({ id: callId, name: toolName, input, output, is_error });
     };
 
     try {
@@ -381,8 +380,9 @@ export class FunctionCallbackHandler {
       }
 
       // Parse arguments: support stringified JSON, object, or empty
-      parsedArgs =
+      const parsedArgs =
         args == null || args === '' ? {} : typeof args === 'string' ? JSON.parse(args) : args;
+      input = parsedArgs;
       const result = await this.mcpClient.callTool(toolName, parsedArgs);
 
       if (isMcpErrorResult(result)) {
@@ -391,7 +391,7 @@ export class FunctionCallbackHandler {
         return { output: `MCP Tool Error (${toolName}): ${errorMessage}`, isError: true };
       }
 
-      const content = normalizeMcpContent(result?.content);
+      const content = normalizeMcpToolContent(result?.content);
       record(content, false);
       return { output: `MCP Tool Result (${toolName}): ${content}`, isError: false };
     } catch (error) {
