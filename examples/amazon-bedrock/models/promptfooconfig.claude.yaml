@@ -16,9 +16,14 @@ providers:
       temperature: 1
       max_tokens: 2048
       region: us-west-2
-  # These Opus models omit unsupported sampling controls.
+  # These models omit unsupported sampling controls.
   - id: bedrock:global.anthropic.claude-opus-5-5
     label: Claude Opus 5.5
+    config:
+      max_tokens: 2048
+      region: us-east-1
+  - id: bedrock:global.anthropic.claude-sonnet-5-5
+    label: Claude Sonnet 5.5
     config:
       max_tokens: 2048
       region: us-east-1

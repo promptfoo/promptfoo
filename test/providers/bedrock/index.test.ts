@@ -777,6 +777,57 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.max_tokens).toBe(1024);
     });
 
+    it.each([
+      [{ type: 'disabled' }, { type: 'between_tools' }],
+      [{ type: 'between_tools' }, { type: 'between_tools' }],
+    ] as const)(
+      'sends thinking %j as %j for Claude Sonnet 5.5, with no thinking headroom',
+      async (thinking, expected) => {
+        const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          { region: 'us-east-1', thinking },
+          'hi',
+          undefined,
+          'global.anthropic.claude-sonnet-5-5',
+        );
+        expect(params.thinking).toEqual(expected);
+        expect(params.max_tokens).toBe(1024);
+        expect(params).not.toHaveProperty('temperature');
+      },
+    );
+
+    it('keeps thinking headroom for Claude Sonnet 5.5 when thinking is left to the API', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1' },
+        'hi',
+        undefined,
+        'anthropic.claude-sonnet-5-5',
+      );
+      expect(params).not.toHaveProperty('thinking');
+      expect(params.max_tokens).toBe(2048);
+    });
+
+    it.each([
+      { type: 'any' as const },
+      { type: 'tool' as const, name: 'get_weather' },
+      { type: 'auto' as const },
+    ])('omits only forced tool_choice for Claude Sonnet 5.5: %j', async (tool_choice) => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        {
+          region: 'us-east-1',
+          tools: [{ name: 'get_weather', description: 'Weather', input_schema: {} }],
+          tool_choice,
+        },
+        'hi',
+        undefined,
+        'global.anthropic.claude-sonnet-5-5',
+      );
+      if (tool_choice.type === 'auto') {
+        expect(params.tool_choice).toEqual(tool_choice);
+      } else {
+        expect(params).not.toHaveProperty('tool_choice');
+      }
+    });
+
     it.each(['global.anthropic.claude-opus-5-5', 'global.anthropic.claude-fable-5-1'])(
       'keeps thinking headroom for always-on %s even when thinking is disabled',
       async (model) => {
@@ -3572,6 +3623,16 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     }
   });
 
+  it('maps Claude Sonnet 5.5 across the base and global inference profiles', () => {
+    for (const id of ['anthropic.claude-sonnet-5-5', 'global.anthropic.claude-sonnet-5-5']) {
+      expect(AWS_BEDROCK_MODELS[id]).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+      expect(getHandlerForModel(id)).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    }
+    expect(getHandlerForModel('us.anthropic.claude-sonnet-5-5')).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+  });
+
   it('maps Claude Sonnet 5 across the base and regional inference profiles', () => {
     // Sonnet 5 mirrors the Claude 5-generation profile set: base + us./eu./global.
     expect(AWS_BEDROCK_MODELS['anthropic.claude-sonnet-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
@@ -4012,6 +4073,7 @@ describe('AwsBedrockCompletionProvider', () => {
   it.each([
     ['global.anthropic.claude-fable-5-1', 1000, 0.0363],
     ['global.anthropic.claude-opus-5-5', 1000, 0.01454],
+    ['global.anthropic.claude-sonnet-5-5', 1000, 0.00729],
     ['global.anthropic.claude-mythos-5-1', 0, 0.0263],
     ['global.anthropic.claude-fable-5', 0, 0.02645],
   ] as const)(
