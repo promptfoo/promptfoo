@@ -39,6 +39,23 @@ function stringifyReportValue(value: unknown): string | undefined {
   return String(value);
 }
 
+export function getPromptDisplayString(prompt: string): string {
+  try {
+    const parsedPrompt = JSON.parse(prompt);
+    if (Array.isArray(parsedPrompt)) {
+      const lastPrompt = parsedPrompt[parsedPrompt.length - 1];
+      if (lastPrompt?.content !== undefined) {
+        return typeof lastPrompt.content === 'string'
+          ? lastPrompt.content
+          : JSON.stringify(lastPrompt.content);
+      }
+    }
+  } catch {
+    // Plain prompt text does not need JSON decoding.
+  }
+  return prompt;
+}
+
 export function getReportPrompt(result: EvaluateResult, injectVar: string): string {
   const actualPrompt = getActualPrompt(result.response);
   if (actualPrompt !== undefined) {

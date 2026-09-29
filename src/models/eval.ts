@@ -881,8 +881,13 @@ function projectSummaryForRedteamReport(
   stripFlags: RedteamReportStripFlags,
   alreadyOutputProjected = false,
 ): EvaluateSummaryV3 | EvaluateSummaryV2 {
-  const results = evaluateSummary.results.map((result) =>
-    projectResultForRedteamReport(result, injectVar, stripFlags, alreadyOutputProjected),
+  const results = evaluateSummary.results.map((result, index) =>
+    projectResultForRedteamReport(
+      { ...result, testIdx: result.testIdx ?? index, promptIdx: result.promptIdx ?? 0 },
+      injectVar,
+      stripFlags,
+      alreadyOutputProjected,
+    ),
   );
   if ('table' in evaluateSummary) {
     return {
@@ -1396,8 +1401,8 @@ export default class Eval {
       ) AS legacy_result
       WHERE ${evalsTable.id} = ${evalId}
         AND legacy_result.type = 'object'
-        AND json_extract(legacy_result.value, '$.testIdx') = ${testIdx}
-        AND json_extract(legacy_result.value, '$.promptIdx') = ${promptIdx}
+        AND COALESCE(json_extract(legacy_result.value, '$.testIdx'), legacy_result.key) = ${testIdx}
+        AND COALESCE(json_extract(legacy_result.value, '$.promptIdx'), 0) = ${promptIdx}
         ${resultIdPredicate}
       LIMIT 2
     `);
@@ -2489,8 +2494,8 @@ export default class Eval {
     const sources = legacy
       ? {
           id: sql<string>`json_extract(report_result.value, '$.id')`,
-          promptIdx: sql<number>`json_extract(report_result.value, '$.promptIdx')`,
-          testIdx: sql<number>`json_extract(report_result.value, '$.testIdx')`,
+          promptIdx: sql<number>`COALESCE(json_extract(report_result.value, '$.promptIdx'), 0)`,
+          testIdx: sql<number>`COALESCE(json_extract(report_result.value, '$.testIdx'), report_result.key)`,
           promptId: sql<string>`json_extract(report_result.value, '$.promptId')`,
           provider: sql<string>`json_extract(report_result.value, '$.provider')`,
           prompt: sql<string>`json_extract(report_result.value, '$.prompt')`,

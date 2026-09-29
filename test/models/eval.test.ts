@@ -1582,6 +1582,36 @@ describe('evaluator', () => {
       );
     });
 
+    it('uses stable row positions for legacy results without IDs or coordinates', async () => {
+      const results = ['first legacy output', 'second legacy output'].map((output) => {
+        const result = createEvaluateResult({ response: { output } });
+        return Object.fromEntries(
+          Object.entries(result).filter(([key]) => !['id', 'testIdx', 'promptIdx'].includes(key)),
+        ) as unknown as EvaluateResult;
+      });
+      const summary = createEvaluateSummaryV2({ results });
+      const evalId = await writeResultsToDatabase(summary, {});
+      const saved = await Eval.findById(evalId);
+      const memory = new Eval({});
+      memory.oldResults = summary;
+      for (const evaluation of [saved!, memory]) {
+        const compact = await evaluation.toResultsFile({ resultProjection: 'redteamReport' });
+        expect(
+          compact.results.results.map(({ testIdx, promptIdx }) => [testIdx, promptIdx]),
+        ).toEqual([
+          [0, 0],
+          [1, 0],
+        ]);
+        for (const row of compact.results.results) {
+          expect(
+            await Eval.getResultByIdAndIndices(evalId, row.testIdx, row.promptIdx),
+          ).toMatchObject({
+            response: { output: results[row.testIdx].response!.output },
+          });
+        }
+      }
+    });
+
     it('rejects ambiguous ID-less legacy row details', async () => {
       const results = ['first', 'second'].map((output) =>
         createEvaluateResult({

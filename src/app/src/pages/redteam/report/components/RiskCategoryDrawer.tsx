@@ -19,7 +19,12 @@ import ChatMessages, { type Message } from '../../../eval/components/ChatMessage
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
-import { getPassRateStyles, getStrategyIdFromTest, type TestWithMetadata } from './shared';
+import {
+  getPassRateStyles,
+  getPromptDisplayString,
+  getStrategyIdFromTest,
+  type TestWithMetadata,
+} from './shared';
 import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 
 interface RiskCategoryDrawerProps {
@@ -56,23 +61,6 @@ function sortByPriorityStrategies(a: TestWithMetadata, b: TestWithMetadata): num
   }
   // If neither has priority, maintain original order
   return 0;
-}
-
-function getPromptDisplayString(prompt: string): string {
-  try {
-    const parsedPrompt = JSON.parse(prompt);
-    if (Array.isArray(parsedPrompt)) {
-      const lastPrompt = parsedPrompt[parsedPrompt.length - 1];
-      if (lastPrompt?.content !== undefined) {
-        return typeof lastPrompt.content === 'string'
-          ? lastPrompt.content
-          : JSON.stringify(lastPrompt.content);
-      }
-    }
-  } catch {
-    // Ignore error
-  }
-  return prompt;
 }
 
 function getOutputDisplay(output: string | object): string {
