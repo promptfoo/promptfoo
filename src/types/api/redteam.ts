@@ -5,42 +5,82 @@ import {
   PluginConfigSchema,
   StrategyConfigSchema,
 } from '../../redteam/types';
-import { RedteamResponseSchemas } from './responses.js';
+import { BaseTokenUsageSchema } from '../shared';
+import { MessageResponseSchema } from './common';
+import { JsonProviderOptionsWithIdSchema } from './providers';
 
 import type { Plugin, Strategy } from '../../redteam/constants';
 
 // POST /api/redteam/generate-test
+
+function normalizePreviewGenerationProvider(provider: unknown): unknown {
+  if (typeof provider === 'string') {
+    const id = provider.trim();
+    return id || undefined;
+  }
+
+  if (provider && typeof provider === 'object' && !Array.isArray(provider)) {
+    const providerObject = provider as Record<string, unknown>;
+    if (typeof providerObject.id !== 'string') {
+      return undefined;
+    }
+
+    const id = providerObject.id.trim();
+    return id ? { ...providerObject, id } : undefined;
+  }
+
+  return provider;
+}
+
+const PreviewGenerationProviderSchema = z.preprocess(
+  normalizePreviewGenerationProvider,
+  z.union([z.string().min(1), JsonProviderOptionsWithIdSchema]).optional(),
+);
 
 export const TestCaseGenerationSchema = z.object({
   plugin: z.object({
     id: z.string().refine((val) => ALL_PLUGINS.includes(val as Plugin), {
       message: `Invalid plugin ID. Must be one of: ${ALL_PLUGINS.join(', ')}`,
     }) as unknown as z.ZodType<Plugin>,
-    config: PluginConfigSchema.catchall(z.unknown()).optional().prefault({}),
+    config: PluginConfigSchema.catchall(z.unknown()).prefault({}),
   }),
   strategy: z.object({
     id: z.string().refine((val) => (ALL_STRATEGIES as string[]).includes(val), {
       message: `Invalid strategy ID. Must be one of: ${ALL_STRATEGIES.join(', ')}`,
     }) as unknown as z.ZodType<Strategy>,
-    config: StrategyConfigSchema.optional().prefault({}),
+    config: StrategyConfigSchema.prefault({}),
   }),
   config: z.object({
     applicationDefinition: z.object({
       purpose: z.string().nullable().optional(),
     }),
   }),
-  turn: z.int().min(0).optional().prefault(0),
+  provider: PreviewGenerationProviderSchema.optional(),
+  turn: z.int().min(0).prefault(0),
   maxTurns: z.int().min(1).optional(),
-  history: z.array(ConversationMessageSchema).optional().prefault([]),
+  history: z.array(ConversationMessageSchema).prefault([]),
   goal: z.string().optional(),
   stateful: z.boolean().optional(),
   // Batch generation: number of test cases to generate (1-10, default 1)
-  count: z.int().min(1).max(10).optional().prefault(1),
+  count: z.int().min(1).max(10).prefault(1),
 });
 
 export type TestCaseGeneration = z.infer<typeof TestCaseGenerationSchema>;
 
-export const TestCaseGenerationResponseSchema = RedteamResponseSchemas.GenerateTest.Response;
+const GeneratedTestCaseResponseSchema = z.object({
+  prompt: z.string(),
+  context: z.string(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const TestCaseGenerationResponseSchema = z.union([
+  GeneratedTestCaseResponseSchema,
+  z.object({
+    testCases: z.array(GeneratedTestCaseResponseSchema),
+    count: z.number().int().nonnegative(),
+    tokenUsage: BaseTokenUsageSchema.optional(),
+  }),
+]);
 
 export type TestCaseGenerationResponse = z.infer<typeof TestCaseGenerationResponseSchema>;
 
@@ -56,13 +96,15 @@ export const RedteamRunRequestSchema = z.object({
 
 export type RedteamRunRequest = z.infer<typeof RedteamRunRequestSchema>;
 
-export const RedteamRunResponseSchema = RedteamResponseSchemas.Run.Response;
+export const RedteamRunResponseSchema = z.object({
+  id: z.string().uuid(),
+});
 
 export type RedteamRunResponse = z.infer<typeof RedteamRunResponseSchema>;
 
 // POST /api/redteam/cancel
 
-export const RedteamCancelResponseSchema = RedteamResponseSchemas.Cancel.Response;
+export const RedteamCancelResponseSchema = MessageResponseSchema;
 
 export type RedteamCancelResponse = z.infer<typeof RedteamCancelResponseSchema>;
 
@@ -76,14 +118,17 @@ export type RedteamTaskParams = z.infer<typeof RedteamTaskParamsSchema>;
 
 export const RedteamTaskRequestSchema = z.record(z.string(), z.unknown());
 
-export const RedteamTaskResponseSchema = RedteamResponseSchemas.Task.Response;
+export const RedteamTaskResponseSchema = z.unknown();
 
 export type RedteamTaskRequest = z.infer<typeof RedteamTaskRequestSchema>;
 export type RedteamTaskResponse = z.infer<typeof RedteamTaskResponseSchema>;
 
 // GET /api/redteam/status
 
-export const RedteamStatusResponseSchema = RedteamResponseSchemas.Status.Response;
+export const RedteamStatusResponseSchema = z.object({
+  hasRunningJob: z.boolean(),
+  jobId: z.string().nullable(),
+});
 
 export type RedteamStatusResponse = z.infer<typeof RedteamStatusResponseSchema>;
 

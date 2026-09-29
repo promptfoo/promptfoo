@@ -2,11 +2,11 @@ import { useMemo } from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { mockWindowLocation } from '@app/tests/browserMocks';
-import { callApiJson } from '@app/utils/api';
+import { callApi } from '@app/utils/api';
 import { ResultFailureReason } from '@promptfoo/types';
 import { render, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import App from './Report';
 import type { EvaluateResult, GradingResult, ResultsFile } from '@promptfoo/types';
@@ -20,12 +20,9 @@ const renderWithProviders = (ui: React.ReactElement) => {
   );
 };
 
-vi.mock('@app/utils/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@app/utils/api')>()),
-  callApiJson: vi.fn(),
-}));
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+vi.mock('@app/utils/api');
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual('react-router');
   return {
     ...actual,
     useNavigate: () => vi.fn(),
@@ -575,7 +572,11 @@ const createComponentMockResult = (
     tokenUsage: { prompt: 1, completion: 1, total: 2 },
   }) as unknown as EvaluateResult;
 
-const createComponentMockEvalData = (numPrompts: number, results: EvaluateResult[]): ResultsFile =>
+const createComponentMockEvalData = (
+  numPrompts: number,
+  results: EvaluateResult[],
+  numRequests = 10,
+): ResultsFile =>
   ({
     version: 4,
     createdAt: '2025-01-01T00:00:00Z',
@@ -585,7 +586,7 @@ const createComponentMockEvalData = (numPrompts: number, results: EvaluateResult
       raw: '{{prompt}}',
       label: `Prompt ${i}`,
       provider: `Provider ${i}`,
-      metrics: { tokenUsage: { total: 100, numRequests: 10 } },
+      metrics: { tokenUsage: { total: 100, numRequests } },
     })),
     results: {
       version: 3,
@@ -595,7 +596,7 @@ const createComponentMockEvalData = (numPrompts: number, results: EvaluateResult
   }) as unknown as ResultsFile;
 
 describe('App component target selection', () => {
-  const mockCallApi = callApiJson as Mock;
+  const mockCallApi = callApi as Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -614,7 +615,9 @@ describe('App component target selection', () => {
         results: [createComponentMockResult(0, 'plugin1', false)],
       },
     } as unknown as ResultsFile;
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     renderWithProviders(<App />);
 
@@ -631,7 +634,9 @@ describe('App component target selection', () => {
       createComponentMockResult(1, 'plugin3', false),
     ];
     const evalData = createComponentMockEvalData(2, results);
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     renderWithProviders(<App />);
 
@@ -658,7 +663,7 @@ describe('App component target selection', () => {
 });
 
 describe('App component target selector rendering', () => {
-  const mockCallApi = callApiJson as Mock;
+  const mockCallApi = callApi as Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -671,7 +676,9 @@ describe('App component target selector rendering', () => {
       createComponentMockResult(1, 'plugin1', false),
     ];
     const evalData = createComponentMockEvalData(2, results);
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     renderWithProviders(<App />);
 
@@ -682,7 +689,9 @@ describe('App component target selector rendering', () => {
   it('should render a static chip when there is only one prompt', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     renderWithProviders(<App />);
 
@@ -693,10 +702,139 @@ describe('App component target selector rendering', () => {
     expect(dropdown).toBeNull();
   });
 
+  it('shows target probes separately from the token usage breakdown', async () => {
+    const user = userEvent.setup();
+    const results = [createComponentMockResult(0, 'plugin1', true)];
+    const evalData = createComponentMockEvalData(1, results);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    expect(await screen.findByLabelText('10 target probes')).toHaveTextContent('Depth: 10 probes');
+    const tokenBadge = screen.getByLabelText('100 total tokens');
+    expect(tokenBadge).toHaveTextContent('Total Tokens: 100');
+
+    await user.hover(tokenBadge);
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toHaveTextContent('Target Tokens: 100');
+    expect(tooltip).toHaveTextContent('Attacker Tokens: 0');
+    expect(tooltip).toHaveTextContent('Grading Tokens: 0');
+  });
+
+  it('preserves a reported target probe count of zero', async () => {
+    const results = [createComponentMockResult(0, 'plugin1', true)];
+    const evalData = createComponentMockEvalData(1, results, 0);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    expect(await screen.findByLabelText('0 target probes')).toHaveTextContent('Depth: 0 probes');
+  });
+
+  it('counts scan-wide generation once across multiple targets', async () => {
+    const user = userEvent.setup();
+    const results = [
+      createComponentMockResult(0, 'plugin1', true),
+      createComponentMockResult(1, 'plugin1', false),
+    ];
+    const evalData = createComponentMockEvalData(2, results);
+    evalData.results.stats = {
+      successes: 1,
+      failures: 1,
+      errors: 0,
+      tokenUsage: {
+        total: 200,
+        prompt: 150,
+        completion: 50,
+        cached: 0,
+        numRequests: 20,
+        completionDetails: {},
+        assertions: {},
+        generation: {
+          total: 40,
+          prompt: 30,
+          completion: 10,
+          cached: 0,
+          numRequests: 1,
+        },
+      },
+    };
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    const tokenBadge = await screen.findByLabelText('240 total tokens');
+    expect(tokenBadge).toHaveTextContent('Total Tokens: 240');
+
+    await user.hover(tokenBadge);
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toHaveTextContent('Target Tokens: 100');
+    expect(tooltip).toHaveTextContent('Selected Target Subtotal: 100');
+    expect(tooltip).toHaveTextContent('Generation Tokens (scan-wide): 40');
+    expect(tooltip).toHaveTextContent('Scan Total Tokens: 240');
+
+    await user.unhover(tokenBadge);
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByRole('option', { name: 'Provider 1' }));
+
+    expect(await screen.findByLabelText('240 total tokens')).toHaveTextContent('Total Tokens: 240');
+  });
+
+  it('shows unmetered generation requests without adding target probes or tokens', async () => {
+    const user = userEvent.setup();
+    const results = [createComponentMockResult(0, 'plugin1', true)];
+    const evalData = createComponentMockEvalData(1, results);
+    evalData.results.stats = {
+      successes: 1,
+      failures: 0,
+      errors: 0,
+      tokenUsage: {
+        total: 100,
+        prompt: 75,
+        completion: 25,
+        cached: 0,
+        numRequests: 10,
+        completionDetails: {},
+        assertions: {},
+        generation: {
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          cached: 0,
+          numRequests: 1,
+        },
+      },
+    };
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    expect(await screen.findByLabelText('10 target probes')).toHaveTextContent('Depth: 10 probes');
+    const tokenBadge = screen.getByLabelText('100 total tokens');
+
+    await user.hover(tokenBadge);
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toHaveTextContent('Generation Tokens (scan-wide): Unavailable (1 request)');
+    expect(tooltip).toHaveTextContent('Scan Total Tokens: 100');
+  });
+
   it('keeps report header actions in normal flow on narrow screens', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     renderWithProviders(<App />);
 
@@ -712,7 +850,9 @@ describe('App component target selector rendering', () => {
   it('allows embedded reports to shrink within narrow result views', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     const { container } = renderWithProviders(<App embedded />);
 
@@ -723,7 +863,7 @@ describe('App component target selector rendering', () => {
 });
 
 describe('App component categoryStats calculation with moderation', () => {
-  const mockCallApi = callApiJson as Mock;
+  const mockCallApi = callApi as Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -749,7 +889,9 @@ describe('App component categoryStats calculation with moderation', () => {
       createComponentMockResult(0, pluginId, false, [moderationFailure, passingTest]),
     ];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     renderWithProviders(<App />);
 
@@ -769,7 +911,7 @@ describe('App component categoryStats calculation with moderation', () => {
 });
 
 describe('Filter panel regression tests', () => {
-  const mockCallApi = callApiJson as Mock;
+  const mockCallApi = callApi as Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -784,7 +926,9 @@ describe('Filter panel regression tests', () => {
       createComponentMockResult(0, 'pii:direct', true),
     ];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     renderWithProviders(<App />);
 
@@ -815,7 +959,9 @@ describe('Filter panel regression tests', () => {
       createComponentMockResult(0, 'pii:direct', true),
     ];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     renderWithProviders(<App />);
 

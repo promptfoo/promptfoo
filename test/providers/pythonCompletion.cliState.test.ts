@@ -104,6 +104,8 @@ describe('PythonProvider cliState.maxConcurrency', () => {
     workerPoolMocks.PythonWorkerPoolMock.mockClear();
     mockPoolInstance.initialize.mockReset().mockResolvedValue(undefined);
     mockPoolInstance.execute.mockReset().mockResolvedValue({ output: 'test' });
+    mockPoolInstance.getWorkerCount.mockReset().mockReturnValue(1);
+    mockPoolInstance.shutdown.mockReset().mockResolvedValue(undefined);
 
     // Reset cliState
     cliState.maxConcurrency = undefined;

@@ -6,26 +6,8 @@ import SessionsTab from './SessionsTab';
 import type { ProviderOptions } from '@promptfoo/types';
 
 // Mock the callApi utility
-vi.mock('@app/utils/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@app/utils/api')>()),
+vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
-  callApiResult: vi.fn(
-    async (route: { clientPath: string }, _schema: unknown, options?: RequestInit) => {
-      const response = await vi.mocked(callApi)(route.clientPath, options);
-      const body = await response.json();
-      if (!response.ok) {
-        return {
-          ok: false,
-          error: {
-            message: body.message ?? body.error ?? 'Request failed',
-            body,
-          },
-          response,
-        };
-      }
-      return { ok: true, data: body, response };
-    },
-  ),
 }));
 
 // Mock the VariableSelectionDialog component
@@ -1054,6 +1036,24 @@ describe('SessionsTab', () => {
 
       const testButton = screen.getByRole('button', { name: /test session/i });
       expect(testButton).toBeDisabled();
+    });
+
+    it('should enable session testing when the HTTP URL is stored in the provider ID', () => {
+      render(
+        <SessionsTab
+          selectedTarget={{
+            ...baseProvider,
+            id: 'https://api.example.com/chat',
+            config: { ...baseProvider.config, url: '' },
+          }}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: /test session/i })).toBeEnabled();
+      expect(
+        screen.queryByText(/Please configure the target URL in the endpoint configuration/i),
+      ).toBeNull();
     });
   });
 

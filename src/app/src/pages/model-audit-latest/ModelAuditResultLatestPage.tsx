@@ -5,8 +5,8 @@ import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
 import { AddIcon, HistoryIcon, SecurityIcon } from '@app/components/ui/icons';
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
-import { ApiRoutes, callApiJson, ModelAuditSchemas } from '@app/utils/api';
-import { Link as RouterLink } from 'react-router-dom';
+import { callApi } from '@app/utils/api';
+import { Link as RouterLink } from 'react-router';
 import { LatestScanSkeleton } from '../model-audit/components/ModelAuditSkeleton';
 import ResultsTab from '../model-audit/components/ResultsTab';
 import ScannedFilesDialog from '../model-audit/components/ScannedFilesDialog';
@@ -34,18 +34,20 @@ export default function ModelAuditResultLatestPage() {
     setError(null);
 
     try {
-      const query = new URLSearchParams({ limit: '1', sort: 'createdAt', order: 'desc' });
-      const data = await callApiJson(
-        ApiRoutes.ModelAudit.ListScans,
-        ModelAuditSchemas.ListScans.Response,
-        { query, signal: abortController.signal },
-      );
+      const response = await callApi('/model-audit/scans?limit=1&sort=createdAt&order=desc', {
+        signal: abortController.signal,
+      });
 
       if (abortController.signal.aborted) {
         return;
       }
 
-      const scans = data.scans as unknown as HistoricalScan[];
+      if (!response.ok) {
+        throw new Error('Failed to fetch latest scan');
+      }
+
+      const data = await response.json();
+      const scans = data.scans || [];
 
       if (scans.length > 0) {
         setLatestScan(scans[0]);

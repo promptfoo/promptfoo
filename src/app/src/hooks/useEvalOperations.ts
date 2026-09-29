@@ -1,12 +1,6 @@
 import { useCallback } from 'react';
 
-import {
-  ApiRoutes,
-  callApiJson,
-  callApiResult,
-  EvalResponseSchemas,
-  TracesSchemas,
-} from '@app/utils/api';
+import { callApi } from '@app/utils/api';
 import type { Trace } from '@app/components/traces/TraceView';
 import type {
   ReplayEvaluationParams,
@@ -21,23 +15,20 @@ export function useEvalOperations() {
   const replayEvaluation = useCallback(
     async (params: ReplayEvaluationParams): Promise<ReplayEvaluationResult> => {
       try {
-        const response = await callApiResult(
-          ApiRoutes.Eval.Replay,
-          EvalResponseSchemas.Replay.Response,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(params),
+        const response = await callApi('/eval/replay', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
           },
-        );
+          body: JSON.stringify(params),
+        });
 
         if (!response.ok) {
-          return { error: response.error.message || 'Failed to replay evaluation' };
+          const error = await response.text();
+          return { error: error || 'Failed to replay evaluation' };
         }
 
-        const data = response.data;
+        const data = await response.json();
 
         if (data.error) {
           return { error: `Provider error: ${data.error}` };
@@ -52,11 +43,16 @@ export function useEvalOperations() {
   );
 
   const fetchTraces = useCallback(async (evalId: string, signal: AbortSignal): Promise<Trace[]> => {
-    const data = await callApiJson(ApiRoutes.Traces.GetByEval, TracesSchemas.GetByEval.Response, {
-      params: { evaluationId: evalId },
+    const response = await callApi(`/traces/evaluation/${evalId}`, {
       signal,
     });
-    return Array.isArray(data.traces) ? (data.traces as unknown as Trace[]) : [];
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return Array.isArray(data.traces) ? data.traces : [];
   }, []);
 
   return {

@@ -1,8 +1,8 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { callApiJson } from '@app/utils/api';
+import { mockCallApiResponse } from '@app/tests/apiMocks';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalsTable from './EvalsTable';
 
@@ -14,7 +14,7 @@ describe('EvalsTable search', () => {
   });
 
   it('searches displayed descriptions when the first row has no description', async () => {
-    vi.mocked(callApiJson).mockResolvedValue({
+    mockCallApiResponse({
       data: [
         {
           evalId: 'eval-newest',
@@ -37,7 +37,7 @@ describe('EvalsTable search', () => {
           passRate: 100,
         },
       ],
-    } as any);
+    });
 
     render(
       <TooltipProvider delayDuration={0}>

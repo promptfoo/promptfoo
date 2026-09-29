@@ -13,11 +13,12 @@ import { Textarea } from '@app/components/ui/textarea';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
-import { ApiRoutes, callApiResult, ProviderResponseSchemas } from '@app/utils/api';
+import { callApi } from '@app/utils/api';
 import { formatToolsAsJSDocs } from '@app/utils/discovery';
 import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
 import { AlertTriangle, CheckCircle, ChevronDown, Info, Sparkles } from 'lucide-react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import PageWrapper from './PageWrapper';
 
 import type { ApplicationDefinition } from '../types';
@@ -81,6 +82,7 @@ function DiscoveryResult({
  */
 export default function Purpose({ onNext, onBack }: PromptsProps) {
   const { config, updateApplicationDefinition } = useRedTeamConfig();
+  const { targetConfigError } = useRedTeamTargetConfigValidation();
   const { recordEvent } = useTelemetry();
   const {
     data: { status: apiHealthStatus },
@@ -160,6 +162,11 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleTargetPurposeDiscovery = React.useCallback(async () => {
+    if (targetConfigError) {
+      setDiscoveryError(targetConfigError);
+      return;
+    }
+
     recordEvent('feature_used', { feature: 'redteam_config_target_test' });
     try {
       setIsDiscovering(true);
@@ -170,22 +177,19 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
         setShowSlowDiscoveryMessage(true);
       }, 5000);
 
-      const response = await callApiResult(
-        ApiRoutes.Providers.Discover,
-        ProviderResponseSchemas.Discover.Response,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(config.target),
-        },
-      );
+      const response = await callApi('/providers/discover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config.target),
+      });
 
       if (!response.ok) {
-        setDiscoveryError(response.error.message);
+        const { error } = (await response.json()) as { error: string };
+        setDiscoveryError(error);
         return;
       }
 
-      const data = response.data as TargetPurposeDiscoveryResult;
+      const data = (await response.json()) as TargetPurposeDiscoveryResult;
       setDiscoveryResult(data);
 
       // Clear the timeout since discovery completed
@@ -197,7 +201,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
       setIsDiscovering(false);
       setShowSlowDiscoveryMessage(false);
     }
-  }, [config.target]);
+  }, [config.target, targetConfigError]);
 
   const hasTargetConfigured = JSON.stringify(config.target) !== JSON.stringify(DEFAULT_HTTP_TARGET);
 
@@ -337,6 +341,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                     <Button
                       disabled={
                         !hasTargetConfigured ||
+                        Boolean(targetConfigError) ||
                         apiHealthStatus !== 'connected' ||
                         !!discoveryError ||
                         !!discoveryResult ||
@@ -380,7 +385,15 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                         </AlertContent>
                       </Alert>
                     )}
-                    {discoveryError && (
+                    {targetConfigError && (
+                      <Alert variant="destructive">
+                        <AlertTriangle className="size-4" />
+                        <AlertContent>
+                          <AlertDescription>{targetConfigError}</AlertDescription>
+                        </AlertContent>
+                      </Alert>
+                    )}
+                    {discoveryError && !targetConfigError && (
                       <>
                         <Alert variant="destructive">
                           <AlertTriangle className="size-4" />

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { cn } from '@app/lib/utils';
-import { ApiRoutes, callApiJson, ServerResponseSchemas } from '@app/utils/api';
+import { callApi } from '@app/utils/api';
 import { Info } from 'lucide-react';
 
 interface EnterpriseBannerProps {
@@ -28,12 +28,15 @@ const EnterpriseBanner = ({ evalId, className }: EnterpriseBannerProps) => {
           return;
         }
 
-        const data = await callApiJson(
-          ApiRoutes.Results.ShareCheckDomain,
-          ServerResponseSchemas.ShareCheckDomain.Response,
-          { query: new URLSearchParams({ id: evalId }) },
-        );
-        setIsCloudEnabled(data.isCloudEnabled);
+        const response = await callApi(`/results/share/check-domain?id=${evalId}`);
+
+        if (response.ok) {
+          const data = await response.json();
+          setIsCloudEnabled(data.isCloudEnabled);
+        } else {
+          // If we can't check, default to showing the banner
+          setIsCloudEnabled(false);
+        }
       } catch (error) {
         console.error('Error checking cloud status:', error);
         setIsCloudEnabled(false);

@@ -1,4 +1,4 @@
-import { ApiRoutes, callApiJson, callApiResult, ModelAuditSchemas } from '@app/utils/api';
+import { callApi } from '@app/utils/api';
 import { create } from 'zustand';
 
 import type { ListScansQuery } from '../../../../../types/api/modelAudit';
@@ -74,14 +74,15 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
         params.append('search', searchQuery);
       }
 
-      const data = await callApiJson(
-        ApiRoutes.ModelAudit.ListScans,
-        ModelAuditSchemas.ListScans.Response,
-        { query: params, signal },
-      );
+      const response = await callApi(`/model-audit/scans?${params.toString()}`, { signal });
+      if (!response.ok) {
+        throw new Error('Failed to fetch historical scans');
+      }
+
+      const data = await response.json();
       set({
-        historicalScans: data.scans as unknown as HistoricalScan[],
-        totalCount: data.total,
+        historicalScans: data.scans || [],
+        totalCount: data.total || data.scans?.length || 0,
         isLoadingHistory: false,
       });
     } catch (error) {
@@ -116,13 +117,14 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
         params.append('search', searchQuery);
       }
 
-      const data = await callApiJson(
-        ApiRoutes.ModelAudit.ListScans,
-        ModelAuditSchemas.ListScans.Response,
-        { query: params, signal },
-      );
-      const scans = data.scans as unknown as HistoricalScan[];
-      const { total } = data;
+      const response = await callApi(`/model-audit/scans?${params.toString()}`, { signal });
+      if (!response.ok) {
+        throw new Error('Failed to fetch historical scans');
+      }
+
+      const data = await response.json();
+      const scans = data.scans || [];
+      const total = data.total || scans.length || 0;
       set({
         totalCount: total,
         historyError: null,
@@ -141,18 +143,14 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
 
   fetchScanById: async (id: string, signal?: AbortSignal) => {
     try {
-      const response = await callApiResult(
-        ApiRoutes.ModelAudit.GetScan,
-        ModelAuditSchemas.GetScan.Response,
-        { params: { id }, signal },
-      );
+      const response = await callApi(`/model-audit/scans/${id}`, { signal });
       if (!response.ok) {
-        if (response.error.status === 404) {
+        if (response.status === 404) {
           return null;
         }
         throw new Error('Failed to fetch scan');
       }
-      return response.data as unknown as HistoricalScan;
+      return await response.json();
     } catch (error) {
       // Re-throw AbortError so caller can handle it appropriately
       if (error instanceof Error && error.name === 'AbortError') {
@@ -175,10 +173,13 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
     }));
 
     try {
-      await callApiJson(ApiRoutes.ModelAudit.DeleteScan, ModelAuditSchemas.DeleteScan.Response, {
-        params: { id },
+      const response = await callApi(`/model-audit/scans/${id}`, {
         method: 'DELETE',
       });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete scan');
+      }
     } catch (error) {
       // Revert optimistic update on failure
       set({

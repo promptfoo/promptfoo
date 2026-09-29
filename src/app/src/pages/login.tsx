@@ -16,13 +16,21 @@ import { Spinner } from '@app/components/ui/spinner';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { cn } from '@app/lib/utils';
 import { useUserStore } from '@app/stores/userStore';
-import { ApiRoutes, callApiResult, UserSchemas } from '@app/utils/api';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { callApi } from '@app/utils/api';
+import { useLocation, useNavigate } from 'react-router';
 
 interface LoginState {
   success: boolean;
   error?: string;
   email?: string;
+}
+
+function decodeRedirect(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
 }
 
 async function loginAction(_prevState: LoginState, formData: FormData): Promise<LoginState> {
@@ -35,7 +43,7 @@ async function loginAction(_prevState: LoginState, formData: FormData): Promise<
   }
 
   try {
-    const response = await callApiResult(ApiRoutes.User.Login, UserSchemas.Login.Response, {
+    const response = await callApi('/user/login', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -47,12 +55,14 @@ async function loginAction(_prevState: LoginState, formData: FormData): Promise<
     });
 
     if (response.ok) {
-      return { success: true, email: response.data.user.email };
+      const data = await response.json();
+      return { success: true, email: data.user.email };
     }
 
+    const errorData = await response.json().catch(() => ({}));
     return {
       success: false,
-      error: response.error.message || 'Authentication failed. Please check your API key.',
+      error: errorData.error || 'Authentication failed. Please check your API key.',
     };
   } catch {
     return { success: false, error: 'Network error. Please check your connection and try again.' };
@@ -83,7 +93,7 @@ export default function LoginPage() {
     let redirect = null;
 
     if (redirectMatch) {
-      redirect = decodeURIComponent(redirectMatch[1]);
+      redirect = decodeRedirect(redirectMatch[1]);
     } else {
       const params = new URLSearchParams(searchStr);
       redirect = params.get('redirect');

@@ -1,5 +1,5 @@
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
-import { ApiRoutes, callApiResult, EvalResponseSchemas } from '@app/utils/api';
+import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
   isPolicyMetric,
@@ -25,7 +25,7 @@ import type {
   ResultsFile,
   UnifiedConfig,
 } from '@promptfoo/types';
-import type { VisibilityState } from '@tanstack/table-core';
+import type { VisibilityState } from '@tanstack/react-table';
 
 function computeHighlightCount(table: EvaluateTable | null): number {
   if (!table) {
@@ -217,11 +217,6 @@ interface FetchEvalOptions {
 interface ColumnState {
   selectedColumns: string[];
   columnVisibility: VisibilityState;
-}
-
-export interface PaginationState {
-  pageIndex: number;
-  pageSize: number;
 }
 
 export type ResultsFilterType =
@@ -704,13 +699,11 @@ export const useTableStore = create<TableState>()(
           );
         });
 
-        const resp = await callApiResult(ApiRoutes.Eval.Table, EvalResponseSchemas.Table.Response, {
-          params: { id },
-          query: url.searchParams,
-        });
+        // Remove the origin as it was only added to satisfy the URL constructor.
+        const resp = await callApi(url.toString().replace(window.location.origin, ''));
 
         if (resp.ok) {
-          const data = resp.data as unknown as EvalTableDTO;
+          const data = (await resp.json()) as EvalTableDTO;
 
           // Build async options
           const [redteamOptions, policyIdToNameMap] = await Promise.all([
@@ -943,17 +936,15 @@ export const useTableStore = create<TableState>()(
           url.searchParams.append('comparisonEvalIds', compId);
         });
 
-        const resp = await callApiResult(
-          ApiRoutes.Eval.MetadataKeys,
-          EvalResponseSchemas.MetadataKeys.Response,
-          { params: { id }, query: url.searchParams, signal: abortController.signal },
-        );
+        const resp = await callApi(url.toString().replace(window.location.origin, ''), {
+          signal: abortController.signal,
+        });
 
         // Clear timeout on successful response
         clearTimeout(timeoutId);
 
         if (resp.ok) {
-          const data = resp.data;
+          const data = await resp.json();
           const filteredKeys = data.keys.filter(
             (key: string) => !HIDDEN_METADATA_KEYS.includes(key),
           );
@@ -969,7 +960,7 @@ export const useTableStore = create<TableState>()(
           }
           return filteredKeys;
         } else {
-          throw resp.error;
+          throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
         }
       } catch (error) {
         // Always clear timeout
@@ -1044,17 +1035,15 @@ export const useTableStore = create<TableState>()(
           url.searchParams.append('comparisonEvalIds', compId);
         });
 
-        const resp = await callApiResult(
-          ApiRoutes.Eval.MetadataValues,
-          EvalResponseSchemas.MetadataValues.Response,
-          { params: { id: evalId }, query: url.searchParams, signal: abortController.signal },
-        );
+        const resp = await callApi(url.toString().replace(window.location.origin, ''), {
+          signal: abortController.signal,
+        });
 
         if (!resp.ok) {
-          throw resp.error;
+          throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
         }
 
-        const data = resp.data;
+        const data = await resp.json();
         const values: string[] = Array.isArray(data.values) ? data.values : [];
 
         set((prevState) => ({

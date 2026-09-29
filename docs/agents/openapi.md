@@ -1,207 +1,61 @@
 # Server OpenAPI Generation
 
-Promptfoo's local server OpenAPI document is generated from the same Zod DTOs
-used by Express route validation.
+The local server serves its installed-version API specification at
+`GET /api/openapi.json`. Its relative server URL follows the origin and port of
+that request.
 
-## Published Surfaces
-
-- The running local server exposes the installed-version document at
-  `/api/openapi.json`.
-- The docs site publishes a latest snapshot at `site/static/openapi.json`, which
-  backs `/docs/local-server-api-reference/`.
-
-The runtime endpoint is the source of truth for integrations against an
-installed Promptfoo version. The docs-site snapshot exists for discovery and
-browsing on `promptfoo.dev`.
+The docs site uses `site/static/openapi.json` for
+`/docs/local-server-api-reference/`. This snapshot has version `latest` so a
+package version bump does not create schema drift. The existing
+`/docs/api-reference/` page describes the Cloud and Enterprise API.
 
 ## Generate The Site Snapshot
 
 ```bash
-source ~/.nvm/nvm.sh && nvm use
 npm run openapi:generate
+npm run openapi:check
 ```
 
-The default output is:
-
-```text
-site/static/openapi.json
-```
-
-You can write to another path when testing locally:
+The first command updates `site/static/openapi.json`; the second fails if that
+file differs from the generated specification. CI performs the same drift
+check in the Generate Assets job. To inspect a temporary snapshot, pass an
+output path:
 
 ```bash
 npm run openapi:generate -- /tmp/promptfoo-openapi.json
 ```
 
-CI enforces that the checked-in docs snapshot is current. The `Generate Assets`
-workflow runs `npm run openapi:generate` and fails if it changes
-`site/static/openapi.json`.
-
-For a local non-mutating check, run:
-
-```bash
-npm run openapi:check
-```
-
-## Where Things Live
-
-- Shared route and DTO contracts: `src/contracts/api/*.ts`
-- Runtime compatibility shims: `src/types/api/*.ts`
-- OpenAPI route registry: `src/openapi/server.ts`
-- Runtime endpoint: `GET /api/openapi.json`
-- Generation script: `scripts/generateOpenApi.ts`
-- Coverage tests: `test/openapi/serverOpenApi.test.ts`
-- Published docs asset: `site/static/openapi.json`
-- Docs page: `site/src/pages/docs/local-server-api-reference.tsx`
-
 ## Add Or Change A Route
 
-1. Define or update the request/response Zod schemas in
-   `src/contracts/api/<area>.ts` and keep its `src/types/api/<area>.ts` shim
-   compatible when one exists.
-2. Define the method, paths, operation ID, tag, and summary once in
-   `src/contracts/api/routes.ts`.
-3. Use that `ApiRoutes` contract in the Express route with `.safeParse()` for
-   requests and `.parse()` for responses.
-4. Register the same contract with `registerContract()` in
-   `src/openapi/server.ts`.
-5. Run the route contract and OpenAPI tests.
-6. Regenerate `site/static/openapi.json` and run `npm run openapi:check`.
+Update the route's Zod schemas in `src/types/api/` and its Express handler in
+`src/server/`. Then update the matching `register()` call in
+`src/openapi/server.ts`, including its method, path, operation ID, request
+schemas, and responses. Use `{id}` for OpenAPI path parameters where Express
+uses `:id`.
 
-## JSON GET Example
+The registry's `params()`, `query()`, `jsonBody()`, and `jsonResponse()` helpers
+embed schemas inline. Their name arguments label call sites; they do not
+create reusable `components.schemas` entries. Use explicit character classes
+instead of JavaScript RegExp flags, which JSON Schema patterns cannot carry.
 
-For a route like:
+Use `binaryResponse()` for bytes, `redirectResponse()` for redirects, and
+`noContent()` for empty responses. Give error responses an error description
+through `validationError()`, `notFound()`, `serverError()`, or `errorResponse()`.
+When runtime transforms cannot be represented in OpenAPI, document the wire
+format with a separate schema and explain the difference beside it.
 
-```typescript
-widgetRouter.get(ApiRoutes.Widgets.Get.routerPath, async (req, res) => {
-  const params = WidgetSchemas.Get.Params.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: z.prettifyError(params.error) });
-    return;
-  }
-
-  res.json(WidgetSchemas.Get.Response.parse({ id: params.data.id }));
-});
-```
-
-Assuming `ApiRoutes.Widgets.Get` contains the method and path metadata, register
-the operation-specific schemas and responses like this:
-
-```typescript
-registerContract(ApiRoutes.Widgets.Get, {
-  request: {
-    params: params('WidgetGetParams', WidgetSchemas.Get.Params),
-  },
-  responses: {
-    200: jsonResponse('WidgetGetResponse', WidgetSchemas.Get.Response),
-    400: validationError(),
-    404: notFound('Widget not found'),
-  },
-});
-```
-
-The shared contract derives OpenAPI `{id}` paths from the Express `:id` path,
-so do not duplicate either form in the registry.
-
-## JSON POST Example
-
-For request bodies, use `jsonBody()` to emit the runtime Zod schema inline in
-the operation. The helper's name argument labels the schema at the call site,
-but the current generator does not add it to `components.schemas`:
-
-```typescript
-registerContract(ApiRoutes.Widgets.Create, {
-  request: {
-    body: jsonBody('WidgetCreateRequest', WidgetSchemas.Create.Request),
-  },
-  responses: {
-    200: jsonResponse('WidgetCreateResponse', WidgetSchemas.Create.Response),
-    400: validationError(),
-    500: serverError(),
-  },
-});
-```
-
-## Query Params Example
-
-Query schemas are emitted inline the same way as params:
-
-```typescript
-registerContract(ApiRoutes.Widgets.List, {
-  request: {
-    query: query('WidgetListQuery', WidgetSchemas.List.Query),
-  },
-  responses: {
-    200: jsonResponse('WidgetListResponse', WidgetSchemas.List.Response),
-    400: validationError(),
-  },
-});
-```
-
-Zod transforms are allowed in runtime schemas. If a transform produces a poor
-OpenAPI parameter shape, add OpenAPI metadata or create a docs-only schema next
-to the route registration and leave a comment explaining the runtime/docs split.
-
-## Binary Response Example
-
-Runtime binary schemas such as `z.instanceof(Uint8Array)` do not map cleanly to
-OpenAPI. Register the route with `binaryResponse()`:
-
-```typescript
-registerContract(ApiRoutes.Files.Get, {
-  request: {
-    params: params('FileHashParams', FileSchemas.Get.Params),
-  },
-  responses: {
-    200: binaryResponse('File bytes'),
-    400: validationError(),
-    404: notFound('File not found'),
-  },
-});
-```
-
-This emits:
-
-```json
-{
-  "type": "string",
-  "format": "binary"
-}
-```
-
-## Redirect Response Example
-
-Routes that may redirect, such as blob storage downloads, should document the
-redirect status separately:
-
-```typescript
-responses: {
-  200: binaryResponse('Blob bytes'),
-  302: redirectResponse('Presigned blob URL redirect'),
-  404: notFound('Blob not found'),
-}
-```
-
-## No Content Example
-
-Use `noContent()` for `204` responses:
-
-```typescript
-responses: {
-  204: noContent('Deleted successfully'),
-  400: validationError(),
-}
-```
-
-## QA Commands
+Add a route case to `test/server/routes/serverRouteSmoke.test.ts` and update
+`SERVER_OPENAPI_ROUTE_COUNT`. The OpenAPI tests compare the registry with
+Express route declarations; schema tests should check representative accepted
+and rejected values.
 
 ```bash
-source ~/.nvm/nvm.sh && nvm use
-npx vitest run test/openapi/serverOpenApi.test.ts --run
+npx vitest run test/openapi/serverOpenApi.test.ts test/server/routes/serverRouteSmoke.test.ts
 npm run openapi:generate
 npm run openapi:check
-npm run tsc -- --pretty false
 ```
 
-For full route DTO confidence, also run the focused server route tests that touch
-the changed schemas.
+Also run the affected handler/schema tests. The hosted local-server reference
+hides test requests because cross-origin requests to a local server are subject
+to its CSRF checks. Use the runtime specification for integrations against an
+installed version.

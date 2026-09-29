@@ -8,7 +8,7 @@
   "servers": [
     {
       "url": "http://localhost:15500",
-      "description": "Default local Promptfoo server"
+      "description": "Local Promptfoo server"
     }
   ],
   "components": {
@@ -16,6 +16,51 @@
     "parameters": {}
   },
   "paths": {
+    "/api/openapi.json": {
+      "get": {
+        "operationId": "getOpenApiDocument",
+        "tags": ["Server"],
+        "summary": "Get the installed local server API specification",
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "details": {},
+                    "suggestion": {
+                      "type": "string"
+                    },
+                    "success": {
+                      "type": "boolean",
+                      "enum": [false]
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "operationId": "getHealth",
@@ -37,70 +82,6 @@
                     }
                   },
                   "required": ["status", "version"]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/openapi.json": {
-      "get": {
-        "operationId": "getOpenApiSpec",
-        "tags": ["Discovery"],
-        "summary": "Fetch this OpenAPI document",
-        "description": "Returns the OpenAPI 3.1 description of the local server API generated from the same Zod DTOs that validate runtime requests and responses. Useful for client code generation and live introspection.",
-        "responses": {
-          "200": {
-            "description": "OpenAPI 3.1 document",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "openapi": {
-                      "type": "string",
-                      "enum": ["3.1.0"]
-                    },
-                    "info": {
-                      "type": "object",
-                      "properties": {
-                        "title": {
-                          "type": "string"
-                        },
-                        "version": {
-                          "type": "string"
-                        },
-                        "description": {
-                          "type": "string"
-                        }
-                      },
-                      "required": ["title", "version"],
-                      "additionalProperties": {}
-                    },
-                    "paths": {
-                      "type": "object",
-                      "additionalProperties": {}
-                    },
-                    "servers": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "url": {
-                            "type": "string"
-                          },
-                          "description": {
-                            "type": "string"
-                          }
-                        },
-                        "required": ["url"],
-                        "additionalProperties": {}
-                      }
-                    }
-                  },
-                  "required": ["openapi", "info", "paths"],
-                  "additionalProperties": {}
                 }
               }
             }
@@ -423,7 +404,7 @@
           {
             "schema": {
               "type": "string",
-              "pattern": "^[a-f0-9]{64}$/i"
+              "pattern": "^[A-Fa-f0-9]{64}$"
             },
             "required": true,
             "name": "sha256hash",
@@ -655,31 +636,6 @@
               }
             }
           },
-          "403": {
-            "description": "CSRF protection rejected request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
           "404": {
             "description": "Evaluation not found",
             "content": {
@@ -828,31 +784,6 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
           }
         }
       }
@@ -893,7 +824,7 @@
                   },
                   "packageVersion": {
                     "type": "string",
-                    "default": "latest"
+                    "default": "0.0.0-development"
                   },
                   "properties": {
                     "type": "object",
@@ -943,31 +874,6 @@
           },
           "400": {
             "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
             "content": {
               "application/json": {
                 "schema": {
@@ -1195,31 +1101,6 @@
           },
           "400": {
             "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
             "content": {
               "application/json": {
                 "schema": {
@@ -1580,27 +1461,12 @@
                     ]
                   },
                   "tests": {
-                    "oneOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "array",
-                        "items": {}
-                      },
-                      {
-                        "type": "object",
-                        "additionalProperties": {}
-                      }
-                    ]
+                    "type": "array",
+                    "items": {}
                   },
                   "evaluateOptions": {
                     "type": "object",
                     "additionalProperties": {}
-                  },
-                  "sourceEvalId": {
-                    "type": "string",
-                    "minLength": 1
                   }
                 },
                 "required": ["prompts", "providers"],
@@ -1629,31 +1495,6 @@
           },
           "400": {
             "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
             "content": {
               "application/json": {
                 "schema": {
@@ -1930,31 +1771,6 @@
               }
             }
           },
-          "403": {
-            "description": "CSRF protection rejected request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
           "500": {
             "description": "Server error",
             "content": {
@@ -2016,31 +1832,6 @@
           },
           "400": {
             "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
             "content": {
               "application/json": {
                 "schema": {
@@ -2170,31 +1961,6 @@
           },
           "400": {
             "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
             "content": {
               "application/json": {
                 "schema": {
@@ -2880,46 +2646,6 @@
                     },
                     "score": {
                       "type": "number"
-                    },
-                    "id": {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    "testCase": {
-                      "type": "object",
-                      "properties": {},
-                      "additionalProperties": {}
-                    },
-                    "prompt": {
-                      "type": "object",
-                      "properties": {
-                        "raw": {
-                          "type": "string"
-                        },
-                        "label": {
-                          "type": "string"
-                        }
-                      },
-                      "required": ["raw", "label"],
-                      "additionalProperties": {}
-                    },
-                    "provider": {
-                      "oneOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string",
-                              "minLength": 1
-                            }
-                          },
-                          "required": ["id"],
-                          "additionalProperties": {}
-                        }
-                      ]
                     }
                   },
                   "required": ["promptIdx", "testIdx", "success", "score"],
@@ -2935,31 +2661,6 @@
           },
           "400": {
             "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
             "content": {
               "application/json": {
                 "schema": {
@@ -3120,31 +2821,6 @@
               }
             }
           },
-          "403": {
-            "description": "CSRF protection rejected request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
           "404": {
             "description": "Evaluation not found",
             "content": {
@@ -3270,31 +2946,6 @@
           },
           "400": {
             "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
             "content": {
               "application/json": {
                 "schema": {
@@ -3484,31 +3135,6 @@
               }
             }
           },
-          "403": {
-            "description": "CSRF protection rejected request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
           "500": {
             "description": "Server error",
             "content": {
@@ -3568,31 +3194,6 @@
           },
           "400": {
             "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
             "content": {
               "application/json": {
                 "schema": {
@@ -3698,31 +3299,6 @@
           },
           "400": {
             "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
             "content": {
               "application/json": {
                 "schema": {
@@ -3878,7 +3454,7 @@
           {
             "schema": {
               "type": "string",
-              "pattern": "^[a-f0-9]{12}\\.[a-z0-9]+$/i"
+              "pattern": "^[A-Fa-f0-9]{12}\\.[A-Za-z0-9]+$"
             },
             "required": true,
             "name": "filename",
@@ -4015,7 +3591,7 @@
           {
             "schema": {
               "type": "string",
-              "pattern": "^[a-f0-9]{12}\\.[a-z0-9]+$/i"
+              "pattern": "^[A-Fa-f0-9]{12}\\.[A-Za-z0-9]+$"
             },
             "required": true,
             "name": "filename",
@@ -4344,31 +3920,6 @@
               }
             }
           },
-          "403": {
-            "description": "CSRF protection rejected request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
           "500": {
             "description": "Server error",
             "content": {
@@ -4545,33 +4096,8 @@
               }
             }
           },
-          "403": {
-            "description": "CSRF protection rejected request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
           "500": {
-            "description": "Server error",
+            "description": "Scan failed",
             "content": {
               "application/json": {
                 "schema": {
@@ -5198,31 +4724,6 @@
               }
             }
           },
-          "403": {
-            "description": "CSRF protection rejected request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
           "404": {
             "description": "Model scan not found",
             "content": {
@@ -5310,12 +4811,16 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "suggestion": {
+                          "type": "string"
+                        },
                         "success": {
                           "type": "boolean",
                           "enum": [false]
-                        },
-                        "error": {
-                          "type": "string"
                         }
                       },
                       "required": ["error"],
@@ -5457,31 +4962,6 @@
               }
             }
           },
-          "403": {
-            "description": "CSRF protection rejected request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
           "500": {
             "description": "Server error",
             "content": {
@@ -5583,6 +5063,326 @@
                         },
                         "required": ["name", "description", "arguments"]
                       }
+                    },
+                    "tokenUsage": {
+                      "type": "object",
+                      "properties": {
+                        "prompt": {
+                          "type": "number"
+                        },
+                        "completion": {
+                          "type": "number"
+                        },
+                        "cached": {
+                          "type": "number"
+                        },
+                        "total": {
+                          "type": "number"
+                        },
+                        "numRequests": {
+                          "type": "number"
+                        },
+                        "completionDetails": {
+                          "type": "object",
+                          "properties": {
+                            "reasoning": {
+                              "type": "number"
+                            },
+                            "acceptedPrediction": {
+                              "type": "number"
+                            },
+                            "rejectedPrediction": {
+                              "type": "number"
+                            },
+                            "cacheReadInputTokens": {
+                              "type": "number"
+                            },
+                            "cacheCreationInputTokens": {
+                              "type": "number"
+                            }
+                          }
+                        },
+                        "attacker": {
+                          "type": "object",
+                          "properties": {
+                            "prompt": {
+                              "type": "number"
+                            },
+                            "completion": {
+                              "type": "number"
+                            },
+                            "cached": {
+                              "type": "number"
+                            },
+                            "total": {
+                              "type": "number"
+                            },
+                            "numRequests": {
+                              "type": "number"
+                            },
+                            "completionDetails": {
+                              "type": "object",
+                              "properties": {
+                                "reasoning": {
+                                  "type": "number"
+                                },
+                                "acceptedPrediction": {
+                                  "type": "number"
+                                },
+                                "rejectedPrediction": {
+                                  "type": "number"
+                                },
+                                "cacheReadInputTokens": {
+                                  "type": "number"
+                                },
+                                "cacheCreationInputTokens": {
+                                  "type": "number"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "assertions": {
+                          "type": "object",
+                          "properties": {
+                            "prompt": {
+                              "type": "number"
+                            },
+                            "completion": {
+                              "type": "number"
+                            },
+                            "cached": {
+                              "type": "number"
+                            },
+                            "total": {
+                              "type": "number"
+                            },
+                            "numRequests": {
+                              "type": "number"
+                            },
+                            "completionDetails": {
+                              "type": "object",
+                              "properties": {
+                                "reasoning": {
+                                  "type": "number"
+                                },
+                                "acceptedPrediction": {
+                                  "type": "number"
+                                },
+                                "rejectedPrediction": {
+                                  "type": "number"
+                                },
+                                "cacheReadInputTokens": {
+                                  "type": "number"
+                                },
+                                "cacheCreationInputTokens": {
+                                  "type": "number"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "generation": {
+                          "type": "object",
+                          "properties": {
+                            "prompt": {
+                              "type": "number"
+                            },
+                            "completion": {
+                              "type": "number"
+                            },
+                            "cached": {
+                              "type": "number"
+                            },
+                            "total": {
+                              "type": "number"
+                            },
+                            "numRequests": {
+                              "type": "number"
+                            },
+                            "completionDetails": {
+                              "type": "object",
+                              "properties": {
+                                "reasoning": {
+                                  "type": "number"
+                                },
+                                "acceptedPrediction": {
+                                  "type": "number"
+                                },
+                                "rejectedPrediction": {
+                                  "type": "number"
+                                },
+                                "cacheReadInputTokens": {
+                                  "type": "number"
+                                },
+                                "cacheCreationInputTokens": {
+                                  "type": "number"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "incurredTokenUsage": {
+                          "type": "object",
+                          "properties": {
+                            "prompt": {
+                              "type": "number"
+                            },
+                            "completion": {
+                              "type": "number"
+                            },
+                            "cached": {
+                              "type": "number"
+                            },
+                            "total": {
+                              "type": "number"
+                            },
+                            "numRequests": {
+                              "type": "number"
+                            },
+                            "completionDetails": {
+                              "type": "object",
+                              "properties": {
+                                "reasoning": {
+                                  "type": "number"
+                                },
+                                "acceptedPrediction": {
+                                  "type": "number"
+                                },
+                                "rejectedPrediction": {
+                                  "type": "number"
+                                },
+                                "cacheReadInputTokens": {
+                                  "type": "number"
+                                },
+                                "cacheCreationInputTokens": {
+                                  "type": "number"
+                                }
+                              }
+                            },
+                            "attacker": {
+                              "type": "object",
+                              "properties": {
+                                "prompt": {
+                                  "type": "number"
+                                },
+                                "completion": {
+                                  "type": "number"
+                                },
+                                "cached": {
+                                  "type": "number"
+                                },
+                                "total": {
+                                  "type": "number"
+                                },
+                                "numRequests": {
+                                  "type": "number"
+                                },
+                                "completionDetails": {
+                                  "type": "object",
+                                  "properties": {
+                                    "reasoning": {
+                                      "type": "number"
+                                    },
+                                    "acceptedPrediction": {
+                                      "type": "number"
+                                    },
+                                    "rejectedPrediction": {
+                                      "type": "number"
+                                    },
+                                    "cacheReadInputTokens": {
+                                      "type": "number"
+                                    },
+                                    "cacheCreationInputTokens": {
+                                      "type": "number"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "assertions": {
+                              "type": "object",
+                              "properties": {
+                                "prompt": {
+                                  "type": "number"
+                                },
+                                "completion": {
+                                  "type": "number"
+                                },
+                                "cached": {
+                                  "type": "number"
+                                },
+                                "total": {
+                                  "type": "number"
+                                },
+                                "numRequests": {
+                                  "type": "number"
+                                },
+                                "completionDetails": {
+                                  "type": "object",
+                                  "properties": {
+                                    "reasoning": {
+                                      "type": "number"
+                                    },
+                                    "acceptedPrediction": {
+                                      "type": "number"
+                                    },
+                                    "rejectedPrediction": {
+                                      "type": "number"
+                                    },
+                                    "cacheReadInputTokens": {
+                                      "type": "number"
+                                    },
+                                    "cacheCreationInputTokens": {
+                                      "type": "number"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "generation": {
+                              "type": "object",
+                              "properties": {
+                                "prompt": {
+                                  "type": "number"
+                                },
+                                "completion": {
+                                  "type": "number"
+                                },
+                                "cached": {
+                                  "type": "number"
+                                },
+                                "total": {
+                                  "type": "number"
+                                },
+                                "numRequests": {
+                                  "type": "number"
+                                },
+                                "completionDetails": {
+                                  "type": "object",
+                                  "properties": {
+                                    "reasoning": {
+                                      "type": "number"
+                                    },
+                                    "acceptedPrediction": {
+                                      "type": "number"
+                                    },
+                                    "rejectedPrediction": {
+                                      "type": "number"
+                                    },
+                                    "cacheReadInputTokens": {
+                                      "type": "number"
+                                    },
+                                    "cacheCreationInputTokens": {
+                                      "type": "number"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
                     }
                   },
                   "required": ["purpose", "limitations", "user", "tools"]
@@ -5592,31 +5392,6 @@
           },
           "400": {
             "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
             "content": {
               "application/json": {
                 "schema": {
@@ -5705,31 +5480,6 @@
           },
           "400": {
             "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
             "content": {
               "application/json": {
                 "schema": {
@@ -5867,31 +5617,6 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
           }
         }
       }
@@ -5982,31 +5707,6 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
           }
         }
       }
@@ -6069,61 +5769,11 @@
                     "message": {
                       "type": "string"
                     },
-                    "reason": {
-                      "type": "string"
-                    },
                     "error": {
                       "type": "string"
-                    },
-                    "details": {
-                      "type": "object",
-                      "properties": {
-                        "sessionId": {
-                          "type": "string"
-                        },
-                        "sessionSource": {
-                          "type": "string"
-                        },
-                        "request1": {
-                          "type": "object",
-                          "properties": {
-                            "prompt": {
-                              "type": "string"
-                            },
-                            "sessionId": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["prompt"]
-                        },
-                        "response1": {},
-                        "request2": {
-                          "type": "object",
-                          "properties": {
-                            "prompt": {
-                              "type": "string"
-                            },
-                            "sessionId": {
-                              "type": "string"
-                            }
-                          },
-                          "required": ["prompt"]
-                        },
-                        "response2": {},
-                        "hasSessionIdTemplate": {
-                          "type": "boolean"
-                        },
-                        "hasSessionParser": {
-                          "type": "boolean"
-                        },
-                        "sessionParser": {
-                          "type": "string"
-                        }
-                      },
-                      "additionalProperties": {}
                     }
                   },
-                  "required": ["success", "message"],
+                  "required": ["success"],
                   "additionalProperties": {}
                 }
               }
@@ -6131,31 +5781,6 @@
           },
           "400": {
             "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
             "content": {
               "application/json": {
                 "schema": {
@@ -6734,6 +6359,200 @@
                     },
                     "required": ["applicationDefinition"]
                   },
+                  "provider": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "config": {},
+                          "prompts": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "transform": {
+                            "type": "string"
+                          },
+                          "delay": {
+                            "type": "number"
+                          },
+                          "env": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          "inputs": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "oneOf": [
+                                {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "config": {
+                                      "type": "object",
+                                      "properties": {
+                                        "benign": {
+                                          "type": "boolean"
+                                        },
+                                        "inputPurpose": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "injectionPlacements": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "minItems": 1
+                                        }
+                                      }
+                                    },
+                                    "description": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "type": {
+                                      "type": "string",
+                                      "enum": ["text"]
+                                    }
+                                  },
+                                  "required": ["description"]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "config": {
+                                      "type": "object",
+                                      "properties": {
+                                        "benign": {
+                                          "type": "boolean"
+                                        },
+                                        "inputPurpose": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "injectionPlacements": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "enum": ["body", "header", "footer"]
+                                          },
+                                          "minItems": 1
+                                        }
+                                      }
+                                    },
+                                    "description": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "type": {
+                                      "type": "string",
+                                      "enum": ["pdf"]
+                                    }
+                                  },
+                                  "required": ["description", "type"]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "config": {
+                                      "type": "object",
+                                      "properties": {
+                                        "benign": {
+                                          "type": "boolean"
+                                        },
+                                        "inputPurpose": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "injectionPlacements": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "enum": [
+                                              "body",
+                                              "comment",
+                                              "footnote",
+                                              "header",
+                                              "footer"
+                                            ]
+                                          },
+                                          "minItems": 1
+                                        }
+                                      }
+                                    },
+                                    "description": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "type": {
+                                      "type": "string",
+                                      "enum": ["docx"]
+                                    }
+                                  },
+                                  "required": ["description", "type"]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "config": {
+                                      "type": "object",
+                                      "properties": {
+                                        "benign": {
+                                          "type": "boolean"
+                                        },
+                                        "inputPurpose": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "injectionPlacements": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "enum": ["body", "header", "footer"]
+                                          },
+                                          "minItems": 1
+                                        }
+                                      }
+                                    },
+                                    "description": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "type": {
+                                      "type": "string",
+                                      "enum": ["image"]
+                                    }
+                                  },
+                                  "required": ["description", "type"]
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        "required": ["id"],
+                        "additionalProperties": {}
+                      }
+                    ]
+                  },
                   "turn": {
                     "type": "integer",
                     "minimum": 0,
@@ -6826,6 +6645,326 @@
                         "count": {
                           "type": "integer",
                           "minimum": 0
+                        },
+                        "tokenUsage": {
+                          "type": "object",
+                          "properties": {
+                            "prompt": {
+                              "type": "number"
+                            },
+                            "completion": {
+                              "type": "number"
+                            },
+                            "cached": {
+                              "type": "number"
+                            },
+                            "total": {
+                              "type": "number"
+                            },
+                            "numRequests": {
+                              "type": "number"
+                            },
+                            "completionDetails": {
+                              "type": "object",
+                              "properties": {
+                                "reasoning": {
+                                  "type": "number"
+                                },
+                                "acceptedPrediction": {
+                                  "type": "number"
+                                },
+                                "rejectedPrediction": {
+                                  "type": "number"
+                                },
+                                "cacheReadInputTokens": {
+                                  "type": "number"
+                                },
+                                "cacheCreationInputTokens": {
+                                  "type": "number"
+                                }
+                              }
+                            },
+                            "attacker": {
+                              "type": "object",
+                              "properties": {
+                                "prompt": {
+                                  "type": "number"
+                                },
+                                "completion": {
+                                  "type": "number"
+                                },
+                                "cached": {
+                                  "type": "number"
+                                },
+                                "total": {
+                                  "type": "number"
+                                },
+                                "numRequests": {
+                                  "type": "number"
+                                },
+                                "completionDetails": {
+                                  "type": "object",
+                                  "properties": {
+                                    "reasoning": {
+                                      "type": "number"
+                                    },
+                                    "acceptedPrediction": {
+                                      "type": "number"
+                                    },
+                                    "rejectedPrediction": {
+                                      "type": "number"
+                                    },
+                                    "cacheReadInputTokens": {
+                                      "type": "number"
+                                    },
+                                    "cacheCreationInputTokens": {
+                                      "type": "number"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "assertions": {
+                              "type": "object",
+                              "properties": {
+                                "prompt": {
+                                  "type": "number"
+                                },
+                                "completion": {
+                                  "type": "number"
+                                },
+                                "cached": {
+                                  "type": "number"
+                                },
+                                "total": {
+                                  "type": "number"
+                                },
+                                "numRequests": {
+                                  "type": "number"
+                                },
+                                "completionDetails": {
+                                  "type": "object",
+                                  "properties": {
+                                    "reasoning": {
+                                      "type": "number"
+                                    },
+                                    "acceptedPrediction": {
+                                      "type": "number"
+                                    },
+                                    "rejectedPrediction": {
+                                      "type": "number"
+                                    },
+                                    "cacheReadInputTokens": {
+                                      "type": "number"
+                                    },
+                                    "cacheCreationInputTokens": {
+                                      "type": "number"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "generation": {
+                              "type": "object",
+                              "properties": {
+                                "prompt": {
+                                  "type": "number"
+                                },
+                                "completion": {
+                                  "type": "number"
+                                },
+                                "cached": {
+                                  "type": "number"
+                                },
+                                "total": {
+                                  "type": "number"
+                                },
+                                "numRequests": {
+                                  "type": "number"
+                                },
+                                "completionDetails": {
+                                  "type": "object",
+                                  "properties": {
+                                    "reasoning": {
+                                      "type": "number"
+                                    },
+                                    "acceptedPrediction": {
+                                      "type": "number"
+                                    },
+                                    "rejectedPrediction": {
+                                      "type": "number"
+                                    },
+                                    "cacheReadInputTokens": {
+                                      "type": "number"
+                                    },
+                                    "cacheCreationInputTokens": {
+                                      "type": "number"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "incurredTokenUsage": {
+                              "type": "object",
+                              "properties": {
+                                "prompt": {
+                                  "type": "number"
+                                },
+                                "completion": {
+                                  "type": "number"
+                                },
+                                "cached": {
+                                  "type": "number"
+                                },
+                                "total": {
+                                  "type": "number"
+                                },
+                                "numRequests": {
+                                  "type": "number"
+                                },
+                                "completionDetails": {
+                                  "type": "object",
+                                  "properties": {
+                                    "reasoning": {
+                                      "type": "number"
+                                    },
+                                    "acceptedPrediction": {
+                                      "type": "number"
+                                    },
+                                    "rejectedPrediction": {
+                                      "type": "number"
+                                    },
+                                    "cacheReadInputTokens": {
+                                      "type": "number"
+                                    },
+                                    "cacheCreationInputTokens": {
+                                      "type": "number"
+                                    }
+                                  }
+                                },
+                                "attacker": {
+                                  "type": "object",
+                                  "properties": {
+                                    "prompt": {
+                                      "type": "number"
+                                    },
+                                    "completion": {
+                                      "type": "number"
+                                    },
+                                    "cached": {
+                                      "type": "number"
+                                    },
+                                    "total": {
+                                      "type": "number"
+                                    },
+                                    "numRequests": {
+                                      "type": "number"
+                                    },
+                                    "completionDetails": {
+                                      "type": "object",
+                                      "properties": {
+                                        "reasoning": {
+                                          "type": "number"
+                                        },
+                                        "acceptedPrediction": {
+                                          "type": "number"
+                                        },
+                                        "rejectedPrediction": {
+                                          "type": "number"
+                                        },
+                                        "cacheReadInputTokens": {
+                                          "type": "number"
+                                        },
+                                        "cacheCreationInputTokens": {
+                                          "type": "number"
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "assertions": {
+                                  "type": "object",
+                                  "properties": {
+                                    "prompt": {
+                                      "type": "number"
+                                    },
+                                    "completion": {
+                                      "type": "number"
+                                    },
+                                    "cached": {
+                                      "type": "number"
+                                    },
+                                    "total": {
+                                      "type": "number"
+                                    },
+                                    "numRequests": {
+                                      "type": "number"
+                                    },
+                                    "completionDetails": {
+                                      "type": "object",
+                                      "properties": {
+                                        "reasoning": {
+                                          "type": "number"
+                                        },
+                                        "acceptedPrediction": {
+                                          "type": "number"
+                                        },
+                                        "rejectedPrediction": {
+                                          "type": "number"
+                                        },
+                                        "cacheReadInputTokens": {
+                                          "type": "number"
+                                        },
+                                        "cacheCreationInputTokens": {
+                                          "type": "number"
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "generation": {
+                                  "type": "object",
+                                  "properties": {
+                                    "prompt": {
+                                      "type": "number"
+                                    },
+                                    "completion": {
+                                      "type": "number"
+                                    },
+                                    "cached": {
+                                      "type": "number"
+                                    },
+                                    "total": {
+                                      "type": "number"
+                                    },
+                                    "numRequests": {
+                                      "type": "number"
+                                    },
+                                    "completionDetails": {
+                                      "type": "object",
+                                      "properties": {
+                                        "reasoning": {
+                                          "type": "number"
+                                        },
+                                        "acceptedPrediction": {
+                                          "type": "number"
+                                        },
+                                        "rejectedPrediction": {
+                                          "type": "number"
+                                        },
+                                        "cacheReadInputTokens": {
+                                          "type": "number"
+                                        },
+                                        "cacheCreationInputTokens": {
+                                          "type": "number"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
                         }
                       },
                       "required": ["testCases", "count"]
@@ -6837,31 +6976,6 @@
           },
           "400": {
             "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
             "content": {
               "application/json": {
                 "schema": {
@@ -6992,31 +7106,6 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
           }
         }
       }
@@ -7045,31 +7134,6 @@
           },
           "400": {
             "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
             "content": {
               "application/json": {
                 "schema": {
@@ -7136,31 +7200,6 @@
           },
           "400": {
             "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
             "content": {
               "application/json": {
                 "schema": {
@@ -7552,31 +7591,6 @@
               }
             }
           },
-          "403": {
-            "description": "CSRF protection rejected request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
           "500": {
             "description": "Server error",
             "content": {
@@ -7676,56 +7690,6 @@
                     }
                   },
                   "required": ["success", "message"]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
                 }
               }
             }
@@ -7992,31 +7956,6 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
           }
         }
       }
@@ -8043,56 +7982,6 @@
                     }
                   },
                   "required": ["success", "message"]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "CSRF protection rejected request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
                 }
               }
             }
@@ -8218,6 +8107,9 @@
                         "commandType": {
                           "type": "string",
                           "enum": ["docker", "npx", "npm"]
+                        },
+                        "isCustomContainer": {
+                          "type": "boolean"
                         }
                       },
                       "required": ["primary", "alternative", "commandType"]
@@ -8296,7 +8188,7 @@
           {
             "schema": {
               "type": "string",
-              "pattern": "^[a-f0-9]{64}$/i"
+              "pattern": "^[A-Fa-f0-9]{64}$"
             },
             "required": false,
             "name": "hash",
@@ -8366,7 +8258,7 @@
                             "properties": {
                               "hash": {
                                 "type": "string",
-                                "pattern": "^[a-f0-9]{64}$/i"
+                                "pattern": "^[A-Fa-f0-9]{64}$"
                               },
                               "mimeType": {
                                 "type": "string"
@@ -8658,7 +8550,7 @@
           {
             "schema": {
               "type": "string",
-              "pattern": "^[a-f0-9]{64}$/i"
+              "pattern": "^[A-Fa-f0-9]{64}$"
             },
             "required": true,
             "name": "hash",

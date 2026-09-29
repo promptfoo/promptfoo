@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 
-import { ApiRoutes, callApiResult, UserSchemas } from '@app/utils/api';
+import { callApi } from '@app/utils/api';
 import { EmailValidationStatus, UserEmailStatus } from '../../../types/email';
 
 interface EmailStatus {
@@ -24,16 +24,9 @@ export function useEmailVerification() {
     async (options?: { validate?: boolean }): Promise<EmailVerificationResult> => {
       setIsChecking(true);
       try {
-        const query = options?.validate ? new URLSearchParams({ validate: 'true' }) : undefined;
-        const response = await callApiResult(
-          ApiRoutes.User.EmailStatus,
-          UserSchemas.EmailStatus.Response,
-          { query },
-        );
-        if (!response.ok) {
-          throw response.error;
-        }
-        const status: EmailStatus = response.data;
+        const validateParam = options?.validate ? '&validate=true' : '';
+        const response = await callApi(`/user/email/status?${validateParam}`);
+        const status: EmailStatus = await response.json();
 
         if (!status.hasEmail) {
           return {
@@ -101,20 +94,17 @@ export function useEmailVerification() {
   const saveEmail = useCallback(async (email: string): Promise<{ error?: string }> => {
     try {
       // First set the email
-      const emailResponse = await callApiResult(
-        ApiRoutes.User.Update,
-        UserSchemas.Update.Response,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email }),
+      const emailResponse = await callApi('/user/email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-      );
+        body: JSON.stringify({ email }),
+      });
 
       if (!emailResponse.ok) {
-        return { error: emailResponse.error.message || 'Failed to set email' };
+        const errorData = await emailResponse.json();
+        return { error: errorData.error || 'Failed to set email' };
       }
 
       return {};
@@ -126,16 +116,13 @@ export function useEmailVerification() {
 
   const clearEmail = useCallback(async (): Promise<{ error?: string }> => {
     try {
-      const emailResponse = await callApiResult(
-        ApiRoutes.User.ClearEmail,
-        UserSchemas.ClearEmail.Response,
-        {
-          method: 'PUT',
-        },
-      );
+      const emailResponse = await callApi('/user/email/clear', {
+        method: 'PUT',
+      });
 
       if (!emailResponse.ok) {
-        return { error: emailResponse.error.message || 'Failed to clear email' };
+        const errorData = await emailResponse.json();
+        return { error: errorData.error || 'Failed to clear email' };
       }
 
       return {};

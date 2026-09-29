@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { TelemetryEventSchema } from '../../telemetryEvents';
 import { BooleanQueryParamSchema, JsonObjectSchema } from './common';
-import { ServerResponseSchemas } from './responses.js';
 
+const UnknownArraySchema = z.array(z.unknown());
+const DataResponseSchema = z.object({ data: z.unknown() });
 const DatasetGeneratePromptSchema = z.union([
   z.string(),
   z
@@ -18,11 +19,15 @@ const DatasetGenerateTestSchema = z
   })
   .passthrough();
 
-const HealthResponseSchema = ServerResponseSchemas.Health.Response;
+const HealthResponseSchema = z.object({
+  status: z.string(),
+  version: z.string(),
+});
 
-const OpenApiResponseSchema = ServerResponseSchemas.OpenApi.Response;
-
-const RemoteHealthResponseSchema = ServerResponseSchemas.RemoteHealth.Response;
+const RemoteHealthResponseSchema = z.object({
+  status: z.string(),
+  message: z.string(),
+});
 
 const ListResultsQuerySchema = z.object({
   datasetId: z.string().min(1).optional(),
@@ -30,15 +35,19 @@ const ListResultsQuerySchema = z.object({
   includeProviders: BooleanQueryParamSchema,
 });
 
-const ListResultsResponseSchema = ServerResponseSchemas.ResultList.Response;
+const ListResultsResponseSchema = z.object({
+  data: z.array(JsonObjectSchema),
+});
 
 const ResultParamsSchema = z.object({
   id: z.string().min(1),
 });
 
-const ResultResponseSchema = ServerResponseSchemas.Result.Response;
+const ResultResponseSchema = DataResponseSchema;
 
-const PromptsResponseSchema = ServerResponseSchemas.Prompts.Response;
+const PromptsResponseSchema = z.object({
+  data: UnknownArraySchema,
+});
 
 const HistoryQuerySchema = z.object({
   tagName: z.string().min(1).optional(),
@@ -46,15 +55,21 @@ const HistoryQuerySchema = z.object({
   description: z.string().min(1).optional(),
 });
 
-const HistoryResponseSchema = ServerResponseSchemas.History.Response;
-
-const PromptHashParamsSchema = z.object({
-  sha256hash: z.string().regex(/^[a-f0-9]{64}$/i, 'Invalid SHA-256 hash'),
+const HistoryResponseSchema = z.object({
+  data: UnknownArraySchema,
 });
 
-const PromptResponseSchema = ServerResponseSchemas.Prompt.Response;
+const PromptHashParamsSchema = z.object({
+  sha256hash: z.string().regex(/^[A-Fa-f0-9]{64}$/, 'Invalid SHA-256 hash'),
+});
 
-const DatasetsResponseSchema = ServerResponseSchemas.Datasets.Response;
+const PromptResponseSchema = z.object({
+  data: UnknownArraySchema,
+});
+
+const DatasetsResponseSchema = z.object({
+  data: UnknownArraySchema,
+});
 
 const ShareCheckDomainQuerySchema = z.object({
   id: z
@@ -63,31 +78,37 @@ const ShareCheckDomainQuerySchema = z.object({
     .refine((value) => value !== 'undefined', { message: 'id is required' }),
 });
 
-const ShareCheckDomainResponseSchema = ServerResponseSchemas.ShareCheckDomain.Response;
+const ShareCheckDomainResponseSchema = z.object({
+  domain: z.string(),
+  isCloudEnabled: z.boolean(),
+});
 
 const ShareRequestSchema = z.object({
   id: z.string().min(1),
 });
 
-const ShareResponseSchema = ServerResponseSchemas.Share.Response;
+const ShareResponseSchema = z.object({
+  url: z.string().nullable().optional(),
+});
 
 const DatasetGenerateRequestSchema = z.object({
   prompts: z.array(DatasetGeneratePromptSchema).min(1),
   tests: z.array(DatasetGenerateTestSchema).default([]),
 });
 
-const DatasetGenerateResponseSchema = ServerResponseSchemas.DatasetGenerate.Response;
+const DatasetGenerateResponseSchema = z.object({
+  results: z.unknown(),
+});
 
-const TelemetryResponseSchema = ServerResponseSchemas.Telemetry.Response;
+const TelemetryResponseSchema = z.object({
+  success: z.literal(true),
+});
 
 export { TelemetryEventSchema } from '../../telemetryEvents';
 
 export const ServerSchemas = {
   Health: {
     Response: HealthResponseSchema,
-  },
-  OpenApi: {
-    Response: OpenApiResponseSchema,
   },
   RemoteHealth: {
     Response: RemoteHealthResponseSchema,

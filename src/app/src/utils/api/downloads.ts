@@ -1,4 +1,3 @@
-import { ApiRoutes, buildApiPath } from '@app/utils/api';
 import { callApi } from '../api';
 
 /**
@@ -10,8 +9,7 @@ import { callApi } from '../api';
  * @throws {Error} When the response cannot be converted to a blob
  */
 export async function downloadResultsFile(evalId: string, format: 'csv' | 'json'): Promise<Blob> {
-  const path = buildApiPath(ApiRoutes.Eval.Table, { id: evalId });
-  const response = await callApi(`${path}?format=${format}`, {
+  const response = await callApi(`/eval/${evalId}/table?format=${format}`, {
     method: 'GET',
   });
 

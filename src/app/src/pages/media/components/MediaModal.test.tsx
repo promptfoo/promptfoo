@@ -3,15 +3,14 @@ import type { ReactNode } from 'react';
 import { mockMatchMedia } from '@app/tests/browserMocks';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MediaModal } from './MediaModal';
 
 import type { MediaItem } from '../types';
 
 // Mock the API utilities
-vi.mock('@app/utils/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@app/utils/api')>()),
+vi.mock('@app/utils/api', () => ({
   getApiBaseUrl: () => 'http://localhost:3000',
 }));
 

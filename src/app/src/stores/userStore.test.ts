@@ -1,19 +1,16 @@
-import { callApiJson, callApiResult, fetchUserId } from '@app/utils/api';
+import { callApi, fetchUserId } from '@app/utils/api';
 import { act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useUserStore } from './userStore';
 
-vi.mock('@app/utils/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@app/utils/api')>()),
-  callApiJson: vi.fn(),
-  callApiResult: vi.fn(),
+vi.mock('@app/utils/api', () => ({
+  callApi: vi.fn(),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(),
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
-const mockedCallApiJson = callApiJson as Mock;
-const mockedCallApiResult = callApiResult as Mock;
+const mockedCallApi = callApi as Mock;
 const mockedFetchUserId = fetchUserId as Mock;
 
 describe('useUserStore', () => {
@@ -30,7 +27,8 @@ describe('useUserStore', () => {
   };
 
   const verifyEmailApiCall = () => {
-    expect(mockedCallApiJson).toHaveBeenCalledTimes(1);
+    expect(mockedCallApi).toHaveBeenCalledTimes(1);
+    expect(mockedCallApi).toHaveBeenCalledWith('/user/email', { cache: 'no-store' });
   };
 
   const verifyEmailState = (expectedEmail: string | null) => {
@@ -47,21 +45,30 @@ describe('useUserStore', () => {
         name: 'successful response with email',
         mockSetup: () => {
           const testEmail = 'user@example.com';
-          mockedCallApiJson.mockResolvedValue({ email: testEmail });
+          mockedCallApi.mockResolvedValue({
+            ok: true,
+            json: vi.fn().mockResolvedValue({ email: testEmail }),
+          });
           return { expectedEmail: testEmail };
         },
       },
       {
         name: 'non-200 status code (e.g. 500)',
         mockSetup: () => {
-          mockedCallApiJson.mockRejectedValue(new Error('Failed to fetch user email'));
+          mockedCallApi.mockResolvedValue({
+            ok: false,
+            status: 500,
+          });
           return { expectedEmail: null };
         },
       },
       {
         name: 'successful response but with invalid JSON',
         mockSetup: () => {
-          mockedCallApiJson.mockRejectedValue(new Error('Invalid JSON'));
+          mockedCallApi.mockResolvedValue({
+            ok: true,
+            json: vi.fn().mockRejectedValue(new Error('Invalid JSON')),
+          });
           return { expectedEmail: null };
         },
       },
@@ -69,7 +76,7 @@ describe('useUserStore', () => {
         name: 'non-404 error',
         mockSetup: () => {
           const errorMessage = 'Failed to fetch user email';
-          mockedCallApiJson.mockRejectedValue(new Error(errorMessage));
+          mockedCallApi.mockRejectedValue(new Error(errorMessage));
           return { expectedEmail: null };
         },
       },
@@ -96,7 +103,7 @@ describe('useUserStore', () => {
         await useUserStore.getState().fetchEmail();
       });
 
-      expect(mockedCallApiJson).not.toHaveBeenCalled();
+      expect(mockedCallApi).not.toHaveBeenCalled();
       expect(useUserStore.getState().email).toBe(initialEmail);
     });
   });
@@ -172,7 +179,10 @@ describe('useUserStore', () => {
       verifyEmailState('test@example.com');
       verifyUserIdState('test-user-id');
 
-      mockedCallApiResult.mockResolvedValue({ ok: true, data: { success: true } });
+      mockedCallApi.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true }),
+      });
 
       await act(async () => {
         await useUserStore.getState().logout();
@@ -188,7 +198,10 @@ describe('useUserStore', () => {
       useUserStore.getState().setEmail('test@example.com');
       useUserStore.getState().setUserId('test-user-id');
 
-      mockedCallApiResult.mockResolvedValue({ ok: false, error: new Error('logout failed') });
+      mockedCallApi.mockResolvedValue({
+        ok: false,
+        status: 500,
+      });
 
       await act(async () => {
         await useUserStore.getState().logout();
@@ -204,7 +217,7 @@ describe('useUserStore', () => {
       // Set initial state
       useUserStore.getState().setEmail('test@example.com');
 
-      mockedCallApiResult.mockRejectedValue(new Error('Network error'));
+      mockedCallApi.mockRejectedValue(new Error('Network error'));
 
       await act(async () => {
         await useUserStore.getState().logout();

@@ -24,11 +24,11 @@ import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { ApiRoutes, ConfigSchemas, callApiJson } from '@app/utils/api';
+import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import { loadYaml } from '@promptfoo/util/yamlLoad';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
-import yaml from 'js-yaml';
 import {
   Brain,
   ClipboardCheck,
@@ -41,7 +41,7 @@ import {
   Save,
   Settings,
 } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import { customTargetOption, findPredefinedTarget } from './components/constants';
 import Plugins from './components/Plugins';
 import Purpose from './components/Purpose';
@@ -53,6 +53,7 @@ import TargetTypeSelection from './components/Targets/TargetTypeSelection';
 import { TestCaseGenerationProvider } from './components/TestCaseGenerationProvider';
 import { NAVBAR_HEIGHT, SIDEBAR_WIDTH } from './constants';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from './hooks/useRedTeamTargetConfigValidation';
 import { useSetupState } from './hooks/useSetupState';
 import { purposeToApplicationDefinition } from './utils/purposeParser';
 import { generateOrderedYaml } from './utils/yamlHelpers';
@@ -76,6 +77,33 @@ const readFileAsText = (file: File): Promise<string> => {
     reader.onerror = reject;
     reader.readAsText(file);
   });
+};
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+};
+
+const withStatefulTargetConfig = (
+  target: Config['target'] | string,
+  strategies: RedteamStrategy[],
+): Config['target'] | string => {
+  const hasStatefulStrategy = strategies.some(
+    (strategy) => typeof strategy !== 'string' && strategy?.config?.stateful,
+  );
+  if (!hasStatefulStrategy) {
+    return target;
+  }
+  if (typeof target === 'string') {
+    return { id: target, config: { stateful: true } };
+  }
+  if (target.config !== undefined && !isPlainObject(target.config)) {
+    return target;
+  }
+  return { ...target, config: { ...target.config, stateful: true } };
 };
 
 const TAB_CONFIG = [
@@ -108,6 +136,7 @@ export default function RedTeamSetupPage() {
   const { hasSeenSetup, markSetupAsSeen } = useSetupState();
   const [setupModalOpen, setSetupModalOpen] = useState(!hasSeenSetup);
   const { config, setFullConfig, resetConfig } = useRedTeamConfig();
+  const { targetConfigError, targetConfigRevision } = useRedTeamTargetConfigValidation();
 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
@@ -207,6 +236,11 @@ export default function RedTeamSetupPage() {
   };
 
   const handleSaveConfig = async () => {
+    if (targetConfigError) {
+      toast.showToast(targetConfigError, 'error');
+      return;
+    }
+
     recordEvent('feature_used', {
       feature: 'redteam_config_save',
       numPlugins: config.plugins.length,
@@ -225,7 +259,7 @@ export default function RedTeamSetupPage() {
     });
 
     try {
-      const data = await callApiJson(ApiRoutes.Configs.Create, ConfigSchemas.Create.Response, {
+      const response = await callApi('/configs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -236,12 +270,18 @@ export default function RedTeamSetupPage() {
           config,
         }),
       });
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
       toast.showToast('Configuration saved successfully', 'success');
       setSaveDialogOpen(false);
       lastSavedConfig.current = JSON.stringify(config);
       setHasUnsavedChanges(false);
       setConfigName(configName);
-      setConfigDate(String(data.createdAt));
+      setConfigDate(data.createdAt);
     } catch (error) {
       console.error('Failed to save configuration', error);
       toast.showToast(
@@ -249,26 +289,25 @@ export default function RedTeamSetupPage() {
         'error',
       );
     }
-
-    setHasUnsavedChanges(false);
   };
 
   const loadConfigs = async () => {
     recordEvent('feature_used', { feature: 'redteam_config_load' });
     try {
-      const data = await callApiJson(ApiRoutes.Configs.List, ConfigSchemas.List.Response, {
-        query: new URLSearchParams({ type: 'redteam' }),
-      });
+      const response = await callApi('/configs?type=redteam');
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
 
       setHasUnsavedChanges(false);
 
-      const configs: SavedConfig[] = data.configs.map(({ id, name, updatedAt }) => ({
-        id,
-        name,
-        updatedAt: String(updatedAt),
-      }));
       setSavedConfigs(
-        configs.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+        data.configs.sort(
+          (a: SavedConfig, b: SavedConfig) =>
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+        ),
       );
     } catch (error) {
       console.error('Failed to load configurations', error);
@@ -282,13 +321,16 @@ export default function RedTeamSetupPage() {
 
   const handleLoadConfig = async (id: string) => {
     try {
-      const data = await callApiJson(ApiRoutes.Configs.Get, ConfigSchemas.Get.Response, {
-        params: { type: 'redteam', id },
-      });
+      const response = await callApi(`/configs/redteam/${id}`);
+      const data = await response.json();
 
-      setFullConfig(data.config as Config);
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      setFullConfig(data.config);
       setConfigName(data.name);
-      setConfigDate(String(data.updatedAt));
+      setConfigDate(data.updatedAt);
       lastSavedConfig.current = JSON.stringify(data.config);
       setHasUnsavedChanges(false);
 
@@ -314,7 +356,7 @@ export default function RedTeamSetupPage() {
     try {
       const content = await readFileAsText(file);
       // biome-ignore lint/suspicious/noExplicitAny: FIXME
-      const yamlConfig = yaml.load(content) as any;
+      const yamlConfig = loadYaml(content) as any;
 
       const strategies = yamlConfig?.redteam?.strategies || [];
       let target = yamlConfig.targets?.[0] || yamlConfig.providers?.[0] || DEFAULT_HTTP_TARGET;
@@ -326,19 +368,11 @@ export default function RedTeamSetupPage() {
         target = ProviderOptionsSchema.parse({
           id: targetType ? targetType.value : customTargetOption.value,
           label: target,
+          ...(targetType?.value.startsWith('vertex:gemini-3') && { config: { region: 'global' } }),
         });
       }
 
-      const hasAnyStatefulStrategies = strategies.some(
-        (strat: RedteamStrategy) => typeof strat !== 'string' && strat?.config?.stateful,
-      );
-      if (hasAnyStatefulStrategies) {
-        if (typeof target === 'string') {
-          target = { id: target, config: { stateful: true } };
-        } else {
-          target.config = { ...target.config, stateful: true };
-        }
-      }
+      target = withStatefulTargetConfig(target, strategies);
 
       // Parse applicationDefinition from purpose string or use explicit definition if available
       // Priority: 1) explicit applicationDefinition in YAML, 2) parse from purpose string, 3) empty defaults
@@ -402,6 +436,11 @@ export default function RedTeamSetupPage() {
   };
 
   const handleDownloadYaml = () => {
+    if (targetConfigError) {
+      toast.showToast(targetConfigError, 'error');
+      return;
+    }
+
     const yamlContent = generateOrderedYaml(config);
     const blob = new Blob([yamlContent], { type: 'text/yaml' });
     const url = URL.createObjectURL(blob);
@@ -484,7 +523,7 @@ export default function RedTeamSetupPage() {
                       variant="outline"
                       className="min-w-0 border-amber-500 px-2 py-1 text-amber-600 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-500 dark:hover:bg-amber-950/30"
                       onClick={handleSaveConfig}
-                      disabled={!configName}
+                      disabled={!configName || Boolean(targetConfigError)}
                     >
                       Save now
                     </Button>
@@ -582,7 +621,7 @@ export default function RedTeamSetupPage() {
                         variant="outline"
                         className="min-w-0 border-amber-500 px-2 py-1 text-amber-600 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-500 dark:hover:bg-amber-950/30"
                         onClick={handleSaveConfig}
-                        disabled={!configName}
+                        disabled={!configName || Boolean(targetConfigError)}
                       >
                         Save now
                       </Button>
@@ -633,7 +672,11 @@ export default function RedTeamSetupPage() {
             )}
             {value === 1 && (
               <ErrorBoundary name="Target Configuration Page">
-                <TargetConfiguration onNext={handleNext} onBack={handleBack} />
+                <TargetConfiguration
+                  key={targetConfigRevision}
+                  onNext={handleNext}
+                  onBack={handleBack}
+                />
               </ErrorBoundary>
             )}
             {value === 2 && (
@@ -685,15 +728,25 @@ export default function RedTeamSetupPage() {
                 />
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={handleDownloadYaml} className="flex-1">
+                <Button
+                  variant="outline"
+                  onClick={handleDownloadYaml}
+                  disabled={Boolean(targetConfigError)}
+                  className="flex-1"
+                >
                   <Download className="mr-2 size-4" />
                   Export YAML
                 </Button>
-                <Button onClick={handleSaveConfig} disabled={!configName} className="flex-1">
+                <Button
+                  onClick={handleSaveConfig}
+                  disabled={!configName || Boolean(targetConfigError)}
+                  className="flex-1"
+                >
                   <Save className="mr-2 size-4" />
                   Save
                 </Button>
               </div>
+              {targetConfigError && <p className="text-sm text-destructive">{targetConfigError}</p>}
             </div>
           </DialogContent>
         </Dialog>

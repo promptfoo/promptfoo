@@ -1,6 +1,6 @@
 import './syntax-highlighting.css';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
@@ -28,10 +28,10 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Switch } from '@app/components/ui/switch';
-import Prism from '@app/lib/prism';
+import { highlightJS } from '@app/lib/codeHighlight';
 import { cn } from '@app/lib/utils';
-import { ApiRoutes, callApiJson, callApiResult, ProviderResponseSchemas } from '@app/utils/api';
-import yaml from 'js-yaml';
+import { callApi } from '@app/utils/api';
+import * as yaml from 'js-yaml';
 import {
   AlignLeft,
   Check,
@@ -60,6 +60,7 @@ interface HttpEndpointConfigurationProps {
   setUrlError: (error: string | null) => void;
   onTargetTested?: (success: boolean) => void;
   onSessionTested?: (success: boolean) => void;
+  isTargetConfigInvalid?: () => boolean;
 }
 
 interface GeneratedConfig {
@@ -76,18 +77,6 @@ interface GeneratedConfig {
   };
 }
 
-const highlightJS = (code: string): string => {
-  try {
-    const grammar = Prism?.languages?.javascript;
-    if (!grammar) {
-      return code;
-    }
-    return Prism.highlight(code, grammar, 'javascript');
-  } catch {
-    return code;
-  }
-};
-
 const HttpEndpointConfiguration = ({
   selectedTarget,
   updateCustomTarget,
@@ -97,6 +86,7 @@ const HttpEndpointConfiguration = ({
   setUrlError,
   onTargetTested,
   onSessionTested,
+  isTargetConfigInvalid,
 }: HttpEndpointConfigurationProps): React.ReactElement => {
   const [requestBody, setRequestBody] = useState(
     typeof selectedTarget.config.body === 'string'
@@ -152,15 +142,28 @@ Content-Type: application/json
 
   // Request body type (json or text)
   const [requestBodyType, setRequestBodyType] = useState<'json' | 'text'>('json');
+  const targetUrl =
+    (typeof selectedTarget.config.url === 'string' && selectedTarget.config.url.trim()) ||
+    (/^https?:\/\//i.test(selectedTarget.id) ? selectedTarget.id : undefined);
+  const [urlInput, setUrlInput] = useState(() => targetUrl ?? '');
+  const isUrlInputFocused = useRef(false);
+  useEffect(() => {
+    if (!isUrlInputFocused.current) {
+      setUrlInput(targetUrl ?? '');
+    }
+  }, [targetUrl]);
 
   // Handle test target
   const handleTestTarget = useCallback(async () => {
+    if (isTargetConfigInvalid?.()) {
+      onTargetTested?.(false);
+      return;
+    }
     setIsTestRunning(true);
     setTestResult(null);
 
     // Validate URL before testing (skip validation for raw request mode)
     if (!selectedTarget.config?.request) {
-      const targetUrl = selectedTarget.config?.url;
       if (!targetUrl || targetUrl.trim() === '' || targetUrl === 'http') {
         setTestResult({
           success: false,
@@ -175,18 +178,14 @@ Content-Type: application/json
     }
 
     try {
-      const response = await callApiResult(
-        ApiRoutes.Providers.Test,
-        ProviderResponseSchemas.Test.Response,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ providerOptions: selectedTarget }),
-        },
-      );
+      const response = await callApi('/providers/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ providerOptions: selectedTarget }),
+      });
 
       if (response.ok) {
-        const data = response.data;
+        const data = await response.json();
 
         // Check for changes_needed field (configuration issues) or success field
         const hasConfigIssues = data.testResult?.changes_needed === true;
@@ -201,17 +200,20 @@ Content-Type: application/json
         setTestResult({
           success: isSuccess,
           message: message,
-          providerResponse: (data.providerResponse as TestResult['providerResponse']) || {},
-          transformedRequest: data.transformedRequest as TestResult['transformedRequest'],
+          providerResponse: data.providerResponse || {},
+          transformedRequest: data.transformedRequest,
           changes_needed: hasConfigIssues,
           changes_needed_suggestions: data.testResult?.changes_needed_suggestions,
         });
         setTestDetailsExpanded(!isSuccess || hasConfigIssues);
         onTargetTested?.(isSuccess);
       } else {
+        const errorData = await response.json();
         setTestResult({
           success: false,
-          message: response.error.message || 'Failed to test target configuration',
+          message: errorData.error || 'Failed to test target configuration',
+          providerResponse: errorData.providerResponse || {},
+          transformedRequest: errorData.transformedRequest,
         });
         setTestDetailsExpanded(true);
         onTargetTested?.(false);
@@ -239,7 +241,7 @@ Content-Type: application/json
     } finally {
       setIsTestRunning(false);
     }
-  }, [selectedTarget, onTargetTested]);
+  }, [selectedTarget, onTargetTested, targetUrl, isTargetConfigInvalid]);
 
   // Auto-size the raw request textarea between 10rem and 40rem based on line count
   const computeRawTextareaHeight = useCallback((text: string) => {
@@ -432,19 +434,22 @@ ${exampleRequest}`;
     setGenerating(true);
     setError('');
     try {
-      const data = await callApiJson(
-        ApiRoutes.Providers.HttpGenerator,
-        ProviderResponseSchemas.HttpGenerator.Response,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            requestExample: request,
-            responseExample: response,
-          }),
-        },
-      );
-      setGeneratedConfig(data as unknown as GeneratedConfig);
+      const res = await callApi('/providers/http-generator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestExample: request,
+          responseExample: response,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
+      }
+
+      const data = await res.json();
+      setGeneratedConfig(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'An error occurred');
     } finally {
@@ -612,8 +617,18 @@ ${exampleRequest}`;
                 </Select>
                 <Input
                   id="url"
-                  value={selectedTarget.config.url}
-                  onChange={(e) => updateCustomTarget('url', e.target.value)}
+                  value={urlInput}
+                  onChange={(e) => {
+                    setUrlInput(e.target.value);
+                    updateCustomTarget('url', e.target.value);
+                  }}
+                  onFocus={() => {
+                    isUrlInputFocused.current = true;
+                  }}
+                  onBlur={() => {
+                    isUrlInputFocused.current = false;
+                    setUrlInput(targetUrl ?? '');
+                  }}
                   className={cn('min-w-0 flex-1', urlError && 'border-destructive')}
                   placeholder="https://example.com/api/chat"
                 />
@@ -802,6 +817,7 @@ ${exampleRequest}`;
             variant="outline"
             size="sm"
             onClick={() => setResponseTestOpen(true)}
+            disabled={isTargetConfigInvalid?.()}
             className="absolute right-2 top-2 z-10"
           >
             <Play className="mr-1 size-4" />
@@ -816,9 +832,8 @@ ${exampleRequest}`;
           testResult={testResult}
           handleTestTarget={handleTestTarget}
           disabled={
-            selectedTarget.config.request
-              ? !selectedTarget.config.request
-              : !selectedTarget.config.url
+            Boolean(isTargetConfigInvalid?.()) ||
+            (selectedTarget.config.request ? !selectedTarget.config.request : !targetUrl)
           }
           detailsExpanded={testDetailsExpanded}
           onDetailsExpandedChange={setTestDetailsExpanded}
@@ -941,6 +956,7 @@ ${exampleRequest}`;
         updateCustomTarget={updateCustomTarget}
         defaultRequestTransform={selectedTarget.config.transformRequest}
         onSessionTested={onSessionTested}
+        isTargetConfigInvalid={isTargetConfigInvalid}
       />
 
       {/* Response Transform Test Dialog */}
@@ -949,6 +965,7 @@ ${exampleRequest}`;
         onClose={() => setResponseTestOpen(false)}
         currentTransform={selectedTarget.config.transformResponse || ''}
         onApply={(code) => updateCustomTarget('transformResponse', code)}
+        isTargetConfigInvalid={isTargetConfigInvalid}
       />
     </div>
   );

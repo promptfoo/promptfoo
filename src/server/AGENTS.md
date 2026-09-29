@@ -112,8 +112,7 @@ npm run openapi:generate
 npm run openapi:check
 ```
 
-Define new or changed route metadata once in `src/contracts/api/routes.ts`, use
-the shared `ApiRoutes` contract in Express and `src/openapi/server.ts`, and keep
-the checked-in docs asset current. CI regenerates the site snapshot in the
-`Generate Assets` job and fails if it drifts. See `docs/agents/openapi.md` for
-concrete JSON body, params/query, binary, redirect, and `204` examples.
+Update route schemas in `src/types/api/`, their Express handlers, and the
+matching registry entry in `src/openapi/server.ts`. Keep the checked-in docs
+asset current. CI regenerates it in the Generate Assets job and fails if it
+drifts. See `docs/agents/openapi.md` for the workflow and schema conventions.

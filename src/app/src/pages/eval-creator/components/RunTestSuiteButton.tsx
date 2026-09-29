@@ -7,14 +7,15 @@ import { EVAL_ROUTES } from '@app/constants/routes';
 import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useToast } from '@app/hooks/useToast';
 import { useStore } from '@app/stores/evalConfig';
-import { ApiRoutes, callApiJson, EvalResponseSchemas } from '@app/utils/api';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { callApi } from '@app/utils/api';
+import { useLocation, useNavigate } from 'react-router';
 import {
   countTests,
   normalizePrompts,
   normalizePromptsForJob,
   normalizeProviders,
 } from './setupReadiness';
+import type { CreateJobResponse, GetJobResponse } from '@promptfoo/types/api/eval';
 
 const RunTestSuiteButton = () => {
   const navigate = useNavigate();
@@ -32,6 +33,7 @@ const RunTestSuiteButton = () => {
     providers,
     scenarios,
     tests,
+    tracing,
     extensions,
   } = config;
   const [isRunning, setIsRunning] = useState(false);
@@ -89,6 +91,7 @@ const RunTestSuiteButton = () => {
       providers,
       scenarios,
       tests, // Note: This is 'tests' in the API, not 'testCases'
+      tracing,
       extensions,
       ...(sourceEvalId && { sourceEvalId }),
     };
@@ -105,18 +108,19 @@ const RunTestSuiteButton = () => {
     };
 
     try {
-      const job = await callApiJson(
-        ApiRoutes.Eval.CreateJob,
-        EvalResponseSchemas.CreateJob.Response,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(testSuite),
+      const response = await callApi('/eval/job', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-      );
+        body: JSON.stringify(testSuite),
+      });
 
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const job: CreateJobResponse = await response.json();
       if (!isMountedRef.current) {
         return;
       }
@@ -124,11 +128,18 @@ const RunTestSuiteButton = () => {
       clearPollInterval();
       const intervalId = setInterval(async () => {
         try {
-          const progressData = await callApiJson(
-            ApiRoutes.Eval.GetJob,
-            EvalResponseSchemas.GetJob.Response,
-            { params: { id: job.id } },
-          );
+          const progressResponse = await callApi(`/eval/job/${job.id}/`);
+          if (!isMountedRef.current) {
+            clearPollInterval();
+            return;
+          }
+
+          if (!progressResponse.ok) {
+            clearPollInterval();
+            throw new Error(`HTTP error! status: ${progressResponse.status}`);
+          }
+
+          const progressData: GetJobResponse = await progressResponse.json();
           if (!isMountedRef.current) {
             clearPollInterval();
             return;

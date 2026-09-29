@@ -46,13 +46,11 @@ export default function ScalarApiReference({
   summary,
   title,
 }: ScalarApiReferenceProps) {
-  const [isReferenceLoaded, setIsReferenceLoaded] = useState(false);
-  const [loadError, setLoadError] = useState(false);
+  const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'error'>('loading');
 
   useEffect(() => {
     let scalarReference: ScalarReference | undefined;
-    setIsReferenceLoaded(false);
-    setLoadError(false);
+    setLoadState('loading');
 
     const destroyReference = () => {
       scalarReference?.destroy?.();
@@ -62,22 +60,21 @@ export default function ScalarApiReference({
     const renderReference = () => {
       const scalar = (window as ScalarWindow).Scalar;
       if (!scalar?.createApiReference) {
-        setLoadError(true);
+        setLoadState('error');
         return;
       }
 
-      destroyReference();
-      scalarReference = scalar.createApiReference(`#${SCALAR_CONTAINER_ID}`, {
-        hideTestRequestButton: !showTestRequestButton,
-        theme: getScalarTheme(),
-        url: specUrl,
-      });
-      if (!scalarReference) {
-        setLoadError(true);
-        return;
+      try {
+        destroyReference();
+        scalarReference = scalar.createApiReference(`#${SCALAR_CONTAINER_ID}`, {
+          hideTestRequestButton: !showTestRequestButton,
+          theme: getScalarTheme(),
+          url: specUrl,
+        });
+        setLoadState(scalarReference ? 'loaded' : 'error');
+      } catch {
+        setLoadState('error');
       }
-      setIsReferenceLoaded(true);
-      setLoadError(false);
     };
 
     const existingScript = document.getElementById(SCALAR_SCRIPT_ID) as HTMLScriptElement | null;
@@ -90,7 +87,7 @@ export default function ScalarApiReference({
 
     const handleError = () => {
       script.dataset.status = 'error';
-      setLoadError(true);
+      setLoadState('error');
     };
 
     if (!existingScript) {
@@ -109,7 +106,7 @@ export default function ScalarApiReference({
     ) {
       renderReference();
     } else if (script.dataset.status === 'error') {
-      setLoadError(true);
+      setLoadState('error');
     } else {
       script.addEventListener('load', handleLoad);
       script.addEventListener('error', handleError);
@@ -160,7 +157,7 @@ export default function ScalarApiReference({
           <p>
             {summary} The raw spec is available as <a href={specUrl}>OpenAPI JSON</a>.
           </p>
-          {loadError ? (
+          {loadState === 'error' ? (
             <p role="alert">
               The interactive API reference failed to load. The generated{' '}
               <a href={specUrl}>OpenAPI JSON</a> is still available.
@@ -170,7 +167,7 @@ export default function ScalarApiReference({
             The generated <a href={specUrl}>OpenAPI JSON</a> is available without JavaScript.
           </noscript>
         </section>
-        <div aria-busy={!isReferenceLoaded && !loadError} id={SCALAR_CONTAINER_ID}></div>
+        <div aria-busy={loadState === 'loading'} id={SCALAR_CONTAINER_ID}></div>
       </main>
     </Layout>
   );

@@ -10,18 +10,14 @@ import React, {
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
-import {
-  ApiRoutes,
-  callApiJson,
-  ProviderResponseSchemas,
-  RedteamResponseSchemas,
-} from '@app/utils/api';
+import { callApi } from '@app/utils/api';
 import {
   DEFAULT_MULTI_TURN_MAX_TURNS,
   isMultiTurnStrategy,
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
+import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import { type Config } from '../types';
 import { TestCaseDialog } from './TestCaseDialog';
 import type { ConversationMessage } from '@promptfoo/redteam/types';
@@ -124,6 +120,7 @@ async function callTestGenerationApi(
   turn: number = 0,
   maxTurns: number = 1,
   count: number = 1,
+  provider: Config['provider'] = undefined,
 ) {
   const previewLanguage = getPreviewLanguage(language);
   const pluginLanguage = getPreviewLanguage(plugin.config.language);
@@ -138,7 +135,7 @@ async function callTestGenerationApi(
         }
       : plugin;
 
-  return callApiJson(ApiRoutes.Redteam.GenerateTest, RedteamResponseSchemas.GenerateTest.Response, {
+  return callApi('/redteam/generate-test', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -149,6 +146,7 @@ async function callTestGenerationApi(
       plugin: pluginWithLanguage,
       strategy,
       config: { applicationDefinition: { purpose } },
+      provider,
       history,
       turn,
       maxTurns,
@@ -166,7 +164,7 @@ async function callTestExecutionApi(
   prompt: GeneratedTestCase['prompt'],
   abortController: AbortController,
 ) {
-  return callApiJson(ApiRoutes.Providers.Test, ProviderResponseSchemas.Test.Response, {
+  return callApi('/providers/test', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -206,6 +204,7 @@ export const TestCaseGenerationProvider: React.FC<{
 
   const { recordEvent } = useTelemetry();
   const toast = useToast();
+  const { targetConfigError } = useRedTeamTargetConfigValidation();
 
   // ===================================================================
   // State
@@ -273,6 +272,15 @@ export const TestCaseGenerationProvider: React.FC<{
         return;
       }
 
+      const currentTargetConfigError =
+        useRedTeamTargetConfigValidation.getState().targetConfigError;
+      if (currentTargetConfigError) {
+        toast.showToast(currentTargetConfigError, 'error', ERROR_MSG_DURATION);
+        setIsGenerating(false);
+        onErrorRef.current?.(new Error(currentTargetConfigError));
+        return;
+      }
+
       try {
         recordEvent('feature_used', {
           feature: 'redteam_generate_test_case',
@@ -282,7 +290,7 @@ export const TestCaseGenerationProvider: React.FC<{
 
         const history = getHistory(generatedTestCases, targetResponses);
 
-        const data = await callTestGenerationApi(
+        const response = await callTestGenerationApi(
           plugin,
           strategy,
           redTeamConfig.applicationDefinition.purpose ?? null,
@@ -291,18 +299,22 @@ export const TestCaseGenerationProvider: React.FC<{
           history,
           currentTurn,
           maxTurns,
+          1,
+          redTeamConfig.provider,
         );
-        const testCase = 'testCases' in data ? data.testCases[0] : data;
-        if (!testCase) {
-          throw new Error('No generated test case returned');
+
+        const data = await response.json();
+
+        if (data.error) {
+          throw new Error(data?.details ?? data.error);
         }
 
         setGeneratedTestCases((prev) => [
           ...prev,
           {
-            prompt: testCase.prompt,
-            context: testCase.context,
-            metadata: testCase.metadata,
+            prompt: data.prompt,
+            context: data.context,
+            metadata: data.metadata,
           },
         ]);
       } catch (error) {
@@ -359,24 +371,37 @@ export const TestCaseGenerationProvider: React.FC<{
         return;
       }
 
+      const currentTargetConfigError =
+        useRedTeamTargetConfigValidation.getState().targetConfigError;
+      if (currentTargetConfigError) {
+        toast.showToast(currentTargetConfigError, 'error', ERROR_MSG_DURATION);
+        setIsGenerating(false);
+        onErrorRef.current?.(new Error(currentTargetConfigError));
+        return;
+      }
+
       // Run against target if configured
       setIsRunningTest(true);
 
       try {
-        const { providerResponse } = await callTestExecutionApi(
+        const testResponse = await callTestExecutionApi(
           redTeamConfig.target,
           testCase.prompt,
           abortController,
         );
-        const typedProviderResponse = providerResponse as
-          | { output?: string; error?: string }
-          | undefined;
+
+        if (!testResponse.ok) {
+          const errorData = await testResponse.json();
+          throw new Error(errorData.error || 'Failed to run test');
+        }
+
+        const { providerResponse } = await testResponse.json();
 
         setTargetResponses((prev) => [
           ...prev,
           {
-            output: typedProviderResponse?.output ?? null,
-            error: typedProviderResponse?.error ?? null,
+            output: providerResponse?.output ?? null,
+            error: providerResponse?.error ?? null,
           },
         ]);
 
@@ -400,7 +425,7 @@ export const TestCaseGenerationProvider: React.FC<{
         setIsRunningTest(false);
       }
     },
-    [generatedTestCases, redTeamConfig],
+    [generatedTestCases, redTeamConfig, toast],
   );
 
   const resetState = useCallback(() => {
@@ -441,7 +466,7 @@ export const TestCaseGenerationProvider: React.FC<{
           count,
         });
 
-        const data = await callTestGenerationApi(
+        const response = await callTestGenerationApi(
           targetPlugin,
           targetStrategy,
           redTeamConfig.applicationDefinition.purpose ?? null,
@@ -451,10 +476,17 @@ export const TestCaseGenerationProvider: React.FC<{
           0,
           1,
           count,
+          redTeamConfig.provider,
         );
 
+        const data = await response.json();
+
+        if (data.error) {
+          throw new Error(data?.details ?? data.error);
+        }
+
         // Handle batch response
-        if ('testCases' in data) {
+        if (data.testCases && Array.isArray(data.testCases)) {
           return data.testCases as GeneratedTestCase[];
         }
 
@@ -473,7 +505,12 @@ export const TestCaseGenerationProvider: React.FC<{
         throw error;
       }
     },
-    [redTeamConfig.applicationDefinition?.purpose, redTeamConfig.language, recordEvent],
+    [
+      redTeamConfig.applicationDefinition?.purpose,
+      redTeamConfig.language,
+      redTeamConfig.provider,
+      recordEvent,
+    ],
   );
 
   /**
@@ -526,6 +563,12 @@ export const TestCaseGenerationProvider: React.FC<{
       testExecutionAbortController.current?.abort();
       resetState();
 
+      if (targetConfigError) {
+        toast.showToast(targetConfigError, 'error', ERROR_MSG_DURATION);
+        onError?.(new Error(targetConfigError));
+        return;
+      }
+
       if (onSuccess) {
         onSuccessRef.current = onSuccess;
       }
@@ -559,7 +602,7 @@ export const TestCaseGenerationProvider: React.FC<{
       // Open dialog to show test case generation results
       setIsDialogOpen(true);
     },
-    [shouldEvaluateAgainstTarget, resetState, toast],
+    [shouldEvaluateAgainstTarget, resetState, targetConfigError, toast],
   );
 
   const handleCloseDialog = useCallback(() => {
@@ -634,11 +677,22 @@ export const TestCaseGenerationProvider: React.FC<{
     ],
   );
 
-  const handleContinue = useCallback((additionalTurns: number) => {
-    setMaxTurns((prev) => prev + additionalTurns);
-    setCurrentTurn((prev) => prev + 1);
-    setIsGenerating(true);
-  }, []);
+  const handleContinue = useCallback(
+    (additionalTurns: number) => {
+      const currentTargetConfigError =
+        useRedTeamTargetConfigValidation.getState().targetConfigError;
+      if (currentTargetConfigError) {
+        toast.showToast(currentTargetConfigError, 'error', ERROR_MSG_DURATION);
+        onErrorRef.current?.(new Error(currentTargetConfigError));
+        return;
+      }
+
+      setMaxTurns((prev) => prev + additionalTurns);
+      setCurrentTurn((prev) => prev + 1);
+      setIsGenerating(true);
+    },
+    [toast],
+  );
 
   // ===================================================================
   // Effects

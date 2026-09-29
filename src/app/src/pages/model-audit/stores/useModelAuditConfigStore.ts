@@ -1,4 +1,4 @@
-import { ApiRoutes, callApiJson, ModelAuditSchemas } from '@app/utils/api';
+import { callApi } from '@app/utils/api';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
@@ -177,11 +177,13 @@ export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
         }));
 
         // Create deduplicated promise
-        checkInstallationPromise = callApiJson(
-          ApiRoutes.ModelAudit.CheckInstalled,
-          ModelAuditSchemas.CheckInstalled.Response,
-        )
-          .then((data) => {
+        checkInstallationPromise = callApi('/model-audit/check-installed')
+          .then(async (response) => {
+            if (!response.ok) {
+              throw new Error('Failed to check installation');
+            }
+            const data = await response.json();
+
             // Update installation status
             set({
               installationStatus: {

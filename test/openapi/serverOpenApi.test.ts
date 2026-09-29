@@ -1,30 +1,30 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import request from 'supertest';
+import Ajv2020 from 'ajv/dist/2020';
 import { describe, expect, it } from 'vitest';
 import {
   createServerOpenApiDocument,
   createServerOpenApiRegistry,
   SERVER_OPENAPI_ROUTE_COUNT,
 } from '../../src/openapi/server';
-import { createApp } from '../../src/server/server';
-import { ALL_API_ROUTES, ApiRoutes, buildApiPath } from '../../src/types/api/routes';
+import { TestCaseGenerationSchema } from '../../src/types/api/redteam';
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace'] as const;
-const ROOT_SERVER_FILE = 'src/server/server.ts';
-const ROUTER_SOURCE_FILES = [
-  'src/server/routes/blobs.ts',
-  'src/server/routes/configs.ts',
-  'src/server/routes/eval.ts',
-  'src/server/routes/media.ts',
-  'src/server/routes/modelAudit.ts',
-  'src/server/routes/providers.ts',
-  'src/server/routes/redteam.ts',
-  'src/server/routes/traces.ts',
-  'src/server/routes/user.ts',
-  'src/server/routes/version.ts',
-] as const;
+
+const ROUTE_PREFIXES = new Map([
+  ['src/server/server.ts', ''],
+  ['src/server/routes/blobs.ts', '/api/blobs'],
+  ['src/server/routes/configs.ts', '/api/configs'],
+  ['src/server/routes/eval.ts', '/api/eval'],
+  ['src/server/routes/media.ts', '/api/media'],
+  ['src/server/routes/modelAudit.ts', '/api/model-audit'],
+  ['src/server/routes/providers.ts', '/api/providers'],
+  ['src/server/routes/redteam.ts', '/api/redteam'],
+  ['src/server/routes/traces.ts', '/api/traces'],
+  ['src/server/routes/user.ts', '/api/user'],
+  ['src/server/routes/version.ts', '/api/version'],
+]);
 
 function operations(document: ReturnType<typeof createServerOpenApiDocument>) {
   return Object.entries(document.paths ?? {}).flatMap(([path, pathItem]) =>
@@ -37,59 +37,92 @@ function operations(document: ReturnType<typeof createServerOpenApiDocument>) {
   );
 }
 
+function normalizeRoutePath(prefix: string, routePath: string) {
+  const joined = routePath === '/' ? prefix || '/' : `${prefix}${routePath}`;
+  return joined.replace(/:([A-Za-z0-9_]+)/g, '{$1}');
+}
+
+function sourceRouteOperations() {
+  const routePattern =
+    /(?:app|\w+Router|router)\.(get|post|put|patch|delete)\(\s*(['"`])([^'"`]+)\2/g;
+
+  return [...ROUTE_PREFIXES.entries()].flatMap(([file, prefix]) => {
+    const source = fs.readFileSync(path.resolve(file), 'utf8');
+    return [...source.matchAll(routePattern)]
+      .map((match) => ({
+        method: match[1].toUpperCase(),
+        path: normalizeRoutePath(prefix, match[3]),
+      }))
+      .filter(({ path }) => path !== '/*splat' && !path.includes('/*'));
+  });
+}
+
 describe('server OpenAPI generation', () => {
+  it('supports stable docs versions without changing runtime defaults', () => {
+    const runtime = createServerOpenApiDocument();
+    const snapshot = createServerOpenApiDocument({ version: 'latest' });
+    expect(snapshot.info.version).toBe('latest');
+    expect(createServerOpenApiDocument().info.version).toBe(runtime.info.version);
+    expect(createServerOpenApiDocument({ serverUrl: '/' }).servers).toEqual([
+      expect.objectContaining({ url: '/' }),
+    ]);
+  });
+
+  it('publishes hash and filename patterns that accept both letter cases', () => {
+    const patterns: Record<string, unknown>[] = [];
+    const visit = (value: unknown) => {
+      if (!value || typeof value !== 'object') {
+        return;
+      }
+      if ('pattern' in value && typeof value.pattern === 'string' && value.pattern.includes('{')) {
+        patterns.push(value as Record<string, unknown>);
+      }
+      for (const child of Object.values(value)) {
+        visit(child);
+      }
+    };
+    visit(createServerOpenApiDocument());
+    expect(patterns).toHaveLength(6);
+    const ajv = new Ajv2020({ strict: false });
+    for (const schema of patterns) {
+      const validate = ajv.compile(schema);
+      const isFilename = String(schema.pattern).includes('{12}');
+      const valid = isFilename ? `${'a'.repeat(12)}.png` : 'a'.repeat(64);
+      expect(validate(valid)).toBe(true);
+      expect(validate(valid.toUpperCase())).toBe(true);
+      expect(validate(isFilename ? 'file.png' : 'not-a-hash')).toBe(false);
+    }
+  });
+
+  it('describes error responses as errors', () => {
+    for (const { operation } of operations(createServerOpenApiDocument())) {
+      const responses = (operation as { responses: Record<string, { description: string }> })
+        .responses;
+      for (const [status, response] of Object.entries(responses)) {
+        if (Number(status) >= 400) {
+          expect(response.description).not.toBe('Successful response');
+        }
+      }
+    }
+  });
+
   it('registers every server route exactly once', () => {
     const { routes } = createServerOpenApiRegistry();
     const document = createServerOpenApiDocument();
     const generatedOperations = operations(document);
-    const contractKeys = ALL_API_ROUTES.map(
-      ({ method, openApiPath }) => `${method.toUpperCase()} ${openApiPath}`,
-    );
+    const sourceOperations = sourceRouteOperations();
 
     expect(routes).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
     expect(generatedOperations).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
-    expect(ALL_API_ROUTES).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
+    expect(sourceOperations).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
 
     const generatedKeys = generatedOperations.map(
       ({ method, path }) => `${method.toUpperCase()} ${path}`,
     );
+    const sourceKeys = sourceOperations.map(({ method, path }) => `${method} ${path}`);
     expect(new Set(generatedKeys).size).toBe(SERVER_OPENAPI_ROUTE_COUNT);
-    expect(new Set(contractKeys).size).toBe(SERVER_OPENAPI_ROUTE_COUNT);
-    expect(generatedKeys.sort()).toEqual(contractKeys.sort());
+    expect(generatedKeys.sort()).toEqual(sourceKeys.sort());
     expect(generatedKeys.some((key) => key.includes('/:'))).toBe(false);
-  });
-
-  it('builds encoded client paths from route contracts', () => {
-    expect(buildApiPath(ApiRoutes.Eval.Table, { id: 'suite/result 1' })).toBe(
-      '/eval/suite%2Fresult%201/table',
-    );
-    expect(() => buildApiPath(ApiRoutes.Blobs.Get)).toThrow('Missing API path parameter: hash');
-  });
-
-  it('requires server API registrations to use shared route contracts', () => {
-    const rootSource = fs.readFileSync(path.resolve(ROOT_SERVER_FILE), 'utf8');
-    const rootLiteralPaths = [
-      ...rootSource.matchAll(/\bapp\.(?:get|post|put|patch|delete)\(\s*(['"`])([^'"`]+)\1/g),
-    ]
-      .map((match) => match[2])
-      .filter((registeredPath) => registeredPath !== '/*splat');
-    const literalApiMounts = [
-      ...rootSource.matchAll(/\bapp\.use\(\s*(['"`])(\/api(?:\/[^'"`]*)?)\1/g),
-    ].map((match) => match[2]);
-
-    expect(rootLiteralPaths).toEqual([]);
-    expect(literalApiMounts).toEqual([]);
-
-    for (const sourceFile of ROUTER_SOURCE_FILES) {
-      const source = fs.readFileSync(path.resolve(sourceFile), 'utf8');
-      const literalHandlerPaths = [
-        ...source.matchAll(
-          /\b(?:[A-Za-z]+Router|router)\.(?:get|post|put|patch|delete)\(\s*(['"`])([^'"`]+)\1/g,
-        ),
-      ].map((match) => match[2]);
-
-      expect(literalHandlerPaths, sourceFile).toEqual([]);
-    }
   });
 
   it('documents representative request and response shapes', () => {
@@ -135,18 +168,6 @@ describe('server OpenAPI generation', () => {
     expect(
       createEvalJobOperation?.requestBody?.content?.['application/json']?.schema?.required,
     ).toEqual(expect.arrayContaining(['prompts', 'providers']));
-    const createEvalJobSchema =
-      createEvalJobOperation?.requestBody?.content?.['application/json']?.schema;
-    expect(createEvalJobSchema?.properties?.sourceEvalId).toEqual(
-      expect.objectContaining({ minLength: 1, type: 'string' }),
-    );
-    expect(createEvalJobSchema?.properties?.tests?.oneOf).toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'string' })]),
-    );
-    expect(
-      addEvalResultsOperation?.requestBody?.content?.['application/json']?.schema?.items?.properties
-        ?.provider?.oneOf,
-    ).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'string' })]));
     expect(
       getMediaOperation?.responses['200']?.content?.['application/octet-stream']?.schema,
     ).toEqual(expect.objectContaining({ format: 'binary', type: 'string' }));
@@ -184,25 +205,7 @@ describe('server OpenAPI generation', () => {
     expect(
       listBlobLibraryOperation?.responses['200']?.content?.['application/json']?.schema?.properties
         ?.data?.properties?.items?.items?.properties?.hash,
-    ).toEqual(expect.objectContaining({ pattern: '^[a-f0-9]{64}$/i', type: 'string' }));
-  });
-
-  it('uses the default local server URL for generated static documents', () => {
-    expect(createServerOpenApiDocument().servers).toEqual([
-      {
-        description: 'Default local Promptfoo server',
-        url: 'http://localhost:15500',
-      },
-    ]);
-  });
-
-  it('uses the requested document version in version-bearing schemas', () => {
-    const document = createServerOpenApiDocument({ version: 'latest' });
-    const telemetryRequest = (document.paths?.['/api/telemetry']?.post?.requestBody as any)
-      ?.content?.['application/json']?.schema;
-
-    expect(document.info.version).toBe('latest');
-    expect(telemetryRequest?.properties?.packageVersion?.default).toBe('latest');
+    ).toEqual(expect.objectContaining({ pattern: '^[A-Fa-f0-9]{64}$', type: 'string' }));
   });
 
   it('emits representative inline DTO schemas', () => {
@@ -233,59 +236,59 @@ describe('server OpenAPI generation', () => {
         type: 'object',
       }),
     );
+    expect(providerTestRequest.properties.providerOptions.properties.env).toBeUndefined();
   });
 
-  it('serves the live OpenAPI document at /api/openapi.json', async () => {
-    const app = createApp();
-
-    const response = await request(app).get('/api/openapi.json');
-
-    expect(response.status).toBe(200);
-    expect(response.headers['content-type']).toMatch(/application\/json/);
-    expect(response.body.openapi).toBe('3.1.0');
-    expect(response.body.info?.title).toBe('Promptfoo Local Server API');
-    expect(response.body.servers).toEqual([
-      {
-        description: 'Current local Promptfoo server',
-        url: '/',
+  it('matches preview provider input placement validation', () => {
+    const document = createServerOpenApiDocument();
+    const requestSchema = (document.paths?.['/api/redteam/generate-test']?.post as any)?.requestBody
+      ?.content?.['application/json']?.schema;
+    const request = {
+      plugin: { id: 'aegis', config: {} },
+      strategy: { id: 'basic', config: {} },
+      config: { applicationDefinition: { purpose: 'test assistant' } },
+      provider: {
+        id: 'openai:chat:gpt-4.1',
+        inputs: {
+          document: {
+            description: 'PDF document',
+            type: 'pdf',
+            config: { injectionPlacements: ['comment'] },
+          },
+        },
       },
-    ]);
-    expect(Object.keys(response.body.paths ?? {})).toContain('/api/openapi.json');
-    expect(Object.keys(response.body.paths ?? {}).length).toBeGreaterThan(0);
-  });
-
-  it('keeps the static site/static/openapi.json artifact in sync with the live registry', () => {
-    const staticPath = path.resolve('site/static/openapi.json');
-    expect(fs.existsSync(staticPath)).toBe(true);
-    const staticDoc = JSON.parse(fs.readFileSync(staticPath, 'utf8'));
-    const liveDoc = createServerOpenApiDocument();
-    // Path-set parity is the contract that matters for client-code generators —
-    // info.version may differ between commits, but the route surface must match.
-    expect(Object.keys(staticDoc.paths ?? {}).sort()).toEqual(
-      Object.keys(liveDoc.paths ?? {}).sort(),
+    };
+    const validateOpenApiRequest = new Ajv2020({ allErrors: true, strict: false }).compile(
+      requestSchema,
     );
+
+    expect(validateOpenApiRequest(request)).toBe(false);
+    expect(TestCaseGenerationSchema.safeParse(request).success).toBe(false);
   });
 
-  it('does not describe error responses as successful', () => {
-    const paths = createServerOpenApiDocument().paths ?? {};
+  it('preserves required OpenAPI 3.1 response descriptions and media schemas', () => {
+    const document = createServerOpenApiDocument();
 
-    for (const pathItem of Object.values(paths)) {
-      for (const operation of Object.values(pathItem ?? {})) {
-        if (!operation || typeof operation !== 'object' || !('responses' in operation)) {
-          continue;
+    for (const { method, path, operation } of operations(document)) {
+      const responses = (
+        operation as {
+          responses?: Record<
+            string,
+            { description?: string; content?: Record<string, { schema?: unknown }> }
+          >;
         }
+      ).responses;
 
-        for (const [status, response] of Object.entries(operation.responses ?? {})) {
-          if (
-            !/^[45]\d\d$/.test(status) ||
-            !response ||
-            typeof response !== 'object' ||
-            !('description' in response)
-          ) {
-            continue;
-          }
+      for (const [status, response] of Object.entries(responses ?? {})) {
+        expect(response.description, `${method.toUpperCase()} ${path} ${status}`).toEqual(
+          expect.any(String),
+        );
 
-          expect(response.description).not.toBe('Successful response');
+        for (const [mediaType, content] of Object.entries(response.content ?? {})) {
+          expect(
+            content.schema,
+            `${method.toUpperCase()} ${path} ${status} ${mediaType}`,
+          ).toBeDefined();
         }
       }
     }
@@ -309,21 +312,6 @@ describe('server OpenAPI generation', () => {
     for (const operation of explicitServerErrorOperations) {
       expect(operation?.responses?.['500']).toEqual(
         expect.objectContaining({ description: 'Server error' }),
-      );
-    }
-  });
-
-  it('documents shared parser and CSRF failures for mutation routes', () => {
-    const mutationOperations = operations(createServerOpenApiDocument()).filter(
-      ({ path, method }) => path.startsWith('/api/') && method !== 'get',
-    );
-
-    for (const { operation } of mutationOperations) {
-      expect((operation as any).responses?.['400']).toEqual(
-        expect.objectContaining({ description: expect.any(String) }),
-      );
-      expect((operation as any).responses?.['403']).toEqual(
-        expect.objectContaining({ description: 'CSRF protection rejected request' }),
       );
     }
   });

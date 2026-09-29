@@ -2,41 +2,15 @@ import { mockCallApiResponse, resetCallApiMock } from '@app/tests/apiMocks';
 import { formatDataGridDate } from '@app/utils/date';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, useNavigate } from 'react-router-dom';
+import { MemoryRouter, useNavigate } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportIndex from './ReportIndex';
 import type { EvalSummary } from '@promptfoo/types';
 
-vi.mock('@app/utils/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@app/utils/api')>();
-  const callApi = vi.fn();
-  return {
-    ...actual,
-    callApi,
-    callApiJson: vi.fn(
-      async (
-        route: { clientPath: string },
-        _schema: unknown,
-        options: {
-          params?: Record<string, string | number>;
-          query?: URLSearchParams;
-        } & RequestInit = {},
-      ) => {
-        const { params, query, ...requestInit } = options;
-        let path = route.clientPath;
-        for (const [name, value] of Object.entries(params ?? {})) {
-          path = path.replace(`:${name}`, encodeURIComponent(String(value)));
-        }
-        const search = query?.toString();
-        const response = await callApi(search ? `${path}?${search}` : path, requestInit);
-        return response.json();
-      },
-    ),
-  };
-});
+vi.mock('@app/utils/api');
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual('react-router');
   return {
     ...actual,
     useNavigate: vi.fn(),

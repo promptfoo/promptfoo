@@ -27,8 +27,14 @@ import { EVAL_ROUTES } from '@app/constants/routes';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
-import { ApiRoutes, callApiJson, ServerResponseSchemas } from '@app/utils/api';
+import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
+import {
+  getCombinedTokenUsageTotal,
+  getIncurredTokenAccounting,
+  getPrimaryTokenUsageLabel,
+  getTokenUsageTotal,
+} from '@app/utils/tokenUsage';
 import {
   type EvaluateResult,
   type EvaluateSummaryV2,
@@ -37,10 +43,11 @@ import {
   ResultFailureReason,
   type ResultLightweightWithLabel,
   type ResultsFile,
+  type SharedResults,
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { AlertTriangle, Filter, ListOrdered, Printer, Settings, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import FrameworkCompliance from './FrameworkCompliance';
 import { type CategoryStats, type TestResultStats } from './FrameworkComplianceUtils';
 import Overview from './Overview';
@@ -87,11 +94,11 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const fetchEvalById = async (id: string) => {
-      const body = await callApiJson(ApiRoutes.Results.Get, ServerResponseSchemas.Result.Response, {
-        params: { id },
+      const resp = await callApi(`/results/${id}`, {
         cache: 'no-store',
       });
-      setEvalData(body.data as ResultsFile);
+      const body = (await resp.json()) as SharedResults;
+      setEvalData(body.data);
 
       // Track funnel event for report viewed
       recordEvent('funnel', {
@@ -118,13 +125,14 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
         // Need to fetch the latest evalId from the server
         const fetchLatestEvalId = async () => {
           try {
-            const body = await callApiJson(
-              ApiRoutes.Results.List,
-              ServerResponseSchemas.ResultList.Response,
-              { cache: 'no-store' },
-            );
+            const resp = await callApi('/results', { cache: 'no-store' });
+            if (!resp.ok) {
+              console.error('Failed to fetch recent evals');
+              return;
+            }
+            const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
             if (body.data && body.data.length > 0) {
-              const latestEvalId = (body.data as unknown as ResultLightweightWithLabel[])[0].evalId;
+              const latestEvalId = body.data[0].evalId;
               setEvalId(latestEvalId);
               fetchEvalById(latestEvalId);
             } else {
@@ -670,6 +678,21 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
       ? evalData.prompts
       : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
   const selectedPrompt = prompts[selectedPromptIndex];
+  const selectedTokenUsage = selectedPrompt?.metrics?.tokenUsage;
+  const targetTokens = getTokenUsageTotal(selectedTokenUsage);
+  const attackerTokens = getTokenUsageTotal(selectedTokenUsage?.attacker);
+  const gradingTokens = getTokenUsageTotal(selectedTokenUsage?.assertions);
+  const selectedTargetTokens = targetTokens + attackerTokens + gradingTokens;
+  const scanTokenUsage = evalData.results.stats?.tokenUsage;
+  const generationTokens = getTokenUsageTotal(scanTokenUsage?.generation);
+  const generationRequests = scanTokenUsage?.generation?.numRequests ?? 0;
+  const evaluationTokens = scanTokenUsage
+    ? getCombinedTokenUsageTotal(scanTokenUsage) - generationTokens
+    : prompts.reduce((total, prompt) => {
+        return total + getCombinedTokenUsageTotal(prompt.metrics?.tokenUsage);
+      }, 0);
+  const totalTokens = evaluationTokens + generationTokens;
+  const incurredAccounting = getIncurredTokenAccounting(scanTokenUsage ?? selectedTokenUsage);
   const tableData =
     (evalData.version >= 4
       ? convertResultsToTable(evalData).body
@@ -762,24 +785,77 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
                       <strong>Target:</strong> {selectedPrompt.provider}
                     </Badge>
                   ) : null}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span>
-                        <Badge variant="secondary">
-                          <strong>Depth:</strong>{' '}
-                          {(
-                            selectedPrompt?.metrics?.tokenUsage?.numRequests || tableData.length
-                          ).toLocaleString()}{' '}
-                          probes
-                        </Badge>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {selectedPrompt?.metrics?.tokenUsage?.total
-                        ? `${selectedPrompt.metrics.tokenUsage.total.toLocaleString()} tokens`
-                        : ''}
-                    </TooltipContent>
-                  </Tooltip>
+                  <Badge
+                    variant="secondary"
+                    aria-label={`${(
+                      selectedTokenUsage?.numRequests ?? tableData.length
+                    ).toLocaleString()} target probes`}
+                  >
+                    <strong>Depth:</strong>{' '}
+                    {(selectedTokenUsage?.numRequests ?? tableData.length).toLocaleString()} probes
+                  </Badge>
+                  {selectedTokenUsage ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <Badge
+                            variant="secondary"
+                            className="cursor-help"
+                            aria-label={`${totalTokens.toLocaleString()} total tokens`}
+                          >
+                            <strong>Total Tokens:</strong> {totalTokens.toLocaleString()}
+                          </Badge>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <div className="flex flex-col gap-1">
+                          <span>
+                            <strong>{getPrimaryTokenUsageLabel(true)} Tokens:</strong>{' '}
+                            {targetTokens.toLocaleString()}
+                          </span>
+                          <span>
+                            <strong>Attacker Tokens:</strong> {attackerTokens.toLocaleString()}
+                          </span>
+                          <span>
+                            <strong>Grading Tokens:</strong> {gradingTokens.toLocaleString()}
+                          </span>
+                          {incurredAccounting ? (
+                            <>
+                              <span>
+                                <strong>Incurred Tokens:</strong>{' '}
+                                {incurredAccounting.incurredTokens.toLocaleString()}
+                              </span>
+                              <span>
+                                <strong>Cached Savings:</strong>{' '}
+                                {incurredAccounting.cachedSavings.toLocaleString()}
+                              </span>
+                              <span>
+                                <strong>Actual Target Requests:</strong>{' '}
+                                {incurredAccounting.actualRequests.toLocaleString()}
+                              </span>
+                            </>
+                          ) : null}
+                          {prompts.length > 1 || generationTokens > 0 || generationRequests > 0 ? (
+                            <>
+                              <span>
+                                <strong>Selected Target Subtotal:</strong>{' '}
+                                {selectedTargetTokens.toLocaleString()}
+                              </span>
+                              <span>
+                                <strong>Generation Tokens (scan-wide):</strong>{' '}
+                                {generationTokens > 0 || generationRequests === 0
+                                  ? generationTokens.toLocaleString()
+                                  : `Unavailable (${generationRequests.toLocaleString()} ${generationRequests === 1 ? 'request' : 'requests'})`}
+                              </span>
+                              <span>
+                                <strong>Scan Total Tokens:</strong> {totalTokens.toLocaleString()}
+                              </span>
+                            </>
+                          ) : null}
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : null}
                   {selectedPrompt && selectedPrompt.raw !== '{{prompt}}' && (
                     <Badge variant="secondary">
                       <strong>Prompt:</strong> &quot;

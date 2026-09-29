@@ -6,8 +6,8 @@ import { CheckCircleIcon, ErrorIcon, RefreshIcon, SettingsIcon } from '@app/comp
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
-import { ApiRoutes, callApiJson, callApiResult, ModelAuditSchemas } from '@app/utils/api';
-import { useNavigate } from 'react-router-dom';
+import { callApi } from '@app/utils/api';
+import { useNavigate } from 'react-router';
 import AdvancedOptionsDialog from '../model-audit/components/AdvancedOptionsDialog';
 import ConfigurationTab from '../model-audit/components/ConfigurationTab';
 import ResultsTab from '../model-audit/components/ResultsTab';
@@ -69,10 +69,13 @@ export default function ModelAuditSetupPage() {
       const shouldApplyScannerUpdate = () => !cancelled && isOptionsDialogOpenRef.current;
 
       try {
-        const data = await callApiJson(
-          ApiRoutes.ModelAudit.ListScanners,
-          ModelAuditSchemas.ListScanners.Response,
-        );
+        const response = await callApi('/model-audit/scanners');
+        if (!response.ok) {
+          const errorBody = await response.json().catch(() => null);
+          throw new Error(errorBody?.error || 'Unable to load scanner catalog');
+        }
+
+        const data = (await response.json()) as { scanners?: ScannerCatalogEntry[] };
         if (shouldApplyScannerUpdate()) {
           setScannerCatalog(Array.isArray(data.scanners) ? data.scanners : []);
         }
@@ -102,25 +105,21 @@ export default function ModelAuditSetupPage() {
     setError(null);
 
     try {
-      const response = await callApiResult(
-        ApiRoutes.ModelAudit.Scan,
-        ModelAuditSchemas.Scan.Response,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            paths: paths.map((p) => p.path),
-            options: scanOptions,
-          }),
-        },
-      );
+      const response = await callApi('/model-audit/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paths: paths.map((p) => p.path),
+          options: scanOptions,
+        }),
+      });
+
+      const data: ScanResult & { auditId?: string; persisted?: boolean } = await response.json();
+
       if (!response.ok) {
-        throw response.error;
+        const errorData = data as unknown as { error: string };
+        throw new Error(errorData.error || 'Failed to run security scan');
       }
-      const data = response.data as unknown as ScanResult & {
-        auditId?: string;
-        persisted?: boolean;
-      };
 
       setScanResults(data);
       addRecentScan(paths);

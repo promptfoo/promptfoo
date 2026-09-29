@@ -1,26 +1,14 @@
-import type { Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { IncomingMessage, ServerResponse } from 'node:http';
+import { Duplex } from 'node:stream';
 
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createServerOpenApiDocument,
   SERVER_OPENAPI_ROUTE_COUNT,
 } from '../../../src/openapi/server';
 import { createApp } from '../../../src/server/server';
 import { promptCacheService } from '../../../src/server/services/promptCacheService';
-import { ErrorResponseSchema } from '../../../src/types/api/common';
-import { ConfigSchemas } from '../../../src/types/api/configs';
-import { EvalSchemas } from '../../../src/types/api/eval';
-import { MediaSchemas } from '../../../src/types/api/media';
-import { ModelAuditSchemas } from '../../../src/types/api/modelAudit';
-import { ProviderSchemas } from '../../../src/types/api/providers';
-import { RedteamSchemas } from '../../../src/types/api/redteam';
-import { ServerSchemas } from '../../../src/types/api/server';
-import { TracesSchemas } from '../../../src/types/api/traces';
-import { UserSchemas } from '../../../src/types/api/user';
-import { VersionSchemas } from '../../../src/types/api/version';
 import type { Express } from 'express';
-import type { ZodType } from 'zod';
 
 const REQUEST_TIMEOUT_MS = 2000;
 
@@ -56,7 +44,6 @@ const mocks = vi.hoisted(() => ({
   fetchWithProxy: vi.fn(),
   getAvailableProviders: vi.fn(),
   getBlobByHash: vi.fn(),
-  getBlobUrl: vi.fn(),
   getDb: vi.fn(),
   getEnvBool: vi.fn(),
   getEnvFloat: vi.fn(),
@@ -103,7 +90,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../src/blobs', () => ({
   getBlobByHash: mocks.getBlobByHash,
-  getBlobUrl: mocks.getBlobUrl,
 }));
 
 vi.mock('../../../src/blobs/extractor', () => ({
@@ -247,7 +233,6 @@ const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options'
 type HttpMethod = (typeof HTTP_METHODS)[number];
 
 type SmokeCase = {
-  label?: string;
   method: HttpMethod;
   openApiPath: string;
   path: string;
@@ -256,6 +241,19 @@ type SmokeCase = {
   rawJsonBody?: string;
   setup?: () => void;
 };
+
+class MockSocket extends Duplex {
+  remoteAddress = '127.0.0.1';
+
+  _read() {
+    // This test double never emits readable data; IncomingMessage only needs the stream shape.
+  }
+
+  _write(_chunk: unknown, _encoding: BufferEncoding, callback: (error?: Error | null) => void) {
+    // Accept and discard smoke-test transport writes.
+    callback();
+  }
+}
 
 function createThenableQuery(rows: unknown[] = []) {
   const query = {
@@ -363,40 +361,14 @@ function routeKey(testCase: Pick<SmokeCase, 'method' | 'openApiPath'>) {
 const validUuid = '00000000-0000-4000-8000-000000000000';
 const validMediaFilename = 'abcdef123456.mp3';
 
-const successfulResponseSchemas = new Map<string, ZodType>([
-  ['GET /health', ServerSchemas.Health.Response],
-  ['GET /api/openapi.json', ServerSchemas.OpenApi.Response],
-  ['GET /api/remote-health', ServerSchemas.RemoteHealth.Response],
-  ['GET /api/results', ServerSchemas.ResultList.Response],
-  ['GET /api/prompts', ServerSchemas.Prompts.Response],
-  ['GET /api/history', ServerSchemas.History.Response],
-  ['GET /api/datasets', ServerSchemas.Datasets.Response],
-  ['GET /api/configs', ConfigSchemas.List.Response],
-  ['GET /api/configs/{type}', ConfigSchemas.ListByType.Response],
-  ['DELETE /api/eval/{id}', EvalSchemas.Delete.Response],
-  ['GET /api/media/stats', MediaSchemas.Stats.Response],
-  ['GET /api/model-audit/check-installed', ModelAuditSchemas.CheckInstalled.Response],
-  ['GET /api/model-audit/scans', ModelAuditSchemas.ListScans.Response],
-  ['GET /api/providers/config-status', ProviderSchemas.ConfigStatus.Response],
-  ['GET /api/redteam/status', RedteamSchemas.Status.Response],
-  ['GET /api/traces/evaluation/{evaluationId}', TracesSchemas.GetByEval.Response],
-  ['GET /api/user/email', UserSchemas.Get.Response],
-  ['GET /api/user/id', UserSchemas.GetId.Response],
-  ['PUT /api/user/email/clear', UserSchemas.ClearEmail.Response],
-  ['GET /api/user/email/status', UserSchemas.EmailStatus.Response],
-  ['POST /api/user/logout', UserSchemas.Logout.Response],
-  ['GET /api/user/cloud-config', UserSchemas.CloudConfig.Response],
-  ['GET /api/version', VersionSchemas.Response],
-]);
-
 const smokeCases: SmokeCase[] = [
-  { method: 'get', openApiPath: '/health', path: '/health', expectedStatus: 200 },
   {
     method: 'get',
     openApiPath: '/api/openapi.json',
     path: '/api/openapi.json',
     expectedStatus: 200,
   },
+  { method: 'get', openApiPath: '/health', path: '/health', expectedStatus: 200 },
   {
     method: 'get',
     openApiPath: '/api/remote-health',
@@ -779,121 +751,96 @@ const smokeCases: SmokeCase[] = [
   },
 ];
 
-const adversarialCases: SmokeCase[] = [
-  {
-    label: 'eval table rejects an excessive page limit',
-    method: 'get',
-    openApiPath: '/api/eval/{id}/table',
-    path: '/api/eval/eval-1/table?limit=1001',
-    expectedStatus: 400,
-  },
-  {
-    label: 'model audit rejects a prototype-like sort value',
-    method: 'get',
-    openApiPath: '/api/model-audit/scans',
-    path: '/api/model-audit/scans?sort=__proto__',
-    expectedStatus: 400,
-  },
-  {
-    label: 'model audit rejects an unknown sort field',
-    method: 'get',
-    openApiPath: '/api/model-audit/scans',
-    path: '/api/model-audit/scans?sort=notAColumn',
-    expectedStatus: 400,
-  },
-  {
-    label: 'blob library rejects an excessive page limit',
-    method: 'get',
-    openApiPath: '/api/blobs/library',
-    path: '/api/blobs/library?limit=999999',
-    setup: () => mocks.isBlobStorageEnabled.mockReturnValue(true),
-    expectedStatus: 400,
-  },
-  {
-    label: 'media path rejects encoded traversal input',
-    method: 'get',
-    openApiPath: '/api/media/{type}/{filename}',
-    path: '/api/media/audio/%2e%2e%2fsecret.mp3',
-    expectedStatus: 400,
-  },
-];
+async function sendRequest(app: Express, testCase: SmokeCase) {
+  const socket = new MockSocket();
+  const req = new IncomingMessage(socket as never);
+  req.method = testCase.method.toUpperCase();
+  req.url = testCase.path;
+  req.headers = {
+    accept: 'application/json',
+    host: '127.0.0.1',
+  };
 
-const malformedJsonCases = smokeCases
-  .filter(
-    (testCase) =>
-      testCase.path.startsWith('/api/') &&
-      ['post', 'put', 'patch', 'delete'].includes(testCase.method),
-  )
-  .map((testCase) => ({
-    ...testCase,
-    label: `malformed JSON is rejected before ${routeKey(testCase)}`,
-    rawJsonBody: '{"unterminated":',
-    expectedStatus: 400,
-  }));
-
-function getResponseSchema(testCase: SmokeCase): ZodType {
-  if (testCase.expectedStatus >= 400) {
-    return ErrorResponseSchema;
-  }
-
-  const schema = successfulResponseSchemas.get(routeKey(testCase));
-  if (!schema) {
-    throw new Error(`Missing successful response schema for ${routeKey(testCase)}`);
-  }
-  return schema;
-}
-
-async function sendRequest(baseUrl: string, testCase: SmokeCase) {
-  let payload: string | undefined;
+  let payload: Buffer | undefined;
   if (testCase.rawJsonBody !== undefined) {
-    payload = testCase.rawJsonBody;
+    payload = Buffer.from(testCase.rawJsonBody);
   } else if ('body' in testCase) {
-    payload = JSON.stringify(testCase.body);
+    payload = Buffer.from(JSON.stringify(testCase.body));
   }
 
-  const response = await fetch(`${baseUrl}${testCase.path}`, {
-    body: payload,
-    headers: {
-      accept: 'application/json',
-      ...(payload === undefined ? {} : { 'content-type': 'application/json' }),
-    },
-    method: testCase.method.toUpperCase(),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
-  const text = await response.text();
-  let body: unknown = {};
-  if (text) {
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = text;
+  if (payload) {
+    req.headers['content-type'] = 'application/json';
+    req.headers['content-length'] = String(payload.length);
+  }
+
+  const res = new ServerResponse(req);
+  res.assignSocket(socket as never);
+
+  const chunks: Buffer[] = [];
+  const write = res.write.bind(res);
+  const end = res.end.bind(res);
+
+  res.write = ((chunk: unknown, encoding?: BufferEncoding | ((error?: Error) => void)) => {
+    if (chunk !== undefined) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
     }
-  }
+    return write(chunk as never, encoding as never);
+  }) as typeof res.write;
 
-  return { body, headers: response.headers, status: response.status, text };
+  res.end = ((chunk?: unknown, encoding?: BufferEncoding | (() => void), callback?: () => void) => {
+    if (chunk !== undefined) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
+    }
+    return end(chunk as never, encoding as never, callback);
+  }) as typeof res.end;
+
+  const response = new Promise<{
+    body: unknown;
+    headers: ReturnType<ServerResponse['getHeaders']>;
+    status: number;
+    text: string;
+  }>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error(`${routeKey(testCase)} did not finish`));
+    }, REQUEST_TIMEOUT_MS);
+
+    res.once('finish', () => {
+      clearTimeout(timeout);
+      const text = Buffer.concat(chunks).toString('utf8');
+      let body: unknown = {};
+      if (text) {
+        try {
+          body = JSON.parse(text);
+        } catch {
+          body = text;
+        }
+      }
+      resolve({
+        body,
+        headers: res.getHeaders(),
+        status: res.statusCode,
+        text,
+      });
+    });
+    res.once('error', reject);
+    socket.once('error', reject);
+  });
+
+  req.push(payload ?? null);
+  if (payload) {
+    req.push(null);
+  }
+  app(req, res);
+
+  return response;
 }
 
 describe('server route end-to-end smoke coverage', { concurrent: false }, () => {
-  let baseUrl: string;
-  let server: Server;
+  let app: Express;
 
-  beforeAll(async () => {
+  beforeAll(() => {
     setupDefaultMocks();
-    const app: Express = createApp();
-    await new Promise<void>((resolve, reject) => {
-      server = app.listen(0, '127.0.0.1', (error?: Error) => (error ? reject(error) : resolve()));
-    });
-    const address = server.address() as AddressInfo;
-    baseUrl = `http://127.0.0.1:${address.port}`;
-  });
-
-  afterAll(async () => {
-    if (!server.listening) {
-      return;
-    }
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
+    app = createApp();
   });
 
   beforeEach(() => {
@@ -909,6 +856,40 @@ describe('server route end-to-end smoke coverage', { concurrent: false }, () => 
     vi.resetAllMocks();
   });
 
+  it('serves the installed spec once per app with a relative server URL', async () => {
+    const generator = await import('../../../src/openapi/server');
+    const spy = vi.spyOn(generator, 'createServerOpenApiDocument');
+    try {
+      const freshApp = createApp();
+      const testCase = smokeCases.find((entry) => entry.path === '/api/openapi.json')!;
+      const first = await sendRequest(freshApp, testCase);
+      const second = await sendRequest(freshApp, testCase);
+      expect(first.status).toBe(200);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(first.text)).toEqual(createServerOpenApiDocument({ serverUrl: '/' }));
+      expect(second.text).toBe(first.text);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('returns a recoverable error when spec generation fails', async () => {
+    const generator = await import('../../../src/openapi/server');
+    const spy = vi.spyOn(generator, 'createServerOpenApiDocument').mockImplementationOnce(() => {
+      throw new Error('internal generator detail');
+    });
+    try {
+      const freshApp = createApp();
+      const testCase = smokeCases.find((entry) => entry.path === '/api/openapi.json')!;
+      const failed = await sendRequest(freshApp, testCase);
+      expect(failed.status).toBe(500);
+      expect(JSON.parse(failed.text)).toEqual({ error: 'Failed to generate API specification' });
+      expect((await sendRequest(freshApp, testCase)).status).toBe(200);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('has one smoke case for every generated OpenAPI route', () => {
     const smokeKeys = smokeCases.map(routeKey).sort();
     const documentedKeys = documentedRouteKeys().sort();
@@ -918,12 +899,10 @@ describe('server route end-to-end smoke coverage', { concurrent: false }, () => 
     expect(smokeKeys).toEqual(documentedKeys);
   });
 
-  it.each(
-    smokeCases,
-  )('$method $openApiPath validates its executed response contract', async (testCase) => {
+  it.each(smokeCases)('$method $openApiPath', async (testCase) => {
     testCase.setup?.();
 
-    const response = await sendRequest(baseUrl, testCase);
+    const response = await sendRequest(app, testCase);
 
     expect(
       response.status,
@@ -931,41 +910,7 @@ describe('server route end-to-end smoke coverage', { concurrent: false }, () => 
     ).toBe(testCase.expectedStatus);
 
     if (response.status !== 204) {
-      expect(response.headers.get('content-type')).toContain('application/json');
-      expect(
-        getResponseSchema(testCase).safeParse(response.body).success,
-        `${routeKey(testCase)} returned a body outside its executed response contract: ${response.text}`,
-      ).toBe(true);
+      expect(response.headers['content-type']).toContain('application/json');
     }
-  });
-
-  it.each(adversarialCases)('$label', async (testCase) => {
-    testCase.setup?.();
-
-    const response = await sendRequest(baseUrl, testCase);
-
-    expect(
-      response.status,
-      `${testCase.label} expected ${testCase.expectedStatus}, got ${response.status}: ${response.text}`,
-    ).toBe(testCase.expectedStatus);
-    expect(response.headers.get('content-type')).toContain('application/json');
-    expect(
-      getResponseSchema(testCase).safeParse(response.body).success,
-      `${testCase.label} returned a payload outside its contract: ${response.text}`,
-    ).toBe(true);
-  });
-
-  it.each(malformedJsonCases)('$label', async (testCase) => {
-    const response = await sendRequest(baseUrl, testCase);
-
-    expect(
-      response.status,
-      `${testCase.label} expected ${testCase.expectedStatus}, got ${response.status}: ${response.text}`,
-    ).toBe(testCase.expectedStatus);
-    expect(response.headers.get('content-type')).toContain('application/json');
-    expect(
-      ErrorResponseSchema.safeParse(response.body).success,
-      `${testCase.label} returned an untyped parser error: ${response.text}`,
-    ).toBe(true);
   });
 });

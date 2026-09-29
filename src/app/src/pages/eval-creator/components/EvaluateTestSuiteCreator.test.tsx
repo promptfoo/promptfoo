@@ -1,5 +1,5 @@
 import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
-import { callApiJson } from '@app/utils/api';
+import { callApi } from '@app/utils/api';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -71,9 +71,13 @@ vi.mock('./InfoBox', () => ({
   InfoBox: vi.fn(({ children }) => <div data-testid="mock-info-box">{children}</div>),
 }));
 
-vi.mock('@app/utils/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@app/utils/api')>()),
-  callApiJson: vi.fn(() => Promise.resolve({ success: true, data: { hasCustomConfig: false } })),
+vi.mock('@app/utils/api', () => ({
+  callApi: vi.fn(() =>
+    Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ hasCustomConfig: false }),
+    }),
+  ),
 }));
 
 describe('EvaluateTestSuiteCreator', () => {
@@ -352,6 +356,57 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(useStore.getState().config.description).toBe('Test Config');
   });
 
+  it('makes the runtime provider alias available to the form and evaluation after upload', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+    const file = new File(['targets:\n  - echo'], 'targets.yaml', { type: 'application/yaml' });
+
+    const input = screen.getByLabelText('Upload YAML configuration');
+    await user.upload(input, file);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith('Configuration loaded successfully', 'success');
+    });
+    expect(useStore.getState().getTestSuite().providers).toEqual(['echo']);
+    expect(useStore.getState().config.targets).toBeUndefined();
+  });
+
+  it('keeps the current configuration when an upload violates the runtime field contract', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+    const previousConfig = useStore.getState().config;
+    const file = new File(['tracing:\n  enabled: incorrect-value'], 'invalid-config.yaml', {
+      type: 'application/yaml',
+    });
+
+    const input = screen.getByLabelText('Upload YAML configuration');
+    await user.upload(input, file);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith(
+        expect.stringContaining('tracing.enabled'),
+        'error',
+      );
+    });
+    expect(useStore.getState().config).toBe(previousConfig);
+  });
+
+  it('does not replace the form with an uploaded configuration that supplies basePath', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+    const previous = useStore.getState().config;
+    const file = new File(['basePath: /work/config\nprompts: [file://prompt.txt]'], 'config.yaml', {
+      type: 'application/yaml',
+    });
+
+    await user.upload(screen.getByLabelText('Upload YAML configuration'), file);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith(expect.stringMatching(/basePath.*CLI/), 'error');
+    });
+    expect(useStore.getState().config).toBe(previous);
+  });
+
   it('should handle invalid YAML with error toast', async () => {
     const user = userEvent.setup();
     render(<EvaluateTestSuiteCreator />);
@@ -490,12 +545,15 @@ describe('EvaluateTestSuiteCreator', () => {
   });
 
   it('should gracefully handle a missing hasCustomConfig property in the /providers/config-status response', async () => {
-    vi.mocked(callApiJson).mockResolvedValue({ success: true, data: {} } as any);
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    } as Response);
 
     render(<EvaluateTestSuiteCreator />);
 
     await waitFor(() => {
-      expect(callApiJson).toHaveBeenCalled();
+      expect(callApi).toHaveBeenCalledWith('/providers/config-status');
     });
 
     expect(showToastMock).not.toHaveBeenCalled();

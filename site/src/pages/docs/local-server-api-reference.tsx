@@ -8,11 +8,11 @@ export default function LocalServerApiReference() {
   return (
     <ScalarApiReference
       title="Local Server API Reference | Promptfoo"
-      description="Interactive OpenAPI reference for Promptfoo local server routes"
+      description="OpenAPI reference for Promptfoo local server routes"
       heading="Local Server API Reference"
       showTestRequestButton={false}
       specUrl={LOCAL_SERVER_OPENAPI_SPEC_URL}
-      summary="Promptfoo's local server API reference is generated from the same Zod DTO schemas used by local server route validation."
+      summary="Browse the latest local server API. For your installed version, fetch /api/openapi.json from your server."
     />
   );
 }

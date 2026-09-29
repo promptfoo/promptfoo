@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { z } from 'zod';
 import logger from '../../../src/logger';
-import { replyError, replyValidationError, sendError } from '../../../src/server/utils/errors';
+import { replyValidationError, sendError } from '../../../src/server/utils/errors';
 import type { Response } from 'express';
 
 vi.mock('../../../src/logger', () => ({
@@ -30,22 +30,6 @@ function createResponseMock(): {
 describe('server/utils/errors', () => {
   afterEach(() => {
     vi.clearAllMocks();
-  });
-
-  describe('replyError', () => {
-    it('validates and preserves endpoint-specific public fields', () => {
-      const { res, status, json } = createResponseMock();
-
-      replyError(res, 403, 'Forbidden', { success: false, suggestion: 'Sign in again' });
-
-      expect(status).toHaveBeenCalledWith(403);
-      expect(json).toHaveBeenCalledWith({
-        error: 'Forbidden',
-        success: false,
-        suggestion: 'Sign in again',
-      });
-      expect(logger.error).not.toHaveBeenCalled();
-    });
   });
 
   describe('sendError', () => {
