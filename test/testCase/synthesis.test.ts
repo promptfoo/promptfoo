@@ -35,6 +35,47 @@ describe('synthesize', () => {
     expect(result).toHaveLength(2);
     expect(result).toEqual([{ var1: 'value1' }, { var2: 'value2' }]);
   });
+
+  it('should throw a descriptive error when the personas response has an unexpected shape', async () => {
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      // Some providers return a bare array of objects instead of {personas: string[]}.
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+        output: '[{"name": "Persona 1"}, {"name": "Persona 2"}]',
+      }),
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+    await expect(
+      synthesize({
+        provider: 'mock-provider',
+        prompts: ['Test prompt'],
+        tests: [],
+        numPersonas: 2,
+        numTestCasesPerPersona: 1,
+      }),
+    ).rejects.toThrow(/personas/i);
+  });
+
+  it('should throw a descriptive error when personas is not an array', async () => {
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+        output: '{"personas": "Persona 1"}',
+      }),
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+    await expect(
+      synthesize({
+        provider: 'mock-provider',
+        prompts: ['Test prompt'],
+        tests: [],
+        numPersonas: 2,
+        numTestCasesPerPersona: 1,
+      }),
+    ).rejects.toThrow(/personas/i);
+  });
 });
 
 describe('generatePersonasPrompt', () => {
