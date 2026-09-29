@@ -547,9 +547,26 @@ describe('calculateAzureCost', () => {
     },
   );
 
+  // Foundry bills Claude at Anthropic's API rates; the $0.2 cache read is 10% of a $2 input rate.
+  it('prices Claude Sonnet 5 at $2/$10 with a $0.2 cache read', () => {
+    expect(calculateAzureCost('claude-sonnet-5', {}, 1000, 500)).toBeCloseTo(
+      (1000 * 2 + 500 * 10) / 1e6,
+      12,
+    );
+    expect(calculateAzureCost('claude-sonnet-5', {}, 1000, 500, 500)).toBeCloseTo(
+      (500 * 2 + 500 * 0.2 + 500 * 10) / 1e6,
+      12,
+    );
+  });
+
   it('calculates cached input cost for claude-opus-5-5 at $0.20 per million cache reads', () => {
     // 500 uncached * $4 + 500 cached * $0.20 + 500 output * $20, per 1e6
     expect(calculateAzureCost('claude-opus-5-5', {}, 1000, 500, 500)).toBeCloseTo(0.0121, 8);
+  });
+
+  it('prices claude-sonnet-5-5 at Anthropic rates with $0.20 cache reads', () => {
+    // 500 uncached * $2 + 500 cached * $0.20 + 500 output * $10, per 1e6
+    expect(calculateAzureCost('claude-sonnet-5-5', {}, 1000, 500, 500)).toBeCloseTo(0.0061, 8);
   });
 
   it('returns undefined for unknown model', () => {
