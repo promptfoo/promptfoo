@@ -293,9 +293,9 @@ function getProviderUsageLines(providerUsage: ReadonlyMap<string, TokenUsage>): 
     return [];
   }
 
-  const sortedProviders = Array.from(providerUsage, ([id, usage]) => ({ id, usage }))
-    .filter((p): p is { id: string; usage: NonNullable<typeof p.usage> } => p.usage != null)
-    .sort((a, b) => (b.usage.total || 0) - (a.usage.total || 0));
+  const sortedProviders = Array.from(providerUsage, ([id, usage]) => ({ id, usage })).sort(
+    (a, b) => (b.usage.total || 0) - (a.usage.total || 0),
+  );
 
   const lines = ['', chalk.bold('Providers:')];
 

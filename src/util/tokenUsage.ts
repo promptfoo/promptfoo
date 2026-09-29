@@ -33,7 +33,7 @@ export function getProviderTokenUsage(evaluation: object): ReadonlyMap<string, T
   return evaluationUsage.get(evaluation) ?? new Map();
 }
 
-/** Retain the response-aware incurred/cached accounting used by provider summaries. */
+/** Add incurred tokens and cache hits to this evaluation's provider totals. */
 export function trackResponseUsage(
   providerId: string,
   response: { cached?: boolean; tokenUsage?: TokenUsage } | undefined,

@@ -518,7 +518,7 @@ tests:
         // Bug #7353: When wrapProviderWithRateLimiting wraps a class-based provider,
         // the spread operator doesn't copy prototype methods like id().
         // This caused "TypeError: redteamProvider.id is not a function" in redteam
-        // strategies that call TokenUsageTracker.trackUsage(provider.id(), ...).
+        // provider accounting that calls provider.id().
         //
         // The fix explicitly delegates id() to the original provider.
         const configPath = path.join(FIXTURES_DIR, 'configs/class-provider-7353.yaml');
