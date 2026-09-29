@@ -128,7 +128,12 @@ export interface ApiProvider extends MinimalApiProvider {
   delay?: number;
   /** True when callApi applies delay itself and the evaluator should not wait again. */
   handlesOwnDelay?: boolean;
-  /** Retry individual requests internally; the scheduler must not replay the whole call. */
+  /**
+   * True when callApi owns retries for its operations, including requests that
+   * must not be replayed. Scheduling still applies, but the scheduler must not
+   * retry the whole call after its transport or SDK has finished. Subclasses
+   * replacing that behavior can override this with false to use scheduler retries.
+   */
   handlesOwnRetries?: boolean;
   /** Delegates to context.originalProvider and inherits its retry ownership. */
   usesOriginalProvider?: boolean;

@@ -421,29 +421,23 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     ) {
       return true;
     }
-    const envKeys = [
-      'OPENAI_API_KEY',
+    const connectionEnvKeys = [
       'OPENAI_API_HOST',
       'OPENAI_API_BASE_URL',
       'OPENAI_BASE_URL',
       'OPENAI_ORGANIZATION',
       ...TRANSPORT_ENV_KEYS,
     ] as const;
+    const scopedEnvKeys = ['OPENAI_API_KEY', ...connectionEnvKeys] as const;
     const scopedEnvs = [this.env, getEnvOverrides(), getEnvOverrides('file')];
     return (
-      scopedEnvs.some((env) => envKeys.some((key) => env?.[key] !== undefined)) ||
-      scopedEnvs.some((env) =>
-        PROXY_ENV_KEYS.some(
-          (key) => env?.[key] !== undefined || env?.[key.toLowerCase()] !== undefined,
-        ),
-      ) ||
-      [
-        'OPENAI_API_HOST',
-        'OPENAI_API_BASE_URL',
-        'OPENAI_BASE_URL',
-        'OPENAI_ORGANIZATION',
-        ...TRANSPORT_ENV_KEYS,
-      ].some((key) => getEnvString(key) !== undefined)
+      scopedEnvs.some(
+        (env) =>
+          scopedEnvKeys.some((key) => env?.[key] !== undefined) ||
+          PROXY_ENV_KEYS.some(
+            (key) => env?.[key] !== undefined || env?.[key.toLowerCase()] !== undefined,
+          ),
+      ) || connectionEnvKeys.some((key) => getEnvString(key) !== undefined)
     );
   }
 

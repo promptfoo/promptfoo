@@ -5,7 +5,7 @@ import { AnthropicMessagesProvider } from './messages';
 import type { EnvOverrides } from '../../types/env';
 import type { DefaultProviders, ProviderResponse } from '../../types/index';
 
-// Default model to use for all default providers
+// Must support the rubric grader's forced tool_choice.
 export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-5';
 
 type AnthropicProviders = Pick<
@@ -58,6 +58,8 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
           },
         ],
         ...config,
+        // Keep the tool-use JSON parseable even if the caller enables thinking display.
+        showThinking: false,
       },
     });
   }
@@ -124,7 +126,7 @@ export function getAnthropicProviders(env?: EnvOverrides): AnthropicProviders {
   const webSearchProvider = new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {
     env: resolvedEnv,
     config: {
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 } as any],
+      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 5 }],
     },
   });
 
