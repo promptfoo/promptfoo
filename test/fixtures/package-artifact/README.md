@@ -97,7 +97,8 @@ npm run test:package-artifact -- --profile omit-optional --browser
 ```
 
 The default profile uses the installed package's Playwright CLI to download matching
-Chromium into a temporary directory. It checks Unicode input, clicking, extraction,
+Chromium into a temporary directory. Provisioning uses the CI job budget; the browser
+fixture keeps its separate one-minute deadline. It checks Unicode input, clicking, extraction,
 stealth at launch, a missing-selector error, and recovery against local HTML. Results
 must have scores 1/0/1 and exactly one deliberate error.
 

@@ -33,6 +33,21 @@ afterEach(() => {
 });
 
 describe('exact artifact release', () => {
+  it('runs built smoke examples in the build job, not the isolated artifact consumer', () => {
+    const ci = yaml.load(
+      fs.readFileSync(path.resolve(__dirname, '../.github/workflows/main.yml'), 'utf8'),
+    ) as { jobs: Record<string, Job> };
+    const smokeCommand = 'npm run test:smoke -- test/smoke/agent-skill-examples.test.ts';
+    const buildSteps = ci.jobs.build.steps;
+    const smokeIndex = buildSteps.findIndex((step) => step.run === smokeCommand);
+    expect(smokeIndex).toBeGreaterThan(
+      buildSteps.findIndex((step) => step.run === 'npm run build'),
+    );
+    expect(ci.jobs['artifact-consumer'].steps.some((step) => step.run === smokeCommand)).toBe(
+      false,
+    );
+  });
+
   it('builds and validates before an OIDC-only publisher, retaining release controls', () => {
     expect(workflow.concurrency['cancel-in-progress']).toBe(false);
     for (const [buildName, publishName] of [

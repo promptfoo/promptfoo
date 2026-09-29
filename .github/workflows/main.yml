@@ -279,6 +279,11 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Run built agent skill examples
+        env:
+          PROMPTFOO_POSTHOG_KEY: ''
+        run: npm run test:smoke -- test/smoke/agent-skill-examples.test.ts
+
   artifact-consumer:
     name: Installed package on ${{ matrix.os }}
     needs: build
@@ -323,11 +328,6 @@ jobs:
           PACKAGE_TARBALL: ${{ steps.prepare.outputs.tarball }}
           PROMPTFOO_DISABLE_TELEMETRY: 1
         run: npm run test:artifact -- --tarball "$PACKAGE_TARBALL"
-
-      - name: Run built agent skill examples
-        env:
-          PROMPTFOO_POSTHOG_KEY: ''
-        run: npm run test:smoke -- test/smoke/agent-skill-examples.test.ts
 
   style-check:
     name: Style Check

@@ -943,8 +943,10 @@ async function main(): Promise<void> {
         };
         assert.equal(typeof playwright.bin.playwright, 'string');
         const browsersPath = path.join(tempDir, 'browsers');
+        // Provisioning follows the install lifecycle and the CI job budget. Only the
+        // browser fixture below uses runAsync's one-minute execution deadline.
         console.log(
-          await runAsync(
+          run(
             process.execPath,
             [
               path.resolve(path.dirname(playwrightManifest), playwright.bin.playwright),
