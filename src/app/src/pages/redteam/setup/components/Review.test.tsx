@@ -10,21 +10,6 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Review from './Review';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
-import type { ZodType } from 'zod';
-
-const mockShowToast = vi.hoisted(() => vi.fn());
-const TEST_JOB_ID = '00000000-0000-4000-8000-000000000001';
-const REPLACEMENT_JOB_ID = '00000000-0000-4000-8000-000000000002';
-
-function createDeferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, reject, resolve };
-}
 
 // Helper to render with required providers
 let rerenderWithProviders: (ui: React.ReactElement) => void;
@@ -59,77 +44,24 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 
 vi.mock('@app/hooks/useToast', () => ({
   useToast: () => ({
-    showToast: mockShowToast,
+    showToast: vi.fn(),
   }),
 }));
 
-vi.mock('@app/utils/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@app/utils/api')>();
-  class MockApiResponseError extends Error {
-    constructor(
-      public readonly status: number,
-      public readonly body: { error: string },
-      public readonly response: Response,
-    ) {
-      super(body.error);
-      this.name = 'ApiResponseError';
+vi.mock('@app/utils/api', () => ({
+  callApi: vi.fn().mockImplementation(async (url: string) => {
+    if (url === '/redteam/status') {
+      return {
+        ok: true,
+        json: async () => ({ hasRunningJob: false }),
+      };
     }
-  }
-
-  return {
-    ...actual,
-    ApiResponseError: MockApiResponseError,
-    callApi: vi.fn().mockImplementation(async (url: string) => {
-      if (url === '/redteam/status') {
-        return {
-          ok: true,
-          json: async () => ({ hasRunningJob: false, jobId: null }),
-        };
-      }
-      return { ok: true, json: async () => ({}) };
-    }),
-    callApiJson: vi.fn(
-      async <T,>(
-        route: { clientPath: string },
-        schema: ZodType<T>,
-        options: {
-          params?: Record<string, string | number>;
-          query?: URLSearchParams;
-        } & RequestInit = {},
-      ) => {
-        const { params = {}, query, ...requestInit } = options;
-        let path = route.clientPath;
-        for (const [name, value] of Object.entries(params)) {
-          path = path.replace(`:${name}`, encodeURIComponent(String(value)));
-        }
-        const queryString = query?.toString();
-        const requestPath = queryString ? `${path}?${queryString}` : path;
-        const response = await vi.mocked(callApi)(requestPath, requestInit);
-        if (response.ok === false) {
-          let body = { error: `Request failed (${response.status})` };
-          try {
-            const parsed: unknown = await response.json();
-            if (
-              typeof parsed === 'object' &&
-              parsed !== null &&
-              'error' in parsed &&
-              typeof parsed.error === 'string'
-            ) {
-              body = { error: parsed.error };
-            }
-          } catch {
-            // Match callApiJson's fallback for non-JSON HTTP errors.
-          }
-          throw new MockApiResponseError(response.status, body, response);
-        }
-        return schema.parse(await response.json());
-      },
-    ),
-    fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
-    fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
-    updateEvalAuthor: vi.fn(() => Promise.resolve({})),
-  };
-});
+    return { ok: true, json: async () => ({}) };
+  }),
+  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
+  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
+}));
 
 // Mock the redteamJobStore
 const mockSetJob = vi.fn();
@@ -359,7 +291,7 @@ describe('Review Component', () => {
       if (url === '/redteam/status') {
         return {
           ok: true,
-          json: async () => ({ hasRunningJob: false, jobId: null }),
+          json: async () => ({ hasRunningJob: false }),
         } as Response;
       }
       return { ok: true, json: async () => ({}) } as Response;
@@ -796,7 +728,7 @@ Application Details:
           if (preflight === 'email') {
             expect(checkEmailStatus).toHaveBeenCalledTimes(1);
           } else {
-            expect(callApi).toHaveBeenCalledWith('/redteam/status', {});
+            expect(callApi).toHaveBeenCalledWith('/redteam/status');
           }
         });
 
@@ -886,7 +818,7 @@ Application Details:
         />,
       );
       await user.click(screen.getByRole('button', { name: /run now/i }));
-      await waitFor(() => expect(callApi).toHaveBeenCalledWith('/redteam/status', {}));
+      await waitFor(() => expect(callApi).toHaveBeenCalledWith('/redteam/status'));
 
       latestState = { ...latestState, config: replacementConfig };
       rendered.unmount();
@@ -953,7 +885,7 @@ Application Details:
         />,
       );
       await user.click(screen.getByRole('button', { name: /run now/i }));
-      await waitFor(() => expect(callApi).toHaveBeenCalledWith('/redteam/status', {}));
+      await waitFor(() => expect(callApi).toHaveBeenCalledWith('/redteam/status'));
 
       confirmedConfig.target.config.url = 'wss://replacement.test/unsafe';
       rendered.unmount();
@@ -1082,10 +1014,7 @@ Application Details:
           statusCalls++;
           return {
             ok: true,
-            json: async () => ({
-              hasRunningJob: statusCalls === 1,
-              jobId: statusCalls === 1 ? TEST_JOB_ID : null,
-            }),
+            json: async () => ({ hasRunningJob: statusCalls === 1 }),
           } as Response;
         }
         if (url === '/redteam/cancel') {
@@ -1441,20 +1370,18 @@ Application Details:
       vi.mocked(callApi).mockImplementation(async (url: string, _options?: any) => {
         if (url === '/redteam/status') {
           return {
-            json: async () => ({ hasRunningJob: false, jobId: null }),
+            json: async () => ({ hasRunningJob: false }),
           } as any;
         }
         if (url === '/redteam/run') {
           return {
-            json: async () => ({ id: TEST_JOB_ID }),
+            json: async () => ({ id: 'test-job-id' }),
           } as any;
         }
         if (url.startsWith('/eval/job/')) {
           return {
             json: async () => ({
-              status: 'in-progress',
-              progress: 1,
-              total: 2,
+              status: 'running',
               logs: ['Running tests...'],
             }),
           } as any;
@@ -1879,7 +1806,7 @@ Application Details:
         if (url === '/redteam/status') {
           return {
             ok: true,
-            json: async () => ({ hasRunningJob: false, jobId: null }),
+            json: async () => ({ hasRunningJob: false }),
           } as Response;
         }
         return { ok: true, json: async () => ({}) } as Response;
@@ -1895,7 +1822,7 @@ Application Details:
 
       // Wait for the effect to run
       await waitFor(() => {
-        expect(callApi).toHaveBeenCalledWith('/redteam/status', {});
+        expect(callApi).toHaveBeenCalledWith('/redteam/status');
       });
     });
 
@@ -1912,8 +1839,7 @@ Application Details:
             ok: true,
             json: async () => ({
               status: 'in-progress',
-              progress: 1,
-              total: 2,
+              logs: ['Test running...'],
             }),
           } as Response;
         }
@@ -1937,423 +1863,6 @@ Application Details:
       expect(mockSetJob).toHaveBeenCalledWith('server-job-123');
     });
 
-    it('should clear a reconnected job when it disappears during polling', async () => {
-      timers.useFakeTimers();
-      let jobRequests = 0;
-      vi.mocked(callApi).mockImplementation(async (url: string) => {
-        if (url === '/redteam/status') {
-          return {
-            ok: true,
-            json: async () => ({ hasRunningJob: true, jobId: 'restarted-job' }),
-          } as Response;
-        }
-        if (url === '/eval/job/restarted-job') {
-          jobRequests += 1;
-          if (jobRequests === 1) {
-            return {
-              ok: true,
-              json: async () => ({
-                status: 'in-progress',
-                progress: 1,
-                total: 2,
-                logs: ['Running...'],
-              }),
-            } as Response;
-          }
-          return {
-            ok: false,
-            status: 404,
-            json: async () => ({ error: 'Job not found' }),
-          } as Response;
-        }
-        return { ok: true, json: async () => ({}) } as Response;
-      });
-
-      await act(async () => {
-        renderWithProviders(
-          <Review
-            navigateToPlugins={vi.fn()}
-            navigateToStrategies={vi.fn()}
-            navigateToPurpose={vi.fn()}
-          />,
-        );
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(jobRequests).toBe(1);
-      expect(mockClearJob).not.toHaveBeenCalled();
-      expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
-      expect(
-        vi
-          .mocked(callApi)
-          .mock.calls.map(([url]) => url)
-          .filter((url) => url === '/redteam/status' || url === '/eval/job/restarted-job'),
-      ).toEqual(['/redteam/status', '/eval/job/restarted-job']);
-
-      await act(async () => {
-        await timers.advanceByAsync(1000);
-      });
-
-      expect(jobRequests).toBe(2);
-      expect(mockClearJob).toHaveBeenCalledTimes(1);
-      expect(
-        vi
-          .mocked(callApi)
-          .mock.calls.map(([url]) => url)
-          .filter((url) => url === '/redteam/status' || url === '/eval/job/restarted-job'),
-      ).toEqual(['/redteam/status', '/eval/job/restarted-job', '/eval/job/restarted-job']);
-      expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
-      expect(mockShowToast).toHaveBeenCalledWith('Job was interrupted. Please try again.', 'error');
-    });
-
-    it.each([
-      { label: '400 response', status: 400, error: 'Invalid job request' },
-      { label: '401 response', status: 401, error: 'Authentication required' },
-      { label: '403 response', status: 403, error: 'Job access denied' },
-    ])('stops polling after an HTTP failure: $label', async ({ status, error }) => {
-      timers.useFakeTimers();
-      let jobRequests = 0;
-      vi.mocked(callApi).mockImplementation(async (url: string) => {
-        if (url === '/redteam/status') {
-          return {
-            ok: true,
-            json: async () => ({ hasRunningJob: true, jobId: 'terminal-error-job' }),
-          } as Response;
-        }
-        if (url === '/eval/job/terminal-error-job') {
-          jobRequests += 1;
-          if (jobRequests === 1) {
-            return {
-              ok: true,
-              json: async () => ({
-                status: 'in-progress',
-                progress: 1,
-                total: 2,
-                logs: ['Running...'],
-              }),
-            } as Response;
-          }
-          return {
-            ok: false,
-            status,
-            json: async () => {
-              if (error === null) {
-                throw new SyntaxError('Unexpected token in HTTP response');
-              }
-              return { error };
-            },
-          } as Response;
-        }
-        return { ok: true, json: async () => ({}) } as Response;
-      });
-
-      await act(async () => {
-        renderWithProviders(
-          <Review
-            navigateToPlugins={vi.fn()}
-            navigateToStrategies={vi.fn()}
-            navigateToPurpose={vi.fn()}
-          />,
-        );
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(jobRequests).toBe(1);
-      expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
-
-      await act(async () => {
-        await timers.advanceByAsync(1000);
-      });
-
-      expect(jobRequests).toBe(2);
-      expect(mockClearJob).toHaveBeenCalledTimes(1);
-      expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
-      expect(mockShowToast).toHaveBeenCalledWith(
-        `Unable to check job status: ${error ?? `Request failed (${status})`}`,
-        'error',
-      );
-
-      await act(async () => {
-        await timers.advanceByAsync(5000);
-      });
-      expect(jobRequests).toBe(2);
-    });
-
-    it.each([
-      {
-        label: 'schema-invalid body',
-        readBody: async () => ({ status: 'in-progress', progress: 'invalid', total: 2 }),
-      },
-      {
-        label: 'malformed-JSON body',
-        readBody: async () => {
-          throw new SyntaxError('Unexpected token in successful response');
-        },
-      },
-    ])('stops polling after a 200 $label', async ({ readBody }) => {
-      timers.useFakeTimers();
-      let jobRequests = 0;
-      vi.mocked(callApi).mockImplementation(async (url: string) => {
-        if (url === '/redteam/status') {
-          return {
-            ok: true,
-            json: async () => ({ hasRunningJob: true, jobId: 'invalid-response-job' }),
-          } as Response;
-        }
-        if (url === '/eval/job/invalid-response-job') {
-          jobRequests += 1;
-          if (jobRequests === 1) {
-            return {
-              ok: true,
-              json: async () => ({
-                status: 'in-progress',
-                progress: 1,
-                total: 2,
-                logs: ['Running...'],
-              }),
-            } as Response;
-          }
-          return { ok: true, json: readBody } as Response;
-        }
-        return { ok: true, json: async () => ({}) } as Response;
-      });
-
-      await act(async () => {
-        renderWithProviders(
-          <Review
-            navigateToPlugins={vi.fn()}
-            navigateToStrategies={vi.fn()}
-            navigateToPurpose={vi.fn()}
-          />,
-        );
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      expect(jobRequests).toBe(1);
-      expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
-
-      await act(async () => {
-        await timers.advanceByAsync(1000);
-      });
-
-      expect(jobRequests).toBe(2);
-      expect(mockClearJob).toHaveBeenCalledTimes(1);
-      expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
-      expect(mockShowToast).toHaveBeenCalledWith(
-        'Received an invalid job status response. Please try again.',
-        'error',
-      );
-
-      await act(async () => {
-        await timers.advanceByAsync(5000);
-      });
-      expect(jobRequests).toBe(2);
-    });
-
-    it('retries a transient 500 polling error and handles the later completion', async () => {
-      timers.useFakeTimers();
-      let jobRequests = 0;
-      vi.mocked(callApi).mockImplementation(async (url: string) => {
-        if (url === '/redteam/status') {
-          return {
-            ok: true,
-            json: async () => ({ hasRunningJob: true, jobId: 'transient-error-job' }),
-          } as Response;
-        }
-        if (url === '/eval/job/transient-error-job') {
-          jobRequests += 1;
-          if (jobRequests === 1) {
-            return {
-              ok: true,
-              json: async () => ({
-                status: 'in-progress',
-                progress: 1,
-                total: 2,
-                logs: ['Running...'],
-              }),
-            } as Response;
-          }
-          if (jobRequests === 2) {
-            return {
-              ok: false,
-              status: 500,
-              json: async () => ({ error: 'Job status temporarily unavailable' }),
-            } as Response;
-          }
-          return {
-            ok: true,
-            json: async () => ({
-              status: 'complete',
-              evalId: 'completed-after-retry',
-              result: {},
-              logs: ['Complete'],
-            }),
-          } as Response;
-        }
-        return { ok: true, json: async () => ({}) } as Response;
-      });
-
-      await act(async () => {
-        renderWithProviders(
-          <Review
-            navigateToPlugins={vi.fn()}
-            navigateToStrategies={vi.fn()}
-            navigateToPurpose={vi.fn()}
-          />,
-        );
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      await act(async () => {
-        await timers.advanceByAsync(1000);
-      });
-      expect(jobRequests).toBe(2);
-      expect(mockClearJob).not.toHaveBeenCalled();
-      expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
-
-      await act(async () => {
-        await timers.advanceByAsync(1000);
-      });
-      expect(jobRequests).toBe(3);
-      expect(mockClearJob).toHaveBeenCalledTimes(1);
-      expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
-      expect(screen.getByRole('link', { name: /view report/i })).toHaveAttribute(
-        'href',
-        '/reports?evalId=completed-after-retry',
-      );
-
-      await act(async () => {
-        await timers.advanceByAsync(5000);
-      });
-      expect(jobRequests).toBe(3);
-    });
-
-    it('does not overlap a stalled polling request', async () => {
-      timers.useFakeTimers();
-      const stalledOldRequest = createDeferred<Response>();
-      let statusRequests = 0;
-      let oldJobRequests = 0;
-      let replacementJobRequests = 0;
-
-      vi.mocked(callApi).mockImplementation((url: string, options?: RequestInit) => {
-        if (url === '/redteam/status') {
-          statusRequests += 1;
-          return Promise.resolve({
-            ok: true,
-            json: async () =>
-              statusRequests === 1
-                ? { hasRunningJob: true, jobId: 'old-job' }
-                : { hasRunningJob: false, jobId: null },
-          } as Response);
-        }
-        if (url === '/eval/job/old-job') {
-          oldJobRequests += 1;
-          if (oldJobRequests === 1) {
-            return Promise.resolve({
-              ok: true,
-              json: async () => ({
-                status: 'in-progress',
-                progress: 1,
-                total: 3,
-                logs: ['Old job running'],
-              }),
-            } as Response);
-          }
-          if (oldJobRequests === 2) {
-            return new Promise((resolve, reject) => {
-              stalledOldRequest.promise.then(resolve, reject);
-              options?.signal?.addEventListener('abort', () =>
-                reject(new DOMException('Timed out', 'AbortError')),
-              );
-            });
-          }
-          if (oldJobRequests === 3) {
-            return Promise.resolve({
-              ok: true,
-              json: async () => ({
-                status: 'in-progress',
-                progress: 2,
-                total: 3,
-                logs: ['Old job resumed'],
-              }),
-            } as Response);
-          }
-          return Promise.resolve({
-            ok: false,
-            status: 500,
-            json: async () => ({ error: 'Old polling session failed' }),
-          } as Response);
-        }
-        if (url === '/redteam/run') {
-          return Promise.resolve({
-            ok: true,
-            json: async () => ({ id: REPLACEMENT_JOB_ID }),
-          } as Response);
-        }
-        if (url === `/eval/job/${REPLACEMENT_JOB_ID}`) {
-          replacementJobRequests += 1;
-          return Promise.resolve({
-            ok: true,
-            json: async () => ({
-              status: 'in-progress',
-              progress: replacementJobRequests,
-              total: 3,
-              logs: [`Replacement poll ${replacementJobRequests}`],
-            }),
-          } as Response);
-        }
-        return Promise.resolve({ ok: true, json: async () => ({}) } as Response);
-      });
-
-      await act(async () => {
-        renderWithProviders(
-          <Review
-            navigateToPlugins={vi.fn()}
-            navigateToStrategies={vi.fn()}
-            navigateToPurpose={vi.fn()}
-          />,
-        );
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(oldJobRequests).toBe(1);
-
-      act(() => {
-        timers.advanceBy(1000);
-      });
-      await act(async () => {
-        await Promise.resolve();
-      });
-      expect(oldJobRequests).toBe(2);
-
-      act(() => {
-        timers.advanceBy(1000);
-      });
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(oldJobRequests).toBe(2);
-      expect(mockClearJob).not.toHaveBeenCalled();
-      expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
-
-      await act(async () => {
-        await timers.advanceByAsync(10_000);
-        await Promise.resolve();
-      });
-      await act(async () => {
-        await timers.advanceByAsync(1_000);
-      });
-      expect(oldJobRequests).toBeGreaterThanOrEqual(3);
-      expect(mockClearJob).not.toHaveBeenCalled();
-      expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
-    });
-
     it('should show completed state when returning to completed job', async () => {
       vi.mocked(callApi).mockImplementation(async (url: string) => {
         if (url === '/redteam/status') {
@@ -2368,7 +1877,6 @@ Application Details:
             json: async () => ({
               status: 'complete',
               evalId: 'eval-result-789',
-              result: {},
               logs: ['Evaluation complete'],
             }),
           } as Response;
@@ -2406,7 +1914,7 @@ Application Details:
         if (url === '/redteam/status') {
           return {
             ok: true,
-            json: async () => ({ hasRunningJob: false, jobId: null }),
+            json: async () => ({ hasRunningJob: false }),
           } as Response;
         }
         if (url === '/eval/job/saved-job-999') {
@@ -2415,7 +1923,6 @@ Application Details:
             json: async () => ({
               status: 'complete',
               evalId: 'completed-eval-123',
-              result: {},
               logs: ['Done'],
             }),
           } as Response;
@@ -2433,7 +1940,7 @@ Application Details:
 
       // Wait for recovery to complete
       await waitFor(() => {
-        expect(callApi).toHaveBeenCalledWith('/eval/job/saved-job-999', {});
+        expect(callApi).toHaveBeenCalledWith('/eval/job/saved-job-999');
       });
 
       // Should clear job since it completed while away
@@ -2446,13 +1953,13 @@ Application Details:
         if (url === '/redteam/status') {
           return {
             ok: true,
-            json: async () => ({ hasRunningJob: false, jobId: null }),
+            json: async () => ({ hasRunningJob: false }),
           } as Response;
         }
         if (url === '/redteam/run') {
           return {
             ok: true,
-            json: async () => ({ id: TEST_JOB_ID }),
+            json: async () => ({ id: 'new-job-id' }),
           } as Response;
         }
         if (url.startsWith('/eval/job/')) {
@@ -2460,8 +1967,6 @@ Application Details:
             ok: true,
             json: async () => ({
               status: 'in-progress',
-              progress: 1,
-              total: 2,
               logs: ['Starting...'],
             }),
           } as Response;
@@ -2490,7 +1995,7 @@ Application Details:
 
       // Wait for job to start
       await waitFor(() => {
-        expect(mockSetJob).toHaveBeenCalledWith(TEST_JOB_ID);
+        expect(mockSetJob).toHaveBeenCalledWith('new-job-id');
       });
     });
 
@@ -2500,19 +2005,19 @@ Application Details:
         if (url === '/redteam/status') {
           return {
             ok: true,
-            json: async () => ({ hasRunningJob: false, jobId: null }),
+            json: async () => ({ hasRunningJob: false }),
           } as Response;
         }
         if (url === '/redteam/run') {
           return {
             ok: true,
-            json: async () => ({ id: TEST_JOB_ID }),
+            json: async () => ({ id: 'job-to-cancel' }),
           } as Response;
         }
         if (url === '/redteam/cancel') {
           return {
             ok: true,
-            json: async () => ({ message: 'Cancel request submitted' }),
+            json: async () => ({ success: true }),
           } as Response;
         }
         if (url.startsWith('/eval/job/')) {
@@ -2520,8 +2025,6 @@ Application Details:
             ok: true,
             json: async () => ({
               status: 'in-progress',
-              progress: 1,
-              total: 2,
               logs: ['Running...'],
             }),
           } as Response;
@@ -2558,63 +2061,6 @@ Application Details:
       // Should call clearJob
       await waitFor(() => {
         expect(mockClearJob).toHaveBeenCalled();
-      });
-    });
-
-    it('should clear stale running state when cancel reports that no job is running', async () => {
-      const user = userEvent.setup({ delay: null });
-      vi.mocked(callApi).mockImplementation(async (url: string) => {
-        if (url === '/redteam/status') {
-          return {
-            ok: true,
-            json: async () => ({ hasRunningJob: false, jobId: null }),
-          } as Response;
-        }
-        if (url === '/redteam/run') {
-          return {
-            ok: true,
-            json: async () => ({ id: TEST_JOB_ID }),
-          } as Response;
-        }
-        if (url === '/redteam/cancel') {
-          return {
-            ok: false,
-            status: 400,
-            json: async () => ({ error: 'No job currently running' }),
-          } as Response;
-        }
-        if (url === `/eval/job/${TEST_JOB_ID}`) {
-          return {
-            ok: true,
-            json: async () => ({
-              status: 'in-progress',
-              progress: 1,
-              total: 2,
-              logs: ['Running...'],
-            }),
-          } as Response;
-        }
-        return { ok: true, json: async () => ({}) } as Response;
-      });
-
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
-
-      renderWithProviders(
-        <Review
-          navigateToPlugins={vi.fn()}
-          navigateToStrategies={vi.fn()}
-          navigateToPurpose={vi.fn()}
-        />,
-      );
-
-      await user.click(await screen.findByRole('button', { name: /run now/i }));
-      await user.click(await screen.findByRole('button', { name: /cancel/i }));
-
-      await waitFor(() => {
-        expect(mockClearJob).toHaveBeenCalled();
-        expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
       });
     });
 
@@ -2666,7 +2112,7 @@ Application Details:
         if (url === '/redteam/status') {
           return {
             ok: true,
-            json: async () => ({ hasRunningJob: false, jobId: null }),
+            json: async () => ({ hasRunningJob: false }),
           } as Response;
         }
         return { ok: true, json: async () => ({}) } as Response;
@@ -2684,11 +2130,7 @@ Application Details:
       await new Promise((resolve) => setTimeout(resolve, 50));
 
       // Should NOT have checked the saved job since we're not hydrated
-      expect(
-        vi
-          .mocked(callApi)
-          .mock.calls.some(([path]) => path === '/eval/job/saved-job-before-hydration'),
-      ).toBe(false);
+      expect(callApi).not.toHaveBeenCalledWith('/eval/job/saved-job-before-hydration');
     });
   });
 

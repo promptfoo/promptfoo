@@ -372,7 +372,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
 
       if (response.ok) {
         const data: TestResult = await response.json();
-        setTestResult({ ...data, message: data.message || data.error || data.reason || '' });
+        setTestResult(data);
         setDetailsExpanded(!data.success);
         onTestComplete?.(data.success);
       } else {

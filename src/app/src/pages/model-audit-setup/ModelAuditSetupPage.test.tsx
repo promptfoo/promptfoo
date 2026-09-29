@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { callApiJson } from '@app/utils/api';
+import { callApi } from '@app/utils/api';
 import { act, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useModelAuditConfigStore, useModelAuditHistoryStore } from '../model-audit/stores';
 import ModelAuditSetupPage from './ModelAuditSetupPage';
@@ -52,8 +52,8 @@ vi.mock('../model-audit/components/ScannedFilesDialog', () => ({
 }));
 
 const mockNavigate = vi.fn();
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual('react-router');
   return {
     ...actual,
     useNavigate: () => mockNavigate,
@@ -61,7 +61,7 @@ vi.mock('react-router-dom', async () => {
 });
 
 describe('ModelAuditSetupPage', () => {
-  const mockCallApiJson = vi.mocked(callApiJson);
+  const mockCallApi = vi.mocked(callApi);
   const mockUseConfigStore = vi.mocked(useModelAuditConfigStore);
   const mockUseHistoryStore = vi.mocked(useModelAuditHistoryStore);
 
@@ -135,8 +135,11 @@ describe('ModelAuditSetupPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockCallApiJson.mockReset();
-    mockCallApiJson.mockResolvedValue({ scanners: [] } as any);
+    mockCallApi.mockReset();
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ scanners: [] }),
+    } as Response);
     mockCheckInstallation.mockResolvedValue(undefined);
     mockUseConfigStore.mockReturnValue(getDefaultConfigState() as any);
     mockUseHistoryStore.mockReturnValue(getDefaultHistoryState() as any);
@@ -247,17 +250,21 @@ describe('ModelAuditSetupPage', () => {
   });
 
   it('should load scanner catalog when the options dialog is open', async () => {
-    mockCallApiJson.mockResolvedValueOnce({
-      scanners: [
-        {
-          id: 'pickle',
-          class: 'PickleScanner',
-          description: 'Scans pickle files',
-          extensions: ['.pkl'],
-          dependencies: [],
-        },
-      ],
-    } as any);
+    mockCallApi.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          scanners: [
+            {
+              id: 'pickle',
+              class: 'PickleScanner',
+              description: 'Scans pickle files',
+              extensions: ['.pkl'],
+              dependencies: [],
+            },
+          ],
+        }),
+    } as Response);
     mockUseConfigStore.mockReturnValue({
       ...getDefaultConfigState(),
       showOptionsDialog: true,
@@ -266,7 +273,7 @@ describe('ModelAuditSetupPage', () => {
     renderComponent();
 
     await waitFor(() => {
-      expect(mockCallApiJson).toHaveBeenCalled();
+      expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scanners');
     });
     await waitFor(() => {
       expect(screen.getByTestId('scanner-count')).toHaveTextContent('1');
@@ -276,7 +283,10 @@ describe('ModelAuditSetupPage', () => {
 
   describe('loadScannerCatalog', () => {
     it('should handle API error response with error body', async () => {
-      mockCallApiJson.mockRejectedValueOnce(new Error('API failure'));
+      mockCallApi.mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.resolve({ error: 'API failure' }),
+      } as Response);
       mockUseConfigStore.mockReturnValue({
         ...getDefaultConfigState(),
         showOptionsDialog: true,
@@ -285,7 +295,7 @@ describe('ModelAuditSetupPage', () => {
       renderComponent();
 
       await waitFor(() => {
-        expect(mockCallApiJson).toHaveBeenCalled();
+        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scanners');
       });
       await waitFor(() => {
         expect(screen.getByTestId('scanner-error')).toHaveTextContent('API failure');
@@ -294,7 +304,10 @@ describe('ModelAuditSetupPage', () => {
     });
 
     it('should handle API error response without error body', async () => {
-      mockCallApiJson.mockRejectedValueOnce(new Error('Unable to load scanner catalog'));
+      mockCallApi.mockResolvedValueOnce({
+        ok: false,
+        json: () => Promise.reject(new Error('Invalid JSON')),
+      } as Response);
       mockUseConfigStore.mockReturnValue({
         ...getDefaultConfigState(),
         showOptionsDialog: true,
@@ -303,7 +316,7 @@ describe('ModelAuditSetupPage', () => {
       renderComponent();
 
       await waitFor(() => {
-        expect(mockCallApiJson).toHaveBeenCalled();
+        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scanners');
       });
       await waitFor(() => {
         expect(screen.getByTestId('scanner-error')).toHaveTextContent(
@@ -314,7 +327,7 @@ describe('ModelAuditSetupPage', () => {
     });
 
     it('should handle network error', async () => {
-      mockCallApiJson.mockRejectedValueOnce(new Error('Network failure'));
+      mockCallApi.mockRejectedValueOnce(new Error('Network failure'));
       mockUseConfigStore.mockReturnValue({
         ...getDefaultConfigState(),
         showOptionsDialog: true,
@@ -323,7 +336,7 @@ describe('ModelAuditSetupPage', () => {
       renderComponent();
 
       await waitFor(() => {
-        expect(mockCallApiJson).toHaveBeenCalled();
+        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scanners');
       });
       await waitFor(() => {
         expect(screen.getByTestId('scanner-error')).toHaveTextContent('Network failure');
@@ -332,7 +345,7 @@ describe('ModelAuditSetupPage', () => {
     });
 
     it('should handle non-Error exceptions', async () => {
-      mockCallApiJson.mockRejectedValueOnce('String error');
+      mockCallApi.mockRejectedValueOnce('String error');
       mockUseConfigStore.mockReturnValue({
         ...getDefaultConfigState(),
         showOptionsDialog: true,
@@ -341,7 +354,7 @@ describe('ModelAuditSetupPage', () => {
       renderComponent();
 
       await waitFor(() => {
-        expect(mockCallApiJson).toHaveBeenCalled();
+        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scanners');
       });
       await waitFor(() => {
         expect(screen.getByTestId('scanner-error')).toHaveTextContent('Unable to load scanners');
@@ -350,7 +363,10 @@ describe('ModelAuditSetupPage', () => {
     });
 
     it('should handle missing scanners array in response', async () => {
-      mockCallApiJson.mockResolvedValueOnce({} as any);
+      mockCallApi.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      } as Response);
       mockUseConfigStore.mockReturnValue({
         ...getDefaultConfigState(),
         showOptionsDialog: true,
@@ -359,7 +375,7 @@ describe('ModelAuditSetupPage', () => {
       renderComponent();
 
       await waitFor(() => {
-        expect(mockCallApiJson).toHaveBeenCalled();
+        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scanners');
       });
       await waitFor(() => {
         expect(screen.getByTestId('scanner-count')).toHaveTextContent('0');
@@ -368,7 +384,10 @@ describe('ModelAuditSetupPage', () => {
     });
 
     it('should handle non-array scanners in response', async () => {
-      mockCallApiJson.mockResolvedValueOnce({ scanners: 'not-an-array' } as any);
+      mockCallApi.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ scanners: 'not-an-array' }),
+      } as Response);
       mockUseConfigStore.mockReturnValue({
         ...getDefaultConfigState(),
         showOptionsDialog: true,
@@ -377,7 +396,7 @@ describe('ModelAuditSetupPage', () => {
       renderComponent();
 
       await waitFor(() => {
-        expect(mockCallApiJson).toHaveBeenCalled();
+        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scanners');
       });
       await waitFor(() => {
         expect(screen.getByTestId('scanner-count')).toHaveTextContent('0');
@@ -396,7 +415,7 @@ describe('ModelAuditSetupPage', () => {
       // Wait a bit to ensure no API call is made
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      expect(mockCallApiJson).not.toHaveBeenCalled();
+      expect(mockCallApi).not.toHaveBeenCalledWith('/model-audit/scanners');
     });
 
     it('should show loading state before scanners load', async () => {
@@ -406,7 +425,7 @@ describe('ModelAuditSetupPage', () => {
         resolveApi = resolve;
       });
 
-      mockCallApiJson.mockReturnValue(apiPromise as any);
+      mockCallApi.mockReturnValue(apiPromise as any);
       mockUseConfigStore.mockReturnValue({
         ...getDefaultConfigState(),
         showOptionsDialog: true,
@@ -419,7 +438,10 @@ describe('ModelAuditSetupPage', () => {
       });
 
       // Resolve the API call
-      resolveApi!({ scanners: [] });
+      resolveApi!({
+        ok: true,
+        json: () => Promise.resolve({ scanners: [] }),
+      });
 
       await waitFor(() => {
         expect(screen.getByTestId('scanner-loading')).toHaveTextContent('false');
@@ -427,12 +449,15 @@ describe('ModelAuditSetupPage', () => {
     });
 
     it('should cancel loading if dialog is closed before API response', async () => {
-      let resolveResponse!: (response: { scanners: Array<{ id: string }> }) => void;
+      let resolveResponse!: (response: {
+        ok: boolean;
+        json: () => Promise<{ scanners: Array<{ id: string }> }>;
+      }) => void;
       const delayedResponse = new Promise((resolve) => {
         resolveResponse = resolve;
       });
 
-      mockCallApiJson.mockReturnValue(delayedResponse as any);
+      mockCallApi.mockReturnValue(delayedResponse as any);
 
       // Start with dialog open
       const { rerender } = render(
@@ -457,7 +482,7 @@ describe('ModelAuditSetupPage', () => {
       );
 
       await waitFor(() => {
-        expect(mockCallApiJson).toHaveBeenCalled();
+        expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scanners');
       });
 
       // Close the dialog before response arrives
@@ -475,7 +500,10 @@ describe('ModelAuditSetupPage', () => {
       );
 
       await act(async () => {
-        resolveResponse({ scanners: [{ id: 'test' }] });
+        resolveResponse({
+          ok: true,
+          json: () => Promise.resolve({ scanners: [{ id: 'test' }] }),
+        });
         await delayedResponse;
         await Promise.resolve();
       });
@@ -486,7 +514,7 @@ describe('ModelAuditSetupPage', () => {
 
     it('should clear previous error when reloading', async () => {
       // First load with error
-      mockCallApiJson.mockRejectedValueOnce(new Error('First error'));
+      mockCallApi.mockRejectedValueOnce(new Error('First error'));
       mockUseConfigStore.mockReturnValue({
         ...getDefaultConfigState(),
         showOptionsDialog: true,
@@ -513,7 +541,10 @@ describe('ModelAuditSetupPage', () => {
       );
 
       // Reopen dialog with successful load
-      mockCallApiJson.mockResolvedValueOnce({ scanners: [] } as any);
+      mockCallApi.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ scanners: [] }),
+      } as Response);
 
       mockUseConfigStore.mockReturnValue({
         ...getDefaultConfigState(),

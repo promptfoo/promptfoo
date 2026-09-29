@@ -1,5 +1,4 @@
-import { callApiResponse } from '@app/utils/api';
-import { ApiRoutes } from '@promptfoo/contracts';
+import { callApi } from '../api';
 
 /**
  * Generic function to download results in a specified format
@@ -10,9 +9,8 @@ import { ApiRoutes } from '@promptfoo/contracts';
  * @throws {Error} When the response cannot be converted to a blob
  */
 export async function downloadResultsFile(evalId: string, format: 'csv' | 'json'): Promise<Blob> {
-  const response = await callApiResponse(ApiRoutes.Eval.Table, {
-    params: { id: evalId },
-    query: new URLSearchParams({ format }),
+  const response = await callApi(`/eval/${evalId}/table?format=${format}`, {
+    method: 'GET',
   });
 
   if (!response.ok) {

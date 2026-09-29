@@ -2,12 +2,12 @@ import { useMemo } from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { mockWindowLocation } from '@app/tests/browserMocks';
-import { callApiJson } from '@app/utils/api';
+import { callApi } from '@app/utils/api';
 import { ResultFailureReason } from '@promptfoo/types';
-import { render, renderHook, screen, waitFor } from '@testing-library/react';
+import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { MemoryRouter } from 'react-router';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import App from './Report';
 import type { EvaluateResult, GradingResult, ResultsFile } from '@promptfoo/types';
 
@@ -20,12 +20,9 @@ const renderWithProviders = (ui: React.ReactElement) => {
   );
 };
 
-vi.mock('@app/utils/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@app/utils/api')>()),
-  callApiJson: vi.fn(),
-}));
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+vi.mock('@app/utils/api');
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual('react-router');
   return {
     ...actual,
     useNavigate: () => vi.fn(),
@@ -599,7 +596,7 @@ const createComponentMockEvalData = (
   }) as unknown as ResultsFile;
 
 describe('App component target selection', () => {
-  const mockCallApi = callApiJson as Mock;
+  const mockCallApi = callApi as Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -618,7 +615,10 @@ describe('App component target selection', () => {
         results: [createComponentMockResult(0, 'plugin1', false)],
       },
     } as unknown as ResultsFile;
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     renderWithProviders(<App />);
 
@@ -635,7 +635,10 @@ describe('App component target selection', () => {
       createComponentMockResult(1, 'plugin3', false),
     ];
     const evalData = createComponentMockEvalData(2, results);
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     renderWithProviders(<App />);
 
@@ -662,7 +665,7 @@ describe('App component target selection', () => {
 });
 
 describe('App component target selector rendering', () => {
-  const mockCallApi = callApiJson as Mock;
+  const mockCallApi = callApi as Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -675,7 +678,10 @@ describe('App component target selector rendering', () => {
       createComponentMockResult(1, 'plugin1', false),
     ];
     const evalData = createComponentMockEvalData(2, results);
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     renderWithProviders(<App />);
 
@@ -686,7 +692,10 @@ describe('App component target selector rendering', () => {
   it('should render a static chip when there is only one prompt', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     renderWithProviders(<App />);
 
@@ -701,7 +710,10 @@ describe('App component target selector rendering', () => {
     const user = userEvent.setup();
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     renderWithProviders(<App />);
 
@@ -720,7 +732,10 @@ describe('App component target selector rendering', () => {
   it('preserves a reported target probe count of zero', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results, 0);
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     renderWithProviders(<App />);
 
@@ -755,7 +770,10 @@ describe('App component target selector rendering', () => {
         },
       },
     };
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     renderWithProviders(<App />);
 
@@ -802,7 +820,10 @@ describe('App component target selector rendering', () => {
         },
       },
     };
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     renderWithProviders(<App />);
 
@@ -819,7 +840,10 @@ describe('App component target selector rendering', () => {
   it('keeps report header actions in normal flow on narrow screens', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     renderWithProviders(<App />);
 
@@ -835,7 +859,10 @@ describe('App component target selector rendering', () => {
   it('allows embedded reports to shrink within narrow result views', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     const { container } = renderWithProviders(<App embedded />);
 
@@ -846,7 +873,7 @@ describe('App component target selector rendering', () => {
 });
 
 describe('App component categoryStats calculation with moderation', () => {
-  const mockCallApi = callApiJson as Mock;
+  const mockCallApi = callApi as Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -872,7 +899,10 @@ describe('App component categoryStats calculation with moderation', () => {
       createComponentMockResult(0, pluginId, false, [moderationFailure, passingTest]),
     ];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     renderWithProviders(<App />);
 
@@ -892,7 +922,7 @@ describe('App component categoryStats calculation with moderation', () => {
 });
 
 describe('Filter panel regression tests', () => {
-  const mockCallApi = callApiJson as Mock;
+  const mockCallApi = callApi as Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -907,7 +937,10 @@ describe('Filter panel regression tests', () => {
       createComponentMockResult(0, 'pii:direct', true),
     ];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     renderWithProviders(<App />);
 
@@ -938,7 +971,10 @@ describe('Filter panel regression tests', () => {
       createComponentMockResult(0, 'pii:direct', true),
     ];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({ data: evalData });
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
 
     renderWithProviders(<App />);
 
@@ -992,5 +1028,144 @@ describe('Filter panel regression tests', () => {
 
     // If we got here without errors, the fix is working
     expect(screen.getByText('Filters')).toBeInTheDocument();
+  });
+});
+
+describe('Report loading', () => {
+  const mockCallApi = vi.mocked(callApi);
+  const report = createComponentMockEvalData(1, [createComponentMockResult(0, 'plugin1', true)]);
+  const response = (data: unknown, status = 200) =>
+    new Response(JSON.stringify({ data }), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+  beforeEach(() => {
+    mockCallApi.mockReset();
+    mockWindowLocation({ search: '' });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each(['http', 'network', 'json', 'missing-data'] as const)(
+    'replaces the spinner after a %s failure',
+    async (failure) => {
+      if (failure === 'network') {
+        mockCallApi.mockRejectedValueOnce(new Error('offline'));
+      } else {
+        mockCallApi.mockResolvedValueOnce(
+          failure === 'http'
+            ? response(null, 403)
+            : failure === 'json'
+              ? new Response('not json')
+              : response({}),
+        );
+      }
+      renderWithProviders(<App evalId="requested-eval" />);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load this report');
+      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled();
+      expect(mockCallApi).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('retries a failed report without re-fetching on unrelated renders', async () => {
+    mockCallApi.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(response(report));
+    renderWithProviders(<App evalId="requested-eval" />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+    expect(await screen.findByTestId('overview-total')).toHaveTextContent('1');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(mockCallApi).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports an empty evaluation list', async () => {
+    mockCallApi.mockResolvedValueOnce(response([]));
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No evaluations are available yet');
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(mockCallApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('catches failure while looking up the latest evaluation', async () => {
+    mockCallApi.mockResolvedValueOnce(response(null, 503));
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load this report');
+    expect(mockCallApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('catches failure in the latest report after its ID lookup succeeds', async () => {
+    mockCallApi
+      .mockResolvedValueOnce(response([{ evalId: 'latest' }]))
+      .mockRejectedValueOnce(new Error('offline'));
+    renderWithProviders(<App />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load this report');
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(mockCallApi).toHaveBeenCalledTimes(2);
+  });
+
+  it('awaits the latest report and encodes its ID as one path segment', async () => {
+    mockCallApi
+      .mockResolvedValueOnce(response([{ evalId: 'folder/report ?' }]))
+      .mockResolvedValueOnce(response(report));
+    renderWithProviders(<App />);
+
+    expect(await screen.findByTestId('overview-total')).toHaveTextContent('1');
+    expect(mockCallApi).toHaveBeenNthCalledWith(
+      2,
+      '/results/folder%2Freport%20%3F',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it('ignores a previous report whose JSON finishes after the selected evaluation changes', async () => {
+    let resolveOldBody!: (value: unknown) => void;
+    const oldBody = new Promise((resolve) => {
+      resolveOldBody = resolve;
+    });
+    mockCallApi
+      .mockResolvedValueOnce({ ok: true, json: () => oldBody } as Response)
+      .mockResolvedValueOnce(response(report));
+    const wrap = (id: string) => (
+      <TooltipProvider>
+        <MemoryRouter>
+          <App evalId={id} />
+        </MemoryRouter>
+      </TooltipProvider>
+    );
+    const { rerender } = render(wrap('old'));
+    await waitFor(() => expect(mockCallApi).toHaveBeenCalledTimes(1));
+    const oldSignal = mockCallApi.mock.calls[0][1]?.signal;
+    rerender(wrap('new'));
+
+    expect(await screen.findByTestId('overview-total')).toHaveTextContent('1');
+    expect(oldSignal?.aborted).toBe(true);
+    await act(async () => {
+      resolveOldBody({ data: createComponentMockEvalData(1, []) });
+    });
+    expect(screen.getByTestId('overview-total')).toHaveTextContent('1');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('aborts an outstanding request when unmounted', async () => {
+    mockCallApi.mockImplementationOnce(
+      (_path, options) =>
+        new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+        }),
+    );
+    const { unmount } = renderWithProviders(<App evalId="requested-eval" />);
+    await waitFor(() => expect(mockCallApi).toHaveBeenCalledTimes(1));
+    const signal = mockCallApi.mock.calls[0][1]?.signal;
+    unmount();
+    expect(signal?.aborted).toBe(true);
+    expect(console.error).not.toHaveBeenCalled();
   });
 });

@@ -24,9 +24,8 @@ import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { callApiJson } from '@app/utils/api';
+import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
-import { ApiRoutes, ConfigSchemas } from '@promptfoo/contracts';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { loadYaml } from '@promptfoo/util/yamlLoad';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
@@ -42,7 +41,7 @@ import {
   Save,
   Settings,
 } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import { customTargetOption, findPredefinedTarget } from './components/constants';
 import Plugins from './components/Plugins';
 import Purpose from './components/Purpose';
@@ -68,7 +67,7 @@ export { SIDEBAR_WIDTH };
 interface SavedConfig {
   id: string;
   name: string;
-  updatedAt: string | number;
+  updatedAt: string;
 }
 
 const readFileAsText = (file: File): Promise<string> => {
@@ -150,7 +149,7 @@ export default function RedTeamSetupPage() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Add new state for tracking the config date
-  const [configDate, setConfigDate] = useState<string | number | null>(null);
+  const [configDate, setConfigDate] = useState<string | null>(null);
 
   const lastSavedConfig = useRef<string>('');
 
@@ -260,7 +259,8 @@ export default function RedTeamSetupPage() {
     });
 
     try {
-      const data = await callApiJson(ApiRoutes.Configs.Create, ConfigSchemas.Create.Response, {
+      const response = await callApi('/configs', {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -270,6 +270,12 @@ export default function RedTeamSetupPage() {
           config,
         }),
       });
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
       toast.showToast('Configuration saved successfully', 'success');
       setSaveDialogOpen(false);
       lastSavedConfig.current = JSON.stringify(config);
@@ -283,26 +289,25 @@ export default function RedTeamSetupPage() {
         'error',
       );
     }
-
-    setHasUnsavedChanges(false);
   };
 
   const loadConfigs = async () => {
     recordEvent('feature_used', { feature: 'redteam_config_load' });
     try {
-      const data = await callApiJson(ApiRoutes.Configs.List, ConfigSchemas.List.Response, {
-        query: new URLSearchParams({ type: 'redteam' }),
-      });
+      const response = await callApi('/configs?type=redteam');
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
 
       setHasUnsavedChanges(false);
 
-      const configs: SavedConfig[] = data.configs.map(({ id, name, updatedAt }) => ({
-        id,
-        name,
-        updatedAt,
-      }));
       setSavedConfigs(
-        configs.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+        data.configs.sort(
+          (a: SavedConfig, b: SavedConfig) =>
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+        ),
       );
     } catch (error) {
       console.error('Failed to load configurations', error);
@@ -316,11 +321,14 @@ export default function RedTeamSetupPage() {
 
   const handleLoadConfig = async (id: string) => {
     try {
-      const data = await callApiJson(ApiRoutes.Configs.Get, ConfigSchemas.Get.Response, {
-        params: { type: 'redteam', id },
-      });
+      const response = await callApi(`/configs/redteam/${id}`);
+      const data = await response.json();
 
-      setFullConfig(data.config as Config);
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      setFullConfig(data.config);
       setConfigName(data.name);
       setConfigDate(data.updatedAt);
       lastSavedConfig.current = JSON.stringify(data.config);

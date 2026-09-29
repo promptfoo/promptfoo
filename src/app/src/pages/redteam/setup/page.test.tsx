@@ -1,10 +1,9 @@
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
-import { formatDataGridDate } from '@app/utils/date';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from './hooks/useRedTeamTargetConfigValidation';
@@ -21,9 +20,9 @@ const mockLocation = {
   key: 'default',
 };
 
-// Mock react-router-dom
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+// Mock react-router
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual('react-router');
   return {
     ...actual,
     useNavigate: () => mockNavigate,
@@ -35,28 +34,8 @@ vi.mock('react-router-dom', async () => {
 vi.mock('@app/hooks/useTelemetry', () => ({ useTelemetry: vi.fn() }));
 vi.mock('@app/hooks/useToast', () => ({ useToast: vi.fn() }));
 vi.mock('./hooks/useSetupState', () => ({ useSetupState: vi.fn() }));
-vi.mock('@app/utils/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@app/utils/api')>()),
+vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
-  callApiJson: vi.fn(
-    async (
-      route: { clientPath: string },
-      _schema: unknown,
-      options: {
-        params?: Record<string, string | number>;
-        query?: URLSearchParams;
-      } & RequestInit = {},
-    ) => {
-      let path = route.clientPath;
-      for (const [name, value] of Object.entries(options.params ?? {})) {
-        path = path.replace(`:${name}`, encodeURIComponent(String(value)));
-      }
-      const search = options.query?.toString();
-      const { params: _params, query: _query, ...requestInit } = options;
-      const response = await vi.mocked(callApi)(search ? `${path}?${search}` : path, requestInit);
-      return response.json();
-    },
-  ),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
@@ -177,6 +156,43 @@ describe('RedTeamSetupPage', () => {
     });
   });
 
+  it.each(['network', 'server', 'success'])(
+    'updates dirty state for the %s save outcome',
+    async (outcome) => {
+      const user = userEvent.setup();
+      render(
+        <MemoryRouter>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+      await user.click(screen.getByRole('button', { name: 'Config' }));
+      await user.click(screen.getByRole('menuitem', { name: 'Save Config' }));
+      await user.type(screen.getByLabelText('Configuration Name'), 'Test config');
+      expect(screen.getAllByText(/Unsaved changes/).length).toBeGreaterThan(0);
+      if (outcome === 'network') {
+        mockedCallApi.mockRejectedValueOnce(new Error('Save failed'));
+      } else {
+        mockedCallApi.mockResolvedValueOnce({
+          ok: outcome === 'success',
+          json: async () =>
+            outcome === 'success' ? { createdAt: '2026-09-11' } : { error: 'Save failed' },
+        } as Response);
+      }
+      await user.click(screen.getByRole('button', { name: /^Save$/ }));
+      await waitFor(() =>
+        expect(mockedUseToast().showToast).toHaveBeenCalledWith(
+          outcome === 'success' ? 'Configuration saved successfully' : 'Save failed',
+          outcome === 'success' ? 'success' : 'error',
+        ),
+      );
+      if (outcome === 'success') {
+        expect(screen.queryByText(/Unsaved changes/)).not.toBeInTheDocument();
+      } else {
+        expect(screen.getAllByText(/Unsaved changes/).length).toBeGreaterThan(0);
+      }
+    },
+  );
+
   describe('URL Hash Updates', () => {
     it('should update the URL hash when the tab state changes', async () => {
       const user = userEvent.setup();
@@ -233,121 +249,6 @@ describe('RedTeamSetupPage', () => {
 
     const setupModal = screen.getByTestId('setup-modal');
     expect(setupModal).toBeInTheDocument();
-  });
-
-  describe('numeric config timestamps', () => {
-    it('sorts numeric list timestamps newest-first and preserves the loaded timestamp', async () => {
-      const user = userEvent.setup();
-      const olderTimestamp = Date.UTC(2024, 0, 2, 3, 4);
-      const newerTimestamp = Date.UTC(2024, 6, 8, 9, 10);
-      const loadedTimestamp = Date.UTC(2024, 11, 20, 21, 22);
-
-      mockedCallApi.mockImplementation(async (url) => {
-        if (url === '/configs?type=redteam') {
-          return {
-            ok: true,
-            json: async () => ({
-              configs: [
-                {
-                  id: 'older-config',
-                  name: 'Older Config',
-                  type: 'redteam',
-                  createdAt: olderTimestamp,
-                  updatedAt: olderTimestamp,
-                },
-                {
-                  id: 'newer-config',
-                  name: 'Newer Config',
-                  type: 'redteam',
-                  createdAt: newerTimestamp,
-                  updatedAt: newerTimestamp,
-                },
-              ],
-            }),
-          } as Response;
-        }
-        if (url === '/configs/redteam/newer-config') {
-          return {
-            ok: true,
-            json: async () => ({
-              id: 'newer-config',
-              name: 'Newer Config',
-              type: 'redteam',
-              config: initialRedTeamState.config,
-              createdAt: newerTimestamp,
-              updatedAt: loadedTimestamp,
-            }),
-          } as Response;
-        }
-        return { ok: true, json: async () => ({}) } as Response;
-      });
-
-      render(
-        <MemoryRouter initialEntries={['/redteam/setup']}>
-          <RedTeamSetupPage />
-        </MemoryRouter>,
-      );
-
-      await user.click(screen.getByRole('button', { name: /Load Config/i }));
-
-      const dialog = await screen.findByRole('dialog', {
-        name: 'Load or Import Configuration',
-      });
-      const olderDate = formatDataGridDate(olderTimestamp);
-      const newerDate = formatDataGridDate(newerTimestamp);
-      expect(olderDate).not.toBe('');
-      expect(newerDate).not.toBe('');
-
-      const olderConfig = within(dialog).getByRole('button', { name: /Older Config/i });
-      const newerConfig = within(dialog).getByRole('button', { name: /Newer Config/i });
-      expect(within(olderConfig).getByText(olderDate)).toBeInTheDocument();
-      expect(within(newerConfig).getByText(newerDate)).toBeInTheDocument();
-
-      const configChoices = within(dialog)
-        .getAllByRole('button')
-        .filter((button) => /(?:Older|Newer) Config/.test(button.textContent ?? ''));
-      expect(configChoices).toEqual([newerConfig, olderConfig]);
-
-      await user.click(newerConfig);
-
-      const loadedDate = formatDataGridDate(loadedTimestamp);
-      expect(loadedDate).not.toBe('');
-      await waitFor(() => {
-        expect(screen.getAllByText(loadedDate).length).toBeGreaterThan(0);
-      });
-    });
-
-    it('preserves a numeric createdAt timestamp after saving', async () => {
-      const user = userEvent.setup();
-      const createdTimestamp = Date.UTC(2025, 1, 3, 4, 5);
-
-      mockedCallApi.mockImplementation(async (url) => {
-        if (url === '/configs') {
-          return {
-            ok: true,
-            json: async () => ({ id: 'saved-config', createdAt: createdTimestamp }),
-          } as Response;
-        }
-        return { ok: true, json: async () => ({}) } as Response;
-      });
-
-      render(
-        <MemoryRouter initialEntries={['/redteam/setup']}>
-          <RedTeamSetupPage />
-        </MemoryRouter>,
-      );
-
-      await user.click(screen.getByRole('button', { name: 'Save Config' }));
-      const dialog = screen.getByRole('dialog', { name: 'Save Configuration' });
-      await user.type(within(dialog).getByLabelText('Configuration Name'), 'Numeric Config');
-      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
-
-      const createdDate = formatDataGridDate(createdTimestamp);
-      expect(createdDate).not.toBe('');
-      await waitFor(() => {
-        expect(screen.getAllByText(createdDate).length).toBeGreaterThan(0);
-      });
-    });
   });
 
   describe('YAML file import', () => {
@@ -577,6 +478,43 @@ redteam:
         expect(config.target.id).toBe('openai:gpt-5-mini');
         expect(config.target.label).toBe('openai:gpt-5-mini');
         expect(providerType).toBe('openai');
+      });
+    });
+
+    it('preserves the dated Sonnet 4.5 preset when importing a saved YAML configuration', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+
+      await user.click(screen.getByRole('button', { name: /Load Config/i }));
+
+      const file = new File(
+        [
+          `description: Saved Sonnet configuration
+targets:
+  - claude-sonnet-4-5-20250929
+prompts:
+  - "{{prompt}}"
+redteam:
+  purpose: Answer product questions
+`,
+        ],
+        'config.yaml',
+        { type: 'text/yaml' },
+      );
+
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      await user.upload(fileInput, file);
+
+      await waitFor(() => {
+        expect(useRedTeamConfig.getState().config.target).toMatchObject({
+          id: 'claude-sonnet-4-5-20250929',
+          label: 'claude-sonnet-4-5-20250929',
+        });
       });
     });
 

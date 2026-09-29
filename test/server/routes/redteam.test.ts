@@ -1,7 +1,5 @@
-import type { Server } from 'node:http';
-
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 // Mock dependencies
@@ -35,20 +33,10 @@ const mockedNeverGenerateRemote = vi.mocked(neverGenerateRemote);
 const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
 
 describe('Redteam Routes', () => {
-  let app: Server;
+  let app: ReturnType<typeof createApp>;
 
-  beforeAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      app = createApp().listen(0, '127.0.0.1', (error?: Error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
-  });
-
-  afterAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      app.close((error) => (error ? reject(error) : resolve()));
-    });
+  beforeEach(() => {
+    app = createApp();
   });
 
   describe('POST /redteam/generate-test', () => {
@@ -905,6 +893,17 @@ describe('Redteam Routes', () => {
       expect(runArgs.liveRedteamConfig).toEqual({ purpose: 'test' });
       expect(runArgs).not.toHaveProperty('delay');
       expect(runArgs).not.toHaveProperty('maxConcurrency');
+    });
+
+    it('should ignore a request-supplied filesystem base path', async () => {
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'test', basePath: '../private' } });
+
+      expect(response.status).toBe(200);
+      expect(mockedDoRedteamRun.mock.calls[0][0].liveRedteamConfig).toEqual({
+        purpose: 'test',
+      });
     });
 
     it('should return 400 when config is missing', async () => {

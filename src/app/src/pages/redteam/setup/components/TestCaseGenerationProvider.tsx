@@ -10,8 +10,7 @@ import React, {
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
-import { callApiJson } from '@app/utils/api';
-import { ApiRoutes, ProviderResponseSchemas, RedteamResponseSchemas } from '@promptfoo/contracts';
+import { callApi } from '@app/utils/api';
 import {
   DEFAULT_MULTI_TURN_MAX_TURNS,
   isMultiTurnStrategy,
@@ -136,7 +135,8 @@ async function callTestGenerationApi(
         }
       : plugin;
 
-  return callApiJson(ApiRoutes.Redteam.GenerateTest, RedteamResponseSchemas.GenerateTest.Response, {
+  return callApi('/redteam/generate-test', {
+    method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -164,7 +164,8 @@ async function callTestExecutionApi(
   prompt: GeneratedTestCase['prompt'],
   abortController: AbortController,
 ) {
-  return callApiJson(ApiRoutes.Providers.Test, ProviderResponseSchemas.Test.Response, {
+  return callApi('/providers/test', {
+    method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
@@ -289,7 +290,7 @@ export const TestCaseGenerationProvider: React.FC<{
 
         const history = getHistory(generatedTestCases, targetResponses);
 
-        const data = await callTestGenerationApi(
+        const response = await callTestGenerationApi(
           plugin,
           strategy,
           redTeamConfig.applicationDefinition.purpose ?? null,
@@ -301,17 +302,19 @@ export const TestCaseGenerationProvider: React.FC<{
           1,
           redTeamConfig.provider,
         );
-        const testCase = 'testCases' in data ? data.testCases[0] : data;
-        if (!testCase) {
-          throw new Error('No generated test case returned');
+
+        const data = await response.json();
+
+        if (data.error) {
+          throw new Error(data?.details ?? data.error);
         }
 
         setGeneratedTestCases((prev) => [
           ...prev,
           {
-            prompt: testCase.prompt,
-            context: testCase.context,
-            metadata: testCase.metadata,
+            prompt: data.prompt,
+            context: data.context,
+            metadata: data.metadata,
           },
         ]);
       } catch (error) {
@@ -381,20 +384,24 @@ export const TestCaseGenerationProvider: React.FC<{
       setIsRunningTest(true);
 
       try {
-        const { providerResponse } = await callTestExecutionApi(
+        const testResponse = await callTestExecutionApi(
           redTeamConfig.target,
           testCase.prompt,
           abortController,
         );
-        const typedProviderResponse = providerResponse as
-          | { output?: string; error?: string }
-          | undefined;
+
+        if (!testResponse.ok) {
+          const errorData = await testResponse.json();
+          throw new Error(errorData.error || 'Failed to run test');
+        }
+
+        const { providerResponse } = await testResponse.json();
 
         setTargetResponses((prev) => [
           ...prev,
           {
-            output: typedProviderResponse?.output ?? null,
-            error: typedProviderResponse?.error ?? null,
+            output: providerResponse?.output ?? null,
+            error: providerResponse?.error ?? null,
           },
         ]);
 
@@ -459,7 +466,7 @@ export const TestCaseGenerationProvider: React.FC<{
           count,
         });
 
-        const data = await callTestGenerationApi(
+        const response = await callTestGenerationApi(
           targetPlugin,
           targetStrategy,
           redTeamConfig.applicationDefinition.purpose ?? null,
@@ -472,8 +479,14 @@ export const TestCaseGenerationProvider: React.FC<{
           redTeamConfig.provider,
         );
 
+        const data = await response.json();
+
+        if (data.error) {
+          throw new Error(data?.details ?? data.error);
+        }
+
         // Handle batch response
-        if ('testCases' in data) {
+        if (data.testCases && Array.isArray(data.testCases)) {
           return data.testCases as GeneratedTestCase[];
         }
 

@@ -1,8 +1,12 @@
-import { callApiJson } from '@app/utils/api';
-import { ApiRoutes, ServerResponseSchemas } from '@promptfoo/contracts';
+import { callApi } from '@app/utils/api';
 import { useQuery } from '@tanstack/react-query';
 
 export type ApiHealthStatus = 'unknown' | 'connected' | 'blocked' | 'disabled';
+
+interface HealthResponse {
+  status: string;
+  message: string;
+}
 
 export type ApiHealthResult = {
   status: ApiHealthStatus;
@@ -17,11 +21,8 @@ export function useApiHealth() {
     queryKey: ['apiHealth'],
     queryFn: async () => {
       try {
-        const { status, message } = await callApiJson(
-          ApiRoutes.RemoteHealth,
-          ServerResponseSchemas.RemoteHealth.Response,
-          { cache: 'no-store' },
-        );
+        const response = await callApi('/remote-health', { cache: 'no-store' });
+        const { status, message } = (await response.json()) as HealthResponse;
         return {
           status: status === 'DISABLED' ? 'disabled' : status === 'OK' ? 'connected' : 'blocked',
           message,

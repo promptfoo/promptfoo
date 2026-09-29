@@ -1,32 +1,9 @@
 import { z } from 'zod';
-import { ErrorResponseSchema } from '../../contracts/api/common';
 import logger from '../../logger';
+import { ErrorResponseSchema } from '../../types/api/common';
 import type { Response } from 'express';
 
 const MAX_CAUSE_DEPTH = 4;
-type ErrorResponseBody = {
-  error: string;
-  details?: unknown;
-  suggestion?: string;
-  success?: false;
-  [key: string]: unknown;
-};
-
-type ErrorResponseExtras = {
-  error?: never;
-  details?: unknown;
-  suggestion?: string;
-  success?: false;
-  [key: string]: unknown;
-};
-
-type ValidationErrorResponseExtras = {
-  error?: never;
-  details?: never;
-  suggestion?: string;
-  success?: false;
-  [key: string]: unknown;
-};
 
 /**
  * Build a logger-safe context object from an unknown error value.
@@ -75,7 +52,7 @@ function serializeError(value: unknown, depth: number, seen: Set<unknown>): unkn
  * and land in Express's default error handler — leaving the client with
  * an empty 500 and no JSON body.
  */
-function safeRespond(res: Response, status: number, body: ErrorResponseBody) {
+function safeRespond(res: Response, status: number, body: { error: string; details?: unknown }) {
   let parsed: unknown;
   try {
     parsed = ErrorResponseSchema.parse(body);
@@ -86,22 +63,6 @@ function safeRespond(res: Response, status: number, body: ErrorResponseBody) {
     parsed = { error: body.error };
   }
   res.status(status).json(parsed);
-}
-
-/**
- * Reply with a client-visible error envelope without logging internal details.
- *
- * Use this for expected failures such as missing resources, authorization
- * rejection, or business-rule errors. Use `sendError` when an unexpected
- * internal error must also be logged.
- */
-export function replyError(
-  res: Response,
-  status: number,
-  publicMessage: string,
-  extras: ErrorResponseExtras = {},
-): void {
-  safeRespond(res, status, { ...extras, error: publicMessage });
 }
 
 /**
@@ -121,7 +82,7 @@ export function sendError(
   if (internalError !== undefined) {
     logger.error(publicMessage, toLogContext(internalError));
   }
-  replyError(res, status, publicMessage);
+  safeRespond(res, status, { error: publicMessage });
 }
 
 /**
@@ -137,13 +98,9 @@ export function sendError(
  * would also reach the wire via this field; audit such schemas before
  * adding.
  */
-export function replyValidationError(
-  res: Response,
-  error: z.ZodError,
-  extras: ValidationErrorResponseExtras = {},
-): void {
-  replyError(res, 400, z.prettifyError(error), {
-    ...extras,
+export function replyValidationError(res: Response, error: z.ZodError): void {
+  safeRespond(res, 400, {
+    error: z.prettifyError(error),
     details: { issues: error.issues },
   });
 }

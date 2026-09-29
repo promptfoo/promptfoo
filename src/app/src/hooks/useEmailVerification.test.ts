@@ -1,29 +1,24 @@
 import useApiConfig from '@app/stores/apiConfig';
-import { callApiResult, fetchUserEmail } from '@app/utils/api';
+import { mockCallApiResponse, rejectCallApi, resetCallApiMock } from '@app/tests/apiMocks';
+import { callApi, fetchUserEmail } from '@app/utils/api';
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useEmailVerification } from './useEmailVerification';
 
-vi.mock('@app/utils/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@app/utils/api')>()),
-  callApiResult: vi.fn(),
+vi.mock('@app/utils/api', () => ({
+  callApi: vi.fn(),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 describe('useEmailVerification', () => {
-  const mockCallApiResult = vi.mocked(callApiResult);
   const setupApiMock = (response: any, isSuccess = true) => {
-    mockCallApiResult.mockResolvedValue(
-      isSuccess
-        ? ({ ok: true, data: response } as any)
-        : ({ ok: false, error: { message: response.error ?? '' } } as any),
-    );
+    mockCallApiResponse(response, { ok: isSuccess });
   };
 
   const setupApiError = (error: Error) => {
-    mockCallApiResult.mockRejectedValue(error);
+    rejectCallApi(error);
   };
 
   const callCheckEmailStatus = async (hook: any) => {
@@ -51,7 +46,7 @@ describe('useEmailVerification', () => {
   };
 
   beforeEach(() => {
-    mockCallApiResult.mockReset();
+    resetCallApiMock();
   });
 
   describe('checkEmailStatus', () => {
@@ -128,7 +123,7 @@ describe('useEmailVerification', () => {
 
       const emailResult = await callCheckEmailStatus(result);
 
-      expect(mockCallApiResult).toHaveBeenCalledTimes(1);
+      expect(callApi).toHaveBeenCalledWith(expect.stringContaining('/user/email/status'));
       expect(emailResult).toEqual({
         ...expected,
         status: apiResponse,
@@ -167,7 +162,7 @@ describe('useEmailVerification', () => {
 
       const emailResult = await callCheckEmailStatus(result);
 
-      expect(mockCallApiResult).toHaveBeenCalledTimes(1);
+      expect(callApi).toHaveBeenCalledWith(expect.stringContaining('/user/email/status'));
       expect(emailResult).toEqual({
         canProceed: false,
         needsEmail: false,
@@ -184,7 +179,13 @@ describe('useEmailVerification', () => {
 
       const saveEmailResult = await callSaveEmail(result, 'test@example.com');
 
-      expect(mockCallApiResult).toHaveBeenCalledTimes(1);
+      expect(callApi).toHaveBeenCalledWith('/user/email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: 'test@example.com' }),
+      });
       expect(saveEmailResult).toEqual({});
     });
 
@@ -205,7 +206,13 @@ describe('useEmailVerification', () => {
 
       const saveEmailResult = await callSaveEmail(result, 'test@example.com');
 
-      expect(mockCallApiResult).toHaveBeenCalledTimes(1);
+      expect(callApi).toHaveBeenCalledWith('/user/email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: 'test@example.com' }),
+      });
       expect(saveEmailResult).toEqual({ error: expectedError });
     });
 
@@ -227,7 +234,9 @@ describe('useEmailVerification', () => {
 
       const clearEmailResult = await callClearEmail(result);
 
-      expect(mockCallApiResult).toHaveBeenCalledTimes(1);
+      expect(callApi).toHaveBeenCalledWith('/user/email/clear', {
+        method: 'PUT',
+      });
       expect(clearEmailResult).toEqual({});
     });
 
@@ -238,7 +247,9 @@ describe('useEmailVerification', () => {
 
       const clearEmailResult = await callClearEmail(result);
 
-      expect(mockCallApiResult).toHaveBeenCalledTimes(1);
+      expect(callApi).toHaveBeenCalledWith('/user/email/clear', {
+        method: 'PUT',
+      });
       expect(clearEmailResult).toEqual({ error: 'Failed to clear email from database' });
     });
 

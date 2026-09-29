@@ -1,18 +1,8 @@
 import useApiConfig from '@app/stores/apiConfig';
-import {
-  type ApiRouteContract,
-  ApiRoutes,
-  buildApiPath,
-  type ErrorResponse,
-  ErrorResponseSchema,
-  EvalResponseSchemas,
-  type UpdateEvalAuthorResponse,
-  UserSchemas,
-} from '@promptfoo/contracts';
-import type { ZodType } from 'zod';
+import type { GetUserIdResponse, GetUserResponse } from '@promptfoo/contracts';
+import type { UpdateEvalAuthorResponse } from '@promptfoo/types/api/eval';
 
-export function getApiBaseUrl(): string {
-  const { apiBaseUrl } = useApiConfig.getState();
+export function getApiBaseUrl(apiBaseUrl = useApiConfig.getState().apiBaseUrl): string {
   if (apiBaseUrl) {
     return apiBaseUrl.replace(/\/$/, '');
   }
@@ -20,117 +10,25 @@ export function getApiBaseUrl(): string {
   return import.meta.env.VITE_PUBLIC_BASENAME || '';
 }
 
-export async function callApi(path: string, options: RequestInit = {}): Promise<Response> {
-  return fetch(`${getApiBaseUrl()}/api${path}`, options);
-}
-
-export type ApiRequestOptions = Omit<RequestInit, 'method'> & {
-  params?: Record<string, string | number>;
-  query?: URLSearchParams;
-};
-
-type CallableApiRoute = Pick<ApiRouteContract, 'expressPath' | 'method'>;
-
-export class ApiResponseError extends Error {
-  constructor(
-    public readonly status: number,
-    public readonly body: ErrorResponse,
-    public readonly response: Response,
-  ) {
-    super(body.error);
-    this.name = 'ApiResponseError';
-  }
-}
-
-type ApiResult<T> =
-  | { ok: true; data: T; response: Response }
-  | { ok: false; error: ApiResponseError; response: Response };
-
-function createRoutePath(
-  route: Pick<ApiRouteContract, 'expressPath'>,
-  params?: Record<string, string | number>,
-  query?: URLSearchParams,
-): string {
-  const path = buildApiPath({ clientPath: route.expressPath }, params);
-  const search = query?.toString();
-  return search ? `${path}?${search}` : path;
-}
-
-export async function callApiResponse(
-  route: CallableApiRoute,
-  options: ApiRequestOptions = {},
+export async function callApi(
+  path: string,
+  options: RequestInit = {},
+  apiBaseUrl = getApiBaseUrl(),
 ): Promise<Response> {
-  const { params, query, ...requestInit } = options;
-  return fetch(`${getApiBaseUrl()}${createRoutePath(route, params, query)}`, {
-    ...requestInit,
-    method: route.method.toUpperCase(),
-  });
-}
-
-async function readErrorResponse(response: Response): Promise<ApiResponseError> {
-  let body: ErrorResponse = { error: `Request failed (${response.status})` };
-  const text = await response.text();
-  try {
-    const json = JSON.parse(text);
-    const parsed = ErrorResponseSchema.safeParse(json);
-    if (parsed.success) {
-      body = parsed.data;
-    } else if (json && typeof json === 'object') {
-      const message =
-        'error' in json && typeof json.error === 'string'
-          ? json.error
-          : 'message' in json && typeof json.message === 'string'
-            ? json.message
-            : undefined;
-      if (message) {
-        body = { error: message };
-      }
-    }
-  } catch {
-    if (text.trim()) {
-      body = { error: text.trim() };
-    }
-  }
-  return new ApiResponseError(response.status, body, response);
-}
-
-export async function callApiResult<T>(
-  route: CallableApiRoute,
-  schema: ZodType<T>,
-  options: ApiRequestOptions = {},
-): Promise<ApiResult<T>> {
-  const response = await callApiResponse(route, options);
-  if (!response.ok) {
-    return { ok: false, error: await readErrorResponse(response), response };
-  }
-  return { ok: true, data: schema.parse(await response.json()), response };
-}
-
-export async function callApiJson<T>(
-  route: CallableApiRoute,
-  schema: ZodType<T>,
-  options: ApiRequestOptions = {},
-): Promise<T> {
-  const result = await callApiResult(route, schema, options);
-  if (!result.ok) {
-    throw result.error;
-  }
-  return result.data;
-}
-
-export async function callApiEmpty(
-  route: CallableApiRoute,
-  options: ApiRequestOptions = {},
-): Promise<void> {
-  const response = await callApiResponse(route, options);
-  if (!response.ok) {
-    throw await readErrorResponse(response);
-  }
+  return fetch(`${apiBaseUrl}/api${path}`, options);
 }
 
 export async function fetchUserEmail(): Promise<string | null> {
   try {
-    const data = await callApiJson(ApiRoutes.User.Get, UserSchemas.Get.Response);
+    const response = await callApi('/user/email', {
+      method: 'GET',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch user email');
+    }
+
+    const data: GetUserResponse = await response.json();
     return data.email;
   } catch (error) {
     console.error('Error fetching user email:', error);
@@ -140,7 +38,15 @@ export async function fetchUserEmail(): Promise<string | null> {
 
 export async function fetchUserId(): Promise<string | null> {
   try {
-    const data = await callApiJson(ApiRoutes.User.GetId, UserSchemas.GetId.Response);
+    const response = await callApi('/user/id', {
+      method: 'GET',
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch user ID');
+    }
+
+    const data: GetUserIdResponse = await response.json();
     return data.id;
   } catch (error) {
     console.error('Error fetching user ID:', error);
@@ -152,22 +58,17 @@ export async function updateEvalAuthor(
   evalId: string,
   author: string,
 ): Promise<UpdateEvalAuthorResponse> {
-  try {
-    return await callApiJson(
-      ApiRoutes.Eval.UpdateAuthor,
-      EvalResponseSchemas.UpdateAuthor.Response,
-      {
-        params: { id: evalId },
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ author }),
-      },
-    );
-  } catch (error) {
-    if (error instanceof ApiResponseError) {
-      throw new Error('Failed to update eval author');
-    }
-    throw error;
+  const response = await callApi(`/eval/${evalId}/author`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ author }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to update eval author');
   }
+
+  return response.json();
 }

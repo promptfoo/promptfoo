@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-import { callApiResult } from '@app/utils/api';
-import { ApiRoutes, ProviderResponseSchemas } from '@promptfoo/contracts';
+import { callApi } from '@app/utils/api';
 import TransformTestDialog from './TransformTestDialog';
 
 interface ResponseParserTestModalProps {
@@ -34,36 +33,33 @@ const ResponseParserTestModal: React.FC<ResponseParserTestModalProps> = ({
     if (isTargetConfigInvalid?.()) {
       return { success: false, error: 'Invalid target configuration' };
     }
-    const response = await callApiResult(
-      ApiRoutes.Providers.TestResponseTransform,
-      ProviderResponseSchemas.TestResponseTransform.Response,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          transformCode,
-          response: testInput,
-        }),
+    const response = await callApi('/providers/test-response-transform', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-    );
+      body: JSON.stringify({
+        transformCode,
+        response: testInput,
+      }),
+    });
 
     if (!response.ok) {
+      const errorData = await response
+        .json()
+        .catch(() => ({ error: `Server error: ${response.status} ${response.statusText}` }));
+
       return {
         success: false,
-        error: response.error.message || 'Failed to test transform',
+        error: errorData.error || 'Failed to test transform',
       };
     }
 
-    const data = response.data;
-    const result =
-      data.result && typeof data.result === 'object' && 'output' in data.result
-        ? data.result.output
-        : data.result;
+    const data = await response.json();
     return {
       success: data.success,
-      result,
-      error: data.success ? undefined : data.error,
+      result: data.result?.output ?? data.result,
+      error: data.error,
     };
   };
 
