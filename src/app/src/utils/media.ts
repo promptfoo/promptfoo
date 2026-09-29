@@ -42,7 +42,7 @@ export type BlobLike =
     };
 
 function normalizePath(path: string): string {
-  return path.replace(/^\//, '');
+  return path.replace(/^\/+/, '');
 }
 
 function withApiBase(apiPath: string): string {

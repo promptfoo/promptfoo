@@ -786,6 +786,12 @@ describe('ResultsTable Metrics Display', () => {
         ['empty blob reference', 'promptfoo://blob/', null],
         ['empty storage reference', 'storageRef:', null],
         ['slash-only storage reference', 'storageRef:/', null],
+        ['multiple-slash storage reference', 'storageRef:////', null],
+        [
+          'multiple leading slashes',
+          'storageRef:////audio/sample.mp3',
+          '/api/media/audio/sample.mp3',
+        ],
         ['storage leading slash', 'storageRef:/audio/sample.mp3', '/api/media/audio/sample.mp3'],
         [
           'proxy basename',

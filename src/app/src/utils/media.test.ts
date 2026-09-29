@@ -698,7 +698,7 @@ describe('resolveBlobUri security', () => {
     expect(resolveBlobUri(dataUri)).toBe(dataUri);
   });
 
-  it.each(['promptfoo://blob/', 'storageRef:', 'storageRef:/'])(
+  it.each(['promptfoo://blob/', 'storageRef:', 'storageRef:/', 'storageRef:////'])(
     'does not resolve an empty reference %s',
     (value) => {
       expect(resolveBlobUri(value)).toBeUndefined();
