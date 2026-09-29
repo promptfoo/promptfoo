@@ -3844,6 +3844,30 @@ describe('evaluator', () => {
       ).toBe('string');
     });
 
+    it.each([
+      [
+        'google:gemini',
+        { functionDeclarations: [{ name: 'lookup', parameters: { privateDefinition: true } }] },
+      ],
+      ['google:gemini', { googleSearch: {} }],
+      [
+        'bedrock:fixture',
+        { toolSpec: { name: 'lookup', inputSchema: { json: { privateDefinition: true } } } },
+      ],
+    ])(
+      'keeps access to native %s tool definitions without copying schemas',
+      async (providerId, tool) => {
+        const eval_ = new Eval({ providers: [{ id: providerId, config: { tools: [tool] } }] });
+        const compact = await eval_.toResultsFile({
+          resultProjection: 'redteamReport',
+          includeTraces: false,
+        });
+        expect((compact.config.providers as any)[0].config.tools).toEqual([{}]);
+        const full = await eval_.toResultsFile({ includeTraces: false });
+        expect((full.config.providers as any)[0].config.tools).toEqual([tool]);
+      },
+    );
+
     it('preserves metric-only category identity when grading details are stripped', async () => {
       const result = createEvaluateResult({
         metadata: {},

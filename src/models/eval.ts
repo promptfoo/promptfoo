@@ -724,7 +724,7 @@ function projectToolForRedteamReport(tool: unknown): Record<string, unknown> | u
             description: tool.description.slice(0, MAX_REPORT_TEXT_LENGTH),
           }),
         }
-      : undefined;
+      : {};
   }
   if (tool.type === 'function' && isRecord(tool.function)) {
     return {
