@@ -21,11 +21,11 @@ export AZURE_API_HOST=your-deployment.services.ai.azure.com
 
 ## Available Claude Models
 
-| Model                       | Description                  |
-| --------------------------- | ---------------------------- |
-| `claude-opus-5`             | Claude Opus 5 - Most capable |
-| `claude-sonnet-5`           | Claude Sonnet 5 - Balanced   |
-| `claude-haiku-4-5-20251001` | Claude Haiku 4.5 - Fast      |
+| Model                       | Description      |
+| --------------------------- | ---------------- |
+| `claude-opus-5`             | Claude Opus 5    |
+| `claude-sonnet-5`           | Claude Sonnet 5  |
+| `claude-haiku-4-5-20251001` | Claude Haiku 4.5 |
 
 ## Running the Example
 
@@ -39,8 +39,10 @@ npx promptfoo@latest view
 The example compares Claude Opus 5, Claude Sonnet 5, and Claude Haiku 4.5 on explanation tasks. Modify `promptfooconfig.yaml` to:
 
 - Change models by updating the provider IDs
-- Adjust `max_tokens` (Opus 5 and Sonnet 5 reject `temperature`/`top_p`/`top_k`; use `effort` instead)
+- Adjust `max_tokens`
 - Add more test cases
+
+Opus 5 and Sonnet 5 reject `temperature`, `top_p`, and `top_k`. To configure Claude thinking or effort, use the [Anthropic Messages endpoint on Foundry](https://www.promptfoo.dev/docs/providers/azure/#using-claude-models) instead of these `azure:chat` configurations.
 
 ## Documentation
 

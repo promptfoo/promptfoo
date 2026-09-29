@@ -8,9 +8,7 @@ prompts:
 providers:
   - id: anthropic:messages:claude-sonnet-5
     config:
-      # Sonnet 5 rejects temperature/top_p/top_k at the model level.
-      # Server-tool results are large and thinking shares this budget, so a tight
-      # max_tokens gets spent on the transcript before the model writes its answer.
+      # Allow room for thinking, tool calls, and the final answer.
       max_tokens: 8000
       tools:
         # Current server-tool versions (dynamic filtering, no beta header required).
@@ -32,7 +30,7 @@ providers:
 tests:
   # Basic web fetch test
   - vars:
-      task: 'Please fetch and summarize the content from this URL: https://platform.claude.com/docs/en/docs/build-with-claude/tool-use'
+      task: 'Please fetch and summarize the content from this URL: https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview'
     assert:
       - type: contains-any
         value: ['tool', 'function', 'API', 'capabilities']
@@ -49,9 +47,7 @@ tests:
       - type: llm-rubric
         value: 'Describes the TypeScript SDK and its purpose'
 
-  # Research workflow test. Kept deliberately bounded — an open-ended "comprehensive
-  # analysis" prompt can chain enough search+fetch rounds to exceed the Anthropic SDK's
-  # default 10-minute request timeout.
+  # Bound the research workflow to one search and one fetch.
   - vars:
       task: |
         Research "Claude Opus 5 model capabilities" and write a short report.
@@ -69,8 +65,7 @@ tests:
       - type: contains-any
         value: ['Claude', 'Opus', 'capabilities', 'model']
         reason: 'Should discuss the Claude model family specifically'
-      # The topic can postdate the grader's training data, so grade focus and attribution
-      # rather than asking the grader to fact-check sources it cannot see.
+      # Grade attribution without assuming the grader has seen the retrieved pages.
       - type: llm-rubric
         value: >-
           Provides a focused report on the requested topic that names or links at least one

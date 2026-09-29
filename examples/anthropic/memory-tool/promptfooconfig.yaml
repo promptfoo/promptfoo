@@ -9,10 +9,7 @@ providers:
     config:
       max_tokens: 2048
       tools:
-        # Promptfoo passes Anthropic's native memory tool definition through
-        # unchanged. It does not manage memory stores or run a local memory
-        # handler — the point of this example is to observe whether the model
-        # asks for a memory operation.
+        # Promptfoo returns the requested operation without executing a memory handler.
         - type: memory_20250818
           name: memory
           allowed_callers:
@@ -28,3 +25,5 @@ tests:
         value: '"name":"memory"'
       - type: contains
         value: 'tool_use'
+      - type: contains
+        value: '"command":"view"'

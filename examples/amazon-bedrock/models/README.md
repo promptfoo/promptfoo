@@ -38,7 +38,7 @@ cd amazon-bedrock/models
 
 This directory contains several example configurations for different Bedrock models:
 
-- [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude Opus 5, Claude Opus 4.8, Claude Opus 4.7 (via inference-profile ARN), Claude Opus 4.6, Claude Opus 4.1, Claude Sonnet 5 with adaptive thinking, Claude Haiku 4.5
+- [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude Opus, Sonnet, and Haiku, including adaptive thinking and inference profiles
 - [`promptfooconfig.openai.yaml`](promptfooconfig.openai.yaml) - OpenAI GPT-OSS models (120B and 20B) with reasoning effort
 - [`promptfooconfig.openai-responses.yaml`](promptfooconfig.openai-responses.yaml) - OpenAI GPT-OSS 120B through the Bedrock Responses API (AWS credentials or `AWS_BEARER_TOKEN_BEDROCK`)
 - [`promptfooconfig.openai-frontier.yaml`](promptfooconfig.openai-frontier.yaml) - OpenAI GPT-6 Sol, GPT-5.6 Terra, and GPT-6 Luna with reasoning, explicit prompt caching, and streaming
@@ -64,7 +64,7 @@ The Converse API example (`promptfooconfig.converse.yaml`) demonstrates the unif
 
 ### Key Features
 
-- **Extended Thinking**: Enable Claude's reasoning capabilities. Claude 4.7+ and the Claude 5 family use adaptive thinking with an `effort` depth control; Sonnet 4.6 and the 4.5 generation still take a manual `budget_tokens` budget
+- **Extended Thinking**: Claude Sonnet 5 uses adaptive thinking with `effort` to control reasoning depth
 - **Unified Interface**: Single API format works across Claude, Nova, Llama, Mistral, and more
 - **Show/Hide Thinking**: Control whether thinking content appears in output with `showThinking`
 
@@ -79,6 +79,7 @@ providers:
       maxTokens: 20000
       thinking:
         type: adaptive
+        display: summarized
       # Converse has no typed `effort` option; it is passed through as a raw field.
       additionalModelRequestFields:
         output_config:
@@ -220,7 +221,7 @@ We provide two inference profile examples:
 
    This includes:
    - Multiple inference profiles for different model families
-   - Comparison with direct model IDs
+   - Comparison with a system inference profile
    - Use of inference profiles for grading assertions
    - Various model-specific configurations
 
@@ -231,7 +232,7 @@ We provide two inference profile examples:
    This demonstrates:
    - A realistic customer support use case
    - High availability setup with failover
-   - Comparison between inference profile and direct model access
+   - Comparison between application and system inference profiles
    - Consistent grading using inference profiles
 
 **Note**: Replace the example ARNs with your actual application inference profile ARNs. To create an inference profile, visit the AWS Bedrock console and navigate to the "Application inference profiles" section.

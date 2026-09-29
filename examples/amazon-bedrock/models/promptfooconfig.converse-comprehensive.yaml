@@ -43,8 +43,6 @@ providers:
           effort: high
 
   # Claude Sonnet 5 with adaptive thinking.
-  # Note: Claude 4.7+ and the Claude 5 family reject temperature/top_p/top_k and the
-  # manual `budget_tokens` budget — use `thinking: { type: adaptive }` plus `effort`.
   - id: bedrock:converse:us.anthropic.claude-sonnet-5
     label: Claude Sonnet 5 (Thinking)
     config:
@@ -52,6 +50,7 @@ providers:
       maxTokens: 16000
       thinking:
         type: adaptive
+        display: summarized
       additionalModelRequestFields:
         output_config:
           effort: high

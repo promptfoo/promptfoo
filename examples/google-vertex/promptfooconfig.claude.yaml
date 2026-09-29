@@ -5,9 +5,6 @@ prompts:
   - 'Analyze this code and list any potential issues: ```{{code}}```'
 
 providers:
-  # Claude 4.7+ and the Claude 5 family are served from Vertex's `global` endpoint
-  # (regional/multi-region endpoints carry a 10% premium where enabled). They also
-  # reject temperature/top_p/top_k — use `effort` for reasoning depth instead.
   - id: vertex:claude-opus-5
     label: Claude Opus 5
     config:

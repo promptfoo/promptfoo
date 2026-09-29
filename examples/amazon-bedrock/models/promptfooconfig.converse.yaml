@@ -5,8 +5,7 @@ prompts:
   - 'Solve this step by step: {{problem}}'
 
 providers:
-  # Claude with adaptive thinking via Converse API. Claude 4.7+ and the Claude 5 family
-  # reject the manual `budget_tokens` budget — `effort` is the depth control instead.
+  # Claude with adaptive thinking via Converse API.
   - id: bedrock:converse:us.anthropic.claude-sonnet-5
     label: Claude Sonnet 5 (Converse + Thinking)
     config:
@@ -14,6 +13,7 @@ providers:
       maxTokens: 20000
       thinking:
         type: adaptive
+        display: summarized
       # Converse has no typed `effort` option; it is passed through as a raw field.
       additionalModelRequestFields:
         output_config:

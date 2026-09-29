@@ -7,12 +7,10 @@ prompts:
 providers:
   - id: anthropic:claude-sonnet-5
     config:
-      # Claude 4.7+ and the Claude 5 family use adaptive thinking; `effort` replaces
-      # the manual `budget_tokens` budget, which those models reject.
       thinking:
         type: adaptive
       effort: high
-      max_tokens: 4000
+      max_tokens: 16000 # Shared by thinking and the final answer.
   - id: openai:o4-mini
     config:
       max_completion_tokens: 4000

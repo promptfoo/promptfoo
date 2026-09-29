@@ -82,10 +82,12 @@ providers:
 
   # Strict tool use - Ensure tool parameters exactly match schema
   - id: anthropic:messages:claude-sonnet-5
+    label: strict-tool
     config:
       max_tokens: 2048
       tool_choice:
-        type: any
+        type: tool
+        name: book_demo
       tools:
         - name: book_demo
           description: Book a demo session for a customer
@@ -145,7 +147,7 @@ providers:
             additionalProperties: false
 
 tests:
-  # Simple test that works for both providers
+  # Customer details should appear in both JSON and tool-call outputs.
   - description: Should extract customer information
     assert:
       - type: contains

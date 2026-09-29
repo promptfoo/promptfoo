@@ -34,4 +34,4 @@ Promptfoo sends the memory tool definition to Anthropic, but it does not create 
 }
 ```
 
-Use this pattern to validate prompt behavior around memory-tool availability. Note that `tool_choice: none` suppresses the tool call **and** the text response on current Claude models, so the eval would see empty output.
+Use this pattern to check whether a prompt causes the model to request a memory operation.

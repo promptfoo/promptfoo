@@ -16,7 +16,7 @@ providers:
       max_tokens: 1000
   # Compare with regular Bedrock Claude Sonnet 5 (without KB)
   - id: bedrock:us.anthropic.claude-sonnet-5
-    label: Claude Sonnet 5 Direct
+    label: Claude Sonnet 5 without KB
     config:
       region: us-east-2
       max_tokens: 1000

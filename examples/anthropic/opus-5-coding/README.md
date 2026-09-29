@@ -6,7 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example anthropic/opus-5-coding
-cd opus-5-coding
+cd anthropic/opus-5-coding
 ```
 
 ## What This Tests

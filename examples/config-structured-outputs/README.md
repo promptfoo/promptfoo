@@ -92,5 +92,5 @@ providers:
 ## Learn More
 
 - [OpenAI Structured Outputs Documentation](https://platform.openai.com/docs/guides/structured-outputs)
-- [Anthropic Structured Outputs Documentation](https://docs.claude.com/en/docs/build-with-claude/structured-outputs)
+- [Anthropic Structured Outputs Documentation](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)
 - [promptfoo Structured Outputs Guide](https://promptfoo.dev/docs/)
