@@ -136,12 +136,13 @@ describe('CrossSessionLeakPlugin', () => {
           expect(mockProvider.callApi).toHaveBeenCalledOnce();
           expect(execute).toHaveBeenCalledOnce();
           expect(usage).toMatchObject({ total: 23, prompt: 14, completion: 9, numRequests: 1 });
-          if (cached) {
-            expect(usage).toMatchObject({
-              cached: 23,
-              incurredTokenUsage: { total: 0, numRequests: 0 },
-            });
-          }
+          expect(usage.cached ?? 0).toBe(cached ? 23 : 0);
+          expect(usage.incurredTokenUsage ?? usage).toMatchObject({
+            total: cached ? 0 : 23,
+            prompt: cached ? 0 : 14,
+            completion: cached ? 0 : 9,
+            numRequests: cached ? 0 : 1,
+          });
         } finally {
           redteamProviderManager.setRateLimitRegistry(undefined);
           execute.mockRestore();
