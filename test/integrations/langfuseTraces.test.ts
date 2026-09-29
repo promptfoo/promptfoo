@@ -273,14 +273,12 @@ describe('langfuseTraces', () => {
         vars: {
           __langfuse_trace_id: 'trace-1',
           __langfuse_input: { query: 'What is the capital of France?' },
-          __langfuse_output: { response: 'Paris is the capital of France.' },
           __langfuse_user_id: 'user_123',
           __langfuse_session_id: 'session_456',
           __langfuse_tags: ['production', 'geography'],
           __langfuse_latency: 0.5,
           __langfuse_cost: 0.001,
           input: 'What is the capital of France?',
-          output: 'Paris is the capital of France.',
         },
         metadata: {
           langfuseTraceId: 'trace-1',
@@ -301,6 +299,36 @@ describe('langfuseTraces', () => {
       });
       const [test] = await fetchLangfuseTraces('langfuse://traces');
       expect(test.metadata?.__promptfoo).toEqual({ remoteVars: Object.keys(test.vars!) });
+      expect(test.vars).not.toHaveProperty('output');
+      expect(test.vars).not.toHaveProperty('__langfuse_output');
+      expect(test.providerOutput).toBe('stored');
+    });
+
+    it.each([
+      { choices: [{ message: { content: 'Hello', tool_calls: [] } }] },
+      { role: 'assistant', content: 'Hello', tool_calls: [] },
+      [{ role: 'assistant', content: 'Hello', tool_calls: [] }],
+    ])('extracts message text when tool calls are empty: %j', async (output) => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [{ id: 'fixture', timestamp: '2026-01-01T00:00:00Z', input: 'Hello', output }],
+      });
+      const [test] = await fetchLangfuseTraces('langfuse://traces');
+      expect(test.providerOutput).toBe('Hello');
+    });
+
+    it.each([
+      { choices: [{ message: { content: [] } }] },
+      { role: 'assistant', content: [] },
+      [{ role: 'assistant', content: [] }],
+      { content: [] },
+      { output: [] },
+      [],
+    ])('keeps empty output blocks empty: %j', async (output) => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [{ id: 'fixture', timestamp: '2026-01-01T00:00:00Z', input: 'Hello', output }],
+      });
+      const [test] = await fetchLangfuseTraces('langfuse://traces');
+      expect(test.providerOutput).toBe('');
     });
 
     it('should handle traces with string input/output directly', async () => {
@@ -319,7 +347,6 @@ describe('langfuseTraces', () => {
 
       expect(tests[0].vars).toMatchObject({
         input: 'Simple string input',
-        output: 'Simple string output',
       });
     });
 
@@ -338,7 +365,6 @@ describe('langfuseTraces', () => {
       const tests = await fetchLangfuseTraces('langfuse://traces');
 
       expect(tests[0].vars?.input).toBe('Using prompt key');
-      expect(tests[0].vars?.output).toBe('Using result key');
     });
 
     it('should pass filter parameters to traceList', async () => {
@@ -470,8 +496,6 @@ describe('langfuseTraces', () => {
 
       expect(tests[0].vars).not.toHaveProperty('__langfuse_input');
       expect(tests[0].vars).not.toHaveProperty('input');
-      expect(tests[0].vars?.__langfuse_output).toBe(false);
-      expect(tests[0].vars?.output).toBe(false);
       expect(tests[0].providerOutput).toBe('false');
     });
 
@@ -489,7 +513,6 @@ describe('langfuseTraces', () => {
 
       const tests = await fetchLangfuseTraces('langfuse://traces');
 
-      expect(tests[0].vars?.output).toBe('');
       expect(tests[0].providerOutput).toBe('');
     });
 
@@ -507,17 +530,10 @@ describe('langfuseTraces', () => {
 
       const tests = await fetchLangfuseTraces('langfuse://traces');
 
-      // Should extract content from OpenAI format
       expect(tests[0].vars?.input).toBe('Hello');
-      expect(tests[0].vars?.output).toBe('Hi there!');
-      // Raw data should still be available
       expect(tests[0].vars?.__langfuse_input).toEqual({
         messages: [{ role: 'user', content: 'Hello' }],
       });
-      expect(tests[0].vars?.__langfuse_output).toEqual({
-        choices: [{ message: { content: 'Hi there!' } }],
-      });
-      // providerOutput should be the exact extracted output string for assertion-only grading
       expect(tests[0].providerOutput).toBe('Hi there!');
     });
 
@@ -622,7 +638,6 @@ describe('langfuseTraces', () => {
 
       const tests = await fetchLangfuseTraces('langfuse://traces');
 
-      expect(tests[0].vars?.output).toBe('Final answer\nAdditional detail');
       expect(tests[0].providerOutput).toBe('Final answer\nAdditional detail');
     });
 
@@ -657,7 +672,6 @@ describe('langfuseTraces', () => {
 
       const tests = await fetchLangfuseTraces('langfuse://traces');
 
-      expect(tests[0].vars?.output).toEqual(toolCalls);
       expect(tests[0].providerOutput).toEqual({ tool_calls: toolCalls });
     });
 
@@ -682,7 +696,6 @@ describe('langfuseTraces', () => {
 
       const tests = await fetchLangfuseTraces('langfuse://traces');
 
-      expect(tests[0].vars?.output).toEqual(toolCalls);
       expect(tests[0].providerOutput).toEqual({ tool_calls: toolCalls });
     });
 
@@ -701,7 +714,6 @@ describe('langfuseTraces', () => {
 
       const tests = await fetchLangfuseTraces('langfuse://traces');
 
-      expect(tests[0].vars?.output).toEqual(functionCall);
       expect(tests[0].providerOutput).toEqual(functionCall);
     });
 
@@ -736,7 +748,6 @@ describe('langfuseTraces', () => {
 
       // Should extract text from Anthropic format
       expect(tests[0].vars?.input).toBe('Hello Claude\nSecond question');
-      expect(tests[0].vars?.output).toBe('Hello!\nHow can I help?');
       expect(tests[0].providerOutput).toBe('Hello!\nHow can I help?');
     });
 
@@ -756,7 +767,6 @@ describe('langfuseTraces', () => {
 
       // Should fall back to the full object when format is unknown
       expect(tests[0].vars?.input).toEqual({ custom_field: 'custom input' });
-      expect(tests[0].vars?.output).toEqual({ custom_response: 'custom output' });
       // Preserve structured stored outputs for native assertions.
       expect(tests[0].providerOutput).toEqual({ custom_response: 'custom output' });
     });

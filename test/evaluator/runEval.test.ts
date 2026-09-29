@@ -278,7 +278,7 @@ describe('runEval', () => {
     expect(mockProvider.callApi).not.toHaveBeenCalled();
   });
 
-  it('skips the response-provider transform for imported outputs but keeps test transforms', async () => {
+  it('applies explicit provider and test transforms to stored remote output', async () => {
     const results = await runEval({
       ...defaultOptions,
       provider: { ...mockProvider, transform: 'output + "-provider"' },
@@ -287,13 +287,13 @@ describe('runEval', () => {
         providerOutput: 'stored text',
         metadata: { __promptfoo: { remote: true, remoteVars: [] } },
         options: { transform: 'output + "-test"' },
-        assert: [{ type: 'equals', value: 'stored text-test' }],
+        assert: [{ type: 'equals', value: 'stored text-provider-test' }],
       },
       conversations: {},
       registers: {},
     });
     expect(results[0].success).toBe(true);
-    expect(results[0].response?.output).toBe('stored text-test');
+    expect(results[0].response?.output).toBe('stored text-provider-test');
     expect(mockProvider.callApi).not.toHaveBeenCalled();
   });
 

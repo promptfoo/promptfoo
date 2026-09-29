@@ -4,7 +4,7 @@
  */
 import safeStringify from 'fast-safe-stringify';
 
-import type { EvalRuntimeOptions, UnifiedConfig } from '../types';
+import type { EvalRuntimeOptions, TestCase, UnifiedConfig } from '../types';
 
 const MAX_DEPTH = 4;
 const DUMMY_BASE = 'http://placeholder';
@@ -726,8 +726,12 @@ export function sanitizeConfigForOutput(
         : [],
     ),
   ];
-  for (const test of tests) {
-    if (!test || typeof test !== 'object' || 'path' in test) {
+  for (const entry of tests) {
+    if (!entry || typeof entry !== 'object') {
+      continue;
+    }
+    const test = entry as TestCase;
+    if ('path' in entry && test.metadata?.__promptfoo?.remote !== true) {
       continue;
     }
     if (stripVars && 'vars' in test) {

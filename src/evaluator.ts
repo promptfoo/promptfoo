@@ -1531,9 +1531,7 @@ async function transformRunEvalResponse({
   providerTransformedOutput: ProviderResponse['output'];
 }> {
   const processedResponse = { ...response };
-  const isRemoteStoredOutput =
-    test.providerOutput !== undefined && test.metadata?.__promptfoo?.remote === true;
-  if (provider.transform && !isRemoteStoredOutput) {
+  if (provider.transform) {
     processedResponse.output = await transform(provider.transform, processedResponse.output, {
       vars,
       prompt,

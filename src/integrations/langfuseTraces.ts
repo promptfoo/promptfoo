@@ -87,7 +87,16 @@ function extractTextBlocksIfPresent(content: unknown[]): unknown | undefined {
 }
 
 function extractTextBlocks(content: unknown[]): unknown {
+  if (content.length === 0) {
+    return '';
+  }
   return extractTextBlocksIfPresent(content) ?? JSON.stringify(content);
+}
+
+function getMessageToolCalls(message: Record<string, unknown>): unknown {
+  return Array.isArray(message.tool_calls) && message.tool_calls.length > 0
+    ? message.tool_calls
+    : message.function_call;
 }
 
 function extractMessageContent(messagesInput: unknown[]): unknown | undefined {
@@ -120,7 +129,7 @@ function extractOutputItemText(item: unknown): unknown | undefined {
     return item.text;
   }
 
-  if ((item.tool_calls || item.function_call) && item.content != null) {
+  if (getMessageToolCalls(item) && item.content != null) {
     return item;
   }
   if (Array.isArray(item.content)) {
@@ -132,7 +141,7 @@ function extractOutputItemText(item: unknown): unknown | undefined {
       return item.content;
     }
 
-    const toolCall = item.tool_calls ?? item.function_call;
+    const toolCall = getMessageToolCalls(item);
     if (toolCall !== undefined && toolCall !== null) {
       return toolCall;
     }
@@ -142,6 +151,9 @@ function extractOutputItemText(item: unknown): unknown | undefined {
 }
 
 function extractOutputItemsText(outputItems: unknown[]): unknown | undefined {
+  if (outputItems.length === 0) {
+    return '';
+  }
   if (
     outputItems.some(
       (item) =>
@@ -166,7 +178,7 @@ function extractChatChoiceText(choice: unknown): unknown | undefined {
 
   if (isRecord(choice.message)) {
     const content = choice.message.content;
-    if (content != null && (choice.message.tool_calls || choice.message.function_call)) {
+    if (content != null && getMessageToolCalls(choice.message)) {
       return choice.message;
     }
     if (content !== undefined && content !== null) {
@@ -175,7 +187,7 @@ function extractChatChoiceText(choice: unknown): unknown | undefined {
         : content;
     }
 
-    const toolCall = choice.message.tool_calls ?? choice.message.function_call;
+    const toolCall = getMessageToolCalls(choice.message);
     if (toolCall !== undefined && toolCall !== null) {
       return toolCall;
     }
@@ -383,7 +395,6 @@ function traceToTestCase(trace: LangfuseTrace, baseUrl: string): LangfuseTraceTe
   };
 
   setVar(vars, '__langfuse_input', trace.input);
-  setVar(vars, '__langfuse_output', trace.output);
   if (trace.name) {
     vars.__langfuse_name = trace.name;
   }
@@ -408,7 +419,6 @@ function traceToTestCase(trace: LangfuseTrace, baseUrl: string): LangfuseTraceTe
   }
 
   setVar(vars, 'input', inputValue);
-  setVar(vars, 'output', outputValue);
 
   const testCase: LangfuseTraceTestCase = {
     description: `Trace: ${trace.name || trace.id} (${new Date(trace.timestamp).toLocaleDateString()})`,

@@ -200,6 +200,26 @@ describe('sanitizeConfigForOutput', () => {
     expect(config.tests[0].vars.input).toBe('private test vars');
   });
 
+  it('strips loaded remote row data even when the row contains a path field', () => {
+    const test = {
+      path: 'ordinary-source-label',
+      vars: { input: 'private vars' },
+      providerOutput: 'private output',
+      metadata: { note: 'private metadata', __promptfoo: { remote: true } },
+    };
+    const output = sanitizeConfigForOutput(
+      { tests: [test] },
+      { shouldStripTestVars: true, shouldStripMetadata: true, shouldStripResponseOutput: true },
+    );
+    expect(output.tests).toEqual([
+      {
+        path: 'ordinary-source-label',
+        metadata: { __promptfoo: { remote: true, providerOutputRedacted: true } },
+      },
+    ]);
+    expect(test.providerOutput).toBe('private output');
+  });
+
   it.each(['https', 'http', 'ws', 'wss'])(
     'redacts credentials in %s provider IDs and map keys without changing safe IDs',
     (scheme) => {

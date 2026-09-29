@@ -143,7 +143,7 @@ defaultTest:
 tests: langfuse://traces?tags=production&limit=50
 ```
 
-Each trace becomes a test case. The response provider and its transform are skipped, including when a trace has no output; missing outputs are graded as an empty string. Test-level transforms still apply. Model-graded assertions still call their configured grading provider. Results are stored locally and are not written back to Langfuse. An empty trace selection stops with an error before evaluation.
+Each trace becomes a test case. The response provider is not called, including when a trace has no output; missing outputs are graded as an empty string. Explicit provider and test transforms still apply. Model-graded assertions still call their configured grading provider. Results are stored locally and are not written back to Langfuse. An empty trace selection stops with an error before evaluation.
 
 Exports created with `PROMPTFOO_STRIP_RESPONSE_OUTPUT=true` cannot replay stored responses. Restore `providerOutput` from the original source before replaying those tests.
 
@@ -165,11 +165,11 @@ Unknown or empty selectors and repeated scalar selectors are rejected. A `sessio
 
 Imported variables and values returned by `transformVars` are treated as literal data, including template syntax and file references. Local variables that are not returned by `transformVars` keep their normal template and file loading behavior.
 
-`input` and `output` contain values extracted from common chat, Responses, and text formats. Stored OpenAI tool calls retain the structure needed by `is-valid-openai-tools-call`. Mixed text and tool-call outputs retain their content. Use the original payloads for assertions that need all fields:
+`input` contains the extracted trace input. The extracted response is stored in `providerOutput` and passed to assertions as `output`. Stored OpenAI tool calls retain the structure needed by `is-valid-openai-tools-call`. Mixed text and tool-call outputs retain their content. The original input is also available:
 
 | Variable                                                         | Value                                              |
 | ---------------------------------------------------------------- | -------------------------------------------------- |
-| `__langfuse_input`, `__langfuse_output`                          | Original input and output                          |
+| `__langfuse_input`                                               | Original input                                     |
 | `__langfuse_trace_id`, `__langfuse_timestamp`                    | Trace ID and timestamp                             |
 | `__langfuse_name`, `__langfuse_user_id`, `__langfuse_session_id` | Optional trace identifiers                         |
 | `__langfuse_tags`, `__langfuse_metadata`                         | Tags and metadata                                  |
