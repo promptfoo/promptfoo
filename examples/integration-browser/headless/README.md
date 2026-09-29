@@ -20,7 +20,10 @@ This example demonstrates how to:
 
 ## Prerequisites
 
-Ensure you have Python 3 and Node.js installed on your system.
+Ensure you have Python 3.10 or later and Node.js installed on your system.
+
+In Windows PowerShell, use `npm.cmd` and `npx.cmd` in place of `npm` and `npx`
+in the commands below. This avoids PowerShell script execution-policy restrictions.
 
 1. **Install Node.js dependencies**:
 
@@ -31,11 +34,25 @@ npx playwright install chromium
 
 2. **Install Python dependencies** (for the demo application):
 
+On macOS or Linux:
+
 ```bash
-pip install -r requirements.txt
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+On Windows PowerShell, call the virtual environment's Python directly:
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
 That's it! No additional setup scripts or configuration needed.
+
+The demo application uses Gradio 6. Browser automation uses the Node.js Playwright
+packages installed above; the Python Playwright package is not needed.
 
 ## Running the Example
 
@@ -45,9 +62,15 @@ That's it! No additional setup scripts or configuration needed.
 python gradio_demo.py
 ```
 
+In Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe gradio_demo.py
+```
+
 This starts a local server at http://localhost:7860
 
-2. **Run the browser automation tests**:
+2. **Run the browser automation tests** in a second terminal, from the same example directory:
 
 ```bash
 npx promptfoo eval -c promptfooconfig.yaml
@@ -84,19 +107,19 @@ The main configuration (`promptfooconfig.yaml`) tests a chatbot interface with a
 
 ### Calculator Example
 
-The `calculator-example.yaml` demonstrates form interactions with a 100% pass rate:
+The `calculator-example.yaml` reads the result textbox and checks the calculated
+value: `10 + 5 = 15` and `20 × 4 = 80`. An empty or incorrect result fails, even
+when the form's static "Result" label is present.
 
 ```text
 ┌───────────────────┬───────────────────┬───────────────────┬───────────────────┬───────────────────┐
 │ num1              │ num2              │ operation         │ operationSelector │ [browser-provider]│
 ├───────────────────┼───────────────────┼───────────────────┼───────────────────┼───────────────────┤
-│ 10                │ 5                 │ Add               │ #operation        │ [PASS] Calculator │
-│                   │                   │                   │ label:nth-child(1)│ interaction       │
-│                   │                   │                   │                   │ successful        │
+│ 10                │ 5                 │ Add               │ #operation        │ [PASS] 15         │
+│                   │                   │                   │ label:nth-child(1)│                   │
 ├───────────────────┼───────────────────┼───────────────────┼───────────────────┼───────────────────┤
-│ 20                │ 4                 │ Multiply          │ #operation        │ [PASS] Calculator │
-│                   │                   │                   │ label:nth-child(3)│ interaction       │
-│                   │                   │                   │                   │ successful        │
+│ 20                │ 4                 │ Multiply          │ #operation        │ [PASS] 80         │
+│                   │                   │                   │ label:nth-child(3)│                   │
 └───────────────────┴───────────────────┴───────────────────┴───────────────────┴───────────────────┘
 ```
 
