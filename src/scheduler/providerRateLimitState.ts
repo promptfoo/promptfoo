@@ -134,6 +134,8 @@ export class ProviderRateLimitState extends EventEmitter {
       getHeaders?: (result: T) => Record<string, string> | undefined;
       isRateLimited?: (result: T | undefined, error?: Error) => boolean;
       getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
+      /** Suppress recovery feedback without changing logical request/latency metrics. */
+      shouldRecoverConcurrency?: (result: T) => boolean;
       /**
        * Per-call override for `maxRetries` only. Preserves the state's other
        * policy fields (backoff, jitter) so provider config cannot silently
@@ -177,6 +179,7 @@ export class ProviderRateLimitState extends EventEmitter {
         const headers = options.getHeaders?.(result);
         const isRateLimited = options.isRateLimited?.(result, undefined) ?? false;
         const retryAfterMs = options.getRetryAfter?.(result, undefined);
+        const shouldRecoverConcurrency = options.shouldRecoverConcurrency?.(result) ?? true;
 
         // Update state from headers BEFORE releasing slot
         if (headers) {
@@ -216,7 +219,7 @@ export class ProviderRateLimitState extends EventEmitter {
         }
 
         // Success
-        this.handleSuccess();
+        this.handleSuccess(shouldRecoverConcurrency);
         this.completedRequests++;
         return result;
       } catch (error) {
@@ -340,8 +343,10 @@ export class ProviderRateLimitState extends EventEmitter {
   /**
    * Handle successful request.
    */
-  private handleSuccess(): void {
-    this.applyConcurrencyChange(this.adaptiveConcurrency.recordSuccess());
+  private handleSuccess(shouldRecoverConcurrency: boolean): void {
+    if (shouldRecoverConcurrency) {
+      this.applyConcurrencyChange(this.adaptiveConcurrency.recordSuccess());
+    }
   }
 
   /**

@@ -10,8 +10,11 @@ import {
 } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import { CodexSecurityResultSchema } from '@promptfoo/contracts/codexSecurity';
 import { Check, Copy, X } from 'lucide-react';
 import ChatMessages, { type Message } from './ChatMessages';
+import { CodexSecurityQualityStatus } from './CodexSecurityQualityStatus';
+import { CodexSecurityResultSummary } from './CodexSecurityResultSummary';
 import { DebuggingPanel } from './DebuggingPanel';
 import { EvaluationPanel } from './EvaluationPanel';
 import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
@@ -138,12 +141,29 @@ export interface FilterConfig {
   field?: string;
 }
 
+function getSdkReportText(
+  rawOutput: unknown,
+  output: string | undefined,
+  hasSecurityResult: boolean,
+): string | undefined {
+  if (!hasSecurityResult || rawOutput == null) {
+    return undefined;
+  }
+  const text = typeof rawOutput === 'string' ? rawOutput : JSON.stringify(rawOutput);
+  return text === output ? undefined : text;
+}
+
+function getPromptEditorState(hasSecurityResult: boolean, readOnly: boolean, editMode: boolean) {
+  return hasSecurityResult ? { editMode: false, readOnly: true } : { editMode, readOnly };
+}
+
 interface EvalOutputPromptDialogProps {
   open: boolean;
   onClose: () => void;
   prompt: string;
   provider?: string;
   output?: string;
+  rawOutput?: unknown;
   gradingResults?: GradingResult[];
   metadata?: Record<string, unknown>;
   /**
@@ -170,6 +190,7 @@ export default function EvalOutputPromptDialog({
   prompt,
   provider,
   output,
+  rawOutput,
   gradingResults,
   metadata,
   providerPrompt,
@@ -185,6 +206,8 @@ export default function EvalOutputPromptDialog({
   cloudConfig,
   readOnly = false,
 }: EvalOutputPromptDialogProps) {
+  const securityResult = CodexSecurityResultSchema.safeParse(metadata?.codexSecurity);
+  const sdkReport = getSdkReportText(rawOutput, output, securityResult.success);
   const [activeTab, setActiveTab] = useState('prompt-output');
   const [copied, setCopied] = useState(false);
   const [copiedFields, setCopiedFields] = useState<{ [key: string]: boolean }>({});
@@ -196,6 +219,7 @@ export default function EvalOutputPromptDialog({
   const [replayOutput, setReplayOutput] = useState<string | null>(null);
   const [replayError, setReplayError] = useState<string | null>(null);
   const [traces, setTraces] = useState<Trace[]>([]);
+  const promptEditorState = getPromptEditorState(securityResult.success, readOnly, editMode);
 
   useEffect(() => {
     setCopied(false);
@@ -258,7 +282,7 @@ export default function EvalOutputPromptDialog({
       return;
     }
 
-    if (!onReplay) {
+    if (!onReplay || securityResult.success) {
       setReplayError('Replay functionality is not available');
       return;
     }
@@ -333,7 +357,7 @@ export default function EvalOutputPromptDialog({
   const citationsData = metadata?.citations as Citation | Citation[] | undefined;
 
   const hasOutputContent = Boolean(
-    output || replayOutput || metadata?.redteamFinalPrompt || citationsData,
+    output || replayOutput || metadata?.redteamFinalPrompt || citationsData || sdkReport,
   );
 
   const redteamHistoryRaw = (metadata?.redteamHistory || metadata?.redteamTreeHistory || []) as
@@ -462,8 +486,8 @@ export default function EvalOutputPromptDialog({
             {/* Prompt & Output Panel */}
             <TabsContent value="prompt-output" className="mt-0">
               <PromptEditor
+                {...promptEditorState}
                 prompt={prompt}
-                editMode={editMode}
                 editedPrompt={editedPrompt}
                 replayLoading={replayLoading}
                 replayError={replayError}
@@ -478,8 +502,17 @@ export default function EvalOutputPromptDialog({
                 onMouseLeave={() => setHoveredElement(null)}
                 CodeDisplay={CodeDisplay}
                 subtitleTypographyClassName={subtitleTypographyClassName}
-                readOnly={readOnly}
               />
+              {securityResult.success && (
+                <div className="mb-4">
+                  <p className="mb-3 text-sm text-muted-foreground">
+                    Rerun Codex Security from the evaluation configuration. Single-prompt replay
+                    cannot preserve its scan, validation, or saved-report settings.
+                  </p>
+                  <CodexSecurityQualityStatus gradingResults={gradingResults} />
+                  <CodexSecurityResultSummary result={securityResult.data} />
+                </div>
+              )}
               {hasOutputContent && (
                 <OutputsPanel
                   output={output}
@@ -497,6 +530,15 @@ export default function EvalOutputPromptDialog({
                   onMouseLeave={() => setHoveredElement(null)}
                   CodeDisplay={CodeDisplay}
                   citations={citationsData}
+                />
+              )}
+              {sdkReport !== undefined && (
+                <CodeDisplay
+                  content={sdkReport}
+                  title="SDK report"
+                  onCopy={() => copyFieldToClipboard('sdkReport', sdkReport)}
+                  copied={copiedFields.sdkReport === true}
+                  showCopyButton
                 />
               )}
             </TabsContent>

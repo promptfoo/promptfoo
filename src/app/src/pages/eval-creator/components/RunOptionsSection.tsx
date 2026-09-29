@@ -112,10 +112,10 @@ export function RunOptionsSection({
       <Card className="border-primary/20 bg-primary/5 p-6">
         <div className="space-y-4">
           <div className="space-y-2">
-            <h3 className="text-lg font-semibold">Ready to run your evaluation?</h3>
+            <h3 className="text-lg font-semibold">Run evaluation</h3>
             <p className="text-sm text-muted-foreground">
               {isReadyToRun
-                ? 'All required steps are complete. Start when you are ready.'
+                ? 'All required setup steps are complete.'
                 : 'Add providers, prompts, and test cases to run this evaluation.'}
             </p>
           </div>

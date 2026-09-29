@@ -87,6 +87,27 @@ describe('callProviderWithContext', () => {
     });
   });
 
+  it('classifies grading calls with the same context passed to the provider', async () => {
+    const provider = createProvider();
+    provider.isHistoricalReplay = vi.fn(() => true);
+    const registry = createRegistry();
+    const callContext = {
+      vars,
+      prompt: { raw: 'Read', label: 'Read', config: { report_file: 'local.json' } },
+    };
+    await withProviderCallExecutionContext({ rateLimitRegistry: registry }, () =>
+      callGradingProvider(provider, 'Read', (context) => provider.callApi('Read', context), {
+        callContext,
+      }),
+    );
+    expect(provider.isHistoricalReplay).toHaveBeenCalledWith(callContext);
+    expect(registry.executeSpy).toHaveBeenCalledWith(
+      provider,
+      expect.any(Function),
+      expect.objectContaining({ skipRateLimit: true }),
+    );
+  });
+
   it('propagates abort signals from the scheduler execution context', async () => {
     const provider = createProvider();
     const registry = createRegistry();

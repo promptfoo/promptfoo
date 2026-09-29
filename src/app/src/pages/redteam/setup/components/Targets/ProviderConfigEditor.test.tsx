@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { getCallApiMock, mockCallApiRoutes, resetCallApiMock } from '@app/tests/apiMocks';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -7,8 +8,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
 import ProviderConfigEditor from './ProviderConfigEditor';
+import ProviderTypeSelector from './ProviderTypeSelector';
 
 import type { ProviderOptions } from '../../types';
+
+vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
+vi.mock('@app/hooks/useTelemetry', () => ({
+  useTelemetry: () => ({ recordEvent: vi.fn() }),
+}));
 
 const mockA2AConfigState = vi.hoisted(() => ({
   advancedConfigError: null as string | null,
@@ -145,8 +152,30 @@ function StatefulCodexSecurityEditor({
   );
 }
 
+function NewCodexSecurityEditor() {
+  const [provider, setProvider] = React.useState<ProviderOptions>();
+  const [providerType, setProviderType] = React.useState<string>();
+
+  return provider ? (
+    <ProviderConfigEditor
+      provider={provider}
+      setProvider={setProvider}
+      providerType={providerType}
+    />
+  ) : (
+    <ProviderTypeSelector
+      provider={provider}
+      setProvider={(selected, type) => {
+        setProvider(selected);
+        setProviderType(type);
+      }}
+    />
+  );
+}
+
 describe('ProviderConfigEditor', () => {
   beforeEach(() => {
+    resetCallApiMock();
     mockA2AConfigState.advancedConfigError = null;
     useRedTeamTargetConfigValidation.getState().clearTargetConfigValidation();
   });
@@ -668,8 +697,12 @@ describe('ProviderConfigEditor', () => {
       },
       {
         config: { operation: 'security-scan', repository: '/repos/service', max_cost_usd: 0 },
-        expectedError: 'Maximum scan cost must be greater than 0',
+        expectedError: 'Estimated scan budget must be a finite number greater than 0',
       },
+      ...['1', 'invalid', Number.NaN, Number.POSITIVE_INFINITY, -1].map((budget) => ({
+        config: { repository: '/repos/service', max_cost_usd: budget },
+        expectedError: 'Estimated scan budget must be a finite number greater than 0',
+      })),
       {
         config: {
           operation: 'security-diff-scan',
@@ -794,6 +827,227 @@ describe('ProviderConfigEditor', () => {
     });
   });
 
+  it.each([
+    { report_file: '/reports/scan.json' },
+    {
+      report_file: '/reports/scan.json',
+      operation: 'security-diff-scan',
+      working_tree: true,
+      head_ref: 'feature',
+      paths: ['src'],
+      model_reasoning_effort: 'high',
+      reasoning_effort: 'low',
+    },
+  ])('accepts a saved report without requiring live operation options: %j', (config) => {
+    const setError = vi.fn();
+    let validate: (() => boolean) | undefined;
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'openai:codex-security', config }}
+        providerType="codex-security"
+        setProvider={vi.fn()}
+        setError={setError}
+        onValidationRequest={(validator) => {
+          validate = validator;
+        }}
+      />,
+    );
+
+    expect(validate?.()).toBe(true);
+    expect(setError).toHaveBeenLastCalledWith(null);
+    expect(screen.getByLabelText('Result source')).toHaveValue('saved-report');
+    expect(screen.getByLabelText('Report file *')).toHaveValue('/reports/scan.json');
+    expect(screen.getByLabelText('Provider label')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Repository path *')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Security operation')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Model')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Reasoning effort')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Authentication')).not.toBeInTheDocument();
+    expect(screen.queryByText('Codex Security SDK')).not.toBeInTheDocument();
+    expect(screen.queryByText(/credentials, account access/)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { operation: '{{operation}}' },
+    { auth: '{{auth}}' },
+    { model_reasoning_effort: '{{effort}}' },
+    { reasoning_effort: 'unsupported' },
+    { max_cost_usd: -1 },
+  ])('validates retained native settings only after switching to SDK mode: %j', async (dormant) => {
+    const user = userEvent.setup();
+    const onValidate = vi.fn();
+    const setError = vi.fn();
+    function Editor() {
+      const [provider, setProvider] = React.useState<ProviderOptions>({
+        id: 'openai:codex-security',
+        config: { report_file: '/reports/scan.json', repository: '/repos/service', ...dormant },
+      });
+      return (
+        <ProviderConfigEditor
+          provider={provider}
+          setProvider={setProvider}
+          providerType="codex-security"
+          validateAll
+          onValidate={onValidate}
+          setError={setError}
+        />
+      );
+    }
+    renderWithProviders(<Editor />);
+
+    expect(onValidate).toHaveBeenLastCalledWith(true);
+    expect(setError).toHaveBeenLastCalledWith(null);
+    await user.selectOptions(screen.getByLabelText('Result source'), 'sdk');
+    expect(onValidate).toHaveBeenLastCalledWith(false);
+    expect(setError).toHaveBeenLastCalledWith(expect.any(String));
+  });
+
+  it.each(['', '   ', undefined, null, 42])(
+    'requires a saved report path for %j',
+    (report_file) => {
+      const setError = vi.fn();
+      let validate: (() => boolean) | undefined;
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'openai:codex-security', config: { report_file } }}
+          providerType="codex-security"
+          setProvider={vi.fn()}
+          setError={setError}
+          onValidationRequest={(validator) => {
+            validate = validator;
+          }}
+        />,
+      );
+
+      expect(screen.getByLabelText('Result source')).toHaveValue('saved-report');
+      expect(validate?.()).toBe(false);
+      expect(setError).toHaveBeenLastCalledWith('Report file path is required');
+    },
+  );
+
+  it('preserves live options and label while switching between SDK and report sources', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StatefulCodexSecurityEditor
+        initialConfig={{ operation: 'deep-security-scan', paths: ['src'], workers: 3 }}
+      />,
+    );
+    const initialConfig = JSON.parse(screen.getByTestId('codex-security-config').textContent!);
+    expect(screen.getByLabelText('Result source')).toHaveValue('sdk');
+
+    await user.selectOptions(screen.getByLabelText('Result source'), 'saved-report');
+    expect(screen.getByLabelText('Report file *')).toHaveValue('');
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toEqual({
+      ...initialConfig,
+      report_file: '',
+    });
+    await user.type(screen.getByLabelText('Report file *'), '/reports/left.json');
+    await user.type(screen.getByLabelText('Provider label'), 'Left report');
+    expect(screen.queryByLabelText('Scoped paths')).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Result source'), 'sdk');
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toEqual(
+      initialConfig,
+    );
+    expect(screen.getByLabelText('Provider label')).toHaveValue('Left report');
+    expect(screen.getByLabelText('Security operation')).toHaveValue('deep-security-scan');
+    expect(screen.getByLabelText('Repository path *')).toHaveValue('/repos/service');
+    expect(screen.getByLabelText('Scoped paths')).toHaveValue('src');
+    expect(screen.getByLabelText('Model')).toHaveValue('gpt-5.6-luna');
+  });
+
+  it('checks a saved report directly from the actual provider selector defaults', async () => {
+    const user = userEvent.setup();
+    mockCallApiRoutes([
+      {
+        method: 'POST',
+        path: '/providers/test',
+        response: { testResult: { success: true, message: 'Saved report is readable.' } },
+      },
+    ]);
+    renderWithProviders(<NewCodexSecurityEditor />);
+    await user.click(screen.getByText('Codex Security SDK').closest('[role="button"]')!);
+    expect(screen.getByLabelText('Repository path *')).toHaveValue('');
+    await user.selectOptions(screen.getByLabelText('Result source'), 'saved-report');
+    await user.type(screen.getByLabelText('Report file *'), '/reports/left.json');
+    await user.click(screen.getByRole('button', { name: 'Check setup' }));
+
+    expect(await screen.findByText(/Saved report is readable\./)).toHaveTextContent(
+      'Local setup check passed.',
+    );
+    expect(getCallApiMock()).toHaveBeenCalledTimes(1);
+    const request = getCallApiMock().mock.calls[0][1]!;
+    expect(JSON.parse(request.body as string)).toEqual({
+      providerOptions: {
+        id: 'openai:codex-security:gpt-5.6-luna',
+        label: 'Codex Security SDK',
+        config: {
+          operation: 'security-scan',
+          auth: 'auto',
+          model_reasoning_effort: 'high',
+          max_cost_usd: 1,
+          report_file: '/reports/left.json',
+        },
+      },
+    });
+  });
+
+  it.each([
+    [{ repository: '', working_dir: ' \t ' }, {}],
+    [{ repository: ' \t ', working_dir: '/repos/legacy' }, { working_dir: '/repos/legacy' }],
+    [{ repository: '/repos/service', working_dir: '' }, { repository: '/repos/service' }],
+  ])(
+    'removes only blank repository paths when selecting a saved report',
+    async (paths, expected) => {
+      const user = userEvent.setup();
+      renderWithProviders(<StatefulCodexSecurityEditor initialConfig={paths} />);
+      const initialConfig = JSON.parse(screen.getByTestId('codex-security-config').textContent!);
+      const { repository: _repository, working_dir: _workingDir, ...liveOptions } = initialConfig;
+      await user.selectOptions(screen.getByLabelText('Result source'), 'saved-report');
+      expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toEqual({
+        ...liveOptions,
+        ...expected,
+        report_file: '',
+      });
+    },
+  );
+
+  it('checks the selected report path and label without changing the provider ID or saved options', async () => {
+    const user = userEvent.setup();
+    mockCallApiRoutes([
+      {
+        method: 'POST',
+        path: '/providers/test',
+        response: { testResult: { success: true, message: 'Saved report is readable.' } },
+      },
+    ]);
+    renderWithProviders(<StatefulCodexSecurityEditor />);
+    await user.selectOptions(screen.getByLabelText('Result source'), 'saved-report');
+    await user.type(screen.getByLabelText('Report file *'), '/reports/left.json');
+    await user.type(screen.getByLabelText('Provider label'), 'Left report');
+    await user.click(screen.getByRole('button', { name: 'Check setup' }));
+
+    expect(await screen.findByText(/Saved report is readable\./)).toHaveTextContent(
+      'Local setup check passed.',
+    );
+    expect(getCallApiMock()).toHaveBeenCalledTimes(1);
+    const request = getCallApiMock().mock.calls[0][1]!;
+    expect(JSON.parse(request.body as string)).toEqual({
+      providerOptions: {
+        id: 'openai:codex-security:gpt-5.6-luna',
+        label: 'Left report',
+        config: {
+          operation: 'security-scan',
+          repository: '/repos/service',
+          auth: 'chatgpt',
+          model_reasoning_effort: 'high',
+          max_cost_usd: 1,
+          report_file: '/reports/left.json',
+        },
+      },
+    });
+  });
+
   it('configures native scan operations, models, reasoning, authentication, and cost', async () => {
     const user = userEvent.setup();
 
@@ -816,8 +1070,8 @@ describe('ProviderConfigEditor', () => {
 
     await user.selectOptions(screen.getByLabelText('Reasoning effort'), 'max');
     await user.selectOptions(screen.getByLabelText('Authentication'), 'api-key');
-    await user.clear(screen.getByLabelText('Maximum cost (USD)'));
-    await user.type(screen.getByLabelText('Maximum cost (USD)'), '2');
+    await user.clear(screen.getByLabelText('Estimated scan budget (USD)'));
+    await user.type(screen.getByLabelText('Estimated scan budget (USD)'), '2');
 
     expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toMatchObject({
       model_reasoning_effort: 'max',
@@ -859,7 +1113,7 @@ describe('ProviderConfigEditor', () => {
 
     const reasoning = screen.getByLabelText('Reasoning effort');
     const auth = screen.getByLabelText('Authentication');
-    expect(reasoning).toHaveValue('');
+    expect(reasoning).toHaveValue('unsupported');
     expect(auth).toHaveValue('');
     expect(screen.getByRole('option', { name: 'Unsupported reasoning effort' })).toBeDisabled();
     expect(
@@ -938,6 +1192,28 @@ describe('ProviderConfigEditor', () => {
     expect(config).not.toHaveProperty('reasoning_effort');
   });
 
+  it('shows the SDK default for unset reasoning and removes both overrides when selected', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StatefulCodexSecurityEditor initialConfig={{ model_reasoning_effort: undefined }} />,
+    );
+
+    const reasoning = screen.getByLabelText('Reasoning effort');
+    expect(reasoning).toHaveValue('');
+    expect(screen.getByRole('option', { name: 'SDK default' })).toBeEnabled();
+
+    await user.selectOptions(reasoning, 'high');
+    expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).toHaveProperty(
+      'model_reasoning_effort',
+      'high',
+    );
+    await user.selectOptions(reasoning, '');
+
+    const config = JSON.parse(screen.getByTestId('codex-security-config').textContent!);
+    expect(config).not.toHaveProperty('model_reasoning_effort');
+    expect(config).not.toHaveProperty('reasoning_effort');
+  });
+
   it('trims pasted model names and treats whitespace-only input as an unset model', async () => {
     const user = userEvent.setup();
     renderWithProviders(<StatefulCodexSecurityEditor />);
@@ -1011,13 +1287,13 @@ describe('ProviderConfigEditor', () => {
       'paths',
     );
 
-    await user.clear(screen.getByLabelText('Maximum cost (USD)'));
+    await user.clear(screen.getByLabelText('Estimated scan budget (USD)'));
     expect(JSON.parse(screen.getByTestId('codex-security-config').textContent!)).not.toHaveProperty(
       'max_cost_usd',
     );
 
     await user.selectOptions(screen.getByLabelText('Security operation'), 'validation');
-    expect(screen.queryByLabelText('Maximum cost (USD)')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Estimated scan budget (USD)')).not.toBeInTheDocument();
 
     const findingFile = screen.getByLabelText('Finding file');
     await user.type(findingFile, '/tmp/finding.json');

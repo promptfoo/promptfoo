@@ -18,6 +18,8 @@ import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
+import { createProviderProgressReporter } from './evaluator/providerProgress';
+import { checkProviderSetup } from './evaluator/providerSetup';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
@@ -899,6 +901,9 @@ function tryParseJson(value: string): unknown {
 async function callProviderForRunEval({
   abortSignal,
   evalId,
+  evaluateOptions,
+  providerSetup,
+  promptIdx,
   filters,
   promptForRender,
   provider,
@@ -914,6 +919,9 @@ async function callProviderForRunEval({
   RunEvalOptions,
   | 'abortSignal'
   | 'evalId'
+  | 'evaluateOptions'
+  | 'providerSetup'
+  | 'promptIdx'
   | 'nunjucksFilters'
   | 'provider'
   | 'rateLimitRegistry'
@@ -945,6 +953,9 @@ async function callProviderForRunEval({
       response = await callActiveProvider({
         abortSignal,
         evalId,
+        evaluateOptions,
+        providerSetup,
+        promptIdx,
         filters,
         onProviderInvoked: () => {
           providerInvoked = true;
@@ -1057,6 +1068,9 @@ async function collectExternalTraceAfterProviderCall({
 async function callActiveProvider({
   abortSignal,
   evalId,
+  evaluateOptions,
+  providerSetup,
+  promptIdx,
   filters,
   onProviderInvoked,
   promptForRender,
@@ -1071,7 +1085,16 @@ async function callActiveProvider({
   vars,
 }: Pick<
   RunEvalOptions,
-  'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test' | 'testSuite'
+  | 'abortSignal'
+  | 'evalId'
+  | 'evaluateOptions'
+  | 'providerSetup'
+  | 'promptIdx'
+  | 'provider'
+  | 'rateLimitRegistry'
+  | 'repeatIndex'
+  | 'test'
+  | 'testSuite'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   onProviderInvoked: () => void;
@@ -1099,7 +1122,33 @@ async function callActiveProvider({
     traceContext,
     vars,
   });
-  const callApiOptions = abortSignal ? { abortSignal } : undefined;
+  if (abortSignal?.aborted) {
+    throw new Error('Operation cancelled');
+  }
+  const setupFailure = await providerSetup?.(activeProvider, callApiContext, {
+    abortSignal,
+    timeoutMs: evaluateOptions?.timeoutMs || getEvalTimeoutMs(),
+  });
+  if (abortSignal?.aborted) {
+    throw new Error('Operation cancelled');
+  }
+  if (setupFailure) {
+    return setupFailure;
+  }
+  const progress = createProviderProgressReporter({
+    provider: sanitizeProviderIdForLog(activeProvider.label || activeProvider.id()),
+    testIdx: testIndex,
+    promptIdx,
+    callback: evaluateOptions?.providerProgressCallback,
+    silent: evaluateOptions?.silent,
+  });
+  const reportsProgress =
+    activeProvider.supportsProgress || evaluateOptions?.providerProgressCallback;
+  const callApiOptions = reportsProgress
+    ? { ...(abortSignal ? { abortSignal } : {}), onProgress: progress.update }
+    : abortSignal
+      ? { abortSignal }
+      : undefined;
 
   const callApi = () => {
     onProviderInvoked();
@@ -1120,13 +1169,21 @@ async function callActiveProvider({
       ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
       : invoke();
   };
-  const response = rateLimitRegistry
-    ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
-    : await callApi();
+  try {
+    const response = rateLimitRegistry
+      ? await rateLimitRegistry.execute(
+          activeProvider,
+          callApi,
+          createProviderRateLimitOptions(activeProvider, callApiContext),
+        )
+      : await callApi();
 
-  logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
-  logger.debug(`Provider response cached property explicitly: ${response.cached}`);
-  return response;
+    logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
+    logger.debug(`Provider response cached property explicitly: ${response.cached}`);
+    return response;
+  } finally {
+    progress.close();
+  }
 }
 
 function buildCallApiContext({
@@ -1218,6 +1275,9 @@ function getConversationLastInput(renderedJson: unknown) {
 }
 
 async function applyProviderDelayIfNeeded(provider: ApiProvider, response: ProviderResponse) {
+  if (response.metadata?.providerSetup?.workloadStarted === false) {
+    return;
+  }
   if (!response.cached && !provider.handlesOwnDelay && provider.delay && provider.delay > 0) {
     logger.debug(`Sleeping for ${provider.delay}ms`);
     await sleep(provider.delay);
@@ -1644,6 +1704,7 @@ async function runEvalInternal({
   evalId,
   providerCallQueue,
   rateLimitRegistry,
+  providerSetup,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
   invariant(
@@ -1689,11 +1750,29 @@ async function runEvalInternal({
     setup = rendered.setup;
     if (!test.providerOutput) {
       const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
-      workspace = await createAgentWorkspaceForConfig(
-        { ...activeProvider.config, ...rendered.setup.prompt.config },
-        state.vars,
-        abortSignal,
+      const historicalReplay = activeProvider.isHistoricalReplay?.(
+        buildCallApiContext({
+          evalId,
+          filters,
+          originalProvider: provider,
+          promptForRender: {
+            ...state.promptForRender,
+            config: rendered.setup.prompt.config,
+          },
+          repeatIndex,
+          test,
+          testIndex,
+          traceContext: null,
+          vars: state.vars,
+        }),
       );
+      if (!historicalReplay) {
+        workspace = await createAgentWorkspaceForConfig(
+          { ...activeProvider.config, ...rendered.setup.prompt.config },
+          state.vars,
+          abortSignal,
+        );
+      }
     }
     const stepWorkspace = workspace;
 
@@ -1719,6 +1798,9 @@ async function runEvalInternal({
           const providerCall = await callProviderForRunEval({
             abortSignal,
             evalId,
+            evaluateOptions,
+            providerSetup,
+            promptIdx: promptIndex,
             filters,
             promptForRender: {
               ...state.promptForRender,
@@ -2548,6 +2630,50 @@ async function applyInputTransform(
     'Transform function did not return a valid object',
   );
   testCase.vars = { ...testCase.vars, ...transformedVars };
+}
+
+async function prepareProviderSetup(runEvalOptions: RunEvalOptions[], checkAbort: () => void) {
+  for (const step of runEvalOptions) {
+    checkAbort();
+    // Hooks can create or replace files without changing provider configuration.
+    // Check their resulting state for each row, inside its timeout boundary.
+    const hasExtensions = Boolean(step.testSuite?.extensions?.length);
+    step.providerSetup = checkProviderSetup;
+    const activeProvider = isApiProvider(step.test.provider) ? step.test.provider : step.provider;
+    if (hasExtensions || step.test.providerOutput || !activeProvider.checkSetupOnEval) {
+      continue;
+    }
+    const runtimeVars = getEvalRuntimeVars({
+      evalId: step.evalId,
+      promptIndex: step.promptIdx,
+      repeatIndex: step.repeatIndex,
+      testIndex: step.testIdx,
+    });
+    const setupFailure = await checkProviderSetup(
+      activeProvider,
+      {
+        vars: { ...step.test.vars, ...step.registers, ...runtimeVars },
+        prompt: {
+          ...step.prompt,
+          config: mergeProviderPromptConfig(step.prompt.config, step.test.options),
+        },
+        test: step.test,
+        originalProvider: step.provider,
+        evaluationId: step.evalId,
+        testIdx: step.testIdx,
+        promptIdx: step.promptIdx,
+        repeatIndex: step.repeatIndex,
+      },
+      {
+        abortSignal: step.abortSignal,
+        timeoutMs: step.evaluateOptions?.timeoutMs || getEvalTimeoutMs(),
+      },
+    );
+    if (setupFailure?.metadata?.providerSetup?.timedOut) {
+      // This row already consumed its setup deadline; preserve that outcome without retrying it.
+      step.providerSetup = async () => structuredClone(setupFailure);
+    }
+  }
 }
 
 async function buildRunEvalOptions({
@@ -4139,6 +4265,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     processedIndices,
     progressBarManager,
     prompts,
+    runEvalOptions,
     serialRunEvalOptions,
     shouldGroupGradingByProvider,
   }: {
@@ -4156,10 +4283,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     processedIndices: Set<number>;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
+    runEvalOptions: RunEvalOptions[];
     serialRunEvalOptions: RunEvalOptions[];
     shouldGroupGradingByProvider: boolean;
   }): Promise<TEvaluation | undefined> {
     try {
+      // Setup shares interruption/finalization with execution and keeps the original step order.
+      await prepareProviderSetup(runEvalOptions, checkAbort);
       if (shouldGroupGradingByProvider) {
         await this.runGroupedEvalSteps({
           checkAbort,
@@ -4191,6 +4321,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       }
     } catch (err) {
       if (!combinedAbortSignal.aborted) {
+        clearTimeout(globalTimeout);
         cleanupProgressAfterError(progressBarManager, ciProgressReporter, err);
         throw err;
       }
@@ -5387,6 +5518,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       processedIndices,
       progressBarManager,
       prompts,
+      runEvalOptions,
       serialRunEvalOptions,
       shouldGroupGradingByProvider,
     });

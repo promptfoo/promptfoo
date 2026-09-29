@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { HUMAN_ASSERTION_TYPE } from '../constants';
 import { getDb } from '../database/index';
-import { evalResultsTable } from '../database/tables';
+import { evalResultsTable, savedReportResultPredicate } from '../database/tables';
 import logger from '../logger';
 
 import type { EvalResultsFilterMode } from '../types/index';
@@ -21,9 +21,15 @@ interface CountCacheEntry {
   timestamp: number;
 }
 
+interface ResultsSummary {
+  count: number;
+  savedReportPromptIndices: number[];
+}
+
 // Simple in-memory cache for counts with 5-minute TTL
 const distinctCountCache = new Map<string, CountCacheEntry>();
 const totalRowCountCache = new Map<string, CountCacheEntry>();
+const savedReportPromptCache = new Map<string, { indices: number[]; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
@@ -61,6 +67,29 @@ export async function getCachedResultsCount(evalId: string): Promise<number> {
   distinctCountCache.set(cacheKey, { count, timestamp: Date.now() });
 
   return count;
+}
+
+/** Full-eval column provenance uses a partial index, independently of the count-only path. */
+export async function getCachedResultsSummary(evalId: string): Promise<ResultsSummary> {
+  const count = await getCachedResultsCount(evalId);
+  const cached = savedReportPromptCache.get(evalId);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return { count, savedReportPromptIndices: cached.indices };
+  }
+
+  const db = await getDb();
+  // Matching the index predicate lets SQLite read only indexed prompt positions, without
+  // loading or parsing metadata from ordinary results (which can contain large histories).
+  const rows = await db
+    .selectDistinct({ promptIdx: evalResultsTable.promptIdx })
+    .from(evalResultsTable)
+    .where(sql`${evalResultsTable.evalId} = ${evalId} AND ${savedReportResultPredicate}`)
+    .all();
+  const indices = rows
+    .map((row) => row.promptIdx)
+    .filter((index) => Number.isInteger(index) && index >= 0);
+  savedReportPromptCache.set(evalId, { indices, timestamp: Date.now() });
+  return { count, savedReportPromptIndices: indices };
 }
 
 /**
@@ -104,9 +133,11 @@ export function clearCountCache(evalId?: string) {
   if (evalId) {
     distinctCountCache.delete(`distinct:${evalId}`);
     totalRowCountCache.delete(`total:${evalId}`);
+    savedReportPromptCache.delete(evalId);
   } else {
     distinctCountCache.clear();
     totalRowCountCache.clear();
+    savedReportPromptCache.clear();
   }
 }
 

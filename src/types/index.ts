@@ -19,6 +19,8 @@ import {
   normalizeConfigProviderAlias,
 } from './configAliases';
 
+import type { EvalProviderProgress } from '../contracts/providers';
+
 export { ProvidersSchema };
 
 import { RedteamConfigSchema } from '../validators/redteam';
@@ -217,6 +219,12 @@ export type EvalConversations = Record<
 export type EvalRegisters = Record<string, VarValue>;
 
 export interface RunEvalOptions {
+  /** Local setup validation with per-call cancellation and deadlines. */
+  providerSetup?: (
+    provider: ApiProvider,
+    context: CallApiContextParams,
+    options?: { abortSignal?: AbortSignal; timeoutMs?: number },
+  ) => Promise<ProviderResponse | undefined>;
   provider: ApiProvider;
   prompt: Prompt;
   delay: number;
@@ -289,6 +297,11 @@ export const EvaluateOptionsSchema = z.object({
       ) => void
     >((v) => typeof v === 'function')
     .optional(),
+  providerProgressCallback: z
+    .custom<(progress: EvalProviderProgress, completed: boolean) => void>(
+      (value) => typeof value === 'function',
+    )
+    .optional(),
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
   /**
@@ -354,6 +367,8 @@ export type PromptMetrics = z.infer<typeof PromptMetricsSchema>;
 export const CompletedPromptSchema = PromptSchema.extend({
   provider: z.string(),
   metrics: PromptMetricsSchema.optional(),
+  /** The full evaluation includes recorded saved-report imports in this column. */
+  hasSavedReportImports: z.boolean().optional(),
 });
 
 export type CompletedPrompt = z.infer<typeof CompletedPromptSchema>;
@@ -1562,6 +1577,7 @@ export interface OutputFile {
 
 // Live eval job state
 export interface Job {
+  providerProgress?: EvalProviderProgress[];
   evalId: string | null;
   status: 'in-progress' | 'complete' | 'error';
   progress: number;

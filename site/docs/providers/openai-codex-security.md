@@ -2,12 +2,12 @@
 sidebar_position: 43
 sidebar_label: Codex Security SDK
 title: OpenAI Codex Security SDK
-description: Compare Codex Security scans, finding validation, model reasoning, repository coverage, token usage, and estimated cost in Promptfoo evals.
+description: Compare Codex Security scans and finding validation in Promptfoo with clear repository coverage, model reasoning, token usage, and estimated cost reporting.
 ---
 
 # OpenAI Codex Security SDK
 
-The Codex Security provider runs the `@openai/codex-security` SDK directly as a Promptfoo provider. Use it to compare standard and deep scans, models, reasoning effort, vulnerability recall, finding validation, token usage, and estimated scan cost.
+The Codex Security provider runs the `@openai/codex-security` SDK directly as a Promptfoo provider, or imports an existing SDK report with `report_file`. Use it to compare standard and deep scans, models, reasoning effort, vulnerability recall, finding validation, token usage, and estimated scan cost.
 
 | Provider                                         | Best for                                                        | Provider ID                     |
 | ------------------------------------------------ | --------------------------------------------------------------- | ------------------------------- |
@@ -24,7 +24,11 @@ Promptfoo declares the SDK as an optional dependency. If optional dependencies w
 npm install promptfoo @openai/codex-security@^0.1.31
 ```
 
-The provider requires `@openai/codex-security` version `0.1.31` or newer. This release replaces the legacy ZIP extractor; earlier releases can also omit finding validation or undercount deep-worker token usage and cost. Use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0` to satisfy both Promptfoo and the SDK. Promptfoo loads the SDK only from its own installation; it does not execute SDK packages found in the target repository or evaluation directory. For a global installation, install both packages together with `npm install -g promptfoo @openai/codex-security@^0.1.31`. Use an existing Codex/ChatGPT login, or set `OPENAI_API_KEY` or `CODEX_API_KEY` in the process environment before starting promptfoo. The native SDK does not support provider-scoped API keys or provider environment overrides; credentials must already be present in the Promptfoo process environment.
+Native operations require `@openai/codex-security` version `0.1.31` or newer, which replaces the legacy ZIP extractor. Use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0`, plus Python 3.10 or later. Python 3.10 also requires `tomli`; use `python_path` to select an interpreter when needed.
+
+Promptfoo loads the SDK from its own installation; it does not execute SDK packages found in the target repository or eval directory. For a global installation, install both packages together with `npm install -g promptfoo @openai/codex-security@^0.1.31`.
+
+Use a supported saved Codex/ChatGPT login, or set `OPENAI_API_KEY` or `CODEX_API_KEY` before starting the Promptfoo server or CLI. Credentials belong to that process: the Setup API keys dialog and provider-scoped environment overrides cannot supply a different key to this provider. With `auth: auto`, the SDK prefers an environment API key when both a key and a saved login are available. Set `auth: chatgpt` to select the saved login, or `auth: api-key` to require an environment key. See the [SDK authentication documentation](https://learn.chatgpt.com/docs/security/sdk#configure-the-runtime-and-credentials).
 
 Codex Security access, Trusted Access, and model availability depend on the authenticated account and organization.
 
@@ -32,7 +36,19 @@ Codex Security access, Trusted Access, and model availability depend on the auth
 
 Open **Setup**, select **Add Provider**, and search for **Codex Security SDK** or **security**. The provider is listed under **Agent Frameworks** and uses the native `openai:codex-security:<model>` provider ID rather than a Python adapter.
 
-Choose a security operation, repository path, model, reasoning effort, authentication method, and optional scan cost limit. Configure advanced deep-scan workers, subagents, discovery limits, and runtime limits in YAML when needed.
+Set **Result source** to **Saved report** to import existing evidence. Enter an absolute server-side path in **Report file**; no SDK installation or model credentials are needed. **Check setup** validates the file locally.
+
+For **SDK operation**, choose a security operation, repository path, model, reasoning effort, authentication method, and optional estimated scan budget. Set **Provider label** to distinguish comparisons. Repository paths refer to the server's filesystem, which may differ from the browser's machine; **Use repository from test cases** inserts `{{repository}}` for row-specific paths. Configure advanced deep-scan workers, subagents, discovery limits, and runtime limits in YAML when needed.
+
+For native operations, **Check setup** uses SDK preflight without starting an operation or sending results to a remote grader. It checks concrete configuration and paths, but does not verify Python/runtime startup, credentials, account permissions, or model availability. For validation, it checks directories and any finding file's presence, not the candidate's validity. Resolve row-variable templates to concrete values before checking setup. Older SDK releases without preflight support report that limitation.
+
+The standalone **Check setup** request and `promptfoo validate target` setup checks have a 30-second deadline. The browser request also cancels setup on disconnect. Evaluation setup checks use a positive configured test timeout, otherwise a 30-second setup deadline, even when workload timeouts are disabled. The overall evaluation deadline and cancellation still apply.
+
+To rerun Codex Security, use the evaluation configuration. Generic **Edit & Replay** is unavailable for both native runs and saved reports because it cannot preserve the operation, scope, and report-file overrides.
+
+Without extensions, an eval checks resolved row and prompt configurations before starting workloads, then checks each case again immediately before execution. Checks use fresh context and local state, allowing earlier workloads to create required files; a setup timeout remains final for that case. With extensions configured, each case is checked after its `beforeEach` preparation. A failed check records a setup error with `metadata.providerSetup.workloadStarted: false`, zero incurred provider cost and zero provider model requests; it does not start the workload. This remains a local configuration/path check, not credential or runtime verification.
+
+For native execution, each prompt/provider/test/repeat combination runs a whole operation. Use descriptive provider labels when comparing settings, and account for that multiplication when planning runtime and spend. To compare existing reports without repeating their original operations, see [Evaluate a vulnerability-finding harness](/docs/guides/codex-security-results).
 
 ## Compare scan depth, models, and reasoning
 
@@ -90,14 +106,17 @@ npx promptfoo eval -c promptfooconfig.yaml --no-cache
 npx promptfoo view
 ```
 
-To start with the included intentionally vulnerable fixture:
+The [included example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-security) compares Luna and Terra at medium reasoning effort on pinned Juice Shop source. Its separate `promptfooconfig.reports.yaml` imports two existing reports without launching a new operation.
 
-```bash
-npx promptfoo@latest init --example openai-codex-security
-cd openai-codex-security
-npm install promptfoo @openai/codex-security@^0.1.31
-npx promptfoo eval --no-cache
-```
+## Import existing reports
+
+Set `report_file` to an existing regular JSON file no larger than 64 MiB containing a Promptfoo replay envelope, SDK `ScanResult.toJSON()` output, or a direct finding-validation result. Scan imports require manifest, findings, and coverage documents with matching scan IDs. Entire Promptfoo eval exports and standalone `findings.json` files are not accepted. The consolidated example's [saved-report config](https://github.com/promptfoo/promptfoo/blob/main/examples/openai-codex-security/promptfooconfig.reports.yaml) imports baseline and candidate reports into separate columns. It requires reports you supply; no sample findings are bundled.
+
+Import reads saved evidence without starting a scan or calling a model, and requires no SDK installation, Python, or model credentials. `report_file` takes precedence over live-operation options. Only `report_file` and `basePath` are validated in import mode; retained SDK settings are validated if a row switches back to a native operation. Relative report paths resolve from the config file directory. Path templates resolve during evaluation; **Check setup** requires a concrete report path. Missing or invalid reports and explicit mock markers produce provider errors, not a fallback scan. Check repository revision, scope, and original provenance before treating two reports as comparable; importing a file does not authenticate its contents.
+
+Prefer a Promptfoo replay file when preserving native execution evidence. Combine `response.metadata.codexSecurityReplay` with the parsed `response.raw` as `payload`; the [example extraction snippet](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-security#compare-saved-reports) handles exported strings and objects. The versioned envelope binds its canonical SDK payload with a SHA-256 and retains normalized warnings, operation, failure diagnostics and historical resources. Failed operations can have a null payload. Keep the full native eval export; the replay is not a signed provenance attestation. SDK 0.1.31's direct serialization omits runtime operation and recovery warnings, which cannot be reconstructed from coverage alone.
+
+The summary marks saved-report results and presents their original cost and duration as historical measurements. Those values are not new model usage or file-import latency. Imported scan operations remain unknown unless the report records `operation`; coverage mode alone does not establish which operation ran. See [Evaluate a vulnerability-finding harness](/docs/guides/codex-security-results) for curated expected IDs and the distinction between coverage checks and finding-quality metrics.
 
 ## Supported operations
 
@@ -139,7 +158,7 @@ providers:
       head_ref: HEAD
 ```
 
-Set `working_tree: true` to review uncommitted changes instead. `head_ref` cannot be combined with `working_tree`, and path-scoped scans cannot be combined with Git diff targets.
+Set `working_tree: true` to review uncommitted changes instead. `head_ref` cannot be combined with `working_tree`, and path-scoped scans cannot be combined with Git diff targets. Diff targets require `repository` to be the Git worktree root and both selected revisions to be available locally.
 
 ## Validate findings
 
@@ -154,7 +173,7 @@ providers:
       finding_file: ./fixtures/sql-injection.json
 ```
 
-Validation returns JSON containing `disposition`, `report`, `outputDir`, and `threadId`. If `finding` and `finding_file` are omitted, the provider uses a structured `finding` eval-row variable when available; otherwise, it uses the rendered prompt as the finding text.
+Validation returns JSON containing `disposition`, `report`, `outputDir`, and `threadId`. If `finding` and `finding_file` are omitted, the provider uses a structured `finding` eval-row variable when available; otherwise, it uses the rendered prompt as the finding text. Set `output_dir` to choose its evidence directory. Validation does not report reliable token/cost totals, and scan budget or deep-scan settings do not apply to it.
 
 :::warning
 
@@ -164,90 +183,88 @@ Managed Codex Security scans run with the access required by the security SDK. R
 
 ## Configuration
 
-| Setting                                                     | Applies to                | Description                                                     |
-| ----------------------------------------------------------- | ------------------------- | --------------------------------------------------------------- |
-| `operation`                                                 | All operations            | Exact Codex Security skill name. Defaults to `security-scan`.   |
-| `model`                                                     | All operations            | Codex model; can also be provided in the provider ID.           |
-| `model_reasoning_effort` / `reasoning_effort`               | All operations            | Model reasoning effort. If both are set, they must match.       |
-| `model_provider`                                            | All operations            | Alternative Codex model provider.                               |
-| `repository` / `working_dir`                                | All operations            | Repository path. A `repository` eval variable is also accepted. |
-| `paths`                                                     | Repository and deep scans | Repository-relative paths to assess.                            |
-| `base_ref`, `head_ref`, `working_tree`                      | Diff scans                | Committed-ref or working-tree target selection.                 |
-| `max_cost_usd`                                              | Scans                     | Hard SDK scan-cost ceiling.                                     |
-| `workers`, `subagents`                                      | Deep scans                | Discovery worker and subagent counts.                           |
-| `stop_after_no_new`, `max_discovery_runs`, `max_time_hours` | Deep scans                | Variance, coverage, and runtime stopping controls.              |
-| `scan_prompt`, `validation_prompt`, `post_scan_prompt`      | Scans                     | Additional instructions for individual scan phases.             |
-| `output_dir`, `archive_existing`                            | Scans                     | Scan artifact location and replacement behavior.                |
-| `knowledge_base_paths`                                      | Scans                     | Additional repository security context.                         |
-| `expected_plugin_version`, `failure_severity`               | Scans                     | Plugin-version and severity policies.                           |
-| `auth`                                                      | All operations            | `auto`, `chatgpt`, or `api-key`.                                |
-| `plugin_path`, `python_path`, `codex_overrides`             | All operations            | Security runtime configuration.                                 |
-| `finding`, `finding_file`                                   | Validation                | Candidate vulnerability text or a structured finding.           |
+| Setting                                         | Applies to                | Description                                                                               |
+| ----------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------- |
+| `report_file`                                   | Saved reports             | Promptfoo replay or SDK scan/validation JSON; imports existing evidence.                  |
+| `operation`                                     | All operations            | Exact Codex Security skill name. Defaults to `security-scan`.                             |
+| `model`                                         | All operations            | Codex model; can also be provided in the provider ID.                                     |
+| `model_reasoning_effort` / `reasoning_effort`   | All operations            | Model reasoning effort. If both are set, they must match.                                 |
+| `model_provider`                                | All operations            | Alternative Codex model provider.                                                         |
+| `repository` / `working_dir`                    | All operations            | Repository path. A `repository` eval variable is also accepted.                           |
+| `paths`                                         | Repository and deep scans | Repository-relative paths to assess.                                                      |
+| `base_ref`, `head_ref`, `working_tree`          | Diff scans                | Committed-ref or working-tree target selection.                                           |
+| `max_cost_usd`                                  | Scans                     | Estimated model-spend stopping threshold per scan; not a hard billing cap.                |
+| `workers`, `subagents`                          | Deep scans                | Positive worker count and nonnegative subagent count; zero subagents is valid.            |
+| `stop_after_no_new`, `max_discovery_runs`       | Deep scans                | Positive counts controlling when discovery stops.                                         |
+| `max_time_hours`                                | Deep scans                | Positive discovery time limit up to 96 hours; fractional hours are supported.             |
+| `scan_prompt`, `post_scan_prompt`               | Scans                     | Additional scan and follow-up instructions. Post-scan work is outside scan cost tracking. |
+| `validation_prompt`                             | Standard and diff scans   | Custom validation instructions; unsupported in deep mode.                                 |
+| `output_dir`                                    | All operations            | Private artifact directory outside the enclosing Git worktree.                            |
+| `archive_existing`                              | Scans                     | Archive existing output before starting a new scan; does not apply to validation.         |
+| `knowledge_base_paths`                          | Scans                     | Additional repository security context.                                                   |
+| `expected_plugin_version`                       | Scans                     | Require the specified bundled plugin version.                                             |
+| `failure_severity`                              | Scans                     | Record a severity threshold in the SDK recipe; does not itself fail a Promptfoo eval.     |
+| `auth`                                          | All operations            | `auto`, `chatgpt`, or `api-key`; automatic selection can prefer environment keys.         |
+| `plugin_path`, `python_path`, `codex_overrides` | All operations            | Security runtime configuration.                                                           |
+| `finding`, `finding_file`                       | Validation                | Candidate vulnerability text or a structured finding.                                     |
+
+Unset model, reasoning and deep-scan controls use the installed SDK's effective configuration. In SDK 0.1.31, the built-in model/effort defaults are `gpt-5.6-sol`/`xhigh`, and the deep discovery time limit defaults to 96 hours. Explicit provider settings and supported Codex overrides can change those defaults. Record the effective settings and SDK/plugin versions when comparing runs.
 
 ## Results, cost, and assertions
 
-Repository scans return `ScanResult.toJSON()` in `output`, including `manifest`, `findings`, `coverage`, artifact paths, and SDK cost data. Promptfoo also normalizes SDK-reported values into:
+Native repository scans return `ScanResult.toJSON()` in `output`, including `manifest`, `findings`, `coverage`, artifact paths, and SDK cost data. Imports retain that SDK-shaped JSON too. Native execution also reports standard Promptfoo token and cost metrics when the SDK supplies them.
 
-- `tokenUsage.prompt`, `tokenUsage.completion`, `tokenUsage.cached`, and `tokenUsage.total`.
-- `tokenUsage.completionDetails.reasoning`, `cacheReadInputTokens`, and `cacheCreationInputTokens` when reported.
-- `cost`, using the security SDK's `estimatedUsd` value.
-- `metadata.operation`, `metadata.mode`, `metadata.model`, `metadata.reasoningEffort`, `metadata.findingsCount`, `metadata.coverage`, artifact paths, warnings, SDK version, and plugin version.
-- `metadata.skillCalls` for native scan and finding-validation operation routing.
+`metadata.codexSecurity` is the versioned summary shared by native and saved-report results. Version 1 includes:
 
-Finding validation does not currently expose reliable token or cost totals, so the provider leaves those fields unset.
+| Field                                          | Meaning                                                                                                                                   |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `source`                                       | Native SDK or saved-report input; imported file path and SHA-256 identify the bytes read, not their authenticity.                         |
+| `operation`, `scanId`, `model`, `versions`     | Recorded scan/model identity and available SDK/plugin versions.                                                                           |
+| `target`, `scope`                              | Recorded source revision/snapshot and review scope.                                                                                       |
+| `status`, `coverage`, `findings`, `validation` | Execution status, coverage, current finding counts, or validation disposition. Missing findings remain unknown rather than becoming zero. |
+| `cost`, `usage`                                | Recorded cost baseline/range/pricing context and token usage; missing values remain `null`.                                               |
+| `elapsedMs`                                    | Duration from valid manifest start/end timestamps; never a substituted model-turn or file-read duration.                                  |
+| `diagnostics`                                  | Observed failure phase and warning availability; unknown diagnostics do not establish that no warnings occurred.                          |
+| `warnings`, `artifacts`                        | Observed warnings and references to files on the original host.                                                                           |
 
-Use [named assertion metrics](/docs/configuration/expected-outputs#assertion-properties) to compare finding recall, skill routing, scan coverage, latency, and spend in the web UI:
+Saved-report cost, token usage, and elapsed time describe the original operation. Import incurs no new model usage (`incurredCost: 0`); its historical measurements remain in `metadata.codexSecurity`. The import counts as one logical provider invocation with zero incurred provider requests. Grader calls made during the eval are accounted for separately. Generic import cost/latency must not be interpreted as scan measurements. The result summary relies on this normalized metadata, while the raw output remains available for evidence inspection.
+
+If you used the former flat provider metadata, migrate assertions to `metadata.codexSecurity`: `findingsCount` becomes `findings.total`, `sdkVersion`/`pluginVersion` become `versions.sdk`/`versions.plugin`, and `cost.estimatedUsd`/`cost.estimatedUsdRange` become `cost.baselineUsd`/`cost.range` (`minUsd`, `maxUsd`). `operation`, `model`, `coverage`, and `warnings` also move under this namespace; full deferred coverage details remain in the raw output. The SDK-shaped raw output is unchanged.
+
+Finding validation does not currently expose reliable token or cost totals, so the provider leaves those fields unset. Missing usage means unreported, not free.
+
+`max_cost_usd` stops work based on estimated model spend. In-flight requests can finish above it, and `post_scan_prompt` runs after cost tracking ends, outside that limit. SDK estimates use API-equivalent model pricing, not a ChatGPT subscription allowance. Inspect the estimated range when available rather than treating the baseline as an exact bill.
+
+Coverage can be `complete`, `partial`, or `unknown`. A result with zero findings and incomplete coverage is not evidence of a clean repository. Current-run findings are in `findings.findings`; `repositoryFindings` can also contain earlier open findings. A Promptfoo pass reflects the assertions you configured. Add an explicit severity assertion if you need a severity gate: `failure_severity` alone only records SDK policy.
+
+Use [named assertion metrics](/docs/configuration/expected-outputs#assertion-properties) to expose explicit checks in the comparison table. For example, require complete coverage:
 
 ```yaml
-tests:
-  - description: Finds known application vulnerabilities
-    vars:
-      expectedFindings: command injection,authentication bypass
-    assert:
-      - type: is-json
-      - type: skill-used
-        value:
-          pattern: '*security-scan'
-        metric: SecuritySkill
-      - type: javascript
-        metric: FindingRecall
-        value: |
-          const scan = JSON.parse(output);
-          const findings = scan.findings?.findings ?? [];
-          const found = findings
-            .map((finding) => `${finding.title ?? ''} ${finding.summary ?? ''}`.toLowerCase())
-            .join(' ');
-          const expected = context.vars.expectedFindings.split(',').map((value) => value.trim());
-          const matches = expected.filter((value) => found.includes(value.toLowerCase()));
-          const recall = matches.length / expected.length;
-          return {
-            pass: recall >= 0.5,
-            score: recall,
-            reason: `Found ${matches.length} of ${expected.length} expected vulnerability classes`,
-          };
-      - type: javascript
-        metric: CompleteCoverage
-        value: context.providerResponse?.metadata?.coverage?.completeness === 'complete'
-      - type: cost
-        threshold: 2
-        metric: ScanCost
-      - type: latency
-        threshold: 3600000
-        metric: ScanLatency
+assert:
+  - type: javascript
+    metric: CompleteCoverage
+    value: context.providerResponse?.metadata?.codexSecurity?.coverage?.completeness === 'complete'
 ```
 
-`cost` assertions require a native scan that reports estimated spend; do not use them for finding validation when the SDK omits usage. Finding output and stored artifacts may include sensitive source-code excerpts; configure Promptfoo retention and sharing accordingly.
+This checks reported coverage, not detection accuracy. For recall and precision, define curated expected findings and adjudicate matches using source locations and evidence. Title/summary keyword matching alone can miss equivalent wording or count a passing mention. See the [comparison guide](/docs/guides/codex-security-results) for metric definitions and limitations.
+
+`cost` assertions apply to native execution with a reported estimate; do not use them to compare imported historical spend or finding validation when usage is unreported. Finding output and stored artifacts may include sensitive source-code excerpts; configure Promptfoo retention and sharing accordingly.
 
 ## Troubleshooting
 
-- **Zero findings with partial coverage:** Inspect `metadata.warnings`, `metadata.coverage.deferred`, and `coverage.json`. Discarded findings or malformed evidence references indicate an incomplete scan, not a clean repository.
+- **Zero findings with partial coverage:** Inspect `metadata.codexSecurity.warnings`, the raw output's `coverage.deferred`, and `coverage.json`. Discarded findings or malformed evidence references indicate an incomplete scan, not a clean repository.
 - **Deep scan cost appears too low:** Install SDK version `0.1.31` or newer. SDKs before `0.1.18` can omit independently launched discovery and deduplication workers from token and cost totals.
 - **SDK fails to load:** Install Promptfoo and the SDK together, and use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0`.
+- **Python is unavailable:** Install Python 3.10+ (`tomli` is also required on 3.10), or point `python_path` at the supported interpreter. A successful local preflight does not verify Python or model access.
 - **Authentication or access fails:** Sign in with Codex or set `OPENAI_API_KEY` / `CODEX_API_KEY`; confirm that the account has the required Codex Security and Trusted Access permissions.
-- **Output directory is rejected:** Choose an artifact directory outside the target repository, and use a distinct directory for each provider or eval row.
+- **Output directory is rejected:** Choose a private directory outside the target and its enclosing Git worktree, with trusted ownership and permissions. Use a distinct directory for each provider or eval row; validation requires an empty output directory.
 - **Diff scan fails:** Set `base_ref`, or use `working_tree: true`; do not combine `working_tree` with `head_ref`.
 
 ## Related documentation
+
+- [Evaluate a vulnerability-finding harness](/docs/guides/codex-security-results)
+- [Official Codex Security SDK](https://learn.chatgpt.com/docs/security/sdk)
+- [Codex Security authentication and troubleshooting](https://learn.chatgpt.com/docs/security/cli/faq)
 
 - [OpenAI provider](./openai.md)
 - [OpenAI Codex SDK](./openai-codex-sdk.md)

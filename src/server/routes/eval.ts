@@ -6,7 +6,9 @@ import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
+import { resolveProviderConfigs } from '../../providers/index';
 import { EvalSchemas } from '../../types/api/eval';
+import { isCloudProvider } from '../../util/cloud';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import {
   ComparisonEvalNotFoundError,
@@ -17,6 +19,7 @@ import {
   mergeComparisonTables,
 } from '../../util/eval/evalTableUtils';
 import invariant from '../../util/invariant';
+import { isProviderConfigFileReference, normalizeProviderRef } from '../../util/providerRef';
 import {
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
@@ -180,6 +183,9 @@ evalRouter.post('/job', async (req: Request, res: Response): Promise<void> => {
     {
       ...evaluateOptions,
       eventSource: 'web',
+      providerProgressCallback: (progress, completed) => {
+        evalJobService.setProviderProgress(id, progress, completed);
+      },
       progressCallback: (progress: number, total: number) => {
         invariant(evalJobService.setProgress(id, progress, total), 'Job not found');
         console.log(`[${id}] ${progress}/${total}`);
@@ -239,6 +245,7 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
         status: 'in-progress',
         progress: job.progress,
         total: job.total,
+        ...(job.providerProgress && { providerProgress: job.providerProgress }),
         logs: job.logs,
       }),
     );
@@ -597,6 +604,27 @@ evalRouter.post('/:id/results', async (req: Request, res: Response) => {
   res.status(204).send();
 });
 
+function getReplayProviderError(provider: unknown): string | undefined {
+  const reference = normalizeProviderRef(provider);
+  const providerPath = 'loadProviderPath' in reference ? reference.loadProviderPath : undefined;
+  if (
+    providerPath === 'openai:codex-security' ||
+    providerPath?.startsWith('openai:codex-security:')
+  ) {
+    return 'Codex Security does not support prompt-only replay. Rerun using the eval configuration to preserve operation and report settings.';
+  }
+  if (
+    reference.kind === 'unknown' ||
+    (providerPath &&
+      (isProviderConfigFileReference(providerPath) ||
+        isCloudProvider(providerPath) ||
+        /\{[{%]/.test(providerPath)))
+  ) {
+    return 'Cannot identify the replay provider safely. Rerun using the eval configuration.';
+  }
+  return undefined;
+}
+
 evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> => {
   const bodyResult = EvalSchemas.Replay.Request.safeParse(req.body);
   if (!bodyResult.success) {
@@ -638,6 +666,35 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
       providerConfig = providers;
     }
 
+    // A prompt-only replay cannot preserve security operation inputs or saved-report
+    // overrides. Inspect config references without instantiating any provider, and
+    // retain expanded file configs so evaluation cannot reread a different target.
+    let replayProviders;
+    try {
+      replayProviders = resolveProviderConfigs([providerConfig]);
+    } catch (error) {
+      sendError(
+        res,
+        400,
+        'Cannot resolve the replay provider. Rerun using the eval configuration.',
+        error,
+      );
+      return;
+    }
+    if (!Array.isArray(replayProviders) || replayProviders.length === 0) {
+      res
+        .status(400)
+        .json({ error: 'Cannot resolve the replay provider. Rerun using the eval configuration.' });
+      return;
+    }
+    for (const replayProvider of replayProviders) {
+      const replayError = getReplayProviderError(replayProvider);
+      if (replayError) {
+        res.status(400).json({ error: replayError });
+        return;
+      }
+    }
+
     // Run the prompt through the provider
     const result = await evaluateWithSource(
       {
@@ -647,7 +704,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
             label: 'Replay', // Add required label field
           },
         ],
-        providers: [providerConfig],
+        providers: replayProviders,
         tests: [
           {
             vars: (variables || {}) as Vars,

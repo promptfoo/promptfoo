@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { EvalProviderProgressSchema } from '../../contracts/providers';
 import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
 import { EmailSchema, MessageResponseSchema } from './common';
 
@@ -170,6 +171,7 @@ export const GetJobResponseSchema = z.discriminatedUnion('status', [
     progress: z.number(),
     total: z.number(),
     logs: z.array(z.string()),
+    providerProgress: z.array(EvalProviderProgressSchema).max(100).optional(),
   }),
   z.object({
     status: z.literal('complete'),

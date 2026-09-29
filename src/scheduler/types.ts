@@ -11,12 +11,16 @@ import type { ProviderResponse } from '../types/providers';
  * Used by RateLimitRegistry.execute() and provider wrappers.
  */
 export interface RateLimitExecuteOptions<T> {
+  /** Execute outside the shared rate-limit queue and state. Fetch retry context is still preserved. */
+  skipRateLimit?: boolean;
   /** Extract rate limit headers from the result */
   getHeaders?: (result: T) => Record<string, string> | undefined;
   /** Detect if the result indicates a rate limit */
   isRateLimited?: (result: T | undefined, error?: Error) => boolean;
   /** Extract retry-after delay from result or error */
   getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
+  /** Whether this result is evidence for adaptive concurrency recovery. Defaults to true. */
+  shouldRecoverConcurrency?: (result: T) => boolean;
   /** Preserve a structured failure result when retries are exhausted. Defaults to throwing. */
   onRateLimitExhausted?: (result: T, error: Error) => T;
 }
@@ -36,8 +40,9 @@ export function isProviderResponseRateLimited(
   result: ProviderResponse | undefined,
   error: Error | undefined,
 ): boolean {
-  // Respect explicit rate-limit policy decisions as well as hard quotas.
+  // Local responses and explicit policy decisions must not trigger retries.
   if (
+    result?.retryable === false ||
     result?.metadata?.rateLimitRetryable === false ||
     result?.metadata?.rateLimitKind === 'quota'
   ) {
