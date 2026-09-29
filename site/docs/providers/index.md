@@ -119,6 +119,7 @@ providers:
 | [Simulated User](./simulated-user.md)                   | Custom - Conversation simulator                                  | `promptfoo:simulated-user`                                                                                            |
 | [WatsonX](./watsonx.md)                                 | IBM's WatsonX                                                    | `watsonx:ibm/granite-4-h-small`                                                                                       |
 | [X.AI](./xai.md)                                        | X.AI's models (text, image, video, voice)                        | `xai:grok-4.3`, `xai:image:grok-imagine-image`, `xai:video:grok-imagine-video`, `xai:voice:grok-voice-think-fast-2.0` |
+| [Y-API](./yapi.md)                                      | OpenAI-compatible gateway for Claude, GPT, DeepSeek and more     | `y-api:deepseek/deepseek-v4-pro`, `y-api:anthropic/claude-sonnet-5`                                                   |
 
 ## Provider Syntax
 

@@ -1658,6 +1658,21 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('y-api:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createYApiProvider } = await import('./yapi');
+      return createYApiProvider(providerPath, {
+        config: providerOptions.config,
+        id: providerOptions.id,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath === 'browser',
     create: async (
       providerPath: string,
