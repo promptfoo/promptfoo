@@ -37,8 +37,6 @@ export function getRiskCategorySeverityMap(
 
 export function getTargetForExecution(provider: ProviderOptions): ProviderOptions {
   const target = { ...provider, config: { ...provider.config } };
-  delete target.config.sessionSource;
-  delete target.config.stateful;
 
   // Keep certificate data while removing the setup form's input state.
   if (target.config.tls) {
@@ -71,6 +69,8 @@ export function getUnifiedConfig(
   config: SavedRedteamConfig,
 ): UnifiedConfig & { redteam: NonNullable<UnifiedConfig['redteam']> } {
   const target = getTargetForExecution(config.target);
+  delete target.config!.sessionSource;
+  delete target.config!.stateful;
   const defaultTest = {
     ...(config.defaultTest ?? {}),
     options: {

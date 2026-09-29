@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Severity } from '../../src/redteam/constants';
-import { getRiskCategorySeverityMap, getUnifiedConfig } from '../../src/redteam/sharedFrontend';
+import {
+  getRiskCategorySeverityMap,
+  getTargetForExecution,
+  getUnifiedConfig,
+} from '../../src/redteam/sharedFrontend';
 
 import type { Plugin } from '../../src/redteam/constants';
 import type { SavedRedteamConfig } from '../../src/redteam/types';
@@ -124,6 +128,25 @@ describe('getRiskCategorySeverityMap', () => {
 
     expect(result['contracts']).toBe(Severity.High);
     expect(result['should-not-be-added' as Plugin]).toBeUndefined();
+  });
+});
+
+describe('getTargetForExecution', () => {
+  it('preserves provider options while removing TLS form fields', () => {
+    const provider = {
+      id: 'openai:chatkit',
+      config: {
+        stateful: true,
+        sessionSource: 'provider-owned',
+        tls: { rejectUnauthorized: true, ca: 'test-ca', caInputType: 'upload' },
+      },
+    };
+
+    expect(getTargetForExecution(provider)).toEqual({
+      ...provider,
+      config: { ...provider.config, tls: { rejectUnauthorized: true, ca: 'test-ca' } },
+    });
+    expect(provider.config.tls.caInputType).toBe('upload');
   });
 });
 

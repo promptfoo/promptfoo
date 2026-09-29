@@ -160,6 +160,23 @@ describe('testProviderConnectivity', () => {
     expect(mockEvaluate).toHaveBeenCalled();
   });
 
+  it.each([
+    { jksContent: 'inert-keystore', passphrase: 'inert-password' },
+    { cert: 'inert-certificate', key: 'inert-key' },
+    { pfx: 'inert-bundle', passphrase: 'inert-password' },
+  ])('keeps TLS credentials local during connectivity analysis: %j', async (tls) => {
+    const provider = createMockProvider({ config: { method: 'POST', tls } });
+
+    const result = await testProviderConnectivity({ provider });
+
+    expect(result.success).toBe(true);
+    expect(mockEvaluate.mock.calls[0][0].providers[0].config.tls).toBe(tls);
+    expect(provider.config?.tls).toBe(tls);
+    const body = JSON.parse(mockFetchWithProxy.mock.calls[0][1].body);
+    expect(body.config).toEqual({ method: 'POST' });
+    expect(body.parsedResponse).toBe('Hello! How can I help you?');
+  });
+
   it('should use custom prompt when provided', async () => {
     const provider = createMockProvider();
     await testProviderConnectivity({ provider, prompt: 'Custom prompt' });

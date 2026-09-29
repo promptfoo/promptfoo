@@ -157,6 +157,10 @@ export async function testProviderConnectivity({
         providerId: provider.id,
       });
 
+      // TLS credentials are used locally and are not needed to analyze the response.
+      const analysisConfig = { ...provider.config };
+      delete analysisConfig.tls;
+
       const testAnalyzerResponse = await fetchWithProxy(`${HOST}/api/v1/providers/test`, {
         method: 'POST',
         headers: {
@@ -164,7 +168,7 @@ export async function testProviderConnectivity({
           ...(cloudConfig.getAuthHeaders() ?? {}),
         },
         body: JSON.stringify({
-          config: provider.config,
+          config: analysisConfig,
           providerResponse: result.response?.raw,
           parsedResponse: result.response?.output,
           error: result.error,
