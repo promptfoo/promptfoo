@@ -3,8 +3,7 @@ import { AnthropicMessagesProvider } from './messages';
 import type { EnvOverrides } from '../../types/env';
 import type { DefaultProviders, ProviderResponse } from '../../types/index';
 
-// Default model for all default providers. It must accept the forced `tool_choice` that the
-// llm-rubric grader below depends on.
+// Must support the rubric grader's forced tool_choice.
 export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-5';
 
 /**
@@ -41,11 +40,6 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
     super(modelName, {
       env,
       config: {
-        // This provider machine-parses its own output with JSON.parse, so never let
-        // rendered thinking text into it. Current models return an empty thinking block
-        // under the default `display: 'omitted'` and emit none at all under a forced
-        // tool_choice, but the parse should not depend on either staying true.
-        showThinking: false,
         tool_choice: { type: 'tool', name: 'grade_output' },
         tools: [
           {
@@ -72,6 +66,8 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
           },
         ],
         ...config,
+        // Keep the tool-use JSON parseable even if the caller enables thinking display.
+        showThinking: false,
       },
     });
   }
@@ -122,13 +118,10 @@ const webSearchProviderFactory = createLazyProvider(
       config: {
         tools: [
           {
-            // Current web search variant (dynamic filtering). Supported on Sonnet 5,
-            // Sonnet 4.6, and Opus 4.6+; `web_search_20250305` is the older basic
-            // variant kept for pre-4.6 models and Vertex.
             type: 'web_search_20260209',
             name: 'web_search',
             max_uses: 5,
-          } as any,
+          },
         ],
       },
     }),

@@ -799,8 +799,177 @@ describe('Anthropic utilities', () => {
       expect(outputFromMessage(message, true)).toBe('Final answer');
     });
 
-    // Claude 5 models think by default, which routes web search responses through the
-    // tool-aware branch; the search blocks must not end up ahead of the answer.
+    it.each([true, false])(
+      'should preserve file references with showThinking=%s',
+      (showThinking) => {
+        const file = { type: 'container_upload', file_id: 'file_report' } as const;
+        const message = {
+          content: [
+            { type: 'thinking', thinking: '', signature: 'abc123' },
+            { type: 'text', text: 'Created the report.', citations: null },
+            file,
+          ],
+        } as Anthropic.Messages.Message;
+
+        expect(outputFromMessage(message, showThinking)).toBe(
+          `Created the report.\n\n${JSON.stringify(file)}`,
+        );
+      },
+    );
+
+    it.each([true, false])(
+      'should preserve paused tool steps with showThinking=%s',
+      (showThinking) => {
+        const toolBlocks: Anthropic.Messages.ContentBlock[] = [
+          {
+            type: 'server_tool_use',
+            id: 'srvtoolu_1',
+            name: 'web_search',
+            input: {},
+            caller: { type: 'direct' },
+          },
+          {
+            type: 'web_search_tool_result',
+            tool_use_id: 'srvtoolu_1',
+            content: [],
+            caller: { type: 'direct' },
+          },
+        ];
+        const message = {
+          content: [{ type: 'thinking', thinking: '', signature: 'abc123' }, ...toolBlocks],
+          stop_reason: 'pause_turn',
+        } as Anthropic.Messages.Message;
+
+        expect(outputFromMessage(message, showThinking)).toBe(
+          toolBlocks.map((block) => JSON.stringify(block)).join('\n\n'),
+        );
+      },
+    );
+
+    it.each([
+      {
+        type: 'bash_code_execution_tool_result',
+        tool_use_id: 'srvtoolu_bash',
+        content: {
+          type: 'bash_code_execution_result',
+          stdout: 'Execution log',
+          stderr: 'Execution warning',
+          return_code: 0,
+          content: [
+            { type: 'bash_code_execution_output', file_id: 'file_report' },
+            { type: 'bash_code_execution_output', file_id: 'file_chart' },
+          ],
+        },
+      },
+      {
+        type: 'code_execution_tool_result',
+        tool_use_id: 'srvtoolu_python',
+        content: {
+          type: 'code_execution_result',
+          stdout: 'Execution log',
+          stderr: 'Execution warning',
+          return_code: 0,
+          content: [
+            { type: 'code_execution_output', file_id: 'file_report' },
+            { type: 'code_execution_output', file_id: 'file_chart' },
+          ],
+        },
+      },
+      {
+        type: 'code_execution_tool_result',
+        tool_use_id: 'srvtoolu_encrypted',
+        content: {
+          type: 'encrypted_code_execution_result',
+          encrypted_stdout: 'Encrypted search payload',
+          stderr: 'Execution warning',
+          return_code: 0,
+          content: [
+            { type: 'code_execution_output', file_id: 'file_report' },
+            { type: 'code_execution_output', file_id: 'file_chart' },
+          ],
+        },
+      },
+    ] satisfies Anthropic.Messages.ContentBlock[])(
+      'should preserve generated files from $content.type without execution payloads',
+      (result) => {
+        const message = {
+          content: [
+            { type: 'thinking', thinking: '', signature: 'abc123' },
+            result,
+            { type: 'text', text: 'Created the report and chart.', citations: null },
+          ],
+          stop_reason: 'end_turn',
+        } as Anthropic.Messages.Message;
+        const fileType =
+          result.type === 'bash_code_execution_tool_result'
+            ? 'bash_code_execution_output'
+            : 'code_execution_output';
+        const expected =
+          `{"type":"${fileType}","file_id":"file_report"}\n\n` +
+          `{"type":"${fileType}","file_id":"file_chart"}\n\nCreated the report and chart.`;
+
+        expect(outputFromMessage(message, true)).toBe(expected);
+        expect(outputFromMessage(message, false)).toBe(expected);
+      },
+    );
+
+    it.each([
+      {
+        type: 'bash_code_execution_tool_result',
+        tool_use_id: 'srvtoolu_bash',
+        content: {
+          type: 'bash_code_execution_result',
+          stdout: 'Execution log',
+          stderr: '',
+          return_code: 0,
+          content: [],
+        },
+      },
+      {
+        type: 'code_execution_tool_result',
+        tool_use_id: 'srvtoolu_python',
+        content: {
+          type: 'code_execution_result',
+          stdout: 'Execution log',
+          stderr: '',
+          return_code: 0,
+          content: [],
+        },
+      },
+      {
+        type: 'code_execution_tool_result',
+        tool_use_id: 'srvtoolu_encrypted',
+        content: {
+          type: 'encrypted_code_execution_result',
+          encrypted_stdout: 'Encrypted search payload',
+          stderr: '',
+          return_code: 0,
+          content: [],
+        },
+      },
+      {
+        type: 'bash_code_execution_tool_result',
+        tool_use_id: 'srvtoolu_bash_error',
+        content: { type: 'bash_code_execution_tool_result_error', error_code: 'unavailable' },
+      },
+      {
+        type: 'code_execution_tool_result',
+        tool_use_id: 'srvtoolu_python_error',
+        content: { type: 'code_execution_tool_result_error', error_code: 'unavailable' },
+      },
+    ] satisfies Anthropic.Messages.ContentBlock[])(
+      'should omit completed $content.type without generated files',
+      (result) => {
+        const message = {
+          content: [result, { type: 'text', text: '{"pass": true}', citations: null }],
+          stop_reason: 'end_turn',
+        } as Anthropic.Messages.Message;
+
+        expect(outputFromMessage(message, false)).toBe('{"pass": true}');
+      },
+    );
+
+    // The search blocks must not end up ahead of a completed answer, even with thinking.
     it('should omit server tool blocks when thinking is present', () => {
       const message = {
         content: [
@@ -1601,8 +1770,6 @@ describe('Anthropic utilities', () => {
       expect(requiredBetaFeatures).toEqual([]);
     });
 
-    // The 2026-03-18 variants add `response_inclusion`, which lets a caller drop the
-    // nested server_tool_use/result pair so large fetched pages stay out of the transcript.
     it('should process web_fetch_20260318 tool with response_inclusion', () => {
       const tool: WebFetchToolConfig20260318 = {
         type: 'web_fetch_20260318',
@@ -1645,19 +1812,18 @@ describe('Anthropic utilities', () => {
       expect(requiredBetaFeatures).toEqual([]);
     });
 
-    // `response_inclusion` only exists on the 2026-03-18 variants, so the older specs must
-    // drop it rather than forward a field the API does not accept on that version.
-    // url_sources limits which URLs web_fetch may load, so dropping it silently widens access.
+    // Dropping url_sources would silently widen the set of fetchable URLs.
     it.each([
       'web_fetch_20250910',
       'web_fetch_20260209',
       'web_fetch_20260309',
       'web_fetch_20260318',
-    ])('forwards url_sources on %s', (type) => {
-      const url_sources = { user_input: 'none', server_tool_results: 'all' };
-      const { processedTools } = processAnthropicTools([
-        { type, name: 'web_fetch', url_sources } as any,
-      ]);
+    ] as const)('forwards url_sources on %s', (type) => {
+      const url_sources: Anthropic.Messages.WebFetchURLSources = {
+        user_input: { type: 'none' },
+        server_tool_results: { type: 'all' },
+      };
+      const { processedTools } = processAnthropicTools([{ type, name: 'web_fetch', url_sources }]);
       expect(processedTools[0]).toMatchObject({ url_sources });
     });
 

@@ -340,6 +340,26 @@ describe('webSearchUtils', () => {
       },
     );
 
+    it.each([
+      'web_search',
+      'web_search_',
+      'web_search_preview',
+      'web_search_2026020',
+      'web_search_202602099',
+      'web_search_20260209_extra',
+      undefined,
+      null,
+    ])('should reject invalid Anthropic web search tool type %s', (toolType) => {
+      const provider: Partial<ApiProvider> = {
+        id: () => 'anthropic:messages:claude-opus-5',
+        config: {
+          tools: [{ type: toolType, name: 'web_search' }],
+        },
+      };
+
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
+    });
+
     it('should return false for Anthropic provider without web_search tool', () => {
       const provider: Partial<ApiProvider> = {
         id: () => 'anthropic:messages:claude-opus-4-6',

@@ -622,8 +622,7 @@ export function outputFromMessage(message: Anthropic.Messages.Message, showThink
   let previousBlockWasText = false;
   for (const block of message.content) {
     if (block.type === 'text') {
-      // Citations split one passage into adjacent text blocks, often mid-sentence or
-      // mid-table-row, so adjacent blocks are concatenated exactly as the model wrote them.
+      // Citation boundaries can split a sentence or table row across text blocks.
       if (previousBlockWasText) {
         segments[segments.length - 1] += block.text;
       } else {
@@ -637,12 +636,25 @@ export function outputFromMessage(message: Anthropic.Messages.Message, showThink
       segments.push(`Thinking: ${block.thinking}\nSignature: ${block.signature}`);
     } else if (block.type === 'redacted_thinking' && showThinking) {
       segments.push(`Redacted Thinking: ${block.data}`);
-    } else if (block.type === 'tool_use') {
+    } else if (
+      block.type === 'tool_use' ||
+      block.type === 'container_upload' ||
+      (message.stop_reason === 'pause_turn' &&
+        block.type !== 'thinking' &&
+        block.type !== 'redacted_thinking')
+    ) {
       segments.push(JSON.stringify(block));
+    } else if (
+      (block.type === 'code_execution_tool_result' ||
+        block.type === 'bash_code_execution_tool_result') &&
+      'content' in block.content
+    ) {
+      // Keep generated files without including execution logs or encrypted payloads.
+      for (const file of block.content.content) {
+        segments.push(JSON.stringify({ type: file.type, file_id: file.file_id }));
+      }
     }
-    // Server-executed tool blocks (web search/fetch, code execution) are intermediate steps
-    // the text already answers. Serializing them buried that answer under large encrypted
-    // payloads, which broke JSON verdict parsing on thinking models.
+    // Omit other completed server-tool blocks so they cannot obscure the answer.
   }
   return segments.filter((segment) => segment !== '').join('\n\n');
 }
@@ -921,11 +933,7 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   return {};
 }
 
-/**
- * Config fields copied onto the SDK tool object, in the order they are written. Order is
- * significant only in that it fixes the key order of the emitted object; the `satisfies`
- * clauses keep these lists honest against the config interfaces.
- */
+// Fields forwarded to each server-tool version.
 const WEB_FETCH_FIELDS = [
   'allowed_callers',
   'max_uses',
@@ -971,8 +979,7 @@ type UnforwardedToolFields<Tool, Fields extends readonly string[]> = Exclude<
   'name' | 'type' | Fields[number]
 >;
 
-// Fails to type-check, naming the field, when an SDK upgrade adds a server tool field that
-// the matching list does not forward, such as `url_sources`, which restricts fetchable URLs.
+// Fail type-checking if an SDK update adds a field these lists would silently drop.
 type _ServerToolFieldsAreForwarded<T extends never> = T;
 type _AllServerToolFieldsForwarded = _ServerToolFieldsAreForwarded<
   | UnforwardedToolFields<Anthropic.Messages.WebFetchTool20250910, typeof WEB_FETCH_FIELDS>
