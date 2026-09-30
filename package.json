@@ -301,6 +301,7 @@
     "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.11.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/server-filesystem": "2026.8.31",
     "@openai/codex-sdk": "^0.156.1",
     "@opencode-ai/sdk": "^1.18.31",
     "@slack/web-api": "^8.1.1",
