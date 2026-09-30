@@ -9,6 +9,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
+import { pathToFileURL } from 'url';
 
 import { FilesystemBlobStorageProvider } from '../blobs/filesystemProvider';
 import logger from '../logger';
@@ -38,8 +39,7 @@ function computeHash(data: Buffer): string {
 export class LocalFileSystemProvider implements MediaStorageProvider {
   readonly providerId = 'local';
   private basePath: string;
-  private hashIndexPath: string;
-  private hashIndex: ReadonlyMap<string, string> = new Map();
+  private readonly hashIndex: ReadonlyMap<string, string>;
   private blobProvider?: FilesystemBlobStorageProvider;
 
   private get blobs(): FilesystemBlobStorageProvider {
@@ -56,9 +56,8 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
 
   constructor(config: LocalStorageConfig = {}) {
     this.basePath = config.basePath || path.join(getConfigDirectoryPath(true), MEDIA_SUBDIR);
-    this.hashIndexPath = path.join(this.basePath, HASH_INDEX_FILE);
     this.ensureDirectory();
-    this.loadHashIndex();
+    this.hashIndex = this.loadHashIndex();
   }
 
   /**
@@ -74,18 +73,20 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   /**
    * Load legacy lookup entries without rewriting the index. New writes use blob paths.
    */
-  private loadHashIndex(): void {
+  private loadHashIndex(): ReadonlyMap<string, string> {
+    const indexPath = path.join(this.basePath, HASH_INDEX_FILE);
     try {
-      if (fs.existsSync(this.hashIndexPath)) {
-        const data = fs.readFileSync(this.hashIndexPath, 'utf8');
+      if (fs.existsSync(indexPath)) {
+        const data = fs.readFileSync(indexPath, 'utf8');
         const parsed = JSON.parse(data);
-        this.hashIndex = new Map(Object.entries(parsed));
-        logger.debug(`[LocalStorage] Loaded hash index with ${this.hashIndex.size} entries`);
+        const index = new Map<string, string>(Object.entries(parsed));
+        logger.debug(`[LocalStorage] Loaded hash index with ${index.size} entries`);
+        return index;
       }
     } catch (error) {
       logger.warn(`[LocalStorage] Failed to load hash index, starting fresh`, { error });
-      this.hashIndex = new Map();
     }
+    return new Map();
   }
 
   /**
@@ -219,7 +220,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
         ? this.blobs.getFilePath(this.blobHash(key))
         : this.getFilePath(key);
       await fsPromises.access(filePath);
-      return `file://${filePath}`;
+      return pathToFileURL(filePath).href;
     } catch {
       return null;
     }

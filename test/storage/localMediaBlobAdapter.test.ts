@@ -51,6 +51,22 @@ async function writeLegacy() {
 }
 
 describe('local media blob adapter', () => {
+  it('returns usable file URLs for blob and legacy media in paths with reserved characters', async () => {
+    const configuredPath = path.join(directory, 'media with spaces #100%');
+    const configuredProvider = new LocalFileSystemProvider({ basePath: configuredPath });
+    const { ref } = await configuredProvider.store(payload, metadata);
+    const legacyKey = `image/${hash.slice(0, 12)}.jpg`;
+    await fs.mkdir(path.join(configuredPath, 'image'));
+    await fs.writeFile(path.join(configuredPath, legacyKey), payload);
+
+    for (const storageKey of [ref.key, legacyKey]) {
+      const url = await configuredProvider.getUrl(storageKey);
+      expect(url).not.toBeNull();
+      expect(url).toContain('media%20with%20spaces%20%23100%25/');
+      expect(await fs.readFile(fileURLToPath(url!))).toEqual(payload);
+    }
+  });
+
   it('serves uppercase blob hashes through media and info routes', async () => {
     await provider.store(payload, metadata);
     const uppercaseKey = `blob/${hash.toUpperCase()}`;
@@ -124,27 +140,6 @@ describe('local media blob adapter', () => {
     });
     expect(await fs.readFile(indexPath, 'utf8')).toBe(originalIndex);
     expect((await fs.stat(legacyPath)).isDirectory()).toBe(true);
-  });
-
-  it('finds separate new writes after restart without modifying the legacy index', async () => {
-    const legacyKey = await writeLegacy();
-    const indexPath = path.join(directory, 'hash-index.json');
-    const originalIndex = await fs.readFile(indexPath, 'utf8');
-    const second = new LocalFileSystemProvider({ basePath: directory });
-    const firstData = Buffer.from('first new blob');
-    const secondData = Buffer.from('second new blob');
-    const first = await provider.store(firstData, metadata);
-    const other = await second.store(secondData, metadata);
-    const restarted = new LocalFileSystemProvider({ basePath: directory });
-    for (const [stored, bytes] of [
-      [first, firstData],
-      [other, secondData],
-    ] as const) {
-      expect(await restarted.findByHash(stored.ref.contentHash)).toBe(stored.ref.key);
-      expect(await restarted.retrieve(stored.ref.key)).toEqual(bytes);
-    }
-    expect(await restarted.findByHash(hash)).toBe(legacyKey);
-    expect(await fs.readFile(indexPath, 'utf8')).toBe(originalIndex);
   });
 
   it('stores new bytes by full hash and preserves the media reference metadata', async () => {

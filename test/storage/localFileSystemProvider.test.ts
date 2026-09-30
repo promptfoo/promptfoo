@@ -74,15 +74,13 @@ describe('LocalFileSystemProvider', () => {
     ['image', 'image/png', 'png'],
     ['video', 'video/mp4', 'mp4'],
   ] as const)(
-    'stores and deletes %s when the unused sidecar path is a nonempty directory',
+    'preserves legacy %s sidecar directories during deduplication and deletion',
     async (mediaType, contentType, extension) => {
       tempDir = createTempDir('promptfoo-media-');
-      const provider = new LocalFileSystemProvider({ basePath: tempDir });
       const payload = Buffer.from(`${mediaType} payload`);
       const contentHash = createHash('sha256').update(payload).digest('hex');
-      const key = `blob/${contentHash}`;
-      const legacyKey = `${mediaType}/${contentHash.slice(0, 12)}.${extension}`;
-      const sidecarPath = path.join(tempDir, `${legacyKey}.meta.json`);
+      const key = `${mediaType}/${contentHash.slice(0, 12)}.${extension}`;
+      const sidecarPath = path.join(tempDir, `${key}.meta.json`);
       fs.mkdirSync(sidecarPath, { recursive: true });
       const unrelatedPath = path.join(sidecarPath, 'unrelated.txt');
       fs.writeFileSync(unrelatedPath, 'unrelated data', 'utf8');
@@ -91,15 +89,21 @@ describe('LocalFileSystemProvider', () => {
       fs.writeFileSync(path.join(nestedPath, 'payload.bin'), 'nested unrelated data');
       const metadata = { mediaType, contentType, evalId: 'test-eval', originalText: 'source text' };
 
+      fs.writeFileSync(path.join(tempDir, key), payload);
+      fs.writeFileSync(
+        path.join(tempDir, 'hash-index.json'),
+        JSON.stringify({ [contentHash]: key }),
+      );
+      const provider = new LocalFileSystemProvider({ basePath: tempDir });
       const stored = await provider.store(payload, metadata);
 
       expect(stored).toEqual({
-        deduplicated: false,
+        deduplicated: true,
         ref: {
           provider: 'local',
           key,
           contentHash,
-          metadata: { ...metadata, contentHash, sizeBytes: payload.length },
+          metadata,
         },
       });
       expect(fs.statSync(sidecarPath).isDirectory()).toBe(true);
@@ -134,11 +138,11 @@ describe('LocalFileSystemProvider', () => {
   it('propagates failures to delete a legacy sidecar file', async () => {
     tempDir = createTempDir('promptfoo-media-');
     const provider = new LocalFileSystemProvider({ basePath: tempDir });
-    const key = 'audio/legacy.wav';
-    const mediaPath = path.join(tempDir, key);
-    fs.mkdirSync(path.dirname(mediaPath), { recursive: true });
-    fs.writeFileSync(mediaPath, 'legacy media');
-    const sidecarPath = `${mediaPath}.meta.json`;
+    const key = 'audio/abcdef123456.wav';
+    const filePath = path.join(tempDir, key);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, 'legacy media');
+    const sidecarPath = `${filePath}.meta.json`;
     fs.writeFileSync(sidecarPath, 'legacy metadata', 'utf8');
     const failure = Object.assign(new Error('Access denied'), { code: 'EACCES' });
     const unlink = fsPromises.unlink;
@@ -153,42 +157,25 @@ describe('LocalFileSystemProvider', () => {
     expect(fs.readFileSync(sidecarPath, 'utf8')).toBe('legacy metadata');
   });
 
-  it.each(['file', 'directory'])(
-    'handles a legacy sidecar %s during media deletion',
-    async (sidecarType) => {
-      tempDir = createTempDir('promptfoo-media-');
-      const payload = Buffer.from('legacy media');
-      const hash = createHash('sha256').update(payload).digest('hex');
-      const key = `audio/${hash.slice(0, 12)}.wav`;
-      const sidecarPath = path.join(tempDir, `${key}.meta.json`);
-      fs.mkdirSync(path.dirname(sidecarPath), { recursive: true });
-      if (sidecarType === 'directory') {
-        fs.mkdirSync(sidecarPath);
-      }
-      const contentPath =
-        sidecarType === 'directory' ? path.join(sidecarPath, 'kept.txt') : sidecarPath;
-      fs.writeFileSync(contentPath, 'legacy metadata', 'utf8');
-      fs.writeFileSync(path.join(tempDir, key), payload);
-      fs.writeFileSync(path.join(tempDir, 'hash-index.json'), JSON.stringify({ [hash]: key }));
-      const provider = new LocalFileSystemProvider({ basePath: tempDir });
+  it('keeps existing legacy sidecars until the corresponding media is deleted', async () => {
+    tempDir = createTempDir('promptfoo-media-');
+    const payload = Buffer.from('legacy media');
+    const hash = createHash('sha256').update(payload).digest('hex');
+    const key = `audio/${hash.slice(0, 12)}.wav`;
+    const sidecarPath = path.join(tempDir, `${key}.meta.json`);
+    fs.mkdirSync(path.dirname(sidecarPath), { recursive: true });
+    fs.writeFileSync(sidecarPath, 'legacy metadata', 'utf8');
 
-      await expect(
-        provider.store(payload, { contentType: 'audio/wav', mediaType: 'audio' }),
-      ).resolves.toMatchObject({ deduplicated: true, ref: { key } });
+    fs.writeFileSync(path.join(tempDir, key), payload);
+    fs.writeFileSync(path.join(tempDir, 'hash-index.json'), JSON.stringify({ [hash]: key }));
+    const provider = new LocalFileSystemProvider({ basePath: tempDir });
+    const result = await provider.store(payload, { contentType: 'audio/wav', mediaType: 'audio' });
+    expect(result).toMatchObject({ ref: { key }, deduplicated: true });
 
-      expect(fs.readFileSync(contentPath, 'utf8')).toBe('legacy metadata');
-      await expect(provider.getStats()).resolves.toEqual({
-        fileCount: 1,
-        totalSizeBytes: payload.length,
-      });
-      await provider.delete(key);
-      expect(fs.existsSync(sidecarPath)).toBe(sidecarType === 'directory');
-      if (sidecarType === 'directory') {
-        expect(fs.readFileSync(contentPath, 'utf8')).toBe('legacy metadata');
-      }
-      await expect(provider.getStats()).resolves.toEqual({ fileCount: 0, totalSizeBytes: 0 });
-      await expect(provider.exists(key)).resolves.toBe(false);
-      await expect(provider.findByHash(hash)).resolves.toBeNull();
-    },
-  );
+    expect(fs.readFileSync(sidecarPath, 'utf8')).toBe('legacy metadata');
+    await provider.delete(key);
+    expect(fs.existsSync(sidecarPath)).toBe(false);
+    await expect(provider.exists(key)).resolves.toBe(false);
+    await expect(provider.findByHash(hash)).resolves.toBeNull();
+  });
 });

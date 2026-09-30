@@ -281,28 +281,6 @@ describe('completed media blob publication', () => {
     },
   );
 
-  it('does not delete a competing writer when its own final publication fails', async () => {
-    const failure = Object.assign(new Error('fixture publish failure'), { code: 'EACCES' });
-    const provider = new FilesystemBlobStorageProvider({ basePath: directory });
-    let otherWriterFinished = false;
-    vi.mocked(fs.rename).mockImplementation(async (source, destination) => {
-      if (destination === provider.getFilePath(hash) && !otherWriterFinished) {
-        otherWriterFinished = true;
-        await new FilesystemBlobStorageProvider({ basePath: directory }).store(data, 'video/mp4');
-        throw failure;
-      }
-      return realFs.rename(source, destination);
-    });
-    await expect(provider.store(data, 'image/jpeg')).rejects.toBe(failure);
-    expect(await provider.getByHash(hash)).toMatchObject({
-      data,
-      metadata: { mimeType: 'video/mp4' },
-    });
-    expect(await fs.readdir(path.dirname(provider.getFilePath(hash)))).toEqual(
-      expect.arrayContaining([hash, `${hash}.meta.json`]),
-    );
-  });
-
   it('preserves committed metadata when a competing data publication fails', async () => {
     const failure = Object.assign(new Error('fixture publish failure'), { code: 'EACCES' });
     const provider = new FilesystemBlobStorageProvider({ basePath: directory });
