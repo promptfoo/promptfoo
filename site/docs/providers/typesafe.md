@@ -13,7 +13,7 @@ keywords: [typesafe, jev, system one, llm-rubric, classifier, grader, promptfoo 
 - **Score**: a rubric of 2–10 ordered levels. Returns a probability-weighted position along the levels.
 - **Choice**: one option from a set. Returns a probability for each option.
 
-In promptfoo, Jev works as a grader for [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric/) and as a provider for the [`classifier`](/docs/configuration/expected-outputs/classifier/) assertion.
+In Promptfoo, Jev works as a grader for [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric/) and as a provider for the [`classifier`](/docs/configuration/expected-outputs/classifier/) assertion.
 
 ## Setup
 
@@ -33,20 +33,21 @@ typesafe:<model>
 - `typesafe:jev-latest`: the latest stable Jev release
 - `typesafe:jev-1.13.0`: a pinned version
 
-An alias such as `jev-latest` moves when TypeSafe ships a new release. If you tune a `threshold` against one version, pin that version. The versioned model that answered is recorded in `metadata.typesafe.model`. See TypeSafe's [models page](https://docs.typesafe.ai/models) for current versions.
+An alias such as `jev-latest` moves when TypeSafe ships a new release. If you tune a `threshold` against one version, pin that version. For `llm-rubric`, the versioned model that answered is recorded in `metadata.typesafe.model`. See TypeSafe's [models page](https://docs.typesafe.ai/models) for current versions and pricing.
 
 ## Configuration
 
-| Option         | Type          | Default                   | Description                                                                                                   |
-| -------------- | ------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `apiKey`       | string        | `TYPESAFE_API_KEY`        | TypeSafe API key                                                                                              |
-| `apiBaseUrl`   | string        | `https://api.typesafe.ai` | API base URL                                                                                                  |
-| `threshold`    | number        | `0.5`                     | Minimum derived score (0–1) for `pass: true`                                                                  |
-| `levels`       | array         | -                         | Ordered Score levels, low to high (2–10). When set, grading uses a Score question instead of a Noul question. |
-| `instructions` | string/object | -                         | The question for `classifier`, and for direct `callApi` use outside `llm-rubric`                              |
-| `labels`       | array/object  | -                         | Choice options for `classifier`: a list of labels, or a map of label to description                           |
+| Option         | Type                | Default                   | Description                                                                                                   |
+| -------------- | ------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `apiKey`       | string              | `TYPESAFE_API_KEY`        | TypeSafe API key                                                                                              |
+| `apiBaseUrl`   | string              | `https://api.typesafe.ai` | API base URL                                                                                                  |
+| `threshold`    | number              | `0.5`                     | Minimum derived score (0–1) for `llm-rubric` to pass; does not apply to `classifier`                          |
+| `levels`       | array               | -                         | Ordered Score levels, low to high (2–10). When set, grading uses a Score question instead of a Noul question. |
+| `instructions` | string/object/array | -                         | The question for `classifier`, and for direct `callApi` use outside `llm-rubric`                              |
+| `labels`       | array/object        | -                         | 2–255 Choice options for `classifier`: a list of unique, nonempty labels, or a map of label to description    |
+| `maxRetries`   | integer             | `4`                       | Additional attempts for transient failures, including `429` and `529`; set to `0` to disable retries          |
 
-Level descriptions, label descriptions, and `instructions` can be strings or JSON objects, as in the [TypeSafe API](https://docs.typesafe.ai/primitives/advanced).
+Level descriptions, label descriptions, and `instructions` can be strings, JSON objects, or arrays, as in the [TypeSafe API](https://docs.typesafe.ai/primitives/advanced). Label descriptions can also be `null` when the label needs no extra detail. Label names must contain non-whitespace characters.
 
 ## Grading with `llm-rubric`
 
@@ -95,7 +96,7 @@ defaultTest:
           - Acknowledges the problem and offers a concrete fix
 ```
 
-The `llm-rubric` assertion's own `threshold` still applies to the returned score.
+Both the provider's `config.threshold` and the `llm-rubric` assertion's own `threshold` must pass: the effective cutoff is the higher of the two. For example, an assertion threshold of `0.3` still requires a score of `0.5` with the provider's default threshold. To lower the cutoff, lower both thresholds. `not-llm-rubric` inverts this combined pass/fail result.
 
 ### Reasons are derived, not generated
 
@@ -106,7 +107,9 @@ Derived from Jev Noul p=0.93 >= threshold 0.5
 Derived from Jev Score 1.43 on levels 0–2 (normalized 0.715 >= threshold 0.5); nearest level 1: "Acknowledges the problem but offers no fix"
 ```
 
-Jev's raw answer (the Noul probability, or the Score `score`, `legend`, `probabilities`, and `confidence`) is kept in the grading result's `metadata.typesafe`, along with the model version, threshold, and request id.
+For `llm-rubric`, Jev's raw answer (the Noul probability, or the Score `score`, `legend`, `probabilities`, and `confidence`) is kept in the grading result's `metadata.typesafe`, along with the model version, threshold, and request id.
+
+For model `jev-1.13.0`, `metadata.typesafe.estimatedCost` records the estimated USD cost at TypeSafe's [published price](https://docs.typesafe.ai/models) of $0.042 per million input tokens; output tokens are free. Cached responses have zero cost. Unknown model versions or missing input-token usage omit the estimate. This metadata estimate is informational and does not increase the eval's aggregate cost.
 
 ## Classification with `classifier`
 
@@ -127,11 +130,11 @@ assert:
     threshold: 0.5
 ```
 
-`labels` can also be a plain list, such as `[billing, technical, sales]`. Set `threshold` explicitly: `classifier` defaults to 1.
+`labels` can also be a plain list, such as `[billing, technical, sales]`. Set the assertion's `threshold` explicitly: `classifier` defaults to 1 and ignores the provider's `config.threshold`. The assertion reports the selected label's probability as its score; it does not expose the full distribution, `metadata.typesafe`, or token usage.
 
 ## Caching
 
-Responses are stored in promptfoo's cache. The cache key covers the model, the state, the full question schema, the ordered labels or levels, and the threshold. Changing, adding, or reordering labels therefore never reuses a cached probability. Use `--no-cache` to force fresh calls.
+Responses are stored in Promptfoo's cache. The cache key covers the API base URL, model, state, full question schema, and ordered labels or levels. Changing, adding, or reordering labels therefore never reuses a cached probability. Thresholds are applied locally, so changing a threshold can reuse the same response. Invalid responses are evicted. Use `--no-cache` to force fresh calls.
 
 ## Limitations
 
@@ -139,8 +142,12 @@ Responses are stored in promptfoo's cache. The cache key covers the model, the s
 - In `llm-rubric` mode the provider reads the rubric and output directly and ignores `rubricPrompt`.
 - Jev accepts text only. Image and audio outputs aren't sent.
 - Each request allows 64k tokens in total and 32k for the state plus the longest question. See the [models page](https://docs.typesafe.ai/models) for rate limits.
-- Grading requests don't retry `529 Overloaded` responses. `429` responses are retried with backoff.
+- Jev 1.13 has documented limitations with arithmetic, counting, date comparisons, and adversarial content in the state. Use code for exact calculations and test grading quality on representative outputs. See TypeSafe's [known model limitations](https://docs.typesafe.ai/model-jaggedness/jev-1.13).
+
+Transient failures, including `429 Too Many Requests` and `529 Overloaded`, are retried with backoff, honoring `Retry-After` when provided. Set `maxRetries` to bound retries or `0` to disable them.
 
 ## Data handling
 
-TypeSafe states that it does not train on customer requests or responses. See TypeSafe's [legal documents](https://docs.typesafe.ai/legal) for retention and the data processing agreement.
+Grading sends the output, rubric, and any configured Score levels to TypeSafe; classification sends the output, instructions, and labels. TypeSafe states that it does not train on customer requests or responses and offers zero data retention for enterprise customers. See its [legal documents](https://docs.typesafe.ai/legal).
+
+The [privacy policy](https://typesafe.ai/legal/privacy-policy) describes collecting input and retaining personal data as needed for its stated purposes; it does not give a fixed default retention period for API content. Confirm request/response logging and retention for your account with TypeSafe before sending sensitive data. No-training does not imply zero retention.
