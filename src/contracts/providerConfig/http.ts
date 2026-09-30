@@ -95,6 +95,12 @@ export const HttpProviderConfigFieldsSchema = z.strictObject({
     .describe('Expression or module reference extracting the session ID from the main response'),
   sessionSource: z.enum(['client', 'server', 'endpoint']).optional(),
   stateful: z.boolean().optional(),
+  streamFormat: z
+    .enum(['openai-chat', 'openai-responses', 'anthropic-messages'])
+    .optional()
+    .describe(
+      'SSE format used to detect first text output; omitted measures first non-whitespace body byte',
+    ),
   transformRequest: z
     .string()
     .optional()

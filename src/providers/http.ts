@@ -8,7 +8,7 @@ import httpZ from 'http-z';
 import { LRUCache } from 'lru-cache';
 import { Agent, type Dispatcher, interceptors } from 'undici';
 import { z } from 'zod';
-import { fetchWithCache } from '../cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import cliState from '../cliState';
 import {
   HttpProviderConfigFieldsSchema,
@@ -21,6 +21,13 @@ import { HttpTlsFieldsSchema } from '../contracts/providerConfig/httpTls';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
+import { isTransientConnectionError, responseBodyError } from '../util/fetch/errors';
+import { fetchWithRetries, sleepWithAbort } from '../util/fetch/index';
+import {
+  estimateStreamingTokensPerSecond,
+  processStreamingResponse,
+  type StreamingMetrics,
+} from '../util/fetch/streaming';
 import { stripDecompressionHeaders } from '../util/fetch/stripDecompressionHeaders';
 import {
   maybeLoadConfigFromExternalFile,
@@ -1744,6 +1751,19 @@ async function createHttpsAgent(
     .compose(stripDecompressionHeaders());
 }
 
+function requestsStreamingTransport(body: unknown): boolean {
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      return false;
+    }
+  }
+  return (
+    typeof body === 'object' && body !== null && (body as Record<string, unknown>).stream === true
+  );
+}
+
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
@@ -1817,6 +1837,84 @@ export class HttpProvider implements ApiProvider {
     if (this.config.body) {
       this.config.body = maybeLoadConfigFromExternalFile(this.config.body);
     }
+  }
+
+  // Streaming bypasses the cache so TTFT reflects a live call.
+  private async fetchResponse(
+    url: string,
+    fetchOptions: RequestInit,
+    context: CallApiContextParams | undefined,
+    isStreaming: boolean,
+    multipartBody: boolean = false,
+  ): Promise<{
+    response: FetchWithCacheResult<string>;
+    streamingMetrics?: StreamingMetrics;
+  }> {
+    if (isStreaming) {
+      const requestStartTime = Date.now();
+      const timeoutMs = getRequestTimeoutMs();
+      const method = (fetchOptions.method ?? 'GET').toUpperCase();
+      const maxBodyRetries = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method) ? 2 : 0;
+      for (let bodyAttempt = 0; ; bodyAttempt++) {
+        const controller = new AbortController();
+        const signal = fetchOptions.signal
+          ? AbortSignal.any([fetchOptions.signal, controller.signal])
+          : controller.signal;
+        const rawResponse = await fetchWithRetries(
+          url,
+          { ...fetchOptions, signal },
+          timeoutMs,
+          this.config.maxRetries,
+        );
+        // Fetch retains its per-attempt timeout; body consumption has its own deadline.
+        const bodyTimeout = setTimeout(
+          () => controller.abort(new Error(`Streaming response timed out after ${timeoutMs} ms`)),
+          timeoutMs,
+        );
+        try {
+          const { text, streamingMetrics } = await processStreamingResponse(
+            rawResponse,
+            requestStartTime,
+            { streamFormat: this.config.streamFormat },
+          );
+          return {
+            response: {
+              data: text,
+              cached: false,
+              status: rawResponse.status,
+              statusText: rawResponse.statusText,
+              headers: Object.fromEntries(rawResponse.headers.entries()),
+              latencyMs: Date.now() - requestStartTime,
+              deleteFromCache: async () => {},
+            },
+            streamingMetrics,
+          };
+        } catch (error) {
+          // Abort every response branch, including the fetch logger's clone.
+          controller.abort(error);
+          if (fetchOptions.signal?.aborted) {
+            throw error;
+          }
+          if (bodyAttempt >= maxBodyRetries || !isTransientConnectionError(error as Error)) {
+            throw responseBodyError(error, url, rawResponse);
+          }
+        } finally {
+          clearTimeout(bodyTimeout);
+        }
+        const backoffMs = 2 ** bodyAttempt * 1000;
+        await sleepWithAbort(backoffMs, fetchOptions.signal);
+      }
+    }
+
+    const response = await fetchWithCache<string>(
+      url,
+      fetchOptions,
+      getRequestTimeoutMs(),
+      'text',
+      multipartBody ? true : (context?.bustCache ?? context?.debug),
+      this.config.maxRetries,
+    );
+    return { response };
   }
 
   id(): string {
@@ -2675,31 +2773,17 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    let data,
-      cached = false,
-      status,
-      statusText,
-      responseHeaders,
-      latencyMs: number | undefined;
-    try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        headers: responseHeaders,
-        latencyMs,
-      } = await fetchWithCache(
-        url,
-        fetchOptions,
-        getRequestTimeoutMs(),
-        'text',
-        multipartBody ? true : (context?.bustCache ?? context?.debug),
-        this.config.maxRetries,
-      ));
-    } catch (err) {
-      throw err;
-    }
+    const isStreaming = requestsStreamingTransport(fetchOptions.body);
+
+    const { response, streamingMetrics } = await this.fetchResponse(
+      url,
+      fetchOptions,
+      context,
+      isStreaming,
+      Boolean(multipartBody),
+    );
+
+    const { data, cached, status, statusText, headers: responseHeaders, latencyMs } = response;
 
     if (!(await this.validateStatus)(status)) {
       throw new Error(`HTTP call failed with status ${status} ${statusText}: ${data}`);
@@ -2741,6 +2825,10 @@ export class HttpProvider implements ApiProvider {
       }
     }
 
+    if (streamingMetrics) {
+      ret.streamingMetrics = streamingMetrics;
+    }
+
     const rawText = data as string;
     let parsedData;
     try {
@@ -2772,6 +2860,10 @@ export class HttpProvider implements ApiProvider {
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, {
       response: { data, status, statusText, headers: responseHeaders, cached, latencyMs },
     });
+
+    if (streamingMetrics) {
+      this.populateStreamingCompletionMetrics(streamingMetrics, parsedOutput);
+    }
 
     return this.processResponseWithTokenEstimation(
       ret,
@@ -2917,31 +3009,16 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    let data,
-      cached = false,
-      status,
-      statusText,
-      responseHeaders,
-      latencyMs: number | undefined;
-    try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        headers: responseHeaders,
-        latencyMs,
-      } = await fetchWithCache(
-        url,
-        fetchOptions,
-        getRequestTimeoutMs(),
-        'text',
-        context?.bustCache ?? context?.debug,
-        this.config.maxRetries,
-      ));
-    } catch (err) {
-      throw err;
-    }
+    const isStreaming = requestsStreamingTransport(bodyContent);
+
+    const { response, streamingMetrics } = await this.fetchResponse(
+      url,
+      fetchOptions,
+      context,
+      isStreaming,
+    );
+
+    const { data, cached, status, statusText, headers: responseHeaders, latencyMs } = response;
 
     logger.debug('[HTTP Provider]: Response received', {
       length: typeof data === 'string' ? data.length : undefined,
@@ -3015,9 +3092,17 @@ export class HttpProvider implements ApiProvider {
       };
     }
 
+    if (streamingMetrics) {
+      ret.streamingMetrics = streamingMetrics;
+    }
+
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, {
       response: { data, status, statusText, headers: responseHeaders, cached, latencyMs },
     });
+
+    if (streamingMetrics) {
+      this.populateStreamingCompletionMetrics(streamingMetrics, parsedOutput);
+    }
 
     return this.processResponseWithTokenEstimation(
       ret,
@@ -3040,6 +3125,41 @@ export class HttpProvider implements ApiProvider {
       return parsedOutput.output;
     }
     return rawText;
+  }
+
+  private populateStreamingCompletionMetrics(
+    streamingMetrics: StreamingMetrics,
+    parsedOutput: unknown,
+  ): void {
+    // Framing bytes do not represent completion text without an explicit transform.
+    if (!this.config.transformResponse && !this.config.responseParser) {
+      return;
+    }
+
+    const completionText = this.getDefiniteCompletionText(parsedOutput);
+    if (completionText === undefined) {
+      return;
+    }
+    streamingMetrics.completionChars = completionText.length;
+    if (streamingMetrics.multiChunkDelivery) {
+      streamingMetrics.tokensPerSecond = estimateStreamingTokensPerSecond(
+        completionText.length,
+        streamingMetrics.totalStreamTime,
+      );
+    }
+  }
+
+  private getDefiniteCompletionText(parsedOutput: unknown): string | undefined {
+    if (typeof parsedOutput === 'string') {
+      return parsedOutput;
+    }
+    if (parsedOutput !== null && typeof parsedOutput === 'object') {
+      const maybeOutput = (parsedOutput as { output?: unknown }).output;
+      if (typeof maybeOutput === 'string') {
+        return maybeOutput;
+      }
+    }
+    return undefined;
   }
 
   /**

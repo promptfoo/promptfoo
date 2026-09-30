@@ -1,3 +1,5 @@
+import { sanitizeUrlForLogging } from '../sanitizer';
+
 /**
  * Error with additional system information (e.g. Node.js system errors).
  */
@@ -442,4 +444,18 @@ export function isTransientConnectionError(error: Error | undefined): boolean {
  */
 export function isAbortError(error: unknown): boolean {
   return error instanceof Error && (error.name === 'AbortError' || error.name === 'AbortException');
+}
+
+export function responseBodyError(error: unknown, url: string, response: Response): Error {
+  if (isAbortError(error)) {
+    return error as Error;
+  }
+  return Object.assign(
+    new Error(
+      `Error reading response body from ${sanitizeUrlForLogging(url)}: ${
+        error instanceof Error ? error.message : String(error)
+      }. HTTP ${response.status} ${response.statusText}`,
+    ),
+    { cause: error },
+  );
 }

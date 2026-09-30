@@ -133,6 +133,18 @@ export interface ProviderResponse {
     resolution?: string; // '720p' or '1080p' (Veo)
   };
   images?: ImageOutput[];
+  /** Timing and estimated throughput for streaming HTTP text responses. */
+  streamingMetrics?: {
+    /** Milliseconds from request dispatch to first text, or first non-whitespace body byte by default. */
+    timeToFirstToken?: number;
+    /** Milliseconds between first and last body chunks, excluding idle time before close. */
+    totalStreamTime?: number;
+    /** UTF-16 code units in the explicitly transformed completion. */
+    completionChars?: number;
+    /** Estimated from four characters per token; omitted for single chunks or windows under 50ms. */
+    tokensPerSecond?: number;
+    multiChunkDelivery?: boolean;
+  };
 }
 
 export interface ProviderEmbeddingResponse {

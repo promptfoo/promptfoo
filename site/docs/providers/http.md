@@ -1,4 +1,5 @@
 ---
+title: HTTP/HTTPS API
 sidebar_label: HTTP API
 description: Configure HTTP/HTTPS endpoints for custom LLM integrations with dynamic request transforms, variable substitution, and multi-provider API compatibility
 ---
@@ -1737,13 +1738,52 @@ Streaming responses typically use one of these formats:
 - **Chunked JSON**: Multiple JSON objects sent sequentially, often separated by newlines or delimiters.
 - **HTTP chunked transfer encoding**: Standard HTTP mechanism for streaming arbitrary data.
 
-Promptfoo offers full support for HTTP targets that stream responses in these formats. WebSocket requests are also supported via the [WebSocket Provider](./websocket.md). However, synchronous REST/HTTP requests are often preferable for the following reasons:
+Promptfoo offers full support for HTTP targets that stream responses in these formats. WebSocket requests are also supported via the [WebSocket Provider](./websocket.md).
 
-- Streaming formats vary widely and often require custom parsing logic in `transformResponse`.
-- Evals wait for the full response before scoring, so progressive tokens may not be surfaced.
-- Overall test duration is typically similar to non-streaming requests, so streaming does not provide a performance benefit.
+### Time to First Token (TTFT) Measurement
 
-If you need to evaluate a streaming endpoint, you will need to configure the `transformResponse` function to parse and reconstruct the final text. For SSE-style responses, you can accumulate chunks from each `data:` line. The logic for extracting each line and determining when the response is complete may vary based on the event types and semantics used by your specific application/provider.
+When `stream: true` is set in the request body, Promptfoo records timing metrics on every streamed response. TTFT here measures streamed text output; it does not measure time to the first audio packet or audio frame. See [the TTFT assertion docs](/docs/configuration/expected-outputs/deterministic#ttft) for precise definitions of each measured field.
+
+Two measurement modes are supported:
+
+Set `streamFormat` to measure the first non-empty text or refusal delta:
+
+```yaml
+providers:
+  - id: https://api.openai.com/v1/chat/completions
+    config:
+      method: POST
+      body:
+        stream: true
+      streamFormat: openai-chat # or: openai-responses, anthropic-messages
+```
+
+Without `streamFormat`, TTFT measures the first non-whitespace response byte. This works across streaming formats, but may report earlier when metadata arrives before displayed text.
+
+Add TTFT assertions to your tests:
+
+```yaml
+defaultTest:
+  assert:
+    - type: ttft
+      threshold: 2000 # Fail if TTFT > 2 seconds
+    - type: latency
+      threshold: 10000 # Fail if total response > 10 seconds
+```
+
+**Config options**
+
+| Option         | Type                                                          | Default | Purpose                                           |
+| -------------- | ------------------------------------------------------------- | ------- | ------------------------------------------------- |
+| `streamFormat` | `'openai-chat' \| 'openai-responses' \| 'anthropic-messages'` | unset   | Detect the first displayed text for this protocol |
+
+When `stream: true` is set, response caching is disabled so each measurement reflects a live call. The OpenAI formats count refusal text as output. Format-specific detection accepts LF, CRLF, and CR line endings and rejects events larger than 64 KiB before the first text output.
+
+### Parsing Streaming Responses
+
+You will need to configure the `transformResponse` function to parse and reconstruct the final text. For SSE-style responses, you can accumulate chunks from each `data:` line. The logic for extracting each line and determining when the response is complete may vary based on the event types and semantics used by your specific application/provider.
+
+Content-derived streaming metrics (`completionChars` and `tokensPerSecond`) are populated only when `transformResponse` (or the deprecated `responseParser`) explicitly returns the reconstructed completion. Without a transform, Promptfoo cannot distinguish plain-text completion bytes from SSE or NDJSON framing, so it leaves those fields unset rather than reporting misleading throughput.
 
 **Example streaming response format:**
 
@@ -1769,6 +1809,7 @@ Each line starts with `data: ` followed by a JSON object. The parser extracts te
 providers:
   - id: https
     config:
+      method: POST
       url: 'https://api.example.com/v1/responses'
       body:
         model: 'custom-model'
@@ -1810,6 +1851,7 @@ Supported config options:
 | queryParams       | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                           |
 | transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
 | transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
+| streamFormat      | string                  | Built-in TTFT detector for `openai-chat`, `openai-responses`, or `anthropic-messages` streaming responses.                                                                          |
 | tokenEstimation   | object                  | Configuration for optional token usage estimation. See Token Estimation section above for details.                                                                                  |
 | maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
 | validateStatus    | string \| Function      | A function or string expression that returns true if the status code should be treated as successful. By default, accepts all status codes.                                         |

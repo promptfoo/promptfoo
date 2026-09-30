@@ -1,50 +1,27 @@
-# provider-http/streaming (HTTP Provider Streaming Example)
+# provider-http/streaming (HTTP Streaming and Time to First Token)
 
-This example shows how to use OpenAI's streaming API via HTTP provider.
+This example measures time to first displayed text (TTFT) and total response latency through Promptfoo's HTTP provider. Evaluations wait for the full response before scoring.
 
-You can run this example with:
+## Setup
 
 ```bash
 npx promptfoo@latest init --example provider-http/streaming
 cd provider-http/streaming
+export OPENAI_API_KEY="your-openai-api-key"
 ```
 
-⚠️ **Streaming is not recommended for evaluations**
-
-Promptfoo supports streaming HTTP targets, but evals wait for full responses before scoring. That means:
-
-- No progressive display during evals
-- Extra parsing complexity for streaming formats (SSE/chunked)
-- Similar end-to-end latency vs. non-streaming
-
-## Environment Variables
-
-Required:
-
-- `OPENAI_API_KEY` - Your OpenAI API key from `https://platform.openai.com/api-keys`
-
-You can set it in your shell or in a project-level `.env` file (recommended):
+## Run the example
 
 ```bash
-export OPENAI_API_KEY="your-openai-api-key"
-# or in .env
-OPENAI_API_KEY=your-openai-api-key
+npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 ```
 
-## Quick Start
+To read the key from a local `.env` file, add `--env-file .env`.
 
-1. Set your API key (or ensure `.env` is populated)
+The request enables `stream: true` and uses `streamFormat: openai-chat` to measure the first content or refusal text. A response transform joins the streamed text for assertions. The example checks output length, TTFT at most 3,000 ms, and total latency at most 10,000 ms. Adjust those limits for your model and network path.
 
-2. Run the evaluation (recommended):
+`streamFormat` also accepts `openai-responses` and `anthropic-messages`. Without it, TTFT measures the first non-whitespace response byte, which may be metadata rather than displayed text. It does not measure audio latency. Streaming requests bypass the response cache.
 
-   ```bash
-   npx promptfoo@latest eval -c examples/provider-http/streaming/promptfooconfig.yaml
-   ```
+The example disables reasoning on `gpt-5.4-mini`; with reasoning enabled, TTFT includes time spent reasoning before text is emitted.
 
-3. View results (optional):
-
-   ```bash
-   npx promptfoo@latest view
-   ```
-
-For more HTTP provider configuration options, see the docs: `https://promptfoo.dev/docs/providers/http`.
+See the [HTTP provider documentation](https://promptfoo.dev/docs/providers/http) for request and response configuration.

@@ -375,3 +375,22 @@ describe('HTTP authoring contracts', () => {
     }
   });
 });
+
+describe('HTTP streaming format contract', () => {
+  it.each(['openai-chat', 'openai-responses', 'anthropic-messages'])(
+    'preserves %s across portable and runtime validation',
+    (streamFormat) => {
+      const config = { body: { stream: true }, streamFormat };
+      expect(HttpProviderConfigInputSchema.parse(config).streamFormat).toBe(streamFormat);
+      expect(HttpProviderConfigSchema.parse(config).streamFormat).toBe(streamFormat);
+      const ajv = new Ajv({ strict: false });
+      expect(ajv.validate(HttpProviderConfigInputJsonSchema, config)).toBe(true);
+    },
+  );
+
+  it('rejects unknown stream formats', () => {
+    const config = { body: { stream: true }, streamFormat: 'unknown' };
+    expect(HttpProviderConfigInputSchema.safeParse(config).success).toBe(false);
+    expect(HttpProviderConfigSchema.safeParse(config).success).toBe(false);
+  });
+});
