@@ -340,7 +340,15 @@ ${nativeSource}`,
       const pid = Number(fs.readFileSync(file, 'utf8'));
       if (Number.isInteger(pid) && pid > 0 && pid !== process.pid && processIsRunning(pid)) {
         try {
-          process.kill(pid, 'SIGKILL');
+          if (process.platform === 'win32') {
+            execFileSync(
+              path.join(process.env.SystemRoot!, 'System32', 'taskkill.exe'),
+              ['/pid', String(pid), '/t', '/f'],
+              { stdio: 'pipe', windowsHide: true, timeout: 5_000 },
+            );
+          } else {
+            process.kill(pid, 'SIGKILL');
+          }
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
             throw error;
