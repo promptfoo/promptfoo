@@ -239,6 +239,7 @@
     "@fal-ai/client": "~1.10.1",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.11.1",
+    "@openai/codex-security": "^0.1.31",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
     "@types/cli-progress": "^3.11.6",
@@ -300,7 +301,6 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openai/agents": "^0.11.3",
     "@openai/codex-sdk": "^0.156.1",
-    "@openai/codex-security": "^0.1.31",
     "@opencode-ai/sdk": "^1.18.31",
     "@slack/web-api": "^8.1.1",
     "@smithy/node-http-handler": "^4.4.14",
@@ -417,12 +417,16 @@
   "homepage": "https://promptfoo.dev",
   "peerDependencies": {
     "@huggingface/transformers": "*",
+    "@openai/codex-security": "*",
     "playwright": "*",
     "playwright-extra": "*",
     "puppeteer-extra-plugin-stealth": "*"
   },
   "peerDependenciesMeta": {
     "@huggingface/transformers": {
+      "optional": true
+    },
+    "@openai/codex-security": {
       "optional": true
     },
     "playwright": {
