@@ -23,6 +23,221 @@ const statusTool = {
   },
 };
 
+describe('GPT-6.1 Sol requests', () => {
+  let restoreEnv: () => void;
+
+  beforeEach(() => {
+    restoreEnv = mockProcessEnv({
+      OPENAI_MAX_TOKENS: undefined,
+      OPENAI_MAX_COMPLETION_TOKENS: undefined,
+      OPENAI_TEMPERATURE: undefined,
+      OPENAI_TOP_P: undefined,
+    });
+  });
+
+  afterEach(() => {
+    restoreEnv();
+  });
+
+  it.each([
+    'gpt-6.1-sol',
+    'gpt-6.1-sol-2026-09-29',
+    'openai/gpt-6.1-sol',
+    'prod-gpt-6.1-sol',
+    'ft:gpt-6.1-sol:org:experiment:id',
+  ])('recognizes %s without using GPT-6 Sol capabilities', async (model) => {
+    expect(getGpt6Variant(model)).toBe('6.1-sol');
+    for (const Provider of [OpenAiChatCompletionProvider, OpenAiResponsesProvider]) {
+      await expect(
+        new Provider(model, { config: { reasoning_effort: 'none' } }).getOpenAiBody('Say ready.'),
+      ).rejects.toThrow('GPT-6.1 Sol supports reasoning effort low, medium, high, xhigh, or max');
+    }
+  });
+
+  it.each([
+    'gpt-6.10-sol',
+    'gpt-6.1-solvent',
+    'gpt-6.1-sol/gpt-4.1',
+    'ft:gpt-4.1:org:compare-gpt-6.1-sol:id',
+  ])('does not infer GPT-6.1 Sol capabilities from %s', (model) => {
+    expect(getGpt6Variant(model)).toBeUndefined();
+  });
+
+  it.each([undefined, 'low', 'medium', 'high', 'xhigh', 'max'] as const)(
+    'uses model defaults and preserves supported reasoning effort %s on both endpoints',
+    async (effort) => {
+      const config = {
+        reasoning_effort: effort,
+        verbosity: 'low' as const,
+        temperature: 0.4,
+        top_p: 0.8,
+        passthrough: { logprobs: true, top_logprobs: 5 },
+      };
+      const { body: chat } = await new OpenAiChatCompletionProvider('gpt-6.1-sol', {
+        config,
+      }).getOpenAiBody('Say ready.');
+      const { body: responses } = await new OpenAiResponsesProvider('gpt-6.1-sol', {
+        config,
+      }).getOpenAiBody('Say ready.');
+
+      expect(chat.reasoning_effort).toBe(effort);
+      expect(responses.reasoning?.effort).toBe(effort);
+      expect(chat.verbosity).toBe('low');
+      expect(responses.text).toMatchObject({ verbosity: 'low' });
+      for (const body of [chat, responses]) {
+        for (const key of [
+          'temperature',
+          'top_p',
+          'logprobs',
+          'top_logprobs',
+          'max_tokens',
+          'max_completion_tokens',
+          'max_output_tokens',
+        ]) {
+          expect(body).not.toHaveProperty(key);
+        }
+      }
+    },
+  );
+
+  it.each(['none', 'minimal', 'ultra', false, 0, {}])(
+    'rejects unsupported passthrough reasoning effort %j on both endpoints',
+    async (effort) => {
+      await expect(
+        new OpenAiChatCompletionProvider('gpt-6.1-sol', {
+          config: { passthrough: { reasoning_effort: effort } },
+        }).getOpenAiBody('Say ready.'),
+      ).rejects.toThrow('GPT-6.1 Sol supports reasoning effort');
+      await expect(
+        new OpenAiResponsesProvider('gpt-6.1-sol', {
+          config: { passthrough: { reasoning: { effort } } },
+        }).getOpenAiBody('Say ready.'),
+      ).rejects.toThrow('GPT-6.1 Sol supports reasoning effort');
+    },
+  );
+
+  it.each([
+    { tools: [statusTool] },
+    { functions: [statusTool.function] },
+    { tool_choice: 'auto' },
+    { function_call: 'auto' },
+  ])('requires Responses for Chat tool configuration %j', async (passthrough) => {
+    await expect(
+      new OpenAiChatCompletionProvider('gpt-6.1-sol', {
+        config: { passthrough },
+      }).getOpenAiBody('Get the status.'),
+    ).rejects.toThrow('Use openai:responses:gpt-6.1-sol');
+  });
+
+  it('preserves Responses tools and explicit output caps while stripping logprob includes', async () => {
+    const { body } = await new OpenAiResponsesProvider('gpt-6.1-sol', {
+      config: {
+        reasoning: { effort: 'max', summary: 'auto' },
+        max_output_tokens: 4096,
+        tools: [statusTool],
+        tool_choice: 'required',
+        include: ['message.output_text.logprobs', 'reasoning.encrypted_content'],
+      },
+    }).getOpenAiBody('Get the status.');
+    expect(body).toMatchObject({
+      reasoning: { effort: 'max', summary: 'auto' },
+      max_output_tokens: 4096,
+      tools: [{ type: 'function', name: 'get_status' }],
+      tool_choice: 'required',
+      include: ['reasoning.encrypted_content'],
+    });
+  });
+
+  it('validates a final per-prompt model override and preserves endpoint-specific output caps', async () => {
+    const config = {
+      reasoning_effort: 'low',
+      passthrough: {
+        model: 'gpt-6.1-sol',
+        temperature: 0.4,
+        max_tokens: 128,
+        max_completion_tokens: 256,
+        max_output_tokens: 512,
+      },
+    };
+    const context = { vars: {}, prompt: { raw: 'Say ready.', label: 'ready', config } };
+    const { body: chat } = await new OpenAiChatCompletionProvider('gpt-4.1').getOpenAiBody(
+      'Say ready.',
+      context,
+    );
+    const { body: responses } = await new OpenAiResponsesProvider('gpt-4.1').getOpenAiBody(
+      'Say ready.',
+      context,
+    );
+    expect(chat).toMatchObject({
+      model: 'gpt-6.1-sol',
+      reasoning_effort: 'low',
+      max_completion_tokens: 256,
+    });
+    expect(responses).toMatchObject({
+      model: 'gpt-6.1-sol',
+      reasoning: { effort: 'low' },
+      max_output_tokens: 512,
+    });
+    expect(chat).not.toHaveProperty('max_output_tokens');
+    expect(responses).not.toHaveProperty('max_completion_tokens');
+    for (const body of [chat, responses]) {
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('max_tokens');
+    }
+    expect(config.passthrough.temperature).toBe(0.4);
+  });
+
+  it('rejects persisted reasoning updates to none and strips sampling for linked responses', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-6.1-sol', {
+      config: { previous_response_id: 'resp_previous', temperature: 0.4, top_p: 0.8 },
+    });
+    await expect(
+      provider.getOpenAiBody(
+        JSON.stringify([
+          { type: 'configuration_update', reasoning: { effort: 'none' } },
+          { role: 'user', content: 'Say ready.' },
+        ]),
+      ),
+    ).rejects.toThrow('GPT-6.1 Sol supports reasoning effort');
+    const { body } = await provider.getOpenAiBody('Say ready.');
+    expect(body).not.toHaveProperty('temperature');
+    expect(body).not.toHaveProperty('top_p');
+  });
+
+  it('applies model defaults and restrictions to named Azure deployments', async () => {
+    const config = { apiKey: 'test-key', modelName: 'gpt-6.1-sol', temperature: 0.4 };
+    const { body: chat } = await new AzureChatCompletionProvider('production', {
+      config,
+    }).getOpenAiBody('Say ready.');
+    const responses = await new AzureResponsesProvider('production', {
+      config,
+    }).getAzureResponsesBody('Say ready.');
+    for (const body of [chat, responses]) {
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('max_completion_tokens');
+      expect(body).not.toHaveProperty('max_output_tokens');
+    }
+    await expect(
+      new AzureChatCompletionProvider('production', {
+        config: { ...config, tools: [statusTool] },
+      }).getOpenAiBody('Get the status.'),
+    ).rejects.toThrow('tool calling requires the Responses API');
+  });
+
+  it('preserves OpenRouter tool routing without allowing reasoning to be disabled', async () => {
+    const { body } = await new OpenRouterProvider('openai/gpt-6.1-sol', {
+      config: { reasoning_effort: 'high', tools: [statusTool], temperature: 0.4 },
+    }).getOpenAiBody('Get the status.');
+    expect(body).toMatchObject({ reasoning_effort: 'high', tools: [statusTool] });
+    expect(body).not.toHaveProperty('temperature');
+    await expect(
+      new OpenRouterProvider('openai/gpt-6.1-sol', {
+        config: { passthrough: { reasoning: { enabled: false } } },
+      }).getOpenAiBody('Say ready.'),
+    ).rejects.toThrow('GPT-6.1 Sol supports reasoning effort');
+  });
+});
+
 describe('GPT-6 Astra requests', () => {
   let restoreEnv: () => void;
 

@@ -146,7 +146,7 @@ describe('OpenAiLiveProvider', () => {
   it.each(['gpt-live-transcribe', 'gpt-live-transcribe-2026-08-25'])(
     'rejects direct construction with transcription-only model %s',
     (model) => {
-      expect(() => new OpenAiLiveProvider(model)).toThrow('dedicated Realtime transcription');
+      expect(() => new OpenAiLiveProvider(model)).toThrow('Realtime transcription sessions');
       expect(sockets).toHaveLength(0);
     },
   );

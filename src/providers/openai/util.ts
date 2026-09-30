@@ -635,8 +635,8 @@ const OPENAI_CHAT_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
       },
     },
   },
-  {
-    id: 'gpt-6-sol',
+  ...['gpt-6-sol', 'gpt-6.1-sol'].map((model) => ({
+    id: model,
     cost: {
       input: 2 / 1e6,
       output: 10 / 1e6,
@@ -646,7 +646,7 @@ const OPENAI_CHAT_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
         output: 15 / 1e6,
       },
     },
-  },
+  })),
   {
     id: 'gpt-6-luna',
     cost: {
