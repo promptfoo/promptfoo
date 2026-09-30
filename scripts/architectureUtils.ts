@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { builtinModules } from 'node:module';
 import path from 'node:path';
 
-import { escape as escapeGlob, globSync } from 'glob';
+import { globSync } from 'glob';
 import { type Node, parseSync, Visitor } from 'oxc-parser';
 
 export interface LayerDefinition {
@@ -46,8 +46,6 @@ export interface LayerConfig {
    */
   maxStronglyConnectedComponentSize?: number;
 }
-
-const DEFAULT_SOURCE_ROOTS = ['src', 'packages'];
 
 const TYPESCRIPT_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts'];
 const DIRECTORY_INDEXES = TYPESCRIPT_EXTENSIONS.map((extension) => `index${extension}`);
@@ -241,41 +239,17 @@ export function getSourceFiles(
   repoRoot: string,
   includeApp = true,
   ignoredRoots: string[] = [],
-  additionalRoots: string[] = [],
 ): string[] {
-  const roots = [
-    ...new Set(
-      [...DEFAULT_SOURCE_ROOTS, ...additionalRoots].map((root) => escapeGlob(normalizePath(root))),
-    ),
-  ];
-  return globSync(
-    roots.flatMap((root) =>
-      TYPESCRIPT_EXTENSIONS.includes(path.extname(root))
-        ? [root]
-        : TYPESCRIPT_EXTENSIONS.map((extension) => `${root}/**/*${extension}`),
-    ),
-    {
-      cwd: repoRoot,
-      nobrace: true,
-      ignore: [
-        ...['ts', 'mts', 'cts'].map((extension) => `**/*.d.${extension}`),
-        '**/node_modules/**',
-        'packages/**/dist/**',
-        ...(includeApp ? [] : ['src/app/**']),
-        ...ignoredRoots.flatMap((root) => {
-          const literalRoot = escapeGlob(normalizePath(root));
-          return [literalRoot, `${literalRoot}/**`];
-        }),
-      ],
-      nodir: true,
-    },
-  )
-    .map(normalizePath)
-    .sort();
-}
-
-function getArchitectureRoots(config: LayerConfig): string[] {
-  return config.layers.flatMap((layer) => layer.roots);
+  return globSync('src/**/*.{ts,tsx,mts,cts}', {
+    cwd: repoRoot,
+    ignore: [
+      'src/**/*.d.ts',
+      'src/**/node_modules/**',
+      ...(includeApp ? [] : ['src/app/**']),
+      ...ignoredRoots.map((root) => `${normalizePath(root)}/**`),
+    ],
+    nodir: true,
+  }).map(normalizePath);
 }
 
 function isWithinRoot(relativePath: string, root: string): boolean {
@@ -369,7 +343,6 @@ export function resolveInternalModule(
   importerRelativePath: string,
   specifier: string,
   aliases: Record<string, string> = {},
-  additionalRoots: string[] = [],
 ): string | undefined {
   const matchingAlias = Object.keys(aliases)
     .sort((left, right) => right.length - left.length)
@@ -378,7 +351,15 @@ export function resolveInternalModule(
     ? `${aliases[matchingAlias]}${specifier.slice(matchingAlias.length)}`
     : undefined;
 
-  const sourceRoots = [...DEFAULT_SOURCE_ROOTS, ...additionalRoots];
+  if (
+    !specifier.startsWith('.') &&
+    specifier !== 'src' &&
+    !specifier.startsWith('src/') &&
+    !aliasedPath
+  ) {
+    return undefined;
+  }
+
   let unresolvedPath: string;
   if (aliasedPath) {
     unresolvedPath = path.resolve(repoRoot, aliasedPath);
@@ -406,8 +387,7 @@ export function resolveInternalModule(
     if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
       const relativeCandidate = normalizePath(path.relative(repoRoot, candidate));
       if (
-        sourceRoots.some((root) => isWithinRoot(relativeCandidate, root)) &&
-        !relativeCandidate.split('/').includes('node_modules') &&
+        relativeCandidate.startsWith('src/') &&
         TYPESCRIPT_EXTENSIONS.includes(path.extname(relativeCandidate))
       ) {
         return relativeCandidate;
@@ -479,8 +459,7 @@ export function scanArchitectureSources(
   config: LayerConfig,
 ): ArchitectureSourceScan {
   const publicFacade = normalizePath(config.publicFacade);
-  const sourceRoots = getArchitectureRoots(config);
-  const sourceFiles = getSourceFiles(repoRoot, true, config.ignoredRoots, sourceRoots);
+  const sourceFiles = getSourceFiles(repoRoot, true, config.ignoredRoots);
   const references: ArchitectureModuleReference[] = [];
 
   for (const importer of sourceFiles) {
@@ -491,13 +470,7 @@ export function scanArchitectureSources(
     const importerLayer = getLayerForFile(importer, config);
     const sourceText = fs.readFileSync(path.join(repoRoot, importer), 'utf8');
     for (const specifier of extractModuleSpecifiers(sourceText, importer)) {
-      const resolvedImport = resolveInternalModule(
-        repoRoot,
-        importer,
-        specifier,
-        config.aliases,
-        sourceRoots,
-      );
+      const resolvedImport = resolveInternalModule(repoRoot, importer, specifier, config.aliases);
       references.push({
         importer,
         importerLayer,
@@ -515,7 +488,7 @@ export function scanArchitectureSources(
 export function findUnclassifiedFiles(
   repoRoot: string,
   config: LayerConfig,
-  sourceFiles = getSourceFiles(repoRoot, true, config.ignoredRoots, getArchitectureRoots(config)),
+  sourceFiles = getSourceFiles(repoRoot, true, config.ignoredRoots),
 ): string[] {
   return sourceFiles.filter((sourceFile) => getLayerForFile(sourceFile, config) === 'unclassified');
 }

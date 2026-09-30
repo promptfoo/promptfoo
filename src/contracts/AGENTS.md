@@ -1,8 +1,6 @@
 # Public Contracts
 
-Compatibility paths for portable Zod schemas and types exported through the published
-`promptfoo/contracts` subpath. Implementations live in `packages/contracts/src`; keep
-these relative `.js` re-exports so existing source consumers keep working.
+Portable Zod schemas and types exported through the published `promptfoo/contracts` subpath.
 
 ## Rules
 
@@ -17,6 +15,11 @@ these relative `.js` re-exports so existing source consumers keep working.
 ```bash
 npx vitest run test/contracts test/package-manifests.test.ts test/integration/library-exports.integration.test.ts
 npm run tsc
+npm run test:contracts-isolation
 ```
 
 If config/env schema output changes, also run `npm run jsonSchema:generate` and check affected docs.
+
+The isolation check copies these sources into a temporary package with only Zod as a
+runtime dependency. It builds and tests ESM/CommonJS exports and declarations in
+a separate consumer, without root dependencies or path aliases. No package is published.

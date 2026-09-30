@@ -8,7 +8,7 @@ model the internal boundaries that would support a future multi-package split.
 | Layer              | Current roots                                                    | Intended role                                   |
 | ------------------ | ---------------------------------------------------------------- | ----------------------------------------------- |
 | `facade`           | `src/index.ts`                                                   | Public compatibility surface                    |
-| `contracts`        | `packages/contracts/src`, `src/contracts`, `src/contracts.ts`    | Leaf-safe shared contracts and schemas          |
+| `contracts`        | `src/contracts`, `src/contracts.ts`                              | Leaf-safe shared contracts and schemas          |
 | `legacy-contracts` | `src/types`, `src/validators`                                    | Transitional mixed runtime types and validators |
 | `core`             | assertions, matchers, prompts, scheduler, test-case logic        | Evaluation domain logic                         |
 | `node`             | database, models, config, storage, `src/evaluate.ts`, `src/node` | Node runtime adapters                           |
@@ -38,11 +38,9 @@ npm run architecture:check
 
 ## First Leaf Layer
 
-`packages/contracts/src` owns the implementation, with compatibility re-exports in
-`src/contracts` and the `src/contracts.ts` public entrypoint. They are the first intentionally
-leaf-safe surface. The private `@promptfoo-internal/contracts` workspace builds
-independently with Zod as its only runtime dependency. The published `promptfoo`
-facade bundles its implementation and declarations. It owns this portable subset:
+`src/contracts` and its `src/contracts.ts` public entrypoint are the first intentionally
+leaf-safe surface. They currently own the dependency-free-or-`zod` subset that can plausibly become a future
+`@promptfoo/schema` package:
 
 - shared token/input contracts
 - browser-safe common and user API DTOs
@@ -127,43 +125,10 @@ path from the allowlist. Avoid adding paths unless the dependency is
 intentionally browser-safe. Allowlist entries are exact files, not directory
 roots.
 
-## Package Source Coverage
-
-Architecture checks scan `src/`, `packages/`, and every configured layer root.
-Assign new package source to a layer in `architecture/layers.json`. The same
-import, dependency, and edge-count rules apply to all classified files.
-Nested `node_modules`, declaration files, and `packages/**/dist` output are
-excluded. Add other generated files or directories to `ignoredRoots`. Layer roots
-and ignored roots are literal paths, not glob patterns.
-
-When moving a layer into a private workspace, include its implementation root
-and compatibility shims in that layer. An exact source alias such as
-`"@promptfoo/contracts": "packages/contracts/src"` takes precedence over the
-broader `@promptfoo` alias. Architecture aliases do not configure the compiler,
-bundler, or package exports.
-
-Tracked TypeScript files under `packages/` or other configured product roots
-must belong to the root compiler project unless a package project owns them.
-Reference separate package projects from the root `tsconfig.json`; the check
-also follows solution references. The nearest referenced package project owns
-files below its directory, even if a parent project also includes them. Projects
-in the same directory combine their file lists. A package project cannot cover
-files outside its own directory.
-
-The coverage check validates compiler configuration and tracked-file membership.
-It does not typecheck package source. When extracting a package, add its actual
-typecheck and artifact consumer checks to CI.
-
-```bash
-npm run check:typescript-coverage
-npm run tsc
-```
-
 ## Dependency Ownership Report
 
-The dependency report groups root runtime dependencies by the private layer that
-currently uses them. Source files beneath a separate `package.json` belong to
-that package and are excluded from the root report:
+The dependency report groups direct runtime imports by the private layer that
+currently uses them:
 
 ```bash
 npm run deps:ownership

@@ -28,8 +28,7 @@
   },
   "workspaces": [
     "src/app",
-    "site",
-    "packages/contracts"
+    "site"
   ],
   "types": "dist/src/index.d.ts",
   "typings": "dist/src/index.d.ts",
@@ -94,6 +93,7 @@
     "prepublishOnly": "node -e \"if (!process.env.PROMPTFOO_POSTHOG_KEY) { console.error('Error: PROMPTFOO_POSTHOG_KEY must be set'); process.exit(1); }\" && npm run build:clean && npm run build",
     "test:app": "npm --prefix src/app run test --",
     "test:app:browser": "npm --prefix src/app run test:browser --",
+    "test:contracts-isolation": "node scripts/testContractsIsolation.ts",
     "test:package-artifact": "tsx scripts/testPackageArtifact.ts",
     "test:site": "npm run test --prefix site",
     "test:integration": "vitest run --config vitest.integration.config.ts",
@@ -109,8 +109,7 @@
     "tsc": "tsc --noEmit",
     "mcp": "node dist/src/entrypoint.js mcp",
     "deps:ownership": "tsx scripts/reportDependencyOwnership.ts",
-    "prepare": "husky || exit 0",
-    "test:contracts-workspace": "node scripts/testContractsWorkspace.ts"
+    "prepare": "husky || exit 0"
   },
   "overrides": {
     "nunjucks": {

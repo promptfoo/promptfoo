@@ -125,29 +125,3 @@ it('treats peers as required when optional metadata is absent', () => {
     rows.find((row: { dependency: string }) => row.dependency === 'optional-peer-package'),
   ).toEqual(expect.objectContaining({ kind: 'peer', owner: 'shared', files: 2 }));
 });
-
-it('excludes separately owned packages while reporting root-owned package and configured sources', () => {
-  write('packages/unowned/index.ts', "import 'direct-package';");
-  write('internal/runtime.ts', "import 'direct-package';");
-  const config = JSON.parse(
-    fs.readFileSync(path.join(fixtureRoot, 'architecture/layers.json'), 'utf8'),
-  );
-  config.layers[0].roots.push('packages', 'internal');
-  write('architecture/layers.json', JSON.stringify(config));
-  for (const root of ['packages/owned', 'internal/owned']) {
-    write(`${root}/package.json`, JSON.stringify({ dependencies: { 'package-dependency': '*' } }));
-    write(`${root}/src/index.ts`, "import 'package-dependency'; import 'direct-package';");
-  }
-
-  const rows = JSON.parse(runReport('--json'));
-  expect(rows.find((row: { dependency: string }) => row.dependency === 'direct-package')).toEqual({
-    dependency: 'direct-package',
-    kind: 'dependency',
-    owner: 'core',
-    layers: 'core',
-    files: 3,
-  });
-  const markdown = runReport();
-  expect(markdown).toContain('- missing-package: core');
-  expect(markdown).not.toContain('package-dependency');
-});

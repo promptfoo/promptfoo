@@ -230,7 +230,7 @@ jobs:
           PROMPTFOO_POSTHOG_KEY: ''
         run: npm run test:smoke -- test/smoke/agent-skill-examples.test.ts
 
-  contracts-workspace:
+  contracts-isolation:
     needs: ci-config
     name: Isolated Contracts on Node ${{ matrix.node }}
     timeout-minutes: 10
@@ -251,10 +251,10 @@ jobs:
         with:
           node-version: ${{ matrix.node == '22.22' && '22.22.0' || matrix.node }}
 
-      - name: Test Isolated Contracts Workspace
+      - name: Test Isolated Contracts
         # The script uses only Node builtins; no root dependency install or build secrets needed.
         # Pin npm 11 because bundled npm 10 crashes while resolving these standalone inputs.
-        run: npx --ignore-scripts --registry=https://registry.npmjs.org/ -y npm@11.18.0 run test:contracts-workspace
+        run: npx --ignore-scripts --registry=https://registry.npmjs.org/ -y npm@11.18.0 run test:contracts-isolation
 
   style-check:
     name: Style Check

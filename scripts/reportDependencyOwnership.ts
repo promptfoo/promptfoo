@@ -48,24 +48,7 @@ for (const dependency of Object.keys(packageJson.peerDependencies ?? {})) {
 const usages = new Map<string, DependencyUsage>();
 const undeclaredUsages = new Map<string, DependencyUsage>();
 
-function isRootPackageSource(sourceFile: string): boolean {
-  for (
-    let directory = path.dirname(sourceFile);
-    directory !== '.';
-    directory = path.dirname(directory)
-  ) {
-    if (fs.existsSync(path.join(repoRoot, directory, 'package.json'))) {
-      return false;
-    }
-  }
-  return true;
-}
-
-const sourceRoots = config.layers.flatMap((layer) => layer.roots);
-for (const sourceFile of getSourceFiles(repoRoot, false, config.ignoredRoots, sourceRoots)) {
-  if (!isRootPackageSource(sourceFile)) {
-    continue;
-  }
+for (const sourceFile of getSourceFiles(repoRoot, false, config.ignoredRoots)) {
   const sourceText = fs.readFileSync(path.join(repoRoot, sourceFile), 'utf8');
   const layer = getLayerForFile(sourceFile, config);
 
