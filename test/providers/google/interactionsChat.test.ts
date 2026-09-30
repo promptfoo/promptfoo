@@ -490,6 +490,51 @@ describe('GoogleInteractionsChatProvider', () => {
       },
     );
 
+    it.each(['tools', 'passthrough'])(
+      'validates native schema const and enum values unchanged through %s',
+      async (location) => {
+        const parameters = {
+          type: 'object',
+          properties: {
+            constant: { const: { type: 'STRING' } },
+            choice: { enum: [{ type: 'NUMBER' }, { type: 'BOOLEAN' }] },
+          },
+          required: ['constant', 'choice'],
+        };
+        const tools = [{ type: 'function', name: 'lookup', parameters }];
+        const provider = make(location === 'tools' ? { tools } : { passthrough: { tools } });
+        mockFetchWithCache.mockResolvedValue(
+          interaction({
+            steps: [
+              {
+                type: 'function_call',
+                id: 'literal-1',
+                name: 'lookup',
+                arguments: { constant: { type: 'STRING' }, choice: { type: 'NUMBER' } },
+              },
+            ],
+          }) as any,
+        );
+
+        const result = await provider.callApi('Select a fixed value');
+
+        expect(bodyOf(mockFetchWithCache.mock.calls[0]).tools[0].parameters).toEqual(parameters);
+        expect(() => provider.validateFunctionToolCall(result.output!)).not.toThrow();
+        expect(() =>
+          provider.validateFunctionToolCall(
+            JSON.stringify([
+              {
+                functionCall: {
+                  name: 'lookup',
+                  args: { constant: { type: 'string' }, choice: { type: 'number' } },
+                },
+              },
+            ]),
+          ),
+        ).toThrow(/does not match schema/);
+      },
+    );
+
     it('maps a nested generationConfig response schema onto response_format', async () => {
       mockFetchWithCache.mockResolvedValue(interaction() as any);
       await make({
@@ -1517,6 +1562,24 @@ describe('GoogleInteractionsChatProvider', () => {
   });
 
   describe('Vertex route', () => {
+    it('uses provider-local cloud location before ambient regions for routing and cost', async () => {
+      mockVertexAuth();
+      vi.stubEnv('VERTEX_REGION', 'global');
+      vi.stubEnv('GOOGLE_CLOUD_LOCATION', 'global');
+      mockFetchWithCache.mockResolvedValue(
+        interaction({ usage: { total_input_tokens: 1000, total_output_tokens: 100 } }) as any,
+      );
+      const provider = new GoogleInteractionsChatProvider('gemini-3.5-flash-lite', {
+        config: { vertexai: true, projectId: 'fixture' },
+        env: { GOOGLE_CLOUD_LOCATION: 'us' },
+      });
+
+      const result = await provider.callApi('Hello');
+
+      expect(mockFetchWithCache.mock.calls[0][0]).toContain('/locations/us/interactions');
+      expect(result.cost).toBeCloseTo(0.000605);
+    });
+
     it('posts to the regional Vertex Interactions endpoint with OAuth headers', async () => {
       const headers = new Headers();
       headers.set('Authorization', 'Bearer vertex-token');

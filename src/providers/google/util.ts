@@ -1872,15 +1872,20 @@ export function validateFunctionCall(
       .flatMap((tool) => {
         const native = tool as { type?: string; name?: string; parameters?: Schema };
         return native.type === 'function' && native.name
-          ? [{ name: native.name, parameters: native.parameters }]
-          : (tool.functionDeclarations ?? []);
+          ? [{ name: native.name, parameters: native.parameters, nativeSchema: true }]
+          : (tool.functionDeclarations ?? []).map((declaration) => ({
+              ...declaration,
+              nativeSchema: false,
+            }));
       })
       .find((declaration) => declaration.name === functionName);
     if (!functionSchema) {
       throw new Error(`Called "${functionName}", but there is no function with that name`);
     }
     if (Object.keys(functionArgs).length !== 0 && functionSchema?.parameters) {
-      const parameterSchema = normalizeSchemaTypes(functionSchema.parameters);
+      const parameterSchema = functionSchema.nativeSchema
+        ? functionSchema.parameters
+        : normalizeSchemaTypes(functionSchema.parameters);
       let validate;
       try {
         validate = ajv.compile(parameterSchema as AnySchema);
