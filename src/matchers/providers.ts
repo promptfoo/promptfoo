@@ -217,6 +217,15 @@ export async function getGradingProvider(
         return false;
       }
 
+      if (
+        typeof candidateProvider === 'object' &&
+        !Array.isArray(candidateProvider) &&
+        !('id' in candidateProvider) &&
+        !(candidateProvider as ProviderTypeMap)[type]
+      ) {
+        return false;
+      }
+
       if (isSimulatedUserProviderConfig(candidateProvider, type)) {
         logger.debug('[Grading] Skipping promptfoo:simulated-user as an implicit grader fallback');
         return false;

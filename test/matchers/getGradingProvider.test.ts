@@ -247,6 +247,18 @@ describe('getGradingProvider', () => {
       },
     );
 
+    it.each(['provider', 'options'] as const)(
+      'uses the embedding default when %s configures only a text provider',
+      async (source) => {
+        const provider = { text: 'promptfoo:simulated-voice-user' };
+        (cliState as any).config = {
+          defaultTest: source === 'provider' ? { provider } : { options: { provider } },
+        };
+        expect(await getGradingProvider('embedding', undefined, mockProvider)).toBe(mockProvider);
+        expect(loadApiProvider).not.toHaveBeenCalled();
+      },
+    );
+
     it('should prefer defaultTest.provider over defaultTest.options.provider', async () => {
       const azureProvider = createMockProvider({ id: 'azureopenai:chat:gpt-4' });
 
