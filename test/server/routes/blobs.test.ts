@@ -403,6 +403,65 @@ describe('Blobs Routes', () => {
       expect(mockedGetBlobByHash).not.toHaveBeenCalled();
     });
 
+    it.each(['image', 'import'])(
+      'selects a trusted library reference ahead of a newer copied URI: %s',
+      async (provenance) => {
+        const { createClient } = await import('@libsql/client/node');
+        const { drizzle } = await import('drizzle-orm/libsql/node');
+        const client = createClient({ url: ':memory:' });
+        try {
+          await client.executeMultiple(`
+          CREATE TABLE blob_assets (hash TEXT PRIMARY KEY, mime_type TEXT, size_bytes INTEGER, provider TEXT, created_at TEXT);
+          CREATE TABLE blob_references (id TEXT, blob_hash TEXT, eval_id TEXT, kind TEXT, location TEXT, test_idx INTEGER, prompt_idx INTEGER, created_at TEXT);
+          CREATE TABLE evals (id TEXT PRIMARY KEY, description TEXT);
+          CREATE TABLE eval_results (eval_id TEXT, test_idx INTEGER, prompt_idx INTEGER, provider TEXT, success INTEGER, score REAL);
+        `);
+          await client.execute({
+            sql: 'INSERT INTO blob_assets VALUES (?, ?, ?, ?, ?)',
+            args: [validHash, 'image/png', 10, 'filesystem', '2026-09-29'],
+          });
+          await client.execute({
+            sql: 'INSERT INTO evals VALUES (?, ?)',
+            args: ['private-eval', 'Media owner'],
+          });
+          await client.execute({
+            sql: 'INSERT INTO evals VALUES (?, ?)',
+            args: ['copied-eval', 'Copied URI'],
+          });
+          await client.execute({
+            sql: 'INSERT INTO blob_references VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            args: [
+              'owned',
+              validHash,
+              'private-eval',
+              provenance === 'image' ? 'image' : null,
+              provenance === 'import' ? 'import' : 'response.image',
+              0,
+              0,
+              '2026-09-29',
+            ],
+          });
+          await client.execute({
+            sql: 'INSERT INTO blob_references VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            args: ['copied', validHash, 'copied-eval', null, 'response.output', 0, 0, '2026-09-30'],
+          });
+          mockedIsBlobStorageEnabled.mockReturnValue(true);
+          mockedGetDb.mockResolvedValue(drizzle(client));
+          mockedGetBlobUrl.mockResolvedValue(null);
+          mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/png', 10));
+
+          const listing = await api.get('/api/blobs/library');
+          expect(listing.status).toBe(200);
+          expect(listing.body.data.items).toHaveLength(1);
+          expect(listing.body.data.items[0].context.evalId).toBe('private-eval');
+          const download = await api.get(listing.body.data.items[0].url);
+          expect(download.status).toBe(200);
+        } finally {
+          client.close();
+        }
+      },
+    );
+
     it('does not borrow a blob reference from another evaluation', async () => {
       const { createClient } = await import('@libsql/client/node');
       const { drizzle } = await import('drizzle-orm/libsql/node');

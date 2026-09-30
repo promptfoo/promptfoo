@@ -158,13 +158,14 @@ export async function uploadTraceBlobRefsForShare(
     maxDepth: BLOB_SCAN_MAX_DEPTH,
     maxStringLength: BLOB_SCAN_MAX_STRING_LENGTH,
   });
-  for (const hash of hashes) {
+  const uploads = [...hashes].flatMap((hash) => {
     const contexts = cache.resultContexts.get(hash);
     const uploadContexts = contexts?.size
       ? [...contexts.values()].map(({ context }) => context)
       : [context];
-    for (const uploadContext of uploadContexts) {
-      await uploadBlobForShare(hash, cache, uploadContext, target);
-    }
-  }
+    return uploadContexts.map((context) => ({ hash, context }));
+  });
+  await async.mapLimit(uploads, 4, async ({ hash, context }: (typeof uploads)[number]) =>
+    uploadBlobForShare(hash, cache, context, target),
+  );
 }

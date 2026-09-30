@@ -631,6 +631,15 @@ export function mergeComparisonTables(
   mainTable: TablePageResult,
   comparisonData: Array<{ evalId: string; table: TablePageResult }>,
 ): TablePageResult {
+  const sourceOutputs = (evalId: string, row: EvaluateTableRow) => {
+    const testCaseId = row.test?.metadata?.testCaseId;
+    return row.outputs.map((output, sourcePromptIndex) => ({
+      ...output,
+      sourceEvalId: evalId,
+      sourcePromptIndex,
+      sourceTestCaseId: typeof testCaseId === 'string' ? testCaseId : undefined,
+    }));
+  };
   return {
     head: {
       prompts: [
@@ -651,22 +660,14 @@ export function mergeComparisonTables(
     },
     body: mainTable.body.map((row) => {
       const testIdx = row.testIdx;
-      const comparedOutputs = comparisonData.flatMap(({ evalId, table }) =>
-        (table.body.find((compRow) => compRow.testIdx === testIdx)?.outputs ?? []).map(
-          (output, sourcePromptIndex) => ({ ...output, sourceEvalId: evalId, sourcePromptIndex }),
-        ),
-      );
+      const comparedOutputs = comparisonData.flatMap(({ evalId, table }) => {
+        const comparisonRow = table.body.find((compRow) => compRow.testIdx === testIdx);
+        return comparisonRow ? sourceOutputs(evalId, comparisonRow) : [];
+      });
 
       return {
         ...row,
-        outputs: [
-          ...row.outputs.map((output, sourcePromptIndex) => ({
-            ...output,
-            sourceEvalId: mainEvalId,
-            sourcePromptIndex,
-          })),
-          ...comparedOutputs,
-        ],
+        outputs: [...sourceOutputs(mainEvalId, row), ...comparedOutputs],
       };
     }),
   };

@@ -193,6 +193,8 @@ describe('eval routes', () => {
       testEvalIds.add(eval_.id);
       const traceId = randomUUID().replaceAll('-', '');
       const payload = [trace(traceId)];
+      const spanName = 'n'.repeat(4_097);
+      payload[0].spans[0].name = spanName;
       const statusMessage = 'x'.repeat(4_097);
       payload[0].spans[0].status.message = statusMessage;
 
@@ -213,6 +215,7 @@ describe('eval routes', () => {
       expect(storedTrace?.spans).toHaveLength(1);
       expect(storedTrace?.spans[0]).toMatchObject({
         spanId: 'span-1',
+        name: spanName,
         attributes: { model: 'test-model' },
         statusCode: 2,
         statusMessage,

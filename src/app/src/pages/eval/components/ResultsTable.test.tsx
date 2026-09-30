@@ -68,6 +68,7 @@ vi.mock('./EvalOutputCell', () => {
       tracePromptIndex,
       searchText,
       evaluationId,
+      testCaseId,
     }: {
       onRating: any;
       rowIndex?: number;
@@ -76,6 +77,7 @@ vi.mock('./EvalOutputCell', () => {
       tracePromptIndex?: number;
       searchText?: string;
       evaluationId?: string;
+      testCaseId?: string;
     }) => {
       return (
         <div
@@ -86,6 +88,7 @@ vi.mock('./EvalOutputCell', () => {
           data-tracepromptindex={tracePromptIndex}
           data-searchtext={searchText}
           data-evaluationid={evaluationId}
+          data-testcaseid={testCaseId}
         >
           <button onClick={() => onRating(true, 0.75, 'test comment')} className="action">
             Rate
@@ -899,46 +902,56 @@ describe('ResultsTable Metrics Display', () => {
       },
     );
 
-    it('keeps merged prompt coordinates separate from comparison trace coordinates', () => {
-      vi.mocked(useResultsViewSettingsStore).mockReturnValue({
-        inComparisonMode: true,
-        comparisonEvalIds: ['comparison-eval'],
-        renderMarkdown: true,
-      });
-      vi.mocked(useTableStore).mockReturnValue({
-        config: {},
-        evalId: '123',
-        setTable: vi.fn(),
-        version: 4,
-        fetchEvalData: vi.fn(),
-        filters: { values: {}, appliedCount: 0, options: { metric: [] } },
-        table: {
-          head: { ...mockTable.head, prompts: [{}, {}, {}] },
-          body: [
-            {
-              ...mockTable.body[0],
-              outputs: [
-                null,
-                null,
-                {
-                  pass: true,
-                  score: 1,
-                  text: 'comparison output',
-                  sourceEvalId: 'comparison-eval',
-                  sourcePromptIndex: 0,
-                },
-              ],
-            },
-          ],
-        },
-      });
+    it.each([
+      ['comparison-test', 'comparison-test'],
+      [undefined, 'comparison-output'],
+    ])(
+      'keeps comparison trace coordinates and source test-case ID: %s',
+      (sourceTestCaseId, expectedId) => {
+        vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+          inComparisonMode: true,
+          comparisonEvalIds: ['comparison-eval'],
+          renderMarkdown: true,
+        });
+        vi.mocked(useTableStore).mockReturnValue({
+          config: {},
+          evalId: '123',
+          setTable: vi.fn(),
+          version: 4,
+          fetchEvalData: vi.fn(),
+          filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+          table: {
+            head: { ...mockTable.head, prompts: [{}, {}, {}] },
+            body: [
+              {
+                ...mockTable.body[0],
+                test: { metadata: { testCaseId: 'main-test' } },
+                outputs: [
+                  null,
+                  null,
+                  {
+                    pass: true,
+                    score: 1,
+                    text: 'comparison output',
+                    id: 'comparison-output',
+                    sourceTestCaseId,
+                    sourceEvalId: 'comparison-eval',
+                    sourcePromptIndex: 0,
+                  },
+                ],
+              },
+            ],
+          },
+        });
 
-      renderWithProviders(<ResultsTable {...defaultProps} />);
+        renderWithProviders(<ResultsTable {...defaultProps} />);
 
-      const cell = screen.getByTestId('eval-output-cell');
-      expect(cell).toHaveAttribute('data-promptindex', '2');
-      expect(cell).toHaveAttribute('data-tracepromptindex', '0');
-    });
+        const cell = screen.getByTestId('eval-output-cell');
+        expect(cell).toHaveAttribute('data-promptindex', '2');
+        expect(cell).toHaveAttribute('data-tracepromptindex', '0');
+        expect(cell).toHaveAttribute('data-testcaseid', expectedId);
+      },
+    );
 
     it('remounts a failed blob image and its open lightbox after a table refresh', async () => {
       const user = userEvent.setup();

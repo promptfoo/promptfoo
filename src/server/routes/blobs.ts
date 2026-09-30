@@ -303,7 +303,7 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
           // Pick one reference per blob: most recent by created_at, rowid as tiebreaker
           eq(
             blobReferencesTable.id,
-            sql`(SELECT r2.id FROM blob_references r2 WHERE r2.blob_hash = ${blobAssetsTable.hash}${evalFilterClause} ORDER BY r2.created_at DESC, r2.rowid DESC LIMIT 1)`,
+            sql`(SELECT r2.id FROM blob_references r2 WHERE r2.blob_hash = ${blobAssetsTable.hash}${evalFilterClause} AND (r2.kind IS NOT NULL OR r2.location = 'import') ORDER BY r2.created_at DESC, r2.rowid DESC LIMIT 1)`,
           ),
         ),
       )

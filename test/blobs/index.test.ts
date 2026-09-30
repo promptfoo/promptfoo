@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getShareAuthorizedBlob,
@@ -228,6 +228,7 @@ describe('storeBlob persistence failures with shared files', () => {
   const firstEvalId = `eval-${randomUUID()}`;
   const secondEvalId = `eval-${randomUUID()}`;
   const missingEvalId = `missing-${randomUUID()}`;
+  const failingEvalId = `eval-${randomUUID()}`;
   let tempDir: string;
   let provider: FilesystemBlobStorageProvider;
   let restoreEnv: () => void;
@@ -247,7 +248,11 @@ describe('storeBlob persistence failures with shared files', () => {
     await db.insert(evalsTable).values([
       { id: firstEvalId, config: {}, results: {} },
       { id: secondEvalId, config: {}, results: {} },
+      { id: failingEvalId, config: {}, results: {} },
     ]);
+    await db.run(sql`CREATE TRIGGER blob_reference_fixture_failure BEFORE INSERT ON blob_references
+      WHEN NEW.location = 'fixture-failure'
+      BEGIN SELECT RAISE(FAIL, 'fixture reference failure'); END`);
     transactionError = undefined;
     const transaction = db.transaction.bind(db);
     vi.spyOn(db, 'transaction').mockImplementation((callback, config) =>
@@ -262,9 +267,12 @@ describe('storeBlob persistence failures with shared files', () => {
     vi.restoreAllMocks();
     resetBlobStorageProvider();
     try {
+      await db.run(sql`DROP TRIGGER IF EXISTS blob_reference_fixture_failure`);
       await db.delete(blobReferencesTable).where(eq(blobReferencesTable.blobHash, hash));
       await db.delete(blobAssetsTable).where(eq(blobAssetsTable.hash, hash));
-      await db.delete(evalsTable).where(inArray(evalsTable.id, [firstEvalId, secondEvalId]));
+      await db
+        .delete(evalsTable)
+        .where(inArray(evalsTable.id, [firstEvalId, secondEvalId, failingEvalId]));
     } finally {
       restoreEnv();
       removeTempDir(tempDir);
@@ -300,12 +308,35 @@ describe('storeBlob persistence failures with shared files', () => {
     expect(error).toBe(transactionError);
   }
 
+  it.each(['store', 'reference'])(
+    'keeps media usable for non-persisted eval IDs: %s',
+    async (operation) => {
+      await storeBlob(data, mimeType);
+      if (operation === 'store') {
+        await expect(
+          storeBlob(data, mimeType, { evalId: missingEvalId, kind: 'image' }),
+        ).resolves.toMatchObject({ ref: { hash } });
+      } else {
+        await expect(
+          recordBlobReference(hash, { evalId: missingEvalId, kind: 'image' }),
+        ).resolves.toBeUndefined();
+      }
+      const rows = await snapshotRows();
+      expect(rows.assets).toHaveLength(1);
+      expect(rows.references).toEqual([]);
+      expect((await provider.getByHash(hash)).data).toEqual(data);
+      await expect(isBlobAllowedForShare(hash, missingEvalId)).resolves.toBe(false);
+    },
+  );
+
   it('preserves already shared files when a later reference transaction fails', async () => {
     await storeBlob(data, mimeType, { evalId: firstEvalId, location: 'import' });
     const files = await snapshotFiles();
     const rows = await snapshotRows();
 
-    await expectOriginalPersistenceError(storeBlob(data, mimeType, { evalId: missingEvalId }));
+    await expectOriginalPersistenceError(
+      storeBlob(data, mimeType, { evalId: failingEvalId, location: 'fixture-failure' }),
+    );
 
     expect(await snapshotRows()).toEqual(rows);
     expect(await provider.exists(hash)).toBe(true);
@@ -345,7 +376,7 @@ describe('storeBlob persistence failures with shared files', () => {
     setBlobStorageProvider(gatedProvider);
     // Attach the rejection observer before starting the other store.
     const failingStore = expectOriginalPersistenceError(
-      storeBlob(data, mimeType, { evalId: missingEvalId }),
+      storeBlob(data, mimeType, { evalId: failingEvalId, location: 'fixture-failure' }),
     );
     try {
       expect(await created.promise).toBe(false);
@@ -373,7 +404,9 @@ describe('storeBlob persistence failures with shared files', () => {
   });
 
   it('retains unreferenced files after failure and permits a later valid adoption', async () => {
-    await expectOriginalPersistenceError(storeBlob(data, mimeType, { evalId: missingEvalId }));
+    await expectOriginalPersistenceError(
+      storeBlob(data, mimeType, { evalId: failingEvalId, location: 'fixture-failure' }),
+    );
 
     expect(await snapshotRows()).toEqual({ assets: [], references: [] });
     expect(await provider.exists(hash)).toBe(true);
@@ -454,10 +487,10 @@ describe('storeBlob persistence failures with shared files', () => {
     expect((await snapshotRows()).references).toHaveLength(0);
     await expect(getShareAuthorizedBlob(hash, firstEvalId)).resolves.toBeNull();
 
-    // A registered asset does not make an invalid eval association safe to ignore.
+    // A non-persisted eval must not acquire a share-authorized reference.
     await expect(
       recordBlobReference(hash, { evalId: missingEvalId, location: 'import' }),
-    ).rejects.toThrow();
+    ).resolves.toBeUndefined();
     expect((await snapshotRows()).references).toHaveLength(0);
 
     await recordBlobReference(hash, { evalId: firstEvalId, location: 'response.output' });

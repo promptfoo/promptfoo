@@ -52,6 +52,32 @@ describe('evalTableUtils', () => {
     expect(mockTable.body[0].outputs[0].sourceEvalId).toBe('unrelated-eval');
   });
 
+  it.each(['comparison-test', undefined])(
+    'preserves source test-case IDs in comparison outputs: %s',
+    (testCaseId) => {
+      mockTable.body[0].test.metadata = { testCaseId: 'main-test' };
+      const compared = {
+        ...mockTable,
+        body: mockTable.body.map((row) => ({
+          ...row,
+          test: { ...row.test, metadata: { testCaseId } },
+          outputs: row.outputs.map((output) => ({ ...output, sourceTestCaseId: 'stored-value' })),
+        })),
+      };
+      const merged = mergeComparisonTables('main-eval', mockTable, [
+        { evalId: 'comparison-eval', table: compared },
+      ]);
+      expect(merged.body[0].outputs.map((output) => output.sourceTestCaseId)).toEqual([
+        'main-test',
+        'main-test',
+        testCaseId,
+        testCaseId,
+      ]);
+      expect(merged.body[0].test.metadata?.testCaseId).toBe('main-test');
+      expect(compared.body[0].outputs[0].sourceTestCaseId).toBe('stored-value');
+    },
+  );
+
   beforeEach(() => {
     mockTable = {
       head: {
