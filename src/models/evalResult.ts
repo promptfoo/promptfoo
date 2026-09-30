@@ -389,7 +389,19 @@ export function sanitizePromptForArtifact<T extends Prompt>(
   }
   const sanitized = sanitizeForDbWithSecrets(prompt, true);
   const id = Object.getOwnPropertyDescriptor(prompt, 'id')?.value;
-  const generatedId = typeof id === 'string' && /^[a-f0-9]{64}$/i.test(id) ? id : undefined;
+  let generatedId = typeof id === 'string' && /^[a-f0-9]{64}$/i.test(id) ? id : undefined;
+  // Imported completed prompts can lack IDs. Preserve their identity before stripping labels.
+  if (
+    id === undefined &&
+    stripPromptText &&
+    typeof Object.getOwnPropertyDescriptor(prompt, 'provider')?.value === 'string'
+  ) {
+    const label = Object.getOwnPropertyDescriptor(prompt, 'label')?.value;
+    const raw = Object.getOwnPropertyDescriptor(prompt, 'raw')?.value;
+    if (typeof label === 'string' && typeof raw === 'string') {
+      generatedId = hashPrompt({ label, raw });
+    }
+  }
   if (!asRecord(sanitized)) {
     return projectPrompt(
       { raw: REDACTED, label: REDACTED, ...(generatedId && { id: generatedId }) } as T,

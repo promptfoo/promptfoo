@@ -1415,6 +1415,56 @@ describe('importCommand', () => {
       expect(process.exitCode).toBe(1);
     });
 
+    it('reimports stripped OpenAI prompts that originally have no IDs', async () => {
+      const dir = createTempDir();
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
+      try {
+        importCommand(program);
+        await program.parseAsync([
+          'node',
+          'test',
+          'import',
+          path.join(__dirname, '../__fixtures__/openai-evals-multi-run-items.jsonl'),
+        ]);
+        expect(process.exitCode).toBeUndefined();
+        const [imported] = await Eval.getMany(10);
+        expect(imported.prompts).toHaveLength(2);
+        expect(imported.prompts.every((prompt) => prompt.id === undefined)).toBe(true);
+        const original = structuredClone(imported.prompts);
+        const originalRows = await EvalResult.findManyByEvalId(imported.id);
+        const ids = originalRows.map((row) => row.promptId).sort();
+        const output = path.join(dir, 'stripped-openai.json');
+        await writeOutput(output, imported, null);
+        const exported = JSON.parse(fs.readFileSync(output, 'utf8'));
+        expect(exported.results.prompts.map((prompt: Prompt) => prompt.id).sort()).toEqual(ids);
+        expect(exported.results.prompts.map((prompt: Prompt) => prompt.label)).toEqual([
+          '[prompt stripped]',
+          '[prompt stripped]',
+        ]);
+        exported.evalId += '-round-trip';
+        fs.writeFileSync(output, JSON.stringify(exported));
+        await program.parseAsync(['node', 'test', 'import', output]);
+        expect(process.exitCode).toBeUndefined();
+        const rows = await EvalResult.findManyByEvalId(exported.evalId);
+        expect(rows.map((row) => row.promptId).sort()).toEqual(ids);
+        const db = await getDb();
+        const links = await db.select().from(evalsToPromptsTable).all();
+        expect(
+          links
+            .filter((link) => link.evalId === exported.evalId)
+            .map((link) => link.promptId)
+            .sort(),
+        ).toEqual(ids);
+        expect(rows.map((row) => row.response?.tokenUsage)).toEqual(
+          originalRows.map((row) => row.response?.tokenUsage),
+        );
+        expect(imported.prompts).toEqual(original);
+      } finally {
+        restoreEnv();
+        removeTempDir(dir);
+      }
+    });
+
     it('should import multi-run samples as comparable prompt columns', async () => {
       const sampleFilePath = path.join(
         __dirname,
