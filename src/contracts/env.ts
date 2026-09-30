@@ -133,6 +133,8 @@ export const ProviderEnvOverridesSchema = z.object({
   SHAREPOINT_CLIENT_ID: z.string().optional(),
   SHAREPOINT_TENANT_ID: z.string().optional(),
   SLACK_BOT_TOKEN: z.string().optional(),
+  SNOWFLAKE_ACCOUNT_IDENTIFIER: z.string().optional(),
+  SNOWFLAKE_API_KEY: z.string().optional(),
   TOGETHER_API_KEY: z.string().optional(),
   VERCEL_AI_GATEWAY_API_KEY: z.string().optional(),
   VERCEL_AI_GATEWAY_BASE_URL: z.string().optional(),

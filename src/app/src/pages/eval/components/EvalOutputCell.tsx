@@ -1620,7 +1620,9 @@ function EvalOutputCell({
         <TruncatedText
           text={node || normalizedText}
           maxLength={
-            renderMarkdown && (isImageProvider(output.provider) || isVideoProvider(output.provider))
+            output.images?.some((image) => resolveEvalImageOutputSource(image)) ||
+            (renderMarkdown &&
+              (isImageProvider(output.provider) || isVideoProvider(output.provider)))
               ? 0
               : maxTextLength
           }

@@ -80,6 +80,7 @@ describe('WatsonXProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(envarsModule.getEnvString).mockReset();
     clearModelSpecsCache();
   });
 
@@ -112,6 +113,22 @@ describe('WatsonXProvider', () => {
 
       const provider = new WatsonXProvider(modelName, { config });
       expect(provider.id()).toBe(`watsonx:${modelName}`);
+    });
+
+    it('prefers provider-scoped default credentials over the process environment', async () => {
+      mockClient({ generateText: vi.fn() });
+      vi.mocked(envarsModule.getEnvString).mockImplementation((name) =>
+        name === 'WATSONX_AI_APIKEY' ? 'process-key' : '',
+      );
+
+      const provider = new WatsonXProvider(modelName, {
+        config: { ...config, apiKey: undefined },
+        env: { WATSONX_AI_APIKEY: 'scoped-key' },
+      });
+
+      await provider.getClient();
+
+      expect(IamAuthenticator).toHaveBeenCalledWith({ apikey: 'scoped-key' });
     });
   });
 

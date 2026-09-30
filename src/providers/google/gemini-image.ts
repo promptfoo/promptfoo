@@ -2,6 +2,7 @@ import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
+import { resolveProviderApiKey } from '../credentials';
 import { getRequestTimeoutMs } from '../shared';
 import {
   createAuthCacheDiscriminator,
@@ -25,7 +26,7 @@ import type {
 import type { CompletionOptions } from './types';
 
 interface GeminiImageOptions {
-  config?: CompletionOptions;
+  config?: CompletionOptions & { apiKeyEnvar?: string };
   id?: string;
   env?: EnvOverrides;
 }
@@ -98,12 +99,16 @@ const MODEL_IMAGE_SIZES: Record<string, string[]> = {
  */
 export class GeminiImageProvider implements ApiProvider {
   modelName: string;
-  config: CompletionOptions;
+  config: CompletionOptions & { apiKeyEnvar?: string };
   env?: EnvOverrides;
 
   constructor(modelName: string, options: GeminiImageOptions = {}) {
     this.modelName = modelName;
     this.config = options.config || {};
+    const id = options.id;
+    if (id) {
+      this.id = () => id;
+    }
     this.env = options.env;
   }
 
@@ -116,15 +121,11 @@ export class GeminiImageProvider implements ApiProvider {
   }
 
   private getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      getEnvString('GOOGLE_API_KEY') ||
-      getEnvString('GOOGLE_GENERATIVE_AI_API_KEY') ||
-      getEnvString('GEMINI_API_KEY') ||
-      this.env?.GOOGLE_API_KEY ||
-      this.env?.GOOGLE_GENERATIVE_AI_API_KEY ||
-      this.env?.GEMINI_API_KEY
-    );
+    return resolveProviderApiKey(this.config, this.env, [
+      'GOOGLE_API_KEY',
+      'GOOGLE_GENERATIVE_AI_API_KEY',
+      'GEMINI_API_KEY',
+    ]);
   }
 
   /**
