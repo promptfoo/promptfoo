@@ -277,21 +277,18 @@ function getVariableCellValue({
   varName: string;
   injectVarName: string;
   fallbackValue: string | object;
-}): string | object {
-  let value = fallbackValue;
-
+}): { value: string | object; sourceEvalId?: string } {
   if (varName === injectVarName) {
     for (const output of row.outputs || []) {
       const actualPrompt = getActualPrompt(output?.response);
       if (actualPrompt) {
-        value = actualPrompt;
-        break;
+        return { value: actualPrompt, sourceEvalId: output.sourceEvalId };
       }
     }
   }
 
-  if (value && value !== '') {
-    return value;
+  if (fallbackValue && fallbackValue !== '') {
+    return { value: fallbackValue };
   }
 
   for (const output of row.outputs || []) {
@@ -299,11 +296,11 @@ function getVariableCellValue({
       | Record<string, string>
       | undefined;
     if (transformVars?.[varName]) {
-      return transformVars[varName];
+      return { value: transformVars[varName], sourceEvalId: output.sourceEvalId };
     }
   }
 
-  return value;
+  return { value: fallbackValue };
 }
 
 function renderMediaVariableCell({
@@ -509,12 +506,14 @@ function renderVariableCell({
   toggleLightbox: (url?: string) => void;
 }): React.ReactNode {
   const row = info.row.original;
-  let value = getVariableCellValue({
+  const selected = getVariableCellValue({
     row,
     varName,
     injectVarName,
     fallbackValue: info.getValue(),
   });
+  let value = selected.value;
+  evaluationId = selected.sourceEvalId || evaluationId;
 
   const output = row.outputs && row.outputs.length > 0 ? row.outputs[0] : null;
   const fileMetadata = output?.metadata?.[FILE_METADATA_KEY] as
@@ -1357,16 +1356,18 @@ function getImageSourceForCell({
     return undefined;
   }
 
-  const imageValue = varName
+  const selected = varName
     ? getVariableCellValue({
         row: row.original,
         varName,
         injectVarName,
         fallbackValue: value,
       })
-    : value;
+    : { value };
 
-  return typeof imageValue === 'string' ? resolveImageSource(imageValue, evaluationId) : undefined;
+  return typeof selected.value === 'string'
+    ? resolveImageSource(selected.value, selected.sourceEvalId || evaluationId)
+    : undefined;
 }
 
 function renderImageCellContent({
@@ -1864,13 +1865,14 @@ function ResultsTable({
       head.vars.map((varName, idx) =>
         estimateMetadataColumnSize(
           varName,
-          tableBody.map((row) =>
-            getVariableCellValue({
-              row,
-              varName,
-              injectVarName,
-              fallbackValue: row.vars[idx],
-            }),
+          tableBody.map(
+            (row) =>
+              getVariableCellValue({
+                row,
+                varName,
+                injectVarName,
+                fallbackValue: row.vars[idx],
+              }).value,
           ),
         ),
       ),

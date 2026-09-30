@@ -1123,6 +1123,51 @@ describe('ResultsTable Metrics Display', () => {
       expect(screen.getByText('spoken prompt')).toBeInTheDocument();
     });
 
+    it.each(['provider', 'transform', 'primary'])(
+      'keeps %s variable media bound to the evaluation that supplied it',
+      (source) => {
+        const hash = 'b'.repeat(64);
+        const image = `promptfoo://blob/${hash}`;
+        const markdown = `Preview: ![comparison sample](${image})`;
+        const comparison = {
+          pass: true,
+          score: 1,
+          text: 'comparison output',
+          sourceEvalId: 'comparison-eval',
+          ...(source === 'provider'
+            ? { response: { prompt: image } }
+            : { metadata: { transformDisplayVars: { prompt: markdown } } }),
+        };
+        vi.mocked(useTableStore).mockImplementation(() => ({
+          config: {},
+          evalId: 'primary-eval',
+          setTable: vi.fn(),
+          table: {
+            body: [
+              {
+                outputs: [{ pass: true, score: 1, text: 'primary output' }, comparison],
+                test: {},
+                vars: [source === 'primary' ? markdown : ''],
+              },
+            ],
+            head: { prompts: [{}, {}], vars: ['prompt'] },
+          },
+          version: 4,
+          fetchEvalData: vi.fn(),
+          filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+        }));
+
+        renderWithProviders(<ResultsTable {...defaultProps} maxTextLength={1000} />);
+
+        const expectedEval = source === 'primary' ? 'primary-eval' : 'comparison-eval';
+        expect(
+          screen.getByRole('img', {
+            name: source === 'provider' ? 'Base64 encoded image' : 'comparison sample',
+          }),
+        ).toHaveAttribute('src', `/api/blobs/${hash}?evalId=${expectedEval}`);
+      },
+    );
+
     it('shows original image text for the injected prompt variable when image cells are rendered', () => {
       vi.mocked(useTableStore).mockImplementation(() => ({
         config: {
