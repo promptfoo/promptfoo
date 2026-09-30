@@ -83,16 +83,31 @@ export function callGradingProvider<T extends ProviderResponse>(
         ) as Promise<T>)
       : invokeWithOptions(callContext);
 
-  const executeCall = () => {
-    if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
-      return executionContext.rateLimitRegistry.execute(
-        provider,
-        callProvider,
-        createProviderRateLimitOptions(callOptions?.abortSignal),
-      );
-    }
+  const executeCall = async () => {
+    try {
+      if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
+        return await executionContext.rateLimitRegistry.execute(
+          provider,
+          callProvider,
+          createProviderRateLimitOptions(callOptions?.abortSignal),
+        );
+      }
 
-    return callProvider();
+      return await callProvider();
+    } catch (error) {
+      // The grouped queue can stop waiting before an unrelated provider failure arrives.
+      if (
+        executionContext?.providerCallQueue &&
+        callOptions?.abortSignal?.aborted &&
+        !isGradingCancellation(error)
+      ) {
+        logger.error('Assertion grading failed after cancellation', {
+          provider: provider.id(),
+          error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+        });
+      }
+      throw error;
+    }
   };
 
   if (executionContext?.providerCallQueue) {

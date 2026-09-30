@@ -1,6 +1,7 @@
 import cliState from '../cliState';
 import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
+import { awaitWithAbort } from '../util/abort';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
   callGradingProvider,
@@ -143,26 +144,22 @@ async function calculateProviderSimilarity(
     throw new Error('Provider must implement callSimilarityApi or callEmbeddingApi');
   }
 
-  const results = await Promise.allSettled([
-    callGradingProvider(
-      finalProvider,
-      'similarity.embedding',
-      (context, options) =>
-        options || context
-          ? callEmbeddingApi.call(finalProvider, expected, context, options)
-          : callEmbeddingApi.call(finalProvider, expected),
-      { operationName: 'embeddings' },
+  const results = await Promise.allSettled(
+    [expected, output].map((input) =>
+      callGradingProvider(
+        finalProvider,
+        'similarity.embedding',
+        (context, options) =>
+          awaitWithAbort(
+            options || context
+              ? callEmbeddingApi.call(finalProvider, input, context, options)
+              : callEmbeddingApi.call(finalProvider, input),
+            options?.abortSignal,
+          ),
+        { operationName: 'embeddings' },
+      ),
     ),
-    callGradingProvider(
-      finalProvider,
-      'similarity.embedding',
-      (context, options) =>
-        options || context
-          ? callEmbeddingApi.call(finalProvider, output, context, options)
-          : callEmbeddingApi.call(finalProvider, output),
-      { operationName: 'embeddings' },
-    ),
-  ]);
+  );
   for (const result of results) {
     if (result.status === 'fulfilled') {
       accumulateTokenUsage(tokensUsed, result.value.tokenUsage);

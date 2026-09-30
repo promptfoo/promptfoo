@@ -10,7 +10,7 @@ import {
   withProviderCallTracingContext,
 } from '../../src/scheduler/providerCallExecutionContext';
 import { createMockProvider } from '../factories/provider';
-import { mockProcessEnv } from '../util/utils';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 
 import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
@@ -299,6 +299,41 @@ describe('matchesSimilarity', () => {
         tokensUsed: { total: 5, prompt: 2, completion: 3 },
       },
     );
+  });
+
+  it('stops waiting for a legacy embedding while retaining completed sibling usage', async () => {
+    const controller = new AbortController();
+    const started = createDeferred<void>();
+    const finish = createDeferred<{ embedding: number[]; tokenUsage: { total: number } }>();
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi')
+      .mockResolvedValueOnce({ embedding: [1, 0, 0], tokenUsage: { total: 5, prompt: 5 } })
+      .mockImplementationOnce(() => {
+        started.resolve();
+        return finish.promise;
+      });
+    const pending = withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
+      matchesSimilarity('Expected output', 'Sample output', 0.5),
+    );
+    let result: Awaited<typeof pending> | undefined;
+    void pending.then((value) => {
+      result = value;
+    });
+    try {
+      await started.promise;
+      controller.abort(new Error('stop legacy embedding'));
+      await vi.waitFor(() => {
+        expect(result).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'stop legacy embedding',
+          tokensUsed: { total: 5, prompt: 5 },
+        });
+      });
+    } finally {
+      finish.resolve({ embedding: [1, 0, 0], tokenUsage: { total: 100 } });
+      await pending;
+    }
+    expect(result?.tokensUsed?.total).toBe(5);
   });
 
   it('does not hide an embedding failure behind a concurrent abort', async () => {
