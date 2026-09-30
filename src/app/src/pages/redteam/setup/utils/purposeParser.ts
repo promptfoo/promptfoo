@@ -108,7 +108,6 @@ export function purposeToApplicationDefinition(purpose: string | undefined): App
 
   // Try to parse structured format with code blocks
   // Pattern: "Section Title:\n```\ncontent\n```"
-  // Using a more robust regex that handles various edge cases
   const sectionRegex = /([A-Za-z][A-Za-z0-9\s/']+?):\s*\n```\n([\s\S]*?)\n```/g;
 
   let match;
