@@ -254,6 +254,7 @@ function serializeTopLevelOperations(
   { reconnectOnLockFailure }: { reconnectOnLockFailure: boolean },
 ): Drizzle {
   const rawExecute = client.execute.bind(client);
+  let recoveryFailed = false;
 
   // A failed statement can leave connection state behind. Reconnect before reuse.
   const recoverConnection = async (): Promise<boolean> => {
@@ -265,6 +266,7 @@ function serializeTopLevelOperations(
       await configureConnection(rawExecute, busyTimeoutMs, 'preserve');
       return true;
     } catch (recoveryError) {
+      recoveryFailed = true;
       logger.warn('Could not recover database connection after lock failure', {
         error: recoveryError,
       });
@@ -283,7 +285,7 @@ function serializeTopLevelOperations(
   const withLockRecovery = async <T>(operation: () => Promise<T>, retry: boolean): Promise<T> => {
     for (let attempt = 1; ; attempt++) {
       // Do not retry or reuse a client whose recovery failed.
-      if (client.closed) {
+      if (recoveryFailed || client.closed) {
         throw new Error('Database connection is closed');
       }
       try {

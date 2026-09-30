@@ -13,6 +13,8 @@ export interface LockRecoveryProbeResult {
   dbOpenAfterFailure: boolean | null;
   reopenedError: string | null;
   reopenedRowsAffected: number | null;
+  staleReadAfterReopenError: string | null;
+  replacementStillCached: boolean | null;
   callbackCalls: number;
   clientClosedAfterFailure: boolean;
   beforeCloseIds: number[];
@@ -39,6 +41,9 @@ async function captureError(operation: () => Promise<unknown>): Promise<string |
 }
 
 const mode = process.argv[2];
+const recoveryFailure = ['reconnect-failure', 'configuration-failure', 'close-failure'].includes(
+  mode,
+);
 const execute = Sqlite3Client.prototype.execute;
 let db: Awaited<ReturnType<typeof getDb>>;
 try {
@@ -69,6 +74,8 @@ const result: LockRecoveryProbeResult = {
   dbOpenAfterFailure: null,
   reopenedError: null,
   reopenedRowsAffected: null,
+  staleReadAfterReopenError: null,
+  replacementStillCached: null,
   callbackCalls: 0,
   clientClosedAfterFailure: false,
   beforeCloseIds: [],
@@ -130,16 +137,22 @@ try {
           break;
         }
         case 'reconnect-failure':
-        case 'configuration-failure': {
+        case 'configuration-failure':
+        case 'close-failure': {
           const reconnect = client.reconnect.bind(client);
           client.reconnect = async () => {
-            if (mode === 'reconnect-failure') {
+            if (mode === 'reconnect-failure' || mode === 'close-failure') {
               throw new Error('Injected reconnect failure');
             }
             await reconnect();
             // Simulate losing the replacement connection before restoring its PRAGMAs.
             client.close();
           };
+          if (mode === 'close-failure') {
+            client.close = () => {
+              throw new Error('Injected close failure');
+            };
+          }
           result.firstError = await captureError(() =>
             db.run('INSERT INTO lock_recovery_test VALUES (2)'),
           );
@@ -161,7 +174,7 @@ try {
   }
 
   result.clientClosedAfterFailure = client.closed;
-  if (!client.closed) {
+  if (!recoveryFailure) {
     for (const pragma of ['busy_timeout', 'foreign_keys', 'synchronous', 'wal_autocheckpoint']) {
       const query = await client.execute(`PRAGMA ${pragma}`);
       result.pragmas[pragma] = Number(query.rows[0]?.[query.columns[0]]);
@@ -173,7 +186,7 @@ try {
     );
     result.followupRowsAffected = insert.rowsAffected;
   });
-  if (mode === 'reconnect-failure' || mode === 'configuration-failure') {
+  if (recoveryFailure) {
     result.transactionAfterFailureError = await captureError(() =>
       db.transaction(async (tx) => {
         result.callbackCalls++;
@@ -187,6 +200,10 @@ try {
       const reopened = await getDb();
       const insert = await reopened.run('INSERT INTO lock_recovery_test VALUES (5)');
       result.reopenedRowsAffected = insert.rowsAffected;
+      result.staleReadAfterReopenError = await captureError(() =>
+        db.all('SELECT id FROM lock_recovery_test'),
+      );
+      result.replacementStillCached = (await getDb()) === reopened;
     });
   }
   if (mode === 'script') {
@@ -199,5 +216,9 @@ try {
   console.log(`PROMPTFOO_DATABASE_PROBE_RESULT=${JSON.stringify(result)}`);
 } finally {
   contender.close();
+  if (mode === 'close-failure') {
+    Reflect.deleteProperty(client, 'close');
+    client.close();
+  }
   await closeDb();
 }
