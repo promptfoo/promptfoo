@@ -259,6 +259,54 @@ describe('cache configuration', () => {
     expect(fs.mkdirSync).toHaveBeenCalledWith(expectedCachePath, { recursive: true });
   });
 
+  it('should fall back to a process-local one-time claim when the disk cache is read-only', async () => {
+    mockProcessEnv({ NODE_ENV: 'production' });
+    mkdirSyncMock.mockImplementationOnce(() => {
+      throw Object.assign(new Error('Permission denied'), { code: 'EACCES' });
+    });
+    const cacheModule = await import('../src/cache');
+    const key = `background-billing-read-only:${Date.now()}`;
+
+    expect(cacheModule.claimCacheKeyOnce(key)).toBe(true);
+    expect(cacheModule.claimCacheKeyOnce(key)).toBe(false);
+  });
+
+  it('should memoize an existing disk-backed one-time claim', async () => {
+    mockProcessEnv({ NODE_ENV: 'production' });
+    const openSync = vi.spyOn(fs, 'openSync').mockImplementation(() => {
+      throw Object.assign(new Error('Already claimed'), { code: 'EEXIST' });
+    });
+    const cacheModule = await import('../src/cache');
+    const key = `background-billing-existing:${Date.now()}`;
+
+    expect(cacheModule.claimCacheKeyOnce(key)).toBe(false);
+    expect(cacheModule.claimCacheKeyOnce(key)).toBe(false);
+    expect(openSync).toHaveBeenCalledOnce();
+
+    openSync.mockRestore();
+  });
+
+  it('should clear persistent one-time claims with the disk cache', async () => {
+    mockProcessEnv({ NODE_ENV: 'production', PROMPTFOO_CACHE_PATH: '/custom/cache/path' });
+    const openSync = vi.spyOn(fs, 'openSync').mockReturnValue(42);
+    const closeSync = vi.spyOn(fs, 'closeSync').mockImplementation(() => undefined);
+    const rmSync = vi.spyOn(fs, 'rmSync').mockImplementation(() => undefined);
+    const cacheModule = await import('../src/cache');
+    const key = `background-billing-clear:${Date.now()}`;
+
+    expect(cacheModule.claimCacheKeyOnce(key)).toBe(true);
+    await cacheModule.clearCache();
+    expect(rmSync).toHaveBeenCalledWith(path.join('/custom/cache/path', 'claims'), {
+      force: true,
+      recursive: true,
+    });
+    expect(cacheModule.claimCacheKeyOnce(key)).toBe(true);
+
+    openSync.mockRestore();
+    closeSync.mockRestore();
+    rmSync.mockRestore();
+  });
+
   it('should surface a failed durable claim without memoizing success', async () => {
     mockProcessEnv({ NODE_ENV: 'production' });
     mkdirSyncMock.mockImplementation(() => {
@@ -266,10 +314,10 @@ describe('cache configuration', () => {
     });
     const cacheModule = await import('../src/cache');
 
-    await expect(cacheModule.claimCacheKeyOnce('read-only-claim')).rejects.toThrow(
+    await expect(cacheModule.claimBackgroundUsageOnce('read-only-claim')).rejects.toThrow(
       'Failed to persist a one-time cache claim',
     );
-    await expect(cacheModule.claimCacheKeyOnce('read-only-claim')).rejects.toThrow(
+    await expect(cacheModule.claimBackgroundUsageOnce('read-only-claim')).rejects.toThrow(
       'Failed to persist a one-time cache claim',
     );
   });
@@ -1849,8 +1897,8 @@ describe('fetchWithCache', () => {
     it('should claim a cache-scoped one-time action only once per namespace', async () => {
       const key = `background-billing:${Date.now()}`;
 
-      expect(await claimCacheKeyOnce(key)).toBe(true);
-      expect(await claimCacheKeyOnce(key)).toBe(false);
+      expect(claimCacheKeyOnce(key)).toBe(true);
+      expect(claimCacheKeyOnce(key)).toBe(false);
       expect(await withCacheNamespace('repeat:1', async () => claimCacheKeyOnce(key))).toBe(true);
       expect(await withCacheNamespace('repeat:1', async () => claimCacheKeyOnce(key))).toBe(false);
     });

@@ -1,5 +1,5 @@
 import {
-  claimCacheKeyOnce,
+  claimBackgroundUsageOnce,
   type FetchWithCacheResult,
   fetchWithCache,
   getScopedCacheKey,
@@ -1350,7 +1350,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     let pollingBackground = false;
     try {
       const url = appendOpenAiApiPath(this.getApiUrl(), 'responses');
-      const backgroundDeadline = body.background && !body.stream ? Date.now() + timeout : undefined;
+      const backgroundDeadline = body.background ? Date.now() + timeout : undefined;
       const customHeaders = this.getOpenAiRequestHeaders(config.headers);
       const hasCustomHeader = (name: string) =>
         Object.keys(customHeaders).some((header) => header.toLowerCase() === name);
@@ -1654,7 +1654,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             billingIdentity.cacheable &&
             isCacheEnabled() &&
             !this.shouldBustCache(context) &&
-            !(await claimCacheKeyOnce(`openai:background-billing:${billingIdentity.key}`));
+            !(await claimBackgroundUsageOnce(`openai:background-billing:${billingIdentity.key}`, {
+              signal: abortSignal,
+              deadline: backgroundDeadline,
+            }));
         }
         data = polled.data;
         status = polled.status;

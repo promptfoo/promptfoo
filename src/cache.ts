@@ -23,7 +23,7 @@ import {
   preserveCloudAuthRedirects,
 } from './util/fetch/monkeyPatchFetch';
 import { isSecretField, looksLikeSecret, sanitizeUrlForLogging } from './util/sanitizer';
-import { sleep } from './util/time';
+import { sleep, sleepWithAbort } from './util/time';
 import type { Cache } from 'cache-manager';
 
 import type { CacheOptions } from './types/cache';
@@ -603,50 +603,116 @@ function getInflightFetchCacheKey(cacheKey: string, url: RequestInfo, options: R
 }
 
 /**
- * Persist one-time usage attribution independently of response-cache expiry. A slow poller
- * can still need a claim after the cached response expires.
+ * Atomically claim a cache-scoped one-time action. Disk-backed claims use an exclusive file so
+ * separate eval processes cannot both attribute the same background response's usage.
  */
-export async function claimCacheKeyOnce(cacheKey: string): Promise<boolean> {
+export function claimCacheKeyOnce(cacheKey: string): boolean {
+  const scopedCacheKey = getScopedCacheKey(cacheKey);
+  if (claimedCacheKeys.has(scopedCacheKey)) {
+    return false;
+  }
+
+  if (cacheType === 'disk' && getEffectiveCacheEnabled()) {
+    const cachePath =
+      getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
+    const claimsPath = path.join(cachePath, 'claims');
+    try {
+      fs.mkdirSync(claimsPath, { recursive: true });
+      const handle = fs.openSync(path.join(claimsPath, sha256(scopedCacheKey)), 'wx');
+      fs.closeSync(handle);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+        claimedCacheKeys.add(scopedCacheKey);
+        return false;
+      }
+      logger.warn(
+        `[Cache] Failed to persist a one-time cache claim: ${(error as Error).message}. ` +
+          'Using a process-local claim instead.',
+      );
+    }
+  }
+
+  claimedCacheKeys.add(scopedCacheKey);
+  return true;
+}
+
+/**
+ * Store background billing claims compactly, independently of response-cache expiry.
+ * The synchronous public claim helper retains its separate legacy marker contract.
+ */
+export async function claimBackgroundUsageOnce(
+  cacheKey: string,
+  options: { signal?: AbortSignal; deadline?: number } = {},
+): Promise<boolean> {
+  const deadline = options.deadline ?? Date.now() + 5000;
+  const checkDeadline = () => {
+    options.signal?.throwIfAborted();
+    if (Date.now() >= deadline) {
+      throw new Error('Timed out claiming background usage');
+    }
+  };
+  checkDeadline();
   const scopedCacheKey = getScopedCacheKey(cacheKey);
   if (cacheType === 'disk' && getEffectiveCacheEnabled()) {
     const cachePath =
       getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
     const claimsPath = path.join(cachePath, 'claims');
     const hash = sha256(scopedCacheKey);
-    // Preserve claims from versions that stored one marker file per response.
     if (fs.existsSync(path.join(claimsPath, hash))) {
       return false;
     }
     let client: import('@libsql/client/node').Client | undefined;
     try {
       fs.mkdirSync(claimsPath, { recursive: true });
+      const databasePath = path.join(claimsPath, 'claims.db');
+      // Avoid opening a directory through the native driver, which can retain a Windows handle.
+      if (fs.statSync(databasePath, { throwIfNoEntry: false })?.isDirectory()) {
+        throw new Error('Cache claims database path is a directory');
+      }
       const { createClient } = await import('@libsql/client/node');
-      client = createClient({
-        url: pathToFileURL(path.join(claimsPath, 'claims.db')).href,
-        concurrency: 1,
-      });
-      await client.execute('PRAGMA busy_timeout = 5000');
-      await client.execute(
-        'CREATE TABLE IF NOT EXISTS claims (key BLOB PRIMARY KEY) WITHOUT ROWID',
-      );
-      const result = await client.execute({
-        sql: 'INSERT OR IGNORE INTO claims (key) VALUES (?)',
-        args: [Buffer.from(hash, 'hex')],
-      });
-      return result.rowsAffected === 1;
+      checkDeadline();
+      client = createClient({ url: pathToFileURL(databasePath).href, concurrency: 1, timeout: 0 });
+      // Native busy waits block the event loop. Retry asynchronously so cancellation can run.
+      await client.execute('PRAGMA busy_timeout = 0');
+      while (true) {
+        checkDeadline();
+        try {
+          await client.execute(
+            'CREATE TABLE IF NOT EXISTS claims (key BLOB PRIMARY KEY) WITHOUT ROWID',
+          );
+          checkDeadline();
+          const result = await client.execute({
+            sql: 'INSERT OR IGNORE INTO claims (key) VALUES (?)',
+            args: [Buffer.from(hash, 'hex')],
+          });
+          return result.rowsAffected === 1;
+        } catch (error) {
+          const code = (error as { code?: string }).code;
+          if (!code?.startsWith('SQLITE_BUSY') && !code?.startsWith('SQLITE_LOCKED')) {
+            throw error;
+          }
+          // A failed native statement may keep a lock until its connection is replaced.
+          await client.reconnect();
+          checkDeadline();
+          await client.execute('PRAGMA busy_timeout = 0');
+          const delay = Math.min(25, deadline - Date.now());
+          if (options.signal) {
+            await sleepWithAbort(delay, options.signal);
+          } else {
+            await sleep(delay);
+          }
+        }
+      }
     } catch (error) {
-      // A local fallback could attribute usage already claimed by another process.
-      throw new Error('Failed to persist a one-time cache claim', { cause: error });
+      const wrapped = new Error('Failed to persist a one-time cache claim');
+      // The app compiles this module with ES2020, before ErrorOptions was added.
+      (wrapped as Error & { cause?: unknown }).cause = error;
+      throw wrapped;
     } finally {
       client?.close();
     }
   }
-
-  if (claimedCacheKeys.has(scopedCacheKey)) {
-    return false;
-  }
-  claimedCacheKeys.add(scopedCacheKey);
-  return true;
+  return claimCacheKeyOnce(cacheKey);
 }
 
 function serializeFetchResponse(

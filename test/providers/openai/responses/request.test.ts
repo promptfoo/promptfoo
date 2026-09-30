@@ -2319,7 +2319,7 @@ describe('OpenAiResponsesProvider request building', () => {
       total_tokens: 15,
     });
     const claim = createDeferred<boolean>();
-    vi.spyOn(cache, 'claimCacheKeyOnce').mockReturnValueOnce(claim.promise);
+    vi.spyOn(cache, 'claimBackgroundUsageOnce').mockReturnValueOnce(claim.promise);
     const provider = new OpenAiResponsesProvider('gpt-4.1', {
       config: { apiKey: 'test-key', background: true, headers: { 'X-Tenant-Id': 'tenant-a' } },
     });
@@ -2333,13 +2333,81 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(result.tokenUsage?.cached).toBe(15);
   });
 
+  it('passes cancellation and the remaining background deadline to durable attribution', async () => {
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '4000' });
+    mockBackgroundCreateAndPoll('resp_claim_deadline', 'Completed task', {
+      input_tokens: 10,
+      output_tokens: 5,
+      total_tokens: 15,
+    });
+    const controller = new AbortController();
+    const claim = vi.spyOn(cache, 'claimBackgroundUsageOnce').mockResolvedValueOnce(true);
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'test-key',
+        background: true,
+        headers: { 'X-Tenant-Id': 'tenant-a' },
+      },
+    });
+    const started = Date.now();
+    const result = await provider.callApi('Deadline fixture', undefined, {
+      abortSignal: controller.signal,
+    });
+    expect(result.error).toBeUndefined();
+    const options = claim.mock.calls[0][1]!;
+    expect(options.signal).toBe(controller.signal);
+    expect(options.deadline).toBeGreaterThanOrEqual(started + 4000);
+    expect(options.deadline).toBeLessThanOrEqual(Date.now() + 4000);
+  });
+
+  it('keeps the original deadline when a background stream falls back to polling', async () => {
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '4000' });
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+      new Response(
+        `data: ${JSON.stringify({ type: 'response.created', response: { id: 'resp_stream_claim', status: 'queued', output: [] } })}\n\ndata: [DONE]\n\n`,
+        { headers: { 'Content-Type': 'text/event-stream' } },
+      ),
+    );
+    vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      data: {
+        id: 'resp_stream_claim',
+        status: 'completed',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Completed fixture' }],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const claim = vi.spyOn(cache, 'claimBackgroundUsageOnce').mockResolvedValueOnce(true);
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'test-key',
+        background: true,
+        stream: true,
+        headers: { 'X-Tenant-Id': 'tenant-a' },
+      },
+    });
+    const started = Date.now();
+    const result = await provider.callApi('Stream fallback fixture');
+    expect(result.error).toBeUndefined();
+    expect(claim.mock.calls[0][1]?.deadline).toBeGreaterThanOrEqual(started + 4000);
+    expect(claim.mock.calls[0][1]?.deadline).toBeLessThanOrEqual(Date.now() + 4000);
+  });
+
   it('surfaces durable claim failures instead of reporting newly billed usage', async () => {
     mockBackgroundCreateAndPoll('resp_failed_claim', 'Completed task', {
       input_tokens: 10,
       output_tokens: 5,
       total_tokens: 15,
     });
-    vi.spyOn(cache, 'claimCacheKeyOnce').mockRejectedValueOnce(
+    vi.spyOn(cache, 'claimBackgroundUsageOnce').mockRejectedValueOnce(
       new Error('Failed to persist a one-time cache claim'),
     );
     const provider = new OpenAiResponsesProvider('gpt-4.1', {
@@ -2421,7 +2489,7 @@ describe('OpenAiResponsesProvider request building', () => {
 
   it('should not claim replacement background usage until a transient polling failure recovers', async () => {
     const deleteFromCache = vi.fn().mockResolvedValue(undefined);
-    const claimCacheKeyOnce = vi.spyOn(cache, 'claimCacheKeyOnce');
+    const claimBackgroundUsageOnce = vi.spyOn(cache, 'claimBackgroundUsageOnce');
     vi.mocked(cache.fetchWithCache)
       .mockResolvedValueOnce({
         data: { id: 'resp_expired_before_outage', status: 'queued', output: [], usage: null },
@@ -2478,13 +2546,13 @@ describe('OpenAiResponsesProvider request building', () => {
 
     const failed = await provider.callApi('Recover a replacement task');
     expect(failed.error).toContain('503 Service Unavailable');
-    expect(claimCacheKeyOnce).not.toHaveBeenCalled();
+    expect(claimBackgroundUsageOnce).not.toHaveBeenCalled();
 
     const recovered = await provider.callApi('Recover a replacement task');
     expect(recovered.error).toBeUndefined();
     expect(recovered.output).toBe('Recovered replacement result');
     expect(recovered.cached).toBe(false);
-    expect(claimCacheKeyOnce).toHaveBeenCalledOnce();
+    expect(claimBackgroundUsageOnce).toHaveBeenCalledOnce();
   });
 
   it('should preserve the overall deadline while replacing a stale cached background job', async () => {
