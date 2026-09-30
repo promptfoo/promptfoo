@@ -61,16 +61,13 @@ function getFrameworkSeverity(nonCompliantPlugins: string[]): Severity {
 const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplianceProps) => {
   const { pluginPassRateThreshold, showUntestedPlugins } = useReportStore();
 
-  // Filter frameworks based on config
   const frameworksToShow = React.useMemo(() => {
     const configuredFrameworks = config?.redteam?.frameworks;
 
-    // If not configured or empty, show all frameworks (default behavior)
     if (!configuredFrameworks || configuredFrameworks.length === 0) {
       return FRAMEWORK_COMPLIANCE_IDS;
     }
 
-    // Filter to only show configured frameworks
     return FRAMEWORK_COMPLIANCE_IDS.filter((id) =>
       configuredFrameworks.includes(id as FrameworkComplianceId),
     );
@@ -136,8 +133,7 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
     };
   }, [categoryStats, frameworkSummaries]);
 
-  // Get progress bar color based on attack success rate (high is bad)
-  // All colors are red-toned since attacks succeeding is always bad.
+  // Higher attack success rates indicate more failures.
   const getProgressBarColor = (percentage: number): string => {
     if (percentage >= 90) {
       return 'bg-red-800';
