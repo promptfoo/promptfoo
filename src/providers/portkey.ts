@@ -151,21 +151,30 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
    *
    * The inherited chat provider merges `context.prompt.config` over the provider config
    * shallowly, so a per-prompt `headers` block replaces this object wholesale. Rebuilding
-   * here keeps the Portkey credential attached when a prompt sets an unrelated header.
+   * here preserves provider headers when a prompt adds an unrelated header.
    */
   override getOpenAiRequestHeaders(
     customHeaders: Record<string, string> | undefined = this.config.headers,
   ): Record<string, string> {
-    const headers = getPortkeyHeaders(
-      { ...this.config, headers: customHeaders },
+    const providerHeaders = getPortkeyHeaders(
+      this.config,
       resolvePortkeyApiKey(this.config, this.env),
     );
-    // Chat resolves its bearer before applying prompt headers. Reject a prompt override
-    // that changes credential routing unless the caller supplies Authorization explicitly.
-    if (
-      !hasHeaderOverride(headers, 'Authorization') &&
-      this.getApiKey() !== this.getApiKey({ ...this.config, headers })
-    ) {
+    const headers = {
+      ...Object.fromEntries(
+        Object.entries(providerHeaders).filter(([name]) => !hasHeaderOverride(customHeaders, name)),
+      ),
+      ...getPortkeyHeaders({ headers: customHeaders }),
+    };
+    const providerRoute = new Headers(providerHeaders);
+    const requestRoute = new Headers(headers);
+    // Chat resolves its bearer before applying prompt headers. Compare the route itself:
+    // different upstreams can resolve to the same explicit key or to no key.
+    const routeChanged =
+      providerRoute.get('x-portkey-provider')?.toLowerCase() !==
+        requestRoute.get('x-portkey-provider')?.toLowerCase() ||
+      providerRoute.get('x-portkey-virtual-key') !== requestRoute.get('x-portkey-virtual-key');
+    if (!hasHeaderOverride(headers, 'Authorization') && routeChanged) {
       throw new Error(
         'Portkey prompt headers change upstream credential routing. Configure the route on the provider or set Authorization explicitly.',
       );

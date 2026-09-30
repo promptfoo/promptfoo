@@ -460,6 +460,59 @@ describe('PortkeyChatCompletionProvider', () => {
     );
   });
 
+  describe('prompt header merging', () => {
+    it.each<Record<string, string>>([
+      { 'X-Portkey-Provider': 'anthropic' },
+      { 'X-Portkey-Virtual-Key': 'fixture-virtual-key' },
+      { 'X-Portkey-Provider': '@fixture-catalog' },
+    ])('preserves provider routing headers when adding unrelated prompt headers: %j', (route) => {
+      const provider = new PortkeyChatCompletionProvider('fixture-model', {
+        config: { portkeyApiKey: 'fake-portkey', headers: route },
+      });
+      const headers = new Headers(provider.getOpenAiRequestHeaders({ 'X-Request-Id': 'fixture' }));
+      for (const [name, value] of Object.entries(route)) {
+        expect(headers.get(name)).toBe(value);
+      }
+      expect(headers.get('x-portkey-api-key')).toBe('fake-portkey');
+      expect(headers.get('x-request-id')).toBe('fixture');
+    });
+
+    it.each<{ apiKey: string | undefined; headers: Record<string, string> }>([
+      { apiKey: 'fake-explicit-upstream', headers: { 'X-Portkey-Provider': 'openai' } },
+      { apiKey: undefined, headers: { 'X-Portkey-Provider': 'azure' } },
+      { apiKey: undefined, headers: { 'X-Portkey-Virtual-Key': 'other-fixture-key' } },
+    ])(
+      'rejects changed selectors independently of resolved key values: %j',
+      ({ apiKey, headers }) => {
+        const provider = new PortkeyChatCompletionProvider('fixture-model', {
+          config: { portkeyApiKey: 'fake-portkey', portkeyProvider: 'anthropic', apiKey },
+        });
+        expect(() => provider.getOpenAiRequestHeaders(headers)).toThrow(
+          'Portkey prompt headers change upstream credential routing',
+        );
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
+    it('applies prompt headers case-insensitively without changing the configured route', () => {
+      const provider = new PortkeyChatCompletionProvider('fixture-model', {
+        config: {
+          portkeyApiKey: 'fake-portkey',
+          headers: { 'X-Portkey-Provider': 'OpenAI', 'X-Request-Id': 'provider' },
+        },
+      });
+      const headers = new Headers(
+        provider.getOpenAiRequestHeaders({
+          'x-portkey-provider': 'openai',
+          'x-request-id': 'prompt',
+        }),
+      );
+      expect(headers.get('x-portkey-provider')).toBe('openai');
+      expect(headers.get('x-request-id')).toBe('prompt');
+      expect(new Headers(provider.config.headers).get('x-request-id')).toBe('provider');
+    });
+  });
+
   describe('header collisions', () => {
     // The inherited builder adds `Authorization` and then spreads these, so emitting the
     // canonical casing is what lets a caller override replace the generated bearer rather
