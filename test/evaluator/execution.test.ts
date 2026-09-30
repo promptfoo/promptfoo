@@ -1408,7 +1408,7 @@ describeEvaluator('evaluator execution control', () => {
   );
 
   it.each(['caller', 'deadline'] as const)(
-    'saves completed and interrupted select-best rows when the %s cancels comparison grading',
+    'resumes interrupted select-best and max-score rows after %s cancellation',
     async (cancellation) => {
       const controller = new AbortController();
       let markStarted!: () => void;
@@ -1419,9 +1419,12 @@ describeEvaluator('evaluator execution control', () => {
       });
       const judge: ApiProvider = {
         id: () => 'interruptible-comparison-judge',
-        callApi: vi.fn((_prompt, _context, options) => {
+        callApi: vi.fn((prompt, _context, options) => {
           if (vi.mocked(judge.callApi).mock.calls.length === 1) {
-            return Promise.resolve({ output: '0' });
+            return Promise.resolve({
+              output:
+                prompt.indexOf('output: first') < prompt.indexOf('output: second') ? '0' : '1',
+            });
           }
           graderSignal = options?.abortSignal;
           markStarted();
@@ -1438,16 +1441,18 @@ describeEvaluator('evaluator execution control', () => {
       });
       const target: ApiProvider = {
         id: () => 'comparison-target',
-        callApi: async (prompt) => ({ output: `output: ${prompt}` }),
+        callApi: vi.fn(async (prompt) => ({ output: `output: ${prompt}` })),
       };
       const suite: TestSuite = {
         providers: [target],
         prompts: [toPrompt('first {{topic}}'), toPrompt('second {{topic}}')],
-        tests: ['finished', 'interrupted', 'queued'].map((topic) => ({
+        tests: ['finished', 'interrupted', 'queued', 'max-only'].map((topic) => ({
           vars: { topic },
           assert: [
             { type: 'contains', value: 'output', metric: 'target-output' },
-            { type: 'select-best', value: `Choose ${topic}` },
+            topic === 'max-only'
+              ? { type: 'max-score' }
+              : { type: 'select-best', value: `Choose ${topic}` },
           ],
         })),
       };
@@ -1481,7 +1486,7 @@ describeEvaluator('evaluator execution control', () => {
         const reloaded = await Eval.findById(evalRecord.id);
         expect(reloaded).toBeDefined();
         const summary = await reloaded!.toEvaluateSummary();
-        expect(summary.results).toHaveLength(6);
+        expect(summary.results).toHaveLength(8);
         const finished = summary.results.filter((row) => row.testIdx === 0);
         expect(finished.map((row) => row.success).sort()).toEqual([false, true]);
         const pending = summary.results.filter((row) => row.testIdx !== 0);
@@ -1494,7 +1499,27 @@ describeEvaluator('evaluator execution control', () => {
             response: { output: expect.stringContaining('output:') },
           });
         }
-        expect(summary.stats).toMatchObject({ successes: 1, failures: 1, errors: 4 });
+        expect(summary.stats).toMatchObject({ successes: 1, failures: 1, errors: 6 });
+
+        releaseGrader?.();
+        // Saved rows can load in a different order; the fixture grader selects the same output.
+        vi.mocked(judge.callApi).mockImplementation(async (prompt) => ({
+          output: prompt.indexOf('output: first') < prompt.indexOf('output: second') ? '0' : '1',
+        }));
+        cliState.resume = true;
+        await evaluate(suite, reloaded!, { maxConcurrency: 2 });
+        const resumed = await Eval.findById(evalRecord.id);
+        const recovered = await resumed!.toEvaluateSummary();
+        expect(target.callApi).toHaveBeenCalledTimes(8);
+        expect(recovered.results).toHaveLength(8);
+        expect(recovered.stats).toMatchObject({ successes: 4, failures: 4, errors: 0 });
+        expect(
+          recovered.results.every((row) => row.failureReason !== ResultFailureReason.ERROR),
+        ).toBe(true);
+        expect(recovered.results.every((row) => !row.metadata?.__promptfoo?.comparisonError)).toBe(
+          true,
+        );
+        expect(recovered.results.every((row) => row.namedScores['target-output'] === 1)).toBe(true);
       } finally {
         controller.abort();
         releaseGrader?.();
