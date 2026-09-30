@@ -284,8 +284,10 @@ export async function runMetaAgentRedteam({
       attackPrompt = agentResp.output;
     } else {
       // Cloud returns { result: "attack prompt" }
+      // output can be null/undefined (e.g. empty or non-JSON remote body), so use
+      // optional access and let the !attackPrompt guard below skip the iteration.
       const cloudResponse = agentResp.output as any;
-      attackPrompt = cloudResponse.result;
+      attackPrompt = cloudResponse?.result;
     }
 
     if (!attackPrompt) {
