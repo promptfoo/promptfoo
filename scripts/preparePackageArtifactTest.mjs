@@ -85,11 +85,15 @@ for (const filename of ['testPackageArtifact.ts', 'packPackageArtifact.ts', 'pos
     path.join(tooling, 'scripts', filename),
   );
 }
-fs.cpSync(
-  path.join(repository, 'test', 'fixtures', 'package-artifact'),
-  path.join(tooling, 'test', 'fixtures', 'package-artifact'),
-  { recursive: true },
-);
+for (const fixture of ['package-artifact', 'transformers/tiny-bert']) {
+  fs.cpSync(
+    path.join(repository, 'test', 'fixtures', fixture),
+    path.join(tooling, 'test', 'fixtures', fixture),
+    {
+      recursive: true,
+    },
+  );
+}
 fs.writeFileSync(path.join(tooling, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 fs.writeFileSync(
   path.join(tooling, 'package-lock.json'),

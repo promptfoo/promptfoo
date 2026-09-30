@@ -36,12 +36,13 @@ describe('package artifact packing', () => {
     const source = path.join(root, 'source');
     fs.mkdirSync(source);
     writeBuildAssets(source);
+    fs.writeFileSync(path.join(source, 'dist/src/app/tsconfig.app.tsbuildinfo'), 'compiler cache');
     fs.writeFileSync(
       path.join(source, 'package.json'),
       JSON.stringify({
         name: 'promptfoo',
         version: '1.2.3',
-        files: ['index.js', 'dist'],
+        files: ['index.js', 'dist', '!dist/**/*.tsbuildinfo'],
         scripts: { prepack: 'node -e "process.exit(99)"', prepare: 'node -e "process.exit(99)"' },
       }),
     );
@@ -132,6 +133,7 @@ describe('standalone artifact tooling', () => {
       temporary,
       artifacts,
       path.join(root, 'test/fixtures/package-artifact'),
+      path.join(root, 'test/fixtures/transformers/tiny-bert/onnx'),
     ]) {
       fs.mkdirSync(directory, { recursive: true });
     }
@@ -146,6 +148,10 @@ describe('standalone artifact tooling', () => {
         path.join(scripts, filename),
       );
     }
+    fs.writeFileSync(
+      path.join(root, 'test/fixtures/transformers/tiny-bert/onnx/model.onnx'),
+      'offline model fixture',
+    );
     const entry = {
       version: '1.2.3',
       resolved: 'https://registry.example/tool-1.2.3.tgz',
@@ -203,6 +209,12 @@ describe('standalone artifact tooling', () => {
       ),
     );
     expect(output.tarball).toBe(fixture.tarball);
+    expect(
+      fs.readFileSync(
+        path.join(output.tooling, 'test/fixtures/transformers/tiny-bert/onnx/model.onnx'),
+        'utf8',
+      ),
+    ).toBe('offline model fixture');
     expect(fs.readFileSync(fixture.tarball, 'utf8')).toBe('selected bytes');
     const manifest = JSON.parse(fs.readFileSync(path.join(output.tooling, 'package.json'), 'utf8'));
     expect(manifest).toMatchObject({
