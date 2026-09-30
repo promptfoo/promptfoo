@@ -1717,8 +1717,8 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       // Validate dependency is available early, before parsing config
-      const { validateTransformersDependency } = await import('./transformersAvailability');
-      await validateTransformersDependency();
+      const { loadTransformers } = await import('./transformersAvailability');
+      await loadTransformers();
 
       const splits = providerPath.split(':');
       if (splits.length < 3) {
