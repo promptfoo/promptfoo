@@ -856,7 +856,7 @@ function resolveCodexLaunch(
   }
   const binDirectory = path.dirname(resolved);
   const nodeModulesDirectory =
-    path.basename(binDirectory) === '.bin'
+    path.basename(binDirectory).toLowerCase() === '.bin'
       ? path.dirname(binDirectory)
       : path.join(binDirectory, 'node_modules');
   const entrypoint = path.join(nodeModulesDirectory, '@openai', 'codex', 'bin', 'codex.js');

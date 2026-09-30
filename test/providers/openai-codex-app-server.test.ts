@@ -630,8 +630,13 @@ describe('OpenAICodexAppServerProvider', () => {
       expect(args).toEqual([entrypoint, 'app-server', '--listen', 'stdio://']);
     });
 
-    it.each(['PATH', 'override'])('runs a project-local npm shim via %s', async (source) => {
-      const localBinDir = path.join(npmBinDir, 'node_modules', '.bin');
+    it.each([
+      ['PATH', '.bin'],
+      ['override', '.bin'],
+      ['PATH', '.BIN'],
+      ['override', '.BIN'],
+    ])('runs a project-local npm shim via %s with %s', async (source, directory) => {
+      const localBinDir = path.join(npmBinDir, 'node_modules', directory);
       fs.mkdirSync(localBinDir, { recursive: true });
       fs.writeFileSync(path.join(localBinDir, 'codex.cmd'), '');
 
