@@ -2,6 +2,8 @@
 
 Compare Google's `generateContent` and [Interactions](https://ai.google.dev/gemini-api/docs/interactions-overview) chat APIs, then try function callbacks and stored interaction IDs.
 
+## Run the examples
+
 ```bash
 npx promptfoo@latest init --example google-interactions
 cd google-interactions

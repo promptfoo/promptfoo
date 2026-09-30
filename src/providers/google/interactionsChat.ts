@@ -237,6 +237,11 @@ const SERVER_TOOL_ALIASES: ReadonlyArray<readonly [string, readonly string[]]> =
   ['code_execution', ['codeExecution', 'code_execution']],
   ['url_context', ['urlContext', 'url_context']],
 ];
+const GEMINI_TOOL_KEYS = new Set([
+  'functionDeclarations',
+  'function_declarations',
+  ...SERVER_TOOL_ALIASES.flatMap(([, aliases]) => aliases),
+]);
 
 /** Convert Gemini-format tools into Interactions typed tool entries. */
 export function toInteractionsTools(tools: Tool[]): Record<string, unknown>[] {
@@ -249,6 +254,12 @@ export function toInteractionsTools(tools: Tool[]): Record<string, unknown>[] {
     if (typeof raw.type === 'string') {
       out.push(raw);
       continue;
+    }
+    const unsupported = Object.keys(raw).find((key) => !GEMINI_TOOL_KEYS.has(key));
+    if (unsupported) {
+      throw new Error(
+        `${unsupported} is not supported by the Interactions chat adapter. Use generateContent.`,
+      );
     }
     const declarations = raw.functionDeclarations ?? raw.function_declarations;
     if (Array.isArray(declarations)) {
@@ -395,6 +406,11 @@ function buildGenerationConfig(config: GoogleProviderConfig): Record<string, unk
 }
 
 function validateChatOptions(config: GoogleProviderConfig): void {
+  if (config.modelArmor || config.passthrough?.model_armor_config) {
+    throw new Error(
+      'Model Armor is not supported by the Interactions chat adapter. Use generateContent.',
+    );
+  }
   if (
     config.safetySettings ||
     config.passthrough?.safety_settings ||
@@ -500,7 +516,6 @@ type UsageTotals = {
 /** Video input is billed at the image rate, matching the generateContent path. */
 const IMAGE_RATE_MODALITIES = ['image', 'document', 'video'];
 
-/** A fresh zeroed accumulator. */
 function newUsageTotals(): UsageTotals {
   return {
     prompt: 0,
@@ -519,7 +534,6 @@ function newUsageTotals(): UsageTotals {
 
 /** Normalize usage across interaction rounds. */
 function buildTokenUsage(totals: UsageTotals) {
-  const total = totals.total || totals.prompt + totals.completion + totals.thoughts;
   const reasoning =
     totals.thoughts > 0
       ? {
@@ -533,7 +547,7 @@ function buildTokenUsage(totals: UsageTotals) {
   return {
     prompt: totals.prompt,
     completion: totals.completion,
-    total,
+    total: totals.total,
     cached: totals.cached,
     numRequests: totals.requests,
     ...reasoning,
@@ -551,11 +565,14 @@ type ToolLoopResult = {
 
 /** Fold one response's usage into the running totals for this call. */
 function accumulateUsage(totals: UsageTotals, usage: InteractionResponse['usage']): void {
-  totals.prompt += (usage?.total_input_tokens ?? 0) + (usage?.total_tool_use_tokens ?? 0);
-  totals.completion += usage?.total_output_tokens ?? 0;
-  totals.thoughts += usage?.total_reasoning_tokens ?? usage?.total_thought_tokens ?? 0;
+  const prompt = (usage?.total_input_tokens ?? 0) + (usage?.total_tool_use_tokens ?? 0);
+  const completion = usage?.total_output_tokens ?? 0;
+  const thoughts = usage?.total_reasoning_tokens ?? usage?.total_thought_tokens ?? 0;
+  totals.prompt += prompt;
+  totals.completion += completion;
+  totals.thoughts += thoughts;
   totals.cached += usage?.total_cached_tokens ?? 0;
-  totals.total += usage?.total_tokens ?? 0;
+  totals.total += usage?.total_tokens ?? prompt + completion + thoughts;
   totals.audioIn +=
     getInteractionModalityTokenCount(usage?.input_tokens_by_modality, ['audio']) +
     getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, ['audio']);
@@ -946,7 +963,11 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
 
     try {
       const parsed: unknown = JSON.parse(prompt);
-      if (isPlainObject(parsed) && Array.isArray(parsed.contents)) {
+      if (
+        isPlainObject(parsed) &&
+        Array.isArray(parsed.contents) &&
+        !('system_instruction' in parsed)
+      ) {
         prompt = JSON.stringify(parsed.contents);
       }
     } catch {
@@ -1043,6 +1064,9 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     }
 
     const turnSteps = getLatestTurnSteps(lastData);
+    const thoughtSignatures = turnSteps
+      .map((step) => step.signature)
+      .filter((signature): signature is string => typeof signature === 'string');
     if (
       turnSteps.some(
         (step) =>
@@ -1111,6 +1135,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
         ...(lastData.id ? { interactionId: lastData.id } : {}),
         ...(lastData.status ? { interactionStatus: lastData.status } : {}),
         interactionStored: store,
+        ...(thoughtSignatures.length > 0 ? { thoughtSignatures } : {}),
         ...(executedToolCalls.length > 0 ? { toolCalls: executedToolCalls } : {}),
         ...(groundingCalls.length > 0 ? { groundingToolCalls: groundingCalls } : {}),
         ...(webSearchQueries.length > 0 ? { webSearchQueries } : {}),

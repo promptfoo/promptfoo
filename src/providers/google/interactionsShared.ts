@@ -53,7 +53,10 @@ export type InteractionResponse = {
 /** Resolve the Google AI Studio Interactions endpoint, honoring host overrides. */
 export function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOverrides): string {
   const endpointFromHost = (apiHost: string) => {
-    const normalizedHost = /^https?:\/\//i.test(apiHost) ? apiHost : `https://${apiHost}`;
+    const renderedHost = getNunjucksEngine().renderString(apiHost, {});
+    const normalizedHost = /^https?:\/\//i.test(renderedHost)
+      ? renderedHost
+      : `https://${renderedHost}`;
     return `${normalizedHost.replace(/\/$/, '')}/v1beta/interactions`;
   };
 
@@ -61,7 +64,7 @@ export function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOver
     return endpointFromHost(config.apiHost);
   }
   if (config.apiBaseUrl) {
-    return `${config.apiBaseUrl.replace(/\/$/, '')}/v1beta/interactions`;
+    return endpointFromHost(config.apiBaseUrl);
   }
 
   const apiHost =
@@ -101,7 +104,8 @@ export function getVertexInteractionsEndpoint(
     (VERTEX_INTERACTIONS_GLOBAL_HOST_LOCATIONS.has(region)
       ? 'aiplatform.googleapis.com'
       : `${region}-aiplatform.googleapis.com`);
-  const host = /^https?:\/\//i.test(configuredHost) ? configuredHost : `https://${configuredHost}`;
+  const renderedHost = getNunjucksEngine().renderString(configuredHost, {});
+  const host = /^https?:\/\//i.test(renderedHost) ? renderedHost : `https://${renderedHost}`;
   return `${host.replace(/\/$/, '')}/v1beta1/projects/${encodeURIComponent(projectId)}/locations/${encodeURIComponent(region)}/interactions`;
 }
 

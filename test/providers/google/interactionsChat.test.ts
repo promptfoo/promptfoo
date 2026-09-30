@@ -108,6 +108,47 @@ describe('GoogleInteractionsChatProvider', () => {
   });
 
   describe('request mapping', () => {
+    it('preserves system instructions in native Gemini prompt wrappers', async () => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      await make().callApi(
+        JSON.stringify({
+          system_instruction: { parts: [{ text: 'Reply briefly.' }] },
+          contents: [{ role: 'user', parts: [{ text: 'Hi' }] }],
+        }),
+      );
+      expect(bodyOf(mockFetchWithCache.mock.calls[0])).toMatchObject({
+        system_instruction: 'Reply briefly.',
+        input: [{ type: 'user_input', content: [{ type: 'text', text: 'Hi' }] }],
+      });
+    });
+
+    it.each(['apiHost', 'apiBaseUrl'])(
+      'renders a configured %s before building the endpoint',
+      async (field) => {
+        vi.stubEnv('FIXTURE_GOOGLE_HOST', 'http://127.0.0.1:12345');
+        mockFetchWithCache.mockResolvedValue(interaction() as any);
+        await make({ [field]: '{{env.FIXTURE_GOOGLE_HOST}}' }).callApi('Hello');
+        expect(mockFetchWithCache.mock.calls[0][0]).toBe(
+          'http://127.0.0.1:12345/v1beta/interactions',
+        );
+      },
+    );
+
+    it('retains latest-turn thought signatures in normalized metadata', async () => {
+      mockFetchWithCache.mockResolvedValue(
+        interaction({
+          steps: [
+            { type: 'thought', signature: 'old-signature' },
+            { type: 'user_input', content: [{ type: 'text', text: 'Hi' }] },
+            { type: 'thought', signature: 'current-signature' },
+            { type: 'function_call', name: 'lookup', id: 'call-1', signature: 'tool-signature' },
+          ],
+        }) as any,
+      );
+      const result = await make().callApi('Hi');
+      expect(result.metadata?.thoughtSignatures).toEqual(['current-signature', 'tool-signature']);
+    });
+
     it('posts a prompt to the Interactions endpoint with the pinned API revision', async () => {
       mockFetchWithCache.mockResolvedValue(interaction() as any);
 
@@ -427,6 +468,8 @@ describe('GoogleInteractionsChatProvider', () => {
       { generationConfig: { responseModalities: ['AUDIO'] } },
       { generationConfig: { response_mime_type: 'text/plain' } },
       { mcp: { enabled: true } },
+      { modelArmor: { promptTemplate: 'fixture-policy' } },
+      { passthrough: { model_armor_config: { prompt_template_name: 'fixture-policy' } } },
     ])('rejects unsupported effective options before sending: %j', async (config) => {
       const result = await make().callApi('Hello', {
         prompt: { raw: 'Hello', label: 'prompt', config },
@@ -527,6 +570,9 @@ describe('GoogleInteractionsChatProvider', () => {
         },
       },
       { functionDeclarations: [{ name: 'f', response: { type: 'STRING' } }] },
+      { googleMaps: {} },
+      { fileSearch: {} },
+      { computerUse: {} },
     ])('rejects tool configuration that cannot be preserved: %j', async (tool) => {
       const result = await make({ tools: [tool] }).callApi('Hello');
       expect(result.error).toContain('not supported');
@@ -781,6 +827,25 @@ describe('GoogleInteractionsChatProvider', () => {
         functionToolCallbacks: { get_weather: () => 'ok' },
       }).callApi('Weather?');
 
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 20,
+        completion: 10,
+        total: 60,
+        numRequests: 2,
+        completionDetails: { reasoning: 30 },
+      });
+    });
+
+    it('includes component usage for each round that omits total_tokens', async () => {
+      const final = finalAnswer();
+      delete (final.data.usage as Partial<typeof final.data.usage>).total_tokens;
+      mockFetchWithCache
+        .mockResolvedValueOnce(pendingCall() as any)
+        .mockResolvedValueOnce(final as any);
+      const result = await make({
+        ...toolConfig,
+        functionToolCallbacks: { get_weather: () => 'ok' },
+      }).callApi('Weather?');
       expect(result.tokenUsage).toMatchObject({
         prompt: 20,
         completion: 10,
