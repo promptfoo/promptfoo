@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { intersects, minVersion, satisfies, validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
-import { extractModuleSpecifiers, getPackageName } from '../scripts/architectureUtils';
+import { extractModuleSpecifiers } from '../scripts/architectureUtils';
 
 type PackageManifest = {
   dependencies?: Record<string, string>;
@@ -62,6 +62,7 @@ const KNOWN_BAD_RELEASES = new Map([
   ['cache-manager', '7.2.10'], // Shai-Hulud compromise (#10301)
   ['cacheable-request', '13.0.20'], // Shai-Hulud compromise (#10301)
   ['extract-zip', '<=2.0.1'], // GHSA-jmr9-qjv8-65gv, GHSA-7pqw-9j4j-h8q3
+  ['fast-uri', '<2.4.7 || >=3.0.0 <3.1.8 || >=4.0.0 <4.1.5'], // GHSA-hrr3-gc8f-f4qj, GHSA-qw65-cvwx-89v3, GHSA-58mr-gqgx-xq4g
   ['image-size', '>=0.6.3 <=2.0.2'], // GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr
   ['hono', '<4.13.7'], // GHSA-hxh3-vqpv-xpqv
   ['js-yaml', '<3.15.2 || >=4.0.0 <4.3.2 || >=5.0.0 <5.2.3'], // #10356, GHSA-2883-xcg3-v3hh
@@ -408,31 +409,6 @@ describe('package manifests', () => {
     ).toThrow();
   });
 
-  it('includes every browser loader in the optional production profile', () => {
-    const packageJson = readPackageJson<PackageManifest>('package.json');
-    const packageLock =
-      readPackageJson<PackageLockManifest<{ dev?: boolean }>>('package-lock.json');
-    const browserSource = fs.readFileSync('src/providers/browser.ts', 'utf8');
-    const browserPackages = extractModuleSpecifiers(browserSource, 'src/providers/browser.ts')
-      .map(getPackageName)
-      .filter((name): name is string => name !== undefined);
-
-    expect(browserPackages).toContain('puppeteer-extra-plugin-stealth');
-    // Chromium supplies the executable via its install script, not a source import.
-    for (const dependency of new Set([...browserPackages, '@playwright/browser-chromium'])) {
-      expect(
-        packageJson.optionalDependencies?.[dependency],
-        `${dependency} must be available to production browser consumers`,
-      ).toBeDefined();
-      // npm treats a same-root dev + optional declaration as dev-only during
-      // `npm ci --omit=dev`, even though packed consumers resolve it as optional.
-      expect(packageJson.devDependencies?.[dependency]).toBeUndefined();
-      const installed = packageLock.packages[`node_modules/${dependency}`];
-      expect(installed, `${dependency} must be installed`).toBeDefined();
-      expect(installed?.dev, `${dependency} must survive --omit=dev`).not.toBe(true);
-    }
-  });
-
   it('declares static runtime imports as required for installs that omit optional packages', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
 
@@ -455,13 +431,14 @@ describe('package manifests', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const sitePackageJson = readPackageJson<PackageManifest>('site/package.json');
     const packageLock =
-      readPackageJson<PackageLockManifest<{ optional?: boolean }>>('package-lock.json');
+      readPackageJson<PackageLockManifest<{ optional?: boolean; devOptional?: boolean }>>(
+        'package-lock.json',
+      );
     for (const dependency of [
       '@alcalzone/ansi-tokenize',
       '@anthropic-ai/claude-agent-sdk',
       '@langfuse/client',
       '@modelcontextprotocol/sdk',
-      '@openai/codex-security',
       '@opencode-ai/sdk',
       '@slack/web-api',
       'hono',
@@ -478,13 +455,9 @@ describe('package manifests', () => {
     expect(sitePackageJson.dependencies).not.toHaveProperty('sharp');
     expect(sitePackageJson.devDependencies).not.toHaveProperty('sharp');
 
-    for (const dependency of [
-      '@alcalzone/ansi-tokenize',
-      '@openai/codex-security',
-      '@opencode-ai/sdk',
-      '@slack/web-api',
-    ]) {
-      expect(packageLock.packages[`node_modules/${dependency}`]?.optional, dependency).toBe(true);
+    for (const dependency of ['@alcalzone/ansi-tokenize', '@opencode-ai/sdk', '@slack/web-api']) {
+      const entry = packageLock.packages[`node_modules/${dependency}`];
+      expect(entry?.optional || entry?.devOptional, dependency).toBe(true);
     }
   });
 

@@ -27,6 +27,7 @@ import {
   initializeAgenticCache,
   resolveAgenticWorkingDir,
 } from './agentic-utils';
+import { assertIsolatedWorkingDir, clearRepositoryEnv } from './agentWorkspace';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode, validateMCPConfigForClaudeCode } from './mcp/transform';
 import {
@@ -425,6 +426,12 @@ export interface ClaudeCodeOptions {
   working_dir?: string;
 
   /**
+   * Run each eval call in a fresh copy of `working_dir`, created by promptfoo eval. `true` clones
+   * a clean git repository and copies anything else; `'git'` or `'copy'` forces one method.
+   */
+  copy_working_dir?: boolean | 'git' | 'copy';
+
+  /**
    * 'model' and 'fallback_model' are optional
    * if not supplied, Claude Agent SDK uses default models
    * 'fallback_model' accepts a comma-separated list, tried in order (SDK >= 0.3.160)
@@ -741,7 +748,7 @@ export interface ClaudeCodeOptions {
    * Enable beta features. Currently supports:
    * - 'context-1m-2025-08-07' - Enable 1M token context window (Sonnet 4/4.5 only)
    *
-   * @see https://docs.anthropic.com/en/api/beta-headers
+   * @see https://platform.claude.com/docs/en/api/beta-headers
    */
   betas?: 'context-1m-2025-08-07'[];
 
@@ -751,7 +758,7 @@ export interface ClaudeCodeOptions {
    * - { type: 'enabled', budgetTokens?: number } - Fixed thinking token budget (older models)
    * - { type: 'disabled' } - No extended thinking
    *
-   * @see https://docs.anthropic.com/en/docs/build-with-claude/adaptive-thinking
+   * @see https://platform.claude.com/docs/en/build-with-claude/thinking-steering-and-cost
    */
   thinking?: ThinkingConfig;
 
@@ -778,7 +785,7 @@ export interface ClaudeCodeOptions {
    * - 'xhigh' - Extra high reasoning (Opus 4.7+); sits between 'high' and 'max'
    * - 'max' - Maximum effort
    *
-   * @see https://docs.anthropic.com/en/docs/build-with-claude/effort
+   * @see https://platform.claude.com/docs/en/build-with-claude/effort
    */
   effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
@@ -875,7 +882,7 @@ export interface ClaudeCodeOptions {
    *     args: ['--hidden']
    * ```
    *
-   * @see https://docs.anthropic.com/en/docs/claude-code/settings#sandbox-settings
+   * @see https://code.claude.com/docs/en/settings#sandbox-settings
    */
   sandbox?: SandboxSettings;
 
@@ -1435,6 +1442,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+    // A fresh workspace must not be served from, or written to, the response cache.
+    const inIsolatedWorkspace = assertIsolatedWorkingDir(config);
 
     if (config.ask_user_question !== undefined) {
       validateAskUserQuestionConfig(config.ask_user_question);
@@ -1470,6 +1479,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           env[key] = value;
         }
       }
+    }
+
+    if (inIsolatedWorkspace) {
+      clearRepositoryEnv(env);
     }
 
     if (config.deep_tracing) {
@@ -1792,6 +1805,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       );
     }
     const cacheResult =
+      inIsolatedWorkspace ||
       runtimeCallbackBypassesCache ||
       sensitiveMcpBypassesCache ||
       settingsConfigurationBypassesCache ||

@@ -225,7 +225,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.277",
+    "@anthropic-ai/claude-agent-sdk": "0.3.278",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws/bedrock-token-generator": "^1.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
@@ -238,6 +238,7 @@
     "@fal-ai/client": "~1.10.1",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.11.1",
+    "@openai/codex-security": "^0.1.31",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
     "@types/cli-progress": "^3.11.6",
@@ -265,7 +266,10 @@
     "node-sql-parser": "^5.4.0",
     "oxc-parser": "^0.150.0",
     "pdf-parse": "^2.4.5",
+    "playwright": "^1.63.0",
+    "playwright-extra": "^4.3.6",
     "prettier": "^3.8.1",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "read-excel-file": "^9.3.9",
     "shx": "^0.4.0",
     "source-map-support": "^0.5.21",
@@ -278,7 +282,7 @@
   },
   "optionalDependencies": {
     "@alcalzone/ansi-tokenize": "0.3.1",
-    "@anthropic-ai/claude-agent-sdk": "0.3.277",
+    "@anthropic-ai/claude-agent-sdk": "0.3.278",
     "@aws/bedrock-token-generator": "^1.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -291,15 +295,12 @@
     "@azure/storage-blob": "^12.31.0",
     "@fal-ai/client": "~1.10.1",
     "@googleapis/sheets": "^18.0.0",
-    "@huggingface/transformers": "^4.0.0",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.11.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openai/agents": "^0.11.3",
     "@openai/codex-sdk": "^0.156.1",
-    "@openai/codex-security": "^0.1.31",
     "@opencode-ai/sdk": "^1.18.31",
-    "@playwright/browser-chromium": "^1.63.0",
     "@slack/web-api": "^8.1.1",
     "@smithy/node-http-handler": "^4.4.14",
     "google-auth-library": "^11.1.0",
@@ -310,9 +311,6 @@
     "node-sql-parser": "^5.4.0",
     "pdf-parse": "^2.4.5",
     "pem": "~1.14.8",
-    "playwright": "^1.63.0",
-    "playwright-extra": "^4.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "read-excel-file": "^9.3.9",
     "sharp": "^0.35.4"
   },
@@ -367,7 +365,7 @@
     "json5": "^2.2.3",
     "keyv": "^5.6.0",
     "keyv-file": "^5.3.3",
-    "lru-cache": "^11.3.0",
+    "lru-cache": "^11.5.3",
     "mathjs": "^15.1.1",
     "minimatch": "^10.2.4",
     "nunjucks": "^3.2.4",
@@ -383,6 +381,7 @@
     "rfdc": "^1.4.1",
     "saxes": "^6.0.0",
     "semver": "^7.7.4",
+    "signal-exit": "4.1.0",
     "simple-git": "^3.33.0",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
@@ -406,7 +405,6 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "@huggingface/transformers",
-      "@playwright/browser-chromium",
       "core-js",
       "core-js-pure",
       "esbuild",
@@ -415,5 +413,29 @@
     ],
     "ignoredBuiltDependencies": []
   },
-  "homepage": "https://promptfoo.dev"
+  "homepage": "https://promptfoo.dev",
+  "peerDependencies": {
+    "@huggingface/transformers": "*",
+    "@openai/codex-security": "*",
+    "playwright": "*",
+    "playwright-extra": "*",
+    "puppeteer-extra-plugin-stealth": "*"
+  },
+  "peerDependenciesMeta": {
+    "@huggingface/transformers": {
+      "optional": true
+    },
+    "@openai/codex-security": {
+      "optional": true
+    },
+    "playwright": {
+      "optional": true
+    },
+    "playwright-extra": {
+      "optional": true
+    },
+    "puppeteer-extra-plugin-stealth": {
+      "optional": true
+    }
+  }
 }

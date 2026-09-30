@@ -780,7 +780,7 @@ export const providerMap: ProviderFactory[] = [
 
       if (!model) {
         throw new Error(
-          'Helicone provider requires a model in format helicone:<provider/model> (e.g., helicone:openai/gpt-4o, helicone:anthropic/claude-3-5-sonnet)',
+          'Helicone provider requires a model in format helicone:<provider/model> (e.g., helicone:openai/gpt-4o, helicone:anthropic/claude-sonnet-5)',
         );
       }
 
@@ -1717,8 +1717,8 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       // Validate dependency is available early, before parsing config
-      const { validateTransformersDependency } = await import('./transformersAvailability');
-      await validateTransformersDependency();
+      const { loadTransformers } = await import('./transformersAvailability');
+      await loadTransformers();
 
       const splits = providerPath.split(':');
       if (splits.length < 3) {
