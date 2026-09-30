@@ -694,7 +694,7 @@ describe('App component target selection', () => {
     { name: 'missing data', response: { ok: true, json: async () => ({}) } },
     { name: 'null body', response: { ok: true, json: async () => null } },
     { name: 'non-array data', response: { ok: true, json: async () => ({ data: {} }) } },
-    { name: 'invalid entry', response: { ok: true, json: async () => ({ data: [null] }) } },
+    { name: 'string data', response: { ok: true, json: async () => ({ data: 'Read' }) } },
   ])('retries saved tool definitions after $name', async ({ response }) => {
     const evalData = createComponentMockEvalData(1, []);
     evalData.config.providers = [
@@ -723,6 +723,34 @@ describe('App component target selection', () => {
     expect(mockCallApi).toHaveBeenCalledTimes(3);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
+
+  it.each([false, true])(
+    'loads named tools with an empty first response: %s',
+    async (emptyFirst) => {
+      const evalData = createComponentMockEvalData(1, []);
+      evalData.config.providers = [{ id: 'claude-agent-sdk', config: { tools: ['Read', 'Edit'] } }];
+      mockCallApi.mockResolvedValueOnce({ ok: true, json: async () => ({ data: evalData }) });
+      if (emptyFirst) {
+        mockCallApi.mockResolvedValueOnce({ ok: true, json: async () => ({ data: [] }) });
+      }
+      mockCallApi.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: ['Read', 'Edit'] }),
+      });
+      renderWithProviders(<App evalId="test-eval-id" />);
+      const button = await screen.findByText('Tools:');
+      await userEvent.click(button);
+      if (emptyFirst) {
+        expect(await screen.findByRole('alert')).toHaveTextContent('Select Tools to retry');
+        await userEvent.click(button);
+      }
+      const dialog = await screen.findByRole('dialog', { name: 'Available Tools' });
+      expect(dialog).toHaveTextContent('Read');
+      expect(dialog).toHaveTextContent('Edit');
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(mockCallApi).toHaveBeenCalledTimes(emptyFirst ? 3 : 2);
+    },
+  );
 
   it('should handle evalData with empty prompts array and non-zero selectedPromptIndex gracefully', async () => {
     const evalData: ResultsFile = {
