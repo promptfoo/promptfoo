@@ -193,7 +193,11 @@ describe('Server Utilities', () => {
     it('should open browser with a custom path', async () => {
       await openBrowser(BrowserBehavior.OPEN, 5000, '/eval/eval-123');
 
-      expect(opener).toHaveBeenCalledWith('http://localhost:5000/eval/eval-123');
+      expect(opener).toHaveBeenCalledWith(
+        'http://localhost:5000/eval/eval-123',
+        {},
+        expect.any(Function),
+      );
     });
   });
 
