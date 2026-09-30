@@ -184,12 +184,9 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
       const pcmData = audioDataToPcm16(base64ToBuffer(chunk.data), chunk.format);
       inputData = bufferToBase64(resamplePcm16(pcmData, chunk.sampleRate, inputSampleRate));
     } else {
-      if (chunk.format !== inputFormat || chunk.sampleRate !== inputSampleRate) {
-        throw new Error(
-          `Cannot route ${chunk.format} at ${chunk.sampleRate} Hz to OpenAI ${inputFormat} at ${inputSampleRate} Hz without encoding support`,
-        );
-      }
-      inputData = chunk.data;
+      throw new Error(
+        `Cannot route ${chunk.format} at ${chunk.sampleRate} Hz to OpenAI ${inputFormat} at ${inputSampleRate} Hz without encoding support`,
+      );
     }
 
     this.send({

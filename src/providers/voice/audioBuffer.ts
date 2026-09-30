@@ -117,14 +117,6 @@ export class AudioBuffer {
   }
 }
 
-/**
- * Convert PCM16 audio data to WAV format.
- *
- * @param pcmData Raw PCM16 audio data
- * @param sampleRate Sample rate in Hz (default 24000)
- * @param numChannels Number of channels (default 1 for mono)
- * @returns WAV format buffer with header
- */
 export function pcm16ToWav(
   pcmData: Buffer,
   sampleRate: number = SAMPLE_RATES.OPENAI_REALTIME,
@@ -244,14 +236,6 @@ export function resamplePcm16(data: Buffer, inputRate: number, outputRate: numbe
   return output;
 }
 
-/**
- * Calculate duration in milliseconds from byte count.
- *
- * @param bytes Number of bytes
- * @param sampleRate Sample rate in Hz
- * @param format Audio format
- * @returns Duration in milliseconds
- */
 export function calculateDuration(bytes: number, sampleRate: number, format: AudioFormat): number {
   const bytesPerSample = BYTES_PER_SAMPLE[format];
   const samples = bytes / bytesPerSample;
@@ -290,17 +274,8 @@ function placeStereoChunks(
 }
 
 /**
- * Create a time-aligned stereo WAV from two AudioBuffers.
- * Left channel = agent, Right channel = user.
- *
- * Uses the absolute timestamps on each audio chunk to place audio at the
- * correct position in the stereo timeline. Each chunk's timestamp represents
- * when that audio was generated (based on cumulative audio position from
- * response start), ensuring accurate alignment regardless of network timing.
- *
- * @param agentBuffer Audio buffer for agent (left channel)
- * @param userBuffer Audio buffer for user (right channel)
- * @returns Stereo WAV buffer with properly aligned audio
+ * Place the agent on the left and caller on the right using sample timestamps,
+ * so network delivery timing does not change the recording's alignment.
  */
 export function createStereoWav(agentBuffer: AudioBuffer, userBuffer: AudioBuffer): Buffer {
   const sampleRate = Math.max(agentBuffer.getSampleRate(), userBuffer.getSampleRate());
@@ -316,10 +291,7 @@ export function createStereoWav(agentBuffer: AudioBuffer, userBuffer: AudioBuffe
   }
 
   // Collect all valid timestamps to find timeline boundaries
-  const allChunks = [
-    ...agentChunks.map((c) => ({ ...c, speaker: 'agent' as const })),
-    ...userChunks.map((c) => ({ ...c, speaker: 'user' as const })),
-  ].filter((c) => c.timestamp !== undefined);
+  const allChunks = [...agentChunks, ...userChunks].filter((c) => c.timestamp !== undefined);
 
   if (allChunks.length === 0) {
     // No valid timestamps - fall back to simple sequential placement
