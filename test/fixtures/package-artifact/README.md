@@ -19,7 +19,9 @@ with caching disabled and isolated configuration paths. CommonJS also checks
 writable exports and Zod constructor identity.
 
 The default profile checks both CLI aliases and evaluates compressed HTTP responses
-from a local server. Without optional dependencies, native SQLite is unavailable;
+from a local server. It also checks the Transformers provider with an offline model
+fixture when the optional SDK is absent, incompatible, and installed.
+Without optional dependencies, native SQLite is unavailable;
 even `--version` must report the expected missing-dependency diagnostic.
 
 The repository's TypeScript compiler checks callers against the installed declarations.
