@@ -1594,7 +1594,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         responseHeaders,
       );
       if (policyResponse) {
-        return policyResponse;
+        return { ...policyResponse, cacheHit };
       }
       if (status < 200 || status >= 300) {
         const errorMessage = `API error: ${status} ${statusText}\n${
@@ -1679,7 +1679,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         );
         if (polledPolicy) {
           await deleteFromCache?.();
-          return polledPolicy;
+          return { ...polledPolicy, cacheHit };
         }
         if (!polled.error && (data.status === 'completed' || data.status === 'incomplete')) {
           await updateCache?.(data, status, statusText, responseHeaders);

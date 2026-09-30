@@ -1103,6 +1103,13 @@ async function callActiveProvider({
 
   const callApi = async () => {
     onProviderInvoked();
+    const invokeProvider = async (context?: CallApiContextParams) => {
+      const { result, cacheHit } = await withCacheHitTracking(() =>
+        activeProvider.callApi(renderedPrompt, context, callApiOptions),
+      );
+      // Providers can report fresh output after discarding an expired cached response.
+      return cacheHit && result.cacheHit === undefined ? { ...result, cacheHit: true } : result;
+    };
     const invoke = () =>
       traceContext?.traceparent
         ? withTracedProviderCall(
@@ -1113,14 +1120,12 @@ async function callActiveProvider({
               evalId: callApiContext.evaluationId,
               testIndex,
             },
-            async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
+            invokeProvider,
           )
-        : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
-    const { result, cacheHit } = await withCacheHitTracking(() =>
-      testSuite?.tracing ? cliState.withRequestTracingConfig(testSuite.tracing, invoke) : invoke(),
-    );
-    // Providers can report fresh output after discarding an expired cached response.
-    return cacheHit && result.cacheHit === undefined ? { ...result, cacheHit: true } : result;
+        : invokeProvider(callApiContext);
+    return testSuite?.tracing
+      ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
+      : invoke();
   };
   const response = rateLimitRegistry
     ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())

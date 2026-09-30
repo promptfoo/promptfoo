@@ -7,6 +7,8 @@ import { OllamaChatProvider, OllamaCompletionProvider } from '../../src/provider
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 import { OpenAiTtsProvider } from '../../src/providers/openai/tts';
 import { ReplicateImageProvider, ReplicateProvider } from '../../src/providers/replicate';
+import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
+import * as targetTracer from '../../src/tracing/targetTracer';
 import { ResultFailureReason } from '../../src/types/index';
 import { fetchWithRetries } from '../../src/util/fetch/index';
 import { createDeferred } from '../util/utils';
@@ -76,6 +78,75 @@ const providers = [
 ];
 
 describe('latency assertions with real provider caching', () => {
+  it('annotates a stored replay before the traced provider call finishes', async () => {
+    vi.spyOn(evaluatorTracing, 'generateTraceContextIfNeeded').mockResolvedValue({
+      traceparent: `00-${'a'.repeat(32)}-${'b'.repeat(16)}-01`,
+      evaluationId: 'trace-fixture',
+      testCaseId: 'case-fixture',
+    });
+    const tracedResponses: unknown[] = [];
+    vi.spyOn(targetTracer, 'withTracedProviderCall').mockImplementation(
+      async ({ callContext }, invoke) => {
+        const response = await invoke(callContext);
+        tracedResponses.push(response);
+        return response;
+      },
+    );
+    vi.mocked(fetchWithRetries).mockImplementation(async () =>
+      Response.json({ choices: [{ text: output }] }),
+    );
+    const provider = new LocalAiCompletionProvider('fixture');
+
+    await evaluateLatency(provider);
+    await evaluateLatency(provider);
+
+    expect(tracedResponses).toHaveLength(2);
+    expect(tracedResponses[1]).toMatchObject({ output, cacheHit: true });
+    expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([false, true])(
+    'keeps live policy responses eligible for latency grading (polling: %s)',
+    async (polling) => {
+      const creation = createDeferred<Response>();
+      const refusal = {
+        id: 'resp_policy_fixture',
+        status: 'incomplete',
+        error: {
+          code: 'content_filter',
+          message: 'Fixture policy response',
+          metadata: { error_type: 'content_policy_violation' },
+        },
+      };
+      vi.mocked(fetchWithRetries)
+        .mockImplementationOnce(() => creation.promise)
+        .mockImplementation(async () => Response.json(refusal));
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'fixture-key',
+          apiBaseUrl: 'https://gateway.example/v1',
+          background: true,
+          headers: { 'OpenAI-Project': 'fixture-project', Authorization: '' },
+        },
+      });
+
+      const calls = [evaluateLatency(provider), evaluateLatency(provider)];
+      await vi.advanceTimersByTimeAsync(25);
+      creation.resolve(
+        Response.json(polling ? { id: refusal.id, status: 'queued', output: [] } : refusal),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+
+      const results = (await Promise.all(calls)).flat();
+      expect(results.map((result) => result.response?.cached).sort()).toEqual([false, true]);
+      for (const result of results) {
+        expect(result.response).toMatchObject({ isRefusal: true, cacheHit: false });
+        expect(result.failureReason).not.toBe(ResultFailureReason.ERROR);
+      }
+      expect(fetchWithRetries).toHaveBeenCalledTimes(polling ? 2 : 1);
+    },
+  );
+
   it.each(providers)('rejects stored $name responses', async (fixture) => {
     vi.mocked(fetchWithRetries).mockImplementation(async () => Response.json(fixture.response));
     const provider = fixture.create();

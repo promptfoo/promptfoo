@@ -1,7 +1,11 @@
 import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PromptfooAttributes } from '../../src/tracing/genaiTracer';
-import { TargetAttributes, withTargetSpan } from '../../src/tracing/targetTracer';
+import {
+  TargetAttributes,
+  withTargetSpan,
+  withTracedProviderCall,
+} from '../../src/tracing/targetTracer';
 
 const mocks = vi.hoisted(() => {
   const span = {
@@ -96,6 +100,46 @@ describe('universal target tracing', () => {
       message: 'agent unavailable',
     });
     expect(mocks.span.recordException).toHaveBeenCalledWith(expect.any(Error));
+  });
+
+  it.each([
+    { response: { cached: true, cacheHit: false }, expected: false },
+    { response: { cacheHit: true }, expected: true },
+  ])('records explicit replay provenance $expected', async ({ response, expected }) => {
+    await withTargetSpan(
+      {
+        targetType: 'provider',
+        providerId: 'fixture-provider',
+        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      },
+      async () => ({ output: 'Hello', ...response }),
+    );
+
+    expect(mocks.span.setAttribute).toHaveBeenCalledWith(PromptfooAttributes.CACHE_HIT, expected);
+  });
+
+  it('uses live provenance on both embedding and target spans', async () => {
+    const callApi = vi.fn(async () => ({ cached: true, cacheHit: false, output: 'fixture' }));
+    await withTracedProviderCall(
+      {
+        provider: { id: () => 'fixture:embedding', callApi },
+        operationName: 'embeddings',
+        callContext: {
+          prompt: { raw: 'fixture', label: 'fixture' },
+          vars: {},
+          traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        },
+      },
+      callApi,
+    );
+
+    const cacheAttributes = mocks.span.setAttribute.mock.calls.filter(
+      ([name]) => name === PromptfooAttributes.CACHE_HIT,
+    );
+    expect(cacheAttributes).toEqual([
+      [PromptfooAttributes.CACHE_HIT, false],
+      [PromptfooAttributes.CACHE_HIT, false],
+    ]);
   });
 
   it('keeps grader-provider spans free of target-only metadata', async () => {
