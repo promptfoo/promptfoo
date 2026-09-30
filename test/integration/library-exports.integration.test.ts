@@ -14,6 +14,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { pathToFileURL } from 'url';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -148,7 +149,7 @@ describeIfBuildExists('Library Exports', () => {
     async (format) => {
       const contractsModule =
         format === 'esm'
-          ? await import(`file://${path.join(distDir, 'contracts.js')}`)
+          ? await import(pathToFileURL(path.join(distDir, 'contracts.js')).href)
           : require(path.join(distDir, 'contracts.cjs'));
 
       expect(contractsModule.traceSpanCountBoundsError({ min: 0, max: 0 })).toBeUndefined();
