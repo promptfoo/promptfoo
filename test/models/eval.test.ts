@@ -2,7 +2,14 @@ import { eq, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { updateSignalFile, updateSignalFileForDeletedEvals } from '../../src/database/signal';
-import { evalResultsTable, evalsTable, spansTable, tracesTable } from '../../src/database/tables';
+import {
+  datasetsTable,
+  evalResultsTable,
+  evalsTable,
+  evalsToDatasetsTable,
+  spansTable,
+  tracesTable,
+} from '../../src/database/tables';
 import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, {
@@ -17,7 +24,8 @@ import EvalResult from '../../src/models/evalResult';
 import { EvalEvaluationStore } from '../../src/node/evaluationStore';
 import { TraceStore } from '../../src/tracing/store';
 import { type EvaluateResult, type Prompt, ResultFailureReason } from '../../src/types/index';
-import { updateResult, writeResultsToDatabase } from '../../src/util/database';
+import { sha256 } from '../../src/util/createHash';
+import { getTestCases, updateResult, writeResultsToDatabase } from '../../src/util/database';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -666,6 +674,98 @@ describe('evaluator', () => {
   });
 
   describe('create', () => {
+    it('uses the saved tests for dataset hashes, storage and eval filtering', async () => {
+      const test = {
+        vars: { value: 'fixture-input' },
+        options: { provider: { id: 'openai:chat:fixture', config: { apiKey: 'dataset-secret' } } },
+      };
+      const evaluation = await Eval.create({ tests: [test] }, []);
+      const db = await getDb();
+      const relation = await db
+        .select()
+        .from(evalsToDatasetsTable)
+        .where(eq(evalsToDatasetsTable.evalId, evaluation.id))
+        .get();
+      const dataset = await db
+        .select()
+        .from(datasetsTable)
+        .where(eq(datasetsTable.id, relation!.datasetId))
+        .get();
+      const reloaded = await Eval.findById(evaluation.id);
+      expect(dataset!.tests).toEqual(reloaded!.config.tests);
+      expect(JSON.stringify(dataset!.tests)).not.toContain('dataset-secret');
+      const listed = await getTestCases();
+      const listedDataset = listed.find((item) => item.id === relation!.datasetId);
+      expect(listedDataset).toBeDefined();
+      const summaries = await getEvalSummaries(listedDataset!.id);
+      expect(summaries.map((item) => item.evalId)).toContain(evaluation.id);
+      expect(test.options.provider.config.apiKey).toBe('dataset-secret');
+    });
+
+    it('rebuilds a legacy dataset relationship from the copied sanitized tests', async () => {
+      const config = {
+        tests: [
+          {
+            options: {
+              provider: { id: 'openai:chat:fixture', config: { apiKey: 'legacy-dataset-key' } },
+            },
+          },
+        ],
+      };
+      const source = await Eval.create(config, []);
+      const db = await getDb();
+      const legacyId = sha256(JSON.stringify(config.tests));
+      await db
+        .insert(datasetsTable)
+        .values({ id: legacyId, tests: config.tests })
+        .onConflictDoNothing()
+        .run();
+      await db
+        .update(evalsToDatasetsTable)
+        .set({ datasetId: legacyId })
+        .where(eq(evalsToDatasetsTable.evalId, source.id))
+        .run();
+      await db.update(evalsTable).set({ config }).where(eq(evalsTable.id, source.id)).run();
+
+      const legacy = await Eval.findById(source.id);
+      const copied = await legacy!.copy();
+      const relation = await db
+        .select()
+        .from(evalsToDatasetsTable)
+        .where(eq(evalsToDatasetsTable.evalId, copied.id))
+        .get();
+      expect(relation!.datasetId).toBe(sha256(JSON.stringify(copied.config.tests)));
+      const dataset = await db
+        .select()
+        .from(datasetsTable)
+        .where(eq(datasetsTable.id, relation!.datasetId))
+        .get();
+      expect(dataset!.tests).toEqual(copied.config.tests);
+      expect(JSON.stringify(dataset!.tests)).not.toContain('legacy-dataset-key');
+      expect(legacy!.config).toEqual(config);
+    });
+
+    it('redacts provider credentials when creating and saving eval configs', async () => {
+      const config = {
+        providers: [{ id: 'muse-code', config: { apiKey: 'fixture-create-key' } }],
+        env: { META_API_KEY: '{{ env.META_API_KEY }}' },
+        tests: [{ vars: { password: 'test-input' } }],
+      };
+      const evaluation = await Eval.create(config, []);
+      const readStored = async () => {
+        const db = await getDb();
+        return (await db.select().from(evalsTable).where(eq(evalsTable.id, evaluation.id)))[0]
+          .config;
+      };
+      expect(JSON.stringify(await readStored())).not.toContain('fixture-create-key');
+      expect((await readStored()).env).toEqual(config.env);
+      expect((await readStored()).tests).toEqual(config.tests);
+      expect(config.providers[0].config.apiKey).toBe('fixture-create-key');
+      evaluation.config.providers = [{ id: 'muse-code', config: { apiKey: 'fixture-save-key' } }];
+      await evaluation.save();
+      expect(JSON.stringify(await readStored())).not.toContain('fixture-save-key');
+    });
+
     it('keeps trace-provider credentials in memory while removing them from persisted evals', async () => {
       const config = {
         tracing: {
