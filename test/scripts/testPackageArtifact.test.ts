@@ -42,6 +42,32 @@ describe('installed package bin check', () => {
     },
   );
 
+  it.each(['promptfoo', 'pf'] as const)(
+    'preserves the Windows %s exit status and SQLite diagnostic when optional dependencies are absent',
+    (binName) => {
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      const diagnostic =
+        'could not load its SQLite dependency\nRequired package: @libsql/win32-x64-msvc';
+      const processError = Object.assign(new Error('Command failed'), {
+        status: 1,
+        stderr: diagnostic,
+      });
+      vi.mocked(execFileSync).mockImplementation(() => {
+        throw processError;
+      });
+
+      expect(() =>
+        runInstalledBinVersion('C:\\temp\\package', 'C:\\temp\\config', binName),
+      ).toThrow(
+        expect.objectContaining({
+          cause: processError,
+          message: expect.stringContaining(diagnostic),
+        }),
+      );
+    },
+  );
+
   it('executes Unix bins directly with a separate version argument', () => {
     Object.defineProperty(process, 'platform', { value: 'linux' });
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);

@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createServer } from 'node:http';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 
 import { API } from 'typescript/unstable/sync';
@@ -32,6 +34,7 @@ type ArtifactEvalOutput = {
         output?: unknown;
       };
       success?: boolean;
+      score?: number;
     }>;
   };
 };
@@ -49,6 +52,7 @@ const requiredPackagedPaths = [
   'dist/src/contracts.js',
   'dist/src/index.cjs',
   'dist/src/index.d.ts',
+  'dist/src/index.d.cts',
   'dist/src/index.js',
   'dist/src/main.js',
   'dist/src/package.json',
@@ -311,15 +315,11 @@ export function runInstalledBinVersion(
       binName === 'promptfoo'
         ? '.\\node_modules\\.bin\\promptfoo.cmd'
         : '.\\node_modules\\.bin\\pf.cmd';
-    return execFileSync(
+    return run(
       process.env.ComSpec || 'cmd.exe',
       ['/d', '/s', '/c', command, '--version'],
-      {
-        cwd: consumerDir,
-        encoding: 'utf8',
-        env: { ...process.env, ...envOverrides },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
+      consumerDir,
+      envOverrides,
     );
   }
 
@@ -439,48 +439,41 @@ function writeConsumerScripts(consumerDir: string): void {
     "  throw new Error('Missing MCP auth JSON Schema export');",
     '}',
   ];
-  fs.writeFileSync(
-    path.join(consumerDir, 'import-package.mjs'),
-    [
-      "import { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } from 'promptfoo';",
-      "import { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } from 'promptfoo/contracts';",
-      "import { McpAuthInputJsonSchema, McpAuthInputSchema, McpAuthSchema } from 'promptfoo/contracts';",
-      "import { McpConfigInputJsonSchema, McpConfigInputSchema, McpConfigSchema } from 'promptfoo/contracts';",
-      "import { HttpAuthInputSchema, HttpProviderConfigInputSchema, HttpProviderConfigInputJsonSchema } from 'promptfoo/contracts';",
-      '',
-      'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
-      "  if (!value || typeof value.safeParse !== 'function') {",
-      "    throw new Error('Missing expected ESM schema export');",
-      '  }',
-      '}',
-      'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
-      "  throw new Error('Missing expected ESM provider capability export');",
-      '}',
-      ...authAssertions,
-      '',
-    ].join('\n'),
-  );
-  fs.writeFileSync(
-    path.join(consumerDir, 'require-package.cjs'),
-    [
-      "const { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } = require('promptfoo');",
-      "const { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } = require('promptfoo/contracts');",
-      "const { McpAuthInputJsonSchema, McpAuthInputSchema, McpAuthSchema } = require('promptfoo/contracts');",
-      "const { McpConfigInputJsonSchema, McpConfigInputSchema, McpConfigSchema } = require('promptfoo/contracts');",
-      "const { HttpAuthInputSchema, HttpProviderConfigInputSchema, HttpProviderConfigInputJsonSchema } = require('promptfoo/contracts');",
-      '',
-      'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
-      "  if (!value || typeof value.safeParse !== 'function') {",
-      "    throw new Error('Missing expected CJS schema export');",
-      '  }',
-      '}',
-      'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
-      "  throw new Error('Missing expected CJS provider capability export');",
-      '}',
-      ...authAssertions,
-      '',
-    ].join('\n'),
-  );
+  for (const filename of ['import-package.mjs', 'require-package.cjs']) {
+    const imports = [
+      ['promptfoo', 'AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema'],
+      [
+        'promptfoo/contracts',
+        'EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator',
+      ],
+      ['promptfoo/contracts', 'McpAuthInputJsonSchema, McpAuthInputSchema, McpAuthSchema'],
+      ['promptfoo/contracts', 'McpConfigInputJsonSchema, McpConfigInputSchema, McpConfigSchema'],
+      [
+        'promptfoo/contracts',
+        'HttpAuthInputSchema, HttpProviderConfigInputSchema, HttpProviderConfigInputJsonSchema',
+      ],
+    ].map(([specifier, names]) =>
+      filename.endsWith('.mjs')
+        ? `import { ${names} } from '${specifier}';`
+        : `const { ${names} } = require('${specifier}');`,
+    );
+    fs.writeFileSync(
+      path.join(consumerDir, filename),
+      [
+        ...imports,
+        'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
+        "  if (!value || typeof value.safeParse !== 'function') {",
+        "    throw new Error('Missing expected schema export');",
+        '  }',
+        '}',
+        'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
+        "  throw new Error('Missing expected provider capability export');",
+        '}',
+        ...authAssertions,
+        '',
+      ].join('\n'),
+    );
+  }
   fs.writeFileSync(
     path.join(consumerDir, 'import-contracts.ts'),
     [
@@ -519,17 +512,63 @@ function writeConsumerScripts(consumerDir: string): void {
       '',
     ].join('\n'),
   );
+  // Only root API callers skip Drizzle's broken optional-driver declarations.
+  for (const [config, file, module, skipLibCheck] of [
+    ['tsconfig.json', 'import-contracts.ts', 'NodeNext', false],
+    ['tsconfig.node16-cjs.json', 'require-contracts.cts', 'Node16', false],
+    ['tsconfig.api-esm.json', 'import-api.ts', 'NodeNext', true],
+    ['tsconfig.api-cjs.json', 'require-api.cts', 'Node16', true],
+  ] as const) {
+    fs.writeFileSync(
+      path.join(consumerDir, config),
+      JSON.stringify({
+        compilerOptions: {
+          module,
+          moduleResolution: module,
+          noEmit: true,
+          strict: true,
+          skipLibCheck,
+        },
+        include: [file],
+      }),
+    );
+  }
+  const apiTypesBody = [
+    "const provider: ApiProvider = { id: () => 'local', callApi: async (prompt) => ({ output: prompt }) };",
+    "const suite: EvaluateTestSuite = { prompts: ['hello'], providers: [provider], tests: [{ assert: [{ type: 'equals', value: 'hello' }] }], writeLatestResults: false };",
+    'async function consume() {',
+    '  const record = await evaluate(suite, { cache: false });',
+    '  const summary = await record.toEvaluateSummary();',
+    '  const successes: number = summary.stats.successes;',
+    '  const id: string = record.id;',
+    '  void successes; void id;',
+    '  // @ts-expect-error Eval keeps its typed result surface',
+    '  await record.nonexistentMethod();',
+    '  // @ts-expect-error success counts remain numeric',
+    "  const invalid: typeof summary.stats.successes = 'wrong';",
+    '  void invalid;',
+    '}',
+    'void consume;',
+    '// @ts-expect-error providers are a required part of the public eval input',
+    "void evaluate({ prompts: ['hello'] });",
+  ].join('\n');
   fs.writeFileSync(
-    path.join(consumerDir, 'tsconfig.json'),
-    JSON.stringify({
-      compilerOptions: {
-        module: 'NodeNext',
-        moduleResolution: 'NodeNext',
-        noEmit: true,
-        strict: true,
-      },
-      include: ['import-contracts.ts'],
-    }),
+    path.join(consumerDir, 'import-api.ts'),
+    [
+      "import { evaluate } from 'promptfoo';",
+      "import type { ApiProvider, EvaluateTestSuite } from 'promptfoo';",
+      apiTypesBody,
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'require-api.cts'),
+    [
+      "import api = require('promptfoo');",
+      'const { evaluate } = api;',
+      'type ApiProvider = api.ApiProvider;',
+      'type EvaluateTestSuite = api.EvaluateTestSuite;',
+      apiTypesBody,
+    ].join('\n'),
   );
   fs.writeFileSync(
     path.join(consumerDir, 'require-contracts.cts'),
@@ -562,23 +601,12 @@ function writeConsumerScripts(consumerDir: string): void {
       '',
     ].join('\n'),
   );
-  fs.writeFileSync(
-    path.join(consumerDir, 'tsconfig.node16-cjs.json'),
-    JSON.stringify({
-      compilerOptions: {
-        module: 'Node16',
-        moduleResolution: 'Node16',
-        noEmit: true,
-        strict: true,
-      },
-      include: ['require-contracts.cts'],
-    }),
-  );
 }
 
 async function runInstalledCodexSecurityEval(
   consumerDir: string,
   configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
 ): Promise<void> {
   const script = `const mode = process.argv[2];
 if (mode === 'missing') {
@@ -654,6 +682,7 @@ ${script}
             : '@openai/codex-security@^0.1.31',
         ],
         consumerDir,
+        npmEnv,
       );
     }
     for (const scriptPath of scriptPaths) {
@@ -775,6 +804,7 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
     assert(Array.isArray(results), 'Installed promptfoo output is missing evaluation results');
     assert.equal(results.length, 2, 'Expected one result for each compressed provider');
     for (const result of results) {
+      assert.equal(result.score, 1);
       assert.equal(result.success, true, `Compressed provider failed: ${JSON.stringify(result)}`);
       assert.equal(
         result.error,
@@ -801,6 +831,8 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
 async function assertOptionalBrowserDependencies(
   consumerDir: string,
   configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+  withOptionalDependencies: boolean,
 ): Promise<void> {
   const assertions = `
     const incompatible = process.argv[2] === 'incompatible';
@@ -842,7 +874,7 @@ async function assertOptionalBrowserDependencies(
       });`,
     );
   }
-  for (const state of ['missing', 'incompatible']) {
+  for (const state of withOptionalDependencies ? ['missing', 'incompatible'] : ['missing']) {
     if (state === 'incompatible') {
       runNpm(
         [
@@ -854,6 +886,7 @@ async function assertOptionalBrowserDependencies(
           'playwright@1.62.0',
         ],
         consumerDir,
+        npmEnv,
       );
     }
     for (const format of ['mjs', 'cjs']) {
@@ -865,12 +898,15 @@ async function assertOptionalBrowserDependencies(
       });
     }
   }
-  await runInstalledCompressionEval(consumerDir, configDir);
+  if (withOptionalDependencies) {
+    await runInstalledCompressionEval(consumerDir, configDir);
+  }
 }
 
 async function runInstalledTransformersProvider(
   consumerDir: string,
   configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
 ): Promise<void> {
   const modelDir = path.join(consumerDir, 'tiny-bert');
   fs.cpSync(path.join(ROOT, 'test/fixtures/transformers/tiny-bert'), modelDir, { recursive: true });
@@ -955,21 +991,38 @@ ${script}
   runNpm(
     ['install', '--ignore-scripts', '--no-audit', '--no-fund', '@huggingface/transformers@3.8.1'],
     consumerDir,
+    npmEnv,
   );
   await runMode('incompatible');
   runNpm(
     ['install', '--ignore-scripts', '--no-audit', '--no-fund', '@huggingface/transformers@^4.0.0'],
     consumerDir,
+    npmEnv,
   );
   await runMode('installed');
 }
 
 async function main(): Promise<void> {
+  const { values } = parseArgs({
+    options: {
+      profile: { type: 'string', default: 'default' },
+      registry: { type: 'string', default: 'https://registry.npmjs.org/' },
+    },
+  });
+  assert(
+    ['default', 'omit-optional'].includes(values.profile),
+    `Unknown install profile: ${values.profile}`,
+  );
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-'));
   const artifactsDir = path.join(tempDir, 'artifacts');
   const configDir = path.join(tempDir, 'config');
   const consumerDir = path.join(tempDir, 'consumer');
   const consumerNpmrc = path.join(tempDir, 'consumer.npmrc');
+  const consumerNpmEnv = {
+    npm_config_engine_strict: 'false',
+    npm_config_userconfig: consumerNpmrc,
+    npm_config_registry: values.registry,
+  };
 
   try {
     fs.mkdirSync(artifactsDir);
@@ -1004,21 +1057,20 @@ async function main(): Promise<void> {
         type: 'module',
       }),
     );
+    console.log(`Installing packed consumer (${values.profile})...`);
     runNpm(
       [
         'install',
+        ...(values.profile === 'omit-optional' ? ['--omit=optional'] : ['--include=optional']),
         '--ignore-scripts',
+        '--omit=dev',
         '--no-audit',
         '--no-fund',
         '--no-package-lock',
-        '--registry=https://registry.npmjs.org/',
         tarballPath,
       ],
       consumerDir,
-      {
-        npm_config_engine_strict: 'false',
-        npm_config_userconfig: consumerNpmrc,
-      },
+      consumerNpmEnv,
     );
 
     const installedPackageDir = path.join(consumerDir, 'node_modules', 'promptfoo');
@@ -1031,29 +1083,86 @@ async function main(): Promise<void> {
     };
     assert.equal(installedPackageJson.version, packResult.version);
     assertExportsResolve(installedPackageDir, installedPackageJson);
+    const packageRequire = createRequire(path.join(installedPackageDir, 'package.json'));
+    if (values.profile === 'omit-optional') {
+      assert.throws(() => packageRequire.resolve('@anthropic-ai/claude-agent-sdk'), {
+        code: 'MODULE_NOT_FOUND',
+      });
+    } else {
+      const relative = path.relative(
+        fs.realpathSync(consumerDir),
+        fs.realpathSync(packageRequire.resolve('@anthropic-ai/claude-agent-sdk')),
+      );
+      assert(
+        relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative),
+      );
+    }
     assertProviderTypeDocumentation(installedPackageDir);
 
+    // Consumer files live outside the repository so neither workspaces nor devDependencies
+    // can satisfy undeclared package imports. Keep all user state local to this fixture.
+    const consumerEnv = {
+      NODE_PATH: '',
+      PROMPTFOO_CONFIG_DIR: configDir,
+      PROMPTFOO_CACHE_PATH: path.join(tempDir, 'cache'),
+      PROMPTFOO_DISABLE_TELEMETRY: '1',
+      PROMPTFOO_DISABLE_UPDATE: 'true',
+      PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+    };
     writeConsumerScripts(consumerDir);
-    run(process.execPath, ['import-package.mjs'], consumerDir);
-    run(process.execPath, ['require-package.cjs'], consumerDir);
+    fs.cpSync(path.join(ROOT, 'test', 'fixtures', 'package-artifact'), consumerDir, {
+      recursive: true,
+    });
+    run(process.execPath, ['import-package.mjs'], consumerDir, consumerEnv);
+    run(process.execPath, ['require-package.cjs'], consumerDir, consumerEnv);
     const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
-    for (const tsconfig of ['tsconfig.json', 'tsconfig.node16-cjs.json']) {
+    for (const tsconfig of [
+      'tsconfig.json',
+      'tsconfig.node16-cjs.json',
+      'tsconfig.api-esm.json',
+      'tsconfig.api-cjs.json',
+    ]) {
       run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
+    }
+    for (const script of ['import-api.mjs', 'require-api.cjs']) {
+      console.log(await runAsync(process.execPath, [script], consumerDir, consumerEnv));
     }
     assertInstalledWebApp(installedPackageDir);
 
     for (const binName of ['promptfoo', 'pf'] as const) {
-      assert.equal(
-        runInstalledBinVersion(consumerDir, configDir, binName).trim(),
-        packResult.version,
-      );
+      if (values.profile === 'omit-optional') {
+        // The CLI currently initializes SQLite before handling --version. Omission removes
+        // libsql's native platform package: verify its actionable failure, not a crash.
+        assert.throws(
+          () => runInstalledBinVersion(consumerDir, configDir, binName),
+          (error: unknown) =>
+            error instanceof Error &&
+            (error.cause as { status?: number })?.status === 1 &&
+            error.message.includes('could not load its SQLite dependency') &&
+            error.message.includes('Required package: @libsql/'),
+        );
+      } else {
+        assert.equal(
+          runInstalledBinVersion(consumerDir, configDir, binName).trim(),
+          packResult.version,
+        );
+      }
     }
-    await runInstalledCodexSecurityEval(consumerDir, configDir);
-    await runInstalledCompressionEval(consumerDir, configDir);
-    await assertOptionalBrowserDependencies(consumerDir, configDir);
-    await runInstalledTransformersProvider(consumerDir, configDir);
+    if (values.profile === 'default') {
+      await runInstalledCodexSecurityEval(consumerDir, configDir, consumerNpmEnv);
+      await runInstalledCompressionEval(consumerDir, configDir);
+    }
+    await assertOptionalBrowserDependencies(
+      consumerDir,
+      configDir,
+      consumerNpmEnv,
+      values.profile === 'default',
+    );
+    if (values.profile === 'default') {
+      await runInstalledTransformersProvider(consumerDir, configDir, consumerNpmEnv);
+    }
 
-    console.log(`Verified installed package artifact: ${packResult.filename}`);
+    console.log(`Verified installed package artifact (${values.profile}): ${packResult.filename}`);
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
