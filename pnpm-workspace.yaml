@@ -15,7 +15,6 @@ minimumReleaseAge: 14400
 # pnpm.onlyBuiltDependencies for older pnpm; keep the two lists identical.
 allowBuilds:
   '@huggingface/transformers': true
-  '@playwright/browser-chromium': true
   core-js: true
   core-js-pure: true
   esbuild: true
