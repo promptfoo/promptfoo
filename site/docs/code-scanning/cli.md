@@ -190,15 +190,15 @@ When using `--json`, the scan outputs a JSON object to stdout with the following
 
 ### Response Object
 
-| Field            | Type        | Description                                                                                    |
-| ---------------- | ----------- | ---------------------------------------------------------------------------------------------- |
-| `success`        | `boolean`   | Whether the scan completed successfully                                                        |
-| `review`         | `string`    | Overall review summary of the scan                                                             |
-| `comments`       | `Comment[]` | Array of findings (see below)                                                                  |
-| `commentsPosted` | `boolean`   | Whether comments were posted to a PR                                                           |
-| `skipReason`     | `string`    | Why the scan was skipped or incomplete (e.g. fork PR awaiting maintainer approval)             |
-| `skippedFiles`   | `number`    | Number of changed files omitted from a partial scan; absent or `0` means no files were skipped |
-| `error`          | `string`    | Error message if the scan failed                                                               |
+| Field            | Type        | Description                                                                                                                                  |
+| ---------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `success`        | `boolean`   | Whether the scan completed successfully                                                                                                      |
+| `review`         | `string`    | Overall review summary of the scan                                                                                                           |
+| `comments`       | `Comment[]` | Array of findings (see below)                                                                                                                |
+| `commentsPosted` | `boolean`   | Whether comments were posted to a PR                                                                                                         |
+| `skipReason`     | `string`    | Why the scan was skipped or incomplete (e.g. fork PR awaiting maintainer approval)                                                           |
+| `skippedFiles`   | `number`    | Number of changed files omitted from the scan; `0` confirms none were skipped. Older CLIs may omit this field, leaving completeness unknown. |
+| `error`          | `string`    | Error message if the scan failed                                                                                                             |
 
 ### Comment Object
 

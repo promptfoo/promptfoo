@@ -177,6 +177,7 @@ describe('scanner config policy boundary', () => {
     const { startFilesystemMcpServer } = await import('../../../src/codeScan/mcp/filesystem');
     const { createAgentClient } = await import('../../../src/util/agent/agentClient');
     const { buildScanRequest } = await import('../../../src/codeScan/scanner/request');
+    const { displayScanResults } = await import('../../../src/codeScan/scanner/output');
 
     await executeScan(repoPath, {
       base: 'main',
@@ -189,6 +190,11 @@ describe('scanner config policy boundary', () => {
       expect.objectContaining({ host: 'https://scanner.example' }),
     );
     expect(startFilesystemMcpServer).not.toHaveBeenCalled();
+    expect(displayScanResults).toHaveBeenCalledWith(
+      { success: true, comments: [], skippedFiles: 0 },
+      expect.any(Number),
+      { format: CodeScanOutputFormat.JSON, githubPr: undefined },
+    );
     expect(buildScanRequest).toHaveBeenCalledWith(
       expect.any(Array),
       expect.any(Object),

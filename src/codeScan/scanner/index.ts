@@ -251,7 +251,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
           success: true,
           comments: [],
           review: msg,
-          ...(skippedFiles.length ? { skippedFiles: skippedFiles.length } : {}),
+          skippedFiles: skippedFiles.length,
         };
         displayScanResults(response, Date.now() - startTime, {
           format: outputFormat,
@@ -308,9 +308,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       spinner,
       abortController,
     });
-    if (skippedFiles.length > 0) {
-      scanResponse.skippedFiles = skippedFiles.length;
-    }
+    scanResponse.skippedFiles = skippedFiles.length;
 
     // Stop spinner silently
     if (showSpinner && spinner) {

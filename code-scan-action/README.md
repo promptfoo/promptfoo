@@ -51,7 +51,7 @@ Fork pull request scanning is disabled by default for `pull_request` workflows. 
 ## SARIF Output
 
 Grant `contents: read` and `security-events: write` in the workflow job permissions, plus `actions: read` for private repositories, then upload the generated file.
-The action sets `sarif-path` only for a complete scan. If changed files were skipped, it withholds SARIF and fails when `sarif-output-path` was requested. Keep the upload step conditional:
+The action sets `sarif-path` only when the scanner reports `skippedFiles: 0`. It withholds SARIF and fails when files were skipped or an older CLI omits the count. PR comment reporting still works. Keep the upload step conditional:
 
 ```yaml
 - name: Run Promptfoo Code Scan

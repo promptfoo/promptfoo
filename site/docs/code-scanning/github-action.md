@@ -57,6 +57,8 @@ Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can 
 
 When `config-path` is omitted, the Action generates a temporary config from its severity, diff-scope, and guidance inputs. When `config-path` is set, that file supplies those settings and any corresponding Action inputs are ignored with a warning. The `api-host` input remains workflow-controlled in both modes.
 
+SARIF output requires a scanner response with `skippedFiles: 0`. If an older CLI omits this field, the Action withholds SARIF and fails when SARIF was requested; PR comment reporting still works.
+
 Only select config content from a trusted workflow or base revision. A config read from the pull request checkout can let the pull request weaken its own scan policy. For example, a workflow can materialize the file from the trusted base SHA before invoking the Action:
 
 ```yaml

@@ -180,6 +180,13 @@ const MOCK_PROMPTFOO_ENTRYPOINT = path.join(
   'entrypoint.js',
 );
 
+function isGitExecutable(candidate: PathLike): boolean {
+  return (
+    path.isAbsolute(String(candidate)) &&
+    path.basename(String(candidate)) === (process.platform === 'win32' ? 'git.exe' : 'git')
+  );
+}
+
 function emitWorkspaceHead(
   command: string,
   args: string[] | undefined,
@@ -187,7 +194,7 @@ function emitWorkspaceHead(
     | { listeners?: { stdout?: (data: Buffer) => void; stderr?: (data: Buffer) => void } }
     | undefined,
 ) {
-  if (command !== 'git' || args?.[0] !== 'rev-parse') {
+  if (!/git(?:\.exe)?"$/.test(command) || args?.[0] !== 'rev-parse') {
     return false;
   }
   options?.listeners?.stdout?.(Buffer.from('abc123\n'));
@@ -273,11 +280,7 @@ function setupMocks() {
   // so tests can assert the exact npm args without touching disk.
   mocks.fs.mkdtempSync.mockReturnValue(MOCK_INSTALL_DIR);
   mocks.fs.existsSync.mockImplementation((candidate: PathLike) => {
-    return (
-      String(candidate) === MOCK_NPM_CLI_PATH ||
-      (path.isAbsolute(String(candidate)) &&
-        path.basename(String(candidate)) === (process.platform === 'win32' ? 'git.exe' : 'git'))
-    );
+    return String(candidate) === MOCK_NPM_CLI_PATH || isGitExecutable(candidate);
   });
   mocks.fs.readFileSync.mockReturnValue(
     JSON.stringify({ bin: { promptfoo: 'dist/src/entrypoint.js' } }),
@@ -296,7 +299,7 @@ function setupMocks() {
       args: string[] | undefined,
       options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
     ) => {
-      if (command === 'git' && args?.[0] === 'rev-parse') {
+      if (/git(?:\.exe)?"$/.test(command) && args?.[0] === 'rev-parse') {
         options?.listeners?.stdout?.(Buffer.from('abc123\n'));
       }
       if (isPromptfooExecCommand(command, args) && options?.listeners?.stdout) {
@@ -582,6 +585,50 @@ describe('code-scan-action main', () => {
       expect(mocks.fs.existsSync).not.toHaveBeenCalledWith(path.join(localBin, executable));
     });
 
+    it('isolates every Git subprocess from inherited credentials and Git overrides', async () => {
+      mockInheritedActionAuthEnv();
+      mockProcessEnv({
+        GIT_EXEC_PATH: '/fixture/git-helpers',
+        GIT_CONFIG_COUNT: '20',
+        GIT_CONFIG_KEY_19: 'fixture.setting',
+        GIT_CONFIG_VALUE_19: 'fixture-value',
+        GIT_SSH_COMMAND: 'fixture-ssh',
+        GIT_DIR: '/fixture/other-repository',
+        GIT_ASKPASS: '/fixture/askpass',
+      });
+      await importActionAndGetPromptfooCall();
+      await vi.waitFor(() =>
+        expect(
+          mocks.exec.exec.mock.calls.filter(([, args]) => args?.[0] === 'rev-parse'),
+        ).toHaveLength(2),
+      );
+
+      const gitCalls = mocks.exec.exec.mock.calls.filter(
+        ([, args]) => args?.[0] === 'fetch' || args?.[0] === 'rev-parse',
+      );
+      expect(gitCalls.filter(([, args]) => args?.[0] === 'rev-parse')).toHaveLength(2);
+      for (const [command, args, options] of gitCalls) {
+        expect(command).toMatch(/git(?:\.exe)?"$/);
+        expectNoActionAuthEnv(options);
+        expect(options?.env?.GITHUB_OIDC_TOKEN).toBeUndefined();
+        for (const key of [
+          'GIT_EXEC_PATH',
+          'GIT_CONFIG_KEY_19',
+          'GIT_CONFIG_VALUE_19',
+          'GIT_SSH_COMMAND',
+          'GIT_DIR',
+          'GIT_ASKPASS',
+        ]) {
+          expect(options?.env?.[key]).toBeUndefined();
+        }
+        expect(options?.env?.GIT_CONFIG_GLOBAL).toBe(os.devNull);
+        expect(options?.env?.GIT_CONFIG_NOSYSTEM).toBe('1');
+        if (args?.[0] === 'rev-parse') {
+          expect(options?.env?.GIT_CONFIG_COUNT).toBeUndefined();
+        }
+      }
+    });
+
     it('passes untrusted-looking refs and paths as single argv values', async () => {
       const base = 'main; echo injected';
       const configPath = './policy $(touch pwned).yaml';
@@ -693,7 +740,9 @@ describe('code-scan-action main', () => {
       mockProcessEnv({ PATH: workflowNodeDir });
       mocks.fs.existsSync.mockImplementation((candidate: PathLike) => {
         return (
-          String(candidate) === workflowNpmExecutable || String(candidate) === workflowNpmCliPath
+          isGitExecutable(candidate) ||
+          String(candidate) === workflowNpmExecutable ||
+          String(candidate) === workflowNpmCliPath
         );
       });
 
@@ -720,6 +769,7 @@ describe('code-scan-action main', () => {
       mockProcessEnv({ PATH: ['untrusted-bin', workflowNodeDir].join(path.delimiter) });
       mocks.fs.existsSync.mockImplementation((candidate: PathLike) => {
         return (
+          isGitExecutable(candidate) ||
           String(candidate) === workflowNpmExecutable ||
           String(candidate) === workflowNpmCliPath ||
           String(candidate) ===
@@ -764,7 +814,7 @@ describe('code-scan-action main', () => {
       ]);
       mockProcessEnv({ PATH: [untrustedNodeDir, trustedNodeDir].join(path.delimiter) });
       mocks.fs.existsSync.mockImplementation((candidate: PathLike) => {
-        return existingPaths.has(String(candidate));
+        return isGitExecutable(candidate) || existingPaths.has(String(candidate));
       });
 
       const { npmCliPath } = await importActionAndGetNpmInstallCall();
@@ -804,7 +854,7 @@ describe('code-scan-action main', () => {
         ]);
         mockProcessEnv({ PATH: [untrustedNodeDir, trustedNodeDir].join(path.delimiter) });
         mocks.fs.existsSync.mockImplementation((candidate: PathLike) => {
-          return existingPaths.has(String(candidate));
+          return isGitExecutable(candidate) || existingPaths.has(String(candidate));
         });
         mocks.fs.realpathSync.mockImplementation((candidate: string) => {
           if (
@@ -847,7 +897,7 @@ describe('code-scan-action main', () => {
       const existingPaths = new Set([untrustedNpmCliPath, trustedNpmExecutable, trustedNpmCliPath]);
       mockProcessEnv({ PATH: [untrustedNodeDir, trustedNodeDir].join(path.delimiter) });
       mocks.fs.existsSync.mockImplementation((candidate: PathLike) => {
-        return existingPaths.has(String(candidate));
+        return isGitExecutable(candidate) || existingPaths.has(String(candidate));
       });
 
       const { npmCliPath } = await importActionAndGetNpmInstallCall();
@@ -857,8 +907,8 @@ describe('code-scan-action main', () => {
     });
 
     it('fails clearly without invoking a subprocess when npm cannot be found', async () => {
-      mockProcessEnv({ PATH: '' });
-      mocks.fs.existsSync.mockReturnValue(false);
+      mockProcessEnv({ PATH: path.join(os.tmpdir(), 'git-only') });
+      mocks.fs.existsSync.mockImplementation(isGitExecutable);
 
       await import('../../code-scan-action/src/main');
 
@@ -1373,20 +1423,22 @@ describe('code-scan-action main', () => {
       expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
     });
 
-    it('writes SARIF when a complete scan omits skippedFiles', async () => {
-      mockPromptfooScanResponse({ success: true, comments: [], skippedFiles: undefined });
+    it.each([undefined, null, -1, '0'])(
+      'withholds SARIF when skippedFiles is %s',
+      async (skippedFiles) => {
+        mockPromptfooScanResponse({ success: true, comments: [], skippedFiles });
 
-      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+        await triggerSarifAction('reports/promptfoo-code-scan.sarif');
 
-      await vi.waitFor(() => {
-        expect(mocks.fs.writeFileSync).toHaveBeenCalled();
-      });
-      expect(mocks.core.setOutput).toHaveBeenCalledWith(
-        'sarif-path',
-        path.resolve('/test/workspace', 'reports/promptfoo-code-scan.sarif'),
-      );
-      expect(mocks.core.setFailed).not.toHaveBeenCalled();
-    });
+        await vi.waitFor(() => {
+          expect(mocks.core.setFailed).toHaveBeenCalledWith(
+            expect.stringContaining('SARIF was requested but withheld'),
+          );
+        });
+        expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
+        expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
+      },
+    );
 
     it('does not write SARIF when the scanner skipped changed files', async () => {
       mockPromptfooScanResponse({
@@ -1415,7 +1467,7 @@ describe('code-scan-action main', () => {
           args: string[] | undefined,
           options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
         ) => {
-          if (command === 'git' && args?.[0] === 'rev-parse') {
+          if (/git(?:\.exe)?"$/.test(command) && args?.[0] === 'rev-parse') {
             options?.listeners?.stdout?.(Buffer.from('merge-commit\n'));
           }
           return 0;
@@ -1439,7 +1491,7 @@ describe('code-scan-action main', () => {
           args: string[] | undefined,
           options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
         ) => {
-          if (command === 'git' && args?.[0] === 'rev-parse') {
+          if (/git(?:\.exe)?"$/.test(command) && args?.[0] === 'rev-parse') {
             options?.listeners?.stdout?.(Buffer.from('\n'));
           }
           return 0;
@@ -1460,6 +1512,7 @@ describe('code-scan-action main', () => {
       const { createComment, createReview } = mockFallbackPosting();
       mockPromptfooScanResponse({
         success: true,
+        skippedFiles: undefined,
         comments: [
           {
             file: 'src/file-only.ts',

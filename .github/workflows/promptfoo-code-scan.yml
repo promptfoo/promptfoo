@@ -51,12 +51,19 @@ jobs:
 
       - name: Load scan policy from the base commit
         id: policy
+        shell: node {0}
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || steps.pr.outputs.base_sha }}
         run: |
-          policy_dir="$(mktemp -d "$RUNNER_TEMP/promptfoo-scan-policy.XXXXXX")"
-          git archive "$BASE_SHA" | tar -x -C "$policy_dir"
-          echo "config_path=$policy_dir/.github/promptfoo-code-scan.yaml" >> "$GITHUB_OUTPUT"
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const { execFileSync } = require('node:child_process');
+          const policyDir = fs.mkdtempSync(path.join(process.env.RUNNER_TEMP, 'promptfoo-scan-policy-'));
+          const archive = `${policyDir}.tar`;
+          execFileSync('git', ['archive', '--format=tar', '--output', archive, process.env.BASE_SHA]);
+          execFileSync('tar', ['-xf', archive, '-C', policyDir]);
+          fs.unlinkSync(archive);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `config_path=${path.join(policyDir, '.github/promptfoo-code-scan.yaml')}\n`);
 
       # Pin to 24.15.0 (not .nvmrc): Node 24.16.0 adds ~10s to every HTTPS
       # request on Linux runners, dragging the scanner's uncached

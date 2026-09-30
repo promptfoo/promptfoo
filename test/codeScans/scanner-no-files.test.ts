@@ -237,7 +237,7 @@ describe('Scanner machine-readable output', () => {
       await executeScan('/test/repo', options);
 
       expect(displayScanResults).toHaveBeenCalledWith(
-        { success: true, comments: [], review: 'No files to scan' },
+        { success: true, comments: [], review: 'No files to scan', skippedFiles: 0 },
         expect.any(Number),
         { format: expectedFormat, githubPr: undefined },
       );

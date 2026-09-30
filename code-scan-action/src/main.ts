@@ -326,20 +326,40 @@ async function getBaseBranch(githubToken: string, context: PullRequestContext): 
   return pr.base.ref;
 }
 
+function getGitCommand(): string {
+  const gitPath = resolveSafePathExecutables(
+    process.platform === 'win32' ? ['git.exe'] : ['git'],
+  ).next().value?.executable;
+  if (!gitPath) {
+    throw new Error('Git not found outside the checkout; install Git and add it to PATH');
+  }
+  return `"${gitPath}"`;
+}
+
+function createGitEnv(): Record<string, string> {
+  const env = createSubprocessEnv();
+  // Keep helper selection, repository selection, and configuration local to this invocation.
+  for (const key of Object.keys(env)) {
+    if (key.toUpperCase().startsWith('GIT_')) {
+      delete env[key];
+    }
+  }
+  return {
+    ...env,
+    GIT_CONFIG_GLOBAL: os.devNull,
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_TERMINAL_PROMPT: '0',
+  };
+}
+
 async function fetchBaseBranch(baseBranch: string, githubToken: string): Promise<void> {
   core.info(`📥 Fetching base branch: ${baseBranch}...`);
 
   try {
     const basicAuth = Buffer.from(`x-access-token:${githubToken}`).toString('base64');
-    const gitPath = resolveSafePathExecutables(
-      process.platform === 'win32' ? ['git.exe'] : ['git'],
-    ).next().value?.executable;
-    if (!gitPath) {
-      throw new Error('Git not found outside the checkout; install Git and add it to PATH');
-    }
-    await exec.exec(`"${gitPath}"`, ['fetch', 'origin', `${baseBranch}:${baseBranch}`], {
+    await exec.exec(getGitCommand(), ['fetch', 'origin', `${baseBranch}:${baseBranch}`], {
       env: {
-        ...process.env,
+        ...createGitEnv(),
         GIT_CONFIG_COUNT: '3',
         GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
         GIT_CONFIG_VALUE_0: '',
@@ -358,7 +378,8 @@ async function fetchBaseBranch(baseBranch: string, githubToken: string): Promise
 
 async function assertWorkspaceHead(context: PullRequestContext): Promise<void> {
   let output = '';
-  const exitCode = await exec.exec('git', ['rev-parse', 'HEAD'], {
+  const exitCode = await exec.exec(getGitCommand(), ['rev-parse', 'HEAD'], {
+    env: createGitEnv(),
     listeners: {
       stdout: (data: Buffer) => {
         output += data.toString();
@@ -404,6 +425,7 @@ function createMockScanResponse(): ScanResponse {
 
   const scanResponse: ScanResponse = {
     success: true,
+    skippedFiles: 0,
     comments: [
       {
         file: 'src/example.ts',
@@ -1058,7 +1080,7 @@ async function handleScanResponse(
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
 
   // Uploading a partial SARIF run could close prior alerts absent from this incomplete scan.
-  if (!skipReason && (skippedFiles ?? 0) === 0) {
+  if (!skipReason && skippedFiles === 0) {
     emitConfiguredSarifOutput(scanResponse, inputs);
   } else if ((skippedFiles ?? 0) > 0) {
     core.warning(
@@ -1083,8 +1105,10 @@ async function handleScanResponse(
     core.info('✨ No vulnerabilities found!');
   }
 
-  if (inputs.sarifOutputPath && (skippedFiles ?? 0) !== 0) {
-    throw new Error('SARIF was requested but withheld because changed files were skipped.');
+  if (inputs.sarifOutputPath && (skipReason || skippedFiles !== 0)) {
+    throw new Error(
+      'SARIF was requested but withheld because scan completeness was not confirmed. Use a scanner that reports skippedFiles: 0 for a complete scan.',
+    );
   }
 }
 
