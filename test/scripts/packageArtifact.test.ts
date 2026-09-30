@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { packPackageArtifact } from '../../scripts/packPackageArtifact';
-import { mockProcessEnv } from '../util/utils';
+import { mockProcessEnv, removeTempDir } from '../util/utils';
 
 // Command mode avoids package resolution and finds node.exe on Windows.
 const npmExecPath = execSync('npm exec --offline --call "node -p process.env.npm_execpath"', {
@@ -21,7 +21,7 @@ beforeEach(() => {
 afterEach(() => {
   restoreEnv();
   for (const directory of directories.splice(0)) {
-    fs.rmSync(directory, { recursive: true, force: true });
+    removeTempDir(directory);
   }
 });
 
