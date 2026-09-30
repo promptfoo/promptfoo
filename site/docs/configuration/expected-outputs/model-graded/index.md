@@ -383,6 +383,7 @@ OpenAI, Azure with an explicit embedding deployment, Google AI Studio, Mistral, 
 with Application Default Credentials. An Azure chat deployment is not used for embeddings.
 
 If no supported embedding credentials are available, embedding assertions return a configuration error.
+For providers outside this list, configure an embedding override explicitly.
 To choose providers explicitly, set separate `text` and `embedding` overrides:
 
 ```yaml

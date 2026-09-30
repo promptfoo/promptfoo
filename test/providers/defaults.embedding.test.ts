@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import { AzureEmbeddingProvider } from '../../src/providers/azure/embedding';
 import { getDefaultProviders } from '../../src/providers/defaults';
 import { hasGoogleDefaultCredentials } from '../../src/providers/google/util';
 import { hasCodexDefaultCredentials } from '../../src/providers/openai/codexDefaults';
@@ -125,12 +126,39 @@ describe('automatic embedding requests', () => {
     expect(fetchWithRetries).not.toHaveBeenCalled();
   });
 
-  it('respects an explicitly cleared OpenAI key when selecting embeddings', async () => {
-    mockProcessEnv({ OPENAI_API_KEY: 'ambient-fixture' });
-    const providers = await getDefaultProviders({
-      OPENAI_API_KEY: '',
-      VOYAGE_API_KEY: 'fixture-voyage',
-    });
-    expect(providers.embeddingProvider.id()).toBe('voyage:voyage-3.5');
+  it.each([
+    ['OPENAI_API_KEY', { VOYAGE_API_KEY: 'fixture-voyage' }, 'voyage:voyage-3.5'],
+    ['MISTRAL_API_KEY', { VOYAGE_API_KEY: 'fixture-voyage' }, 'voyage:voyage-3.5'],
+    ['VOYAGE_API_KEY', {}, 'embedding:unconfigured'],
+  ])('respects an explicitly cleared %s when selecting embeddings', async (key, fallback, id) => {
+    mockProcessEnv({ [key]: 'ambient-fixture' });
+    const providers = await getDefaultProviders({ ...fallback, [key]: '' });
+    expect(providers.embeddingProvider.id()).toBe(id);
   });
+
+  it.each(['AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET', 'AZURE_TENANT_ID'])(
+    'skips Azure embeddings when scoped %s is cleared',
+    async (key) => {
+      mockProcessEnv({
+        AZURE_CLIENT_ID: 'ambient-client',
+        AZURE_CLIENT_SECRET: 'ambient-secret',
+        AZURE_TENANT_ID: 'ambient-tenant',
+      });
+      const initialize = vi
+        .spyOn(AzureEmbeddingProvider.prototype, 'initialize')
+        .mockResolvedValue();
+      try {
+        const providers = await getDefaultProviders({
+          ANTHROPIC_API_KEY: 'fixture-grader',
+          MISTRAL_API_KEY: 'fixture-embedding',
+          AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'vectors',
+          [key]: '',
+        });
+        expect(providers.embeddingProvider.id()).toBe('mistral:embedding:mistral-embed');
+        expect(initialize).not.toHaveBeenCalled();
+      } finally {
+        initialize.mockRestore();
+      }
+    },
+  );
 });

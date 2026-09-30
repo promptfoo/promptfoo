@@ -74,19 +74,19 @@ async function getDefaultEmbeddingProvider(
     getEnvString('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME');
   const hasAzureCredentials =
     resolveProviderApiKey(undefined, env, ['AZURE_API_KEY', 'AZURE_OPENAI_API_KEY']) ||
-    ((env?.AZURE_CLIENT_ID || getEnvString('AZURE_CLIENT_ID')) &&
-      (env?.AZURE_CLIENT_SECRET || getEnvString('AZURE_CLIENT_SECRET')) &&
-      (env?.AZURE_TENANT_ID || getEnvString('AZURE_TENANT_ID')));
+    ((env?.AZURE_CLIENT_ID ?? getEnvString('AZURE_CLIENT_ID')) &&
+      (env?.AZURE_CLIENT_SECRET ?? getEnvString('AZURE_CLIENT_SECRET')) &&
+      (env?.AZURE_TENANT_ID ?? getEnvString('AZURE_TENANT_ID')));
   if (embeddingDeploymentName && hasAzureCredentials) {
     return new AzureEmbeddingProvider(embeddingDeploymentName, { env });
   }
   if (resolveProviderApiKey(undefined, env, ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'PALM_API_KEY'])) {
     return new AIStudioEmbeddingProvider('gemini-embedding-001', { env });
   }
-  if (env?.MISTRAL_API_KEY || getEnvString('MISTRAL_API_KEY')) {
+  if (resolveProviderApiKey(undefined, env, ['MISTRAL_API_KEY'])) {
     return env ? new MistralEmbeddingApiProvider({ env }) : MistralDefaultEmbeddingProvider;
   }
-  if (env?.VOYAGE_API_KEY || getEnvString('VOYAGE_API_KEY')) {
+  if (resolveProviderApiKey(undefined, env, ['VOYAGE_API_KEY'])) {
     return new VoyageEmbeddingProvider('voyage-3.5', {}, env);
   }
   if (await hasGoogleCredentials()) {
