@@ -74,6 +74,9 @@ vi.mock('crypto', async (importOriginal) => {
 });
 
 function resetCommonMocks() {
+  fsMocks.readFileSync.mockReset();
+  fsMocks.existsSync.mockReset();
+  vi.mocked(checkCloudPermissions).mockReset().mockResolvedValue(undefined);
   vi.mocked(extractA2AAgentCardInfo).mockReset().mockResolvedValue('');
   vi.mocked(extractMcpToolsInfo).mockReset().mockResolvedValue('');
   vi.mocked(getCloudDatabaseId).mockReset();
