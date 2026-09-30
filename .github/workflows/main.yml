@@ -256,7 +256,12 @@ jobs:
           PROMPTFOO_DISABLE_TELEMETRY: 1
           RUNTIME_ASSETS: ${{ matrix.node == '24.x' && 'all' || 'none' }}
           npm_config_install_strategy: ${{ matrix.node == '22.22' && 'shallow' || 'hoisted' }}
-        run: npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL" --runtime-assets "$RUNTIME_ASSETS"
+        run: |
+          browser_args=()
+          if [ "$RUNTIME_ASSETS" = all ]; then
+            browser_args+=(--browser)
+          fi
+          npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL" --runtime-assets "$RUNTIME_ASSETS" "${browser_args[@]}"
 
       - name: Test Package Artifact Without Optional Dependencies
         if: matrix.node == '24.x'

@@ -986,6 +986,7 @@ async function main(): Promise<void> {
       registry: { type: 'string', default: 'https://registry.npmjs.org/' },
       tarball: { type: 'string' },
       'runtime-assets': { type: 'string', default: 'none' },
+      browser: { type: 'boolean', default: false },
     },
   });
   assert(
@@ -1004,6 +1005,7 @@ async function main(): Promise<void> {
     ['default', 'omit-optional'].includes(values.profile),
     `Unknown install profile: ${values.profile}`,
   );
+  assert(!values.browser || values.profile === 'default', '--browser requires the default profile');
   // Module resolution canonicalizes paths (for example /var to /private/var on macOS).
   const tempDir = fs.realpathSync(
     fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-')),
@@ -1173,6 +1175,51 @@ async function main(): Promise<void> {
         await runAsync(
           process.execPath,
           ['runtime-assets.mjs', ...(values['runtime-assets'] === 'all' ? ['--ruby'] : [])],
+          consumerDir,
+          consumerEnv,
+        ),
+      );
+    }
+
+    if (values.browser) {
+      runNpm(
+        [
+          'install',
+          '--ignore-scripts',
+          '--no-audit',
+          '--no-fund',
+          '--no-package-lock',
+          'playwright@1.63.0',
+          'playwright-extra@4.3.6',
+          'puppeteer-extra-plugin-stealth@2.11.2',
+        ],
+        consumerDir,
+        consumerNpmEnv,
+      );
+      const playwrightManifest = packageRequire.resolve('playwright/package.json');
+      const playwright = JSON.parse(fs.readFileSync(playwrightManifest, 'utf8')) as {
+        bin: { playwright: string };
+      };
+      assert.equal(typeof playwright.bin.playwright, 'string');
+      const browsersPath = path.join(tempDir, 'browsers');
+      // Browser downloads use the CI job deadline, not the fixture timeout.
+      console.log(
+        run(
+          process.execPath,
+          [
+            path.resolve(path.dirname(playwrightManifest), playwright.bin.playwright),
+            'install',
+            'chromium',
+            '--only-shell',
+          ],
+          consumerDir,
+          { ...consumerEnv, PLAYWRIGHT_BROWSERS_PATH: browsersPath },
+        ),
+      );
+      console.log(
+        await runAsync(
+          process.execPath,
+          ['browser.mjs', '--browsers-path', browsersPath],
           consumerDir,
           consumerEnv,
         ),

@@ -82,3 +82,17 @@ including integrity hashes and optional native packages, then installed with `np
 The installed Promptfoo consumer resolves dependencies independently. No repository
 dependency install or build is required on those platforms. Incremental TypeScript
 compiler state is excluded from the published archive.
+
+## Browser capability
+
+Add `--browser` to the default profile to install compatible browser SDKs and test them:
+
+```sh
+npm run test:package-artifact -- --browser
+```
+
+The installed Playwright CLI downloads matching Chromium into a temporary directory.
+The fixture checks Unicode input, clicks, extraction, stealth, a missing-selector
+error, and recovery on local HTML. Expected scores are 1/0/1. This runs on Linux
+Node 24 in CI; other jobs require `--browser`. Missing-SDK checks run in both profiles
+without this flag.
