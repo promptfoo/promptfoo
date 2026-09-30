@@ -7,7 +7,7 @@ import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache, getCache, isCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
-import { importModule } from '../../src/esm';
+import { getDirectory, importModule, resolvePackageEntryPoint } from '../../src/esm';
 import logger from '../../src/logger';
 import {
   CLAUDE_CODE_MODEL_ALIASES,
@@ -75,6 +75,7 @@ vi.mock('fs', async (importOriginal) => {
 vi.mock('../../src/esm', async (importOriginal) => {
   return {
     ...(await importOriginal()),
+    getDirectory: vi.fn(),
     importModule: vi.fn(),
     resolvePackageEntryPoint: vi.fn(() => '@anthropic-ai/claude-agent-sdk'),
   };
@@ -293,6 +294,12 @@ describe('ClaudeCodeSDKProvider', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(getDirectory)
+      .mockReset()
+      .mockReturnValue(path.resolve('/global/node_modules/promptfoo/dist/src'));
+    vi.mocked(resolvePackageEntryPoint)
+      .mockReset()
+      .mockReturnValue('@anthropic-ai/claude-agent-sdk');
     vi.mocked(getPackageVersion).mockReturnValue('0.3.273');
     mockQuery.mockReset();
     Object.values(fsMocks).forEach((mock) => mock.mockReset());
@@ -312,6 +319,8 @@ describe('ClaudeCodeSDKProvider', () => {
   });
 
   afterEach(async () => {
+    vi.mocked(getDirectory).mockReset();
+    vi.mocked(resolvePackageEntryPoint).mockReset();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
     cliState.setActiveOtlpReceiver();
@@ -583,6 +592,44 @@ describe('ClaudeCodeSDKProvider', () => {
         vi.useRealTimers();
       }
     });
+  });
+
+  it('loads the SDK installed beside a global Promptfoo installation', async () => {
+    const installRoot = path.resolve('/global/node_modules/promptfoo');
+    const sdkPath = path.resolve('/global/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs');
+    vi.mocked(resolvePackageEntryPoint).mockImplementation((_name, basePath) =>
+      basePath === installRoot ? sdkPath : null,
+    );
+    mockQuery.mockReturnValue(createMockResponse('Response'));
+    const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
+
+    const result = await provider.callApi('test');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Response');
+    expect(resolvePackageEntryPoint).toHaveBeenNthCalledWith(
+      1,
+      '@anthropic-ai/claude-agent-sdk',
+      cliState.basePath,
+    );
+    expect(getPackageVersion).toHaveBeenCalledWith('@anthropic-ai/claude-agent-sdk', sdkPath);
+    expect(importModule).toHaveBeenCalledWith(sdkPath);
+  });
+
+  it('checks the project SDK before a compatible global sibling', async () => {
+    const localPath = path.resolve(
+      '/test/basePath/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs',
+    );
+    vi.mocked(resolvePackageEntryPoint).mockReturnValue(localPath);
+    vi.mocked(getPackageVersion).mockReturnValue('0.3.235');
+    const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
+
+    const result = await provider.callApi('test');
+
+    expect(result.error).toContain('found 0.3.235');
+    expect(resolvePackageEntryPoint).toHaveBeenCalledTimes(1);
+    expect(getPackageVersion).toHaveBeenCalledWith('@anthropic-ai/claude-agent-sdk', localPath);
+    expect(importModule).not.toHaveBeenCalled();
   });
 
   it('reports installation guidance for an asynchronously rejected SDK import', async () => {

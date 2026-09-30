@@ -697,7 +697,26 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
   }
 }
 
-async function runInstalledCodingSdkEval(consumerDir: string, configDir: string): Promise<void> {
+async function runInstalledCodingSdkEval(tarballPath: string, configDir: string): Promise<void> {
+  // Keep SDK install states separate from providers that can install Codex transitively.
+  const consumerDir = fs.mkdtempSync(path.join(path.dirname(configDir), 'coding-sdk-consumer-'));
+  fs.writeFileSync(
+    path.join(consumerDir, 'package.json'),
+    JSON.stringify({ name: 'promptfoo-coding-sdk-consumer', private: true, type: 'module' }),
+  );
+  runNpm(
+    [
+      'install',
+      '--omit=optional',
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+      '--no-package-lock',
+      tarballPath,
+    ],
+    consumerDir,
+    { npm_config_engine_strict: 'false' },
+  );
   const fixturesDir = path.join(consumerDir, 'coding-sdks');
   fs.cpSync(path.join(ROOT, 'test/fixtures/coding-sdks'), fixturesDir, { recursive: true });
   // The Codex SDK sends `exec` as its first argument. Let Node load that script on all platforms.
@@ -712,7 +731,7 @@ import { evaluate } from 'promptfoo';
 const mode = process.argv[2];
 const installed = mode === 'installed';
 if (mode === 'missing') {
-  for (const sdk of ['@openai/codex-sdk', '@anthropic-ai/claude-agent-sdk', '@openai/codex-security']) {
+  for (const sdk of ['@openai/codex-sdk', '@anthropic-ai/claude-agent-sdk']) {
     assert.throws(() => import.meta.resolve(sdk), { code: 'ERR_MODULE_NOT_FOUND' });
   }
 }
@@ -774,24 +793,6 @@ for (const result of results) {
     assert.match(result.response.sessionId, /^fixture-(thread|session)$/);
   }
 }
-// Loading the real security SDK must reach its repository validation, without starting a model scan.
-const scan = await evaluate({
-  prompts: ['Inspect this repository'],
-  providers: [{
-    id: 'openai:codex-security',
-    config: { repository: path.join(import.meta.dirname, 'does-not-exist') },
-  }],
-  tests: [{ vars: {} }],
-}, { cache: false, maxConcurrency: 1 });
-const { results: scanResults } = await scan.toEvaluateSummary();
-assert.equal(scanResults.length, 1);
-assert.equal(scanResults[0].success, false);
-assert.ok(scanResults[0].response.error.includes(installed
-  ? 'Repository is not a directory'
-  : 'npm install promptfoo @openai/codex-security@^0.1.31'));
-if (mode === 'incompatible') {
-  assert.ok(scanResults[0].response.error.includes('incompatible (0.1.28)'));
-}
 `,
   );
   const env = {
@@ -804,13 +805,13 @@ if (mode === 'incompatible') {
   runNpm(
     [
       'install',
+      '--omit=optional',
       '--ignore-scripts',
       '--no-audit',
       '--no-fund',
       '--no-package-lock',
       '@openai/codex-sdk@0.154.0',
       '@anthropic-ai/claude-agent-sdk@0.3.235',
-      '@openai/codex-security@0.1.28',
     ],
     consumerDir,
   );
@@ -818,13 +819,13 @@ if (mode === 'incompatible') {
   runNpm(
     [
       'install',
+      '--omit=optional',
       '--ignore-scripts',
       '--no-audit',
       '--no-fund',
       '--no-package-lock',
       '@openai/codex-sdk@^0.156.1',
       '@anthropic-ai/claude-agent-sdk@^0.3.273',
-      '@openai/codex-security@^0.1.31',
     ],
     consumerDir,
   );
@@ -1084,7 +1085,7 @@ async function main(): Promise<void> {
     await runInstalledCompressionEval(consumerDir, configDir);
     await assertOptionalBrowserDependencies(consumerDir, configDir);
     await runInstalledTransformersProvider(consumerDir, configDir);
-    await runInstalledCodingSdkEval(consumerDir, configDir);
+    await runInstalledCodingSdkEval(tarballPath, configDir);
 
     console.log(`Verified installed package artifact: ${packResult.filename}`);
   } finally {

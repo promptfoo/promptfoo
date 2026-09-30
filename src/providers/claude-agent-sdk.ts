@@ -8,7 +8,7 @@ import dedent from 'dedent';
 import semverSatisfies from 'semver/functions/satisfies.js';
 import cliState from '../cliState';
 import { getEnvString, getProcessEnv } from '../envars';
-import { importModule, resolvePackageEntryPoint } from '../esm';
+import { getDirectory, importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
 import {
   addActiveSpanRoleAttribute,
@@ -381,7 +381,19 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
   const basePath =
     cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
 
-  const claudeCodePath = resolvePackageEntryPoint('@anthropic-ai/claude-agent-sdk', basePath);
+  const basePaths = new Set([
+    basePath,
+    process.cwd(),
+    path.resolve(getDirectory(), '..'),
+    path.resolve(getDirectory(), '../..'),
+  ]);
+  let claudeCodePath: string | null = null;
+  for (const candidate of basePaths) {
+    claudeCodePath = resolvePackageEntryPoint('@anthropic-ai/claude-agent-sdk', candidate);
+    if (claudeCodePath) {
+      break;
+    }
+  }
 
   if (!claudeCodePath) {
     throw new Error(
