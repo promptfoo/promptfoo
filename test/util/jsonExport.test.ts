@@ -124,7 +124,12 @@ describe('JSON export with improved error handling', () => {
           usage: undefined,
           expected: { ...zero, numRequests: 1, incurredTokenUsage: zero },
         },
-        { name: 'fresh usage', cached: false, usage: legacy, expected: legacy },
+        {
+          name: 'fresh usage',
+          cached: false,
+          usage: legacy,
+          expected: { ...legacy, incurredTokenUsage: legacy },
+        },
         { name: 'explicit mixed incurred usage', cached: false, usage: mixed, expected: mixed },
         {
           name: 'explicit zero incurred usage',
@@ -132,7 +137,12 @@ describe('JSON export with improved error handling', () => {
           usage: { ...legacy, incurredTokenUsage: zero },
           expected: { ...legacy, incurredTokenUsage: zero },
         },
-        { name: 'deterministic zero usage', cached: false, usage: zero, expected: zero },
+        {
+          name: 'deterministic zero usage',
+          cached: false,
+          usage: zero,
+          expected: { ...zero, incurredTokenUsage: zero },
+        },
         {
           name: 'unmarked cache heuristic',
           cached: undefined,
@@ -175,7 +185,7 @@ describe('JSON export with improved error handling', () => {
         },
       );
 
-      it('normalizes nested cached components without double counting the parent', () => {
+      it('normalizes nested grading components without double counting the parent', () => {
         const restore = mockProcessEnv({
           PROMPTFOO_STRIP_METADATA: 'true',
           PROMPTFOO_STRIP_GRADING_RESULT: 'false',
@@ -218,7 +228,11 @@ describe('JSON export with improved error handling', () => {
             completionDetails: { reasoning: 2 },
             incurredTokenUsage: zero,
           });
-          expect(component.componentResults![0].tokensUsed).toEqual({ total: 10, numRequests: 1 });
+          expect(component.componentResults![0].tokensUsed).toMatchObject({
+            total: 10,
+            numRequests: 1,
+            incurredTokenUsage: { total: 10, numRequests: 1 },
+          });
           for (const result of [grading, component, component.componentResults![0]]) {
             expect(result).not.toHaveProperty('metadata');
           }
