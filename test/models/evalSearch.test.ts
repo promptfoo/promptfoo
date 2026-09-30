@@ -104,6 +104,33 @@ describe('table search and filtered metrics', () => {
   });
 
   it.each([
+    ['grading_result', sql`grading_result`],
+    ['named_scores', sql`named_scores`],
+    ['metadata', sql`metadata`],
+    ['test_case', sql`test_case`],
+    ['response', sql`response`],
+    ['prompt', sql`prompt`],
+    ['provider', sql`provider`],
+  ])('loads matches with malformed %s in another artifact', async (_name, column) => {
+    const eval_ = await create([
+      { metadata: { note: 'needle' }, testCase: { vars: { input: 'needle' } } },
+      {},
+    ]);
+    const db = await getDb();
+    await db.run(sql`UPDATE eval_results SET ${column} = ${'{invalid JSON'}
+      WHERE eval_id = ${eval_.id} AND test_idx = 0`);
+
+    const page = await eval_.getTablePage({ searchQuery: 'needle' });
+    expect(page.body.map((row) => row.testIdx)).toEqual([0]);
+    expect(page.filteredCount).toBe(1);
+    expect(page.totalCount).toBe(2);
+    const metrics = await eval_.getFilteredMetrics({ searchQuery: 'needle' });
+    expect(
+      metrics.reduce((n, m) => n + m.testPassCount + m.testFailCount + m.testErrorCount, 0),
+    ).toBe(1);
+  });
+
+  it.each([
     'all',
     'passes',
     'failures',
