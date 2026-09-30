@@ -38,6 +38,7 @@ import {
 } from '../../src/node/retry';
 import { ClaudeCodeSDKProvider } from '../../src/providers/claude-agent-sdk';
 import { loadApiProvider } from '../../src/providers/index';
+import { trackProvider } from '../../src/providers/lifecycle';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { generateTable } from '../../src/table';
 import {
@@ -1185,10 +1186,13 @@ describe('evalCommand', () => {
         cleanup: vi.fn().mockResolvedValue(undefined),
       }));
       for (const provider of providers.slice(0, 2)) {
-        vi.mocked(resolveConfigs).mockResolvedValueOnce({
-          config: {},
-          testSuite: { prompts: [], providers: [provider] },
-          basePath: path.resolve('/'),
+        vi.mocked(resolveConfigs).mockImplementationOnce(async () => {
+          trackProvider(provider);
+          return {
+            config: {},
+            testSuite: { prompts: [], providers: [provider] },
+            basePath: path.resolve('/'),
+          };
         });
       }
       vi.mocked(evaluate)
@@ -1208,10 +1212,13 @@ describe('evalCommand', () => {
         await expect(onChange(defaultConfigPath)).resolves.toBeUndefined();
         expect(providers[1].cleanup).toHaveBeenCalledTimes(1);
 
-        vi.mocked(resolveConfigs).mockResolvedValueOnce({
-          config: {},
-          testSuite: { prompts: [], providers: [providers[2]] },
-          basePath: path.resolve('/'),
+        vi.mocked(resolveConfigs).mockImplementationOnce(async () => {
+          trackProvider(providers[2]);
+          return {
+            config: {},
+            testSuite: { prompts: [], providers: [providers[2]] },
+            basePath: path.resolve('/'),
+          };
         });
         await expect(onChange(defaultConfigPath)).resolves.toBeUndefined();
         expect(evaluate).toHaveBeenCalledTimes(3);
@@ -2320,13 +2327,16 @@ describe('evalCommand', () => {
       callApi: async () => ({ output: 'ok' }),
       cleanup,
     } as ApiProvider;
-    vi.mocked(resolveConfigs).mockResolvedValueOnce({
-      config: {} as UnifiedConfig,
-      testSuite: {
-        prompts: [],
-        providers: [provider],
-      },
-      basePath: path.resolve('/'),
+    vi.mocked(resolveConfigs).mockImplementationOnce(async () => {
+      trackProvider(provider);
+      return {
+        config: {} as UnifiedConfig,
+        testSuite: {
+          prompts: [],
+          providers: [provider],
+        },
+        basePath: path.resolve('/'),
+      };
     });
     vi.mocked(evaluate).mockImplementationOnce(
       async (_testSuite, evalRecord) => evalRecord as Eval,
@@ -2347,17 +2357,21 @@ describe('evalCommand', () => {
       vi.fn().mockRejectedValue(cleanupErrors[1]),
       vi.fn().mockResolvedValue(undefined),
     ];
-    vi.mocked(resolveConfigs).mockResolvedValueOnce({
-      config: {},
-      testSuite: {
-        prompts: [],
-        providers: cleanups.map((cleanup, index) => ({
-          id: () => `cleanup-provider-${index}`,
-          callApi: vi.fn(async () => ({ output: 'ok' })),
-          cleanup,
-        })),
-      },
-      basePath: path.resolve('/'),
+    vi.mocked(resolveConfigs).mockImplementationOnce(async () => {
+      const resolved = {
+        config: {},
+        testSuite: {
+          prompts: [],
+          providers: cleanups.map((cleanup, index) => ({
+            id: () => `cleanup-provider-${index}`,
+            callApi: vi.fn(async () => ({ output: 'ok' })),
+            cleanup,
+          })),
+        },
+        basePath: path.resolve('/'),
+      };
+      resolved.testSuite.providers.forEach(trackProvider);
+      return resolved;
     });
     vi.mocked(evaluate).mockRejectedValueOnce(runError);
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
@@ -2366,11 +2380,103 @@ describe('evalCommand', () => {
       for (const cleanup of cleanups) {
         expect(cleanup).toHaveBeenCalledTimes(1);
       }
-      for (const error of cleanupErrors) {
-        expect(warnSpy).toHaveBeenCalledWith('Provider cleanup failed', { error });
-      }
+      expect(warnSpy).toHaveBeenCalledWith('Provider cleanup failed after evaluation error', {
+        error: cleanupErrors[0],
+      });
     } finally {
       warnSpy.mockRestore();
+    }
+  });
+
+  it('cleans constructed providers when config resolution fails before returning a suite', async () => {
+    const configError = new Error('invalid tests file');
+    const provider = {
+      id: () => 'cleanup-provider',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup: vi.fn(),
+    };
+    vi.mocked(resolveConfigs).mockImplementationOnce(async () => {
+      trackProvider(provider);
+      throw configError;
+    });
+    await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toBe(configError);
+    expect(provider.cleanup).toHaveBeenCalledOnce();
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it('reports cleanup failure after a successful run and still cleans remaining providers', async () => {
+    const cleanupError = new Error('cleanup failed');
+    const providers = [
+      {
+        id: () => 'failing',
+        callApi: async () => ({}),
+        cleanup: vi.fn().mockRejectedValue(cleanupError),
+      },
+      { id: () => 'other', callApi: async () => ({}), cleanup: vi.fn() },
+    ];
+    vi.mocked(resolveConfigs).mockImplementationOnce(async () => {
+      providers.forEach(trackProvider);
+      return { config: {}, testSuite: { prompts: [], providers }, basePath: path.resolve('/') };
+    });
+    vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => record as Eval);
+    await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toBe(cleanupError);
+    for (const provider of providers) {
+      expect(provider.cleanup).toHaveBeenCalledOnce();
+    }
+  });
+
+  it('cleans constructed providers after evaluation fails', async () => {
+    const cleanup = vi.fn();
+    const provider = {
+      id: () => 'cleanup-provider',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup,
+    };
+    vi.mocked(evaluate).mockImplementationOnce(async () => {
+      trackProvider(provider);
+      throw new Error('evaluation failed');
+    });
+    await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toThrow(
+      'evaluation failed',
+    );
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('leaves reusable caller-owned providers open', async () => {
+    const cleanup = vi.fn();
+    const provider = {
+      id: () => 'caller-provider',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup,
+    };
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: {},
+      testSuite: { prompts: [], providers: [provider] },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => record as Eval);
+    await doEval({}, defaultConfig, defaultConfigPath, {});
+    expect(cleanup).not.toHaveBeenCalled();
+  });
+
+  it('preserves configured failure exit codes when cleanup rejects', async () => {
+    const previousExitCode = process.exitCode;
+    const provider = {
+      id: () => 'cleanup-provider',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup: vi.fn().mockRejectedValue(new Error('cleanup failed')),
+    };
+    vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => {
+      trackProvider(provider);
+      process.exitCode = 42;
+      return record as Eval;
+    });
+    try {
+      await expect(doEval({}, defaultConfig, defaultConfigPath, {})).resolves.toBeDefined();
+      expect(process.exitCode).toBe(42);
+      expect(provider.cleanup).toHaveBeenCalledOnce();
+    } finally {
+      process.exitCode = previousExitCode;
     }
   });
 
@@ -2825,10 +2931,14 @@ describe('checkCloudPermissions', () => {
 });
 
 describe('showRedteamProviderLabelMissingWarning', () => {
-  const mockWarn = vi.spyOn(logger, 'warn');
+  let mockWarn: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    mockWarn.mockClear();
+    mockWarn = vi.spyOn(logger, 'warn');
+  });
+
+  afterEach(() => {
+    mockWarn.mockRestore();
   });
 
   it('should show warning when provider has no label', () => {

@@ -205,12 +205,15 @@ describe('resolveTestsWatchPaths', () => {
     expect(watched).toContain(path.join(base, 'tests/b.yaml'));
   });
 
-  it.each([{ data: { path: 'file://vars.csv' } }, { data: [{ path: 'file://vars.csv' }] }])(
-    'ignores file-like strings inside literal var objects: %j',
-    (vars) => {
-      expect(resolve([{ vars }] as TestSuiteConfig['tests'])).toEqual([]);
-    },
-  );
+  it.each([
+    { data: { path: 'file://vars.csv' } },
+    { data: [{ path: 'file://vars.csv' }] },
+    { data: [42, 'file://vars.csv'] },
+    { data: [null, 'file://vars.csv'] },
+    { data: [{ title: 'literal' }, 'file://vars.csv'] },
+  ])('ignores file-like strings inside literal var objects: %j', (vars) => {
+    expect(resolve([{ vars }] as TestSuiteConfig['tests'])).toEqual([]);
+  });
 
   it('ignores remote references', () => {
     expect(

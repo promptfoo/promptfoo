@@ -1008,9 +1008,9 @@ export function resolveTestsWatchPaths(
           typeof value === 'string' ? resolveTestsFileReference(value, basePath) : [],
         );
       }
-      // renderPrompt loads direct strings and array strings; nested objects remain literal.
+      // Arrays starting with non-strings are literal values, as in generateVarCombinations.
       return Object.values(entry.vars)
-        .flat()
+        .flatMap((value) => (Array.isArray(value) && typeof value[0] !== 'string' ? [] : value))
         .flatMap((value) =>
           typeof value === 'string' && value.startsWith('file://')
             ? resolveTestsFileReference(value, basePath)
