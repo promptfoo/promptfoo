@@ -32,6 +32,92 @@ describe('provider cleanup ownership', () => {
     expect(cleanup).toHaveBeenCalledOnce();
   });
 
+  it.each(['single', 'batch'])(
+    'keeps %s loader delegates caller-owned across evaluations',
+    async (loader) => {
+      const cleanup = vi.fn();
+      let delegate: ApiProvider | undefined;
+      const caller: ApiProvider = {
+        id: () => 'caller',
+        async callApi(prompt) {
+          delegate ??=
+            loader === 'single'
+              ? await loadApiProvider(providerPath, { options: providerOptions({ cleanup }) })
+              : (await loadApiProviders([providerOptions({ cleanup })]))[0];
+          return delegate.callApi(prompt);
+        },
+      };
+      try {
+        for (let run = 0; run < 2; run++) {
+          const result = await evaluateWithSource(
+            {
+              prompts: ['hello'],
+              providers: [caller],
+              tests: [{ assert: [{ type: 'equals', value: 'ok' }] }],
+            },
+            { cache: false },
+          );
+          expect(result.prompts[0].metrics?.testPassCount).toBe(1);
+          expect(cleanup).not.toHaveBeenCalled();
+        }
+      } finally {
+        await delegate?.cleanup?.();
+      }
+      expect(cleanup).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('preserves process-registered caller providers during evaluation', async () => {
+    const provider = { ...makeProvider(), shutdown: vi.fn(async () => {}) };
+    providerRegistry.register(provider);
+    try {
+      await evaluateWithSource(
+        {
+          prompts: ['hello'],
+          providers: [provider],
+          tests: [{ assert: [{ type: 'equals', value: 'ok' }] }],
+        },
+        { cache: false },
+      );
+      expect(provider.shutdown).not.toHaveBeenCalled();
+      expect(providerRegistry.has(provider)).toBe(true);
+    } finally {
+      providerRegistry.unregister(provider);
+    }
+  });
+
+  it('shuts down a registered owned provider when setup fails', async () => {
+    const error = new Error('setup failed');
+    const provider = { ...makeProvider(), shutdown: vi.fn(async () => {}) };
+    providerRegistry.register(provider);
+    try {
+      await expect(
+        withProviderCleanup(async () => {
+          trackProvider(provider);
+          throw error;
+        }),
+      ).rejects.toBe(error);
+      expect(provider.shutdown).toHaveBeenCalledOnce();
+      expect(providerRegistry.has(provider)).toBe(false);
+    } finally {
+      providerRegistry.unregister(provider);
+    }
+  });
+
+  it('reports cleanup failure without replacing a batch load failure', async () => {
+    const error = new Error('cleanup failed');
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    await expect(
+      loadApiProviders([
+        providerOptions({ cleanup: vi.fn().mockRejectedValue(error) }),
+        providerOptions({ fail: true }),
+      ]),
+    ).rejects.toThrow('provider load failed');
+    expect(warn).toHaveBeenCalledWith('Provider cleanup failed after provider load error', {
+      error,
+    });
+  });
+
   it('cleans a configured provider after programmatic evaluation', async () => {
     const cleanup = vi.fn();
     const result = await evaluateWithSource(
@@ -238,12 +324,11 @@ describe('provider cleanup ownership', () => {
     });
   });
 
-  it('leaves process-registered providers to their shutdown owner', async () => {
+  it('does not clean untracked process-registered providers', async () => {
     const provider = { ...makeProvider(), shutdown: vi.fn(async () => {}) };
     providerRegistry.register(provider);
     try {
       await withProviderCleanup(async () => {
-        trackProvider(provider);
         providerRegistry.unregister(provider);
       });
       expect(provider.cleanup).not.toHaveBeenCalled();

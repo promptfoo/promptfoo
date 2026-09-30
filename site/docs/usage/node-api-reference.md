@@ -104,7 +104,8 @@ interface EvaluateOptions {
 ### `loadApiProvider(providerPath, context?)`
 
 Load a single provider instance by path or identifier. You own the returned instance and
-should call `await provider.cleanup?.()` when finished.
+should call `await provider.cleanup?.()` when finished. Direct loads remain caller-owned even
+when made from a provider used by an evaluation.
 
 ```typescript
 async function loadApiProvider(

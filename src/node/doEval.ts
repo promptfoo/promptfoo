@@ -1356,7 +1356,8 @@ async function doEvalWithEnv(
         cliState.withEnv(runEnv, () =>
           withProviderCleanup(
             () => runEvaluationWithEnv(runEnv, initialization),
-            () => isCliInvocation && process.exitCode !== undefined,
+            () =>
+              isCliInvocation && process.exitCode !== undefined && Number(process.exitCode) !== 0,
           ),
         ),
       ),
