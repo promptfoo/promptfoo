@@ -164,6 +164,36 @@ describe('resolveTestsWatchPaths', () => {
     expect(watched).toContain(path.join(base, 'vars.csv'));
   });
 
+  it.each(['yaml', 'json', 'jsonl'])(
+    'watches bare vars files from nested %s rows using the loader base',
+    (extension) => {
+      const file = path.join(base, `nested/vars-cases.${extension}`);
+      const row = { vars: ['one.yaml', 'two.yaml'], provider: 'file://provider.yaml' };
+      fs.writeFileSync(
+        file,
+        extension === 'yaml'
+          ? '- vars: [one.yaml, two.yaml]\n  provider: file://provider.yaml\n'
+          : JSON.stringify(extension === 'json' ? [row] : row),
+      );
+      const source = `nested/vars-cases.${extension}`;
+      const arrayPaths = resolve([source]);
+      expect(arrayPaths).toEqual(
+        expect.arrayContaining([
+          file,
+          path.join(base, 'nested/one.yaml'),
+          path.join(base, 'nested/two.yaml'),
+          path.join(base, 'provider.yaml'),
+        ]),
+      );
+      expect(arrayPaths).not.toContain(path.join(base, 'nested/provider.yaml'));
+      const scalarBase = extension === 'yaml' ? path.join(base, 'nested') : base;
+      expect(resolve(source)).toContain(path.join(scalarBase, 'one.yaml'));
+      expect(resolve(`nested/vars-cases*.${extension}`)).toContain(
+        path.join(base, 'nested/one.yaml'),
+      );
+    },
+  );
+
   it('tolerates a self-referential generator config', () => {
     // A YAML anchor produces a cyclic object, which naive recursion would follow until
     // the stack overflows -- crashing a run that had already evaluated successfully.

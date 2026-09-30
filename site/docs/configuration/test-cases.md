@@ -588,9 +588,9 @@ tests:
       shared: file://../shared/context.json
 ```
 
-Within a test row, `file://` vars and references to provider config files, such as `provider: file://provider.yaml`, use the owning config's directory.
+Rows in YAML test files, or JSON/JSONL files supplied in a `tests` array or glob, resolve bare `vars:` paths and globs from the tests file's directory. For example, `vars: ../vars/*.yaml` in `tests/cases.yaml` loads files from the adjacent `vars` directory. Watch mode observes those same files.
 
-Rows in YAML test files, or JSON/JSONL files supplied in a `tests` array or glob, resolve bare `vars:` paths and globs from the tests file's directory. For example, `vars: ../vars/*.yaml` in `tests/cases.yaml` loads files from the adjacent `vars` directory. Row-provider `file://` references to script functions, such as `file://provider.py:call_api`, use the same directory. A single non-YAML test path, such as `tests: file://tests/cases.json`, or a `{ path, config }` source keeps row vars and provider paths relative to the config directory.
+Inline `file://` vars and row-provider references keep the owning config's directory. A single non-YAML test path, such as `tests: file://tests/cases.json`, or a `{ path, config }` source also keeps bare vars-file paths relative to the config directory.
 
 With multiple configs, each config's tests use its base directory; suite-level providers and deferred grader references use the first config's base directory. Explicit `--tests` and `--vars` paths resolve from the working directory.
 

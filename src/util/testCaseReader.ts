@@ -511,24 +511,23 @@ async function readTestWithEnv(
   isDefaultTest: boolean,
   env: EnvOverrides | undefined,
   loadProviders = true,
-  // Directory of the file declaring the row: its `vars` files and provider resolve from here,
-  // while inline `file://` vars keep `basePath`, where prompt rendering resolves them.
-  sourceBasePath = basePath,
+  // Bare vars-file references in imported rows use the tests file's directory.
+  varsBasePath = basePath,
 ): Promise<TestCase> {
   if (typeof test === 'object' && isRemoteTestCase(test)) {
     return test as TestCase;
   }
   let testCase: TestCase;
-  let effectiveBasePath = sourceBasePath;
+  let effectiveBasePath = basePath;
 
   if (typeof test === 'string') {
-    const testFilePath = path.resolve(sourceBasePath, test);
+    const testFilePath = path.resolve(basePath, test);
     effectiveBasePath = path.dirname(testFilePath);
     const rawContent = loadYaml(await fsPromises.readFile(testFilePath, 'utf-8'));
     const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
   } else {
-    testCase = await loadTestWithVars(test, effectiveBasePath);
+    testCase = await loadTestWithVars(test, varsBasePath);
   }
 
   if (!loadProviders) {
@@ -958,7 +957,11 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
  * unreadable file is left to the loader to report, since this runs only to decide what
  * to watch.
  */
-function collectNestedFileReferences(testsFile: string, basePath: string): string[] {
+function collectNestedFileReferences(
+  testsFile: string,
+  basePath: string,
+  varsBasePath: string,
+): string[] {
   const ext = parsePath(testsFile).ext.slice(1).toLowerCase();
   if (!['yaml', 'yml', 'json', 'jsonl'].includes(ext)) {
     return [];
@@ -971,7 +974,13 @@ function collectNestedFileReferences(testsFile: string, basePath: string): strin
         : ext === 'jsonl'
           ? parseJsonlLines(raw, testsFile)
           : loadYaml(raw);
-    return collectConfigFileReferences(parsed, basePath);
+    const rows = Array.isArray(parsed) ? parsed : [parsed];
+    const varsFiles = rows.flatMap((row) =>
+      row && (typeof row.vars === 'string' || Array.isArray(row.vars))
+        ? resolveTestsWatchPaths([{ vars: row.vars }], varsBasePath)
+        : [],
+    );
+    return [...collectConfigFileReferences(parsed, basePath), ...varsFiles];
   } catch {
     return [];
   }
@@ -1029,9 +1038,19 @@ export function resolveTestsWatchPaths(
       // A tests file may itself point at more files, e.g. a case with
       // `vars: {data: file://vars.yaml}`. The loader reads those before the resolved
       // config is built, so collect them here as well.
+      const source = renderEnvOnlyInObject(entry).replace(/^file:\/\//, '');
+      const useSourceDirectory =
+        Array.isArray(tests) ||
+        source.endsWith('yaml') ||
+        source.endsWith('yml') ||
+        (hasGlobMagic(source) && !fs.existsSync(path.resolve(basePath, source)));
       return resolveTestsFileReference(entry, basePath).flatMap((file) => [
         file,
-        ...collectNestedFileReferences(file, basePath),
+        ...collectNestedFileReferences(
+          file,
+          basePath,
+          useSourceDirectory ? path.dirname(file) : basePath,
+        ),
       ]);
     }
     if (!entry || typeof entry !== 'object') {

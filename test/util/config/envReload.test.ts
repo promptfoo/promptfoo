@@ -1994,7 +1994,7 @@ describe('suite environment loading', () => {
   });
 
   it.each(['json', 'jsonl', 'yaml'])(
-    'resolves vars files and providers in array %s rows from the tests file directory',
+    'resolves vars files in array %s rows without moving inline files or providers',
     async (extension) => {
       const configPath = writeConfig('array-root', { tests: [`nested/cases.${extension}`] });
       const base = path.dirname(configPath);
@@ -2016,10 +2016,44 @@ describe('suite environment loading', () => {
       const { config, testSuite } = await resolveConfigs({ config: [configPath] }, {});
       expect(testSuite.tests?.[0].vars?.source).toBe('nested');
       expect((config.tests as TestCase[])[1].provider).toBe(
-        `file://${path.join(base, 'nested/provider.py')}:call_api`,
+        `file://${path.join(base, 'provider.py')}:call_api`,
       );
       // Inline file:// vars stay config-relative, matching prompt rendering.
       expect(testSuite.tests?.[1].vars?.doc).toBe(`file://${path.join(base, 'doc.txt')}`);
+    },
+  );
+
+  it.each(['json', 'jsonl', 'yaml'])(
+    'preserves config-relative scripts loaded from provider config in %s test rows',
+    async (extension) => {
+      const configPath = writeConfig('provider-origin', { tests: [`nested/cases.${extension}`] });
+      const base = path.dirname(configPath);
+      fs.mkdirSync(path.join(base, 'nested'));
+      fs.writeFileSync(path.join(base, 'provider.yaml'), 'id: file://provider.cjs\n');
+      fs.writeFileSync(
+        path.join(base, 'provider.cjs'),
+        'module.exports = class { id() { return "root-provider"; } async callApi() { return { output: "root" }; } };',
+      );
+      fs.writeFileSync(
+        path.join(base, 'nested/provider.cjs'),
+        'module.exports = class { id() { return "wrong-shadow"; } async callApi() { return { output: "shadow" }; } };',
+      );
+      const row = { vars: {}, provider: 'file://provider.yaml' };
+      fs.writeFileSync(
+        path.join(base, `nested/cases.${extension}`),
+        extension === 'yaml'
+          ? '- vars: {}\n  provider: file://provider.yaml\n'
+          : JSON.stringify(extension === 'json' ? [row] : row),
+      );
+
+      const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
+
+      expect(isApiProvider(testSuite.tests?.[0].provider) && testSuite.tests[0].provider.id()).toBe(
+        'root-provider',
+      );
+      expect(resolveTestsWatchPaths([`nested/cases.${extension}`], base)).toContain(
+        path.join(base, 'provider.yaml'),
+      );
     },
   );
 

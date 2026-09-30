@@ -1963,7 +1963,7 @@ describe('loadTestsFromGlob', () => {
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No test files found'));
   });
 
-  it("loads a row's vars files and provider from its tests file directory", async () => {
+  it("loads a row's vars files from its tests file directory without moving its provider", async () => {
     const configDir = path.resolve('fixture-config');
     const testsFile = path.join(configDir, 'tests', 'cases.yaml');
     const varsFile = path.join(configDir, 'vars', 'extra.yaml');
@@ -1982,7 +1982,7 @@ describe('loadTestsFromGlob', () => {
     expect(test.vars).toEqual({ topic: 'nested' });
     expect(loadApiProvider).toHaveBeenCalledWith(
       'python:provider.py',
-      expect.objectContaining({ basePath: path.dirname(testsFile) }),
+      expect.objectContaining({ basePath: configDir }),
     );
   });
 
