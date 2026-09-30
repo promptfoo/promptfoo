@@ -71,20 +71,7 @@ describe('OllamaCompletionProvider', () => {
     const provider = new OllamaCompletionProvider('llama3.3');
     const result = await provider.callApi('test prompt');
 
-    expect(result.error).toContain('API call error: Error: API error');
-  });
-
-  // The rejected `fetchWithCache` call never assigns `response`, so interpolating
-  // `response?.data` in the catch block rendered the literal string "undefined".
-  it('should not report an undefined response body when the API call rejects', async () => {
-    vi.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
-
-    const provider = new OllamaCompletionProvider('llama3.3');
-    const result = await provider.callApi('test prompt');
-
-    expect(result.error).toContain('API call error: Error: API error');
-    expect(result.error).not.toContain('undefined');
-    expect(result.error).not.toContain('Output:');
+    expect(result.error).toBe('API call error: Error: API error');
   });
 
   // fetchWithCache is called with format 'text' here, so `data` is always a string --
@@ -593,19 +580,7 @@ describe('OllamaChatProvider', () => {
     const provider = new OllamaChatProvider('llama3.3');
     const result = await provider.callApi('test prompt');
 
-    expect(result.error).toContain('API call error: Error: API error');
-  });
-
-  // Same as the completion provider: `response` is unassigned when the call rejects.
-  it('should not report an undefined response body when the chat API call rejects', async () => {
-    vi.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
-
-    const provider = new OllamaChatProvider('llama3.3');
-    const result = await provider.callApi('test prompt');
-
-    expect(result.error).toContain('API call error: Error: API error');
-    expect(result.error).not.toContain('undefined');
-    expect(result.error).not.toContain('Output:');
+    expect(result.error).toBe('API call error: Error: API error');
   });
 
   it('should handle chat API response with error field', async () => {
