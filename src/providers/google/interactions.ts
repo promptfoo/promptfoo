@@ -205,7 +205,11 @@ function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOverrides):
     return `${config.apiBaseUrl.replace(/\/$/, '')}/v1beta/interactions`;
   }
 
-  const apiHost = env?.GOOGLE_API_HOST || getEnvString('GOOGLE_API_HOST');
+  const apiHost =
+    env?.GOOGLE_API_HOST ||
+    env?.PALM_API_HOST ||
+    getEnvString('GOOGLE_API_HOST') ||
+    getEnvString('PALM_API_HOST');
   if (apiHost) {
     return endpointFromHost(apiHost);
   }
@@ -270,6 +274,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
       this.config,
       context?.prompt?.config as Partial<CompletionOptions> | undefined,
     ) as GoogleProviderConfig;
+    if (this.modelName === 'gemini-omni-1.1-flash') {
+      config.vertexai = false;
+    }
     const passthroughPreviousInteractionId =
       config.passthrough?.previous_interaction_id ?? config.passthrough?.previousInteractionId;
     if (config.vertexai && (config.previousInteractionId || passthroughPreviousInteractionId)) {
@@ -283,7 +290,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
       (Array.isArray(config.passthrough?.tools)
         ? config.passthrough.tools.length > 0
         : Boolean(config.passthrough?.tools)) ||
-      Boolean(config.mcp?.enabled)
+      config.mcp?.enabled
     ) {
       return {
         error:

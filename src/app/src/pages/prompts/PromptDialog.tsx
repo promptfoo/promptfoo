@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
 
 interface PromptDialogProps {

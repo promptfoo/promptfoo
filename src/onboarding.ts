@@ -390,7 +390,7 @@ export async function createDummyFiles(
   }
 
   const prompts: string[] = [];
-  const providers: (string | object)[] = [];
+  const providers: (string | ProviderOptions)[] = [];
   let action: string;
   let language: string;
 
@@ -468,15 +468,16 @@ export async function createDummyFiles(
     }
 
     const choices: { name: string; value: (string | ProviderOptions)[] }[] = [
-      { name: `I'll choose later`, value: ['openai:gpt-5-mini', 'openai:gpt-5'] },
+      { name: `I'll choose later`, value: ['openai:gpt-6-luna', 'openai:gpt-6-sol'] },
       {
-        name: '[OpenAI] GPT 5, GPT 4.1, ...',
+        name: action === 'agent' ? '[OpenAI] GPT-6 Sol' : '[OpenAI] GPT-6 Luna and Sol',
         value:
           action === 'agent'
             ? [
                 {
-                  id: 'openai:gpt-5',
+                  id: 'openai:chat:gpt-6-sol',
                   config: {
+                    reasoning_effort: 'none',
                     tools: [
                       {
                         type: 'function',
@@ -499,23 +500,35 @@ export async function createDummyFiles(
                   },
                 },
               ]
-            : ['openai:gpt-5-mini', 'openai:gpt-5'],
+            : ['openai:gpt-6-luna', 'openai:gpt-6-sol'],
       },
       {
         name: '[Anthropic] Claude Fable, Opus, Sonnet, Haiku, ...',
         value: [
           'anthropic:messages:claude-fable-5',
-          'anthropic:messages:claude-opus-5',
+          'anthropic:messages:claude-opus-5-5',
           'anthropic:messages:claude-opus-4-8',
-          'anthropic:messages:claude-sonnet-5',
+          'anthropic:messages:claude-sonnet-5-5',
           'anthropic:messages:claude-sonnet-4-6',
-          'anthropic:messages:claude-opus-4-1-20250805',
+          'anthropic:messages:claude-opus-4-6',
           'anthropic:messages:claude-haiku-4-5',
         ],
       },
       {
-        name: '[Google] Gemini 3.1 Pro, ...',
-        value: ['vertex:gemini-3.1-pro-preview', 'vertex:gemini-2.5-pro'],
+        name: '[Google] Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
+        value: [
+          ...[
+            'gemini-3.8-flash',
+            'gemini-3.7-flash',
+            'gemini-3.6-flash',
+            'gemini-3.5-flash-lite',
+          ].map((id) => ({
+            id: `vertex:${id}`,
+            config: { region: 'global' },
+          })),
+          'vertex:gemini-3.1-pro-preview',
+          'vertex:gemini-2.5-pro',
+        ],
       },
       {
         name: '[HuggingFace] Llama, Phi, Gemma, ...',
@@ -554,7 +567,7 @@ export async function createDummyFiles(
       },
       {
         name: '[AWS Bedrock] Claude, Llama, Titan, ...',
-        value: ['bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0'],
+        value: ['bedrock:us.anthropic.claude-sonnet-5'],
       },
       {
         name: '[Cohere] Command R, Command R+, ...',
@@ -607,21 +620,15 @@ export async function createDummyFiles(
         providers.push(...providerChoices);
       }
 
-      if (
-        providerChoices.some(
-          (choice) =>
-            typeof choice === 'string' && choice.startsWith('file://') && choice.endsWith('.js'),
-        )
-      ) {
+      const providerIds = providerChoices.filter((choice) => typeof choice === 'string');
+      if (providerIds.some((id) => id.startsWith('file://') && id.endsWith('.js'))) {
         await writeFile({
           file: 'provider.js',
           contents: JAVASCRIPT_PROVIDER,
           required: true,
         });
       }
-      if (
-        providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))
-      ) {
+      if (providerIds.some((id) => id.startsWith('exec:'))) {
         // Generate platform-appropriate executable provider script
         const isWindows = process.platform === 'win32';
         await writeFile({
@@ -631,11 +638,8 @@ export async function createDummyFiles(
         });
       }
       if (
-        providerChoices.some(
-          (choice) =>
-            typeof choice === 'string' &&
-            (choice.startsWith('python:') ||
-              (choice.startsWith('file://') && choice.endsWith('.py'))),
+        providerIds.some(
+          (id) => id.startsWith('python:') || (id.startsWith('file://') && id.endsWith('.py')),
         )
       ) {
         await writeFile({
@@ -645,8 +649,8 @@ export async function createDummyFiles(
         });
       }
     } else {
-      providers.push('openai:gpt-5-mini');
-      providers.push('openai:gpt-5');
+      providers.push('openai:gpt-6-luna');
+      providers.push('openai:gpt-6-sol');
     }
 
     if (action === 'compare') {
@@ -684,8 +688,8 @@ export async function createDummyFiles(
     language = 'not_sure';
     prompts.push(`Write a tweet about {{topic}}`);
     prompts.push(`Write a concise, funny tweet about {{topic}}`);
-    providers.push('openai:gpt-5-mini');
-    providers.push('openai:gpt-5');
+    providers.push('openai:gpt-6-luna');
+    providers.push('openai:gpt-6-sol');
   }
 
   const nunjucks = getNunjucksEngine();
@@ -710,7 +714,10 @@ export async function createDummyFiles(
 
   return {
     numPrompts: prompts.length,
-    providerPrefixes: providers.map((p) => (typeof p === 'string' ? p.split(':')[0] : 'unknown')),
+    providerPrefixes: providers.map((provider) => {
+      const providerId = typeof provider === 'string' ? provider : provider.id;
+      return providerId?.split(':')[0] ?? 'unknown';
+    }),
     action,
     language,
     outDirectory,

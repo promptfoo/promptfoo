@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 
+import { API } from 'typescript/unstable/sync';
 import { shouldCopyDrizzlePath } from './postbuild';
 
 type PackFile = {
@@ -310,12 +311,127 @@ function runInstalledBinVersion(consumerDir: string, configDir: string, binName:
   return run(binPath, ['--version'], consumerDir, envOverrides);
 }
 
+function assertProviderTypeDocumentation(installedPackageDir: string): void {
+  const api = new API();
+  try {
+    for (const declaration of ['contracts.d.ts', 'contracts.d.cts']) {
+      const declarationPath = path.join(installedPackageDir, 'dist', 'src', declaration);
+      const snapshot = api.updateSnapshot({ openFiles: [declarationPath] });
+      const project = snapshot.getDefaultProjectForFile(declarationPath);
+      assert(project, `Missing declaration project: ${declaration}`);
+      const checker = project.checker;
+      const source = project.program.getSourceFile(declarationPath);
+      assert(source, `Missing declaration source: ${declaration}`);
+      const moduleSymbol = checker.getSymbolAtLocation(source);
+      assert(moduleSymbol, `Missing declaration module: ${declaration}`);
+      const exports = checker.getExportsOfModule(moduleSymbol);
+
+      for (const name of [
+        'McpConfigInput',
+        'McpConfig',
+        'McpConfigParsed',
+        'HttpProviderConfigInput',
+      ]) {
+        const symbol = exports.find((entry) => entry.name === name);
+        assert(symbol, `Missing ${name} in ${declaration}`);
+        const configType = checker.getDeclaredTypeOfSymbol(symbol);
+        const properties =
+          name === 'HttpProviderConfigInput'
+            ? ['tools', 'tool_choice', 'transformToolsFormat', 'session']
+            : ['timeout', 'resetTimeoutOnProgress', 'maxTotalTimeout', 'pingOnConnect'];
+        for (const property of properties) {
+          const member = checker.getPropertyOfType(configType, property);
+          assert(member, `Missing ${name}.${property} in ${declaration}`);
+          const documentation = checker.getDocumentationCommentOfSymbol(member);
+          assert(
+            documentation.length > 0,
+            `Missing JSDoc for ${name}.${property} in ${declaration}`,
+          );
+          if (property === 'timeout') {
+            assert.match(documentation, /60000 \(60 seconds\)/);
+            assert.match(documentation, /MCP_REQUEST_TIMEOUT_MS/);
+          }
+        }
+        const responseParser = checker.getPropertyOfType(configType, 'responseParser');
+        assert(responseParser, `Missing ${name}.responseParser in ${declaration}`);
+        const deprecated = checker.getJsDocTagsOfSymbol(responseParser);
+        assert(
+          deprecated?.some(
+            (tag) => tag.name === 'deprecated' && tag.text?.includes('transformResponse'),
+          ),
+          `Missing responseParser deprecation in ${name} in ${declaration}`,
+        );
+      }
+      snapshot.dispose();
+    }
+  } finally {
+    api.close();
+  }
+}
+
 function writeConsumerScripts(consumerDir: string): void {
+  const authAssertions = [
+    "const httpInput = { method: 'GET', auth: { type: 'api_key', value: '{{ KEY }}', placement: 'header', keyName: 'X-Key' }, tls: {} };",
+    "if ('rejectUnauthorized' in HttpProviderConfigInputSchema.parse(httpInput).tls) {",
+    "  throw new Error('HTTP authoring schema inserted runtime defaults');",
+    '}',
+    "for (const invalid of [{method: 'POST'}, {body: {}, signatureAuth: {type: 'pem'}}, {method: 'GET', typo: true}]) {",
+    '  if (HttpProviderConfigInputSchema.safeParse(invalid).success) {',
+    "    throw new Error('HTTP authoring schema accepted invalid input');",
+    '  }',
+    '}',
+    "if (HttpAuthInputSchema.safeParse({ type: 'api_key', value: 'key' }).success) {",
+    "  throw new Error('HTTP auth lost its placement/name requirements');",
+    '}',
+    "if (HttpProviderConfigInputJsonSchema.$schema !== 'http://json-schema.org/draft-07/schema#') {",
+    "  throw new Error('Missing HTTP config JSON Schema export');",
+    '}',
+    "const extensionConfig = { server: { command: 'node', extension: true }, extension: true };",
+    'if (McpConfigInputSchema.safeParse(extensionConfig).success) {',
+    "  throw new Error('MCP authoring config accepted extension fields');",
+    '}',
+    'const compatibleConfig = McpConfigSchema.parse(extensionConfig);',
+    'if (compatibleConfig.extension !== true || compatibleConfig.server.extension !== true) {',
+    "  throw new Error('MCP runtime config lost extension fields');",
+    '}',
+    "if (McpAuthInputSchema.safeParse({ type: 'bearer', token: 'key', typo: true }).success) {",
+    "  throw new Error('MCP authoring auth accepted an unknown field');",
+    '}',
+    "const mcpInput = { servers: [{ url: 'https://mcp.example.test', auth: { type: 'api_key', api_key: 'key' } }] };",
+    "if ('enabled' in McpConfigInputSchema.parse(mcpInput)) {",
+    "  throw new Error('MCP config input parsing inserted defaults');",
+    '}',
+    'if (McpConfigSchema.parse(mcpInput).enabled !== true) {',
+    "  throw new Error('MCP config runtime default is missing');",
+    '}',
+    "if (McpConfigInputSchema.safeParse({ server: { url: 'https://mcp.example.test', auth: { type: 'api_key' } } }).success) {",
+    "  throw new Error('MCP config accepted invalid nested auth');",
+    '}',
+    "if (McpConfigInputJsonSchema.$schema !== 'http://json-schema.org/draft-07/schema#') {",
+    "  throw new Error('Missing MCP config JSON Schema export');",
+    '}',
+    "const authInput = { type: 'oauth', clientId: 'client', clientSecret: 'secret' };",
+    "if ('grantType' in McpAuthInputSchema.parse(authInput)) {",
+    "  throw new Error('MCP auth input parsing inserted a runtime default');",
+    '}',
+    "if (McpAuthSchema.parse(authInput)?.grantType !== 'client_credentials') {",
+    "  throw new Error('MCP runtime auth parsing lost its default');",
+    '}',
+    "if (McpAuthInputSchema.safeParse({ type: 'api_key' }).success) {",
+    "  throw new Error('MCP API-key auth accepted missing credentials');",
+    '}',
+    "if (McpAuthInputJsonSchema.$schema !== 'http://json-schema.org/draft-07/schema#') {",
+    "  throw new Error('Missing MCP auth JSON Schema export');",
+    '}',
+  ];
   fs.writeFileSync(
     path.join(consumerDir, 'import-package.mjs'),
     [
       "import { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } from 'promptfoo';",
       "import { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } from 'promptfoo/contracts';",
+      "import { McpAuthInputJsonSchema, McpAuthInputSchema, McpAuthSchema } from 'promptfoo/contracts';",
+      "import { McpConfigInputJsonSchema, McpConfigInputSchema, McpConfigSchema } from 'promptfoo/contracts';",
+      "import { HttpAuthInputSchema, HttpProviderConfigInputSchema, HttpProviderConfigInputJsonSchema } from 'promptfoo/contracts';",
       '',
       'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
       "  if (!value || typeof value.safeParse !== 'function') {",
@@ -325,6 +441,7 @@ function writeConsumerScripts(consumerDir: string): void {
       'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
       "  throw new Error('Missing expected ESM provider capability export');",
       '}',
+      ...authAssertions,
       '',
     ].join('\n'),
   );
@@ -333,6 +450,9 @@ function writeConsumerScripts(consumerDir: string): void {
     [
       "const { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } = require('promptfoo');",
       "const { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } = require('promptfoo/contracts');",
+      "const { McpAuthInputJsonSchema, McpAuthInputSchema, McpAuthSchema } = require('promptfoo/contracts');",
+      "const { McpConfigInputJsonSchema, McpConfigInputSchema, McpConfigSchema } = require('promptfoo/contracts');",
+      "const { HttpAuthInputSchema, HttpProviderConfigInputSchema, HttpProviderConfigInputJsonSchema } = require('promptfoo/contracts');",
       '',
       'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
       "  if (!value || typeof value.safeParse !== 'function') {",
@@ -342,6 +462,7 @@ function writeConsumerScripts(consumerDir: string): void {
       'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
       "  throw new Error('Missing expected CJS provider capability export');",
       '}',
+      ...authAssertions,
       '',
     ].join('\n'),
   );
@@ -350,6 +471,10 @@ function writeConsumerScripts(consumerDir: string): void {
     [
       "import { GetUserResponseSchema, PromptSchema, hasFunctionToolCallValidator, isTransformFunction } from 'promptfoo/contracts';",
       "import type { BlobRef, FunctionToolCallValidator, GetUserResponse, Prompt, ProviderResponse, TransformFunction } from 'promptfoo/contracts';",
+      "import { McpAuthInputSchema, McpAuthSchema } from 'promptfoo/contracts';",
+      "import type { McpAuthInput, McpAuthParsed } from 'promptfoo/contracts';",
+      "import { McpConfigSchema, type McpConfigInput, type McpConfigParsed } from 'promptfoo/contracts';",
+      "import { HttpProviderConfigInputSchema, type HttpProviderConfigInput } from 'promptfoo/contracts';",
       '',
       "const prompt: Prompt = { label: 'Greeting', raw: 'Hello, world!' };",
       'const transform: TransformFunction<string, string> = (output) => output;',
@@ -357,6 +482,18 @@ function writeConsumerScripts(consumerDir: string): void {
       'const validator: FunctionToolCallValidator = { validateFunctionToolCall() {} };',
       "const blobRef: BlobRef = { hash: 'abc123', mimeType: 'image/png', provider: 'filesystem', sizeBytes: 3, uri: 'promptfoo://blob/abc123' };",
       "const response: ProviderResponse = { images: [{ blobRef }], output: 'ok' };",
+      "const authInput: McpAuthInput = { type: 'oauth', clientId: 'client', clientSecret: 'secret', scopes: 'read write' };",
+      'const auth: McpAuthParsed = McpAuthSchema.parse(McpAuthInputSchema.parse(authInput));',
+      "const mcpInput: McpConfigInput = { servers: [{ url: 'https://mcp.example.test', auth: authInput }] };",
+      'const mcp: McpConfigParsed = McpConfigSchema.parse(mcpInput);',
+      'const enabled: boolean = mcp.enabled;',
+      'void enabled;',
+      "const httpInput: HttpProviderConfigInput = { body: { prompt: '{{ prompt }}' }, auth: { type: 'bearer', token: 'key' } };",
+      'HttpProviderConfigInputSchema.parse(httpInput);',
+      "if (auth?.type === 'oauth') {",
+      "  const grant: 'client_credentials' | 'password' = auth.grantType;",
+      '  void grant;',
+      '}',
       '',
       'GetUserResponseSchema.parse(user);',
       'PromptSchema.parse(prompt);',
@@ -380,19 +517,6 @@ function writeConsumerScripts(consumerDir: string): void {
     }),
   );
   fs.writeFileSync(
-    path.join(consumerDir, 'tsconfig.legacy.json'),
-    JSON.stringify({
-      compilerOptions: {
-        ignoreDeprecations: '6.0',
-        module: 'CommonJS',
-        moduleResolution: 'node',
-        noEmit: true,
-        strict: true,
-      },
-      include: ['import-contracts.ts'],
-    }),
-  );
-  fs.writeFileSync(
     path.join(consumerDir, 'require-contracts.cts'),
     [
       "import contracts = require('promptfoo/contracts');",
@@ -402,6 +526,18 @@ function writeConsumerScripts(consumerDir: string): void {
       'const validator: contracts.FunctionToolCallValidator = { validateFunctionToolCall() {} };',
       "const blobRef: contracts.BlobRef = { hash: 'abc123', mimeType: 'image/png', provider: 'filesystem', sizeBytes: 3, uri: 'promptfoo://blob/abc123' };",
       "const response: contracts.ProviderResponse = { images: [{ blobRef }], output: 'ok' };",
+      "const authInput: contracts.McpAuthInput = { type: 'oauth', clientId: 'client', clientSecret: 'secret', scopes: 'read write' };",
+      'const auth: contracts.McpAuthParsed = contracts.McpAuthSchema.parse(contracts.McpAuthInputSchema.parse(authInput));',
+      "const mcpInput: contracts.McpConfigInput = { servers: [{ url: 'https://mcp.example.test', auth: authInput }] };",
+      'const mcp: contracts.McpConfigParsed = contracts.McpConfigSchema.parse(mcpInput);',
+      'const enabled: boolean = mcp.enabled;',
+      'void enabled;',
+      "const httpInput: contracts.HttpProviderConfigInput = { body: { prompt: '{{ prompt }}' }, auth: { type: 'bearer', token: 'key' } };",
+      'contracts.HttpProviderConfigInputSchema.parse(httpInput);',
+      "if (auth?.type === 'oauth') {",
+      "  const grant: 'client_credentials' | 'password' = auth.grantType;",
+      '  void grant;',
+      '}',
       'contracts.GetUserResponseSchema.parse(user);',
       'contracts.PromptSchema.parse(prompt);',
       'void response;',
@@ -561,6 +697,172 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
   }
 }
 
+async function assertOptionalBrowserDependencies(
+  consumerDir: string,
+  configDir: string,
+): Promise<void> {
+  const assertions = `
+    const incompatible = process.argv[2] === 'incompatible';
+    if (incompatible) {
+      assert.equal(require('playwright/package.json').version, '1.62.0');
+    } else {
+      for (const name of ['playwright', 'playwright-extra', 'puppeteer-extra-plugin-stealth', '@playwright/browser-chromium']) {
+        assert.throws(() => require.resolve(name), { code: 'MODULE_NOT_FOUND' });
+      }
+    }
+    for (const [id, config] of [
+      ['browser', { steps: [] }],
+      ['openai:chatkit:wf_fixture', { apiKey: 'fixture-key', usePool: false }],
+      ['openai:chatkit:wf_fixture', { apiKey: 'fixture-key', usePool: true }],
+    ]) {
+      const provider = await loadApiProvider(id, { options: { config } });
+      const response = await provider.callApi('optional browser fixture', { vars: {} });
+      assert.match(response.error, incompatible
+        ? /installed playwright package [(]1[.]62[.]0[)] is incompatible/
+        : /requires the optional Playwright package/);
+      assert.match(response.error, /npm install promptfoo/);
+      assert.match(response.error, /npx playwright install chromium/);
+      await provider.cleanup?.();
+    }
+  `;
+  for (const format of ['mjs', 'cjs']) {
+    const imports =
+      format === 'mjs'
+        ? `import assert from 'node:assert/strict';
+         import { createRequire } from 'node:module';
+         import { loadApiProvider } from 'promptfoo';
+         const require = createRequire(import.meta.url);`
+        : `const assert = require('node:assert/strict');
+         const { loadApiProvider } = require('promptfoo');`;
+    fs.writeFileSync(
+      path.join(consumerDir, `optional-browser.${format}`),
+      `${imports}\n(async () => {${assertions}})().catch(error => {
+        console.error(error); process.exitCode = 1;
+      });`,
+    );
+  }
+  for (const state of ['missing', 'incompatible']) {
+    if (state === 'incompatible') {
+      runNpm(
+        [
+          'install',
+          '--ignore-scripts',
+          '--no-audit',
+          '--no-fund',
+          '--no-package-lock',
+          'playwright@1.62.0',
+        ],
+        consumerDir,
+      );
+    }
+    for (const format of ['mjs', 'cjs']) {
+      await runAsync(process.execPath, [`optional-browser.${format}`, state], consumerDir, {
+        PROMPTFOO_CONFIG_DIR: configDir,
+        PROMPTFOO_CACHE_ENABLED: 'false',
+        PROMPTFOO_DISABLE_TELEMETRY: '1',
+        PROMPTFOO_DISABLE_UPDATE: 'true',
+      });
+    }
+  }
+  await runInstalledCompressionEval(consumerDir, configDir);
+}
+
+async function runInstalledTransformersProvider(
+  consumerDir: string,
+  configDir: string,
+): Promise<void> {
+  const modelDir = path.join(consumerDir, 'tiny-bert');
+  fs.cpSync(path.join(ROOT, 'test/fixtures/transformers/tiny-bert'), modelDir, { recursive: true });
+  const script = `const modelDir = ${JSON.stringify(modelDir)};
+const providerId = 'transformers:feature-extraction:' + modelDir;
+const mode = process.argv[2];
+// An unrelated local SDK version must not prevent ordinary evaluations.
+const ordinary = await evaluate({
+  prompts: ['hello world'],
+  providers: ['echo'],
+  tests: [{ vars: {}, assert: [{ type: 'equals', value: 'hello world' }] }],
+}, { cache: false, maxConcurrency: 1 });
+const { results: ordinaryResults } = await ordinary.toEvaluateSummary();
+assert.equal(ordinaryResults.length, 1);
+assert.equal(ordinaryResults[0].success, true);
+assert.equal(ordinaryResults[0].score, 1);
+if (mode !== 'installed') {
+  if (mode === 'absent') {
+    assert.throws(() => require.resolve('@huggingface/transformers'), { code: 'MODULE_NOT_FOUND' });
+  } else {
+    assert.doesNotThrow(() => require.resolve('@huggingface/transformers'));
+  }
+  await assert.rejects(loadApiProvider(providerId), (error) => {
+    assert.ok(error.message.includes('npm install promptfoo @huggingface/transformers@^4.0.0'));
+    if (mode === 'incompatible') { assert.match(error.message, /found 3\\.8\\.1/); }
+    return true;
+  });
+} else {
+  const config = { device: 'cpu', dtype: 'fp32', localFilesOnly: true, normalize: false, cacheDir: modelDir };
+  const provider = await loadApiProvider(providerId, { options: { config } });
+  const embedding = await provider.callEmbeddingApi('hello world');
+  assert.equal(embedding.error, undefined);
+  assert.deepEqual(embedding.embedding, [3.5]);
+  const record = await evaluate({
+    prompts: ['hello world'],
+    providers: ['echo'],
+    tests: [providerId, providerId + '/missing'].map((id) => ({
+      assert: [{ type: 'similar', value: 'hello world', threshold: 0.99, provider: { id, config } }],
+    })),
+  }, { cache: false, maxConcurrency: 1 });
+  const { results } = await record.toEvaluateSummary();
+  assert.equal(results.length, 2);
+  assert.equal(results[0].success, true);
+  assert.equal(results[0].score, 1);
+  assert.equal(results[0].error, undefined);
+  assert.equal(results[1].success, false);
+  assert.match(results[1].gradingResult.reason, /missing|not found|Unable to locate/i);
+}
+`;
+  const scriptPaths = ['transformers.mjs', 'transformers.cjs'].map((name) =>
+    path.join(consumerDir, name),
+  );
+  fs.writeFileSync(
+    scriptPaths[0],
+    `import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { evaluate, loadApiProvider } from 'promptfoo';
+const require = createRequire(import.meta.url);
+${script}`,
+  );
+  fs.writeFileSync(
+    scriptPaths[1],
+    `const assert = require('node:assert/strict');
+const { evaluate, loadApiProvider } = require('promptfoo');
+(async () => {
+${script}
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+`,
+  );
+  const env = {
+    PROMPTFOO_CONFIG_DIR: configDir,
+    PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+    PROMPTFOO_DISABLE_TELEMETRY: '1',
+    PROMPTFOO_DISABLE_UPDATE: 'true',
+  };
+  const runMode = async (mode: string) => {
+    for (const scriptPath of scriptPaths) {
+      await runAsync(process.execPath, [scriptPath, mode], consumerDir, env);
+    }
+  };
+  await runMode('absent');
+  runNpm(
+    ['install', '--ignore-scripts', '--no-audit', '--no-fund', '@huggingface/transformers@3.8.1'],
+    consumerDir,
+  );
+  await runMode('incompatible');
+  runNpm(
+    ['install', '--ignore-scripts', '--no-audit', '--no-fund', '@huggingface/transformers@^4.0.0'],
+    consumerDir,
+  );
+  await runMode('installed');
+}
+
 async function main(): Promise<void> {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-'));
   const artifactsDir = path.join(tempDir, 'artifacts');
@@ -628,14 +930,13 @@ async function main(): Promise<void> {
     };
     assert.equal(installedPackageJson.version, packResult.version);
     assertExportsResolve(installedPackageDir, installedPackageJson);
+    assertProviderTypeDocumentation(installedPackageDir);
 
     writeConsumerScripts(consumerDir);
     run(process.execPath, ['import-package.mjs'], consumerDir);
     run(process.execPath, ['require-package.cjs'], consumerDir);
-    const tsc6Path = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc6');
-    const tsc7Path = path.join(ROOT, 'node_modules', '@typescript', 'native', 'bin', 'tsc');
-    for (const tsconfig of ['tsconfig.json', 'tsconfig.legacy.json', 'tsconfig.node16-cjs.json']) {
-      const tscPath = tsconfig === 'tsconfig.legacy.json' ? tsc6Path : tsc7Path;
+    const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
+    for (const tsconfig of ['tsconfig.json', 'tsconfig.node16-cjs.json']) {
       run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
     }
     assertInstalledWebApp(installedPackageDir);
@@ -647,6 +948,8 @@ async function main(): Promise<void> {
       );
     }
     await runInstalledCompressionEval(consumerDir, configDir);
+    await assertOptionalBrowserDependencies(consumerDir, configDir);
+    await runInstalledTransformersProvider(consumerDir, configDir);
 
     console.log(`Verified installed package artifact: ${packResult.filename}`);
   } finally {

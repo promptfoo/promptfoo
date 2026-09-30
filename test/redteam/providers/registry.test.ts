@@ -118,16 +118,13 @@ describe('redteamProviderFactories', () => {
       expect(factory).toBeDefined();
     });
 
-    it.each([
-      'openai:gpt-4',
-      'anthropic:claude-3',
-      'agentic:other',
-      'promptfoo:other',
-      '',
-    ])('does not dispatch %s', (path) => {
-      const factory = redteamProviderFactories.find((f) => f.test(path));
-      expect(factory).toBeUndefined();
-    });
+    it.each(['openai:gpt-4', 'anthropic:claude-3', 'agentic:other', 'promptfoo:other', ''])(
+      'does not dispatch %s',
+      (path) => {
+        const factory = redteamProviderFactories.find((f) => f.test(path));
+        expect(factory).toBeUndefined();
+      },
+    );
   });
 
   describe('withErrorContext', () => {

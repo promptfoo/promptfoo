@@ -3,7 +3,6 @@ import logger from '../../../src/logger';
 import { DoNotAnswerPlugin, fetchDataset } from '../../../src/redteam/plugins/donotanswer';
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
 
-vi.mock('fs');
 vi.mock('../../../src/util/fetch/index');
 vi.mock('../../../src/logger');
 

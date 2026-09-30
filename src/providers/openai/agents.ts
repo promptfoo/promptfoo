@@ -6,7 +6,9 @@ import {
   run,
   startTraceExportLoop,
 } from '@openai/agents';
+import { SandboxAgent } from '@openai/agents/sandbox';
 import logger from '../../logger';
+import { getConfiguredTracingExport } from '../tracing';
 import {
   loadAgentDefinition,
   loadHandoffs,
@@ -73,6 +75,8 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     });
 
     try {
+      validateExecuteTools(this.agentConfig.executeTools);
+
       // Initialize agent if not already initialized
       if (!this.agent) {
         this.agent = await this.initializeAgent();
@@ -144,8 +148,12 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
    * Setup tracing if enabled
    */
   private async setupTracingIfNeeded(context?: CallApiContextParams): Promise<void> {
+    const hasConfiguredExporter = Boolean(
+      this.agentConfig.otlpEndpoint || getConfiguredTracingExport(),
+    );
     const tracingEnabled =
       this.agentConfig.tracing === true ||
+      Boolean(context?.traceparent && hasConfiguredExporter) ||
       context?.test?.metadata?.tracingEnabled === true ||
       process.env.PROMPTFOO_TRACING_ENABLED === 'true';
 
@@ -200,11 +208,20 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         runOptions.modelSettings = resolveModelSettings(this.agentConfig.modelSettings);
       }
 
+      if (this.agentConfig.executeTools === false || this.agentConfig.executeTools === 'mock') {
+        assertNoMockToolOverrides(runOptions.modelSettings, 'run options');
+      }
+
       const traceContext = parseTraceparent(context?.traceparent);
+      const configuredExport = getConfiguredTracingExport();
+      const explicitModel = runOptions.model ?? this.agent?.model;
       const traceMetadata = buildTraceMetadata(
         context,
-        this.agentConfig.otlpEndpoint,
+        this.agentConfig.otlpEndpoint ?? configuredExport?.endpoint,
         traceContext,
+        this.agentConfig.otlpEndpoint ? 'json' : configuredExport?.format,
+        typeof explicitModel === 'string' ? explicitModel : undefined,
+        getModelProviderName(explicitModel),
       );
 
       // Run the agent within the evaluator trace when Promptfoo supplied one so
@@ -295,20 +312,80 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       return agent;
     }
 
+    return this.wrapAgentForMockMode(agent, new WeakMap<object, Agent<any, any>>());
+  }
+
+  private wrapAgentForMockMode(
+    agent: Agent<any, any>,
+    wrappedAgents: WeakMap<object, Agent<any, any>>,
+  ): Agent<any, any> {
+    const existingWrappedAgent = wrappedAgents.get(agent as object);
+    if (existingWrappedAgent) {
+      return existingWrappedAgent;
+    }
+
+    if (agent instanceof SandboxAgent) {
+      throw new Error(
+        "executeTools: false/'mock' does not support SandboxAgent because capability tools are attached after function-tool mocks",
+      );
+    }
+
+    if (agent.prompt !== undefined) {
+      throw new Error(
+        "executeTools: false/'mock' does not support reusable prompt templates because they can supply hosted tools outside function-tool mocks",
+      );
+    }
+
+    assertNoMockToolOverrides(agent.modelSettings, `agent ${JSON.stringify(agent.name)}`);
+
+    if (agent.mcpServers?.length) {
+      throw new Error(
+        "executeTools: false/'mock' does not support MCP servers because they can execute outside mocked function tools",
+      );
+    }
+
     const toolMocks = this.agentConfig.toolMocks ?? {};
     const tools = agent.tools.map((tool) => {
       if (tool.type !== 'function') {
-        return tool;
+        throw new Error(
+          "executeTools: false/'mock' only supports function tools; remove hosted or non-function tools",
+        );
       }
 
-      const mockValue = toolMocks[tool.name];
+      const hasMockValue = Object.prototype.hasOwnProperty.call(toolMocks, tool.name);
       return {
         ...tool,
-        invoke: async () => mockValue ?? { mocked: true, tool: tool.name },
+        isEnabled: async () => true,
+        needsApproval: async () => false,
+        inputGuardrails: [],
+        outputGuardrails: [],
+        timeoutMs: undefined,
+        timeoutBehavior: undefined,
+        timeoutErrorFunction: undefined,
+        invoke: async () =>
+          hasMockValue ? toolMocks[tool.name] : { mocked: true, tool: tool.name },
       };
     });
 
-    return agent.clone({ tools });
+    const wrappedAgent = agent.clone({ tools, handoffs: [] });
+    shareAgentEventEmitter(agent, wrappedAgent);
+    wrappedAgents.set(agent as object, wrappedAgent);
+
+    wrappedAgent.handoffs = agent.handoffs.map((agentHandoff) => {
+      if (isAgentLike(agentHandoff)) {
+        return this.wrapAgentForMockMode(agentHandoff, wrappedAgents);
+      }
+
+      if (agentHandoff && typeof agentHandoff === 'object' && 'agent' in agentHandoff) {
+        throw new Error(
+          "executeTools: false/'mock' does not support explicit Handoff objects because their callbacks can perform external side effects",
+        );
+      }
+
+      throw new Error("executeTools: false/'mock' cannot safely wrap an unknown handoff shape");
+    });
+
+    return wrappedAgent;
   }
 
   private parsePromptInput(prompt: string): string | AgentInputItem[] {
@@ -492,6 +569,9 @@ function buildTraceMetadata(
   context?: CallApiContextParams,
   otlpEndpoint?: string,
   traceContext?: { traceId: string; parentSpanId: string },
+  otlpFormat?: 'json' | 'protobuf',
+  requestedModel?: string,
+  modelProvider?: string,
 ): Record<string, string> {
   return {
     ...(context?.evaluationId ? { 'evaluation.id': context.evaluationId } : {}),
@@ -500,7 +580,25 @@ function buildTraceMetadata(
       ? { 'promptfoo.parent_span_id': traceContext.parentSpanId }
       : {}),
     ...(otlpEndpoint ? { 'promptfoo.otlp_endpoint': otlpEndpoint } : {}),
+    ...(otlpFormat === 'protobuf' ? { 'promptfoo.otlp_format': otlpFormat } : {}),
+    ...(requestedModel ? { 'promptfoo.request_model': requestedModel } : {}),
+    ...(modelProvider ? { 'promptfoo.model_provider': modelProvider } : {}),
   };
+}
+
+function getModelProviderName(model: unknown): string | undefined {
+  if (!model || typeof model !== 'object') {
+    return undefined;
+  }
+
+  const modelRecord = model as Record<string, unknown>;
+  for (const value of [modelRecord.provider, modelRecord.providerName, modelRecord.providerId]) {
+    if (typeof value === 'string' && value) {
+      return value;
+    }
+  }
+
+  return undefined;
 }
 
 function summarizeUsageDetails(
@@ -543,4 +641,72 @@ function parseAgentInputItems(value: unknown): AgentInputItem[] | undefined {
   }
 
   return [parsedItem.data];
+}
+
+function isAgentLike(value: unknown): value is Agent<any, any> {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'clone' in value &&
+    typeof (value as Agent<any, any>).clone === 'function' &&
+    'tools' in value &&
+    Array.isArray((value as Agent<any, any>).tools)
+  );
+}
+
+function shareAgentEventEmitter(source: Agent<any, any>, target: Agent<any, any>): void {
+  const sourceWithEmitter = source as unknown as { eventEmitter?: unknown };
+  if (sourceWithEmitter.eventEmitter) {
+    (target as unknown as { eventEmitter?: unknown }).eventEmitter = sourceWithEmitter.eventEmitter;
+  }
+}
+
+function validateExecuteTools(value: unknown): void {
+  if (
+    value !== undefined &&
+    value !== true &&
+    value !== false &&
+    value !== 'real' &&
+    value !== 'mock'
+  ) {
+    throw new Error("executeTools must be true, false, 'real', or 'mock'");
+  }
+}
+
+function assertNoMockToolOverrides(modelSettings: unknown, source: string): void {
+  if (!modelSettings || typeof modelSettings !== 'object' || Array.isArray(modelSettings)) {
+    return;
+  }
+
+  const providerData = (modelSettings as { providerData?: unknown }).providerData;
+  if (!providerData || typeof providerData !== 'object' || Array.isArray(providerData)) {
+    return;
+  }
+
+  const providerDataRecord = providerData as Record<string, unknown>;
+  const extraBodies = [providerDataRecord.extraBody, providerDataRecord.extra_body];
+  const overridesPrompt =
+    Object.prototype.hasOwnProperty.call(providerDataRecord, 'prompt') ||
+    extraBodies.some(
+      (extraBody) =>
+        !!extraBody &&
+        typeof extraBody === 'object' &&
+        !Array.isArray(extraBody) &&
+        Object.prototype.hasOwnProperty.call(extraBody, 'prompt'),
+    );
+  const overridesTools =
+    Object.prototype.hasOwnProperty.call(providerDataRecord, 'tools') ||
+    extraBodies.some(
+      (extraBody) =>
+        !!extraBody &&
+        typeof extraBody === 'object' &&
+        !Array.isArray(extraBody) &&
+        Object.prototype.hasOwnProperty.call(extraBody, 'tools'),
+    );
+
+  if (overridesPrompt || overridesTools) {
+    throw new Error(
+      `executeTools: false/'mock' cannot safely use providerData ${overridesPrompt ? 'prompt' : 'tool'} overrides from ${source}`,
+    );
+  }
 }

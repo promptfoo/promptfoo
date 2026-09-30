@@ -8,6 +8,12 @@ description: 'Evaluate ChatKit workflows built with Agent Builder using browser 
 
 Evaluate [ChatKit](https://platform.openai.com/docs/guides/chatkit) workflows from OpenAI's Agent Builder. This provider uses Playwright to automate the ChatKit web component since workflows don't expose a REST API.
 
+:::warning Agent Builder retirement
+
+[OpenAI will retire Agent Builder on November 30, 2026](https://developers.openai.com/api/docs/deprecations). This provider evaluates Agent Builder-hosted workflows, so plan their migration before that date. ChatKit itself remains available for supported integrations.
+
+:::
+
 ## Setup Guide
 
 ### Step 1: Create a Workflow in Agent Builder
@@ -59,8 +65,11 @@ tests:
 
 ### Step 4: Run Your First Eval
 
+ChatKit browser support is optional. For a global CLI, use `npm install -g promptfoo "playwright@^1.63.0"` followed by `playwright install chromium`.
+
 ```bash
-# Install Playwright (first time only)
+# Install the optional SDK alongside Promptfoo and its matching browser
+npm install promptfoo "playwright@^1.63.0"
 npx playwright install chromium
 
 # Set your API key
@@ -312,10 +321,25 @@ npx promptfoo eval --max-concurrency 4
 ### Playwright not installed
 
 ```text
+This provider requires the optional Playwright package.
+```
+
+Install the SDK alongside Promptfoo in the same project:
+
+```bash
+npm install promptfoo "playwright@^1.63.0"
+npx playwright install chromium
+```
+
+For a global CLI, use `npm install -g promptfoo "playwright@^1.63.0"` and then `playwright install chromium`.
+
+### Chromium not installed
+
+```text
 Error: Playwright browser not installed
 ```
 
-Run `npx playwright install chromium`
+The SDK is available, but its matching browser binary is missing. Run `npx playwright install chromium` in the project, or `playwright install chromium` for a global installation.
 
 ### Timeout errors
 
@@ -356,7 +380,7 @@ ChatKit workflows require browser automation because they don't expose a direct 
 
 ## Security Testing
 
-OpenAI recommends [running evals](https://platform.openai.com/docs/guides/safety-building-agents) as a key safety practice when building agents. Use promptfoo to test your ChatKit workflows for vulnerabilities.
+OpenAI recommends [running evals](https://platform.openai.com/docs/guides/safety-best-practices) as a key safety practice when building agents. Use promptfoo to test your ChatKit workflows for vulnerabilities.
 
 ### Prompt Injection
 
@@ -391,10 +415,12 @@ tests:
         value: Response refuses to reveal internal instructions
 ```
 
+ChatKit exposes the visible assistant response, not guardrail-node result metadata. Use the behavioral assertions above. To use `guardrails` or `not-guardrails`, expose the workflow through a target that returns the [normalized guardrail response](/docs/configuration/expected-outputs/guardrails#mapping-provider-responses-to-guardrails).
+
 ## See Also
 
 - [OpenAI Provider](/docs/providers/openai) - Standard OpenAI completions and chat
 - [OpenAI Agents](/docs/providers/openai-agents) - OpenAI Agents SDK
 - [OpenAI Codex SDK](/docs/providers/openai-codex-sdk) - Code generation
 - [ChatKit Documentation](https://platform.openai.com/docs/guides/chatkit) - Official OpenAI docs
-- [OpenAI Agent Safety Guide](https://platform.openai.com/docs/guides/safety-building-agents) - Best practices for building agents safely
+- [OpenAI Safety Best Practices](https://platform.openai.com/docs/guides/safety-best-practices) - Best practices for building agents safely

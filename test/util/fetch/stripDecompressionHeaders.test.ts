@@ -166,18 +166,18 @@ describe('stripDecompressionHeaders', () => {
     ]);
   });
 
-  it.each([
-    undefined,
-    null,
-  ])('passes through when controller.rawHeaders is %s (not an array)', (rawHeaders) => {
-    const { controller, events } = dispatchResponseStart({
-      rawHeaders,
-      parsedHeaders: { 'content-type': 'application/json' },
-    });
+  it.each([undefined, null])(
+    'passes through when controller.rawHeaders is %s (not an array)',
+    (rawHeaders) => {
+      const { controller, events } = dispatchResponseStart({
+        rawHeaders,
+        parsedHeaders: { 'content-type': 'application/json' },
+      });
 
-    expect(controller.rawHeaders).toBe(rawHeaders);
-    expect(events.map((e) => e.method)).toEqual(['onResponseStarted', 'onResponseStart']);
-  });
+      expect(controller.rawHeaders).toBe(rawHeaders);
+      expect(events.map((e) => e.method)).toEqual(['onResponseStarted', 'onResponseStart']);
+    },
+  );
 
   it('blocks the strip when the parsed content-encoding key is not lowercase', () => {
     // Decompress only decodes on the exact lowercase key, so a differently
