@@ -1,4 +1,11 @@
+import { existsSync } from 'node:fs';
+
 import { afterEach, beforeEach, describe, expect, it, type MockedFunction, vi } from 'vitest';
+
+vi.mock('node:fs', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:fs')>()),
+  existsSync: vi.fn(),
+}));
 
 vi.mock('../../src/util/fetch/index', () => ({
   fetchWithTimeout: vi.fn(),
@@ -114,6 +121,7 @@ describe('getUpdateInstructions', () => {
 
   beforeEach(() => {
     restoreEnvironment = mockProcessEnv({}, { clear: true });
+    vi.mocked(existsSync).mockReset().mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -138,6 +146,19 @@ describe('getUpdateInstructions', () => {
     expect(instructions).toContain('rebuild, and redeploy');
     expect(instructions).not.toContain('promptfoo update');
   });
+
+  it.each(['docker-env', 'marker-file'])(
+    'uses rebuild guidance for a container detected by %s',
+    (detection) => {
+      if (detection === 'docker-env') {
+        vi.stubEnv('DOCKER', 'true');
+      } else {
+        vi.mocked(existsSync).mockImplementation((file) => file === '/.dockerenv');
+      }
+      expect(getUpdateInstructions()).toContain('rebuild and redeploy');
+      expect(getUpdateInstructions()).not.toContain('promptfoo update');
+    },
+  );
 
   it('directs custom container users to update and rebuild their own image', () => {
     vi.stubEnv('PROMPTFOO_RUNNING_IN_DOCKER', 'true');

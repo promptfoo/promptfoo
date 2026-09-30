@@ -3,6 +3,7 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getLatestVersion } from '../updates';
 import { VERSION } from '../version';
+import { isContainerInstallation } from './installationInfo';
 import { getUpdateCommands } from './updateCommands';
 
 interface UpdateInfo {
@@ -23,7 +24,7 @@ interface CheckForUpdatesOptions {
 const PACKAGE_NAME = 'promptfoo';
 export function getUpdateInstructions(): string {
   const commands = getUpdateCommands({
-    isContainer: getEnvBool('PROMPTFOO_RUNNING_IN_DOCKER'),
+    isContainer: getEnvBool('PROMPTFOO_RUNNING_IN_DOCKER') || isContainerInstallation(process.env),
     isOfficialDockerImage: getEnvBool('PROMPTFOO_OFFICIAL_DOCKER_IMAGE'),
     isNpx: false,
   });

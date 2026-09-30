@@ -13,18 +13,22 @@ export interface InstallationInfo {
 
 const MANUAL_UPDATE = 'Update Promptfoo with the package manager that installed it.';
 
+export function isContainerInstallation(sourceEnvironment: NodeJS.ProcessEnv): boolean {
+  return (
+    parseEnvBool(sourceEnvironment.PROMPTFOO_OFFICIAL_DOCKER_IMAGE) ||
+    parseEnvBool(sourceEnvironment.PROMPTFOO_RUNNING_IN_DOCKER) ||
+    sourceEnvironment.DOCKER === 'true' ||
+    existsSync('/.dockerenv')
+  );
+}
+
 export function getInstallationInfo(
   projectRoot: string,
   sourceEnvironment: NodeJS.ProcessEnv,
 ): InstallationInfo {
   const manual = (message: string): InstallationInfo => ({ canUpdate: false, message });
   const isOfficialDockerImage = parseEnvBool(sourceEnvironment.PROMPTFOO_OFFICIAL_DOCKER_IMAGE);
-  if (
-    isOfficialDockerImage ||
-    parseEnvBool(sourceEnvironment.PROMPTFOO_RUNNING_IN_DOCKER) ||
-    sourceEnvironment.DOCKER === 'true' ||
-    existsSync('/.dockerenv')
-  ) {
+  if (isContainerInstallation(sourceEnvironment)) {
     const commands = getUpdateCommands({ isContainer: true, isOfficialDockerImage, isNpx: false });
     return manual(
       commands.isCustomContainer

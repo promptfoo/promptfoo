@@ -6,7 +6,18 @@ import path from 'node:path';
 export function createUpdateContext(sourceEnvironment: NodeJS.ProcessEnv, projectRoot: string) {
   const root = realpathSync(projectRoot);
   const runtimeBin = realpathSync(path.dirname(process.execPath));
-  const isProjectDirectory = existsSync(path.join(root, 'package.json'));
+  let enclosingProject: string | undefined;
+  for (let directory = root; ; directory = path.dirname(directory)) {
+    if (
+      existsSync(path.join(directory, 'package.json')) ||
+      existsSync(path.join(directory, '.git'))
+    ) {
+      enclosingProject = directory;
+    }
+    if (path.dirname(directory) === directory) {
+      break;
+    }
+  }
   const entries = (sourceEnvironment.PATH ?? '/usr/bin:/bin').split(path.delimiter);
   const trustedPaths = entries.flatMap((entry) => {
     if (!path.isAbsolute(entry) || entry.includes('/node_modules/.bin')) {
@@ -18,9 +29,13 @@ export function createUpdateContext(sourceEnvironment: NodeJS.ProcessEnv, projec
         return [];
       }
       const insideProject =
-        isProjectDirectory &&
-        (canonical === root ||
-          canonical.startsWith(root.endsWith(path.sep) ? root : `${root}${path.sep}`));
+        enclosingProject !== undefined &&
+        (canonical === enclosingProject ||
+          canonical.startsWith(
+            enclosingProject.endsWith(path.sep)
+              ? enclosingProject
+              : `${enclosingProject}${path.sep}`,
+          ));
       return canonical === runtimeBin || !insideProject ? [canonical] : [];
     } catch {
       return [];

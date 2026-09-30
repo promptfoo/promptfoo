@@ -68,6 +68,26 @@ describe('update execution context', () => {
     expect(context.env.PATH).toBe(realpathSync(runtimeBin));
   });
 
+  it.each(['package.json', '.git'])(
+    'filters enclosing project paths from a nested package using %s',
+    (marker) => {
+      const project = path.join(directory, 'project');
+      const projectBin = path.join(project, 'bin');
+      const nested = path.join(project, 'packages', 'app', 'src');
+      mkdirSync(projectBin, { recursive: true });
+      mkdirSync(nested, { recursive: true });
+      writeFileSync(path.join(project, marker), '{}');
+      writeFileSync(path.join(project, 'packages', 'app', 'package.json'), '{}');
+      const runtimeBin = path.dirname(process.execPath);
+      const context = createUpdateContext(
+        { PATH: [projectBin, runtimeBin].join(path.delimiter) },
+        nested,
+      );
+      expect(context.env.PATH).toBe(realpathSync(runtimeBin));
+      expect(context.cwd).toBe(nested);
+    },
+  );
+
   it('preserves version-manager shims when invoked from a home directory', () => {
     const shims = path.join(directory, '.asdf', 'shims');
     mkdirSync(shims, { recursive: true });
