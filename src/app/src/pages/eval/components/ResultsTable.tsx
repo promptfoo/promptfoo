@@ -1703,6 +1703,7 @@ function ResultsTable({
     table,
     setTable,
     tableRefreshVersion,
+    tableResultSetKey,
     config,
     version,
     filteredResultsCount,
@@ -1899,6 +1900,7 @@ function ResultsTable({
         filters: appliedFiltersString,
         comparisonEvalIds,
         tableRefreshVersion,
+        tableResultSetKey,
       }),
     [
       evalId,
@@ -1909,6 +1911,7 @@ function ResultsTable({
       appliedFiltersString,
       comparisonEvalIds,
       tableRefreshVersion,
+      tableResultSetKey,
     ],
   );
   const currentColumnSizes = React.useMemo(() => {

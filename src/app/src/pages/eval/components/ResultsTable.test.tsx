@@ -5288,6 +5288,75 @@ describe('ResultsTable default column sizing', () => {
     },
   );
 
+  it.each(['search', 'filter'])(
+    'sizes the matching rows when overlapping %s responses have the same count',
+    (change) => {
+      const makeTable = (value: string) => ({
+        ...mockTable,
+        body: [
+          {
+            ...mockTable.body[0],
+            test: { description: value },
+            vars: ['ok', value],
+            outputs: [
+              {
+                ...mockTable.body[0].outputs[0],
+                metadata: { transformDisplayVars: { __late: value } },
+              },
+            ],
+          },
+        ],
+      });
+      let table = makeTable('initial');
+      let tableResultSetKey = 'initial';
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table,
+        tableResultSetKey,
+        version: 4,
+        fetchEvalData: vi.fn(),
+        isFetching: false,
+        filteredResultsCount: 1,
+        filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+      }));
+      const widths = () =>
+        ['large_metadata', 'Description', 'late'].map((label) =>
+          Number.parseFloat(screen.getByText(label).closest('th')!.style.width),
+        );
+      const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+      const firstProps = {
+        ...defaultProps,
+        debouncedSearchText: change === 'search' ? 'first' : '',
+        filterMode: change === 'filter' ? ('failures' as const) : ('all' as const),
+      };
+      const secondProps = {
+        ...defaultProps,
+        debouncedSearchText: change === 'search' ? 'second' : '',
+        filterMode: change === 'filter' ? ('errors' as const) : ('all' as const),
+      };
+      rerender(<ResultsTable {...firstProps} />);
+      rerender(<ResultsTable {...secondProps} />);
+
+      // The first response arrives after the controls have already advanced.
+      table = makeTable('Long metadata value '.repeat(30));
+      tableResultSetKey = 'first';
+      rerender(<ResultsTable {...secondProps} zoom={1.01} />);
+      const firstWidths = widths();
+
+      table = makeTable('compact');
+      tableResultSetKey = 'second';
+      rerender(<ResultsTable {...secondProps} zoom={1.02} />);
+      const secondWidths = widths();
+      secondWidths.forEach((width, index) => expect(width).toBeLessThan(firstWidths[index]));
+
+      table = makeTable('A later page with long metadata '.repeat(30));
+      rerender(<ResultsTable {...secondProps} zoom={1.03} />);
+      expect(widths()).toEqual(secondWidths);
+    },
+  );
+
   it('resamples metadata widths when live result growth changes the visible row count', () => {
     let table = {
       ...mockTable,

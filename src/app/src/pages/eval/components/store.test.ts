@@ -1119,6 +1119,53 @@ describe('useTableStore', () => {
   });
 
   describe('fetchEvalData', () => {
+    it('keeps the result-set identity with its response and shares it across pages', async () => {
+      const pending: Array<(response: Response) => void> = [];
+      vi.mocked(callApi).mockImplementation(() => new Promise((resolve) => pending.push(resolve)));
+      const firstRequest = useTableStore
+        .getState()
+        .fetchEvalData('test-eval', { searchText: 'first' });
+      const secondRequest = useTableStore
+        .getState()
+        .fetchEvalData('test-eval', { searchText: 'second' });
+      const response = (value: string) =>
+        new Response(
+          JSON.stringify({
+            table: {
+              head: { vars: ['value'], prompts: [] },
+              body: [{ vars: [value], outputs: [], test: {} }],
+            },
+            totalCount: 2,
+            filteredCount: 2,
+          }),
+        );
+      pending[0](response('first'));
+      await firstRequest;
+      const firstKey = useTableStore.getState().tableResultSetKey;
+      expect(new URL(firstKey!, 'http://localhost').searchParams.get('search')).toBe('first');
+      expect(useTableStore.getState().table?.body[0].vars).toEqual(['first']);
+
+      pending[1](response('second'));
+      await secondRequest;
+      const secondKey = useTableStore.getState().tableResultSetKey;
+      expect(new URL(secondKey!, 'http://localhost').searchParams.get('search')).toBe('second');
+      expect(secondKey).not.toBe(firstKey);
+      expect(useTableStore.getState().table?.body[0].vars).toEqual(['second']);
+
+      vi.mocked(callApi).mockResolvedValue(response('next page'));
+      await useTableStore
+        .getState()
+        .fetchEvalData('test-eval', { searchText: 'second', pageIndex: 1 });
+      expect(useTableStore.getState().tableResultSetKey).toBe(secondKey);
+      expect(
+        new URL(vi.mocked(callApi).mock.calls[2][0], 'http://localhost').searchParams.get('offset'),
+      ).toBe('50');
+      expect(new URL(secondKey!, 'http://localhost').searchParams.has('offset')).toBe(false);
+
+      useTableStore.getState().setTable(null);
+      expect(useTableStore.getState().tableResultSetKey).toBeNull();
+    });
+
     it('should properly handle filters with special characters in their values when building the API request URL', async () => {
       const evalId = 'test-eval-id';
       const filterValue = 'test value with !@#$%^&*()_+=-`~[]\{}|;\':",./<>? special characters';
