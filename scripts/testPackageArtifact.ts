@@ -6,6 +6,7 @@ import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 
@@ -262,7 +263,11 @@ function assertExportsResolve(
   );
 }
 
-function runInstalledBinVersion(consumerDir: string, configDir: string, binName: string): string {
+export function runInstalledBinVersion(
+  consumerDir: string,
+  configDir: string,
+  binName: 'promptfoo' | 'pf',
+): string {
   const binPath = path.join(
     consumerDir,
     'node_modules',
@@ -277,9 +282,15 @@ function runInstalledBinVersion(consumerDir: string, configDir: string, binName:
   };
 
   if (process.platform === 'win32') {
+    // Keep the working directory out of cmd.exe's command string. Paths can contain
+    // percent signs, which cmd.exe expands even inside quotes.
+    const command =
+      binName === 'promptfoo'
+        ? '.\\node_modules\\.bin\\promptfoo.cmd'
+        : '.\\node_modules\\.bin\\pf.cmd';
     return run(
       process.env.ComSpec || 'cmd.exe',
-      ['/d', '/s', '/c', `"${binPath}" --version`],
+      ['/d', '/s', '/c', command, '--version'],
       consumerDir,
       envOverrides,
     );
@@ -1023,7 +1034,7 @@ async function main(): Promise<void> {
       );
     }
 
-    for (const binName of ['promptfoo', 'pf']) {
+    for (const binName of ['promptfoo', 'pf'] as const) {
       if (values.profile === 'omit-optional') {
         // The CLI currently initializes SQLite before handling --version. Omission removes
         // libsql's native platform package: verify its actionable failure, not a crash.
@@ -1070,7 +1081,9 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error: unknown) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((error: unknown) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

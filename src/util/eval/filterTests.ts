@@ -49,7 +49,7 @@ export interface FilterOptions {
   failingOnly?: string;
   /** Number of tests to take from the beginning */
   firstN?: number | string;
-  /** Key-value pair(s) (format: "key=value") to filter tests by metadata. Multiple values use AND logic. */
+  /** Metadata filters: comma-separated values use OR; separate filters use AND, even for the same key. */
   metadata?: string | string[];
   /** Regular expression pattern to filter tests by description */
   pattern?: string;
@@ -172,18 +172,23 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     const metadataFilters = Array.isArray(options.metadata) ? options.metadata : [options.metadata];
 
     // Validate all filters first
-    const parsedFilters: Array<{ key: string; value: string }> = [];
+    const parsedFilters: Array<{ key: string; values: string[] }> = [];
     for (const filter of metadataFilters) {
       const [key, ...valueParts] = filter.split('=');
       const value = valueParts.join('='); // Rejoin in case value contains '='
-      if (!key || value === undefined || value === '') {
+      if (!key || value === '') {
         throw new Error('--filter-metadata must be specified in key=value format');
       }
-      parsedFilters.push({ key, value });
+      // Values within each filter use OR; separate filters use AND below.
+      const values = value.split(',');
+      if (values.includes('')) {
+        throw new Error(`--filter-metadata has an empty value in "${filter}"`);
+      }
+      parsedFilters.push({ key, values });
     }
 
     logger.debug(
-      `Filtering for metadata conditions (AND logic): ${parsedFilters.map((f) => `${f.key}=${f.value}`).join(', ')}`,
+      `Filtering for metadata conditions (AND across filters, OR within each filter): ${metadataFilters.join('; ')}`,
     );
     logger.debug(`Before metadata filter: ${tests.length} tests`);
 
@@ -193,22 +198,21 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
         return false;
       }
 
-      // ALL conditions must match (AND logic)
-      for (const { key, value } of parsedFilters) {
+      // Every filter must match, including separate filters for the same key.
+      for (const { key, values } of parsedFilters) {
         const testValue = test.metadata[key];
-        let matches = false;
-
-        if (Array.isArray(testValue)) {
-          // For array metadata, check if any value includes the search term
-          matches = testValue.some((v) => v.toString().includes(value));
-        } else if (testValue !== undefined) {
+        const matches = values.some((value) => {
+          if (Array.isArray(testValue)) {
+            // For array metadata, check if any value includes the search term
+            return testValue.some((v) => v.toString().includes(value));
+          }
           // For single value metadata, check if it includes the search term
-          matches = testValue.toString().includes(value);
-        }
+          return testValue !== undefined && testValue.toString().includes(value);
+        });
 
         if (!matches) {
           logger.debug(
-            `Test "${test.description || 'unnamed test'}" metadata doesn't match. Expected ${key} to include ${value}, got ${JSON.stringify(test.metadata)}`,
+            `Test "${test.description || 'unnamed test'}" metadata doesn't match. Expected ${key} to include one of [${values.join(', ')}], got ${JSON.stringify(test.metadata)}`,
           );
           return false;
         }
