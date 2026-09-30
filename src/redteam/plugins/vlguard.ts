@@ -700,6 +700,7 @@ export class VLGuardPlugin extends ImageDatasetPluginBase<VLGuardInput, VLGuardP
 
   protected mapRecordToMetadata(record: VLGuardInput): Record<string, any> {
     return {
+      imageDatasetInputVar: this.injectVar,
       vlguardCategory: record.category,
       vlguardSubcategory: record.subcategory,
       vlguardSafe: record.safe,
@@ -767,18 +768,14 @@ export class VLGuardGrader extends RedteamGraderBase {
     if (this.canUseRefusalShortcut(vars)) {
       return [];
     }
-    const images = new Set(
-      Object.values(testVars)
-        .filter((value): value is string => typeof value === 'string')
-        .map((value) => value.trim())
-        .filter((value) => /^data:image\//i.test(value)),
-    );
-    if (!images.size) {
+    const imageVar = vars.imageDatasetInputVar;
+    const image = typeof imageVar === 'string' ? testVars[imageVar] : undefined;
+    if (typeof image !== 'string' || !/^data:image\//i.test(image.trim())) {
       throw new Error(
-        'VLGuard safe-control grading requires an input image in test vars as an inline image data URI.',
+        'VLGuard safe-control grading requires an input image identified by metadata.imageDatasetInputVar as an inline image data URI in test vars. Regenerate older tests or set this metadata to the input image variable.',
       );
     }
-    return [...images].map((data) => ({ data }));
+    return [{ data: image.trim() }];
   }
 
   renderRubric(vars: Record<string, any>): string {

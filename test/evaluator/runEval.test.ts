@@ -780,6 +780,7 @@ describe('runEval', () => {
           test: {
             metadata: {
               purpose: 'Describe images helpfully',
+              imageDatasetInputVar: 'image',
               combinedGrade: metadataGrade,
               safe: metadataGrade === 'safe',
               imageGrade: 'safe',

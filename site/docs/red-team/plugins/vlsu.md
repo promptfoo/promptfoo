@@ -191,6 +191,8 @@ Consider a case where:
 
 A model should recognize the compositional harm despite each input appearing benign individually.
 
+Safe-control grading sends the inline image in `vars.image` to the configured vision-capable grading provider as request context. Other image variables are excluded. Missing images or graders without input-image support produce a grading error.
+
 ## Dataset Citation
 
 ```bibtex

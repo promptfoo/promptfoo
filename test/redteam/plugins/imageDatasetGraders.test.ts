@@ -53,7 +53,10 @@ async function evaluate(
   const result = await grader.getResult(
     prompt,
     output,
-    { vars: { prompt, image: inputImage }, metadata: { purpose, ...metadata } },
+    {
+      vars: { prompt, image: inputImage },
+      metadata: { purpose, imageDatasetInputVar: 'image', ...metadata },
+    },
     undefined,
     value,
     undefined,
@@ -76,8 +79,13 @@ describe('VLGuard active grading', () => {
         inputImage,
         output,
         {
-          vars: { [variable]: inputImage, duplicate: inputImage },
-          metadata: { purpose, safe: true, question: 'What color is the square?' },
+          vars: { [variable]: inputImage, unrelated: 'data:image/png;base64,dW5yZWxhdGVk' },
+          metadata: {
+            purpose,
+            imageDatasetInputVar: variable,
+            safe: true,
+            question: 'What color is the square?',
+          },
         },
         undefined,
         undefined,
@@ -92,6 +100,25 @@ describe('VLGuard active grading', () => {
       expect(result.rubric).toContain('Dataset question (request context):');
       expect(result.rubric).toContain('<UserQuery>What color is the square?</UserQuery>');
       expect(result.rubric).not.toContain(inputImage);
+    },
+  );
+
+  it.each([undefined, 'missing'])(
+    'does not substitute unrelated images when the selected variable is %s',
+    async (imageDatasetInputVar) => {
+      await expect(
+        new VLGuardGrader().getResult(
+          prompt,
+          output,
+          {
+            vars: { prompt, unrelated: inputImage },
+            metadata: { purpose, safe: true, imageDatasetInputVar },
+          },
+          undefined,
+          undefined,
+        ),
+      ).rejects.toThrow('VLGuard safe-control grading requires');
+      expect(matchesLlmRubric).not.toHaveBeenCalled();
     },
   );
 
@@ -195,7 +222,10 @@ describe('VLGuard active grading', () => {
       const result = await new VLGuardGrader().getResult(
         prompt,
         'I cannot help with that.',
-        { vars: { prompt, image: inputImage }, metadata: { purpose, [alias]: true } },
+        {
+          vars: { prompt, image: inputImage },
+          metadata: { purpose, imageDatasetInputVar: 'image', [alias]: true },
+        },
         undefined,
         undefined,
       );
@@ -316,6 +346,46 @@ describe('shared grading behavior', () => {
 });
 
 describe('VLSU generated assertions and active grading', () => {
+  const safeMetadata = {
+    purpose,
+    vlsuCategory: 'C4',
+    vlsuCategoryName: CATEGORY_NAMES.C4,
+    vlsuSeverityPattern: 'safe_safe_safe',
+    imageGrade: 'safe',
+    textGrade: 'safe',
+    combinedGrade: 'safe',
+    isCompositional: false,
+  };
+
+  it('attaches only the VLSU safe-control input image', async () => {
+    await new VLSUGrader().getResult(
+      prompt,
+      output,
+      {
+        vars: { prompt, image: inputImage, unrelated: 'data:image/png;base64,dW5yZWxhdGVk' },
+        metadata: safeMetadata,
+      },
+      undefined,
+      undefined,
+    );
+    expect(vi.mocked(matchesLlmRubric).mock.calls[0][5]).toMatchObject({
+      inputImages: [{ data: inputImage }],
+    });
+  });
+
+  it('rejects VLSU safe controls without the input image', async () => {
+    await expect(
+      new VLSUGrader().getResult(
+        prompt,
+        output,
+        { vars: { prompt, unrelated: inputImage }, metadata: safeMetadata },
+        undefined,
+        undefined,
+      ),
+    ).rejects.toThrow('VLSU safe-control grading requires');
+    expect(matchesLlmRubric).not.toHaveBeenCalled();
+  });
+
   it.each([...VLSU_CATEGORIES, 'unknown'])(
     'preserves %s guidance from the generated assertion',
     async (category) => {
@@ -404,7 +474,7 @@ describe('VLSU generated assertions and active grading', () => {
       const result = await new VLSUGrader().getResult(
         prompt,
         response,
-        { vars: { prompt }, metadata: { purpose } },
+        { vars: { prompt, image: inputImage }, metadata: { purpose } },
         undefined,
         {
           vlsuCategory: 'C4',
@@ -471,6 +541,9 @@ describe.each(['prompt', 'image'])('generated images injected into %s', (injectV
       const grader = pluginId === 'vlguard' ? new VLGuardGrader() : new UnsafeBenchGrader();
       const [generated] = await plugin.generateTests(1);
       expect(generated.vars?.[injectVar]).toBe(imageData);
+      if (pluginId === 'vlguard') {
+        expect(generated.metadata?.imageDatasetInputVar).toBe(injectVar);
+      }
       const assertion = generated.assert?.[0];
       const result = await grader.getResult(
         imageData,
