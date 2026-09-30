@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, enableCache } from '../../src/cache';
 import { runEval } from '../../src/evaluator';
 import { TypeSafeProvider } from '../../src/providers/typesafe';
+import { createProviderRateLimitOptions } from '../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { ResultFailureReason } from '../../src/types/index';
 import { clearAgentCache } from '../../src/util/fetch/index';
 import { createDeferred, mockProcessEnv } from '../util/utils';
@@ -163,6 +165,75 @@ describe('TypeSafe HTTP transport integration', () => {
     expect(results.find((result) => result.cached)?.cost).toBe(0);
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
+
+  it.each(['callApi', 'callClassificationApi'] as const)(
+    'does not throttle the scheduler or pause subsequent work after a %s hard-quota response',
+    async (method) => {
+      vi.useFakeTimers();
+      const restoreSchedulerEnv = mockProcessEnv({
+        PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: 'false',
+      });
+      const registry = new RateLimitRegistry({ maxConcurrency: 4 });
+      const provider = createProvider({ maxRetries: 0, labels: ['polite', 'rude'] });
+      const rateLimitHit = vi.fn();
+      const concurrencyDecreased = vi.fn();
+      const completed = vi.fn();
+      registry.on('ratelimit:hit', rateLimitHit);
+      registry.on('concurrency:decreased', concurrencyDecreased);
+      mockFetch
+        .mockResolvedValueOnce(
+          jsonResponse(
+            { error: { code: 'credit_balance_exhausted', message: 'Billing credits exhausted' } },
+            {
+              status: 429,
+              statusText: 'Too Many Requests',
+              headers: {
+                'x-ratelimit-remaining-requests': '0',
+                'x-ratelimit-reset-requests': '60s',
+              },
+            },
+          ),
+        )
+        .mockResolvedValueOnce(method === 'callApi' ? gradeResponse() : choiceResponse());
+      const invoke = (prompt: string) =>
+        registry.execute(
+          provider,
+          () => provider[method](prompt),
+          createProviderRateLimitOptions(),
+        );
+      let subsequent: Promise<unknown> | undefined;
+      try {
+        const quota = await invoke('Quota request');
+        const afterQuota = Object.values(registry.getMetrics())[0];
+        subsequent = invoke('Subsequent request').then(completed, (error: unknown) => error);
+        // Flush work without advancing the 60-second rate-limit window. A hard
+        // quota must not impose that pause on this provider's next operation.
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(quota.error).toContain('Quota exceeded');
+        expect(afterQuota).toMatchObject({
+          rateLimitHits: 0,
+          maxConcurrency: 4,
+          retriedRequests: 0,
+        });
+        expect(rateLimitHit).not.toHaveBeenCalled();
+        expect(concurrencyDecreased).not.toHaveBeenCalled();
+        expect(completed).toHaveBeenCalledOnce();
+        expect(completed.mock.calls[0][0].error).toBeUndefined();
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+        expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+          queueDepth: 0,
+          activeRequests: 0,
+        });
+      } finally {
+        // Dispose also settles a mistakenly paused request when this regression
+        // fails, so the test never leaves an unhandled promise or reset timer.
+        registry.dispose();
+        await subsequent;
+        restoreSchedulerEnv();
+      }
+    },
+  );
 
   it('retries HTTP 429 with Retry-After and caches the recovered response', async () => {
     vi.useFakeTimers();

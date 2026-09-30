@@ -201,8 +201,9 @@ function formatTypeSafeError(
   const hints: Record<number, string> = {
     401: ' Check TYPESAFE_API_KEY or the `apiKey` provider config.',
     422: ' The request failed validation.',
+    // The shared scheduler recognizes this marker as a non-retryable quota error.
     429: quota
-      ? ' Quota exceeded; check your TypeSafe plan and billing.'
+      ? ' Quota exceeded: check your TypeSafe plan and billing.'
       : ' Rate limit exceeded; retry after a short delay.',
     529: ' TypeSafe is overloaded; retry after a short delay.',
   };
