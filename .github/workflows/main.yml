@@ -223,7 +223,14 @@ jobs:
       - name: Test Package Artifact
         env:
           PROMPTFOO_DISABLE_TELEMETRY: 1
+          npm_config_install_strategy: ${{ matrix.node == '22.22' && 'shallow' || 'hoisted' }}
         run: npm run test:package-artifact
+
+      - name: Test Package Artifact Without Optional Dependencies
+        if: matrix.node == '24.x'
+        env:
+          PROMPTFOO_DISABLE_TELEMETRY: 1
+        run: npm run test:package-artifact -- --profile omit-optional
 
       - name: Run built agent skill examples
         env:
@@ -361,6 +368,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
 
       - name: Use Python ${{ matrix.python-version }}
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -519,6 +528,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 2
+          persist-credentials: false
 
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -534,6 +544,10 @@ jobs:
 
       - name: Install Dependencies
         run: npm ci
+
+      # Browser binaries are opt-in; install the version from the locked SDK.
+      - name: Install Chromium
+        run: node node_modules/playwright/cli.js install --with-deps chromium
 
       - name: Run App Browser Tests
         run: npm run test:app:browser

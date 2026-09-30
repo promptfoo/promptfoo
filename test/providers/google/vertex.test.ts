@@ -3011,19 +3011,10 @@ describe('VertexChatProvider.callClaudeApi', () => {
       env: undefined,
     },
   ])('preserves numbered Claude aliases behind custom Vertex $source', async ({ apiHost, env }) => {
+    // A gateway alias can map to a model that still accepts sampling, so the Claude 5 fallback
+    // must neither drop these values nor convert manual thinking to adaptive.
     const model = 'claude-prod-5';
-    provider = new VertexChatProvider(model, {
-      config: {
-        ...(apiHost ? { apiHost } : {}),
-        max_tokens: 10000,
-        temperature: 0.5,
-        top_p: 0.9,
-        top_k: 40,
-        thinking: { type: 'enabled', budget_tokens: 5000 },
-      },
-      env,
-    });
-    const mockRequest = mockVertexRequest({
+    const response = {
       id: 'test-id',
       type: 'message',
       role: 'assistant',
@@ -3032,22 +3023,71 @@ describe('VertexChatProvider.callClaudeApi', () => {
       stop_reason: 'end_turn',
       stop_sequence: null,
       usage: { input_tokens: 5, output_tokens: 1 },
+    };
+    const send = async (config: Record<string, unknown>) => {
+      provider = new VertexChatProvider(model, {
+        config: { ...(apiHost ? { apiHost } : {}), max_tokens: 10000, ...config },
+        env,
+      });
+      const mockRequest = mockVertexRequest(response);
+      await provider.callClaudeApi('test prompt');
+      expect(mockRequest.mock.calls[0][0].url).toContain(
+        `https://${apiHost ?? env?.VERTEX_API_HOST}/`,
+      );
+      return mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+    };
+
+    expect(await send({ temperature: 0.5, top_k: 40 })).toMatchObject({
+      temperature: 0.5,
+      top_k: 40,
     });
-
-    await provider.callClaudeApi('test prompt');
-
-    expect(mockRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: expect.stringContaining(`https://${apiHost ?? env?.VERTEX_API_HOST}/`),
-        data: expect.objectContaining({
-          temperature: 0.5,
-          top_p: 0.9,
-          top_k: 40,
-          thinking: { type: 'enabled', budget_tokens: 5000 },
-        }),
-      }),
-    );
+    expect(
+      await send({ top_p: 0.95, thinking: { type: 'enabled', budget_tokens: 5000 } }),
+    ).toMatchObject({ top_p: 0.95, thinking: { type: 'enabled', budget_tokens: 5000 } });
   });
+
+  // Vertex forwards the body verbatim, so Claude's own sampling rules (verified live against
+  // the Messages API) must hold here too.
+  it.each([
+    ['temperature with top_p', { temperature: 0.5, top_p: 0.9 }, { top_p: 0.9 }],
+    [
+      'temperature and top_k with thinking',
+      { temperature: 0, top_k: 40, thinking: { type: 'enabled', budget_tokens: 1024 } },
+      {},
+    ],
+    [
+      'a low top_p with thinking',
+      { top_p: 0.5, thinking: { type: 'enabled', budget_tokens: 1024 } },
+      { top_p: 0.95 },
+    ],
+  ] as const)(
+    'sends Claude on Vertex only the sampling it accepts: %s',
+    async (_, sampling, expected) => {
+      provider = new VertexChatProvider('claude-sonnet-4-6', {
+        config: { max_tokens: 2048, ...sampling },
+      });
+      const mockRequest = mockVertexRequest({
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-sonnet-4-6',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 5, output_tokens: 1 },
+      });
+
+      await provider.callClaudeApi('test prompt');
+
+      const sent = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+      expect({ temperature: sent.temperature, top_p: sent.top_p, top_k: sent.top_k }).toEqual({
+        temperature: undefined,
+        top_p: undefined,
+        top_k: undefined,
+        ...expected,
+      });
+    },
+  );
 
   it.each([
     { name: 'regional', region: 'us-central1', apiHost: undefined, env: undefined },
@@ -3141,6 +3181,105 @@ describe('VertexChatProvider.callClaudeApi', () => {
 
     expect(mockRequest.mock.calls[0][0].data.temperature).toBeUndefined();
   });
+
+  it.each([
+    { thinking: { type: 'disabled' as const }, effort: 'low' as const },
+    { thinking: { type: 'disabled' as const }, effort: undefined },
+    { thinking: { type: 'enabled' as const, budget_tokens: 1024 }, effort: 'high' as const },
+  ])(
+    'Claude Opus 5.5 on Vertex normalizes thinking %j and omits sampling params',
+    async ({ thinking, effort }) => {
+      const model = 'claude-opus-5-5';
+      provider = new VertexChatProvider(model, {
+        config: { temperature: 0.5, top_p: 0.9, top_k: 40, thinking, effort },
+      });
+      const mockRequest = mockVertexRequest({
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 5, output_tokens: 1 },
+      });
+
+      await provider.callClaudeApi('test prompt');
+
+      const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+      expect(sentBody.temperature).toBeUndefined();
+      expect(sentBody.top_p).toBeUndefined();
+      expect(sentBody.top_k).toBeUndefined();
+      // Opus 5.5 rejects `disabled` at every effort level (unlike Opus 5), and thinking
+      // always consumes max_tokens, so the default gets thinking headroom.
+      expect(sentBody.thinking).toEqual(
+        thinking.type === 'enabled' ? { type: 'adaptive' } : undefined,
+      );
+      expect(sentBody.max_tokens).toBe(2048);
+    },
+  );
+
+  it.each([
+    // `disabled` is rejected at every effort; `between_tools` is the lowest setting up to high.
+    {
+      thinking: { type: 'disabled' as const },
+      effort: undefined,
+      expected: { type: 'between_tools' },
+      maxTokens: 512,
+    },
+    {
+      thinking: { type: 'disabled' as const },
+      effort: 'high' as const,
+      expected: { type: 'between_tools' },
+      maxTokens: 512,
+    },
+    // Above high, `between_tools` is a 400 too, so adaptive thinking runs.
+    {
+      thinking: { type: 'disabled' as const },
+      effort: 'max' as const,
+      expected: undefined,
+      maxTokens: 2048,
+    },
+    {
+      thinking: { type: 'between_tools' as const },
+      effort: 'xhigh' as const,
+      expected: undefined,
+      maxTokens: 2048,
+    },
+    {
+      thinking: { type: 'enabled' as const, budget_tokens: 1024 },
+      effort: 'high' as const,
+      expected: { type: 'adaptive' },
+      maxTokens: 2048,
+    },
+  ])(
+    'Claude Sonnet 5.5 on Vertex sends thinking %j as the API accepts it',
+    async ({ thinking, effort, expected, maxTokens }) => {
+      const model = 'claude-sonnet-5-5';
+      provider = new VertexChatProvider(model, {
+        config: { temperature: 0.5, top_p: 0.9, top_k: 40, thinking, effort },
+      });
+      const mockRequest = mockVertexRequest({
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 5, output_tokens: 1 },
+      });
+
+      await provider.callClaudeApi('test prompt');
+
+      const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+      expect(sentBody.temperature).toBeUndefined();
+      expect(sentBody.top_p).toBeUndefined();
+      expect(sentBody.top_k).toBeUndefined();
+      expect(sentBody.thinking).toEqual(expected);
+      expect(sentBody.max_tokens).toBe(maxTokens);
+    },
+  );
 
   it('omits temperature for Claude Opus 4.7 on Vertex', async () => {
     provider = new VertexChatProvider('claude-opus-4-7', {
@@ -3375,6 +3514,46 @@ describe('VertexChatProvider.callClaudeApi', () => {
     expect(result.output).toBe(expected);
   });
 
+  it.each([
+    { type: 'between_tools' as const, showThinking: undefined },
+    { type: 'disabled' as const, showThinking: undefined },
+    { type: 'between_tools' as const, showThinking: false },
+  ])(
+    'renders Sonnet 5.5 between-tool progress with $type and showThinking=$showThinking',
+    async ({ type, showThinking }) => {
+      provider = new VertexChatProvider('claude-sonnet-5-5', {
+        config: { thinking: { type }, showThinking },
+      });
+      const mockRequest = vi.fn().mockResolvedValue({
+        data: {
+          content: [
+            { type: 'thinking', thinking: 'Checking the result', signature: 'sig' },
+            { type: 'text', text: 'the answer' },
+          ],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 5, output_tokens: 1 },
+        },
+      });
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: { request: mockRequest } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+      const result = await provider.callClaudeApi('test prompt');
+
+      expect(result.output).toBe(
+        showThinking === false
+          ? 'the answer'
+          : 'Thinking: Checking the result\nSignature: sig\n\nthe answer',
+      );
+      expect(mockRequest.mock.calls[0][0].data).toMatchObject({
+        thinking: { type: 'between_tools' },
+        max_tokens: 512,
+      });
+    },
+  );
+
   it('keeps the 512 default for a Claude model that does not think by default', async () => {
     provider = new VertexChatProvider('claude-opus-4-8', { config: {} });
 
@@ -3608,9 +3787,17 @@ describe('VertexChatProvider.callClaudeApi', () => {
     expect(result.cost).toBeCloseTo(0.00012, 8);
   });
 
-  it('still sends temperature for Opus 4.6 on Vertex (regression)', async () => {
+  // Claude rejects `temperature` together with `top_p`, so each case is a request the API accepts.
+  it.each([
+    [
+      'temperature and top_k',
+      { temperature: 0, top_k: 0, topK: 40 },
+      { temperature: 0, top_p: undefined, top_k: 0 },
+    ],
+    ['top_p', { top_p: 0, topP: 0.8 }, { temperature: undefined, top_p: 0, top_k: undefined }],
+  ])('preserves zero %s for Opus 4.6 on Vertex (regression)', async (_, sampling, expected) => {
     provider = new VertexChatProvider('claude-opus-4-6', {
-      config: { max_tokens: 32, temperature: 0 },
+      config: { max_tokens: 32, ...sampling },
     });
 
     const mockResponse = {
@@ -3642,8 +3829,9 @@ describe('VertexChatProvider.callClaudeApi', () => {
 
     await provider.callClaudeApi('test prompt');
 
-    const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
-    expect(sentBody.temperature).toBe(0);
+    // toEqual treats an omitted parameter and an undefined one alike, as JSON does.
+    const { temperature, top_p, top_k } = mockRequest.mock.calls[0][0].data;
+    expect({ temperature, top_p, top_k }).toEqual(expected);
   });
 
   it('should accept both max_tokens and maxOutputTokens parameters', async () => {
