@@ -77,16 +77,29 @@ process.stdout.write(process.argv[4]);`,
     expect(context.getCache).toBe(getCache);
   });
 
-  it('closes provider stdin before awaiting child completion', async () => {
-    const script = path.join(directory, 'fixture.cjs');
-    await writeFile(
-      script,
-      `require('node:fs').writeFileSync(${JSON.stringify(pidPath)}, String(process.pid));
+  it.each(['provider', 'prompt'] as const)(
+    'closes %s stdin before awaiting child completion',
+    async (mode) => {
+      const script = path.join(directory, 'fixture.cjs');
+      await writeFile(
+        script,
+        `require('node:fs').writeFileSync(${JSON.stringify(pidPath)}, String(process.pid));
 process.stdin.resume();
 process.stdin.on('end', () => process.stdout.write('received EOF'));`,
-    );
-    await expect(new ScriptCompletionProvider(command).callApi('hello')).resolves.toEqual({
-      output: 'received EOF',
-    });
-  });
+      );
+      if (mode === 'provider') {
+        await expect(new ScriptCompletionProvider(command).callApi('hello')).resolves.toEqual({
+          output: 'received EOF',
+        });
+      } else {
+        await expect(
+          executablePromptFunction(command, {
+            vars: {},
+            provider: { id: () => 'echo', callApi: async () => ({}) },
+            config: { timeout: 5000 },
+          }),
+        ).resolves.toBe('received EOF');
+      }
+    },
+  );
 });

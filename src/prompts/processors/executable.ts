@@ -75,7 +75,9 @@ export const executablePromptFunction = async (
     timeout: context.config?.timeout || 60000, // Default 60 second timeout
   };
 
-  const { stdout, stderr } = await execFileAsync(command, scriptArgs, options);
+  const execution = execFileAsync(command, scriptArgs, options);
+  execution.child?.stdin?.end();
+  const { stdout, stderr } = await execution;
   const standardOutput = stripText(Buffer.from(stdout).toString('utf8').trim());
   const errorOutput = stripText(Buffer.from(stderr).toString('utf8').trim());
 
