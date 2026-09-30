@@ -146,9 +146,7 @@ export async function synthesize({
   const personas = (respObjects[0] as { personas?: unknown }).personas;
   invariant(
     Array.isArray(personas),
-    `Expected the personas response to be a JSON object of the form {personas: string[]}, but got ${JSON.stringify(
-      respObjects[0],
-    )}. The generation model may not support the personas JSON schema.`,
+    'Expected the personas response to contain a "personas" array.',
   );
   logger.debug(
     `Generated ${personas.length} persona${personas.length === 1 ? '' : 's'}:\n${personas.map((p) => `  - ${p}`).join('\n')}`,

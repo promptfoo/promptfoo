@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadApiProvider } from '../../src/providers/index';
 import { generatePersonasPrompt, synthesize, testCasesPrompt } from '../../src/testCase/synthesis';
 import { createMockProvider } from '../factories/provider';
@@ -11,6 +11,14 @@ vi.mock('../../src/providers', () => ({
 }));
 
 describe('synthesize', () => {
+  beforeEach(() => {
+    vi.mocked(loadApiProvider).mockReset();
+  });
+
+  afterEach(() => {
+    vi.mocked(loadApiProvider).mockReset();
+  });
+
   it('should generate test cases based on prompts and personas', async () => {
     let i = 0;
     const mockProvider = createMockProvider({
@@ -36,13 +44,13 @@ describe('synthesize', () => {
     expect(result).toEqual([{ var1: 'value1' }, { var2: 'value2' }]);
   });
 
-  it('should throw a descriptive error when the personas response has an unexpected shape', async () => {
+  it.each([
+    { output: [{ name: 'Persona 1' }, { name: 'Persona 2' }] },
+    { output: '{"personas": "Persona 1"}' },
+  ])('rejects a response without a personas array: $output', async ({ output }) => {
     const mockProvider = createMockProvider({
       id: 'mock-provider',
-      // Some providers return a bare array of objects instead of {personas: string[]}.
-      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
-        output: '[{"name": "Persona 1"}, {"name": "Persona 2"}]',
-      }),
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({ output }),
     });
     vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
 
@@ -54,27 +62,8 @@ describe('synthesize', () => {
         numPersonas: 2,
         numTestCasesPerPersona: 1,
       }),
-    ).rejects.toThrow(/personas/i);
-  });
-
-  it('should throw a descriptive error when personas is not an array', async () => {
-    const mockProvider = createMockProvider({
-      id: 'mock-provider',
-      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
-        output: '{"personas": "Persona 1"}',
-      }),
-    });
-    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
-
-    await expect(
-      synthesize({
-        provider: 'mock-provider',
-        prompts: ['Test prompt'],
-        tests: [],
-        numPersonas: 2,
-        numTestCasesPerPersona: 1,
-      }),
-    ).rejects.toThrow(/personas/i);
+    ).rejects.toThrow('Expected the personas response to contain a "personas" array.');
+    expect(mockProvider.callApi).toHaveBeenCalledTimes(1);
   });
 });
 
