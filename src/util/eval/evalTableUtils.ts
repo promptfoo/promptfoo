@@ -3,6 +3,7 @@ import { ResultFailureReason } from '../../types/index';
 
 import type Eval from '../../models/eval';
 import type {
+  AtomicTestCase,
   CompletedPrompt,
   EnvOverrides,
   EvalResultsFilterMode,
@@ -271,6 +272,7 @@ type StreamRow = {
     failureReason?: ResultFailureReason;
     gradingResult?: { reason?: string; comment?: string } | null;
     metadata?: Record<string, unknown>;
+    testCase?: AtomicTestCase;
   } | null>;
   test: { description?: string; vars?: Record<string, unknown> };
 };
@@ -285,7 +287,7 @@ function batchToStreamRows(
   batchResults: Iterable<{
     testIdx: number;
     promptIdx: number;
-    testCase?: { vars?: Record<string, unknown>; description?: string };
+    testCase?: AtomicTestCase;
     response?: { output?: string };
     success: boolean;
     score?: number;
@@ -320,6 +322,7 @@ function batchToStreamRows(
       failureReason: result.failureReason,
       gradingResult: result.gradingResult,
       metadata: result.metadata,
+      testCase: result.testCase,
     };
   }
   return Array.from(rowsByTestIdx.values());

@@ -393,6 +393,58 @@ describe('writeOutput', () => {
     );
   });
 
+  it.each([false, true])(
+    'keeps user messages consistent between JSON and CSV when prompt stripping is %s',
+    async (stripPrompt) => {
+      const prompt = createCompletedPrompt('ordinary prompt', { provider: 'echo' });
+      const eval_ = new Eval(
+        {
+          redteam: { plugins: [], strategies: [] },
+          env: {
+            PROMPTFOO_STRIP_PROMPT_TEXT: String(stripPrompt),
+            PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'false',
+            PROMPTFOO_STRIP_METADATA: 'false',
+          },
+        },
+        { prompts: [prompt] },
+      );
+      for (const [testIdx, content] of ['user-authored note', 'provider transcript'].entries()) {
+        const messages = [{ role: 'user', content }];
+        await eval_.addResult(
+          createEvaluateResult({
+            testIdx,
+            prompt,
+            testCase: { metadata: testIdx === 0 ? { messages } : {} },
+            metadata: { messages },
+            response: { output: 'ordinary answer' },
+            namedScores: { quality: 1 },
+          }),
+        );
+      }
+      const before = JSON.stringify(eval_.results);
+      const fetchBatches = eval_.fetchResultsBatched.bind(eval_);
+      vi.spyOn(eval_, 'fetchResultsBatched').mockImplementation(() => fetchBatches(1));
+
+      await writeOutput('messages.json', eval_, null);
+      await writeOutput('messages.csv', eval_, null);
+
+      const json = JSON.parse(vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string);
+      const csv = parseCsv(
+        mockFileHandle.write.mock.calls.map(([chunk]) => chunk).join(''),
+      ) as string[][];
+      const messageColumn = csv[0].indexOf('Messages');
+      expect(messageColumn).toBeGreaterThanOrEqual(0);
+      expect(csv).toHaveLength(3);
+      for (const [index, result] of json.results.results.entries()) {
+        expect(JSON.parse(csv[index + 1][messageColumn])).toEqual(result.metadata.messages);
+        expect(result).toMatchObject({ success: true, score: 1, namedScores: { quality: 1 } });
+      }
+      expect(csv[1][messageColumn]).toContain('user-authored note');
+      expect(csv[2][messageColumn].includes('provider transcript')).toBe(!stripPrompt);
+      expect(JSON.stringify(eval_.results)).toBe(before);
+    },
+  );
+
   describe.each([2, 3])('scoped V%s writer projection', (version) => {
     it.each(['none', 'prompt', 'output', 'vars', 'grading', 'metadata', 'all'])(
       'uses one %s projection for rows, config and traces',
