@@ -91,15 +91,6 @@ vi.mock('./FrameworkCompliance', () => ({
 }));
 vi.mock('./ReportDownloadButton', () => ({ default: () => null }));
 vi.mock('./ReportSettingsDialogButton', () => ({ default: () => null }));
-vi.mock('./ToolsDialog', () => ({
-  default: ({ open, tools, onClose }: { open: boolean; tools: unknown[]; onClose: () => void }) =>
-    open ? (
-      <div data-testid="full-tools">
-        {JSON.stringify(tools)}
-        <button onClick={onClose}>Close tools</button>
-      </div>
-    ) : null,
-}));
 
 describe('Report filtering logic', () => {
   const createMockResult = (promptIdx: number, pluginId: string, pass: boolean): EvaluateResult =>
@@ -683,33 +674,53 @@ describe('App component target selection', () => {
     const button = await screen.findByText('Tools:');
     expect(mockCallApi).toHaveBeenCalledTimes(1);
     await userEvent.click(button);
-    expect(await screen.findByTestId('full-tools')).toHaveTextContent('parameters');
+    expect(await screen.findByRole('dialog', { name: 'Available Tools' })).toHaveTextContent(
+      'value',
+    );
     expect(mockCallApi).toHaveBeenLastCalledWith(
       '/results/test-eval-id/tools',
       expect.objectContaining({ cache: 'no-store', signal: expect.any(AbortSignal) }),
     );
-    await userEvent.click(screen.getByRole('button', { name: 'Close tools' }));
-    expect(screen.queryByTestId('full-tools')).not.toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     await userEvent.click(button);
-    await screen.findByTestId('full-tools');
+    await screen.findByRole('dialog', { name: 'Available Tools' });
     expect(mockCallApi).toHaveBeenCalledTimes(3);
   });
 
-  it('shows a retryable error when saved tool definitions cannot be loaded', async () => {
+  it.each([
+    { name: 'HTTP 503', response: { ok: false, status: 503 } },
+    { name: 'empty array', response: { ok: true, json: async () => ({ data: [] }) } },
+    { name: 'missing data', response: { ok: true, json: async () => ({}) } },
+    { name: 'null body', response: { ok: true, json: async () => null } },
+    { name: 'non-array data', response: { ok: true, json: async () => ({ data: {} }) } },
+    { name: 'invalid entry', response: { ok: true, json: async () => ({ data: [null] }) } },
+  ])('retries saved tool definitions after $name', async ({ response }) => {
     const evalData = createComponentMockEvalData(1, []);
     evalData.config.providers = [
       { id: 'echo', config: { tools: [{ type: 'function', function: { name: 'example' } }] } },
     ];
     mockCallApi.mockReset();
     mockCallApi.mockResolvedValueOnce({ ok: true, json: async () => ({ data: evalData }) });
-    mockCallApi.mockResolvedValueOnce({ ok: false, status: 503 });
+    mockCallApi.mockResolvedValueOnce(response);
     renderWithProviders(<App evalId="test-eval-id" />);
     const button = await screen.findByText('Tools:');
     await userEvent.click(button);
     expect(await screen.findByRole('alert')).toHaveTextContent('Select Tools to retry');
-    mockCallApi.mockResolvedValueOnce({ ok: true, json: async () => ({ data: [] }) });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    mockCallApi.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        data: [
+          { type: 'function', function: { name: 'recovered', parameters: { type: 'object' } } },
+        ],
+      }),
+    });
     await userEvent.click(button);
-    await screen.findByTestId('full-tools');
+    expect(await screen.findByRole('dialog', { name: 'Available Tools' })).toHaveTextContent(
+      'recovered',
+    );
+    expect(mockCallApi).toHaveBeenCalledTimes(3);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 

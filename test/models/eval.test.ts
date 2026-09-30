@@ -1718,7 +1718,7 @@ describe('evaluator', () => {
       expect(full?.result.results.results[0].response?.output).toBe(longOutput);
     });
 
-    it('keeps the first category identity and failed moderation after the preview component limit', async () => {
+    it('keeps category identity, failed moderation, and suggestions beyond the preview limit', async () => {
       const components = [
         ...Array.from({ length: 30 }, () => ({
           pass: true,
@@ -1744,6 +1744,19 @@ describe('evaluator', () => {
           reason: 'moderation fixture',
           assertion: { type: 'moderation' as const },
         },
+        { pass: true, score: 1, reason: 'no suggestions', suggestions: [] },
+        {
+          pass: true,
+          score: 1,
+          reason: 'first suggestion',
+          suggestions: [{ type: 'text', action: 'note' as const, value: 'Review this result.' }],
+        },
+        {
+          pass: true,
+          score: 1,
+          reason: 'later suggestion',
+          suggestions: [{ type: 'text', action: 'note' as const, value: 'Additional detail.' }],
+        },
       ];
       const result = createEvaluateResult({
         gradingResult: { pass: false, score: 0, reason: 'failed', componentResults: components },
@@ -1765,7 +1778,7 @@ describe('evaluator', () => {
         const metrics = report.results.results[0].gradingResult?.componentResults?.map(
           (component) => component.assertion?.metric,
         );
-        expect(metrics).toHaveLength(27);
+        expect(metrics).toHaveLength(28);
         expect(
           report.results.results[0].gradingResult?.componentResults?.find(
             (component) => component.assertion?.type === 'moderation',
@@ -1773,7 +1786,14 @@ describe('evaluator', () => {
         ).toBe(false);
         expect(metrics).toContain('Harmful');
         expect(metrics).not.toContain('PolicyViolation:policy-id');
+        expect(
+          report.results.results[0].gradingResult?.componentResults?.flatMap(
+            (component) => component.suggestions ?? [],
+          ),
+        ).toEqual([{ type: 'text', action: 'note', value: 'Review this result.' }]);
       }
+      const full = await normalized.toResultsFile();
+      expect(full.results.results[0].gradingResult?.componentResults).toEqual(components);
     });
 
     it('retains result-level policy identity without grading details', async () => {

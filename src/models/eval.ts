@@ -275,8 +275,15 @@ function projectGradingResultForRedteamReport(
   const moderationIndex = components?.findIndex(
     (component) => component?.assertion?.type === 'moderation' && component.pass === false,
   );
+  const suggestionIndex = components?.findIndex(
+    (component) => projectSuggestionsForRedteamReport(component?.suggestions)?.length,
+  );
   const compactComponents = components?.filter(
-    (_, index) => index < 25 || index === identityIndex || index === moderationIndex,
+    (_, index) =>
+      index < 25 ||
+      index === identityIndex ||
+      index === moderationIndex ||
+      index === suggestionIndex,
   );
   const componentResults = compactComponents
     ?.filter(isRecord)
@@ -400,15 +407,18 @@ function jsonSuggestionsOrNull(value: SQLWrapper, path: string): SQL<string | nu
           'value', substr(json_extract(report_suggestion.value, '$.value'), 1, ${MAX_REPORT_TEXT_LENGTH})
         )
       )
-      FROM json_each(${value}, ${path}) AS report_suggestion
-      WHERE report_suggestion.type = 'object'
-        AND json_type(report_suggestion.value, '$.type') = 'text'
-        AND json_type(report_suggestion.value, '$.action') = 'text'
-        AND json_extract(report_suggestion.value, '$.action') IN (
-          'replace-prompt', 'pre-filter', 'post-filter', 'note'
-        )
-        AND json_type(report_suggestion.value, '$.value') = 'text'
-        AND report_suggestion.key < 25
+      FROM (
+        SELECT suggestion.value
+        FROM json_each(${value}, ${path}) AS suggestion
+        WHERE suggestion.type = 'object'
+          AND json_type(suggestion.value, '$.type') = 'text'
+          AND json_type(suggestion.value, '$.action') = 'text'
+          AND json_extract(suggestion.value, '$.action') IN (
+            'replace-prompt', 'pre-filter', 'post-filter', 'note'
+          )
+          AND json_type(suggestion.value, '$.value') = 'text'
+        ORDER BY suggestion.key LIMIT 25
+      ) AS report_suggestion
     )
     ELSE NULL
   END`;
@@ -2664,11 +2674,33 @@ export default class Eval {
       gradingSuggestions: stripFlags.shouldStripGradingResult
         ? sql<string | null>`NULL`
         : jsonSuggestionsOrNull(validGradingResultJson, '$.suggestions'),
+      // Materialization keeps representative searches outside the component loop.
       gradingComponentResults: stripFlags.shouldStripGradingResult
         ? sql<string | null>`NULL`
         : sql<string | null>`CASE
           WHEN json_type(${validGradingResultJson}, '$.componentResults') = 'array'
           THEN (
+            WITH report_indices AS MATERIALIZED (
+              SELECT
+                ${jsonReportIdentityMetric(validGradingResultJson, true)} AS identity_index,
+                (
+                  SELECT moderation_component.key
+                  FROM json_each(${validGradingResultJson}, '$.componentResults') AS moderation_component
+                  WHERE moderation_component.type = 'object'
+                    AND json_extract(moderation_component.value, '$.assertion.type') = 'moderation'
+                    AND json_type(moderation_component.value, '$.pass') = 'false'
+                  ORDER BY moderation_component.key LIMIT 1
+                ) AS moderation_index,
+                (
+                  SELECT suggestion_component.key
+                  FROM json_each(${validGradingResultJson}, '$.componentResults') AS suggestion_component
+                  WHERE json_array_length(${jsonSuggestionsOrNull(
+                    sql`CASE WHEN suggestion_component.type = 'object' THEN suggestion_component.value ELSE NULL END`,
+                    '$.suggestions',
+                  )}) > 0
+                  ORDER BY suggestion_component.key LIMIT 1
+                ) AS suggestion_index
+            )
             SELECT json_group_array(
               json_patch(
                 json_patch(
@@ -2703,18 +2735,16 @@ export default class Eval {
                 END
               )
             )
-            FROM json_each(
+            FROM report_indices CROSS JOIN json_each(
               json_extract(${validGradingResultJson}, '$.componentResults')
             ) AS report_component
             WHERE report_component.type = 'object'
-              AND (report_component.key < 25 OR report_component.key = ${jsonReportIdentityMetric(validGradingResultJson, true)} OR report_component.key IN (
-                SELECT moderation_component.key
-                FROM json_each(${validGradingResultJson}, '$.componentResults') AS moderation_component
-                WHERE moderation_component.type = 'object'
-                  AND json_extract(moderation_component.value, '$.assertion.type') = 'moderation'
-                  AND json_type(moderation_component.value, '$.pass') = 'false'
-                ORDER BY moderation_component.key LIMIT 1
-              ))
+              AND (
+                report_component.key < 25
+                OR report_component.key = report_indices.identity_index
+                OR report_component.key = report_indices.moderation_index
+                OR report_component.key = report_indices.suggestion_index
+              )
           )
           ELSE NULL
         END`,

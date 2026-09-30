@@ -112,7 +112,14 @@ const App = ({ evalId: requestedEvalId, embedded, onActionsReady }: ReportProps)
         if (!response.ok) {
           throw new Error(`Failed to load tool definitions (${response.status})`);
         }
-        const body = (await response.json()) as { data: Tool[] };
+        const body = (await response.json()) as { data?: Tool[] } | null;
+        if (
+          !Array.isArray(body?.data) ||
+          body.data.length === 0 ||
+          body.data.some((tool) => !tool || typeof tool !== 'object' || Array.isArray(tool))
+        ) {
+          throw new Error('No valid tool definitions were returned');
+        }
         if (!controller.signal.aborted) {
           setFullTools(body.data);
         }
