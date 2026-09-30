@@ -3483,7 +3483,8 @@ describe('BEDROCK_MODEL token counting functionality', () => {
     });
   });
 
-  describe('AMAZON_NOVA model handler', () => {
+  describe.each(['AMAZON_NOVA', 'AMAZON_NOVA_2'] as const)('%s model handler', (model) => {
+    const modelHandler = BEDROCK_MODEL[model];
     it('should handle numeric token counts', async () => {
       const mockResponse = {
         usage: {
@@ -3493,7 +3494,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
         },
       };
 
-      const result = BEDROCK_MODEL.AMAZON_NOVA.tokenUsage!(mockResponse, 'Test prompt');
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
       expect(result).toEqual({
         prompt: 100,
         completion: 200,
@@ -3511,7 +3512,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
         },
       };
 
-      const result = BEDROCK_MODEL.AMAZON_NOVA.tokenUsage!(mockResponse, 'Test prompt');
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
       expect(result).toEqual({
         prompt: 113,
         completion: 335,
@@ -3519,6 +3520,41 @@ describe('BEDROCK_MODEL token counting functionality', () => {
         numRequests: 1,
       });
     });
+
+    it('includes numeric-string cache counts in displayed input', () => {
+      expect(
+        modelHandler.tokenUsage!(
+          {
+            usage: {
+              inputTokens: '0',
+              outputTokens: '20',
+              totalTokens: '45',
+              cacheReadInputTokenCount: '20',
+              cacheWriteInputTokenCount: '5',
+            },
+          },
+          'Test prompt',
+        ),
+      ).toEqual({
+        prompt: 25,
+        completion: 20,
+        total: 45,
+        numRequests: 1,
+        completionDetails: { cacheReadInputTokens: 20, cacheCreationInputTokens: 5 },
+      });
+    });
+
+    it.each([{}, { usage: { cacheReadInputTokenCount: '20' } }])(
+      'keeps missing input usage unknown for %j',
+      (response) => {
+        expect(modelHandler.tokenUsage!(response, 'Test prompt')).toMatchObject({
+          prompt: undefined,
+          completion: undefined,
+          total: undefined,
+          numRequests: 1,
+        });
+      },
+    );
   });
 
   describe('COHERE model handlers', () => {

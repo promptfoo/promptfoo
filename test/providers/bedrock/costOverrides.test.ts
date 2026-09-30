@@ -53,7 +53,7 @@ describe('Bedrock cost override integration', () => {
   });
 
   it.each(['amazon.nova-pro-v1:0', 'amazon.nova-2-lite-v1:0'])(
-    'prices native Nova cache counters for %s',
+    'reports all Nova input tokens and prices cache counters separately for %s',
     async (modelName) => {
       const provider = new AwsBedrockCompletionProvider(modelName, { config: rates });
       const body = Buffer.from(
@@ -79,6 +79,7 @@ describe('Bedrock cost override integration', () => {
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('Hello');
       expect(result.cost).toBeCloseTo(0.55);
+      expect(result.tokenUsage).toMatchObject({ prompt: 35, completion: 20, total: 55 });
       expect(result.tokenUsage?.completionDetails).toEqual({
         cacheReadInputTokens: 20,
         cacheCreationInputTokens: 5,
