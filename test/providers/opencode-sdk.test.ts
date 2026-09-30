@@ -3788,6 +3788,7 @@ describe('OpenCodeSDKProvider', () => {
                   type: 'local',
                   command: ['server'],
                   environment: { CUSTOM_GATEWAY: 'p6' },
+                  enabled: false,
                 },
               },
             },
@@ -3902,6 +3903,7 @@ describe('OpenCodeSDKProvider', () => {
                 },
               },
             },
+            keep: ['Upstream diagnostic withheld'],
             secrets: [
               'synthetic-local-env',
               'synthetic-flag-value',
@@ -3910,16 +3912,26 @@ describe('OpenCodeSDKProvider', () => {
             ],
           },
         ],
-      ])('redacts configured %s', async (_label, { echo, secrets, ...options }) => {
-        await expectRedacted({
-          ...options,
+      ])(
+        'redacts configured %s',
+        async (_label, {
+          echo,
           secrets,
-          message: `upstream echoed ${(echo ?? secrets).join(' | ')}; useful context`,
-          keep: ['upstream echoed', 'useful context'],
-        });
-      });
+          keep = ['upstream echoed', 'useful context'],
+          ...options
+        }) => {
+          await expectRedacted({
+            ...options,
+            secrets,
+            message: `upstream echoed ${(echo ?? secrets).join(' | ')}; useful context`,
+            keep,
+          });
+        },
+      );
 
       it.each<[string, string[]]>([
+        ['script path', ['node', 'transform.js']],
+        ['opaque executable', ['custom-server']],
         ['jq', ['jq', '-n', '$ENV.CUSTOM_GATEWAY | @base64']],
         ['shell', ['sh', '-c', 'printf %s "$CUSTOM_GATEWAY" | base64']],
         ['node', ['node', '-p', 'Buffer.from(process.env.CUSTOM_GATEWAY).toString("base64")']],
@@ -3933,6 +3945,25 @@ describe('OpenCodeSDKProvider', () => {
           message: 'Filter output ' + transformed + '; private tail',
           secrets: [credential, transformed, 'private tail'],
           keep: ['Upstream diagnostic withheld'],
+        });
+      });
+
+      it('keeps redacted diagnostics when the local MCP server is disabled', async () => {
+        const credential = 'disabled-server-credential';
+        await expectRedacted({
+          config: {
+            mcp: {
+              tool: {
+                type: 'local',
+                command: ['node', 'server.js'],
+                enabled: false,
+                environment: { CUSTOM_GATEWAY: credential },
+              },
+            },
+          },
+          message: `Startup failed for ${credential}; useful context`,
+          secrets: [credential],
+          keep: ['Startup failed', 'useful context'],
         });
       });
 

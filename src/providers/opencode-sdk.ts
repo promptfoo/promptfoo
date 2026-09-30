@@ -835,23 +835,6 @@ function addOpenCodeMcpCredentials(
   }
 }
 
-function hasDynamicOpenCodeMcpCommand(server: unknown): boolean {
-  const mcp = asRecord(server);
-  return (
-    mcp?.type === 'local' &&
-    Array.isArray(mcp.command) &&
-    mcp.command
-      .slice(1)
-      .some(
-        (argument) =>
-          typeof argument === 'string' &&
-          /\$(?:[\w{(])|\x60|\b(?:process\.env|(?:Deno|Bun)\.env|os\.environ|ENV\s*[\[.]|\w+\.join\s*\(|\w+\.toString\s*\()|(?:^|\s)(?:\||(?:printf|base64)\b)/.test(
-            argument,
-          ),
-      )
-  );
-}
-
 /**
  * Resolve ESM-only package entry point by reading package.json exports
  * Handles packages that only have "import" condition (no "require" condition)
@@ -1308,9 +1291,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
     addOpenCodeUrlCredentials(config.baseUrl, addStrong);
     for (const server of Object.values(asRecord(config.mcp) ?? {})) {
       addOpenCodeMcpCredentials(server, add, addStrong);
-      this.withholdMcpDiagnostics ||= hasDynamicOpenCodeMcpCommand(server);
       const mcp = asRecord(server);
       if (mcp?.type === 'local') {
+        // Any executable can transform inherited credentials, including scripts passed by path.
+        this.withholdMcpDiagnostics ||= mcp.enabled !== false;
         Object.values(asRecord(mcp.environment) ?? {}).forEach(addStrong);
       } else if (mcp?.type === 'remote') {
         getHeadersCredentialForms(mcp.headers).forEach(addStrong);
