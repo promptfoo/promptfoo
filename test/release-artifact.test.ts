@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -17,6 +18,7 @@ type Job = {
   needs?: string | string[];
   if?: string;
   permissions: Record<string, string>;
+  outputs?: Record<string, string>;
   steps: Step[];
 };
 const workflow = yaml.load(
@@ -26,6 +28,10 @@ const workflow = yaml.load(
   jobs: Record<string, Job>;
 };
 const directories: string[] = [];
+const bash =
+  process.platform === 'win32'
+    ? path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Git/bin/bash.exe')
+    : 'bash';
 afterEach(() => {
   for (const directory of directories.splice(0)) {
     fs.rmSync(directory, { recursive: true, force: true });
@@ -33,9 +39,28 @@ afterEach(() => {
 });
 
 describe('exact artifact release', () => {
-  it('builds and validates before an OIDC-only publisher, retaining release controls', () => {
+  it('isolates validation from immutable uploads and the OIDC-only publisher', () => {
     expect(workflow.concurrency['cancel-in-progress']).toBe(false);
     const publisher = workflow.jobs['publish-npm'];
+    const validator = workflow.jobs['validate-npm'];
+    expect(validator.permissions).toEqual({ contents: 'read' });
+    expect(validator.outputs).toBeUndefined();
+    expect(validator.steps.some((s) => s.uses?.startsWith('actions/upload-artifact@'))).toBe(false);
+    expect(validator.steps.find((s) => s.uses?.startsWith('actions/checkout@'))?.with).toEqual({
+      ref: "${{ inputs.tag_name && format('refs/tags/{0}', inputs.tag_name) || github.sha }}",
+      'persist-credentials': false,
+    });
+    expect(
+      validator.steps.find((s) => s.uses?.startsWith('actions/setup-node@'))?.with?.[
+        'package-manager-cache'
+      ],
+    ).toBe(false);
+    expect(
+      validator.steps.find((s) => s.uses?.startsWith('actions/setup-node@'))?.with?.cache,
+    ).toBeUndefined();
+    expect(validator.steps.some((s) => s.uses?.startsWith('actions/cache'))).toBe(false);
+    expect(publisher.needs).toContain('validate-npm');
+    expect(publisher.if).toContain("needs.validate-npm.result == 'success'");
     for (const buildName of ['build-npm', 'build-npm-backfill']) {
       const build = workflow.jobs[buildName];
       expect(build.permissions['id-token']).toBeUndefined();
@@ -45,22 +70,33 @@ describe('exact artifact release', () => {
         ],
       ).toBe(false);
       const buildIndex = build.steps.findIndex((s) => s.run === 'npm run prepublishOnly');
-      const validateIndex = build.steps.findIndex(
-        (s) => s.name?.startsWith('Validate ') && s.env?.PACKAGE_TARBALL,
-      );
+      expect(build.steps.some((s) => s.run?.includes('test:package-artifact'))).toBe(false);
       const uploadIndex = build.steps.findIndex((s) =>
         s.uses?.startsWith('actions/upload-artifact@'),
       );
       expect(buildIndex).toBeGreaterThan(-1);
-      expect(validateIndex).toBeGreaterThan(buildIndex);
-      expect(uploadIndex).toBeGreaterThan(validateIndex);
-      expect(build.steps[uploadIndex].with?.name).toBe(
-        publisher.steps.find((s) => s.uses?.startsWith('actions/download-artifact@'))?.with?.name,
-      );
+      expect(uploadIndex).toBeGreaterThan(buildIndex);
+      expect(build.outputs).toEqual({
+        'artifact-id': '${{ steps.upload.outputs.artifact-id }}',
+        sha512: '${{ steps.package-artifact.outputs.sha512 }}',
+      });
+      for (const consumer of [validator, publisher]) {
+        expect(consumer.if).toContain('always() && !cancelled()');
+        expect(consumer.needs).toContain(buildName);
+        expect(consumer.if).toContain(`needs.${buildName}.result == 'success'`);
+        const download = consumer.steps.find((s) =>
+          s.uses?.startsWith('actions/download-artifact@'),
+        )!;
+        expect(download.with?.name).toBeUndefined();
+        expect(download.with?.['artifact-ids']).toBe(
+          '${{ needs.build-npm.outputs.artifact-id || needs.build-npm-backfill.outputs.artifact-id }}',
+        );
+        expect(consumer.steps.find((s) => s.env?.EXPECTED_SHA512)?.env?.EXPECTED_SHA512).toBe(
+          '${{ needs.build-npm.outputs.sha512 || needs.build-npm-backfill.outputs.sha512 }}',
+        );
+      }
       expect(build.steps[buildIndex].env?.PROMPTFOO_POSTHOG_KEY).toBeDefined();
       expect(publisher.permissions['id-token']).toBe('write');
-      expect([publisher.needs].flat()).toContain(buildName);
-      expect(publisher.if).toContain(`needs.${buildName}.result == 'success'`);
       expect(publisher.steps.some((s) => s.uses?.startsWith('actions/checkout@'))).toBe(false);
       expect(publisher.steps.map((s) => s.run ?? '').join('\n')).not.toMatch(
         /npm (?:ci|install|run|rebuild)/,
@@ -70,6 +106,38 @@ describe('exact artifact release', () => {
       expect(publish.run).toContain(
         'npm publish "${tarballs[0]}" --ignore-scripts --provenance --access public',
       );
+    }
+  });
+
+  it.each(['', '1.2.3'])('runs the expected modern profiles for tag %j', (tag) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'release-profiles-'));
+    directories.push(root);
+    fs.mkdirSync(path.join(root, 'scripts'));
+    fs.writeFileSync(path.join(root, 'scripts/testPackageArtifact.ts'), '// --tarball');
+    const tarball = path.join(root, 'promptfoo.tgz');
+    fs.writeFileSync(tarball, 'fixture archive');
+    const validate = workflow.jobs['validate-npm'].steps.find(
+      (step) => step.name === 'Validate npm package',
+    )!.run!;
+    const result = spawnSync(bash, ['-e', '-o', 'pipefail'], {
+      input: 'npm() { printf "%s\\n" "$*"; }\n' + validate,
+      cwd: root,
+      env: {
+        ...process.env,
+        PACKAGE_DIR: root.replaceAll('\\', '/'),
+        EXPECTED_SHA512: createHash('sha512').update(fs.readFileSync(tarball)).digest('hex'),
+        TAG_NAME: tag,
+      },
+      encoding: 'utf8',
+    });
+    expect(result.status, result.stderr).toBe(0);
+    const calls = result.stdout.trim().split('\n');
+    expect(calls).toHaveLength(tag ? 1 : 2);
+    expect(calls[0]).toBe(
+      `run test:package-artifact -- --tarball ${tarball.replaceAll('\\', '/')}`,
+    );
+    if (!tag) {
+      expect(calls[1]).toBe(`${calls[0]} --profile omit-optional`);
     }
   });
 
@@ -87,7 +155,9 @@ describe('exact artifact release', () => {
   it('detects current packers and legacy native SQLite from tag manifests', () => {
     const steps = workflow.jobs['build-npm-backfill'].steps;
     const pack = steps.find((step) => step.name === 'Pack npm package')!.run!;
-    const validate = steps.find((step) => step.name === 'Validate historical npm package')!.run!;
+    const validate = workflow.jobs['validate-npm'].steps.find(
+      (step) => step.name === 'Validate npm package',
+    )!.run!;
     const packProbe = pack.match(/if node -e "([^"]+)"/)?.[1];
     const nativeProbe = validate.match(/if node -e "([^"]+)"/)?.[1];
     expect(packProbe).toBeDefined();
@@ -128,17 +198,19 @@ describe('exact artifact release', () => {
     expect(validate).toContain('PROMPTFOO_CONFIG_DIR="$consumer_dir/config"');
   });
 
-  it.each(['none', 'rebuild', 'result'])(
+  it.each(['none', 'rebuild', 'result', 'version', 'blank-version'])(
     'runs legacy backfill acceptance with %s failure',
     (failure) => {
       const root = fs.mkdtempSync(path.join(os.tmpdir(), 'backfill-acceptance-'));
       directories.push(root);
       const fixture = path.join(root, 'fixture');
       const native = path.join(root, 'native');
-      const tarball = path.join(root, 'promptfoo-0.0.0.tgz').replaceAll('\\', '/');
+      const packageDir = path.join(root, 'artifact');
+      const tarball = path.join(packageDir, 'promptfoo-0.0.0.tgz').replaceAll('\\', '/');
       const nativeTarball = path.join(root, 'better-sqlite3-0.0.0.tgz').replaceAll('\\', '/');
       fs.mkdirSync(fixture);
       fs.mkdirSync(native);
+      fs.mkdirSync(packageDir);
       // Newer npm requires explicit approval even for these local test lifecycle scripts.
       fs.writeFileSync(
         path.join(root, 'fixtures.npmrc'),
@@ -178,7 +250,10 @@ const fs = require('node:fs');
 const assert = require('node:assert/strict');
 assert.equal(require('better-sqlite3'), true);
 fs.appendFileSync(process.env.BACKFILL_EVIDENCE, process.argv[2] + '\\n');
-if (process.argv[2] === '--version') console.log('0.0.0');
+if (process.argv[2] === '--version') {
+  console.log(process.env.BACKFILL_FAILURE === 'version' ? '9.9.9' :
+    process.env.BACKFILL_FAILURE === 'blank-version' ? '' : '  0.0.0  ');
+}
 else {
   assert.equal(process.argv[2], 'eval');
   const config = JSON.parse(fs.readFileSync(process.argv[process.argv.indexOf('--config') + 1]));
@@ -191,18 +266,15 @@ else {
 }
 `,
       );
-      const validate = workflow.jobs['build-npm-backfill'].steps.find(
-        (step) => step.name === 'Validate historical npm package',
+      const validate = workflow.jobs['validate-npm'].steps.find(
+        (step) => step.name === 'Validate npm package',
       )!.run!;
       const evidence = path.join(root, 'cli-calls');
-      const bash =
-        process.platform === 'win32'
-          ? path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Git/bin/bash.exe')
-          : 'bash';
       const result = spawnSync(bash, ['-e', '-o', 'pipefail'], {
         input:
           'npm pack "$NATIVE_FIXTURE" --ignore-scripts --pack-destination "$RUNNER_TEMP"\n' +
-          'npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP"\n' +
+          'npm pack --ignore-scripts --pack-destination "$PACKAGE_DIR"\n' +
+          'export EXPECTED_SHA512="$(node -e \'console.log(require("node:crypto").createHash("sha512").update(require("node:fs").readFileSync(process.argv[1])).digest("hex"))\' "$PACKAGE_TARBALL")"\n' +
           validate,
         cwd: fixture,
         encoding: 'utf8',
@@ -211,6 +283,8 @@ else {
           ...process.env,
           RUNNER_TEMP: root.replaceAll('\\', '/'),
           PACKAGE_TARBALL: tarball,
+          PACKAGE_DIR: packageDir.replaceAll('\\', '/'),
+          TAG_NAME: '0.0.0',
           NATIVE_FIXTURE: native.replaceAll('\\', '/'),
           BACKFILL_EVIDENCE: evidence,
           BACKFILL_FAILURE: failure,
@@ -225,6 +299,9 @@ else {
       expect(fs.existsSync(evidence)).toBe(failure !== 'rebuild');
       if (failure === 'rebuild') {
         expect(result.stderr).toContain('fixture native rebuild failed');
+      } else if (failure.endsWith('version')) {
+        expect(result.stderr).toContain('Installed CLI version does not match tag');
+        expect(fs.readFileSync(evidence, 'utf8')).toBe('--version\n');
       } else {
         expect(fs.readFileSync(evidence, 'utf8')).toBe('--version\neval\n');
       }
@@ -234,36 +311,81 @@ else {
     },
   );
 
-  it('rejects wrong identity, version, and publish configuration before publishing', () => {
+  it('checks the builder checksum and manifest before publishing', () => {
     const run = workflow.jobs['publish-npm'].steps.find(
       (s) => s.name === 'Publish verified npm package',
     )!.run!;
-    const script = run.match(/<<'NODE'\n([\s\S]*?)\nNODE\n/)?.[1];
-    expect(script).toBeDefined();
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'release-artifact-'));
     directories.push(root);
-    const manifestPath = path.join(root, 'package.json');
-    for (const [manifest, valid] of [
-      [{ name: 'promptfoo', version: '1.2.3' }, true],
-      [{ name: 'other', version: '1.2.3' }, false],
-      [{ name: 'promptfoo', version: '9.9.9' }, false],
+    fs.mkdirSync(path.join(root, 'package'));
+    const manifestPath = path.join(root, 'package', 'package.json');
+    const tarball = path.join(root, 'promptfoo.tgz');
+    const evidence = path.join(root, 'published');
+    const env = {
+      ...process.env,
+      RUNNER_TEMP: root.replaceAll('\\', '/'),
+      PACKAGE_DIR: root.replaceAll('\\', '/'),
+      PUBLISH_EVIDENCE: evidence.replaceAll('\\', '/'),
+      EXPECTED_VERSION: '1.2.3',
+      REGISTRY_URL: 'https://registry.invalid/',
+    };
+    const pack = () => {
+      const result = spawnSync(bash, ['-e', '-o', 'pipefail'], {
+        input: 'tar -czf "$PACKAGE_DIR/promptfoo.tgz" package\n',
+        cwd: root,
+        env,
+        encoding: 'utf8',
+      });
+      expect(result.status, result.stderr).toBe(0);
+    };
+    for (const [manifest, failure] of [
+      [{ name: 'promptfoo', version: '1.2.3' }, 'none'],
+      [{ name: 'other', version: '1.2.3' }, 'metadata'],
+      [{ name: 'promptfoo', version: '9.9.9' }, 'metadata'],
       [
         {
           name: 'promptfoo',
           version: '1.2.3',
           publishConfig: { registry: 'https://example.invalid' },
         },
-        false,
+        'metadata',
       ],
+      [{ name: 'promptfoo', version: '1.2.3' }, 'tampered'],
+      [{ name: 'promptfoo', version: '1.2.3' }, 'blank-checksum'],
+      [{ name: 'promptfoo', version: '1.2.3' }, 'missing'],
+      [{ name: 'promptfoo', version: '1.2.3' }, 'multiple'],
     ] as const) {
+      fs.rmSync(evidence, { force: true });
       fs.writeFileSync(manifestPath, JSON.stringify(manifest));
-      const result = spawnSync(process.execPath, ['-', manifestPath, '1.2.3'], {
-        input: script,
+      fs.writeFileSync(path.join(root, 'package', 'payload'), 'original');
+      pack();
+      const checksum = createHash('sha512').update(fs.readFileSync(tarball)).digest('hex');
+      if (failure === 'tampered') {
+        fs.writeFileSync(path.join(root, 'package', 'payload'), 'changed after validation');
+        pack();
+      } else if (failure === 'missing') {
+        fs.rmSync(tarball);
+      } else if (failure === 'multiple') {
+        fs.copyFileSync(tarball, path.join(root, 'extra.tgz'));
+      }
+      const result = spawnSync(bash, ['-e', '-o', 'pipefail'], {
+        input: 'npm() { printf "%s\\n" "$@" > "$PUBLISH_EVIDENCE"; }\n' + run,
+        env: { ...env, EXPECTED_SHA512: failure === 'blank-checksum' ? '' : checksum },
+        cwd: root,
         encoding: 'utf8',
       });
-      expect(result.status === 0).toBe(valid);
-      if (!valid) {
+      expect(result.error).toBeUndefined();
+      expect(result.status === 0, result.stderr).toBe(failure === 'none');
+      expect(fs.existsSync(evidence)).toBe(failure === 'none');
+      if (failure === 'metadata') {
         expect(result.stderr).toContain('Downloaded artifact has unexpected publish metadata');
+      } else if (failure === 'missing' || failure === 'multiple') {
+        expect(result.stdout).toContain('Expected exactly one verified npm tarball');
+      } else if (failure === 'none') {
+        expect(fs.readFileSync(evidence, 'utf8')).toContain('publish\n');
+        expect(fs.readFileSync(evidence, 'utf8')).toContain('--ignore-scripts\n');
+      } else {
+        expect(result.stderr).toContain('Npm artifact checksum mismatch');
       }
     }
   });
