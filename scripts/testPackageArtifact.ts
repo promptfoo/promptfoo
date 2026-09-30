@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { createServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 
 import { API } from 'typescript/unstable/sync';
@@ -285,7 +286,11 @@ function assertExportsResolve(
   );
 }
 
-function runInstalledBinVersion(consumerDir: string, configDir: string, binName: string): string {
+export function runInstalledBinVersion(
+  consumerDir: string,
+  configDir: string,
+  binName: 'promptfoo' | 'pf',
+): string {
   const binPath = path.join(
     consumerDir,
     'node_modules',
@@ -300,11 +305,21 @@ function runInstalledBinVersion(consumerDir: string, configDir: string, binName:
   };
 
   if (process.platform === 'win32') {
-    return run(
+    // Keep the working directory out of cmd.exe's command string. Paths can contain
+    // percent signs, which cmd.exe expands even inside quotes.
+    const command =
+      binName === 'promptfoo'
+        ? '.\\node_modules\\.bin\\promptfoo.cmd'
+        : '.\\node_modules\\.bin\\pf.cmd';
+    return execFileSync(
       process.env.ComSpec || 'cmd.exe',
-      ['/d', '/s', '/c', `"${binPath}" --version`],
-      consumerDir,
-      envOverrides,
+      ['/d', '/s', '/c', command, '--version'],
+      {
+        cwd: consumerDir,
+        encoding: 'utf8',
+        env: { ...process.env, ...envOverrides },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
     );
   }
 
@@ -1027,7 +1042,7 @@ async function main(): Promise<void> {
     }
     assertInstalledWebApp(installedPackageDir);
 
-    for (const binName of ['promptfoo', 'pf']) {
+    for (const binName of ['promptfoo', 'pf'] as const) {
       assert.equal(
         runInstalledBinVersion(consumerDir, configDir, binName).trim(),
         packResult.version,
@@ -1044,7 +1059,9 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error: unknown) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((error: unknown) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
