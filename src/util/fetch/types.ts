@@ -3,11 +3,12 @@
  */
 export interface FetchOptions extends RequestInit {
   /**
-   * Additional HTTP statuses to retry within fetchWithRetries' existing attempt
-   * budget. Retry-After is honored; the final response is returned for callers
-   * to report its body and headers. This option is not forwarded to fetch.
+   * Opt additional responses into fetchWithRetries' existing attempt budget.
+   * Retry-After is honored; the final response is returned for callers to report
+   * its body and headers. This predicate must not consume the response body and
+   * does not disable existing rate-limit or global 5xx retries. It is not forwarded to fetch.
    */
-  retryableStatusCodes?: number[];
+  retryableResponse?: (response: Response) => boolean;
 
   /**
    * Resolve default authentication headers immediately before each HTTP attempt, including

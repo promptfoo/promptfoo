@@ -331,7 +331,11 @@ describe('TypeSafe HTTP transport integration', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
-  it.each([429, 529])('bounds retries for persistent HTTP %s responses', async (status) => {
+  it.each([
+    { status: 429, statusText: 'Too Many Requests' },
+    { status: 503, statusText: 'Service Unavailable' },
+    { status: 529, statusText: 'Overloaded' },
+  ])('bounds retries for persistent HTTP $status responses', async ({ status, statusText }) => {
     vi.useFakeTimers();
     vi.spyOn(Math, 'random').mockReturnValue(0);
     mockFetch.mockImplementation(async () =>
@@ -339,7 +343,7 @@ describe('TypeSafe HTTP transport integration', () => {
         { error: 'Please retry later' },
         {
           status,
-          statusText: status === 429 ? 'Too Many Requests' : 'Overloaded',
+          statusText,
           headers: { 'Retry-After': '1', 'x-typesafe-request-id': 'fixture-request' },
         },
       ),
@@ -350,21 +354,39 @@ describe('TypeSafe HTTP transport integration', () => {
     const response = await pending;
 
     expect(response.error).toContain(String(status));
+    expect(response.error).toContain('fixture-request');
+    expect(response.error).toContain('Please retry later');
     expect(response.output).toBeUndefined();
     expect(mockFetch).toHaveBeenCalledTimes(3);
   });
 
-  it('shares one retry budget across mixed rate-limit and overload responses', async () => {
+  it('does not retry a permanent authentication error reported as HTTP 502', async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ error: 'Invalid API key' }, { status: 502, statusText: 'Unauthorized' }),
+    );
+
+    const response = await createProvider({ maxRetries: 2 }).callApi('Thank you');
+
+    expect(response.error).toContain('502 Unauthorized');
+    expect(response.error).toContain('Invalid API key');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('shares one retry budget across rate-limit, service-unavailable, and overload responses', async () => {
     vi.useFakeTimers();
     vi.spyOn(Math, 'random').mockReturnValue(0);
+    const responses = [
+      { status: 429, statusText: 'Too Many Requests' },
+      { status: 503, statusText: 'Service Unavailable' },
+      { status: 529, statusText: 'Overloaded' },
+    ];
     let attempts = 0;
     mockFetch.mockImplementation(async () => {
-      const status = attempts++ % 2 === 0 ? 429 : 529;
+      const response = responses[attempts++ % responses.length];
       return jsonResponse(
         { error: 'Please retry later' },
         {
-          status,
-          statusText: status === 429 ? 'Too Many Requests' : 'Overloaded',
+          ...response,
           headers: { 'Retry-After': '1' },
         },
       );
@@ -373,41 +395,55 @@ describe('TypeSafe HTTP transport integration', () => {
     const pending = createProvider({ maxRetries: 2 }).callApi('Thank you');
     await vi.runAllTimersAsync();
 
-    expect((await pending).error).toContain('429');
+    expect((await pending).error).toContain('529');
     expect(mockFetch).toHaveBeenCalledTimes(3);
   });
 
-  it('retries HTTP 529 after Retry-After and recovers without another request on a cache hit', async () => {
-    vi.useFakeTimers();
-    vi.spyOn(Math, 'random').mockReturnValue(0);
-    mockFetch
-      .mockResolvedValueOnce(
-        jsonResponse(
-          { error: 'Overloaded' },
-          { status: 529, statusText: 'Overloaded', headers: { 'Retry-After': '1' } },
-        ),
-      )
-      .mockResolvedValueOnce(gradeResponse());
-    const provider = createProvider({ maxRetries: 2 });
+  it.each([
+    { status: 502, statusText: 'Bad Gateway' },
+    { status: 503, statusText: 'Service Unavailable' },
+    { status: 504, statusText: 'Gateway Timeout' },
+    { status: 524, statusText: 'A Timeout Occurred' },
+    { status: 529, statusText: 'Overloaded' },
+  ])(
+    'recovers from HTTP $status after Retry-After and caches the response',
+    async ({ status, statusText }) => {
+      vi.useFakeTimers();
+      vi.spyOn(Math, 'random').mockReturnValue(0);
+      mockFetch
+        .mockResolvedValueOnce(
+          jsonResponse(
+            { error: statusText },
+            { status, statusText, headers: { 'Retry-After': '1' } },
+          ),
+        )
+        .mockResolvedValueOnce(gradeResponse());
+      const provider = createProvider({ maxRetries: 2 });
 
-    const pending = provider.callApi('Thank you');
-    await vi.advanceTimersByTimeAsync(999);
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(1);
-    expect((await pending).error).toBeUndefined();
-    expect((await provider.callApi('Thank you')).cached).toBe(true);
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-  });
+      const pending = provider.callApi('Thank you');
+      await vi.advanceTimersByTimeAsync(999);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect((await pending).error).toBeUndefined();
+      expect((await provider.callApi('Thank you')).cached).toBe(true);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    },
+  );
 
-  it.each(['llm-rubric', 'classifier'] as const)(
-    'cancels an overload retry delay for %s without sending the next request',
-    async (assertionType) => {
+  it.each([
+    { assertionType: 'llm-rubric', status: 503, statusText: 'Service Unavailable' },
+    { assertionType: 'classifier', status: 503, statusText: 'Service Unavailable' },
+    { assertionType: 'llm-rubric', status: 529, statusText: 'Overloaded' },
+    { assertionType: 'classifier', status: 529, statusText: 'Overloaded' },
+  ] as const)(
+    'cancels an HTTP $status retry delay for $assertionType without sending the next request',
+    async ({ assertionType, status, statusText }) => {
       vi.useFakeTimers();
       const controller = new AbortController();
       mockFetch.mockResolvedValueOnce(
         jsonResponse(
-          { error: 'Overloaded' },
-          { status: 529, statusText: 'Overloaded', headers: { 'Retry-After': '60' } },
+          { error: statusText },
+          { status, statusText, headers: { 'Retry-After': '60' } },
         ),
       );
       const provider = createProvider({ labels: ['polite', 'rude'] });
@@ -427,24 +463,30 @@ describe('TypeSafe HTTP transport integration', () => {
     },
   );
 
-  it('does not multiply overload retries when global 5xx retries are enabled', async () => {
-    vi.useFakeTimers();
-    vi.spyOn(Math, 'random').mockReturnValue(0);
-    const restoreRetryEnv = mockProcessEnv({ PROMPTFOO_RETRY_5XX: 'true' });
-    try {
-      mockFetch.mockImplementation(async () =>
-        jsonResponse({ error: 'Overloaded' }, { status: 529, statusText: 'Overloaded' }),
-      );
+  it.each([
+    { status: 503, statusText: 'Service Unavailable' },
+    { status: 529, statusText: 'Overloaded' },
+  ])(
+    'does not multiply HTTP $status retries when global 5xx retries are enabled',
+    async ({ status, statusText }) => {
+      vi.useFakeTimers();
+      vi.spyOn(Math, 'random').mockReturnValue(0);
+      const restoreRetryEnv = mockProcessEnv({ PROMPTFOO_RETRY_5XX: 'true' });
+      try {
+        mockFetch.mockImplementation(async () =>
+          jsonResponse({ error: statusText }, { status, statusText }),
+        );
 
-      const pending = createProvider({ maxRetries: 2 }).callApi('Thank you');
-      await vi.runAllTimersAsync();
+        const pending = createProvider({ maxRetries: 2 }).callApi('Thank you');
+        await vi.runAllTimersAsync();
 
-      expect((await pending).error).toContain('529');
-      expect(mockFetch).toHaveBeenCalledTimes(3);
-    } finally {
-      restoreRetryEnv();
-    }
-  });
+        expect((await pending).error).toContain(String(status));
+        expect(mockFetch).toHaveBeenCalledTimes(3);
+      } finally {
+        restoreRetryEnv();
+      }
+    },
+  );
 
   it('preserves the status, request id, and body of non-JSON HTTP errors', async () => {
     mockFetch.mockResolvedValueOnce(
@@ -455,7 +497,7 @@ describe('TypeSafe HTTP transport integration', () => {
       }),
     );
 
-    const response = await createProvider().callApi('Thank you');
+    const response = await createProvider({ maxRetries: 0 }).callApi('Thank you');
 
     expect(response.error).toContain('503 Service Unavailable');
     expect(response.error).toContain('fixture-unavailable');

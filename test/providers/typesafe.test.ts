@@ -750,7 +750,10 @@ describe('TypeSafeProvider', () => {
         undefined,
         { abortSignal: signal },
       );
-      expect(lastRequest().options).toMatchObject({ signal, retryableStatusCodes: [529] });
+      expect(lastRequest().options).toMatchObject({
+        signal,
+        retryableResponse: expect.any(Function),
+      });
       expect(mockedFetchWithCache.mock.calls[0][5]).toBe(2);
       expect(createProvider().handlesOwnRetries).toBe(true);
     });

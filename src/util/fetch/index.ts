@@ -225,11 +225,7 @@ export async function fetchWithProxy(
     : options.signal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
-  const {
-    getAuthHeaders,
-    retryableStatusCodes: _retryableStatusCodes,
-    ...requestOptions
-  } = options;
+  const { getAuthHeaders, retryableResponse: _retryableResponse, ...requestOptions } = options;
   const finalOptions: FetchOptions & { dispatcher?: any } = {
     ...requestOptions,
     headers: getFetchWithProxyHeaders(url, options),
@@ -747,7 +743,7 @@ export async function fetchWithRetries(
   timeout: number,
   maxRetries?: number,
 ): Promise<Response> {
-  const { retryableStatusCodes, ...requestOptions } = options;
+  const { retryableResponse, ...requestOptions } = options;
   options = preserveCloudAuthRedirects(url, requestOptions);
   const contextMaxRetries = getFetchRetryContextMaxRetries();
   maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
@@ -766,11 +762,12 @@ export async function fetchWithRetries(
         timeout,
       );
 
+      const shouldRetryResponse = retryableResponse?.(response) ?? false;
       if (
         getEnvBool('PROMPTFOO_RETRY_5XX') &&
         response.status >= 500 &&
         response.status < 600 &&
-        !retryableStatusCodes?.includes(response.status)
+        !shouldRetryResponse
       ) {
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
       }
@@ -780,7 +777,7 @@ export async function fetchWithRetries(
         continue;
       }
 
-      if (retryableStatusCodes?.includes(response.status) && i < maxRetries) {
+      if (shouldRetryResponse && i < maxRetries) {
         const { retryAfterMs } = rateLimitTimingFromHeaders(
           Object.fromEntries(response.headers.entries()),
         );

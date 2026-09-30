@@ -1526,7 +1526,28 @@ describe('fetchWithRetries', () => {
     expect(sleep).not.toHaveBeenCalled();
   });
 
-  describe('opt-in HTTP status retries', () => {
+  describe('opt-in HTTP response retries', () => {
+    it('preserves the global 5xx opt-in when the predicate does not match', async () => {
+      await vi.mocked(getEnvBool).withImplementation(
+        (key) => key === 'PROMPTFOO_RETRY_5XX',
+        async () => {
+          vi.mocked(global.fetch)
+            .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
+            .mockResolvedValueOnce(new Response('recovered'));
+
+          const result = await fetchWithRetries(
+            'https://example.com',
+            { retryableResponse: () => false },
+            1000,
+            1,
+          );
+
+          expect(await result.text()).toBe('recovered');
+          expect(global.fetch).toHaveBeenCalledTimes(2);
+        },
+      );
+    });
+
     it('leaves unconfigured statuses unchanged', async () => {
       await vi.mocked(getEnvBool).withImplementation(
         () => false,
@@ -1551,7 +1572,7 @@ describe('fetchWithRetries', () => {
 
       const result = await fetchWithRetries(
         'https://example.com',
-        { retryableStatusCodes: [529] },
+        { retryableResponse: (response) => response.status === 529 },
         1000,
         1,
       );
@@ -1561,7 +1582,7 @@ describe('fetchWithRetries', () => {
       expect(unavailable.bodyUsed).toBe(true);
       expect(global.fetch).toHaveBeenCalledTimes(2);
       for (const [, options] of vi.mocked(global.fetch).mock.calls) {
-        expect(options).not.toHaveProperty('retryableStatusCodes');
+        expect(options).not.toHaveProperty('retryableResponse');
       }
     });
 
@@ -1579,7 +1600,7 @@ describe('fetchWithRetries', () => {
 
           const result = await fetchWithRetries(
             'https://example.com',
-            { retryableStatusCodes: [529] },
+            { retryableResponse: (response) => response.status === 529 },
             1000,
             1,
           );
@@ -1598,7 +1619,12 @@ describe('fetchWithRetries', () => {
       );
 
       await expect(
-        fetchWithRetries('https://example.com', { retryableStatusCodes: [429, 529] }, 1000, 2),
+        fetchWithRetries(
+          'https://example.com',
+          { retryableResponse: (response) => [429, 529].includes(response.status) },
+          1000,
+          2,
+        ),
       ).rejects.toMatchObject({ name: 'HttpRateLimitError', kind: 'quota' });
       expect(global.fetch).toHaveBeenCalledTimes(1);
       expect(sleep).not.toHaveBeenCalled();

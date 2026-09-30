@@ -20,6 +20,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { HttpRateLimitError, isAbortError } from '../util/fetch/errors';
+import { isTransientError } from '../util/fetch/index';
 import { getFetchRetryContextMaxRetries } from '../util/fetch/retryContext';
 import { sanitizeObject } from '../util/sanitizer';
 import { ellipsize } from '../util/text';
@@ -471,10 +472,10 @@ export class TypeSafeProvider implements ApiClassificationProvider {
           Authorization: `Bearer ${this.apiKey}`,
         },
         body: JSON.stringify(request),
-        retryableStatusCodes: [529],
+        retryableResponse: (response) => response.status === 529 || isTransientError(response),
         ...(abortSignal ? { signal: abortSignal } : {}),
       };
-      // The shared transport owns one retry budget for 429, 529, and network errors.
+      // One retry budget covers rate limits, transient responses, and network errors.
       // Read text so non-JSON failures retain their HTTP status and request id.
       const response = await fetchWithCache<string>(
         `${apiBaseUrl}/v1/systemone`,
