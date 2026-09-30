@@ -22,7 +22,6 @@ type AnthropicProviders = Pick<
 // response caches to be collected after the invocation, without credential fingerprints.
 const scopedProviders = new WeakMap<object, { env: EnvOverrides; providers: AnthropicProviders }>();
 
-// LLM Rubric Provider
 export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
   constructor(
     modelName: string,
@@ -93,11 +92,7 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
   }
 }
 
-/**
- * Gets all default Anthropic providers with the given environment overrides
- * @param env - Optional environment overrides
- * @returns Anthropic provider implementations for various functions
- */
+/** Create default Anthropic providers for the active environment scope. */
 export function getAnthropicProviders(env?: EnvOverrides): AnthropicProviders {
   // Resolve every construction input before reuse, including partial explicit maps.
   // Preserve explicit empty credentials and headers when capturing the client inputs.

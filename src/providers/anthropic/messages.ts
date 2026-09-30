@@ -974,14 +974,15 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
+    const envTemperature = parseEnvFloat(
+      this.env?.ANTHROPIC_TEMPERATURE ?? getEnvString('ANTHROPIC_TEMPERATURE'),
+    );
     // The rules Claude enforces for temperature, top_p, top_k, and thinking live in one helper
     // shared with the Vertex and Bedrock paths.
     const { sampling, warnings: samplingWarnings } = resolveClaudeSamplingParams(config, {
       thinkingEnabled,
       samplingParamsDeprecated,
-      defaultTemperature:
-        parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE ?? getEnvString('ANTHROPIC_TEMPERATURE')) ??
-        0,
+      defaultTemperature: envTemperature ?? 0,
     });
     for (const warning of samplingWarnings) {
       logger.warn(warning);
@@ -994,9 +995,6 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // instance when the user supplied any of them via config or the
     // ANTHROPIC_TEMPERATURE env var (the built-in default stays silent to avoid
     // spamming every request).
-    const envTemperature = parseEnvFloat(
-      this.env?.ANTHROPIC_TEMPERATURE ?? getEnvString('ANTHROPIC_TEMPERATURE'),
-    );
     const explicitSamplingParam =
       config.temperature != null ||
       config.top_p != null ||
