@@ -11,10 +11,10 @@ import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/
 import {
   getRemoteGenerationExplicitlyDisabledError,
   getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { resolveRemoteGenerationUrl } from '../remoteGenerationRequest';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { getSessionId } from '../util';
 import { callTargetProvider } from './shared';
@@ -86,7 +86,7 @@ export default class BestOfNProvider implements ApiProvider {
     try {
       // Get candidate prompts from the server
       const response = await fetchWithProxy(
-        getRemoteGenerationUrl(),
+        await resolveRemoteGenerationUrl({ targetId: this.config.targetId }),
         {
           method: 'POST',
           headers: getRemoteGenerationHeaders(),

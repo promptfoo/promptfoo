@@ -24,6 +24,8 @@ function containsString(value: unknown, needle: string): boolean {
   return false;
 }
 
+vi.mock('../src/util/cloud', () => ({ ensureCloudTeamContext: vi.fn() }));
+
 vi.mock('../src/cache', () => ({
   fetchWithCache: vi.fn(),
 }));

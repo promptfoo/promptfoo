@@ -5,6 +5,7 @@ import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { resolveRemoteGenerationUrl } from '../remoteGenerationRequest';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type {
@@ -209,7 +210,7 @@ async function createWebPage(
   preferSmallModel?: boolean,
   targetId?: string,
 ): Promise<CreateWebPageResponse> {
-  const url = getRemoteGenerationUrl();
+  const url = await resolveRemoteGenerationUrl({ targetId });
   logger.debug('[IndirectWebPwn] Creating web page via task API', {
     url,
     testCaseId,
@@ -266,7 +267,7 @@ async function updateWebPage(
   preferSmallModel?: boolean,
   targetId?: string,
 ): Promise<UpdateWebPageResponse> {
-  const url = getRemoteGenerationUrl();
+  const url = await resolveRemoteGenerationUrl({ targetId });
   logger.debug('[IndirectWebPwn] Updating web page via task API', {
     url,
     uuid,

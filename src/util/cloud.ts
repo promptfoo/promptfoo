@@ -1,10 +1,12 @@
 import dedent from 'dedent';
+import { z } from 'zod';
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
-import { cloudConfig } from '../globalConfig/cloud';
+import { CloudSelectionChangedError, cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { type UnifiedConfig, UnifiedConfigSchema } from '../types/index';
 import { ProviderOptionsSchema } from '../validators/providers';
 import { fetchWithProxy } from './fetch/index';
+import { isPromptfooCloudApiHost } from './fetch/monkeyPatchFetch';
 import invariant from './invariant';
 import { normalizeProviderRef } from './providerRef';
 import { checkServerFeatureSupport } from './server';
@@ -17,6 +19,61 @@ import type { ProviderOptions } from '../types/providers';
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
 const PERMISSION_CHECK_SERVER_FEATURE_DATE = '2025-09-03T14:49:11Z';
 
+export interface ResolvedCloudTeam {
+  id: string;
+  name?: string;
+  organizationId?: string;
+  sessionId?: string;
+}
+
+const pendingTeamRecovery = new Map<string, Promise<void>>();
+
+/** Recover a pending team selection before an unscoped Cloud task starts. */
+export async function ensureCloudTeamContext(url?: string, targetId?: string): Promise<void> {
+  if (targetId || !cloudConfig.hasPendingTeamSelection()) {
+    return;
+  }
+  const request = cloudConfig.getRequestConfig();
+  if (!request.headers || (url && !isPromptfooCloudApiHost(url, request.apiHost))) {
+    return;
+  }
+  let pending = pendingTeamRecovery.get(request.sessionId);
+  if (!pending) {
+    pending = resolveCloudTeam().then(() => undefined);
+    pendingTeamRecovery.set(request.sessionId, pending);
+  }
+  try {
+    await pending;
+    if (cloudConfig.getRequestConfig().sessionId !== request.sessionId) {
+      throw new Error('Cloud login changed while selecting a team. Retry the operation.');
+    }
+  } finally {
+    if (pendingTeamRecovery.get(request.sessionId) === pending) {
+      pendingTeamRecovery.delete(request.sessionId);
+    }
+  }
+}
+
+/** Resolve an operation's destination without replacing an explicit Cloud-config team. */
+export async function resolveCloudTeam(
+  config?: Partial<UnifiedConfig>,
+): Promise<ResolvedCloudTeam | undefined> {
+  const request = cloudConfig.getRequestConfig();
+  if (!request.headers) {
+    return undefined;
+  }
+  const assignedTeamId = config?.metadata?.configId ? config.metadata.teamId : undefined;
+  // The server authorizes an assigned destination; a display lookup must not change it.
+  const team =
+    typeof assignedTeamId === 'string' && assignedTeamId
+      ? { id: assignedTeamId }
+      : await resolveTeamId();
+  if (cloudConfig.getRequestConfig().sessionId !== request.sessionId) {
+    throw new Error('Cloud login changed while selecting a team. Retry the operation.');
+  }
+  return { ...team, sessionId: request.sessionId };
+}
+
 /**
  * Makes an authenticated HTTP request to the PromptFoo Cloud API.
  * @param path - The API endpoint path (with or without leading slash)
@@ -25,14 +82,20 @@ const PERMISSION_CHECK_SERVER_FEATURE_DATE = '2025-09-03T14:49:11Z';
  * @returns Promise resolving to the fetch Response object
  * @throws Error if the request fails due to network or other issues
  */
-export function makeRequest(path: string, method: string, body?: any): Promise<Response> {
-  const apiHost = cloudConfig.getApiHost();
+export function makeRequest(
+  path: string,
+  method: string,
+  body?: any,
+  request = cloudConfig.getRequestConfig(),
+): Promise<Response> {
+  const { apiHost, headers } = request;
   const url = `${apiHost}/api/v1/${path.startsWith('/') ? path.slice(1) : path}`;
   try {
     return fetchWithProxy(url, {
       method,
       body: JSON.stringify(body),
-      headers: { ...(cloudConfig.getAuthHeaders() ?? {}), 'Content-Type': 'application/json' },
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      skipCloudAuthInjection: true,
     });
   } catch (e) {
     logger.error(`[Cloud] Failed to make request to ${url}: ${e}`);
@@ -416,6 +479,17 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
   }
 }
 
+const UserTeamSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string(),
+    slug: z.string(),
+    organizationId: z.string().min(1),
+    createdAt: z.string(),
+    updatedAt: z.string().optional(),
+  })
+  .passthrough();
+
 /**
  * Retrieves all teams for the current user from Promptfoo Cloud.
  * @returns Promise resolving to an array of team objects
@@ -425,16 +499,8 @@ export async function getUserTeams(
   apiHost?: string,
   apiKey?: string,
   authHeaderName?: string,
-): Promise<
-  Array<{
-    id: string;
-    name: string;
-    slug: string;
-    organizationId: string;
-    createdAt: string;
-    updatedAt: string;
-  }>
-> {
+  request?: ReturnType<typeof cloudConfig.getRequestConfig>,
+): Promise<z.infer<typeof UserTeamSchema>[]> {
   const response =
     apiHost && apiKey
       ? await fetchWithProxy(`${apiHost}/api/v1/users/me/teams`, {
@@ -443,13 +509,16 @@ export async function getUserTeams(
           },
           skipCloudAuthInjection: true,
         })
-      : await makeRequest(`/users/me/teams`, 'GET');
+      : await makeRequest(`/users/me/teams`, 'GET', undefined, request);
   if (!response.ok) {
     throw new Error(`Failed to get user teams: ${response.statusText}`);
   }
 
-  const body = await response.json();
-  return body;
+  const result = z.array(UserTeamSchema).safeParse(await response.json());
+  if (!result.success) {
+    throw new Error('Failed to get user teams: invalid response');
+  }
+  return result.data;
 }
 
 /** Returns the oldest team by creation date, which matches the enterprise app's default team. */
@@ -477,28 +546,6 @@ export function findTeam<
 }
 
 /**
- * Retrieves the default team for the current user from Promptfoo Cloud.
- * The default team is determined as the oldest team by creation date.
- * @returns Promise resolving to an object with team id, name, organizationId, and createdAt
- * @throws Error if the request fails or no teams are found
- */
-export async function getDefaultTeam(): Promise<{
-  id: string;
-  name: string;
-  organizationId: string;
-  createdAt: string;
-}> {
-  const teams = await getUserTeams();
-
-  if (teams.length === 0) {
-    throw new Error('No teams found for user');
-  }
-
-  const { id, name, organizationId, createdAt } = getOldestTeam(teams);
-  return { id, name, organizationId, createdAt };
-}
-
-/**
  * Retrieves a team by its ID.
  * @param teamId - The team ID to look up
  * @returns Promise resolving to an object with team id, name, organizationId, and createdAt
@@ -522,6 +569,20 @@ export async function getTeamById(
   };
 }
 
+async function resolveOrganizationId(selection: ReturnType<typeof cloudConfig.getTeamSelection>) {
+  if (selection.organizationId) {
+    return selection.organizationId;
+  }
+  const response = await makeRequest('/users/me', 'GET', undefined, selection.request);
+  const organizationId = response.ok ? (await response.json())?.organization?.id : undefined;
+  if (typeof organizationId !== 'string' || !organizationId) {
+    throw new Error(
+      "Could not determine the current organization. Run 'promptfoo auth login' to select it.",
+    );
+  }
+  return organizationId;
+}
+
 /**
  * Resolves a team identifier (name, slug, or ID) to a team object. When several
  * organizations share a team name or slug, the current organization's team wins.
@@ -531,9 +592,23 @@ export async function getTeamById(
  */
 export async function resolveTeamFromIdentifier(
   identifier: string,
+  selection = cloudConfig.getTeamSelection(),
 ): Promise<{ id: string; name: string; organizationId: string; createdAt: string }> {
-  const teams = await getUserTeams();
-  const team = findTeam(teams, identifier, cloudConfig.getCurrentOrganizationId());
+  const teams = await getUserTeams(undefined, undefined, undefined, selection.request);
+  let team = findTeam(teams, identifier, selection.organizationId);
+  // Only ambiguous names and slugs need organization discovery.
+  if (
+    !selection.organizationId &&
+    team &&
+    team.id !== identifier &&
+    findTeam(
+      teams.filter((candidate) => candidate.organizationId !== team?.organizationId),
+      identifier,
+    )
+  ) {
+    team = findTeam(teams, identifier, await resolveOrganizationId(selection));
+  }
+  cloudConfig.assertTeamSelection(selection);
 
   if (!team) {
     const availableTeams = teams.map((t) => t.name).join(', ');
@@ -549,8 +624,8 @@ export async function resolveTeamFromIdentifier(
 }
 
 /**
- * Resolves the current team context, checking stored preferences first. Never changes the
- * current organization: the fallback is the oldest team in that organization.
+ * Resolves a team within the selected organization, preferring its stored team.
+ * A new environment credential discovers its organization before reusing a preference.
  * @param teamIdentifier - Optional explicit team identifier to use
  * @param fallbackToDefault - Whether to fall back to server default team
  * @returns Promise resolving to an object with team id and name
@@ -559,40 +634,29 @@ export async function resolveTeamFromIdentifier(
 export async function resolveTeamId(
   teamIdentifier?: string,
   fallbackToDefault = true,
-): Promise<{ id: string; name: string }> {
+  selection = cloudConfig.getTeamSelection(),
+): Promise<{ id: string; name: string; organizationId: string }> {
   // 1. Use explicit team identifier if provided
   if (teamIdentifier) {
     logger.debug(`[Team Resolution] Using explicit team identifier: ${teamIdentifier}`);
-    return await resolveTeamFromIdentifier(teamIdentifier);
+    return await resolveTeamFromIdentifier(teamIdentifier, selection);
   }
 
   // 2. Use stored current team preference (scoped to current organization)
-  const configuredOrganizationId = cloudConfig.getCurrentOrganizationId();
-  let currentOrganizationId = configuredOrganizationId;
-  const currentTeamId = cloudConfig.getCurrentTeamId(currentOrganizationId);
+  const currentOrganizationId = await resolveOrganizationId(selection);
+  // Validate legacy preferences against the token's organization before migrating them.
+  const scopedTeamId = selection.selection.teams?.[currentOrganizationId]?.currentTeamId;
+  const currentTeamId = scopedTeamId || selection.selection.currentTeamId;
   if (!currentTeamId && !fallbackToDefault) {
     throw new Error('No team specified and no default available');
   }
-  if (!currentOrganizationId) {
-    const response = await makeRequest('/users/me', 'GET');
-    const organizationId = response.ok ? (await response.json())?.organization?.id : undefined;
-    if (typeof organizationId !== 'string' || !organizationId) {
-      throw new Error(
-        "Could not determine the current organization. Run 'promptfoo auth login' to select it.",
-      );
-    }
-    currentOrganizationId = organizationId;
-  }
   // Let lookup failures propagate: only a successful lookup proves the stored team is gone.
-  const teams = (await getUserTeams()).filter(
+  const teams = (await getUserTeams(undefined, undefined, undefined, selection.request)).filter(
     (team) => team.organizationId === currentOrganizationId,
   );
   const storedTeam = teams.find((team) => team.id === currentTeamId);
   if (storedTeam) {
-    if (!configuredOrganizationId) {
-      cloudConfig.setCurrentOrganization(currentOrganizationId);
-      cloudConfig.setCurrentTeamId(storedTeam.id, currentOrganizationId);
-    }
+    cloudConfig.saveTeamSelection(selection, currentOrganizationId, storedTeam.id);
     logger.debug(`[Team Resolution] Using stored team ID: ${currentTeamId}`);
     return storedTeam;
   }
@@ -600,6 +664,13 @@ export async function resolveTeamId(
     logger.warn(
       `[Team Resolution] Stored team ${currentTeamId} no longer accessible, falling back`,
     );
+    if (teams.length === 0) {
+      cloudConfig.saveTeamSelection(
+        selection,
+        scopedTeamId ? currentOrganizationId : undefined,
+        null,
+      );
+    }
   }
 
   // 3. Fall back to server default (oldest team in the current organization)
@@ -613,10 +684,7 @@ export async function resolveTeamId(
   }
   const defaultTeam = getOldestTeam(teams);
   // Store the default team where the next lookup reads it
-  if (!configuredOrganizationId) {
-    cloudConfig.setCurrentOrganization(currentOrganizationId);
-  }
-  cloudConfig.setCurrentTeamId(defaultTeam.id, currentOrganizationId);
+  cloudConfig.saveTeamSelection(selection, currentOrganizationId, defaultTeam.id);
   logger.info(`Using team: ${defaultTeam.name} (use 'promptfoo auth teams set <name>' to change)`);
   return defaultTeam;
 }
@@ -651,8 +719,12 @@ function convertErrorsToReadableMessage(
  * @throws ConfigPermissionError if permissions are insufficient (403 responses)
  * @throws Error for other critical permission check failures
  */
-export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Promise<void> {
-  if (!cloudConfig.isEnabled()) {
+export async function checkCloudPermissions(
+  config: Partial<UnifiedConfig>,
+  team?: ResolvedCloudTeam,
+  request = cloudConfig.getRequestConfig(),
+): Promise<ResolvedCloudTeam | undefined> {
+  if (!request.headers) {
     return;
   }
 
@@ -661,17 +733,45 @@ export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Pro
     return;
   }
 
+  // Local configs need a destination only when sharing supplies a resolved team.
+  const hasCloudProvider = [config.providers].flat().some((provider) => {
+    const ref = normalizeProviderRef(provider);
+    const linkedTargetId =
+      'loadOptions' in ref ? ref.loadOptions.config?.linkedTargetId : undefined;
+    return (
+      ('loadProviderPath' in ref && isCloudProvider(ref.loadProviderPath)) ||
+      (typeof linkedTargetId === 'string' && isCloudProvider(linkedTargetId))
+    );
+  });
+  if (!team && !config.metadata?.configId && !hasCloudProvider) {
+    return;
+  }
+
+  const assertSession = () => {
+    if (
+      cloudConfig.getRequestConfig().sessionId !== request.sessionId ||
+      (team?.sessionId && team.sessionId !== request.sessionId)
+    ) {
+      throw new CloudSelectionChangedError();
+    }
+  };
+  assertSession();
+
   try {
     const hasPermissionCheckServerFeature = await checkServerFeatureSupport(
       PERMISSION_CHECK_SERVER_FEATURE_NAME,
       PERMISSION_CHECK_SERVER_FEATURE_DATE,
+      request,
     );
+    assertSession();
     if (!hasPermissionCheckServerFeature) {
       logger.debug(
         `[Config Permission Check] Server feature ${PERMISSION_CHECK_SERVER_FEATURE_NAME} is not supported. Skipping permission check.`,
       );
       return;
     }
+    const resolvedTeam = team ?? (await resolveCloudTeam(config));
+    assertSession();
     // Strip large fields not needed for permission validation.
     // The server only needs providers, metadata, and whether redteam exists.
     const { tests, scenarios, defaultTest, evaluateOptions, ...minimalConfig } = config;
@@ -679,9 +779,15 @@ export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Pro
       minimalConfig.redteam = {} as typeof minimalConfig.redteam;
     }
 
-    const response = await makeRequest('permissions/check', 'POST', {
-      config: minimalConfig,
-    });
+    const response = await makeRequest(
+      'permissions/check',
+      'POST',
+      {
+        config: minimalConfig,
+        ...(resolvedTeam && { teamId: resolvedTeam.id }),
+      },
+      request,
+    );
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ errors: ['Unknown error'] }));
@@ -724,14 +830,17 @@ export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Pro
     }
 
     logger.debug('Permission check passed');
+    return resolvedTeam;
   } catch (error) {
-    if (error instanceof ConfigPermissionError) {
+    if (error instanceof ConfigPermissionError || error instanceof CloudSelectionChangedError) {
       throw error;
     }
 
     // If we can't check permissions, allow the operation to continue
     // It will fail later with a proper error message if permissions are actually missing
     logger.warn(`Error checking permissions: ${error}. Continuing anyway.`);
+  } finally {
+    assertSession();
   }
 
   return;
@@ -751,7 +860,7 @@ export async function canCreateTargets(teamId: string | undefined): Promise<bool
     return true;
   }
   if (!teamId) {
-    const team = await getDefaultTeam();
+    const team = await resolveTeamId();
     teamId = team.id;
     logger.debug(
       `[canCreateTargets] No team id provided, using default team ${team.name} (${teamId})`,
@@ -892,7 +1001,7 @@ export async function validateLinkedTargetId(linkedTargetId: string): Promise<vo
 
         Troubleshooting steps:
         1. Verify you're logged in to the correct organization
-           Run: promptfoo auth status
+           Run: promptfoo auth whoami
 
         2. Check that the target exists in your cloud dashboard:
            ${appHost}/redteam/targets
@@ -911,7 +1020,7 @@ export async function validateLinkedTargetId(linkedTargetId: string): Promise<vo
  * Returns null if cloud is not enabled or if fetching fails.
  * @returns Promise resolving to organization name and optional team name, or null
  */
-export async function getOrgContext(): Promise<{
+export async function getOrgContext(team?: ResolvedCloudTeam): Promise<{
   organizationName: string;
   teamName?: string;
 } | null> {
@@ -919,10 +1028,20 @@ export async function getOrgContext(): Promise<{
     return null;
   }
 
+  if (team && (!team.name || !team.organizationId)) {
+    try {
+      team = await getTeamById(team.id);
+    } catch {
+      // Preserve the actual destination label when optional name lookup fails.
+      return { organizationName: team.id };
+    }
+  }
+
   try {
-    const apiHost = cloudConfig.getApiHost();
+    const { apiHost, headers } = cloudConfig.getRequestConfig();
     const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
-      headers: { ...(cloudConfig.getAuthHeaders() ?? {}) },
+      headers,
+      skipCloudAuthInjection: true,
     });
 
     if (!response.ok) {
@@ -930,17 +1049,21 @@ export async function getOrgContext(): Promise<{
     }
 
     const { organization } = await response.json();
-    const organizationId = cloudConfig.getCurrentOrganizationId() ?? organization.id;
+    const organizationId =
+      team?.organizationId ?? cloudConfig.getCurrentOrganizationId() ?? organization.id;
     const organizationName = getCloudOrganizationLabel(organization, organizationId);
-    const currentTeamId = cloudConfig.getCurrentTeamId(organizationId);
+    const currentTeamId = team?.id ?? cloudConfig.getCurrentTeamId(organizationId);
 
     // Only include team name if it differs from organization name
     let teamName: string | undefined;
     if (currentTeamId) {
       try {
-        const team = await getTeamById(currentTeamId);
-        if (team.organizationId === organizationId && team.name !== organizationName) {
-          teamName = team.name;
+        const selectedTeam = team ?? (await getTeamById(currentTeamId));
+        if (
+          selectedTeam.organizationId === organizationId &&
+          selectedTeam.name !== organizationName
+        ) {
+          teamName = selectedTeam.name;
         }
       } catch {
         // Team lookup failed, continue without team name
