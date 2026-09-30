@@ -559,6 +559,31 @@ function writeConsumerScripts(consumerDir: string): void {
       include: ['require-contracts.cts'],
     }),
   );
+  for (const filename of ['import-root.mts', 'require-root.cts']) {
+    fs.writeFileSync(
+      path.join(consumerDir, filename),
+      [
+        "import { evaluate } from 'promptfoo';",
+        "const suite: Parameters<typeof evaluate>[0] = { prompts: ['Hello'], providers: ['echo'] };",
+        'void suite;',
+        '',
+      ].join('\n'),
+    );
+  }
+  fs.writeFileSync(
+    path.join(consumerDir, 'tsconfig.root.json'),
+    JSON.stringify({
+      compilerOptions: {
+        module: 'NodeNext',
+        moduleResolution: 'NodeNext',
+        noEmit: true,
+        strict: true,
+        // Check consumer API usage without checking optional database-driver declarations.
+        skipLibCheck: true,
+      },
+      include: ['import-root.mts', 'require-root.cts'],
+    }),
+  );
 }
 
 async function runInstalledCompressionEval(consumerDir: string, configDir: string): Promise<void> {
@@ -770,7 +795,7 @@ async function main(): Promise<void> {
     run(process.execPath, ['import-package.mjs'], consumerDir);
     run(process.execPath, ['require-package.cjs'], consumerDir);
     const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
-    for (const tsconfig of ['tsconfig.json', 'tsconfig.node16-cjs.json']) {
+    for (const tsconfig of ['tsconfig.json', 'tsconfig.node16-cjs.json', 'tsconfig.root.json']) {
       run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
     }
     assertInstalledWebApp(installedPackageDir);
