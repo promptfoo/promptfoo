@@ -729,6 +729,81 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
   }
 }
 
+async function assertOptionalBrowserDependencies(
+  consumerDir: string,
+  configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+  withOptionalDependencies: boolean,
+): Promise<void> {
+  const assertions = `
+    const incompatible = process.argv[2] === 'incompatible';
+    if (incompatible) {
+      assert.equal(require('playwright/package.json').version, '1.62.0');
+    } else {
+      for (const name of ['playwright', 'playwright-extra', 'puppeteer-extra-plugin-stealth', '@playwright/browser-chromium']) {
+        assert.throws(() => require.resolve(name), { code: 'MODULE_NOT_FOUND' });
+      }
+    }
+    for (const [id, config] of [
+      ['browser', { steps: [] }],
+      ['openai:chatkit:wf_fixture', { apiKey: 'fixture-key', usePool: false }],
+      ['openai:chatkit:wf_fixture', { apiKey: 'fixture-key', usePool: true }],
+    ]) {
+      const provider = await loadApiProvider(id, { options: { config } });
+      const response = await provider.callApi('optional browser fixture', { vars: {} });
+      assert.match(response.error, incompatible
+        ? /installed playwright package [(]1[.]62[.]0[)] is incompatible/
+        : /requires the optional Playwright package/);
+      assert.match(response.error, /npm install promptfoo/);
+      assert.match(response.error, /npx playwright install chromium/);
+      await provider.cleanup?.();
+    }
+  `;
+  for (const format of ['mjs', 'cjs']) {
+    const imports =
+      format === 'mjs'
+        ? `import assert from 'node:assert/strict';
+         import { createRequire } from 'node:module';
+         import { loadApiProvider } from 'promptfoo';
+         const require = createRequire(import.meta.url);`
+        : `const assert = require('node:assert/strict');
+         const { loadApiProvider } = require('promptfoo');`;
+    fs.writeFileSync(
+      path.join(consumerDir, `optional-browser.${format}`),
+      `${imports}\n(async () => {${assertions}})().catch(error => {
+        console.error(error); process.exitCode = 1;
+      });`,
+    );
+  }
+  for (const state of withOptionalDependencies ? ['missing', 'incompatible'] : ['missing']) {
+    if (state === 'incompatible') {
+      runNpm(
+        [
+          'install',
+          '--ignore-scripts',
+          '--no-audit',
+          '--no-fund',
+          '--no-package-lock',
+          'playwright@1.62.0',
+        ],
+        consumerDir,
+        npmEnv,
+      );
+    }
+    for (const format of ['mjs', 'cjs']) {
+      await runAsync(process.execPath, [`optional-browser.${format}`, state], consumerDir, {
+        PROMPTFOO_CONFIG_DIR: configDir,
+        PROMPTFOO_CACHE_ENABLED: 'false',
+        PROMPTFOO_DISABLE_TELEMETRY: '1',
+        PROMPTFOO_DISABLE_UPDATE: 'true',
+      });
+    }
+  }
+  if (withOptionalDependencies) {
+    await runInstalledCompressionEval(consumerDir, configDir);
+  }
+}
+
 async function runInstalledTransformersProvider(
   consumerDir: string,
   configDir: string,
@@ -910,21 +985,18 @@ async function main(): Promise<void> {
     assert.equal(installedPackageJson.version, packResult.version);
     assertExportsResolve(installedPackageDir, installedPackageJson);
     const packageRequire = createRequire(path.join(installedPackageDir, 'package.json'));
-    for (const optionalPackage of [
-      '@playwright/browser-chromium/package.json',
-      '@anthropic-ai/claude-agent-sdk',
-    ]) {
-      if (values.profile === 'omit-optional') {
-        assert.throws(() => packageRequire.resolve(optionalPackage), { code: 'MODULE_NOT_FOUND' });
-      } else {
-        const relative = path.relative(
-          fs.realpathSync(consumerDir),
-          fs.realpathSync(packageRequire.resolve(optionalPackage)),
-        );
-        assert(
-          relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative),
-        );
-      }
+    if (values.profile === 'omit-optional') {
+      assert.throws(() => packageRequire.resolve('@anthropic-ai/claude-agent-sdk'), {
+        code: 'MODULE_NOT_FOUND',
+      });
+    } else {
+      const relative = path.relative(
+        fs.realpathSync(consumerDir),
+        fs.realpathSync(packageRequire.resolve('@anthropic-ai/claude-agent-sdk')),
+      );
+      assert(
+        relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative),
+      );
     }
     assertProviderTypeDocumentation(installedPackageDir);
 
@@ -979,6 +1051,14 @@ async function main(): Promise<void> {
     }
     if (values.profile === 'default') {
       await runInstalledCompressionEval(consumerDir, configDir);
+    }
+    await assertOptionalBrowserDependencies(
+      consumerDir,
+      configDir,
+      consumerNpmEnv,
+      values.profile === 'default',
+    );
+    if (values.profile === 'default') {
       await runInstalledTransformersProvider(consumerDir, configDir, consumerNpmEnv);
     }
 
