@@ -217,6 +217,24 @@ describe('resolveTestsWatchPaths', () => {
     expect(watched).toContain(path.join(base, 'va/case.yaml'));
   });
 
+  it('watches file dependencies inside whole-vars files', () => {
+    const varsPath = path.join(base, 'nested/vars-dependencies.yaml');
+    fs.writeFileSync(varsPath, 'context: file://context.txt\nnested: { data: file://data.json }');
+    expect(resolve([{ vars: 'file://nested/vars-dependencies.yaml' }])).toEqual(
+      expect.arrayContaining([
+        varsPath,
+        path.join(base, 'context.txt'),
+        path.join(base, 'data.json'),
+      ]),
+    );
+  });
+
+  it('treats vars-file contents as data rather than more vars imports', () => {
+    const varsPath = path.join(base, 'self-vars.yaml');
+    fs.writeFileSync(varsPath, 'vars: self-vars.yaml');
+    expect(resolve([{ vars: 'self-vars.yaml' }])).toEqual([varsPath]);
+  });
+
   it('still handles the vars mapping form', () => {
     const watched = resolve([{ vars: { data: 'file://vars.csv' } }] as TestSuiteConfig['tests']);
     expect(watched).toEqual([path.join(base, 'vars.csv')]);

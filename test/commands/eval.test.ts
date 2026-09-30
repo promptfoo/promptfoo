@@ -847,7 +847,12 @@ describe('evalCommand', () => {
           config,
           testSuite: { prompts: [], providers: [] },
           basePath: watchBase,
-          defaultTestSources: ['file://defaults/default.yaml', { vars: ['second/defaults.yaml'] }],
+          watchSources: [
+            {
+              tests: ['file://defaults/default.yaml', { vars: ['second/defaults.yaml'] }],
+              basePath: watchBase,
+            },
+          ],
         });
         vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => record as Eval);
         await doEval({ watch: true, write: false, tests }, config, defaultConfigPath, {});

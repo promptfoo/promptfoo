@@ -656,12 +656,13 @@ describe('suite environment loading', () => {
       const configPath = writeConfig('literal-vars', { defaultTest: { vars } });
       const filename = path.join(path.dirname(configPath), 'literal%20vars.yaml');
       fs.writeFileSync(filename, 'source: literal');
-      const { testSuite, defaultTestSources, basePath } = await resolveConfigs(
-        { config: [configPath] },
-        {},
-      );
+      const { testSuite, watchSources } = await resolveConfigs({ config: [configPath] }, {});
       expect(testSuite.defaultTest).toMatchObject({ vars: { source: 'literal' } });
-      expect(resolveTestsWatchPaths(defaultTestSources, basePath)).toEqual([filename]);
+      expect(
+        (watchSources ?? []).flatMap((source) =>
+          resolveTestsWatchPaths(source.tests, source.basePath),
+        ),
+      ).toEqual([filename]);
     },
   );
 
@@ -693,19 +694,23 @@ describe('suite environment loading', () => {
         }),
       );
 
-      const { testSuite, defaultTestSources, basePath } = await resolveConfigs(
-        { config: [configPath] },
-        {},
-      );
+      const { testSuite, watchSources } = await resolveConfigs({ config: [configPath] }, {});
       expect(testSuite.defaultTest).toMatchObject({ vars: { default: 'loaded' } });
       expect(testSuite.tests?.map((test) => test.vars)).toEqual([
         { inline: 'loaded' },
         { row: 'loaded' },
       ]);
       expect(testSuite.scenarios?.[0].tests[0].vars).toEqual({ scenario: 'loaded' });
-      expect(resolveTestsWatchPaths(defaultTestSources, basePath)).toEqual([
-        path.join(dir, 'default vars.yaml'),
-      ]);
+      expect(
+        (watchSources ?? []).flatMap((source) =>
+          resolveTestsWatchPaths(source.tests, source.basePath),
+        ),
+      ).toEqual(
+        expect.arrayContaining([
+          path.join(dir, 'default vars.yaml'),
+          path.join(dir, 'scenario vars.yaml'),
+        ]),
+      );
     },
   );
 
@@ -732,17 +737,16 @@ describe('suite environment loading', () => {
         fs.writeFileSync(path.join(path.dirname(configPath), 'vars.yaml'), `source: ${name}`);
         return configPath;
       });
-      const { testSuite, defaultTestSources, basePath } = await resolveConfigs(
-        { config: configs },
-        {},
-      );
+      const { testSuite, watchSources } = await resolveConfigs({ config: configs }, {});
       expect(testSuite.defaultTest).toMatchObject({ vars: expected });
       const selectedVars = second ?? first;
       if (typeof selectedVars === 'string' || Array.isArray(selectedVars)) {
         const source = second === undefined ? 'first' : 'second';
-        expect(resolveTestsWatchPaths(defaultTestSources, basePath)).toEqual([
-          path.join(tempDir, source, 'vars.yaml'),
-        ]);
+        expect(
+          (watchSources ?? []).flatMap((source) =>
+            resolveTestsWatchPaths(source.tests, source.basePath),
+          ),
+        ).toEqual([path.join(tempDir, source, 'vars.yaml')]);
       }
     },
   );
@@ -1340,19 +1344,64 @@ describe('suite environment loading', () => {
       fs.writeFileSync(path.join(dir, 'defaults/vars.yaml'), 'source: wrong-shadow');
       fs.writeFileSync(path.join(dir, 'provider.yaml'), 'id: echo\nlabel: root');
       fs.writeFileSync(path.join(dir, 'defaults/provider.yaml'), 'id: echo\nlabel: wrong-shadow');
-      const { testSuite, defaultTestSources, basePath } = await resolveConfigs(
-        { config: [configPath] },
-        {},
-      );
+      const { testSuite, watchSources } = await resolveConfigs({ config: [configPath] }, {});
       expect(testSuite.defaultTest).toMatchObject({
         vars: { source: 'config-root' },
         provider: { label: 'root' },
       });
-      const watched = resolveTestsWatchPaths(defaultTestSources, basePath);
+      const watched = (watchSources ?? []).flatMap((source) =>
+        resolveTestsWatchPaths(source.tests, source.basePath),
+      );
       expect(watched).toEqual(expect.arrayContaining([defaultsPath, path.join(dir, 'vars.yaml')]));
       expect(watched).not.toContain(path.join(dir, 'defaults/vars.yaml'));
     },
   );
+
+  it('loads external defaults from the later config directory', async () => {
+    const first = writeConfig('first-default-root', {});
+    const second = writeConfig('second-default-root', {
+      defaultTest: 'file://defaults/default.yaml',
+    });
+    const firstDir = path.dirname(first);
+    const secondDir = path.dirname(second);
+    fs.mkdirSync(path.join(secondDir, 'defaults'));
+    fs.writeFileSync(path.join(firstDir, 'vars.yaml'), 'source: wrong-first');
+    fs.writeFileSync(
+      path.join(secondDir, 'vars.yaml'),
+      'source: second\ncontext: file://context.txt',
+    );
+    fs.writeFileSync(path.join(firstDir, 'context.txt'), 'wrong-first-context');
+    fs.writeFileSync(path.join(secondDir, 'context.txt'), 'second-context');
+    fs.writeFileSync(path.join(secondDir, 'defaults/default.yaml'), 'vars: vars.yaml');
+
+    const resolved = await resolveConfigs({ config: [first, second] }, {});
+
+    expect(resolved.testSuite.defaultTest).toMatchObject({
+      vars: { source: 'second', context: 'second-context' },
+    });
+    const watched = (resolved.watchSources ?? []).flatMap((source) =>
+      resolveTestsWatchPaths(source.tests, source.basePath),
+    );
+    expect(watched).toContain(path.join(secondDir, 'context.txt'));
+    expect(watched).not.toContain(path.join(firstDir, 'context.txt'));
+  });
+
+  it('retains scenario vars references before loading them', async () => {
+    const configPath = writeConfig('scenario-watch', {
+      scenarios: [{ config: [{}], tests: [{ vars: 'file://scenario-vars.yaml' }] }],
+    });
+    const varsPath = path.join(path.dirname(configPath), 'scenario-vars.yaml');
+    fs.writeFileSync(varsPath, 'source: scenario');
+
+    const resolved = await resolveConfigs({ config: [configPath] }, {});
+
+    expect(resolved.testSuite.scenarios?.[0].tests[0].vars).toEqual({ source: 'scenario' });
+    expect(
+      resolved.watchSources?.flatMap((source) =>
+        resolveTestsWatchPaths(source.tests, source.basePath),
+      ),
+    ).toContain(varsPath);
+  });
 
   it('evaluates normalized file-backed defaults and merges non-overlapping command options', async () => {
     const configPath = writeConfig('default-runtime-file', {

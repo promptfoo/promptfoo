@@ -186,7 +186,7 @@ tests:
   - vars: file://path/to/vars*.yaml
 ```
 
-`vars` also accepts a list of file references, loaded in order. These forms work in `defaultTest.vars` and scenario tests too. Absolute file URLs support encoded characters such as `%20` for a space.
+`vars` also accepts a list of file references, loaded in order. These forms work in `defaultTest.vars` and scenario tests too. Absolute file URLs support encoded characters such as `%20` for a space. Watch mode tracks these vars files and the files they reference.
 
 When combining configs, vars mappings merge by key. If either value is a file reference or list, the later `vars` value replaces the earlier one. Relative paths resolve from the config that declares them.
 

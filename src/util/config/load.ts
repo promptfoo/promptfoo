@@ -569,9 +569,12 @@ async function readTestSources(
 }
 
 /** Combines declarative config and keeps each test source's directory for loading and watch. */
-async function prepareCombinedConfig(
-  configPaths: string[],
-): Promise<{ config: UnifiedConfig; testSources: TestSource[] }> {
+async function prepareCombinedConfig(configPaths: string[]): Promise<{
+  config: UnifiedConfig;
+  testSources: TestSource[];
+  watchSources: TestSource[];
+  defaultTestBasePath?: string;
+}> {
   const configSources: { config: UnifiedConfig; basePath: string }[] = [];
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
@@ -799,6 +802,7 @@ async function prepareCombinedConfig(
     prompts.push(...Array.from(seenPrompts));
   }
 
+  const watchSources: TestSource[] = [];
   let scenarios: UnifiedConfig['scenarios'];
   for (const { config, basePath } of configSources) {
     if (config.scenarios === undefined) {
@@ -806,6 +810,9 @@ async function prepareCombinedConfig(
     }
     scenarios ??= [];
     for (const source of [config.scenarios].flat()) {
+      if (typeof source === 'string') {
+        watchSources.push({ tests: source, basePath });
+      }
       const loaded =
         typeof source === 'string' && source.startsWith('file://')
           ? await cliState.withBasePath(basePath, () =>
@@ -813,6 +820,9 @@ async function prepareCombinedConfig(
             )
           : source;
       for (const scenario of [loaded].flat()) {
+        if (typeof scenario === 'object' && scenario?.tests) {
+          watchSources.push({ tests: scenario.tests, basePath });
+        }
         scenarios.push(
           typeof scenario === 'object' && scenario?.tests
             ? {
@@ -828,6 +838,8 @@ async function prepareCombinedConfig(
     }
   }
 
+  let defaultTestBasePath: string | undefined;
+
   // Combine all configs into a single UnifiedConfig
   const combinedConfig: UnifiedConfig = {
     tags: configs.reduce((prev, curr) => ({ ...prev, ...curr.tags }), {}),
@@ -841,7 +853,9 @@ async function prepareCombinedConfig(
       const { config: curr, basePath } = source;
       // The last file default wins; inline defaults only merge when no file was selected.
       if (typeof curr.defaultTest === 'string') {
-        return makeTestAbsolute(basePath, curr.defaultTest) as string;
+        const reference = makeTestAbsolute(basePath, curr.defaultTest) as string;
+        defaultTestBasePath = basePath;
+        return reference;
       }
       // If prev is already a string (file reference), keep it
       if (typeof prev === 'string') {
@@ -910,6 +924,8 @@ async function prepareCombinedConfig(
 
   return {
     config: combinedConfig,
+    defaultTestBasePath,
+    watchSources,
     testSources: configSources.map(({ config, basePath }) => ({
       tests: config.tests,
       basePath,
@@ -932,16 +948,20 @@ export async function resolveConfigs(
   commandLineOptions?: Partial<CommandLineOptions>;
   selectedProviderConfigs?: TestSuiteConfig['providers'];
   testSources?: TestSource[];
-  defaultTestSources?: (string | TestCaseWithVarsFile)[];
+  watchSources?: TestSource[];
 }> {
   let fileConfig: Partial<UnifiedConfig> = {};
   let testSources: TestSource[] | undefined;
+  let preparedWatchSources: TestSource[] = [];
+  let defaultTestBasePath: string | undefined;
   let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
   let promptReferenceSources: PromptReferenceSource[] = [];
   if (configPaths) {
     const prepared = await prepareCombinedConfig(configPaths);
     fileConfig = prepared.config;
+    preparedWatchSources = prepared.watchSources;
+    defaultTestBasePath = prepared.defaultTestBasePath;
     testSources = cmdObj.tests || cmdObj.vars || cmdObj.assertions ? [] : prepared.testSources;
     promptReferenceSources = await readPromptReferenceSources(configPaths);
     // The user has provided a config file, so we do not want to use the default config.
@@ -957,6 +977,7 @@ export async function resolveConfigs(
           promptReferenceSources,
           type,
           testSources,
+          defaultTestBasePath,
         ),
       ),
     ),
@@ -966,6 +987,7 @@ export async function resolveConfigs(
   cliState.selectedProviderConfigs = resolved.selectedProviderConfigs;
   return {
     ...resolved,
+    watchSources: [...preparedWatchSources, ...resolved.watchSources],
     testSources: testSources ?? [{ tests: defaultConfig.tests, basePath: resolved.basePath }],
   };
 }
@@ -977,6 +999,7 @@ async function resolveLoadedConfig(
   promptReferenceSources: PromptReferenceSource[],
   type?: 'DatasetGeneration' | 'AssertionGeneration',
   testSources?: TestSource[],
+  defaultTestBasePath?: string,
 ) {
   const configPaths = cmdObj.config;
   // Standalone assertion mode
@@ -1028,19 +1051,23 @@ async function resolveLoadedConfig(
   // Get the raw defaultTest value which could be a string (file://), object (TestCase), or undefined
   const defaultTestRaw = fileConfig.defaultTest || defaultConfig.defaultTest;
 
+  defaultTestBasePath ??= basePath;
+
   // Load defaultTest from file:// reference if needed
   let processedDefaultTest: TestCaseWithVarsFile | undefined;
   if (typeof defaultTestRaw === 'string' && defaultTestRaw.startsWith('file://')) {
-    const loaded = await maybeLoadFromExternalFile(defaultTestRaw);
+    const loaded = await cliState.withBasePath(defaultTestBasePath, () =>
+      maybeLoadFromExternalFile(defaultTestRaw),
+    );
     processedDefaultTest = loaded as TestCaseWithVarsFile;
   } else if (typeof defaultTestRaw === 'object') {
     processedDefaultTest = defaultTestRaw;
   }
-  const defaultTestSources: (string | TestCaseWithVarsFile)[] = processedDefaultTest
-    ? [processedDefaultTest]
+  const watchSources: TestSource[] = processedDefaultTest
+    ? [{ tests: [processedDefaultTest], basePath: defaultTestBasePath }]
     : [];
   if (typeof defaultTestRaw === 'string') {
-    defaultTestSources.unshift(defaultTestRaw);
+    watchSources.push({ tests: defaultTestRaw, basePath: defaultTestBasePath });
   }
 
   const authoredTracing = fileConfig.tracing || defaultConfig.tracing;
@@ -1123,10 +1150,10 @@ async function resolveLoadedConfig(
   invariant(Array.isArray(config.providers), 'providers must be an array');
 
   config.defaultTest = processedDefaultTest
-    ? await readTestConfig(processedDefaultTest, basePath, true, config.env)
+    ? await readTestConfig(processedDefaultTest, defaultTestBasePath, true, config.env)
     : undefined;
   const parsedDefaultTest = config.defaultTest
-    ? await readTest(clone(config.defaultTest), basePath, true, config.env)
+    ? await readTest(clone(config.defaultTest), defaultTestBasePath, true, config.env)
     : undefined;
 
   // Resolve provider configs: loads file:// references while preserving non-file providers.
@@ -1209,6 +1236,9 @@ async function resolveLoadedConfig(
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
     for (const [scenarioIndex, scenario] of parsedScenarios.entries()) {
+      if (typeof scenario === 'object' && scenario.tests) {
+        watchSources.push({ tests: scenario.tests, basePath });
+      }
       if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
         scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
       }
@@ -1343,6 +1373,6 @@ async function resolveLoadedConfig(
     basePath,
     commandLineOptions,
     selectedProviderConfigs: filteredProviderConfigs,
-    defaultTestSources,
+    watchSources,
   };
 }

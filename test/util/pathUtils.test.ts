@@ -31,10 +31,10 @@ describe('pathUtils', () => {
     );
 
     it('accepts localhost file URLs and preserves literal glob syntax', () => {
-      const absolutePath = path.resolve('/base', 'vars?.yaml');
+      const absolutePath = path.resolve('/base', 'vars??.yaml');
       const reference = pathToFileURL(absolutePath)
         .href.replace('file:///', 'file://localhost/')
-        .replace('%3F', '?');
+        .replace(/%3F/g, '?');
       expect(fileReferenceToPath(reference)).toBe(absolutePath);
     });
   });
