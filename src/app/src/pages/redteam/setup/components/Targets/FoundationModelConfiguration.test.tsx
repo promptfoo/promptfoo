@@ -1,6 +1,6 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -21,6 +21,10 @@ describe('FoundationModelConfiguration', () => {
 
   beforeEach(() => {
     mockUpdateCustomTarget = vi.fn();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   it('should display advanced configuration fields with values from selectedTarget.config and call updateCustomTarget with the correct field and value when changed', async () => {
@@ -86,6 +90,47 @@ describe('FoundationModelConfiguration', () => {
       'apiBaseUrl',
       'https://new.api.example.com/v2',
     );
+  });
+
+  it.each([
+    ['google', 'google:gemini-2.5-pro', 'other-provider-key'],
+    ['openai', 'openai:gpt-5.5', ''],
+  ])('remasks the API key when switching to %s target %s', async (providerType, id, apiKey) => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <FoundationModelConfiguration
+        selectedTarget={initialTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="openai"
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+    await user.click(screen.getByRole('button', { name: 'Show api key' }));
+
+    rerender(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          ...initialTarget,
+          config: { ...initialTarget.config, apiKey: 'edited-key' },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="openai"
+      />,
+    );
+    expect(screen.getByLabelText('API Key')).toHaveAttribute('type', 'text');
+    expect(screen.getByLabelText('API Key')).toHaveValue('edited-key');
+
+    rerender(
+      <FoundationModelConfiguration
+        selectedTarget={{ id, config: { apiKey } }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType={providerType}
+      />,
+    );
+    expect(screen.getByLabelText('API Key')).toHaveAttribute('type', 'password');
+    expect(screen.getByLabelText('API Key')).toHaveValue(apiKey);
+    expect(screen.getByRole('button', { name: 'Show api key' })).toBeInTheDocument();
+    expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
   });
 
   it('should display the initial Model ID from selectedTarget.id when rendered', () => {

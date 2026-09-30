@@ -672,6 +672,7 @@ const FoundationModelConfiguration = ({
 
             {!isBedrock && (
               <SensitiveTextField
+                key={`${providerType}:${selectedTarget.id}`}
                 label="API Key"
                 value={selectedTarget.config?.apiKey ?? ''}
                 onChange={(e) => updateCustomTarget('apiKey', e.target.value || undefined)}
