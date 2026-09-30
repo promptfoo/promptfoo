@@ -2213,6 +2213,28 @@ describe('evalCommand', () => {
     expect(cleanup).not.toHaveBeenCalled();
   });
 
+  it('reports cleanup failure when the selected exit code is zero', async () => {
+    const previousExitCode = process.exitCode;
+    const provider = {
+      id: () => 'cleanup-provider',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup: vi.fn().mockRejectedValue(new Error('cleanup failed')),
+    };
+    vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => {
+      trackProvider(provider);
+      process.exitCode = 0;
+      return record as Eval;
+    });
+    try {
+      await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toThrow(
+        'cleanup failed',
+      );
+      expect(provider.cleanup).toHaveBeenCalledOnce();
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+
   it('preserves configured failure exit codes when cleanup rejects', async () => {
     const previousExitCode = process.exitCode;
     const provider = {

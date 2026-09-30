@@ -10,7 +10,7 @@ import Eval from './models/eval';
 import { sanitizeProvider } from './models/evalResult';
 import { processPrompts, readProviderPromptMap } from './prompts/index';
 import { loadApiProviders, resolveProvider } from './providers/index';
-import { withProviderCleanup } from './providers/lifecycle';
+import { trackConfiguredProviders, withProviderCleanup } from './providers/lifecycle';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
 import { isTransformFunction } from './types/transform';
@@ -345,6 +345,7 @@ async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEv
   const loadedProviders = await loadApiProviders(testSuiteConfig.providers, {
     env: testSuiteConfig.env,
   });
+  trackConfiguredProviders(loadedProviders, testSuiteConfig.providers);
   const providerMap = buildConfiguredProviderMap(loadedProviders);
   const constructedTestSuite = await createRuntimeTestSuite(testSuiteConfig, loadedProviders);
   await resolveNestedProviders(testSuiteConfig, constructedTestSuite, providerMap);

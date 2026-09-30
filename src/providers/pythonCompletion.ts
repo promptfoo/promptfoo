@@ -422,6 +422,10 @@ export class PythonProvider implements ApiProvider {
     return this.executePythonScript(prompt, undefined, 'call_classification_api');
   }
 
+  async cleanup(): Promise<void> {
+    await this.shutdown();
+  }
+
   async shutdown(): Promise<void> {
     if (this.pool) {
       await this.pool.shutdown();

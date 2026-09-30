@@ -1000,6 +1000,22 @@ describe('PythonProvider', () => {
   });
 
   describe('cleanup', () => {
+    it('exposes worker-pool teardown through the public cleanup hook', async () => {
+      const provider = new PythonProvider('script.py', { config: { basePath: process.cwd() } });
+      try {
+        await provider.initialize();
+        expect(providerRegistry.has(provider)).toBe(true);
+        await provider.cleanup();
+        expect(mockPoolInstance.shutdown).toHaveBeenCalledOnce();
+        expect(providerRegistry.has(provider)).toBe(false);
+        expect((provider as any).isInitialized).toBe(false);
+        await provider.cleanup();
+        expect(mockPoolInstance.shutdown).toHaveBeenCalledOnce();
+      } finally {
+        await provider.shutdown();
+      }
+    });
+
     it('should cleanup worker pool on shutdown', async () => {
       const provider = new PythonProvider('script.py', {
         config: { basePath: process.cwd() },

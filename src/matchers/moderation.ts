@@ -1,6 +1,7 @@
 import { getEnvString } from '../envars';
 import { getDefaultProviders } from '../providers/defaults';
 import { loadApiProvider } from '../providers/index';
+import { trackProvider } from '../providers/lifecycle';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../redteam/constants';
 import invariant from '../util/invariant';
 import {
@@ -37,7 +38,7 @@ export async function matchesModeration(
   const hasReplicateKey =
     !hasOpenAiKey && (getEnvString('REPLICATE_API_KEY') || getEnvString('REPLICATE_API_TOKEN'));
   const defaultModerationProvider = hasReplicateKey
-    ? await loadApiProvider(LLAMA_GUARD_REPLICATE_PROVIDER)
+    ? trackProvider(await loadApiProvider(LLAMA_GUARD_REPLICATE_PROVIDER))
     : defaultProviders.moderationProvider;
 
   const moderationProvider = (await getAndCheckProvider(
