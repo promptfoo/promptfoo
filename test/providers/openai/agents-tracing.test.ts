@@ -79,6 +79,65 @@ describe('OTLPTracingExporter', () => {
   }
 
   it.each(['json', 'protobuf'] as const)(
+    'keeps ordinary short options and masks curl authentication in %s',
+    async (format) => {
+      const { attributes } = await exportCustomData(
+        {
+          command: ['git', 'push', '-u', 'origin', 'main'],
+          gitText: 'git push -u origin main',
+          curlArgs: ['curl', '-u', 'fixture-user:fixture-password'],
+          curlText: 'curl -u fixture-user:fixture-password',
+          requiredOption: ['client', '--password', '-fixture-value'],
+        },
+        format,
+      );
+      expect(attributes.command).toBe('git push -u origin main');
+      expect(attributes.gitText).toBe('git push -u origin main');
+      expect(attributes.curlArgs).toEqual({
+        arrayValue: {
+          values: ['curl', '-u', '<redacted>'].map((stringValue) => ({ stringValue })),
+        },
+      });
+      expect(attributes.curlText).toBe('curl -u <redacted>');
+      expect(attributes.requiredOption).toEqual({
+        arrayValue: {
+          values: ['client', '--password', '<redacted>'].map((stringValue) => ({ stringValue })),
+        },
+      });
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'masks whitespace-delimited properties and retains ordinary lines in %s',
+    async (format) => {
+      const { attributes } = await exportCustomData(
+        {
+          properties: 'region test\npassword fixture/value\napi_key\tfixture-key\nretries 3',
+          dottedName: 'application.release.version',
+          dottedAssignment: 'application.api_key=fixture-key',
+        },
+        format,
+      );
+      expect(attributes.properties).toBe(
+        'region test\npassword <redacted>\napi_key\t<redacted>\nretries 3',
+      );
+      expect(attributes.dottedName).toBe('application.release.version');
+      expect(attributes.dottedAssignment).toBe('application.api_key=<redacted>');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'rejects sparse arrays beyond the structured node limit in %s',
+    async (format) => {
+      const sparse: string[] = [];
+      sparse[10_000] = 'fixture';
+      const { attributes } = await exportCustomData({ sparse, nested: { sparse } }, format);
+      expect(attributes.sparse).toBe('<redacted>');
+      expect(attributes.nested).toBe('<redacted>');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
     'redacts credential text formats without changing ordinary metadata in %s',
     async (format) => {
       const { attributes } = await exportCustomData(
@@ -1368,7 +1427,7 @@ describe('OTLPTracingExporter', () => {
               digest: `Authorization: Digest uri="/app?x=1&y=2", response="${credentials[0]}"`,
               header_text: `Cookie: sid="${credentials[1]}"`,
               cmd: ['deploy', '--api-key', credentials[2], '--region', 'test-region'],
-              optionOnly: ['deploy', '--password', '--region', 'test-region'],
+              dashPrefixedValue: ['deploy', '--password', '--fixture-value', 'test-region'],
               invocation: `deploy --dry-run --api-key=${credentials[2]} --token-count 12`,
               command: `deploy --dry-run --token "${credentials[3]}" --region test-region`,
             },
@@ -1407,12 +1466,12 @@ describe('OTLPTracingExporter', () => {
       expect(getAttributes(span).invocation).toBe(
         'deploy --dry-run --api-key=<redacted> --token-count 12',
       );
-      expect(getAttributes(span).optionOnly).toEqual({
+      expect(getAttributes(span).dashPrefixedValue).toEqual({
         arrayValue: {
           values: [
             { stringValue: 'deploy' },
             { stringValue: '--password' },
-            { stringValue: '--region' },
+            { stringValue: '<redacted>' },
             { stringValue: 'test-region' },
           ],
         },

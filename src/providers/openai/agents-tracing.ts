@@ -678,12 +678,14 @@ function sanitizeCredentialText(value: string): string {
 
   const options =
     /(^|\s)(--?[A-Za-z][A-Za-z\d_.-]*)([ \t]+|=)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s;]+)/g;
+  const executable = value.trimStart().match(/^(?:"([^"]+)"|'([^']+)'|(\S+))/);
+  const usesCurlAuth = isCurlCommand(executable?.[1] ?? executable?.[2] ?? executable?.[3]);
   let match: RegExpExecArray | null;
   let sanitized = '';
   let copied = 0;
   while ((match = options.exec(value))) {
     const [, prefix, option, separator] = match;
-    if (isCredentialAttributeKey(option) || ['-u', '--user', '--proxy-user'].includes(option)) {
+    if (isCredentialOption(option, usesCurlAuth)) {
       sanitized += value.slice(copied, match.index) + prefix + option + separator + '<redacted>';
       copied = options.lastIndex;
     } else {
@@ -696,6 +698,11 @@ function sanitizeCredentialText(value: string): string {
   // Preserve escapes before the generic masker can shorten quoted credentials.
   return redactQuotedCredentials(sanitizeBody(redactQuotedCredentials(value)))
     .replace(/\bAIza[a-zA-Z0-9_-]{35}\b/g, '<redacted>')
+    .replace(
+      /^([ \t]*)([A-Za-z_][A-Za-z\d_.-]*)([ \t]+)(?![ \t:=])([^\r\n]+)/gm,
+      (match, prefix: string, key: string, separator: string) =>
+        isCredentialAttributeKey(key) ? `${prefix}${key}${separator}<redacted>` : match,
+    )
     .replace(
       /(?<![A-Za-z0-9_-])([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*)?/g,
       (token, header: string) => {
@@ -728,7 +735,7 @@ function sanitizeCredentialText(value: string): string {
         isCredentialAttributeKey(key) ? `${prefix}${key}${separator}<redacted>` : match,
     )
     .replace(
-      /(^|[?&#;:\s.])((?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%-]*(?:\[(?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%-]*\])*)(\s*=\s*)(["']?)(?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?([^&#;\s"',}\]\\]+)\4/gi,
+      /(^|[?&#;:\s])((?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%-]*(?:\[(?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%-]*\])*)(\s*=\s*)(["']?)(?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?([^&#;\s"',}\]\\]+)\4/gi,
       (match, prefix: string, key: string, separator: string, quote: string) => {
         let decodedKey = key;
         try {
@@ -741,6 +748,19 @@ function sanitizeCredentialText(value: string): string {
           : match;
       },
     );
+}
+
+function isCurlCommand(executable: unknown): boolean {
+  return typeof executable === 'string' && /(?:^|[/\\])curl(?:\.exe)?$/i.test(executable);
+}
+
+function isCredentialOption(option: string, usesCurlAuth: boolean): boolean {
+  return (
+    isCredentialAttributeKey(option) ||
+    option === '--user' ||
+    option === '--proxy-user' ||
+    (option === '-u' && usesCurlAuth)
+  );
 }
 
 function hasCredentialNamedPayload(value: string): boolean {
@@ -917,7 +937,6 @@ function sanitizeAttributeByKey(key: string, value: unknown): unknown {
 function isCredentialPairValue(source: Record<string, unknown> | unknown[], key: string) {
   if (Array.isArray(source)) {
     const option = source[Number(key) - 1];
-    const value = source[Number(key)];
     if (typeof option !== 'string') {
       return false;
     }
@@ -925,9 +944,8 @@ function isCredentialPairValue(source: Record<string, unknown> | unknown[], key:
       return isCredentialAttributeKey(option);
     }
     return (
-      !(typeof value === 'string' && /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(value)) &&
-      (['-u', '--user', '--proxy-user'].includes(option) ||
-        (isCredentialAttributeKey(option) && /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(option)))
+      /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(option) &&
+      isCredentialOption(option, isCurlCommand(source[0]))
     );
   }
   return (
@@ -1016,6 +1034,10 @@ function sanitizeStructuredAttributeValue(
 
   while (stack.length > 0) {
     const { source, target, depth } = stack.pop()!;
+    if (Array.isArray(source) && source.length > budget.remaining) {
+      state.changed = true;
+      return '<redacted>';
+    }
     for (const [key, entry] of structuredAttributeEntries(source)) {
       if (--budget.remaining < 0) {
         state.changed = true;
