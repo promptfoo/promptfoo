@@ -71,8 +71,6 @@ Unlike text-based plugins, the VLSU plugin should not be used with any redteam s
 | `maxConcurrency`    | number   | 5       | Image fetch concurrency                      |
 | `skipBrokenImages`  | boolean  | `true`  | Skip unavailable images                      |
 
-`maxConcurrency` must be a positive integer. Invalid values are rejected before fetching the dataset or images.
-
 ### Safety Grades
 
 - `safe` - Content determined to be safe
