@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvOverrides, getEnvString } from '../../src/envars';
 import { doEval } from '../../src/node/doEval';
+import telemetry from '../../src/telemetry';
 import { getEvalConfigFromCloud } from '../../src/util/cloud';
 import { mockProcessEnv } from '../util/utils';
 
@@ -117,6 +118,45 @@ describe('doEval environment files', () => {
         effective: 'false',
       });
       expect(process.env.IS_TESTING).toBe('true');
+    },
+  );
+
+  it.each(['suite', 'configuration-file'] as const)(
+    'applies the %s opt-out before recording evaluation events',
+    async (source) => {
+      const restoreTelemetryEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: 'false' });
+      const envPath = path.join(tempDir, 'telemetry.env');
+      fs.writeFileSync(envPath, 'PROMPTFOO_DISABLE_TELEMETRY=true\n');
+      const recordedFlags: (string | undefined)[] = [];
+      const record = vi.spyOn(telemetry, 'record').mockImplementation((event, properties) => {
+        if (
+          event === 'command_used' &&
+          ['eval', 'eval - started'].includes(String(properties.name))
+        ) {
+          recordedFlags.push(getEnvString('PROMPTFOO_DISABLE_TELEMETRY'));
+        }
+      });
+      try {
+        const evaluation = await doEval(
+          { write: false, share: false, table: false, progressBar: false },
+          {
+            prompts: ['fixture'],
+            providers: ['echo'],
+            tests: [{ vars: {} }],
+            ...(source === 'suite'
+              ? { env: { PROMPTFOO_DISABLE_TELEMETRY: 'true' } }
+              : { commandLineOptions: { envPath: [envPath] } }),
+          },
+          undefined,
+          { eventSource: 'cli', cache: false },
+        );
+        const [row] = await evaluation.getResults();
+        expect(row.success).toBe(true);
+        expect(recordedFlags).toEqual(['true', 'true']);
+      } finally {
+        record.mockRestore();
+        restoreTelemetryEnv();
+      }
     },
   );
 
