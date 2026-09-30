@@ -1,30 +1,29 @@
 ---
 sidebar_label: GitLab CI
-description: Run Promptfoo evals in GitLab CI with a pinned reusable template, protected credentials, JUnit reports, merge request comments, and explicit sharing.
+description: Run trusted Promptfoo evals in GitLab CI with a pinned container template, an independent pass-rate check, JSON and JUnit artifacts, and explicit sharing.
 ---
 
 # Setting up Promptfoo with GitLab CI
 
-Use the reusable Promptfoo GitLab CI template to run evals in merge request, branch, and scheduled pipelines. Failed evals block the pipeline, GitLab displays JUnit results, and sharing stays disabled unless explicitly enabled.
+Use the reusable Promptfoo template to run trusted evals in merge request, branch, and scheduled pipelines. The job checks the pass rate, exports JSON and JUnit results, and shares results only when enabled.
 
 ## Prerequisites
 
-- A GitLab repository with CI/CD enabled
-- A Docker or Kubernetes runner that honors the template's pinned container image
-- A Promptfoo config file, such as `promptfooconfig.yaml`
-- Masked provider credentials when your provider requires authentication
-- GitLab 17.9 or later for [`include:integrity`](https://docs.gitlab.com/ci/yaml/#includeintegrity), or an immutable commit SHA on older GitLab versions
+- A GitLab project with CI/CD enabled.
+- A Docker or Kubernetes runner that honors the pinned container image.
+- A Promptfoo config file, such as `promptfooconfig.yaml`.
+- GitLab 17.9 or later for [`include:integrity`](https://docs.gitlab.com/ci/yaml/#includeintegrity), or a reviewed commit SHA on older versions.
 
 ## Configuration Steps
 
 ### 1. Create GitLab CI Configuration
 
-Add the organization-owned template to your `.gitlab-ci.yml` file:
+Add this to `.gitlab-ci.yml`:
 
 ```yaml title=".gitlab-ci.yml"
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-Xyd7vtbeLo0wC7VW6ZS+i2GZGRrsIV5pEhmHWF+4T+8='
+    integrity: 'sha256-6A8dnu7NKsAdzWTI+yIrtJyTfFPF9dA4OQP6a+KgNr8='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -42,47 +41,36 @@ promptfoo-eval:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 ```
 
-GitLab verifies the included template against its SHA-256 integrity value before starting the pipeline. The template runs as the unprivileged user in Promptfoo's official, digest-pinned container image, so provider secrets are never exposed to an npm installation. For GitLab versions older than 17.9, replace `main` with a full, reviewed commit SHA and omit `integrity`. Do not include an unpinned third-party branch.
+GitLab verifies the template's SHA-256 integrity value before starting the pipeline. On versions older than 17.9, replace `main` with a full, reviewed commit SHA and omit `integrity`. Update the pinned image tag and digest together when upgrading Promptfoo.
 
-The job-level merge request rule is intentional: GitLab requires `merge_request_event` rules in the consuming pipeline configuration to create merge request pipelines.
-
-To copy a complete, runnable example instead:
+The job-level `merge_request_event` rule is required for merge request pipelines. To copy a runnable example with a local template instead:
 
 ```bash
 npx promptfoo@latest init --example integration-gitlab-ci
 cd integration-gitlab-ci
 ```
 
-The example uses the `echo` provider, so its sample config runs without provider credentials.
+The bundled config uses the `echo` provider and needs no API credentials.
 
 ### 2. Set Up Environment Variables
 
-In GitLab, go to **Settings > CI/CD > Variables** and add provider credentials such as `OPENAI_API_KEY` as masked variables. Use protected variables for trusted protected branches and tags whenever possible.
+Store provider credentials as masked, protected variables under **Settings > CI/CD > Variables**. Only trusted pipelines should receive them. Protected variables in merge request pipelines require protected source and target branches in the same project, appropriate user permissions, and the project's protected-resource setting. See [GitLab's requirements](https://docs.gitlab.com/ci/pipelines/merge_request_pipelines/#control-access-to-protected-variables-and-runners).
 
-:::warning
+The template runs project code with the job's permissions. Configs, providers, assertions, and pipeline files can access credentials available to the job; this template does not provide a sandbox for untrusted code.
 
-Protected variables are not available to ordinary merge request pipelines. GitLab only exposes protected resources when the source and target branches are both protected, belong to the same project, and the triggering user has the required access. Never run fork-controlled code in a parent-project pipeline that has access to provider credentials or GitLab write tokens.
+| Variable                        | Default                | Purpose                                        |
+| ------------------------------- | ---------------------- | ---------------------------------------------- |
+| `PROMPTFOO_CONFIG`              | `promptfooconfig.yaml` | Config file to evaluate                        |
+| `PROMPTFOO_OUTPUT_DIR`          | `.promptfoo-results`   | Empty directory for JSON and JUnit results     |
+| `PROMPTFOO_PASS_RATE_THRESHOLD` | `100`                  | Minimum passing percentage, from 0 through 100 |
+| `PROMPTFOO_SHARE`               | `false`                | Upload results only when set to `true`         |
+| `PROMPTFOO_CACHE_PATH`          | `.promptfoo/cache`     | Response cache directory                       |
 
-:::
-
-The template supports these job variables:
-
-| Variable                         | Default                 | Purpose                                                                |
-| -------------------------------- | ----------------------- | ---------------------------------------------------------------------- |
-| `PROMPTFOO_CONFIG`               | `promptfooconfig.yaml`  | Config file to evaluate                                                |
-| `PROMPTFOO_VERSION`              | `0.123.0`               | Exact expected version of the digest-pinned Promptfoo container        |
-| `PROMPTFOO_OUTPUT_DIR`           | `.promptfoo-results`    | Directory containing JSON and JUnit results                            |
-| `PROMPTFOO_PASS_RATE_THRESHOLD`  | `100`                   | Minimum passing percentage needed for the job to succeed               |
-| `PROMPTFOO_SHARE`                | `false`                 | Upload eval results only when explicitly set to `true`                 |
-| `PROMPTFOO_SHARING_APP_BASE_URL` | `https://promptfoo.app` | Allowed origin for shared-result links in comments                     |
-| `PROMPTFOO_GITLAB_TOKEN`         | Unset                   | Optional write token scoped only to the `promptfoo-review` environment |
-| `PROMPTFOO_GITLAB_TRUST_PROXY`   | `false`                 | Honor proxy variables only when the proxy and pipeline are trusted     |
+The job sets `PROMPTFOO_SELF_HOSTED: 'false'` to enable ordinary `{{env.NAME}}` templates in CLI configs. It uses the installed CLI in the pinned image and does not install npm packages during the job.
 
 ### 3. Configure Caching (Optional but Recommended)
 
-The template stores Promptfoo's response cache in `.promptfoo/cache` and uses a key containing the project, job name, and immutable commit SHA. This avoids collisions between branch names that normalize to the same GitLab slug; caches are reused by retries of the same commit rather than shared between commits. Scheduled evals bypass cached responses to detect model or endpoint changes.
-
-Keep GitLab's separate caches for protected branches enabled, and consider disabling caching when prompt inputs or model responses contain sensitive data:
+The response-cache key includes the project, job name, and commit SHA. Retries of the same commit can reuse responses; scheduled pipelines always use `--no-cache`. To disable the GitLab cache:
 
 ```yaml
 promptfoo-eval:
@@ -92,45 +80,23 @@ promptfoo-eval:
 
 ### 4. Storing Results
 
-Each job writes:
+Each job writes `.promptfoo-results/results.json` and `.promptfoo-results/results.junit.xml`. Artifacts upload after both passing and failing evals. GitLab displays JUnit results in the pipeline **Tests** tab and merge request test summary.
 
-- `.promptfoo-results/results.json` for the complete eval output.
-- `.promptfoo-results/results.junit.xml` for the merge request test summary and pipeline **Tests** tab.
+UI and API artifact downloads require the Developer role or higher. This restriction does not cover runner job-token downloads; review [artifact access](https://docs.gitlab.com/ci/yaml/#artifactsaccess) and project CI/CD visibility before storing sensitive results. Artifacts can contain prompts, responses, and grading details.
 
-Artifacts are uploaded even when the eval fails and are configured to expire after one week. Downloads through the GitLab UI and API require the Developer role or higher. This restriction does not cover runner job-token downloads; review [artifact access](https://docs.gitlab.com/ci/yaml/#artifactsaccess) and project CI/CD visibility before storing sensitive results. GitLab keeps artifacts from the most recent successful pipeline on each ref indefinitely by default; disable **Keep artifacts from most recent successful jobs** when strict expiration is required. Treat all result artifacts as sensitive because they can contain prompts, model responses, and grading details.
+Artifacts expire after one week. GitLab keeps the latest successful artifacts on each ref by default; disable **Keep artifacts from most recent successful jobs** if strict expiration is required.
 
 ## Advanced Configuration
 
 ### Adding Custom Test Steps
 
-Add a downstream job to inspect the JSON results without replacing the template's inherited `script`:
+Use a downstream job to inspect exported results. Extending `script` replaces the template's CLI invocation and pass-rate check, so leave it inherited when using the built-in behavior.
 
-```yaml
-inspect-promptfoo-results:
-  image: node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd
-  cache: []
-  artifacts: {}
-  variables:
-    GIT_STRATEGY: empty
-  needs:
-    - job: promptfoo-eval
-      artifacts: true
-      optional: true
-  when: always
-  script:
-    - |
-      if [ ! -f .promptfoo-results/results.json ]; then
-        echo 'Skipping inspection: no eval results were produced.'
-        exit 0
-      fi
-      node -e 'console.log(JSON.parse(require("node:fs").readFileSync(".promptfoo-results/results.json", "utf8")).results.stats)'
-```
-
-Do not override `script` merely to enforce failures: the template already preserves Promptfoo's exit code and defaults to a 100% pass-rate threshold.
+The job preserves CLI errors. After a successful CLI exit, it independently validates the JSON counts and checks the job's pass-rate threshold. Config-level exit-code or threshold overrides cannot skip this check. Missing, malformed, or empty results fail the job. Lower `PROMPTFOO_PASS_RATE_THRESHOLD` only when a lower passing percentage is intentional.
 
 ### Parallel Evaluation
 
-Run independent eval configs as separate jobs and give each one a unique artifact directory:
+Use separate jobs for independent configs:
 
 ```yaml
 promptfoo-support:
@@ -146,67 +112,24 @@ promptfoo-billing:
     PROMPTFOO_OUTPUT_DIR: .promptfoo-results/billing
 ```
 
-The cache key already includes the GitLab job name and commit SHA. If these jobs should run in merge request pipelines, add the same explicit merge request `rules` shown in the basic configuration.
+Add the same explicit merge request rules from the basic configuration if these jobs should run in merge request pipelines. Each output directory must be empty before the eval starts.
 
 ### Integration with GitLab Merge Requests
 
-To enable optional merge request summaries, create a short-lived, project-scoped access token with the minimum API access needed to create and update merge request notes. Store it as the masked, protected `PROMPTFOO_GITLAB_TOKEN` CI/CD variable and set its **Environment scope** to exactly `promptfoo-review`.
+GitLab reads the JUnit report directly to show passing and failing tests. The template needs no project access token and does not post merge request comments.
 
-The pipeline must meet [GitLab’s protected-resource requirements](https://docs.gitlab.com/ci/pipelines/merge_request_pipelines/#control-access-to-protected-variables-and-runners) to receive the token. Without it, the comment job skips. Add a separate comment job after the eval:
-
-```yaml
-promptfoo-comment:
-  extends: .promptfoo-comment
-  variables:
-    PROMPTFOO_OUTPUT_DIR: .promptfoo-results
-    PROMPTFOO_SHARE: 'false'
-  needs:
-    - job: promptfoo-eval
-      artifacts: true
-      optional: true
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      changes:
-        - .gitlab-ci.yml
-        - promptfooconfig.yaml
-        - prompts/**/*
-        - tests/**/*
-      when: always
-```
-
-GitLab's built-in `CI_JOB_TOKEN` can read merge request notes but cannot create or update them, so a project access token is required. The separate comment job starts in a fresh, unprivileged container with no checkout and accesses the write token only through its `promptfoo-review` environment scope. Repeat any job-level `PROMPTFOO_OUTPUT_DIR`, `PROMPTFOO_SHARE`, or `PROMPTFOO_SHARING_APP_BASE_URL` overrides from the eval job in the comment job because GitLab `needs` does not inherit job variables. The eval job fails closed if that token is exposed to it, removes token-bearing Git metadata before executable providers run, and forces failed assertions to return a nonzero exit code.
-
-Keep the comment job's `changes` rules aligned with the eval so unrelated merge requests skip both jobs. Both jobs override default OIDC ID tokens with `id_tokens: {}` and set the pinned image’s system PATH before invoking executables. Keep the eval's inherited `after_script` empty: GitLab starts it with the original job credentials.
-
-The comment job reads the eval status from GitLab's pipeline jobs API. Set `PROMPTFOO_EVAL_JOB_NAME` to the eval job's exact name if you rename it. With `when: always`, it summarizes failed evals even when no results were written. A successful eval must supply valid JSON results; missing or malformed artifacts fail the comment job. A per-merge-request resource group serializes overlapping updates, and older pipelines cannot overwrite a newer summary.
-
-Only provide a write token to trusted pipelines. Masking does not prevent malicious executable providers, JavaScript assertions, or modified pipeline configuration from exfiltrating credentials that are otherwise exposed to a job.
-
-Proxy settings are ignored by default to prevent an attacker-controlled `HTTP_PROXY` or `HTTPS_PROXY` from intercepting the GitLab write token. Set `PROMPTFOO_GITLAB_TRUST_PROXY: 'true'` only for trusted pipelines whose configured proxy is authorized to handle GitLab API credentials.
-
-The eval also fails closed when a Kubernetes or custom executor leaves GitLab credentials readable in a long-lived, same-user container init process. Use an executor that starts the sanitized eval as PID 1, or configure runner-level process isolation before enabling executable providers.
-
-Kubernetes runners must set [`automount_service_account_token = false`](https://docs.gitlab.com/runner/executors/kubernetes/#configuration-settings) in the runner configuration. The eval stops before loading repository code if the standard service-account token mount is readable.
-
-Disable GitLab Agent CI access for eval jobs; the template rejects a readable `KUBECONFIG` before executable providers start.
-
-To include a Promptfoo Cloud link, set `PROMPTFOO_SHARE: 'true'` and configure a masked `PROMPTFOO_API_KEY`. Sharing is disabled with `--no-share` by default, including when cloud credentials or sharing-enabled config are present.
+Sharing is disabled with `--no-share`. To upload results to Promptfoo Cloud, set `PROMPTFOO_SHARE: 'true'` and configure a protected `PROMPTFOO_API_KEY` variable. Review which prompts and outputs will be shared before enabling it.
 
 ## Example Output
 
-After the eval runs, GitLab displays:
-
-- A passing or failing pipeline status that reflects the configured pass-rate threshold.
-- JUnit results in the merge request test summary and pipeline **Tests** tab.
-- Restricted JSON and JUnit artifacts, including for failed jobs.
-- An optional merge request comment with the pass count and, when explicitly enabled, a Promptfoo Cloud link.
+A successful job prints the passed and total test counts and the required pass rate. GitLab shows the job status, JUnit test summary, and downloadable JSON and JUnit artifacts.
 
 ## Troubleshooting
 
-1. **Template integrity mismatch:** Update the integrity value only after reviewing the new template content. To calculate it locally, run `openssl dgst -sha256 -binary gitlab-ci.yml | openssl base64 -A` and prefix the result with `sha256-`.
-2. **Provider credentials are unavailable:** Check whether the variables are masked or protected and whether the merge request pipeline satisfies GitLab's protected-resource requirements.
-3. **Merge request comments are missing:** Verify that the `.promptfoo-comment` job is configured, `PROMPTFOO_GITLAB_TOKEN` is scoped to exactly `promptfoo-review`, and the job runs in a merge request pipeline. The comment job reports expired tokens and HTTP errors directly.
-4. **Internal certificate authority:** Store the CA bundle as a GitLab file-type variable and set `NODE_EXTRA_CA_CERTS` to its file path. Never disable TLS certificate verification.
-5. **Job timing out:** Override `timeout` in the extending job, for example `timeout: 2 hours`.
+1. **Template integrity mismatch:** Review the updated template before changing its hash. Calculate it with `openssl dgst -sha256 -binary gitlab-ci.yml | openssl base64 -A` and prefix the value with `sha256-`.
+2. **Provider credentials are unavailable:** Check the variable's protected status and whether the pipeline meets GitLab's protected-resource requirements.
+3. **Artifact directory is not empty:** Use a fresh checkout and keep the output directory out of caches and incoming artifacts.
+4. **Missing or invalid results:** Inspect the CLI logs and confirm the configured file contains runnable tests. A successful process exit alone does not pass the job.
+5. **Job timing out:** Set `timeout` on the extending job, for example `timeout: 2 hours`.
 
-For more details, see the [configuration reference](/docs/configuration/reference), [JUnit output formats](/docs/configuration/outputs), and [GitLab CI/CD component security guidance](https://docs.gitlab.com/ci/components/#cicd-component-security-best-practices).
+See the [configuration reference](/docs/configuration/reference) and [JUnit output formats](/docs/configuration/outputs) for more details.
