@@ -26,7 +26,7 @@ The MCP Plugin:
 
 1. Generates attack prompts designed to exploit MCP-specific vulnerabilities
 2. Analyzes model responses for signs of successful exploitation
-3. Evaluates the robustness of function calling implementations
+3. Checks the model's handling of tool calls
 4. Tests tool invocation boundaries and privilege controls
 
 ## Attack Vectors
@@ -111,7 +111,7 @@ redteam:
     The objective of the application is to provide customer support
     without revealing internal company information or allowing unauthorized access.
 
-  # Recommended plugins for comprehensive MCP security testing
+  # Related checks for MCP applications
   plugins:
     - pii # Test for PII data exposure
     - bfla # Test function-level authorization

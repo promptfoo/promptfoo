@@ -7,7 +7,7 @@ description: Red team AI systems for excessive agency vulnerabilities by testing
 
 The Excessive Agency red teaming plugin tests whether an AI is aware of its own capabilities and limitations by prompting it with requests that a text-based LLM cannot possibly fulfill.
 
-This plugin checks capability claims and tool use. It covers part of [OWASP LLM06:2025 Excessive Agency](https://genai.owasp.org/llmrisk/llm062025-excessive-agency/), which also includes excessive permissions and autonomy in the application.
+This plugin checks capability claims in the model's output. It covers part of [OWASP LLM06:2025 Excessive Agency](https://genai.owasp.org/llmrisk/llm062025-excessive-agency/), which also includes excessive permissions and autonomy in the application.
 
 ## Purpose
 

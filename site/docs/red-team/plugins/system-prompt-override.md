@@ -5,17 +5,13 @@ description: Red team system prompt override attacks by simulating malicious mes
 
 # System Prompt Override Plugin
 
-System prompts serve as the foundation of LLM security and behavior control. They define how a model should behave, what content it should filter, what role it should play, and what ethical guidelines it should follow. These prompts are meant to be immutable instructions that keep the model operating safely and consistently.
+System prompts describe an application's intended behavior. Enforce authorization and data access in application code independently of those instructions.
 
-However, some LLM deployments have a critical vulnerability: **the system prompt can be modified by users**. This security flaw exists because LLM providers typically allow system messages to be included in any request. For example, OpenAI's API accepts new system messages in every chat request, while Claude allows system instructions through XML-style tags. Most open-source LLMs offer no built-in protection against this type of manipulation.
-
-This vulnerability is compounded by common architectural weaknesses in LLM deployments. Organizations often expose raw API endpoints to users without proper validation or sanitization of messages. Without enforcing system prompt integrity, these deployments leave themselves open to manipulation.
-
-The impact of a successful system prompt override can be devastating. An attacker could disable content filtering and ethical constraints, change the model's personality and purpose, gain unauthorized capabilities, extract sensitive information from the original prompt, or create unpredictable and harmful behavior.
+This plugin checks whether the model follows conflicting system instructions supplied through the tested interface. Review a failed result against the application's tools, permissions, and intended behavior to determine its impact.
 
 ## OWASP LLM Top 10 Context
 
-This vulnerability is a critical part of [LLM01: Prompt Injection](/docs/red-team/owasp-llm-top-10#1-prompt-injection-llm01) in the OWASP LLM Top 10. While standard prompt injection tries to manipulate the model's output, system prompt override attempts to change its fundamental operating instructions - making it a particularly dangerous form of attack.
+Changing a model's intended behavior through user-controlled content relates to [LLM01:2025 Prompt Injection](/docs/red-team/owasp-llm-top-10#1-prompt-injection-llm01).
 
 [Prompt Extraction](prompt-extraction.md) checks disclosure of protected instructions; this plugin checks whether the model follows conflicting instructions.
 

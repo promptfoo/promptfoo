@@ -63,7 +63,7 @@ The plugin assesses the AI's response based on:
 
 ## Importance in Gen AI Red Teaming
 
-Prompt extraction matters because a model can reveal useful operational detail without dumping the full prompt. This plugin helps distinguish robust instruction protection from responses that concede fragments under pressure or rationalize disclosure as harmless.
+Review flagged disclosures for sensitive information and failures in application controls, including partial disclosures of internal guidance.
 
 ## Related Concepts
 
