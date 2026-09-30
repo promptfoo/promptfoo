@@ -7,6 +7,8 @@ import { OllamaChatProvider, OllamaCompletionProvider } from '../../src/provider
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 import { OpenAiTtsProvider } from '../../src/providers/openai/tts';
 import { ReplicateImageProvider, ReplicateProvider } from '../../src/providers/replicate';
+import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
+import * as targetTracer from '../../src/tracing/targetTracer';
 import { ResultFailureReason } from '../../src/types/index';
 import { fetchWithRetries } from '../../src/util/fetch/index';
 import { createDeferred } from '../util/utils';
@@ -76,6 +78,28 @@ const providers = [
 ];
 
 describe('latency assertions with real provider caching', () => {
+  it('annotates dropped cache metadata before the traced provider call finishes', async () => {
+    vi.mocked(fetchWithRetries).mockImplementation(async () =>
+      Response.json({ choices: [{ text: output }] }),
+    );
+    const provider = new LocalAiCompletionProvider('fixture');
+    await evaluateLatency(provider);
+    vi.spyOn(evaluatorTracing, 'generateTraceContextIfNeeded').mockResolvedValue({
+      traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+    });
+    const observed: Array<boolean | undefined> = [];
+    vi.spyOn(targetTracer, 'withTracedProviderCall').mockImplementation(async (options, invoke) => {
+      const result = await invoke(options.callContext);
+      observed.push(result.cacheHit);
+      return result;
+    });
+
+    const [replay] = await evaluateLatency(provider);
+    expect(replay.error).toContain('does not support cached results');
+    expect(observed).toEqual([true]);
+    expect(fetchWithRetries).toHaveBeenCalledOnce();
+  });
+
   it.each(providers)('rejects stored $name responses', async (fixture) => {
     vi.mocked(fetchWithRetries).mockImplementation(async () => Response.json(fixture.response));
     const provider = fixture.create();
@@ -254,16 +278,32 @@ describe('latency assertions with real provider caching', () => {
     expect(fetchWithRetries).toHaveBeenCalledTimes(4);
   });
 
-  it.each([false, true])(
-    'grades both live background subscribers (polling: %s)',
-    async (polling) => {
+  it.each([
+    [false, false],
+    [false, true],
+    [true, false],
+    [true, true],
+  ])(
+    'grades both live background subscribers (polling: %s, refusal: %s)',
+    async (polling, refusal) => {
       const creation = createDeferred<Response>();
       const completed = {
         id: 'resp_latency_fixture',
-        status: 'completed',
-        output: [
-          { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: output }] },
-        ],
+        status: refusal ? 'incomplete' : 'completed',
+        ...(refusal
+          ? {
+              error_type: 'refusal',
+              error: { code: 'bio_policy', message: 'This request was declined.' },
+            }
+          : {
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: output }],
+                },
+              ],
+            }),
         usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
       };
       vi.mocked(fetchWithRetries)
@@ -272,8 +312,9 @@ describe('latency assertions with real provider caching', () => {
       const provider = new OpenAiResponsesProvider('gpt-4.1', {
         config: {
           apiKey: 'fixture-key',
+          apiBaseUrl: 'https://openrouter.ai/api/v1',
           background: true,
-          headers: { 'OpenAI-Project': 'fixture-project' },
+          headers: { 'OpenAI-Project': 'fixture-project', Authorization: '' },
         },
       });
 
@@ -282,7 +323,7 @@ describe('latency assertions with real provider caching', () => {
       expect(fetchWithRetries).toHaveBeenCalledTimes(1);
       creation.resolve(
         Response.json(
-          polling ? { ...completed, status: 'queued', output: [], usage: null } : completed,
+          polling ? { id: completed.id, status: 'queued', output: [], usage: null } : completed,
         ),
       );
       await vi.advanceTimersByTimeAsync(0);
@@ -290,16 +331,18 @@ describe('latency assertions with real provider caching', () => {
 
       expect(results.map((result) => result.response?.cached).sort()).toEqual([false, true]);
       for (const result of results) {
-        expect(result.response?.output).toBe(output);
+        expect(result.response?.output).toBe(refusal ? 'This request was declined.' : output);
         expect(result.response?.cacheHit).toBe(false);
         expect(result.success).toBe(false);
         expect(result.failureReason).not.toBe(ResultFailureReason.ERROR);
         expect(result.error).toContain('threshold 10ms');
       }
 
-      const [replay] = await evaluateLatency(provider);
-      expect(replay.failureReason).toBe(ResultFailureReason.ERROR);
-      expect(replay.error).toContain('does not support cached results');
+      if (!refusal) {
+        const [replay] = await evaluateLatency(provider);
+        expect(replay.failureReason).toBe(ResultFailureReason.ERROR);
+        expect(replay.error).toContain('does not support cached results');
+      }
       expect(fetchWithRetries).toHaveBeenCalledTimes(polling ? 2 : 1);
     },
   );
