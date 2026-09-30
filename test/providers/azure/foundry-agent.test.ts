@@ -432,6 +432,35 @@ describe('AzureFoundryAgentProvider', () => {
       expect(result.output).toEqual({ ok: true });
     });
 
+    it.each([undefined, false, true])(
+      'preserves configured schema strictness and defaults omission to false: %s',
+      async (strict) => {
+        mockGetAgent.mockResolvedValue(mockAgent);
+        mockResponsesCreate.mockResolvedValue(createMessageResponse('{"ok":true}'));
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: {
+            projectUrl,
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                name: 'answer',
+                ...(strict === undefined ? {} : { strict }),
+                schema: {
+                  type: 'object',
+                  properties: { ok: { type: 'boolean' } },
+                  additionalProperties: strict !== true,
+                },
+              },
+            },
+          },
+        });
+
+        await provider.callApi('test prompt');
+
+        expect(mockResponsesCreate.mock.calls[0][0].text.format.strict).toBe(strict ?? false);
+      },
+    );
+
     it('keeps prompt callbacks isolated from cached provider callbacks across calls', async () => {
       mockGetAgent.mockResolvedValue(mockAgent);
       vi.mocked(isCacheEnabled).mockReturnValue(true);

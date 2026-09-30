@@ -3663,6 +3663,24 @@ describe('OpenAiResponsesProvider request building', () => {
     expect('max_completion_tokens' in body).toBe(false);
   });
 
+  it.each([
+    [{ max_completion_tokens: 50 }, 50],
+    [{ max_completion_tokens: 0 }, 0],
+    [{ max_output_tokens: 40, max_completion_tokens: 50 }, 40],
+  ])('resolves prompt token caps before provider aliases: %j', async (promptConfig, expected) => {
+    const provider = new OpenAiResponsesProvider('gpt-5.6-luna', {
+      config: { max_output_tokens: 1000, max_completion_tokens: 2000 },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt', {
+      vars: {},
+      prompt: { raw: 'Test prompt', label: 'test', config: promptConfig },
+    });
+
+    expect(body.max_output_tokens).toBe(expected);
+    expect(body).not.toHaveProperty('max_completion_tokens');
+  });
+
   it('should prefer an explicit max_output_tokens over max_completion_tokens', async () => {
     const provider = new OpenAiResponsesProvider('gpt-5.6-luna', {
       config: { apiKey: 'test-key', max_completion_tokens: 77, max_output_tokens: 99 },

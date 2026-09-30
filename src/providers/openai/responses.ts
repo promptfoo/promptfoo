@@ -1079,8 +1079,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const reasoningMaxOutputTokensDefault =
       getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
     const maxOutputTokens =
-      config.max_output_tokens ??
-      config.max_completion_tokens ??
+      context?.prompt?.config?.max_output_tokens ??
+      context?.prompt?.config?.max_completion_tokens ??
+      this.config.max_output_tokens ??
+      this.config.max_completion_tokens ??
       (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
 
     const gpt6Reasoning = isGPT6Model
