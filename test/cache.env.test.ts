@@ -139,6 +139,44 @@ describe('invocation-scoped cache settings', () => {
     expect(fs.existsSync(path.join(tempDir, 'disabled'))).toBe(false);
   });
 
+  it.each(['api', 'scope', 'env'] as const)(
+    'clears retained isolated handles when caching is disabled by %s',
+    async (mode) => {
+      await cliState.withEnv(
+        { ...memory, ...(mode === 'env' ? { PROMPTFOO_CACHE_ENABLED: 'false' } : {}) },
+        async () => {
+          if (mode === 'api') {
+            cache.disableCache();
+          }
+          const run = async () => {
+            const first = cache.getCache();
+            await first.set('key', 'first');
+            const second = cache.getCache();
+            expect(await second.get('key')).toBeUndefined();
+            await second.set('key', 'second');
+            const namespaced = await cache.withCacheNamespace('held', async () => cache.getCache());
+            await namespaced.set('key', 'namespaced');
+
+            await cache.clearCache(path.join(tempDir, 'unrelated'));
+            expect(await first.get('key')).toBe('first');
+            expect(await second.get('key')).toBe('second');
+            expect(await namespaced.get('key')).toBe('namespaced');
+
+            await cache.clearCache();
+            expect(await first.get('key')).toBeUndefined();
+            expect(await second.get('key')).toBeUndefined();
+            expect(await namespaced.get('key')).toBeUndefined();
+          };
+          if (mode === 'scope') {
+            await cache.withCacheEnabled(false, run);
+          } else {
+            await run();
+          }
+        },
+      );
+    },
+  );
+
   it.each(['backend', 'namespace'])(
     'does not let a response from before %s clearing overwrite or detach a newer request',
     async (kind) => {

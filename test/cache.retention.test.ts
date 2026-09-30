@@ -16,6 +16,7 @@ it('releases unused backends, TTL instances, and namespace wrappers', () => {
       const backendRefs = [];
       const ttlRefs = [];
       const namespaceRefs = [];
+      const disabledRefs = [];
       const customPath = ${JSON.stringify(directory)} + '/0';
       const pendingEnv = {
         PROMPTFOO_CACHE_TYPE: 'disk',
@@ -61,6 +62,9 @@ it('releases unused backends, TTL instances, and namespace wrappers', () => {
       const pendingFetch = inPendingNamespace(call);
       await fetchEntered;
       for (let index = 0; index < 80; index++) {
+        await cache.withCacheEnabled(false, async () => {
+          disabledRefs.push(new WeakRef(cache.getCache()));
+        });
         backendRefs.push(new WeakRef(cliState.withEnv({
           PROMPTFOO_CACHE_TYPE: 'disk',
           PROMPTFOO_CACHE_PATH: ${JSON.stringify(directory)} + '/' + index,
@@ -97,6 +101,7 @@ it('releases unused backends, TTL instances, and namespace wrappers', () => {
       }, () => cache.getCache().get('previous-result'));
       console.log(JSON.stringify({
         backends: backendRefs.filter(ref => ref.deref()).length,
+        disabled: disabledRefs.filter(ref => ref.deref()).length,
         ttls: ttlRefs.filter(ref => ref.deref()).length,
         namespaces: namespaceRefs.filter(ref => ref.deref()).length,
         customCleared: customResult === undefined,
@@ -119,6 +124,7 @@ it('releases unused backends, TTL instances, and namespace wrappers', () => {
     expect(child.status, child.stderr).toBe(0);
     const retained = JSON.parse(child.stdout.trim());
     expect(retained.backends).toBeLessThanOrEqual(32);
+    expect(retained.disabled).toBe(0);
     expect(retained.ttls).toBeLessThanOrEqual(16);
     expect(retained.namespaces).toBe(0);
     expect(retained.customCleared).toBe(true);

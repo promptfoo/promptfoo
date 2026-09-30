@@ -65,8 +65,10 @@ class CacheRegistry<Key extends string | number, Value extends object> {
     return value;
   }
 
-  set(key: Key, value: Value): void {
-    this.retained.set(key, value);
+  set(key: Key, value: Value, retain = true): void {
+    if (retain) {
+      this.retained.set(key, value);
+    }
     this.references.set(key, new WeakRef(value));
     this.finalizer.register(value, key);
   }
@@ -221,9 +223,8 @@ function getCacheBackend(
       writes: new Map(),
       clears: new Map(),
     };
-    if (retain) {
-      cacheBackends.set(identity, backend);
-    }
+    // Disabled handles remain isolated, but global clearing must still reach live ones.
+    cacheBackends.set(retain ? identity : `disabled:${backend.clearGeneration}`, backend, retain);
   }
   return backend;
 }
