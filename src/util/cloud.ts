@@ -7,6 +7,7 @@ import { ProviderOptionsSchema } from '../validators/providers';
 import { fetchWithProxy } from './fetch/index';
 import invariant from './invariant';
 import { normalizeProviderRef } from './providerRef';
+import { sanitizeUrl } from './sanitizer';
 import { checkServerFeatureSupport } from './server';
 import { isUuid } from './uuid';
 
@@ -643,6 +644,33 @@ function convertErrorsToReadableMessage(
   return errors.map((error) => `${error.type} ${error.id}: ${error.message}`).join(', ');
 }
 
+function permissionCheckProvider(provider: unknown): string | ProviderOptions {
+  if (typeof provider === 'string') {
+    return sanitizeUrl(provider);
+  }
+
+  const ref = normalizeProviderRef(provider);
+  const id =
+    isRecord(provider) && typeof provider.id === 'function'
+      ? provider.id()
+      : ref.kind === 'map' && ref.loadProviderPath.startsWith(CLOUD_PROVIDER_PREFIX)
+        ? ref.loadProviderPath
+        : ref.id;
+  const config =
+    'loadOptions' in ref
+      ? ref.loadOptions.config
+      : isRecord(provider)
+        ? provider.config
+        : undefined;
+  const linkedTargetId = isRecord(config) ? config.linkedTargetId : undefined;
+  return {
+    id: sanitizeUrl(id),
+    ...(typeof linkedTargetId === 'string'
+      ? { config: { linkedTargetId: sanitizeUrl(linkedTargetId) } }
+      : {}),
+  };
+}
+
 /**
  * Validates that the current user has necessary permissions for the given configuration.
  * Checks with PromptFoo Cloud to ensure providers and other resources can be accessed.
@@ -672,12 +700,14 @@ export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Pro
       );
       return;
     }
-    // Strip large fields not needed for permission validation.
-    // The server only needs providers, metadata, and whether redteam exists.
-    const { tests, scenarios, defaultTest, evaluateOptions, ...minimalConfig } = config;
-    if (minimalConfig.redteam) {
-      minimalConfig.redteam = {} as typeof minimalConfig.redteam;
-    }
+    // Permission checks need provider identities, metadata, and redteam presence.
+    const minimalConfig = {
+      providers: Array.isArray(config.providers)
+        ? config.providers.map(permissionCheckProvider)
+        : permissionCheckProvider(config.providers),
+      metadata: config.metadata,
+      ...(config.redteam ? { redteam: {} } : {}),
+    };
 
     const response = await makeRequest('permissions/check', 'POST', {
       config: minimalConfig,

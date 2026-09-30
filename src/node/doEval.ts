@@ -57,7 +57,7 @@ import {
   writeMultipleOutputs,
 } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
-import { checkProviderApiKeys } from '../util/provider';
+import { checkProviderApiKeys, isProviderAllowed } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
@@ -93,6 +93,28 @@ export const EvalCommandSchema = CommandLineOptionsSchema.extend({
 }).partial();
 
 export type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
+
+function selectEligibleProviders(testSuite: TestSuite): TestSuite['providers'] {
+  const defaultProviders =
+    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest.providers : undefined;
+  const restrictions = testSuite.tests?.length
+    ? testSuite.tests.map((test) => test.providers ?? defaultProviders)
+    : testSuite.scenarios
+      ? []
+      : [defaultProviders];
+  for (const scenario of testSuite.scenarios ?? []) {
+    for (const data of scenario.config) {
+      for (const test of scenario.tests ?? [{}]) {
+        restrictions.push(
+          { providers: defaultProviders, ...data, ...test }.providers ?? defaultProviders,
+        );
+      }
+    }
+  }
+  return testSuite.providers.filter((provider) =>
+    restrictions.some((allowed) => isProviderAllowed(provider, allowed)),
+  );
+}
 
 function runtimeTagsForEval(
   cmdObj: Partial<CommandLineOptions & Command>,
@@ -357,6 +379,9 @@ async function doEvalWithEnv(
   const runEvaluationWithEnv = async (runEnv: EnvOverrides, initialization?: boolean) => {
     const startTime = Date.now();
     let testSources: Awaited<ReturnType<typeof resolveConfigs>>['testSources'];
+    let selectedProviderConfigs: Awaited<
+      ReturnType<typeof resolveConfigs>
+    >['selectedProviderConfigs'];
     telemetry.record('command_used', {
       name: 'eval - started',
       watch: Boolean(cmdObj.watch),
@@ -544,6 +569,7 @@ async function doEvalWithEnv(
         basePath: _basePath,
         commandLineOptions,
         testSources,
+        selectedProviderConfigs,
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
@@ -554,7 +580,32 @@ async function doEvalWithEnv(
     // Application callers can select resolved inputs inside the evaluation's env scope.
     // Keep this callback separate from options loaded from user configuration.
     if (prepareTestSuite) {
+      const originalProviders = [...testSuite.providers];
+      const originalTests = testSuite.tests;
+      const testConfigs = config.tests;
+      const testsBySource =
+        Array.isArray(testConfigs) && originalTests
+          ? new Map(originalTests.map((test, index) => [test, testConfigs[index]]))
+          : undefined;
       testSuite = prepareTestSuite(testSuite);
+      testSuite.providers = selectEligibleProviders(testSuite);
+      const providerConfigs = selectedProviderConfigs ?? config.providers;
+      const configs = Array.isArray(providerConfigs)
+        ? providerConfigs
+        : providerConfigs === undefined
+          ? []
+          : [providerConfigs];
+      if (configs.length !== originalProviders.length) {
+        throw new Error('Could not preserve the selected provider configurations.');
+      }
+      const selected = new Set(testSuite.providers);
+      config = {
+        ...config,
+        providers: configs.filter((_, index) => selected.has(originalProviders[index])),
+        tests: testsBySource
+          ? testSuite.tests?.map((test) => testsBySource.get(test)!)
+          : testConfigs,
+      };
     }
 
     const describeReplayAction = (isRetryErrors: boolean | undefined) =>
@@ -807,17 +858,7 @@ async function doEvalWithEnv(
       });
     }
 
-    await checkCloudPermissions(
-      prepareTestSuite
-        ? {
-            ...config,
-            // Keep cloud target identity without sending resolved credentials.
-            providers: testSuite.providers.map((provider) => ({
-              id: provider.config?.linkedTargetId ?? provider.id(),
-            })),
-          }
-        : config,
-    );
+    await checkCloudPermissions(config);
 
     const providerFilter = resumeEval ? persistedProviderFilter : cliProviderFilter;
 

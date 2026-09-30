@@ -499,7 +499,7 @@ describe('MCP evaluation execution contract', () => {
     },
   );
 
-  it('checks only selected cloud provider identities without resolved credentials', async () => {
+  it('checks only selected cloud references without resolved credentials', async () => {
     const allowed = 'promptfoo://provider/11111111-1111-4111-8111-111111111111';
     const excluded = 'promptfoo://provider/22222222-2222-4222-8222-222222222222';
     vi.spyOn(cloud, 'getProviderFromCloud').mockImplementation(async (id) => ({
@@ -528,12 +528,133 @@ describe('MCP evaluation execution contract', () => {
     expect(response.success, response.error).toBe(true);
     expect(permissions).toHaveBeenCalledOnce();
     const checked = permissions.mock.calls[0][0];
-    expect(checked.providers).toEqual([{ id: allowed }]);
+    expect(checked.providers).toEqual([allowed]);
     expect(checked.metadata).toEqual({ teamId: 'fixture-team' });
     expect(JSON.stringify(checked.providers)).not.toContain('resolved-fixture-secret');
   });
 
-  it('checks the linked cloud identity of a selected local provider', async () => {
+  it('keeps the selected provider configuration for sharing and replay', async () => {
+    const selected = { id: 'echo', label: 'Allowed', config: { custom: 'preserve-for-replay' } };
+    const permissions = vi
+      .spyOn(cloud, 'checkCloudPermissions')
+      .mockImplementation(async (config) => {
+        if (JSON.stringify(config.providers).includes('Excluded')) {
+          throw new Error('Excluded target denied');
+        }
+      });
+    vi.mocked(createShareableUrl).mockImplementation(async (evalRecord) => {
+      await cloud.checkCloudPermissions(evalRecord.config);
+      return 'https://example.test/selected';
+    });
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        providers: [selected, { id: 'echo', label: 'Excluded' }],
+        prompts: ['Hello'],
+        tests: [{ vars: {} }],
+      }),
+    );
+
+    const response = await run({ providerFilter: 'Allowed', share: true, write: true });
+    expect(response.success, response.error).toBe(true);
+    expect(permissions).toHaveBeenCalledTimes(2);
+    expect(permissions.mock.calls[1][0].providers).toEqual([selected]);
+    const saved = await Eval.findById(response.data.eval.id);
+    expect(saved?.config.providers).toEqual([selected]);
+  });
+
+  it.each(['test', 'default', 'scenario'])(
+    'checks only providers eligible for the selected %s cases',
+    async (source) => {
+      const selected = { id: 'echo', label: 'Allowed' };
+      const permissions = vi
+        .spyOn(cloud, 'checkCloudPermissions')
+        .mockImplementation(async (config) => {
+          if (JSON.stringify(config.providers).includes('Excluded')) {
+            throw new Error('Excluded target denied');
+          }
+        });
+      await writeFile(
+        configPath,
+        JSON.stringify({
+          providers: [selected, { id: 'echo', label: 'Excluded' }],
+          prompts: ['Hello'],
+          ...(source === 'scenario'
+            ? { scenarios: [{ config: [{ providers: ['Allowed'] }], tests: [{ vars: {} }] }] }
+            : {
+                tests:
+                  source === 'test'
+                    ? [
+                        { vars: {}, providers: ['Allowed'] },
+                        { vars: {}, providers: ['Excluded'] },
+                      ]
+                    : [{ vars: {} }],
+                ...(source === 'default' ? { defaultTest: { providers: ['Allowed'] } } : {}),
+              }),
+        }),
+      );
+
+      const response = await run({
+        ...(source === 'test' ? { testCaseIndices: 0 } : { promptFilter: '0' }),
+        write: false,
+      });
+      expect(response.success, response.error).toBe(true);
+      expect(response.data.results.stats).toMatchObject({ successes: 1, failures: 0, errors: 0 });
+      expect(permissions.mock.calls[0][0].providers).toEqual([selected]);
+    },
+  );
+
+  it.each([{ providers: ['Excluded'] }, { providers: undefined }])(
+    'keeps the union of providers allowed by selected tests with $providers',
+    async ({ providers }) => {
+      const configured = [
+        { id: 'echo', label: 'Allowed' },
+        { id: 'echo', label: 'Excluded' },
+      ];
+      const permissions = vi.spyOn(cloud, 'checkCloudPermissions').mockResolvedValue();
+      await writeFile(
+        configPath,
+        JSON.stringify({
+          providers: configured,
+          prompts: ['Hello'],
+          tests: [
+            { vars: {}, providers: ['Allowed'] },
+            { vars: {}, providers },
+          ],
+        }),
+      );
+      const response = await run({ testCaseIndices: [0, 1], write: false });
+      expect(response.success, response.error).toBe(true);
+      expect(permissions.mock.calls[0][0].providers).toEqual(configured);
+      expect(response.data.results.totalEvals).toBe(providers ? 2 : 3);
+    },
+  );
+
+  it.each(['default', 'scenario'])(
+    'lets a test override a %s provider restriction',
+    async (source) => {
+      const selected = { id: 'echo', label: 'Override' };
+      const permissions = vi.spyOn(cloud, 'checkCloudPermissions').mockResolvedValue();
+      const test = { vars: {}, providers: ['Override'] };
+      await writeFile(
+        configPath,
+        JSON.stringify({
+          providers: [{ id: 'echo', label: 'Default' }, selected],
+          prompts: ['Hello'],
+          defaultTest: { providers: ['Default'] },
+          ...(source === 'scenario'
+            ? { scenarios: [{ config: [{ providers: ['Default'] }], tests: [test] }] }
+            : { tests: [test] }),
+        }),
+      );
+      const response = await run({ promptFilter: '0', write: false });
+      expect(response.success, response.error).toBe(true);
+      expect(permissions.mock.calls[0][0].providers).toEqual([selected]);
+      expect(response.data.results.totalEvals).toBe(1);
+    },
+  );
+
+  it('preserves the linked cloud identity of a selected local provider', async () => {
     const target = 'promptfoo://provider/33333333-3333-4333-8333-333333333333';
     vi.spyOn(cloud, 'validateLinkedTargetId').mockResolvedValue();
     const permissions = vi.spyOn(cloud, 'checkCloudPermissions').mockResolvedValue();
@@ -555,7 +676,13 @@ describe('MCP evaluation execution contract', () => {
     const response = await run({ providerFilter: 'Selected', write: false });
     expect(response.success, response.error).toBe(true);
     expect(permissions).toHaveBeenCalledOnce();
-    expect(permissions.mock.calls[0][0].providers).toEqual([{ id: target }]);
+    expect(permissions.mock.calls[0][0].providers).toEqual([
+      {
+        id: 'echo',
+        label: 'Selected',
+        config: { linkedTargetId: target, apiKey: 'fixture-secret' },
+      },
+    ]);
   });
 
   it('preserves permission rejection for a selected provider', async () => {

@@ -17,6 +17,7 @@ import { fetchWithProxy } from '../../src/util/fetch/index';
 import { checkServerFeatureSupport } from '../../src/util/server';
 
 import type { UnifiedConfig } from '../../src/types';
+import type { ProviderOptions } from '../../src/types/providers';
 
 vi.mock('../../src/util/fetch/index.ts');
 vi.mock('../../src/globalConfig/cloud');
@@ -1881,10 +1882,9 @@ describe('cloud utils', () => {
 
       await expect(checkCloudPermissions(complexConfig)).resolves.toBeUndefined();
 
-      // Should strip tests and replace redteam with empty object
+      // Keep only permission inputs and redteam presence.
       const expectedConfig = {
         providers: ['provider1', 'provider2'],
-        prompts: ['prompt1'],
         redteam: {},
       };
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
@@ -1931,9 +1931,9 @@ describe('cloud utils', () => {
       const sentBody = JSON.parse((mockFetchWithProxy.mock.calls[0] as any[])[1].body as string);
       const sentConfig = sentBody.config;
 
-      // Should keep providers, prompts, and metadata
+      // Keep provider identity and permission metadata.
       expect(sentConfig.providers).toEqual(['provider1']);
-      expect(sentConfig.prompts).toEqual(['prompt1']);
+      expect(sentConfig.prompts).toBeUndefined();
       expect(sentConfig.metadata).toEqual({ configId: 'config-123', teamId: 'team-456' });
 
       // Should strip heavy fields
@@ -1944,6 +1944,82 @@ describe('cloud utils', () => {
 
       // Should replace redteam with empty object (preserving truthiness)
       expect(sentConfig.redteam).toEqual({});
+    });
+
+    it('sends only provider identities and linked targets in the serialized permission request', async () => {
+      const linkedTargetId = 'promptfoo://provider/linked-target';
+      const providerConfig = {
+        linkedTargetId,
+        apiKey: 'provider-secret',
+        headers: { Authorization: 'provider-header-secret' },
+      };
+      const config: Partial<UnifiedConfig> = {
+        providers: [
+          'promptfoo://provider/cloud-target',
+          {
+            id: 'openai:chat:fixture',
+            config: providerConfig,
+            env: { OPENAI_API_KEY: 'env-secret' },
+          },
+          { http: { config: providerConfig } },
+          {
+            'promptfoo://provider/map-target': {
+              id: 'display-name',
+              config: { apiKey: 'map-secret' },
+            },
+          },
+          'https://user:url-password@example.test/path?api_key=url-query-secret',
+          // The Node API also accepts provider instances beyond the YAML schema.
+          {
+            id: () => 'runtime-fixture',
+            callApi: async () => ({ output: 'inert' }),
+            config: providerConfig,
+          } as unknown as ProviderOptions,
+        ],
+        metadata: { configId: 'config-123', teamId: 'team-456' },
+        env: { OPENAI_API_KEY: 'config-env-secret' },
+        prompts: ['private-prompt'],
+        redteam: { purpose: 'private-purpose' },
+      };
+      const original = JSON.stringify(config);
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true }),
+      } as Response);
+      await checkCloudPermissions(config);
+      const request = mockFetchWithProxy.mock.calls[0][1]!;
+      const body = request.body as string;
+      const payload = JSON.parse(body).config;
+      expect(payload).toEqual({
+        providers: [
+          'promptfoo://provider/cloud-target',
+          { id: 'openai:chat:fixture', config: { linkedTargetId } },
+          { id: 'http', config: { linkedTargetId } },
+          { id: 'promptfoo://provider/map-target' },
+          expect.stringContaining('example.test/path'),
+          { id: 'runtime-fixture', config: { linkedTargetId } },
+        ],
+        metadata: config.metadata,
+        redteam: {},
+      });
+      for (const secret of [
+        'provider-secret',
+        'provider-header-secret',
+        'env-secret',
+        'map-secret',
+        'url-password',
+        'url-query-secret',
+        'config-env-secret',
+        'private-prompt',
+        'private-purpose',
+      ]) {
+        expect(body).not.toContain(secret);
+      }
+      expect(request.headers).toEqual({
+        Authorization: 'Bearer test-api-key',
+        'Content-Type': 'application/json',
+      });
+      expect(JSON.stringify(config)).toBe(original);
     });
 
     it('should handle config with undefined providers', async () => {
