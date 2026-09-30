@@ -46,7 +46,8 @@ describe('blob-backed image grading', () => {
   it.each([
     { imageMime: undefined, resolverMime: undefined, expected: 'image/jpeg' },
     { imageMime: undefined, resolverMime: 'image/webp', expected: 'image/webp' },
-    { imageMime: 'image/png', resolverMime: 'image/webp', expected: 'image/png' },
+    { imageMime: 'image/png', resolverMime: 'image/webp', expected: 'image/webp' },
+    { imageMime: 'image/png', resolverMime: undefined, expected: 'image/jpeg' },
   ])('uses the resolved image MIME: $expected', async ({ imageMime, resolverMime, expected }) => {
     const grader = createGrader();
     const result = await matchesLlmRubric(

@@ -538,6 +538,27 @@ describe('matchesLlmRubric', () => {
     },
   );
 
+  it.each([
+    { output: 'data:image/png;base64,qg==', data: 'qg' },
+    { output: 'qg', data: 'data:image/png;base64,qg==' },
+    { output: 'q-_z', data: 'data:image/png;base64,q+/z' },
+    { output: 'data:image/png;base64, q g = = ', data: 'qg==' },
+    { output: JSON.stringify([{ b64_json: 'qg' }]), data: 'qg==' },
+  ])('replaces equivalent image encodings in output: $output', async ({ output, data }) => {
+    const provider = createMockProvider({ response: { output: '{"pass":true,"score":1}' } });
+    const result = await matchesLlmRubric(
+      'An image is attached.',
+      output,
+      { provider },
+      {},
+      undefined,
+      { providerResponse: { output, images: [{ data, mimeType: 'image/png' }] } },
+    );
+    expect(result.pass).toBe(true);
+    expect(result.metadata?.renderedGradingPrompt).toContain('[Image output attached.');
+    expect(result.metadata?.renderedGradingPromptImages).toBe(1);
+  });
+
   it.each(['scalar', 'array', 'object'])(
     'preserves accompanying image description: %s',
     async (shape) => {
@@ -1556,8 +1577,6 @@ describe('matchesLlmRubric', () => {
       },
     });
 
-    // Same raw base64url string in output and images[].data (Codex P2 regression):
-    // canonicalization must not defeat the placeholder substitution.
     const result = await matchesLlmRubric(
       'Does the image match?',
       'q-_z',

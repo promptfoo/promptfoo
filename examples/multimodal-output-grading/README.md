@@ -3,6 +3,8 @@
 This example asks for red and blue bicycles and grades both against the same red-bicycle rubric.
 It uses OpenAI for image generation and grading and requires `OPENAI_API_KEY`.
 
+## Run the example
+
 ```bash
 npx promptfoo@latest init --example multimodal-output-grading
 cd multimodal-output-grading

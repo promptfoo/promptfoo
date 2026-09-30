@@ -216,7 +216,7 @@ function toStandardBase64(base64: string): string {
   return remainder === 0 ? standardized : standardized + '='.repeat(4 - remainder);
 }
 
-function normalizeBase64ImageData(
+export function normalizeBase64ImageData(
   data: string,
   mimeType?: string,
 ): { dataUri: string; base64Data: string; mimeType: string; decodedBytes: number } {
@@ -492,14 +492,16 @@ export async function resolveBlobBackedImageOutputs(
     try {
       blob = await resolveImageBlob(hash);
     } catch (error) {
-      throw new Error('Failed to load blob-backed image output for multimodal grading.', {
-        cause: error,
-      });
+      throw Object.defineProperty(
+        new Error('Failed to load blob-backed image output for multimodal grading.'),
+        'cause',
+        { value: error, configurable: true, writable: true },
+      );
     }
     assertImageByteLimit(blob.data.length, maxImageBytes);
     totalActualBytes += blob.data.length;
     assertTotalImageByteLimit(totalActualBytes, maxTotalImageBytes);
-    const mimeType = image.mimeType || blob.mimeType || image.blobRef?.mimeType || 'image/png';
+    const mimeType = blob.mimeType || image.blobRef?.mimeType || image.mimeType || 'image/png';
     const rawChars = getDataUriRawChars(blob.data.length, mimeType);
     assertImageRawCharLimit(rawChars, maxRawChars);
     totalRawChars += rawChars;

@@ -21,9 +21,11 @@ import {
   shouldUseRemoteGrading,
 } from './providers';
 import {
+  type GradingImageData,
   LlmRubricProviderError,
   loadRubricPrompt,
   materializeImageOutputsForGrading,
+  normalizeBase64ImageData,
   renderLlmRubricPrompt,
   resolveBlobBackedImageOutputs,
   runJsonGradingPrompt,
@@ -130,19 +132,12 @@ function parseLegacyFactualityResponse(responseText: string): { option: string; 
   };
 }
 
-function getDataUriPayload(data: string): string | undefined {
-  // Split on the first comma only (base64 never contains one); `split(',', 2)`
-  // would truncate a payload that did.
-  const trimmed = data.trim();
-  const commaIndex = trimmed.indexOf(',');
-  if (commaIndex === -1 || !trimmed.slice(0, commaIndex).toLowerCase().startsWith('data:image/')) {
-    return undefined;
-  }
-  return trimmed.slice(commaIndex + 1) || undefined;
-}
-
-function getGradingOutputForImages(llmOutput: string, imageOutputs: ProviderResponse['images']) {
-  if (!imageOutputs?.length) {
+function getGradingOutputForImages(
+  llmOutput: string,
+  imageOutputs: ProviderResponse['images'],
+  imageData: GradingImageData[],
+) {
+  if (!imageData.length) {
     return llmOutput;
   }
 
@@ -152,21 +147,25 @@ function getGradingOutputForImages(llmOutput: string, imageOutputs: ProviderResp
   }
 
   const imageValues = new Set<string>();
-  for (const image of imageOutputs) {
+  for (const image of imageOutputs ?? []) {
     if (image.data) {
       imageValues.add(image.data.trim());
-      const payload = getDataUriPayload(image.data);
-      if (payload) {
-        imageValues.add(payload);
-      }
     }
     if (image.blobRef) {
       imageValues.add(image.blobRef.uri);
     }
   }
+  const imagePayloads = new Set(imageData.map((image) => image.base64Data));
   const isImageValue = (value: unknown): boolean => {
     if (typeof value === 'string') {
-      return imageValues.has(value.trim());
+      if (imageValues.has(value.trim())) {
+        return true;
+      }
+      try {
+        return imagePayloads.has(normalizeBase64ImageData(value).base64Data);
+      } catch {
+        return false;
+      }
     }
     return (
       value !== null &&
@@ -174,7 +173,7 @@ function getGradingOutputForImages(llmOutput: string, imageOutputs: ProviderResp
       Object.keys(value).length === 1 &&
       'b64_json' in value &&
       typeof value.b64_json === 'string' &&
-      imageValues.has(value.b64_json.trim())
+      isImageValue(value.b64_json)
     );
   };
   const parsed: unknown = tryParse(trimmedOutput);
@@ -239,7 +238,8 @@ export async function matchesLlmRubric(
   const audio = options?.providerResponse?.audio;
   const gradingOutput = getGradingOutputForImages(
     getGradingOutputForAudio(llmOutput, audio),
-    imageOutputs.length ? options?.providerResponse?.images : undefined,
+    options?.providerResponse?.images,
+    imageData,
   );
   if (
     !grading.rubricPrompt &&
