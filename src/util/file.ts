@@ -47,7 +47,7 @@ function renderStructuredConfig(
   }
   if (typeof config === 'string') {
     const match = /^\{\{\s*([A-Za-z_]\w*)\s*(\|\s*dump\s*\|\s*safe\s*)?\}\}$/.exec(config);
-    if (match && allowStructured && Object.hasOwn(vars, match[1])) {
+    if (match && allowStructured && Object.prototype.hasOwnProperty.call(vars, match[1])) {
       const value = vars[match[1]];
       if (
         Array.isArray(value) ||
