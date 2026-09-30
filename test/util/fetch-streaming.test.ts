@@ -8,19 +8,20 @@ const encoder = new TextEncoder();
 function stream(chunks: (string | Uint8Array)[], delay = 20, tailDelay = 0) {
   let index = 0;
   return new Response(
-    new ReadableStream<Uint8Array>({
-      async pull(controller) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, index < chunks.length ? delay : tailDelay),
-        );
-        if (index === chunks.length) {
-          controller.close();
-        } else {
-          const chunk = chunks[index++];
-          controller.enqueue(typeof chunk === 'string' ? encoder.encode(chunk) : chunk);
-        }
+    new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          vi.setSystemTime(Date.now() + (index < chunks.length ? delay : tailDelay));
+          if (index === chunks.length) {
+            controller.close();
+          } else {
+            const chunk = chunks[index++];
+            controller.enqueue(typeof chunk === 'string' ? encoder.encode(chunk) : chunk);
+          }
+        },
       },
-    }),
+      { highWaterMark: 0 },
+    ),
   );
 }
 async function collect(
@@ -33,7 +34,6 @@ async function collect(
   const result = processStreamingResponse(stream(chunks, 20, tailDelay), start - 100, {
     streamFormat: format,
   });
-  await vi.runAllTimersAsync();
   return result;
 }
 afterEach(() => {

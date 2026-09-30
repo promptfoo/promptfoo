@@ -103,7 +103,10 @@ function createTextDetector(format?: StreamFormat): (chunk: string, final?: bool
     }
     append(chunk.slice(start));
     if (final) {
-      return consumeLine() || consumeLine();
+      if (consumeLine()) {
+        return true;
+      }
+      return consumeLine();
     }
     return false;
   };

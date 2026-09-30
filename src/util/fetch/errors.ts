@@ -450,10 +450,12 @@ export function responseBodyError(error: unknown, url: string, response: Respons
   if (isAbortError(error)) {
     return error as Error;
   }
-  return new Error(
-    `Error reading response body from ${sanitizeUrlForLogging(url)}: ${
-      error instanceof Error ? error.message : String(error)
-    }. HTTP ${response.status} ${response.statusText}`,
+  return Object.assign(
+    new Error(
+      `Error reading response body from ${sanitizeUrlForLogging(url)}: ${
+        error instanceof Error ? error.message : String(error)
+      }. HTTP ${response.status} ${response.statusText}`,
+    ),
     { cause: error },
   );
 }

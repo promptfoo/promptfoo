@@ -1746,7 +1746,7 @@ When `stream: true` is set in the request body, Promptfoo records timing metrics
 
 Two measurement modes are supported:
 
-**Canonical TTFT (recommended)** — pin TTFT to the first model-emitted text content token using `streamFormat`:
+Set `streamFormat` to measure the first non-empty text or refusal delta:
 
 ```yaml
 providers:
@@ -1758,7 +1758,7 @@ providers:
       streamFormat: openai-chat # or: openai-responses, anthropic-messages
 ```
 
-**Wire-level proxy (default)** — TTFT fires on the first non-whitespace body byte. This is format-agnostic and works on any SSE/chunked endpoint without configuration, but may report earlier than canonical TTFT when framing metadata arrives before the first content token.
+Without `streamFormat`, TTFT measures the first non-whitespace response byte. This works across streaming formats, but may report earlier when metadata arrives before displayed text.
 
 Add TTFT assertions to your tests:
 
@@ -1773,9 +1773,9 @@ defaultTest:
 
 **Config options**
 
-| Option         | Type                                                          | Default | Purpose                                                     |
-| -------------- | ------------------------------------------------------------- | ------- | ----------------------------------------------------------- |
-| `streamFormat` | `'openai-chat' \| 'openai-responses' \| 'anthropic-messages'` | unset   | Use built-in canonical-TTFT detector for the named protocol |
+| Option         | Type                                                          | Default | Purpose                                           |
+| -------------- | ------------------------------------------------------------- | ------- | ------------------------------------------------- |
+| `streamFormat` | `'openai-chat' \| 'openai-responses' \| 'anthropic-messages'` | unset   | Detect the first displayed text for this protocol |
 
 When `stream: true` is set, response caching is disabled so each measurement reflects a live call. The OpenAI formats count refusal text as output. Format-specific detection accepts LF, CRLF, and CR line endings and rejects events larger than 64 KiB before the first text output.
 

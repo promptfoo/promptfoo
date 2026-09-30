@@ -1,9 +1,7 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: HTTP provider streaming with TTFT measurement
 
-# Demonstrates Time to First Token (TTFT) measurement. Uses gpt-5.4-mini
-# with reasoning disabled so TTFT reflects streamed text delivery rather than
-# internal deliberation time.
+# Reasoning is disabled to measure text delivery without a reasoning phase.
 
 prompts:
   - 'Write a haiku about {{topic}}'
@@ -27,12 +25,11 @@ providers:
       streamFormat: openai-chat
       transformResponse: |
         (json, text) => {
-          // Handle non-streaming JSON response
-          if (json && json.choices?.[0]?.message?.content) {
-            return json.choices[0].message.content;
+          const message = json?.choices?.[0]?.message;
+          if (message?.content || message?.refusal) {
+            return message.content || message.refusal;
           }
 
-          // Parse OpenAI streaming SSE format
           let content = '';
           for (const line of String(text || '').split('\n')) {
             const trimmed = line.trim();
@@ -41,9 +38,8 @@ providers:
 
             try {
               const data = JSON.parse(trimmed.slice(6));
-              if (data.choices?.[0]?.delta?.content) {
-                content += data.choices[0].delta.content;
-              }
+              const delta = data.choices?.[0]?.delta;
+              content += delta?.content || delta?.refusal || '';
             } catch {
               // Skip malformed JSON
             }
@@ -53,15 +49,12 @@ providers:
 
 defaultTest:
   assert:
-    # Ensure we get meaningful content
     - type: javascript
       value: 'output && output.length > 10'
 
-    # TTFT should be reasonable (under 3 seconds for demo)
     - type: ttft
       threshold: 3000
 
-    # Total latency should be reasonable
     - type: latency
       threshold: 10000
 
