@@ -67,18 +67,22 @@ export async function runJavascriptInWorker({
     'assertions',
     `javascriptWorkerEntry.${built ? 'js' : 'ts'}`,
   );
-  // Parent entry-point and V8 flags are not valid worker startup arguments.
-  const execArgv: string[] = [];
+  let workerEntry = pathToFileURL(entry);
   if (!built) {
-    const loader = resolvePackageEntryPoint('tsx', getDirectory());
+    const loader = resolvePackageEntryPoint('tsx/esm/api', getDirectory());
     if (!loader) {
       throw new Error('The JavaScript assertion worker requires tsx when running from source');
     }
-    execArgv.push('--import', pathToFileURL(loader).href);
+    // Node 22 needs explicit loader registration inside a worker before importing TypeScript.
+    const bootstrap = `import { register } from ${JSON.stringify(pathToFileURL(loader).href)};
+register();
+await import(${JSON.stringify(workerEntry.href)});`;
+    workerEntry = new URL(`data:text/javascript,${encodeURIComponent(bootstrap)}`);
   }
-  const worker = new Worker(pathToFileURL(entry), {
+  const worker = new Worker(workerEntry, {
     workerData: request,
-    execArgv,
+    // Parent entry-point and V8 flags are not valid worker startup arguments.
+    execArgv: [],
   });
 
   return new Promise((resolve, reject) => {

@@ -241,10 +241,9 @@ describe('isolated JavaScript assertions', () => {
         assertionContext,
       ),
     );
-    const rejection = expect(pending).rejects.toThrow('aborted');
-    await ready;
+    await Promise.race([ready, pending]);
     controller.abort();
-    await rejection;
+    await expect(pending).rejects.toThrow('aborted');
     expect(callApi).toHaveBeenCalledWith('ready', undefined, {
       abortSignal: expect.any(AbortSignal),
     });
