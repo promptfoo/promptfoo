@@ -603,11 +603,15 @@ describe('AzureRealtimeProvider', () => {
     });
   });
 
-  it('reconnects a persistent conversation when its safety identifier changes or is removed', async () => {
+  it('keeps its delegate when a custom safety header overrides identifier changes', async () => {
     const provider = new AzureRealtimeProvider('gpt-realtime', {
-      config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key' },
+      config: {
+        apiHost: 'example.openai.azure.com',
+        apiKey: 'azure-key',
+        headers: { 'OpenAI-Safety-Identifier': 'header-user' },
+      },
     });
-    for (const safety_identifier of ['first-user', 'first-user', 'second-user', undefined]) {
+    for (const safety_identifier of ['first-user', 'second-user', undefined]) {
       await provider.callApi('hi', {
         vars: {},
         prompt: { id: 'prompt-a', raw: 'hi', label: 'hi', config: { safety_identifier } },
@@ -615,12 +619,12 @@ describe('AzureRealtimeProvider', () => {
       });
     }
 
-    expect(mockCleanup).toHaveBeenCalledTimes(2);
-    expect(
-      vi
-        .mocked(OpenAiRealtimeProvider)
-        .mock.calls.map(([, options]) => options?.config?.safety_identifier),
-    ).toEqual(['first-user', 'second-user', undefined]);
+    expect(mockCleanup).not.toHaveBeenCalled();
+    expect(OpenAiRealtimeProvider).toHaveBeenCalledOnce();
+    expect(vi.mocked(OpenAiRealtimeProvider).mock.results[0]?.value.config.headers).toMatchObject({
+      'OpenAI-Safety-Identifier': 'header-user',
+      'api-key': 'azure-key',
+    });
     provider.cleanup();
   });
 

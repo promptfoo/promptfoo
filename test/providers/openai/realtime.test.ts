@@ -3080,65 +3080,116 @@ describe('OpenAI Realtime Provider', () => {
       });
     });
 
-    it('keeps concurrent prompt safety identifiers separate', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
-        config: { safety_identifier: 'provider-user' },
-      });
-      const context = (safety_identifier: string) => ({
-        vars: {},
-        prompt: { raw: 'hi', label: 'hi', config: { safety_identifier } },
-      });
-      const first = provider.callApi('hi', context('first-user'));
-      const firstHandler = lastMessageHandler();
-      const second = provider.callApi('hi', context('second-user'));
-      const secondHandler = lastMessageHandler();
-      mockHandlers.open.forEach((handler) => handler());
-      for (const handler of [firstHandler, secondHandler]) {
-        emitUserItem(handler);
-        emitOutputTextDone(handler, 'ok');
-        emitResponseDone(handler);
-      }
-
-      const results = await Promise.all([first, second]);
-      expect(results.map((result) => result.output)).toEqual(['ok', 'ok']);
-      const headers = (MockWebSocket as any).mock.calls.map(
-        ([, options]: any[]) => options.headers,
-      );
-      expect(
-        headers.map((header: Record<string, string>) => header['OpenAI-Safety-Identifier']),
-      ).toEqual(['first-user', 'second-user']);
-      expect(provider.config.safety_identifier).toBe('provider-user');
-    });
-
-    it('reconnects persistent calls when the safety identifier changes or is removed', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
-        config: { maintainContext: true },
-      });
-      try {
-        for (const safety_identifier of ['first-user', 'first-user', 'second-user', undefined]) {
-          const pending = provider.callApi('hi', {
-            vars: {},
-            prompt: { raw: 'hi', label: 'hi', config: { safety_identifier } },
-            test: { metadata: { conversationId: 'conversation-1' } },
-          });
-          await flushMicrotasks();
-          mockHandlers.open.forEach((handler) => handler());
-          await flushMicrotasks();
-          simulateGaFlow();
-          expect(await pending).toMatchObject({ output: 'ok' });
+    it.each(['config', 'header'])(
+      'keeps concurrent prompt safety identifiers separate via %s',
+      async (source) => {
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: {
+            safety_identifier: 'provider-user',
+            ...(source === 'header'
+              ? {
+                  headers: {
+                    'OPENAI-SAFETY-IDENTIFIER': 'provider-user',
+                    'api-key': 'gateway-key',
+                  },
+                }
+              : {}),
+          },
+        });
+        const context = (safety_identifier: string) => ({
+          vars: {},
+          prompt: {
+            raw: 'hi',
+            label: 'hi',
+            config:
+              source === 'header'
+                ? { headers: { 'openai-safety-identifier': safety_identifier } }
+                : { safety_identifier },
+          },
+        });
+        const first = provider.callApi('hi', context('first-user'));
+        const firstHandler = lastMessageHandler();
+        const second = provider.callApi('hi', context('second-user'));
+        const secondHandler = lastMessageHandler();
+        mockHandlers.open.forEach((handler) => handler());
+        for (const handler of [firstHandler, secondHandler]) {
+          emitUserItem(handler);
+          emitOutputTextDone(handler, 'ok');
+          emitResponseDone(handler);
         }
+
+        const results = await Promise.all([first, second]);
+        expect(results.map((result) => result.output)).toEqual(['ok', 'ok']);
         const headers = (MockWebSocket as any).mock.calls.map(
           ([, options]: any[]) => options.headers,
         );
         expect(
-          headers.map((header: Record<string, string>) => header['OpenAI-Safety-Identifier']),
-        ).toEqual(['first-user', 'second-user', undefined]);
-        expect(mockWs.close).toHaveBeenCalledTimes(2);
-        expect(provider.config.safety_identifier).toBeUndefined();
-      } finally {
-        provider.cleanup();
-      }
-    });
+          headers.map((header: Record<string, string>) =>
+            Object.entries(header)
+              .filter(([name]) => name.toLowerCase() === 'openai-safety-identifier')
+              .map(([, value]) => value),
+          ),
+        ).toEqual([['first-user'], ['second-user']]);
+        if (source === 'header') {
+          expect(
+            headers.every((header: Record<string, string>) => header['api-key'] === 'gateway-key'),
+          ).toBe(true);
+        }
+        expect(provider.config.safety_identifier).toBe('provider-user');
+      },
+    );
+
+    it.each([
+      ['prompt', undefined],
+      ['provider', undefined],
+      ['provider', 'header-user'],
+    ] as const)(
+      'uses the effective persistent safety identifier from %s with header %s',
+      async (source, header) => {
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: {
+            maintainContext: true,
+            ...(header ? { headers: { 'openai-safety-identifier': header } } : {}),
+          },
+        });
+        try {
+          for (const safety_identifier of ['first-user', 'first-user', 'second-user', undefined]) {
+            if (source === 'provider') {
+              provider.config.safety_identifier = safety_identifier;
+            }
+            const pending = provider.callApi('hi', {
+              vars: {},
+              prompt: {
+                raw: 'hi',
+                label: 'hi',
+                config: source === 'prompt' ? { safety_identifier } : {},
+              },
+              test: { metadata: { conversationId: 'conversation-1' } },
+            });
+            await flushMicrotasks();
+            mockHandlers.open.forEach((handler) => handler());
+            await flushMicrotasks();
+            simulateGaFlow();
+            expect(await pending).toMatchObject({ output: 'ok' });
+          }
+          const headers = (MockWebSocket as any).mock.calls.map(
+            ([, options]: any[]) => options.headers,
+          );
+          expect(
+            headers.map(
+              (headers: Record<string, string>) =>
+                Object.entries(headers).find(
+                  ([name]) => name.toLowerCase() === 'openai-safety-identifier',
+                )?.[1],
+            ),
+          ).toEqual(header ? [header] : ['first-user', 'second-user', undefined]);
+          expect(mockWs.close).toHaveBeenCalledTimes(header ? 0 : 2);
+          expect(provider.config.safety_identifier).toBeUndefined();
+        } finally {
+          provider.cleanup();
+        }
+      },
+    );
 
     it('uses default OpenAI base for direct WebSocket', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');

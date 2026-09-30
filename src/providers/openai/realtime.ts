@@ -631,8 +631,8 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     return appendOpenAiApiPath(wsBase, 'realtime', `model=${encodeURIComponent(modelName)}`);
   }
 
-  private shouldOmitBearerAuth(wsUrl: string): boolean {
-    if (!hasHeaderOverride(this.config.headers, 'api-key')) {
+  private shouldOmitBearerAuth(wsUrl: string, headers: Record<string, string>): boolean {
+    if (!hasHeaderOverride(headers, 'api-key')) {
       return false;
     }
     return (
@@ -642,7 +642,14 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   }
 
   private getRealtimeRequestHeaders(config = this.config): Record<string, string> {
-    const headers = this.getOpenAiRequestHeaders();
+    const headers = this.getOpenAiRequestHeaders({
+      ...Object.fromEntries(
+        Object.entries(this.config.headers ?? {}).filter(
+          ([name]) => !hasHeaderOverride(config.headers, name),
+        ),
+      ),
+      ...config.headers,
+    });
     if (
       config.safety_identifier !== undefined &&
       !hasHeaderOverride(headers, 'OpenAI-Safety-Identifier')
@@ -659,7 +666,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     wsUrl: string,
     headers = this.getRealtimeRequestHeaders(),
   ): Record<string, string> {
-    const omitBearer = this.shouldOmitBearerAuth(wsUrl);
+    const omitBearer = this.shouldOmitBearerAuth(wsUrl, headers);
     const requestHeaders = { ...headers };
     if (omitBearer) {
       for (const key of Object.keys(requestHeaders)) {

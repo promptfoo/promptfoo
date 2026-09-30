@@ -33,8 +33,7 @@ function hasSameRealtimeConnection(
   if (
     current.apiHost !== next.apiHost ||
     current.apiBaseUrl !== next.apiBaseUrl ||
-    current.apiKey !== next.apiKey ||
-    current.safety_identifier !== next.safety_identifier
+    current.apiKey !== next.apiKey
   ) {
     return false;
   }
