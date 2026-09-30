@@ -1570,7 +1570,7 @@ describe('loadApiProvider', () => {
       },
     })) as OpenAICodexAppServerProvider;
 
-    expect(mergedProvider.env?.CODEX_API_KEY).toBe('context-codex-key');
+    expect(mergedProvider.env).not.toHaveProperty('CODEX_API_KEY');
     expect(mergedProvider.env?.OPENAI_API_KEY).toBe('options-openai-key');
     expect(mergedProvider.getApiKey()).toBe('options-openai-key');
   });

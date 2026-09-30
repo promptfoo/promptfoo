@@ -5,7 +5,7 @@ import path from 'path';
 import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
 import { z } from 'zod';
-import { getEnvString, getProcessEnv } from '../../envars';
+import { getProcessEnv } from '../../envars';
 import {
   addActiveSpanRoleAttribute,
   closeTurnSpan,
@@ -28,6 +28,7 @@ import {
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { assertIsolatedWorkingDir, clearRepositoryEnv } from '../agentWorkspace';
+import { resolveProviderApiKey } from '../credentials';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 import {
@@ -750,13 +751,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   getApiKey(config: OpenAICodexSDKConfig = this.config): string | undefined {
-    return (
-      config?.apiKey ||
-      this.env?.OPENAI_API_KEY ||
-      this.env?.CODEX_API_KEY ||
-      getEnvString('OPENAI_API_KEY') ||
-      getEnvString('CODEX_API_KEY')
-    );
+    return resolveProviderApiKey(config, this.env, ['OPENAI_API_KEY', 'CODEX_API_KEY']);
   }
 
   requiresApiKey(): boolean {

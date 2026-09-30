@@ -1,10 +1,11 @@
 import { storeBlob } from '../../blobs';
 import { fetchWithCache } from '../../cache';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import { resolveProviderApiKey } from '../credentials';
+import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleAuthManager } from './auth';
 import { calculateGoogleCost, mergeGoogleCompletionOptions } from './util';
@@ -205,17 +206,16 @@ function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOverrides):
     return `${config.apiBaseUrl.replace(/\/$/, '')}/v1beta/interactions`;
   }
 
-  const apiHost =
-    env?.GOOGLE_API_HOST ||
-    env?.PALM_API_HOST ||
-    getEnvString('GOOGLE_API_HOST') ||
-    getEnvString('PALM_API_HOST');
-  if (apiHost) {
-    return endpointFromHost(apiHost);
+  const endpoint = resolveProviderEnv(env, [
+    'GOOGLE_API_HOST',
+    'PALM_API_HOST',
+    'GOOGLE_API_BASE_URL',
+  ]);
+  if (endpoint?.name === 'GOOGLE_API_BASE_URL') {
+    return `${endpoint.value.replace(/\/$/, '')}/v1beta/interactions`;
   }
-  const apiBaseUrl = env?.GOOGLE_API_BASE_URL || getEnvString('GOOGLE_API_BASE_URL');
-  if (apiBaseUrl) {
-    return `${apiBaseUrl.replace(/\/$/, '')}/v1beta/interactions`;
+  if (endpoint) {
+    return endpointFromHost(endpoint.value);
   }
   return 'https://generativelanguage.googleapis.com/v1beta/interactions';
 }
@@ -227,15 +227,12 @@ function getVertexInteractionsEndpoint(
 ): string {
   const region =
     config.region ||
-    env?.VERTEX_REGION ||
-    getEnvString('VERTEX_REGION') ||
-    getEnvString('GOOGLE_CLOUD_LOCATION') ||
+    resolveProviderEnv(env, ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'])?.value ||
     'global';
   const configuredHost =
     config.apiBaseUrl ||
     config.apiHost ||
-    env?.VERTEX_API_HOST ||
-    getEnvString('VERTEX_API_HOST') ||
+    resolveProviderEnv(env, ['VERTEX_API_HOST'])?.value ||
     (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`);
   const host = /^https?:\/\//i.test(configuredHost) ? configuredHost : `https://${configuredHost}`;
   return `${host.replace(/\/$/, '')}/v1beta1/projects/${encodeURIComponent(projectId)}/locations/${encodeURIComponent(region)}/interactions`;
@@ -310,12 +307,11 @@ export class GoogleInteractionsProvider implements ApiProvider {
         });
         const projectId =
           config.projectId ||
-          this.env?.VERTEX_PROJECT_ID ||
-          this.env?.GOOGLE_PROJECT_ID ||
-          this.env?.GOOGLE_CLOUD_PROJECT ||
-          getEnvString('VERTEX_PROJECT_ID') ||
-          getEnvString('GOOGLE_PROJECT_ID') ||
-          getEnvString('GOOGLE_CLOUD_PROJECT') ||
+          resolveProviderEnv(this.env, [
+            'VERTEX_PROJECT_ID',
+            'GOOGLE_PROJECT_ID',
+            'GOOGLE_CLOUD_PROJECT',
+          ])?.value ||
           authProjectId;
         if (!projectId) {
           return {
@@ -344,10 +340,12 @@ export class GoogleInteractionsProvider implements ApiProvider {
         return { error: `Gemini Omni Vertex AI authentication error: ${String(err)}` };
       }
     } else {
-      const rawApiKey =
-        GoogleAuthManager.getApiKey(config, this.env).apiKey ||
-        this.env?.GOOGLE_GENERATIVE_AI_API_KEY ||
-        getEnvString('GOOGLE_GENERATIVE_AI_API_KEY');
+      const rawApiKey = resolveProviderApiKey({ apiKey: config.apiKey }, this.env, [
+        'GOOGLE_API_KEY',
+        'GEMINI_API_KEY',
+        'PALM_API_KEY',
+        'GOOGLE_GENERATIVE_AI_API_KEY',
+      ]);
       apiKey = rawApiKey ? getNunjucksEngine().renderString(rawApiKey, {}) : undefined;
       if (!apiKey) {
         return {
