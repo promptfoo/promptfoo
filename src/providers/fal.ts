@@ -4,10 +4,17 @@ import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { ellipsize } from '../util/text';
+import { buildSafeStructuredImageOutputs } from './openai/image';
 import type { Cache } from 'cache-manager';
 
 import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ImageOutput,
+  ProviderResponse,
+} from '../types/index';
 
 type FalProviderOptions = {
   apiKey?: string;
@@ -136,14 +143,18 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
     return true;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'fal.ai API key is not set. Set the FAL_KEY environment variable or or add `apiKey` to the provider config.',
       );
     }
 
-    let response: FalResult<unknown> | undefined;
+    let response: FalResult<unknown> | string | undefined;
     let cache: Cache | undefined;
     let cached = false;
 
@@ -169,7 +180,37 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
       response = await this.runInference(input);
     }
 
-    if (!cached && cacheEnabled && cache && cacheKey) {
+    let images: ImageOutput[] | undefined;
+    const imageUrl =
+      typeof response === 'string' ? /^!\[[^\]]*\]\((.+)\)$/.exec(response)?.[1] : undefined;
+    const imageSource =
+      imageUrl ||
+      (typeof response === 'string' && response.startsWith('data:image/') ? response : undefined);
+    if (imageSource) {
+      images = await buildSafeStructuredImageOutputs(
+        { data: [{ url: imageSource }] },
+        undefined,
+        undefined,
+        options?.abortSignal,
+      );
+      if (!images?.[0]?.data) {
+        if (cache && cacheKey) {
+          if (!options?.abortSignal?.aborted) {
+            await cache.del(cacheKey);
+          } else if (!cached) {
+            try {
+              await cache.set(cacheKey, JSON.stringify(response));
+            } catch (err) {
+              logger.error(`Failed to cache response: ${String(err)}`);
+            }
+          }
+        }
+        return { cached, error: 'The generated image could not be downloaded safely.' };
+      }
+      response = images[0].data;
+    }
+
+    if ((!cached || imageUrl) && cacheEnabled && cache && cacheKey) {
       try {
         await cache.set(cacheKey, JSON.stringify(response));
       } catch (err) {
@@ -180,6 +221,7 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
     return {
       cached,
       output: response,
+      ...(images && { images }),
     };
   }
 

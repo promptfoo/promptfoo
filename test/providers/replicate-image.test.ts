@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import { buildSafeStructuredImageOutputs } from '../../src/providers/openai/image';
 import { ReplicateImageProvider } from '../../src/providers/replicate';
 
 vi.mock('../../src/cache');
+vi.mock('../../src/providers/openai/image', () => ({ buildSafeStructuredImageOutputs: vi.fn() }));
+const imageData = 'data:image/png;base64,aW1hZ2U=';
 
 const mockedFetchWithCache = vi.mocked(fetchWithCache);
 
@@ -11,10 +14,12 @@ describe('ReplicateImageProvider Demonstration', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(buildSafeStructuredImageOutputs).mockResolvedValue([
+      { data: imageData, mimeType: 'image/png' },
+    ]);
   });
 
   it('demonstrates FLUX 1.1 Pro Ultra image generation', async () => {
-    // Mock successful API response
     mockedFetchWithCache.mockResolvedValue({
       data: {
         id: 'test-prediction-id',
@@ -38,13 +43,9 @@ describe('ReplicateImageProvider Demonstration', () => {
     const prompt = 'A majestic mountain landscape at golden hour';
     const result = await provider.callApi(prompt);
 
-    // The provider formats the output as markdown
-    expect(result.output).toBe(
-      '![A majestic mountain landscape at golden hour](https://replicate.delivery/pbxt/flux-ultra-example/beautiful-landscape.webp)',
-    );
+    expect(result.output).toBe(imageData);
     expect(result.error).toBeUndefined();
 
-    // Verify the API was called correctly
     expect(mockedFetchWithCache).toHaveBeenCalledWith(
       'https://api.replicate.com/v1/models/black-forest-labs/flux-1.1-pro-ultra/predictions',
       expect.objectContaining({
@@ -62,7 +63,6 @@ describe('ReplicateImageProvider Demonstration', () => {
   });
 
   it('demonstrates multiple image outputs handling', async () => {
-    // Some models return multiple images
     mockedFetchWithCache.mockResolvedValue({
       data: {
         id: 'test-prediction-id',
@@ -84,10 +84,8 @@ describe('ReplicateImageProvider Demonstration', () => {
 
     const result = await provider.callApi('Generate variations');
 
-    // Only the first image is returned for simplicity
-    expect(result.output).toBe(
-      '![Generate variations](https://replicate.delivery/pbxt/example/image1.png)',
-    );
+    // The provider retains its existing first-image behavior.
+    expect(result.output).toBe(imageData);
   });
 
   it('demonstrates raw mode for FLUX 1.1 Pro Ultra', async () => {
@@ -111,16 +109,14 @@ describe('ReplicateImageProvider Demonstration', () => {
 
     const result = await provider.callApi('Professional headshot, natural lighting');
 
-    expect(result.output).toBe(
-      '![Professional headshot, natural lighting](https://replicate.delivery/pbxt/flux-raw/photorealistic.png)',
-    );
+    expect(result.output).toBe(imageData);
 
-    // Verify raw parameter was passed (note: raw should be in input)
     const callArgs = mockedFetchWithCache.mock.calls[0];
     expect(callArgs).toBeDefined();
     if (callArgs && callArgs[1] && callArgs[1].body) {
       const bodyJson = JSON.parse(callArgs[1].body as string);
       expect(bodyJson.input.prompt).toBe('Professional headshot, natural lighting');
+      expect(bodyJson.input.raw).toBe(true);
     }
   });
 

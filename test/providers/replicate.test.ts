@@ -7,6 +7,11 @@ import {
   isCacheEnabled,
 } from '../../src/cache';
 import logger from '../../src/logger';
+import { buildSafeStructuredImageOutputs } from '../../src/providers/openai/image';
+
+const imageData = 'data:image/png;base64,aW1hZ2U=';
+vi.mock('../../src/providers/openai/image', () => ({ buildSafeStructuredImageOutputs: vi.fn() }));
+
 import {
   DefaultModerationProvider,
   ReplicateImageProvider,
@@ -854,6 +859,9 @@ describe('ReplicateImageProvider', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(buildSafeStructuredImageOutputs).mockResolvedValue([
+      { data: imageData, mimeType: 'image/png' },
+    ]);
     disableCache();
   });
 
@@ -878,7 +886,109 @@ describe('ReplicateImageProvider', () => {
     });
 
     const result = await provider.callApi('a beautiful sunset');
-    expect(result.output).toBe('![a beautiful sunset](https://example.com/image.png)');
+    expect(result.output).toBe(imageData);
+    expect(result.images).toEqual([{ data: imageData, mimeType: 'image/png' }]);
+    expect(buildSafeStructuredImageOutputs).toHaveBeenCalledWith(
+      { data: [{ url: 'https://example.com/image.png' }] },
+      undefined,
+      undefined,
+      undefined,
+    );
+  });
+
+  it.each([false, true])(
+    'returns a download error and evicts an unusable image: %s',
+    async (cached) => {
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      const cache = {
+        get: vi
+          .fn()
+          .mockResolvedValue(
+            cached ? JSON.stringify(['https://example.com/image.png']) : undefined,
+          ),
+        set: vi.fn(),
+        del: vi.fn(),
+      };
+      vi.mocked(getCache).mockReturnValue(cache as unknown as ReturnType<typeof getCache>);
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+      mockedFetchWithCache.mockResolvedValue({
+        deleteFromCache,
+        data: { id: 'fixture', status: 'succeeded', output: ['https://example.com/image.png'] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      vi.mocked(buildSafeStructuredImageOutputs).mockResolvedValue(undefined);
+      const provider = new ReplicateImageProvider('test-model', { config: { apiKey: mockApiKey } });
+
+      const result = await provider.callApi('A benign image');
+
+      expect(result.error).toBe('The generated image could not be downloaded safely.');
+      expect(result.output).toBeUndefined();
+      expect(cache.del).toHaveBeenCalledWith(
+        expect.stringContaining('replicate:image:test-model:'),
+      );
+      expect(cache.set).not.toHaveBeenCalled();
+      expect(deleteFromCache).toHaveBeenCalledTimes(cached ? 0 : 1);
+    },
+  );
+
+  it.each([undefined, ['https://example.com/image.png'], imageData])(
+    'keeps downloaded image bytes in the cache: %j',
+    async (cachedResponse) => {
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      const cache = {
+        get: vi
+          .fn()
+          .mockResolvedValue(
+            cachedResponse === undefined ? undefined : JSON.stringify(cachedResponse),
+          ),
+        set: vi.fn(),
+      };
+      vi.mocked(getCache).mockReturnValue(cache as unknown as ReturnType<typeof getCache>);
+      mockedFetchWithCache.mockResolvedValue({
+        data: { id: 'fixture', status: 'succeeded', output: ['https://example.com/image.png'] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new ReplicateImageProvider('test-model', { config: { apiKey: mockApiKey } });
+
+      const result = await provider.callApi('A benign image');
+
+      expect(result.output).toBe(imageData);
+      expect(result.cached).toBe(cachedResponse !== undefined);
+      if (cachedResponse === imageData) {
+        expect(cache.set).not.toHaveBeenCalled();
+      } else {
+        expect(cache.set).toHaveBeenCalledWith(expect.any(String), JSON.stringify(imageData));
+      }
+      if (cachedResponse !== undefined) {
+        expect(mockedFetchWithCache).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it('keeps cancellation active while downloading a generated image', async () => {
+    const controller = new AbortController();
+    mockedFetchWithCache.mockResolvedValue({
+      data: { id: 'fixture', status: 'succeeded', output: ['https://example.com/image.png'] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    vi.mocked(buildSafeStructuredImageOutputs).mockImplementation(
+      async (_data, _format, _responseFormat, signal) => {
+        expect(signal).toBe(controller.signal);
+        controller.abort(new DOMException('Fixture cancellation', 'AbortError'));
+        return undefined;
+      },
+    );
+    const provider = new ReplicateImageProvider('test-model', { config: { apiKey: mockApiKey } });
+
+    await expect(
+      provider.callApi('A benign image', undefined, { abortSignal: controller.signal }),
+    ).rejects.toThrow('Fixture cancellation');
   });
 
   it('should handle custom width and height', async () => {
@@ -932,7 +1042,7 @@ describe('ReplicateImageProvider', () => {
     expect(result.error).toBe('Image generation failed');
   });
 
-  it('should ellipsize long prompts in markdown', async () => {
+  it('returns inline image data for long prompts', async () => {
     mockedFetchWithCache.mockResolvedValue({
       data: {
         id: 'test-id',
@@ -950,7 +1060,7 @@ describe('ReplicateImageProvider', () => {
 
     const longPrompt = 'a'.repeat(100);
     const result = await provider.callApi(longPrompt);
-    expect(result.output).toMatch(/!\[.*\.\.\.\]/);
+    expect(result.output).toBe(imageData);
   });
 
   it('should hash prompt and config values in image cache keys', async () => {

@@ -1,15 +1,31 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { lookup } from 'node:dns/promises';
+
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiImageProvider } from '../../../src/providers/openai/image';
+import {
+  fetchWithProxy,
+  getFetchTlsOptions,
+  getProxyUrlForTarget,
+} from '../../../src/util/fetch/index';
+import { PNG_IMAGE } from '../../fixtures/images';
 import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn(),
+}));
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     fetchWithCache: vi.fn(),
   };
 });
+vi.mock('../../../src/util/fetch/index', () => ({
+  fetchWithProxy: vi.fn(),
+  getFetchTlsOptions: vi.fn(),
+  getProxyUrlForTarget: vi.fn(),
+}));
 vi.mock('../../../src/logger', () => ({
   default: {
     debug: vi.fn(),
@@ -19,7 +35,10 @@ vi.mock('../../../src/logger', () => ({
   },
 }));
 
+const lookupMock = lookup as unknown as Mock;
+
 describe('OpenAiImageProvider', () => {
+  const imageData = `data:image/png;base64,${PNG_IMAGE.toString('base64')}`;
   const mockFetchResponse = {
     data: {
       data: [{ url: 'https://example.com/image.png' }],
@@ -40,10 +59,91 @@ describe('OpenAiImageProvider', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
     vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
+    vi.mocked(getFetchTlsOptions).mockResolvedValue({});
+    vi.mocked(getProxyUrlForTarget).mockReturnValue('');
+    vi.mocked(fetchWithProxy).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers({ 'content-type': 'image/png' }),
+      arrayBuffer: async () => Uint8Array.from(PNG_IMAGE).buffer,
+    } as Response);
+  });
+
+  it.each([false, true])(
+    'retains generation accounting when a download fails, cancelled=%s',
+    async (cancelled) => {
+      const controller = new AbortController();
+      const deleteFromCache = vi.fn();
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { data: [{ url: 'https://example.com/image.png' }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      });
+      let started!: () => void;
+      const downloadStarted = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      vi.mocked(fetchWithProxy).mockImplementation((_url, options) => {
+        started();
+        if (!cancelled) {
+          return Promise.reject(new Error('Fixture download failed'));
+        }
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
+            once: true,
+          });
+        });
+      });
+      const provider = new OpenAiImageProvider('dall-e-3', { config: { apiKey: 'fixture' } });
+      const pending = provider.callApi('A blue square', undefined, {
+        abortSignal: controller.signal,
+      });
+      await downloadStarted;
+      if (cancelled) {
+        controller.abort();
+      }
+      const result = await pending;
+      expect(result.error).toContain('could not be downloaded');
+      expect(result.cost).toBe(0.04);
+      expect(result.cached).toBe(false);
+      expect(deleteFromCache).toHaveBeenCalledTimes(cancelled ? 0 : 1);
+    },
+  );
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('Basic functionality', () => {
+    it('reuses downloaded image bytes after the provider URL expires', async () => {
+      const updateCache = vi.fn();
+      vi.mocked(fetchWithCache).mockResolvedValue({ ...mockFetchResponse, updateCache });
+      const provider = new OpenAiImageProvider('dall-e-3', { config: { apiKey: 'test-key' } });
+      const first = await provider.callApi('A cat');
+      expect(first.error).toBeUndefined();
+      expect(updateCache).toHaveBeenCalledWith({ data: [{ url: imageData }] }, 200, 'OK');
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...mockFetchResponse,
+        data: updateCache.mock.calls[0][0],
+        cached: true,
+        updateCache,
+      });
+      vi.mocked(fetchWithProxy).mockRejectedValue(new Error('Image expired'));
+      const cached = await provider.callApi('A cat');
+      expect(cached.output).toEqual(first.output);
+      expect(cached.images?.map((image) => image.data)).toEqual(
+        first.images?.map((image) => image.data),
+      );
+      expect(cached.cached).toBe(true);
+      expect(cached.cost).toBe(0);
+      expect(fetchWithProxy).toHaveBeenCalledTimes(1);
+      expect(updateCache).toHaveBeenCalledTimes(1);
+    });
     it('should reject a per-prompt Codex-only image model override before dispatch', async () => {
       const provider = new OpenAiImageProvider('gpt-image-1.5', {
         config: { apiKey: 'test-key' },
@@ -78,9 +178,9 @@ describe('OpenAiImageProvider', () => {
         expect.any(Number),
       );
 
-      expect(result).toEqual({
-        output: '![Generate a cat](https://example.com/image.png)',
-        images: [{ data: 'https://example.com/image.png', mimeType: 'image/png' }],
+      expect(result).toMatchObject({
+        output: imageData,
+        images: [{ data: imageData, mimeType: 'image/png' }],
         cached: false,
         cost: 0.04, // Default cost for DALL-E 3 standard 1024x1024
       });
@@ -98,9 +198,9 @@ describe('OpenAiImageProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(result).toEqual({
-        output: '![test prompt](https://example.com/image.png)',
-        images: [{ data: 'https://example.com/image.png', mimeType: 'image/png' }],
+      expect(result).toMatchObject({
+        output: imageData,
+        images: [{ data: imageData, mimeType: 'image/png' }],
         cached: true,
         cost: 0, // Cost is 0 for cached responses
       });
@@ -166,11 +266,11 @@ describe('OpenAiImageProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(result).toEqual({
-        output: '![test prompt](https://example.com/image-1.png)',
+      expect(result).toMatchObject({
+        output: imageData,
         images: [
-          { data: 'https://example.com/image-1.png', mimeType: 'image/png' },
-          { data: 'https://example.com/image-2.png', mimeType: 'image/png' },
+          { data: imageData, mimeType: 'image/png' },
+          { data: imageData, mimeType: 'image/png' },
         ],
         cached: false,
         cost: 0.04, // DALL-E 2 1024x1024 with n=2
@@ -184,7 +284,7 @@ describe('OpenAiImageProvider', () => {
 
       const result = await provider.callApi('Test [prompt] with\nnewlines');
 
-      expect(result.output).toBe('![Test (prompt) with newlines](https://example.com/image.png)');
+      expect(result.output).toBe(imageData);
     });
 
     it('should correctly use ID passed during construction', async () => {
@@ -330,6 +430,27 @@ describe('OpenAiImageProvider', () => {
       expect(result.error).toContain('No image URL found in response');
     });
 
+    it('should redact blocked external image URLs instead of fetching them', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { data: [{ url: 'http://169.254.169.254/latest/meta-data' }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toMatchObject({
+        error: expect.stringContaining('No usable image data'),
+      });
+      expect(result.images).toBeUndefined();
+      expect(fetchWithProxy).not.toHaveBeenCalled();
+    });
+
     it('should handle error with minimal details', async () => {
       const provider = new OpenAiImageProvider('dall-e-3', {
         config: { apiKey: 'test-key' },
@@ -357,11 +478,11 @@ describe('OpenAiImageProvider', () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
           // Invalid data structure that will cause parsing to fail
-          deleteFromCache: mockDeleteFn,
         },
         cached: false,
         status: 200,
         statusText: 'OK',
+        deleteFromCache: mockDeleteFn,
       });
 
       await provider.callApi('test prompt');

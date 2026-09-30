@@ -1,10 +1,26 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { lookup } from 'node:dns/promises';
+
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { callOpenAiImageApi } from '../../../src/providers/openai/image';
 import { getRequestTimeoutMs } from '../../../src/providers/shared';
 import { createXAIImageProvider, XAIImageProvider } from '../../../src/providers/xai/image';
+import {
+  fetchWithProxy,
+  getFetchTlsOptions,
+  getProxyUrlForTarget,
+} from '../../../src/util/fetch/index';
+import { JPEG_IMAGE } from '../../fixtures/images';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/logger');
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn(),
+}));
+vi.mock('../../../src/util/fetch/index', () => ({
+  fetchWithProxy: vi.fn(),
+  getFetchTlsOptions: vi.fn(),
+  getProxyUrlForTarget: vi.fn(),
+}));
 vi.mock('../../../src/providers/openai/image', async () => {
   const actual = await vi.importActual('../../../src/providers/openai/image');
   return {
@@ -13,7 +29,10 @@ vi.mock('../../../src/providers/openai/image', async () => {
   };
 });
 
+const lookupMock = lookup as unknown as Mock;
+
 describe('XAI Image Provider', () => {
+  const imageData = `data:image/jpeg;base64,${JPEG_IMAGE.toString('base64')}`;
   const mockApiKey = 'test-api-key';
   const mockPrompt = 'test prompt';
 
@@ -58,7 +77,77 @@ describe('XAI Image Provider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.clearAllMocks();
+    lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
     vi.mocked(callOpenAiImageApi).mockResolvedValue(mockSuccessResponse);
+    vi.mocked(getFetchTlsOptions).mockResolvedValue({});
+    vi.mocked(getProxyUrlForTarget).mockReturnValue('');
+    vi.mocked(fetchWithProxy).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers({ 'content-type': 'image/jpeg' }),
+      arrayBuffer: async () => Uint8Array.from(JPEG_IMAGE).buffer,
+    } as Response);
+  });
+
+  it.each([false, true])(
+    'retains generation accounting when a download fails, cancelled=%s',
+    async (cancelled) => {
+      const controller = new AbortController();
+      const deleteFromCache = vi.fn();
+      vi.mocked(callOpenAiImageApi).mockResolvedValue({
+        data: { data: [{ url: 'https://example.com/image.png' }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      });
+      let started!: () => void;
+      const downloadStarted = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      vi.mocked(fetchWithProxy).mockImplementation((_url, options) => {
+        started();
+        if (!cancelled) {
+          return Promise.reject(new Error('Fixture download failed'));
+        }
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
+            once: true,
+          });
+        });
+      });
+      const provider = new XAIImageProvider('grok-2-image', { config: { apiKey: 'fixture' } });
+      const pending = provider.callApi('A blue square', undefined, {
+        abortSignal: controller.signal,
+      });
+      await downloadStarted;
+      if (cancelled) {
+        controller.abort();
+      }
+      const result = await pending;
+      expect(result.error).toContain('could not be downloaded');
+      expect(result.cost).toBe(0.07);
+      expect(result.cached).toBe(false);
+      expect(deleteFromCache).toHaveBeenCalledTimes(cancelled ? 0 : 1);
+    },
+  );
+
+  it('rejects an incomplete base64 batch while retaining its generation cost', async () => {
+    vi.mocked(callOpenAiImageApi).mockResolvedValue({
+      data: { data: [{ b64_json: 'aW1hZ2U=' }, {}] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new XAIImageProvider('grok-2-image', {
+      config: { apiKey: 'fixture', response_format: 'b64_json', n: 2 },
+    });
+    const result = await provider.callApi('Two blue squares');
+    expect(result.error).toContain('One or more generated images');
+    expect(result.output).toBeUndefined();
+    expect(result.cost).toBe(0.14);
+    expect(fetchWithProxy).not.toHaveBeenCalled();
   });
 
   afterEach(() => {
@@ -432,9 +521,9 @@ describe('XAI Image Provider', () => {
         getRequestTimeoutMs(),
       );
 
-      expect(result).toEqual({
-        output: '![Generate a cat](https://example.com/image.jpg)',
-        images: [{ data: 'https://example.com/image.jpg', mimeType: 'image/jpeg' }],
+      expect(result).toMatchObject({
+        output: imageData,
+        images: [{ data: imageData, mimeType: 'image/jpeg' }],
         cached: false,
         cost: 0.07, // xAI pricing: $0.07 per generated image
       });
@@ -449,9 +538,9 @@ describe('XAI Image Provider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(result).toEqual({
-        output: '![test prompt](https://example.com/image.jpg)',
-        images: [{ data: 'https://example.com/image.jpg', mimeType: 'image/jpeg' }],
+      expect(result).toMatchObject({
+        output: imageData,
+        images: [{ data: imageData, mimeType: 'image/jpeg' }],
         cached: true,
         cost: 0,
       });
@@ -476,11 +565,11 @@ describe('XAI Image Provider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(result).toEqual({
-        output: '![test prompt](https://example.com/image-1.jpg)',
+      expect(result).toMatchObject({
+        output: imageData,
         images: [
-          { data: 'https://example.com/image-1.jpg', mimeType: 'image/jpeg' },
-          { data: 'https://example.com/image-2.jpg', mimeType: 'image/jpeg' },
+          { data: imageData, mimeType: 'image/jpeg' },
+          { data: imageData, mimeType: 'image/jpeg' },
         ],
         cached: false,
         cost: 0.14,
@@ -711,6 +800,7 @@ describe('XAI Image Provider', () => {
     });
 
     it('should handle missing base64 data in response', async () => {
+      const deleteFromCache = vi.fn();
       const provider = new XAIImageProvider('grok-2-image', {
         config: { apiKey: mockApiKey, response_format: 'b64_json' },
       });
@@ -720,12 +810,14 @@ describe('XAI Image Provider', () => {
         cached: false,
         status: 200,
         statusText: 'OK',
+        deleteFromCache,
       });
 
       const result = await provider.callApi('test prompt');
 
       expect(result).toHaveProperty('error');
       expect(result.error).toContain('No base64 image data found in response');
+      expect(deleteFromCache).toHaveBeenCalledWith();
     });
 
     it('should handle custom response format', async () => {

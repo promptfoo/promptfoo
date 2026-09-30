@@ -5,7 +5,7 @@ prompts:
   - 'Generate an image: {{imagePrompt}}'
 
 providers:
-  # FLUX Dev - Best balance of quality and cost
+  # FLUX Dev
   - id: replicate:image:black-forest-labs/flux-dev
     config:
       width: 1024
@@ -22,33 +22,18 @@ providers:
       height: 1024
       num_inference_steps: 25
 
+defaultTest:
+  assert:
+    - type: javascript
+      value: '(context.providerResponse?.images?.length ?? 0) > 0'
+
 tests:
   # Simple object
   - vars:
       imagePrompt: 'A red apple on a white table, professional product photography, soft lighting'
-    assert:
-      - type: javascript
-        value: |
-          // Check that the output contains markdown image format
-          if (typeof output !== 'string') {
-            return false;
-          }
-          return output.includes('![') && output.includes('](http');
-
   # Portrait
   - vars:
       imagePrompt: 'Portrait of a smiling elderly man with grey beard, warm lighting, bokeh background'
-    assert:
-      - type: javascript
-        value: |
-          // Check markdown image format
-          return output && output.includes('![') && output.includes('](http');
-
   # Landscape
   - vars:
       imagePrompt: 'Serene mountain lake at sunrise, mirror reflection, pine trees, photorealistic'
-    assert:
-      - type: javascript
-        value: |
-          // Check markdown image format
-          return output && output.includes('![') && output.includes('](http');

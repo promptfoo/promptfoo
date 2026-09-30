@@ -661,9 +661,50 @@ describe('resolveBlobUri security', () => {
     expect(resolveBlobUri('/some/path')).toBeUndefined();
   });
 
-  it('should pass through /api/ paths', () => {
+  it('should pass through blob and media API paths only', () => {
     expect(resolveBlobUri('/api/blobs/abc123')).toBe('/api/blobs/abc123');
     expect(resolveBlobUri('/api/media/test.png')).toBe('/api/media/test.png');
+    expect(resolveBlobUri('/api/users/me/avatar')).toBeUndefined();
+  });
+
+  it('should pass through paths on the configured API origin only', () => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com'));
+
+    expect(resolveBlobUri('https://api.example.com/api/blobs/abc123')).toBe(
+      'https://api.example.com/api/blobs/abc123',
+    );
+    expect(resolveBlobUri('https://api.example.com/api/users/me/avatar')).toBeUndefined();
+    expect(resolveBlobUri('https://api.example.com.evil/api/blobs/abc123')).toBeUndefined();
+  });
+
+  it('preserves a configured API prefix that itself starts with /api', () => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('/api/promptfoo'));
+    expect(resolveBlobUri('promptfoo://blob/abc123')).toBe('/api/promptfoo/api/blobs/abc123');
+    expect(resolveBlobUri('storageRef:images/test.png')).toBe(
+      '/api/promptfoo/api/media/images/test.png',
+    );
+    expect(resolveBlobUri('/api/promptfoo/api/blobs/abc123')).toBe(
+      '/api/promptfoo/api/blobs/abc123',
+    );
+    expect(resolveBlobUri('/api/blobs/abc123')).toBe('/api/blobs/abc123');
+    expect(resolveVideoSource({ url: '/api/promptfoo/api/media/video.mp4' })?.src).toBe(
+      '/api/promptfoo/api/media/video.mp4',
+    );
+    expect(resolveBlobUri('/api/promptfood/api/blobs/abc123')).toBeUndefined();
+  });
+
+  it('normalizes media paths before checking the API route', () => {
+    expect(resolveBlobUri('/api/media/images/./test.png')).toBe('/api/media/images/test.png');
+    expect(resolveBlobUri('/api/media/../users/me/avatar')).toBeUndefined();
+    expect(resolveBlobUri('storageRef:../users/me/avatar')).toBeUndefined();
+    expect(resolveBlobUri('promptfoo://blob/../users/me/avatar')).toBeUndefined();
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com/base'));
+    expect(
+      resolveBlobUri('https://api.example.com/base/api/media/../users/me/avatar'),
+    ).toBeUndefined();
+    expect(resolveBlobUri('storageRef:images/test.png')).toBe(
+      'https://api.example.com/base/api/media/images/test.png',
+    );
   });
 
   it('should pass through data: URIs', () => {
@@ -698,6 +739,11 @@ describe('resolveImageSource security', () => {
     expect(resolveImageSource('https://attacker.com/leak sensitive data')).toBeUndefined();
   });
 
+  it('should NOT return external URLs from image objects', () => {
+    expect(resolveImageSource({ data: 'https://example.com/foo' })).toBeUndefined();
+    expect(resolveImageSource({ data: 'http://example.com/foo' })).toBeUndefined();
+  });
+
   it('should return data: URIs', () => {
     const dataUri = 'data:image/png;base64,iVBORw0KGgo=';
     expect(resolveImageSource(dataUri)).toBe(dataUri);
@@ -707,14 +753,64 @@ describe('resolveImageSource security', () => {
     expect(resolveImageSource('promptfoo://blob/abc123')).toBe('/api/blobs/abc123');
   });
 
+  it('should return normalized blob paths on the configured API origin', () => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com'));
+
+    expect(resolveImageSource('https://api.example.com/api/blobs/abc123')).toBe(
+      'https://api.example.com/api/blobs/abc123',
+    );
+    expect(resolveImageSource('https://attacker.example/api/blobs/abc123')).toBeUndefined();
+  });
+
   it('should return storage references', () => {
     expect(resolveImageSource('storageRef:images/test.png')).toBe('/api/media/images/test.png');
+  });
+
+  it('should return storage references from image objects', () => {
+    expect(resolveImageSource({ data: 'storageRef:images/test.png' })).toBe(
+      '/api/media/images/test.png',
+    );
   });
 
   it('should convert long base64 strings to data URIs', () => {
     const base64 = 'A'.repeat(100); // Long enough to be treated as base64
     expect(resolveImageSource(base64)).toBe(`data:image/png;base64,${base64}`);
   });
+
+  it('should convert long base64 strings from image objects to data URIs', () => {
+    const base64 = 'A'.repeat(100); // Long enough to be treated as base64
+    expect(resolveImageSource({ data: base64 })).toBe(`data:image/png;base64,${base64}`);
+  });
+
+  it('accepts short and line-wrapped base64 in explicit image objects', () => {
+    const gif = 'R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+    const wrapped = `${gif.slice(0, 16)}\r\n${gif.slice(16, 32)}\n${gif.slice(32)}`;
+    expect(resolveImageSource({ data: gif, format: 'gif' })).toBe(`data:image/gif;base64,${gif}`);
+    expect(resolveImageSource({ data: wrapped, format: 'gif' })).toBe(
+      `data:image/gif;base64,${gif}`,
+    );
+    expect(resolveImageSource(gif)).toBeUndefined();
+    expect(resolveImageSource(wrapped)).toBeUndefined();
+  });
+
+  it.each(['AA', 'AAA', 'AAAA', 'AA==', 'AAA='])(
+    'accepts complete or unpadded base64: %s',
+    (data) => {
+      expect(resolveImageSource({ data })).toBe(`data:image/png;base64,${data}`);
+    },
+  );
+
+  it('resolves a raw image buffer', () => {
+    const data = 'QUJD'.repeat(4096);
+    expect(resolveImageSource({ data, format: 'jpeg' })).toBe(`data:image/jpeg;base64,${data}`);
+  });
+
+  it.each(['A', 'AAAA=', 'AA=A', 'AA=', 'AAA==', '====', 'AAAA====', 'AA-_', 'not base64!'])(
+    'rejects malformed raw image data: %s',
+    (data) => {
+      expect(resolveImageSource({ data })).toBeUndefined();
+    },
+  );
 
   it('should return undefined for short strings that could be session IDs', () => {
     expect(resolveImageSource('abc123')).toBeUndefined();
@@ -729,18 +825,20 @@ describe('resolveImageSource security', () => {
   });
 
   it('should resolve data from image object with format', () => {
+    const base64 = 'A'.repeat(100);
     const result = resolveImageSource({
-      data: 'SGVsbG8gV29ybGQ=',
+      data: base64,
       format: 'jpeg',
     });
-    expect(result).toBe('data:image/jpeg;base64,SGVsbG8gV29ybGQ=');
+    expect(result).toBe(`data:image/jpeg;base64,${base64}`);
   });
 
   it('should resolve data from image object with default png format', () => {
+    const base64 = 'A'.repeat(100);
     const result = resolveImageSource({
-      data: 'SGVsbG8gV29ybGQ=',
+      data: base64,
     });
-    expect(result).toBe('data:image/png;base64,SGVsbG8gV29ybGQ=');
+    expect(result).toBe(`data:image/png;base64,${base64}`);
   });
 
   it('should pass through data URI from image object', () => {

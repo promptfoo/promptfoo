@@ -1,5 +1,13 @@
-import { fetchWithCache } from '../../cache';
+import { lookup } from 'node:dns/promises';
+import { BlockList, isIP } from 'node:net';
+import type { LookupAddress } from 'node:dns';
+
+import { Agent, type Dispatcher, interceptors, ProxyAgent } from 'undici';
+import { BLOB_MAX_SIZE } from '../../blobs/constants';
+import { type FetchWithCacheResult, fetchWithCache } from '../../cache';
 import logger from '../../logger';
+import { fetchWithProxy, getFetchTlsOptions, getProxyUrlForTarget } from '../../util/fetch/index';
+import { stripDecompressionHeaders } from '../../util/fetch/stripDecompressionHeaders';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { ellipsize } from '../../util/text';
 import { getRequestTimeoutMs } from '../shared';
@@ -47,6 +55,8 @@ const GPT_IMAGE2_MIN_PIXELS = 655_360;
 const GPT_IMAGE2_MAX_PIXELS = 8_294_400;
 const DATED_GPT_IMAGE2_MODEL_PATTERN = /^gpt-image-2-\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_SIZE = '1024x1024';
+const BLOCKED_IMAGE_HOSTNAMES = new Set(['localhost', 'metadata', 'metadata.google.internal']);
+const MAX_IMAGE_BATCH_SIZE = 10;
 
 export const DALLE2_COSTS: Record<DallE2Size, number> = {
   '256x256': 0.016,
@@ -575,6 +585,216 @@ function inferMimeTypeFromUrl(url: string): string | undefined {
   return undefined;
 }
 
+function isExternalImageUrl(url: string): boolean {
+  return /^(?:https?:)?\/\//i.test(url);
+}
+
+function normalizeExternalImageHostname(hostname: string): string {
+  return hostname.replace(/^\[/, '').replace(/\]$/, '').replace(/\.$/, '').toLowerCase();
+}
+
+const blockedImageAddresses = new BlockList();
+for (const [address, prefix] of [
+  ['0.0.0.0', 8],
+  ['10.0.0.0', 8],
+  ['100.64.0.0', 10],
+  ['127.0.0.0', 8],
+  ['169.254.0.0', 16],
+  ['172.16.0.0', 12],
+  ['192.0.0.0', 24],
+  ['192.0.2.0', 24],
+  ['192.168.0.0', 16],
+  ['198.18.0.0', 15],
+  ['198.51.100.0', 24],
+  ['203.0.113.0', 24],
+  ['224.0.0.0', 3],
+] as const) {
+  blockedImageAddresses.addSubnet(address, prefix, 'ipv4');
+  // Apply the same destination restrictions to NAT64 and 6to4 addresses.
+  const octets = address.split('.').map(Number);
+  const embedded = `${((octets[0] << 8) | octets[1]).toString(16)}:${((octets[2] << 8) | octets[3]).toString(16)}`;
+  blockedImageAddresses.addSubnet(`64:ff9b::${embedded}`, 96 + prefix, 'ipv6');
+  blockedImageAddresses.addSubnet(`2002:${embedded}::`, 16 + prefix, 'ipv6');
+}
+for (const [address, prefix] of [
+  ['::', 96],
+  ['64:ff9b:1::', 48],
+  ['2001:db8::', 32],
+  ['fc00::', 7],
+  ['fe80::', 10],
+  ['fec0::', 10],
+  ['ff00::', 8],
+] as const) {
+  blockedImageAddresses.addSubnet(address, prefix, 'ipv6');
+}
+
+function getUnsafeIpReason(address: string): string | undefined {
+  const normalizedAddress = normalizeExternalImageHostname(address);
+  const family = isIP(normalizedAddress);
+  if (family && blockedImageAddresses.check(normalizedAddress, family === 4 ? 'ipv4' : 'ipv6')) {
+    return `resolved to blocked IPv${family} address ${normalizedAddress}`;
+  }
+  return undefined;
+}
+
+type ExternalImageTargetValidation =
+  | { blockReason: string; resolvedAddresses?: never }
+  | { blockReason?: never; resolvedAddresses: LookupAddress[] };
+
+async function validateExternalImageTarget(
+  url: string,
+  signal: AbortSignal,
+): Promise<ExternalImageTargetValidation> {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    return { blockReason: 'URL is invalid' };
+  }
+
+  if (parsedUrl.protocol !== 'https:') {
+    return { blockReason: `protocol ${parsedUrl.protocol} is not allowed` };
+  }
+
+  const hostname = normalizeExternalImageHostname(parsedUrl.hostname);
+  if (!hostname) {
+    return { blockReason: 'URL is missing a hostname' };
+  }
+
+  if (parsedUrl.username || parsedUrl.password) {
+    return { blockReason: 'URL credentials are not allowed' };
+  }
+
+  if (BLOCKED_IMAGE_HOSTNAMES.has(hostname) || hostname.endsWith('.localhost')) {
+    return { blockReason: `hostname ${hostname} is blocked` };
+  }
+
+  const directIpReason = getUnsafeIpReason(hostname);
+  if (directIpReason) {
+    return { blockReason: directIpReason };
+  }
+
+  const hostnameIpFamily = isIP(hostname);
+  if (hostnameIpFamily) {
+    return { resolvedAddresses: [{ address: hostname, family: hostnameIpFamily }] };
+  }
+
+  try {
+    const resolvedAddresses = await new Promise<LookupAddress[]>((resolve, reject) => {
+      signal.throwIfAborted();
+      const onAbort = () => reject(signal.reason);
+      signal.addEventListener('abort', onAbort, { once: true });
+      lookup(hostname, { all: true, verbatim: true })
+        .then(resolve, reject)
+        .finally(() => signal.removeEventListener('abort', onAbort));
+    });
+    if (resolvedAddresses.length === 0) {
+      return { blockReason: `hostname ${hostname} did not resolve to any addresses` };
+    }
+
+    for (const resolvedAddress of resolvedAddresses) {
+      const unsafeReason = getUnsafeIpReason(resolvedAddress.address);
+      if (unsafeReason) {
+        return { blockReason: `${hostname} ${unsafeReason}` };
+      }
+    }
+
+    return { resolvedAddresses };
+  } catch (error) {
+    logger.warn('[OpenAI Image] Failed to resolve external image hostname', {
+      url,
+      hostname,
+      error: String(error),
+    });
+    return { blockReason: `hostname ${hostname} could not be resolved` };
+  }
+}
+
+async function createPinnedExternalImageDispatcher(
+  url: string,
+  resolvedAddresses: LookupAddress[],
+): Promise<Dispatcher> {
+  const tlsOptions = await getFetchTlsOptions();
+  const proxyUrl = getProxyUrlForTarget(url);
+  const hostname = normalizeExternalImageHostname(new URL(url).hostname);
+  const requestTls = { ...tlsOptions, ...(isIP(hostname) ? {} : { servername: hostname }) };
+  const agent = proxyUrl
+    ? new ProxyAgent({ uri: proxyUrl, proxyTls: tlsOptions, requestTls })
+    : new Agent({ connect: requestTls });
+  const pinnedAgent = isIP(hostname)
+    ? agent
+    : agent.compose(
+        interceptors.dns({
+          // Pin the validated addresses while preserving the HTTP host and TLS server name.
+          lookup: (_origin, _options, callback) => {
+            callback(
+              null,
+              resolvedAddresses.map(({ address, family }) => ({
+                address,
+                family: family as 4 | 6,
+                ttl: 60_000,
+              })),
+            );
+          },
+        }),
+      );
+  return pinnedAgent.compose(
+    // DNS pinning rotates address families on another request. Retry route failures
+    // that the DNS interceptor does not handle itself, using the same validated set.
+    interceptors.retry({
+      maxRetries: 1,
+      minTimeout: 0,
+      maxTimeout: 0,
+      errorCodes: ['ENETUNREACH', 'EHOSTUNREACH', 'UND_ERR_CONNECT_TIMEOUT'],
+      statusCodes: [],
+    }),
+    interceptors.decompress({ skipErrorResponses: false, maxSize: BLOB_MAX_SIZE }),
+    stripDecompressionHeaders(),
+  );
+}
+
+function getDownloadedImageMimeType(buffer: Buffer): string | undefined {
+  if (buffer.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) {
+    return 'image/png';
+  }
+  if (buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) {
+    return 'image/jpeg';
+  }
+  if (['GIF87a', 'GIF89a'].includes(buffer.subarray(0, 6).toString('ascii'))) {
+    return 'image/gif';
+  }
+  if (
+    buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  if (buffer.length >= 16 && buffer.subarray(4, 8).toString('ascii') === 'ftyp') {
+    const boxEnd = Math.min(buffer.readUInt32BE(0), buffer.length);
+    for (let offset = 8; offset + 4 <= boxEnd; offset += offset === 8 ? 8 : 4) {
+      if (['avif', 'avis'].includes(buffer.subarray(offset, offset + 4).toString('ascii'))) {
+        return 'image/avif';
+      }
+    }
+  }
+  return undefined;
+}
+
+function formatImageMarkdown(prompt: string, imageSrc: string): string {
+  const sanitizedPrompt = prompt
+    .replace(/\r?\n|\r/g, ' ')
+    .replace(/\[/g, '(')
+    .replace(/\]/g, ')');
+  const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
+
+  return `![${ellipsizedPrompt}](${imageSrc})`;
+}
+
+function getPrimaryImageSource(images?: ImageOutput[]): string | undefined {
+  const primaryImage = images?.[0];
+  return primaryImage?.blobRef?.uri || primaryImage?.data;
+}
+
 export function buildStructuredImageOutputs(
   data: any,
   outputFormat?: string,
@@ -591,6 +811,9 @@ export function buildStructuredImageOutputs(
       }
 
       if (item.url) {
+        if (isExternalImageUrl(item.url)) {
+          return null;
+        }
         const mimeType = inferMimeTypeFromUrl(item.url);
         return mimeType ? { data: item.url, mimeType } : { data: item.url };
       }
@@ -600,33 +823,223 @@ export function buildStructuredImageOutputs(
     .filter((item: ImageOutput | null): item is ImageOutput => item !== null);
 }
 
+async function downloadExternalImage(
+  url: string,
+  abortSignal: AbortSignal,
+  maxBytes: number,
+): Promise<ImageOutput | null> {
+  const controller = new AbortController();
+  const signal = AbortSignal.any([controller.signal, abortSignal]);
+  let dispatcher: Dispatcher | undefined;
+  try {
+    signal.throwIfAborted();
+    const validatedTarget = await validateExternalImageTarget(url, signal);
+    if ('blockReason' in validatedTarget) {
+      logger.warn('[OpenAI Image] Blocked unsafe external image URL', {
+        url,
+        reason: validatedTarget.blockReason,
+      });
+      return null;
+    }
+
+    signal.throwIfAborted();
+    dispatcher = await createPinnedExternalImageDispatcher(url, validatedTarget.resolvedAddresses);
+    signal.throwIfAborted();
+    const downloadOptions = {
+      redirect: 'error',
+      signal,
+      dispatcher,
+      // Binary downloads must not be cloned for request logging or receive saved Cloud auth.
+      headers: { 'x-promptfoo-silent': 'true' },
+      skipCloudAuthInjection: true,
+    } as const;
+    const response = await fetchWithProxy(url, downloadOptions);
+    if (!response.ok) {
+      logger.warn('[OpenAI Image] Failed to download external image URL', {
+        url,
+        status: response.status,
+        statusText: response.statusText,
+      });
+      return null;
+    }
+
+    const contentLength = Number(response.headers.get('content-length') ?? 0);
+    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+      logger.warn('[OpenAI Image] External image exceeds blob size limit', {
+        url,
+        contentLength,
+        maxSizeBytes: maxBytes,
+      });
+      return null;
+    }
+
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    if (response.body) {
+      const reader = response.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        totalBytes += value.byteLength;
+        if (totalBytes > maxBytes) {
+          controller.abort();
+          logger.warn('[OpenAI Image] External image exceeded blob size limit during download', {
+            url,
+            sizeBytes: totalBytes,
+            maxSizeBytes: maxBytes,
+          });
+          return null;
+        }
+        chunks.push(Buffer.from(value));
+      }
+    } else {
+      const arrayBuffer = await response.arrayBuffer();
+      totalBytes = arrayBuffer.byteLength;
+      if (totalBytes > maxBytes) {
+        controller.abort();
+        logger.warn('[OpenAI Image] External image exceeded blob size limit after download', {
+          url,
+          sizeBytes: totalBytes,
+          maxSizeBytes: maxBytes,
+        });
+        return null;
+      }
+      chunks.push(Buffer.from(arrayBuffer));
+    }
+
+    const responseMimeType = response.headers
+      .get('content-type')
+      ?.split(';', 1)[0]
+      ?.trim()
+      .toLowerCase();
+    const buffer = Buffer.concat(chunks, totalBytes);
+    const mimeType = getDownloadedImageMimeType(buffer);
+    const declaredMimeType = responseMimeType === 'image/jpg' ? 'image/jpeg' : responseMimeType;
+    if (!mimeType || (declaredMimeType && declaredMimeType !== mimeType)) {
+      logger.warn('[OpenAI Image] External image bytes did not match a supported content type', {
+        url,
+        declaredMimeType,
+        detectedMimeType: mimeType,
+      });
+      return null;
+    }
+    return { data: `data:${mimeType};base64,${buffer.toString('base64')}`, mimeType };
+  } catch (error) {
+    logger.warn('[OpenAI Image] Failed to internalize external image URL', {
+      url,
+      error: String(error),
+    });
+    return null;
+  } finally {
+    controller.abort();
+    await dispatcher?.destroy();
+  }
+}
+
+export async function buildSafeStructuredImageOutputs(
+  data: any,
+  outputFormat?: string,
+  responseFormat?: string,
+  abortSignal?: AbortSignal,
+): Promise<ImageOutput[] | undefined> {
+  if (
+    !Array.isArray(data.data) ||
+    data.data.length === 0 ||
+    data.data.length > MAX_IMAGE_BATCH_SIZE
+  ) {
+    return undefined;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), getRequestTimeoutMs());
+  const signal = abortSignal
+    ? AbortSignal.any([controller.signal, abortSignal])
+    : controller.signal;
+  const images: ImageOutput[] = [];
+  let remainingBytes = BLOB_MAX_SIZE;
+  try {
+    for (const item of data.data) {
+      if (signal.aborted || remainingBytes <= 0) {
+        return undefined;
+      }
+      let image: ImageOutput | null = null;
+      if (item.b64_json) {
+        const mimeType = getMimeTypeForOutputFormat(outputFormat);
+        image = { data: `data:${mimeType};base64,${item.b64_json}`, mimeType };
+      } else if (responseFormat !== 'b64_json' && typeof item.url === 'string') {
+        if (isExternalImageUrl(item.url)) {
+          image = await downloadExternalImage(item.url, signal, remainingBytes);
+        } else if (item.url.startsWith('data:image/')) {
+          image = { data: item.url };
+        }
+      }
+      if (!image?.data || signal.aborted) {
+        return undefined;
+      }
+      remainingBytes -= Buffer.byteLength(
+        image.data.slice(image.data.indexOf(',') + 1),
+        image.data.includes(';base64,') ? 'base64' : 'utf8',
+      );
+      if (remainingBytes < 0) {
+        return undefined;
+      }
+      images.push(image);
+    }
+    return images;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export function formatStructuredImageOutput(
+  data: any,
+  prompt: string,
+  responseFormat?: string,
+  outputFormat?: string,
+  images?: ImageOutput[],
+): string | { error: string } {
+  if (!images && data.data?.length > 1) {
+    return { error: 'One or more generated images could not be downloaded safely.' };
+  }
+
+  if (responseFormat === 'b64_json') {
+    const b64Json = data.data?.[0]?.b64_json;
+    if (!b64Json) {
+      return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
+    }
+    if (!images?.length) {
+      return { error: 'No usable image data: the generated image did not pass validation.' };
+    }
+
+    return `data:${getMimeTypeForOutputFormat(outputFormat)};base64,${b64Json}`;
+  }
+
+  const primaryImageSource = getPrimaryImageSource(images);
+  if (primaryImageSource) {
+    if (primaryImageSource.startsWith('data:')) {
+      return primaryImageSource;
+    }
+    return formatImageMarkdown(prompt, primaryImageSource);
+  }
+
+  const url = data.data?.[0]?.url;
+  if (!url) {
+    return { error: `No image URL found in response: ${JSON.stringify(data)}` };
+  }
+
+  return { error: 'No usable image data: the external image could not be downloaded safely.' };
+}
+
 export function formatOutput(
   data: any,
   prompt: string,
   responseFormat?: string,
   outputFormat?: string,
 ): string | { error: string } {
-  if (responseFormat === 'b64_json') {
-    const b64Json = data.data[0].b64_json;
-    if (!b64Json) {
-      return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
-    }
-
-    return `data:${getMimeTypeForOutputFormat(outputFormat)};base64,${b64Json}`;
-  } else {
-    const url = data.data[0].url;
-    if (!url) {
-      return { error: `No image URL found in response: ${JSON.stringify(data)}` };
-    }
-
-    const sanitizedPrompt = prompt
-      .replace(/\r?\n|\r/g, ' ')
-      .replace(/\[/g, '(')
-      .replace(/\]/g, ')');
-    const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-
-    return `![${ellipsizedPrompt}](${url})`;
-  }
+  const images = buildStructuredImageOutputs(data, outputFormat);
+  return formatStructuredImageOutput(data, prompt, responseFormat, outputFormat, images);
 }
 
 export function prepareRequestBody(
@@ -769,7 +1182,7 @@ export async function callOpenAiImageApi(
   body: Record<string, any>,
   headers: Record<string, string>,
   timeout: number,
-): Promise<{ data: any; cached: boolean; status: number; statusText: string; latencyMs?: number }> {
+): Promise<FetchWithCacheResult<any>> {
   let sendsToOpenAiApi = false;
   let hasSensitiveUrl = false;
   try {
@@ -817,40 +1230,65 @@ export async function processApiResponse(
   n: number = 1,
   outputFormat?: string,
   billingConfig: OpenAiImageOptions = {},
+  deleteFromCache?: () => Promise<void>,
+  abortSignal?: AbortSignal,
 ): Promise<ProviderResponse> {
+  const evictFromCache = async () => {
+    if (!abortSignal?.aborted) {
+      await (deleteFromCache ?? data?.deleteFromCache)?.();
+    }
+  };
+
   if (data.error) {
-    await data?.deleteFromCache?.();
+    await evictFromCache();
     return {
       error: formatOpenAiError(data),
     };
   }
 
-  try {
-    const formattedOutput = formatOutput(data, prompt, responseFormat, outputFormat);
-    if (typeof formattedOutput === 'object') {
-      return formattedOutput;
-    }
+  const exactUsageCost = calculateOpenAIUsageCost(model, billingConfig, data.usage, {
+    cachedResponse: cached,
+  });
+  const cost = exactUsageCost ?? (cached ? 0 : calculateImageCost(model, size, quality, n));
+  const tokenUsage = getImageTokenUsage(data, cached);
 
-    const exactUsageCost = calculateOpenAIUsageCost(model, billingConfig, data.usage, {
-      cachedResponse: cached,
-    });
-    const cost = exactUsageCost ?? (cached ? 0 : calculateImageCost(model, size, quality, n));
-    const tokenUsage = getImageTokenUsage(data, cached);
-    const images = buildStructuredImageOutputs(data, outputFormat);
+  const generation: ProviderResponse = {
+    cached,
+    latencyMs,
+    ...(cost === undefined ? {} : { cost }),
+    ...(tokenUsage ? { tokenUsage } : {}),
+    ...(data.usage ? { metadata: { usage: data.usage } } : {}),
+  };
+
+  try {
+    const images = await buildSafeStructuredImageOutputs(
+      data,
+      outputFormat,
+      responseFormat,
+      abortSignal,
+    );
+    const formattedOutput = formatStructuredImageOutput(
+      data,
+      prompt,
+      responseFormat,
+      outputFormat,
+      images,
+    );
+    if (typeof formattedOutput === 'object') {
+      await evictFromCache();
+      return { ...generation, ...formattedOutput };
+    }
 
     return {
       output: formattedOutput,
       images,
-      cached,
-      latencyMs,
-      ...(cost === undefined ? {} : { cost }),
-      ...(tokenUsage ? { tokenUsage } : {}),
-      ...(data.usage ? { metadata: { usage: data.usage } } : {}),
+      ...generation,
       ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
     };
   } catch (err) {
-    await data?.deleteFromCache?.();
+    await evictFromCache();
     return {
+      ...generation,
       error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
     };
   }
@@ -870,7 +1308,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
@@ -912,13 +1350,16 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     let data, status, statusText;
     let cached = false;
     let latencyMs: number | undefined;
+    let deleteFromCache: (() => Promise<void>) | undefined;
+    let updateCache: FetchWithCacheResult<unknown>['updateCache'];
     try {
-      ({ data, cached, status, statusText, latencyMs } = await callOpenAiImageApi(
-        appendOpenAiApiPath(this.getApiUrl(), endpoint),
-        body,
-        headers,
-        getRequestTimeoutMs(),
-      ));
+      ({ data, cached, status, statusText, latencyMs, deleteFromCache, updateCache } =
+        await callOpenAiImageApi(
+          appendOpenAiApiPath(this.getApiUrl(), endpoint),
+          body,
+          headers,
+          getRequestTimeoutMs(),
+        ));
 
       if (status < 200 || status >= 300) {
         return {
@@ -927,13 +1368,13 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
-      await data?.deleteFromCache?.();
+      await deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
       };
     }
 
-    return processApiResponse(
+    const response = await processApiResponse(
       data,
       prompt,
       responseFormat,
@@ -945,6 +1386,32 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       config.n ?? 1,
       'output_format' in config ? config.output_format : undefined,
       config,
+      deleteFromCache,
+      callApiOptions?.abortSignal,
     );
+    const images = response.images;
+    if (
+      images &&
+      data.data.some(
+        (item: { url?: string }) => typeof item.url === 'string' && isExternalImageUrl(item.url),
+      )
+    ) {
+      try {
+        await updateCache?.(
+          {
+            ...data,
+            data: data.data.map((item: object, index: number) => ({
+              ...item,
+              url: images[index].data,
+            })),
+          },
+          status,
+          statusText,
+        );
+      } catch (error) {
+        logger.warn('[OpenAI Image] Failed to cache image data', { error: String(error) });
+      }
+    }
+    return response;
   }
 }

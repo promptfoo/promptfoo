@@ -10,13 +10,11 @@
  * The API key is sent as the "key" field in the JSON request body.
  */
 
-import { isBlobStorageEnabled } from '../blobs/extractor';
-import { type BlobRef, storeBlob } from '../blobs/index';
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { fetchWithProxy } from '../util/fetch/index';
 import { ellipsize } from '../util/text';
+import { buildSafeStructuredImageOutputs } from './openai/image';
 import { getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../types/env';
@@ -101,7 +99,7 @@ export class ModelsLabImageProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       return {
@@ -174,19 +172,16 @@ export class ModelsLabImageProvider implements ApiProvider {
         if (!data.output || data.output.length === 0) {
           return { error: 'ModelsLab returned no image URLs' };
         }
-        const imageUrl = data.output[0];
-        const { url: resolvedUrl, blobRef } = await this.maybeDownloadToBlob(imageUrl, context);
-        const sanitizedPrompt = prompt
-          .replace(/\r?\n|\r/g, ' ')
-          .replace(/\[/g, '(')
-          .replace(/\]/g, ')');
-        return {
-          output: `![${ellipsize(sanitizedPrompt, 50)}](${resolvedUrl})`,
-          cached,
-          ...(blobRef && {
-            metadata: { blobRef, blobHash: blobRef.hash },
-          }),
-        };
+        const images = await buildSafeStructuredImageOutputs(
+          { data: [{ url: data.output[0] }] },
+          undefined,
+          undefined,
+          callApiOptions?.abortSignal,
+        );
+        if (!images?.[0]?.data) {
+          return { error: 'The generated image could not be downloaded safely.' };
+        }
+        return { output: images[0].data, images, cached };
       }
 
       return {
@@ -194,43 +189,6 @@ export class ModelsLabImageProvider implements ApiProvider {
       };
     } catch (err) {
       return { error: `ModelsLab API call error: ${String(err)}` };
-    }
-  }
-
-  private async maybeDownloadToBlob(
-    imageUrl: string,
-    context?: CallApiContextParams,
-  ): Promise<{ url: string; blobRef?: BlobRef }> {
-    if (!isBlobStorageEnabled()) {
-      return { url: imageUrl };
-    }
-
-    try {
-      const response = await fetchWithProxy(imageUrl);
-      if (!response.ok) {
-        logger.warn('[ModelsLab] Failed to download image for blob storage', {
-          url: imageUrl,
-          status: response.status,
-        });
-        return { url: imageUrl };
-      }
-
-      const buffer = Buffer.from(await response.arrayBuffer());
-      const mimeType = response.headers.get('content-type')?.split(';')[0] || 'image/png';
-      const { ref } = await storeBlob(buffer, mimeType, {
-        evalId: context?.evaluationId,
-        location: 'response.output',
-        kind: 'image',
-        promptIdx: context?.promptIdx,
-        testIdx: context?.testIdx,
-      });
-      return { url: ref.uri, blobRef: ref };
-    } catch (error) {
-      logger.warn('[ModelsLab] Failed to store image as blob, using URL', {
-        url: imageUrl,
-        error: String(error),
-      });
-      return { url: imageUrl };
     }
   }
 

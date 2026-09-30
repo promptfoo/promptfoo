@@ -1,7 +1,12 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
-import { callOpenAiImageApi, formatOutput, OpenAiImageProvider } from '../openai/image';
+import {
+  buildSafeStructuredImageOutputs,
+  callOpenAiImageApi,
+  formatStructuredImageOutput,
+  OpenAiImageProvider,
+} from '../openai/image';
 import { appendOpenAiApiPath } from '../openai/util';
 import { getRequestTimeoutMs } from '../shared';
 
@@ -132,7 +137,7 @@ export class NscaleImageProvider extends OpenAiImageProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -172,8 +177,14 @@ export class NscaleImageProvider extends OpenAiImageProvider {
 
     let data: any, status: number, statusText: string;
     let cached = false;
+    let deleteFromCache: (() => Promise<void>) | undefined;
+    const evictFromCache = async () => {
+      if (!callApiOptions?.abortSignal?.aborted) {
+        await (deleteFromCache ?? data?.deleteFromCache)?.();
+      }
+    };
     try {
-      ({ data, cached, status, statusText } = await callOpenAiImageApi(
+      ({ data, cached, status, statusText, deleteFromCache } = await callOpenAiImageApi(
         appendOpenAiApiPath(this.getApiUrl(), endpoint),
         body,
         headers,
@@ -186,36 +197,51 @@ export class NscaleImageProvider extends OpenAiImageProvider {
       }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
-      await data?.deleteFromCache?.();
+      await evictFromCache();
       return {
         error: `API call error: ${String(err)}`,
       };
     }
 
     if (data.error) {
-      await data?.deleteFromCache?.();
+      await evictFromCache();
       return {
         error: typeof data.error === 'string' ? data.error : JSON.stringify(data.error),
       };
     }
 
-    try {
-      const formattedOutput = formatOutput(data, prompt, responseFormat);
-      if (typeof formattedOutput === 'object') {
-        return formattedOutput;
-      }
+    const cost = cached ? 0 : this.calculateImageCost(this.modelName, config.n || 1);
+    const generation = { cached, cost };
 
-      const cost = cached ? 0 : this.calculateImageCost(this.modelName, config.n || 1);
+    try {
+      const images = await buildSafeStructuredImageOutputs(
+        data,
+        undefined,
+        responseFormat,
+        callApiOptions?.abortSignal,
+      );
+      const formattedOutput = formatStructuredImageOutput(
+        data,
+        prompt,
+        responseFormat,
+        undefined,
+        images,
+      );
+      if (typeof formattedOutput === 'object') {
+        await evictFromCache();
+        return { ...generation, ...formattedOutput };
+      }
 
       return {
         output: formattedOutput,
-        cached,
-        cost,
+        images,
+        ...generation,
         ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
       };
     } catch (err) {
-      await data?.deleteFromCache?.();
+      await evictFromCache();
       return {
+        ...generation,
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
       };
     }

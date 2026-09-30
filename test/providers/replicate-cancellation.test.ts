@@ -1,11 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache, getCache, getCacheClearGeneration, isCacheEnabled } from '../../src/cache';
+import { buildSafeStructuredImageOutputs } from '../../src/providers/openai/image';
 import {
   ReplicateImageProvider,
   ReplicateModerationProvider,
   ReplicateProvider,
 } from '../../src/providers/replicate';
 
+const imageData = 'data:image/png;base64,aW1hZ2U=';
+vi.mock('../../src/providers/openai/image', async (importOriginal) => ({
+  ...(await importOriginal()),
+  buildSafeStructuredImageOutputs: vi.fn(),
+}));
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
   fetchWithCache: vi.fn(),
@@ -14,6 +20,9 @@ vi.mock('../../src/cache', async (importOriginal) => ({
   isCacheEnabled: vi.fn(),
 }));
 beforeEach(() => {
+  vi.mocked(buildSafeStructuredImageOutputs)
+    .mockReset()
+    .mockResolvedValue([{ data: imageData, mimeType: 'image/png' }]);
   vi.mocked(fetchWithCache).mockReset();
   vi.mocked(getCache).mockReset();
   vi.mocked(getCacheClearGeneration).mockReset().mockReturnValue(0);
@@ -62,7 +71,7 @@ it.each([
     expect(sharedSignal?.aborted).toBe(false);
     finish(reply('succeeded', output));
     const surviving = await result2;
-    expect(surviving).toMatchObject({ output: expect.stringContaining(output) });
+    expect(surviving.output).toBe(Provider === ReplicateImageProvider ? imageData : output);
     if (Provider === ReplicateProvider) {
       expect(surviving.tokenUsage?.numRequests).toBe(1);
     } else {
@@ -181,11 +190,8 @@ it('caches an image completed by polling after replaying an incomplete creation'
     .mockResolvedValueOnce(reply('succeeded', ['https://example.invalid/complete.png']));
   const provider = new ReplicateImageProvider('owner/model', { config: { apiKey: 'fixture' } });
   const result = await provider.callApi('Hello');
-  expect(result).toMatchObject({ cached: false, output: expect.stringContaining('complete.png') });
-  expect(cache.set).toHaveBeenCalledWith(
-    expect.any(String),
-    JSON.stringify(['https://example.invalid/complete.png']),
-  );
+  expect(result).toMatchObject({ cached: false, output: imageData });
+  expect(cache.set).toHaveBeenCalledWith(expect.any(String), JSON.stringify(imageData));
   cache.get.mockResolvedValueOnce(cache.set.mock.calls[0][1]);
   expect(await provider.callApi('Hello')).toMatchObject({ cached: true });
   expect(fetchWithCache).toHaveBeenCalledTimes(2);
@@ -266,7 +272,9 @@ describe.each([ReplicateProvider, ReplicateImageProvider])('%s local cancellatio
         undefined,
         { abortSignal: signal },
       );
-      expect(response.output).toContain('https://example.invalid/fixture.png');
+      expect(response.output).toBe(
+        Provider === ReplicateImageProvider ? imageData : 'https://example.invalid/fixture.png',
+      );
       expect(fetchWithCache).toHaveBeenCalledWith(
         model.includes(':')
           ? 'https://api.replicate.com/v1/predictions'
@@ -325,7 +333,9 @@ describe.each([ReplicateProvider, ReplicateImageProvider])('%s local cancellatio
       undefined,
       { abortSignal: signal },
     );
-    expect(response.output).toContain('https://example.invalid/fixture.png');
+    expect(response.output).toBe(
+      Provider === ReplicateImageProvider ? imageData : 'https://example.invalid/fixture.png',
+    );
     expect(fetchWithCache).toHaveBeenLastCalledWith(
       'https://api.replicate.com/v1/predictions/fixture-prediction',
       expect.objectContaining({ method: 'GET', signal }),

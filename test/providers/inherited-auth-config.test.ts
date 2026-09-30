@@ -6,10 +6,16 @@ import { HeliconeGatewayProvider } from '../../src/providers/helicone';
 import { loadApiProvider } from '../../src/providers/index';
 import { createNscaleProvider } from '../../src/providers/nscale';
 import { NscaleImageProvider } from '../../src/providers/nscale/image';
+import { buildSafeStructuredImageOutputs } from '../../src/providers/openai/image';
 import { mockProcessEnv } from '../util/utils';
 
 import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 
+const imageData = 'data:image/png;base64,aW1hZ2U=';
+vi.mock('../../src/providers/openai/image', async (importOriginal) => ({
+  ...(await importOriginal()),
+  buildSafeStructuredImageOutputs: vi.fn(),
+}));
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
   fetchWithCache: vi.fn(),
@@ -17,6 +23,9 @@ vi.mock('../../src/cache', async (importOriginal) => ({
 
 let restoreEnv: () => void;
 beforeEach(() => {
+  vi.mocked(buildSafeStructuredImageOutputs)
+    .mockReset()
+    .mockResolvedValue([{ data: imageData, mimeType: 'image/png' }]);
   vi.mocked(fetchWithCache).mockReset();
   restoreEnv = mockProcessEnv({
     CEREBRAS_API_KEY: 'cerebras-fixture',
@@ -50,7 +59,7 @@ const chatReply = {
   choices: [{ message: { content: 'Hello' }, finish_reason: 'stop' }],
   usage: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
 };
-const imageReply = { data: [{ url: 'https://example.invalid/fixture.png' }] };
+const imageReply = { data: [{ url: imageData }] };
 
 function firstRequest() {
   const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
@@ -106,7 +115,7 @@ describe('Nscale image resolved configuration', () => {
       },
     });
     const result = await provider.callApi('A blue square');
-    expect(result.output).toContain('https://example.invalid/fixture.png');
+    expect(result.output).toBe(imageData);
     expect(firstRequest()).toMatchObject({
       url: 'https://proxy.example/v1/images/generations',
       headers: { Authorization: `Bearer ${expected}` },
@@ -153,7 +162,7 @@ describe('Nscale image resolved configuration', () => {
       });
       const result = await provider.callApi('A blue square');
       expect(provider.id()).toBe('nscale-fixture');
-      expect(result.output).toContain('https://example.invalid/fixture.png');
+      expect(result.output).toBe(imageData);
       expect(result.cached).toBe(false);
       expect(firstRequest()).toMatchObject({
         url: 'http://127.0.0.1:9000/v1/images/generations',
@@ -187,7 +196,7 @@ describe('Gateway scoped credentials', () => {
       });
       const result = await provider.callApi('A blue square');
       expect(provider.id()).toBe('comet-fixture');
-      expect(result.output).toContain('https://example.invalid/fixture.png');
+      expect(result.output).toBe(imageData);
       expect(firstRequest()).toMatchObject({
         url: 'https://api.cometapi.com/v1/images/generations',
         headers: { Authorization: `Bearer ${apiKey ?? 'scoped-comet'}` },

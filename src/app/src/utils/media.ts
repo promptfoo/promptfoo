@@ -61,7 +61,8 @@ function resolveMediaUrl(url?: string | null): string | undefined {
 
   // Legacy API path - prepend base URL (check before resolveBlobUri since
   // that function returns paths starting with '/' directly without apiBaseUrl)
-  if (url.startsWith('/api/')) {
+  const apiBase = getApiBaseUrl();
+  if (url.startsWith('/api/') && !(apiBase && url.startsWith(`${apiBase}/api/`))) {
     return withApiBase(url);
   }
 
@@ -83,23 +84,35 @@ export function resolveBlobUri(uri?: string | null): string | undefined {
   if (!uri) {
     return undefined;
   }
-
-  if (uri.startsWith(BLOB_URI_PREFIX)) {
-    return withApiBase(`/api/blobs/${uri.slice(BLOB_URI_PREFIX.length)}`);
-  }
-
-  if (uri.startsWith(STORAGE_REF_PREFIX)) {
-    const path = normalizePath(uri.slice(STORAGE_REF_PREFIX.length));
-    return withApiBase(`/api/media/${path}`);
-  }
-
-  // Only allow safe internal paths and data URIs
-  // External URLs (http://, https://, //) are NOT allowed to prevent SSRF
-  // See SECURITY.md - test data and model outputs are untrusted inputs
-  if (uri.startsWith('/api/') || uri.startsWith('data:')) {
+  if (uri.startsWith('data:')) {
     return uri;
   }
 
+  let source = uri;
+  if (uri.startsWith(BLOB_URI_PREFIX)) {
+    source = withApiBase(`/api/blobs/${uri.slice(BLOB_URI_PREFIX.length)}`);
+  } else if (uri.startsWith(STORAGE_REF_PREFIX)) {
+    source = withApiBase(`/api/media/${normalizePath(uri.slice(STORAGE_REF_PREFIX.length))}`);
+  }
+
+  const apiBase = getApiBaseUrl();
+  const prefix = apiBase && source.startsWith(`${apiBase}/api/`) ? apiBase : '';
+  if (!source.startsWith(`${prefix}/api/`)) {
+    return undefined;
+  }
+
+  // Check the normalized path so a media reference cannot select another API route.
+  try {
+    const path = new URL(source.slice(prefix.length), 'https://media.invalid');
+    if (
+      path.origin === 'https://media.invalid' &&
+      (path.pathname.startsWith('/api/blobs/') || path.pathname.startsWith('/api/media/'))
+    ) {
+      return `${prefix}${path.pathname}${path.search}${path.hash}`;
+    }
+  } catch {
+    return undefined;
+  }
   return undefined;
 }
 
@@ -145,34 +158,37 @@ export function resolveAudioSource(
 export function resolveImageSource(
   image?: { data?: string; format?: string; blobRef?: BlobLike } | string | null,
 ): string | undefined {
-  if (typeof image === 'string') {
-    const blobUrl = resolveBlobUri(image);
+  if (typeof image !== 'string') {
+    const blobUrl = resolveBlobRef(image?.blobRef);
     if (blobUrl) {
       return blobUrl;
     }
-    if (image.startsWith('data:')) {
-      return image;
-    }
-    // Allow base64-ish payloads that are purely non-whitespace and use common base64/url-safe chars
-    // Require a minimum length to avoid misclassifying short strings (e.g., session IDs) as images.
-    if (image.length >= 60 && /^[A-Za-z0-9+/=_-]+$/.test(image)) {
-      return `data:image/png;base64,${image}`;
-    }
-    return undefined;
   }
 
-  const blobUrl = resolveBlobRef(image?.blobRef);
+  const data = typeof image === 'string' ? image : image?.data;
+  if (!data) {
+    return undefined;
+  }
+  const blobUrl = resolveBlobUri(data);
   if (blobUrl) {
     return blobUrl;
   }
-
-  if (image?.data) {
-    const format = image.format || 'png';
-    return image.data.startsWith('data:')
-      ? image.data
-      : `data:image/${format};base64,${image.data}`;
+  if (typeof image === 'string') {
+    return data.length >= 60 && /^[A-Za-z0-9+/=_-]+$/.test(data)
+      ? `data:image/png;base64,${data}`
+      : undefined;
   }
-
+  const base64 = data.replace(/[\t\n\r ]/g, '');
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+  const contentLength = base64.length - padding;
+  if (
+    contentLength > 0 &&
+    contentLength % 4 !== 1 &&
+    (padding === 0 || base64.length % 4 === 0) &&
+    /^[A-Za-z0-9+/]+={0,2}$/.test(base64)
+  ) {
+    return `data:image/${image?.format || 'png'};base64,${base64}`;
+  }
   return undefined;
 }
 
