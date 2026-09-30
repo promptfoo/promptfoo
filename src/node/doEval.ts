@@ -1020,6 +1020,7 @@ async function doEvalWithEnv(
     let successes = 0;
     let failures = 0;
     let errors = 0;
+    let cacheHits = 0;
     const tokenUsage = createEmptyTokenUsage();
 
     // Calculate our total successes and failures
@@ -1032,6 +1033,9 @@ async function doEvalWithEnv(
       }
       if (prompt.metrics?.testErrorCount) {
         errors += prompt.metrics.testErrorCount;
+      }
+      if (prompt.metrics?.testCacheHitCount) {
+        cacheHits += prompt.metrics.testCacheHitCount;
       }
       accumulateTokenUsage(tokenUsage, prompt.metrics?.tokenUsage);
     }
@@ -1098,6 +1102,7 @@ async function doEvalWithEnv(
       successes,
       failures,
       errors,
+      cacheHits,
       duration,
       maxConcurrency,
       tracker,

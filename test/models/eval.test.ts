@@ -1226,6 +1226,24 @@ describe('evaluator', () => {
   });
 
   describe('getStats', () => {
+    it('aggregates cache hits across prompts and omits the field when there are none', () => {
+      const eval1 = new Eval({});
+      eval1.prompts = [
+        { metrics: { testPassCount: 2, testCacheHitCount: 2 } },
+        { metrics: { testPassCount: 1, testFailCount: 1, testCacheHitCount: 1 } },
+      ] as any;
+
+      expect(eval1.getStats().cacheHits).toBe(3);
+
+      const noCacheEval = new Eval({});
+      noCacheEval.prompts = [
+        { metrics: { testPassCount: 2 } },
+        { metrics: { testPassCount: 1, testCacheHitCount: 0 } },
+      ] as any;
+
+      expect(noCacheEval.getStats().cacheHits).toBeUndefined();
+    });
+
     it('attributes generation metadata once without increasing target tokens or probes', () => {
       const eval1 = new Eval({
         metadata: {
