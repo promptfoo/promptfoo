@@ -570,13 +570,31 @@ setInterval(() => {}, 1000);`;
 Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);`,
       );
       const pidFiles = ['native-pid', 'descendant-pid'].map((name) => path.join(nativeDir, name));
-      const descriptor = fs.openSync(path.join(root, 'supervisor.log'), 'w');
-      const supervisor = spawn(process.execPath, [fixture], {
-        stdio: ['ignore', descriptor, descriptor],
-        timeout: 8_000,
-        killSignal: 'SIGKILL',
-        env: { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary },
-      });
+      const preload = path.join(root, 'delayed-signal.mjs');
+      fs.writeFileSync(
+        preload,
+        `const originalKill = process.kill;
+process.kill = function (pid, signal) {
+  if (pid === process.pid && ['SIGINT', 'SIGTERM'].includes(signal)) {
+    setTimeout(() => originalKill.call(process, pid, signal), 50).unref();
+    return true;
+  }
+  return originalKill.call(process, pid, signal);
+};`,
+      );
+      const output = path.join(root, 'supervisor.log');
+      const descriptor = fs.openSync(output, 'w');
+      // The preload delays only the supervisor's self-signal, never its child's cleanup.
+      const supervisor = spawn(
+        process.execPath,
+        ['--import', pathToFileURL(preload).href, fixture],
+        {
+          stdio: ['ignore', descriptor, descriptor],
+          timeout: 8_000,
+          killSignal: 'SIGKILL',
+          env: { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary },
+        },
+      );
       const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
         (resolve, reject) => {
           supervisor.once('error', reject);
@@ -590,8 +608,7 @@ Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);`,
         });
         expect(supervisor.kill(signal)).toBe(true);
         const result = await closed;
-        expect(result.code).not.toBe(0);
-        expect(result.signal).toBe(signal);
+        expect(result, fs.readFileSync(output, 'utf8')).toEqual({ code: null, signal });
         const pids = pidFiles.map((file) => Number(fs.readFileSync(file, 'utf8')));
         await vi.waitFor(() => expect(pids.filter(processIsRunning)).toEqual([]), {
           timeout: 1_000,

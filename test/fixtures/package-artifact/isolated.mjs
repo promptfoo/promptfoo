@@ -285,7 +285,10 @@ export async function runIsolated(
     if (cancellationSignal) {
       // Preserve cancellation only after owned processes and state are gone.
       process.kill(process.pid, cancellationSignal);
-      await new Promise(() => {});
+      // A pending Promise alone cannot keep Node alive until signal delivery.
+      await new Promise(() => {
+        setInterval(() => {}, 1_000);
+      });
     }
   }
 }
