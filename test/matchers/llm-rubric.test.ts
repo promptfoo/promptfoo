@@ -97,6 +97,159 @@ describe('matchesLlmRubric', () => {
     cliState.selectedProviderConfigs = undefined;
   });
 
+  describe('input image evidence', () => {
+    const inputData =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC';
+    const outputData =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
+    const inputImage = { data: inputData };
+    const outputImage = { data: outputData };
+
+    it.each([
+      ['openai:gpt-4o', { type: 'image_url', image_url: { url: inputData } }],
+      ['openai:responses:gpt-4o', { type: 'input_image', image_url: inputData }],
+      [
+        'anthropic:messages:claude-sonnet-4',
+        {
+          type: 'image',
+          source: { type: 'base64', media_type: 'image/png', data: inputData.split(',')[1] },
+        },
+      ],
+      [
+        'google:gemini-2.5-flash',
+        { inlineData: { mimeType: 'image/png', data: inputData.split(',')[1] } },
+      ],
+    ])('preserves a custom rubric and supplies input context to %s', async (id, imagePart) => {
+      const provider = createMockProvider({
+        id: id as string,
+        response: { output: JSON.stringify({ pass: true, score: 1, reason: 'Fixture verdict' }) },
+      });
+      const customRubric = JSON.stringify([
+        { role: 'system', content: 'Return a JSON verdict.' },
+        { role: 'user', content: 'Custom rubric: {{rubric}}. Response: {{output}}' },
+      ]);
+      const result = await matchesLlmRubric(
+        'Describe the color',
+        'A blue square.',
+        { provider, rubricPrompt: customRubric },
+        {},
+        undefined,
+        { inputImages: [inputImage] },
+      );
+      const messages = JSON.parse(provider.callApi.mock.calls[0][0] as string);
+      expect(messages[0]).toEqual({ role: 'system', content: 'Return a JSON verdict.' });
+      expect(messages[1].content).toContainEqual(imagePart);
+      expect(JSON.stringify(messages)).toContain(
+        'Custom rubric: Describe the color. Response: A blue square.',
+      );
+      expect(JSON.stringify(messages)).toContain('input context for the request, not output');
+      expect(JSON.stringify(messages)).not.toContain(
+        'The evaluated output includes the attached image',
+      );
+      expect(result.metadata?.renderedGradingPromptInputImages).toBe(1);
+      expect(result.metadata?.renderedGradingPromptImages).toBeUndefined();
+      expect(JSON.stringify(result.metadata)).not.toContain(inputData);
+      expect(remoteGrading.doRemoteGrading).not.toHaveBeenCalled();
+    });
+
+    it('preserves nullable output media from JSON providers', async () => {
+      const provider = createMockProvider({
+        response: { output: JSON.stringify({ pass: true, score: 1, reason: 'Fixture verdict' }) },
+      });
+      const result = await matchesLlmRubric(
+        'Describe the color',
+        'A blue square.',
+        { provider },
+        {},
+        undefined,
+        { inputImages: [inputImage], providerResponse: JSON.parse('{"images":null}') },
+      );
+      expect(result.metadata?.renderedGradingPromptInputImages).toBe(1);
+      expect(result.metadata?.renderedGradingPromptImages).toBeUndefined();
+    });
+
+    it('labels input and output images separately after ignoring empty output entries', async () => {
+      const provider = createMockProvider({
+        response: { output: JSON.stringify({ pass: true, score: 1, reason: 'Fixture verdict' }) },
+      });
+      const result = await matchesLlmRubric(
+        'Compare the colors',
+        outputData,
+        { provider },
+        {},
+        undefined,
+        { inputImages: [inputImage], providerResponse: { images: [{}, outputImage] } },
+      );
+      const parts = JSON.parse(provider.callApi.mock.calls[0][0] as string).at(-1).content;
+      const inputIndex = parts.findIndex(
+        (part: { image_url?: { url: string } }) => part.image_url?.url === inputData,
+      );
+      const outputIndex = parts.findIndex(
+        (part: { image_url?: { url: string } }) => part.image_url?.url === outputData,
+      );
+      expect(inputIndex).toBeGreaterThan(0);
+      expect(outputIndex).toBeGreaterThan(inputIndex);
+      expect(parts[inputIndex - 1].text).toContain('input context');
+      expect(parts[outputIndex - 1].text).toContain('The evaluated output includes');
+      expect(parts[0].text).toContain('[Image output attached.');
+      expect(result.metadata?.renderedGradingPromptInputImages).toBe(1);
+      expect(result.metadata?.renderedGradingPromptImages).toBe(1);
+      expect(JSON.stringify(result.metadata)).not.toContain(inputData);
+      expect(JSON.stringify(result.metadata)).not.toContain(outputData);
+    });
+
+    it.each([
+      ['PROMPTFOO_GRADING_MAX_IMAGES', '1', 'Too many images'],
+      ['PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES', '100', 'total size limit'],
+      ['PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS', '150', 'total size limit'],
+    ])('applies %s across input and output evidence together', async (setting, limit, error) => {
+      const restore = mockProcessEnv({ [setting]: limit });
+      const provider = createMockProvider();
+      try {
+        await expect(
+          matchesLlmRubric('Compare the colors', 'A square.', { provider }, {}, undefined, {
+            inputImages: [inputImage],
+            providerResponse: { images: [outputImage] },
+          }),
+        ).rejects.toThrow(error);
+      } finally {
+        restore();
+      }
+      expect(provider.callApi).not.toHaveBeenCalled();
+      expect(remoteGrading.doRemoteGrading).not.toHaveBeenCalled();
+    });
+
+    it('rejects remote-preferred grading instead of dropping input evidence', async () => {
+      cliState.config = { redteam: {} };
+      const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+      const provider = createMockProvider();
+      await expect(
+        matchesLlmRubric('Describe the color', 'A blue square.', { provider }, {}, undefined, {
+          inputImages: [inputImage],
+          preferRemote: true,
+        }),
+      ).rejects.toThrow('Set redteam.provider or defaultTest.options.provider');
+      expect(provider.callApi).not.toHaveBeenCalled();
+      expect(remoteGrading.doRemoteGrading).not.toHaveBeenCalled();
+    });
+
+    it('uses the configured provider for input evidence when remote grading is available', async () => {
+      cliState.config = { redteam: { provider: 'local-vision-fixture' } };
+      const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+      const provider = createMockProvider({
+        response: { output: JSON.stringify({ pass: true, score: 1, reason: 'Fixture verdict' }) },
+      });
+      await matchesLlmRubric('Describe the color', 'A blue square.', { provider }, {}, undefined, {
+        inputImages: [inputImage],
+        preferRemote: true,
+      });
+      expect(provider.callApi).toHaveBeenCalledOnce();
+      expect(remoteGrading.doRemoteGrading).not.toHaveBeenCalled();
+    });
+  });
+
   it('should pass when the grading provider returns a passing result', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';

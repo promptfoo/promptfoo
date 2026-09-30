@@ -34,6 +34,7 @@ import type {
   CallApiContextParams,
   GradingConfig,
   GradingResult,
+  ImageOutput,
   ProviderResponse,
   VarValue,
 } from '../types/index';
@@ -188,6 +189,7 @@ export async function matchesLlmRubric(
     throwOnError?: boolean;
     preferRemote?: boolean;
     providerResponse?: ProviderResponse;
+    inputImages?: ImageOutput[];
   },
   providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
@@ -203,7 +205,15 @@ export async function matchesLlmRubric(
     options?.preferRemote ||
     (grading as LlmRubricGradingConfig).__promptfooPreferRemote ||
     !grading.provider;
-  const { imageOutputs } = materializeImageOutputsForGrading(options?.providerResponse?.images);
+  const { imageOutputs, imageInputs } = materializeImageOutputsForGrading(
+    options?.providerResponse?.images,
+    options?.inputImages,
+  );
+  if (imageInputs.length && shouldPreferRemote && !cliState.config?.redteam?.provider) {
+    throw new Error(
+      'Input-image grading requires an explicitly configured vision-capable grading provider. Set redteam.provider or defaultTest.options.provider; remote grading does not support input images.',
+    );
+  }
   const audio = options?.providerResponse?.audio;
   const gradingOutput = getGradingOutputForImages(
     getGradingOutputForAudio(llmOutput, audio),
@@ -246,6 +256,7 @@ export async function matchesLlmRubric(
       providerCallContext,
       throwOnError: options?.throwOnError,
       images: imageOutputs,
+      inputImages: imageInputs,
       audio,
       vars: {
         ...(vars || {}),

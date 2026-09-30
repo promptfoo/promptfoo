@@ -790,7 +790,11 @@ describe('runEval', () => {
               isCompositional: false,
               categoryGuidance: 'Describe the visible shape.',
             },
-            vars: { prompt: 'Describe this sunset' },
+            vars: {
+              prompt: 'Describe this sunset',
+              image:
+                'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC',
+            },
             assert: nested ? [{ type: 'assert-set', assert: [assertion] }] : [assertion],
           },
           conversations: {},

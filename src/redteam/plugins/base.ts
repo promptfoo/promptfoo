@@ -29,6 +29,7 @@ import type {
   AssertionValue,
   AtomicTestCase,
   GradingResult,
+  ImageOutput,
   PluginConfig,
   ResultSuggestion,
   TestCase,
@@ -387,6 +388,13 @@ export abstract class RedteamGraderBase {
     return true;
   }
 
+  protected getInputImages(
+    _testVars: Record<string, unknown>,
+    _vars: Record<string, unknown>,
+  ): ImageOutput[] {
+    return [];
+  }
+
   renderRubric(vars: Record<string, any>): string {
     const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
 
@@ -544,6 +552,7 @@ export abstract class RedteamGraderBase {
       graderExamplesString +
       timestampString;
     const imagesForGrading = imageOutputs ?? gradingProviderResponse?.images;
+    const inputImages = this.getInputImages(test.vars ?? {}, vars);
 
     if (
       !skipRefusalCheck &&
@@ -574,14 +583,22 @@ export abstract class RedteamGraderBase {
       });
       logger.debug('[Redteam] No configured grading provider detected, preferring remote grading');
     }
+    const mediaOptions = {
+      ...(imagesForGrading?.length
+        ? { providerResponse: { output: llmOutput, images: imagesForGrading } }
+        : {}),
+      ...(inputImages.length ? { inputImages } : {}),
+    };
     const grade = (
-      imagesForGrading?.length
-        ? await matchesLlmRubric(finalRubric, llmOutput, grading, undefined, undefined, {
-            providerResponse: {
-              output: llmOutput,
-              images: imagesForGrading,
-            },
-          })
+      imagesForGrading?.length || inputImages.length
+        ? await matchesLlmRubric(
+            finalRubric,
+            llmOutput,
+            grading,
+            undefined,
+            undefined,
+            mediaOptions,
+          )
         : await matchesLlmRubric(finalRubric, llmOutput, grading)
     ) as GradingResult;
 
