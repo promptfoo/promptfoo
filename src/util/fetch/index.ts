@@ -614,13 +614,13 @@ export function classifySdkRateLimit({
   headers?: Record<string, string>;
 }): HttpRateLimitError {
   const codes = [
-    ...records.map(extractRateLimitErrorCode),
+    ...records.map((record) => extractRateLimitErrorCode(record)?.toLowerCase()),
     ...texts.flatMap((text) => text?.toLowerCase().match(/\b[a-z]+(?:_[a-z]+)+\b/g) ?? []),
   ].filter((code): code is string => Boolean(code));
   return new HttpRateLimitError({
     status: 429,
     code: codes.find((code) => isHardQuotaCode(code) || isTransientRateLimitCode(code)) ?? codes[0],
-    type: records.map(extractRateLimitErrorType).find(Boolean),
+    type: records.map((record) => extractRateLimitErrorType(record)?.toLowerCase()).find(Boolean),
     ...rateLimitTimingFromHeaders(headers),
   });
 }

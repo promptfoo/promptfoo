@@ -1330,6 +1330,24 @@ describe('classifySdkRateLimit', () => {
     expect(classifySdkRateLimit(input)).toMatchObject({ status: 429, kind });
   });
 
+  it.each([
+    [{ code: 'CREDIT_BALANCE_EXHAUSTED' }, 'credit_balance_exhausted', undefined, 'quota'],
+    [{ code: 'UnKnOwN', type: 'BILLING_NOT_ACTIVE' }, 'unknown', 'billing_not_active', 'quota'],
+    [
+      { code: 'RATE_LIMIT_EXCEEDED', type: 'INSUFFICIENT_QUOTA' },
+      'rate_limit_exceeded',
+      'insufficient_quota',
+      'rate_limit',
+    ],
+  ])('normalizes SDK error code and type before classification: %j', (error, code, type, kind) => {
+    expect(classifySdkRateLimit({ records: [{ error }] })).toMatchObject({
+      status: 429,
+      code,
+      type,
+      kind,
+    });
+  });
+
   it('keeps the recovery timing from the headers', () => {
     expect(classifySdkRateLimit({ records: [], headers: { 'retry-after': '2' } })).toMatchObject({
       kind: 'rate_limit',

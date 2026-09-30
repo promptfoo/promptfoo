@@ -1292,9 +1292,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
     for (const server of Object.values(asRecord(config.mcp) ?? {})) {
       addOpenCodeMcpCredentials(server, add, addStrong);
       const mcp = asRecord(server);
+      // Both local commands and remote servers can transform credentials, including stored OAuth tokens.
+      this.withholdMcpDiagnostics ||=
+        (mcp?.type === 'local' || mcp?.type === 'remote') && mcp.enabled !== false;
       if (mcp?.type === 'local') {
-        // Any executable can transform inherited credentials, including scripts passed by path.
-        this.withholdMcpDiagnostics ||= mcp.enabled !== false;
         Object.values(asRecord(mcp.environment) ?? {}).forEach(addStrong);
       } else if (mcp?.type === 'remote') {
         getHeadersCredentialForms(mcp.headers).forEach(addStrong);
@@ -1321,7 +1322,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     const details = parseOpenCodeError(error, transportStatus);
     if (this.withholdMcpDiagnostics && details.message) {
       details.message =
-        'Upstream diagnostic withheld because a local MCP command may transform credentials';
+        'Upstream diagnostic withheld because an MCP server may transform credentials';
     }
     let text = describeOpenCodeError(details);
     for (const credential of this.shortCredentials) {

@@ -3838,6 +3838,7 @@ describe('OpenCodeSDKProvider', () => {
                 gateway: {
                   type: 'remote',
                   url: 'https://example.test/mcp/synthetic-path-token?route=public;opaque=synthetic%2Bquery-1#t=synthetic-fragment-1',
+                  enabled: false,
                   headers: {
                     Authorization: 'Bearer synthetic-bare-bearer',
                     'Proxy-Authorization': `Basic ${basic}`,
@@ -3876,6 +3877,7 @@ describe('OpenCodeSDKProvider', () => {
                 gateway: {
                   type: 'remote',
                   url: 'https://user:synthetic-bad-pass@[bad]/mcp/synthetic-bad-path?opaque=synthetic-bad-query',
+                  enabled: false,
                 },
               },
             },
@@ -3948,6 +3950,44 @@ describe('OpenCodeSDKProvider', () => {
         });
       });
 
+      it.each([
+        { headers: { 'X-Gateway': 'q7x9' } },
+        { oauth: { clientId: 'fixture', clientSecret: 'q7x9' } },
+        {},
+      ])(
+        'withholds transformed credentials from enabled remote MCP diagnostics: %j',
+        async (auth) => {
+          const transformed = Buffer.from('q7x9').toString('base64');
+          await expectRedacted({
+            config: {
+              mcp: { tool: { type: 'remote', url: 'https://example.test/mcp', ...auth } },
+            },
+            message: `Startup failed ${transformed}; private tail`,
+            secrets: [transformed, 'private tail'],
+            keep: ['Upstream diagnostic withheld'],
+          });
+        },
+      );
+
+      it('keeps redacted diagnostics when the remote MCP server is disabled', async () => {
+        const credential = 'disabled-remote-credential';
+        await expectRedacted({
+          config: {
+            mcp: {
+              tool: {
+                type: 'remote',
+                url: 'https://example.test/mcp',
+                enabled: false,
+                headers: { 'X-Gateway': credential },
+              },
+            },
+          },
+          message: `Startup failed for ${credential}; useful context`,
+          secrets: [credential],
+          keep: ['Startup failed', 'useful context'],
+        });
+      });
+
       it('keeps redacted diagnostics when the local MCP server is disabled', async () => {
         const credential = 'disabled-server-credential';
         await expectRedacted({
@@ -4014,7 +4054,11 @@ describe('OpenCodeSDKProvider', () => {
 
       it.each([
         { baseUrl: 'https://q7x9@example.test' },
-        { mcp: { tool: { type: 'remote' as const, url: 'https://q7x9@example.test' } } },
+        {
+          mcp: {
+            tool: { type: 'remote' as const, url: 'https://q7x9@example.test', enabled: false },
+          },
+        },
       ])('redacts short configured URL credentials inside diagnostics', async (config) => {
         await expectRedacted({
           config,
@@ -4093,7 +4137,7 @@ describe('OpenCodeSDKProvider', () => {
         }
       });
 
-      it('keeps redacting values from the configuration that started a reused server', async () => {
+      it('keeps withholding diagnostics for MCP on a reused server', async () => {
         vi.spyOn(logger, 'error').mockImplementation(() => {});
         const provider = new OpenCodeSDKProvider();
         const mcp: OpenCodeSDKConfig['mcp'] = {
@@ -4114,7 +4158,8 @@ describe('OpenCodeSDKProvider', () => {
         const result = await provider.callApi('later prompt without MCP');
 
         expect(mockCreateOpencode).toHaveBeenCalledTimes(1);
-        expect(result.error).toContain('server still sends [REDACTED]');
+        expect(result.error).toContain('Upstream diagnostic withheld');
+        expect(result.error).not.toContain('synthetic-first-prompt-token');
       });
 
       it('redacts credentials echoed as history anchors in debug logs', async () => {
