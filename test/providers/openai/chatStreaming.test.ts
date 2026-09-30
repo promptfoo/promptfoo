@@ -112,6 +112,7 @@ describe('Streaming API', () => {
     async (location) => {
       const callback = vi.fn().mockResolvedValue('sunny');
       const toolChunk = {
+        usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 },
         choices: [
           {
             index: 0,
@@ -156,6 +157,11 @@ describe('Streaming API', () => {
       const result = await provider.callApi('A benign weather question');
 
       expect(result.error).toContain(message);
+      expect(result.tokenUsage).toMatchObject({ prompt: 2, completion: 1, total: 3 });
+      expect(result.cost).toBeGreaterThan(0);
+      expect(result.latencyMs).toEqual(expect.any(Number));
+      expect(result.cached).toBe(false);
+      expect(result.raw).toMatchObject({ usage: toolChunk.usage });
       expect(callback).not.toHaveBeenCalled();
       expect(response.body?.locked).toBe(false);
     },
@@ -331,6 +337,42 @@ describe('Streaming API', () => {
       expect(result.output).toBe('Clear skies');
     },
   );
+  it.each(['tool', 'legacy'])('assembles fragmented %s function names', async (kind) => {
+    const frames = ['get_', 'weather'].map((name, index) => ({
+      choices: [
+        {
+          index: 0,
+          delta:
+            kind === 'tool'
+              ? {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      ...(index === 0 ? { id: 'fixture-call' } : {}),
+                      function: { name, arguments: index === 0 ? '{}' : '' },
+                    },
+                  ],
+                }
+              : { function_call: { name, arguments: index === 0 ? '{}' : '' } },
+        },
+      ],
+    }));
+    const body =
+      frames.map((frame) => `data: ${JSON.stringify(frame)}\n\n`).join('') +
+      `data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: kind === 'tool' ? 'tool_calls' : 'function_call' }] })}\n\n` +
+      'data: [DONE]\n\n';
+    mockFetchWithRetries.mockResolvedValue(new Response(body));
+    const callback = vi.fn().mockResolvedValue('Clear skies');
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+      config: { stream: true, functionToolCallbacks: { get_weather: callback } },
+    });
+
+    const result = await provider.callApi('Weather?');
+
+    expect(result.error).toBeUndefined();
+    expect(callback).toHaveBeenCalledExactlyOnceWith('{}');
+    expect(result.output).toBe('Clear skies');
+  });
   it('preserves explicitly empty text and aborts the request after DONE', async () => {
     mockFetchWithRetries.mockResolvedValue(
       new Response(

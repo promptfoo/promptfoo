@@ -345,6 +345,7 @@ responses, audio output or custom tools. Streaming supports function tools.
 Malformed or incomplete streams fail the evaluation.
 Each stream is limited to 32 MiB, each event to 1 MiB, and choices and tools to 128 each.
 The request timeout covers both the HTTP request and reading the stream.
+The separate `openrouter:` provider does not support streaming and rejects `stream: true`.
 
 ### Generating multiple responses
 

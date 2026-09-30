@@ -1529,7 +1529,7 @@ describe('fetchWithRetries', () => {
 
   afterEach(() => {
     if (vi.isMockFunction(global.fetch)) {
-      global.fetch.mockReset();
+      vi.mocked(global.fetch).mockReset();
     }
     vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
   });

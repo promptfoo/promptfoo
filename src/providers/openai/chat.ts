@@ -939,9 +939,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           };
         }
 
+        const cost = streaming ? this.calculateResponseCost(data, config, cached) : undefined;
         return {
           error: errorMessage,
+          ...(streaming && {
+            tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
+            cached,
+            latencyMs,
+            raw: data,
+          }),
+          ...(cost === undefined ? {} : { cost }),
           metadata: {
+            ...(streaming && this.getProviderResponseMetadata(data)),
             ...(rateLimitKind ? { rateLimitKind } : {}),
             http: {
               status,
