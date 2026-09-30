@@ -52,10 +52,17 @@ describe('Bedrock cost override integration', () => {
     expect(result.tokenUsage?.prompt).toBe(35);
   });
 
-  it.each(['amazon.nova-pro-v1:0', 'amazon.nova-2-lite-v1:0'])(
+  it.each([
+    ['amazon.nova-pro-v1:0', undefined],
+    ['amazon.nova-2-lite-v1:0', undefined],
+    ['arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/profile-id', 'nova'],
+    ['arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/profile-id', 'nova2'],
+  ] as const)(
     'reports all Nova input tokens and prices cache counters separately for %s',
-    async (modelName) => {
-      const provider = new AwsBedrockCompletionProvider(modelName, { config: rates });
+    async (modelName, inferenceModelType) => {
+      const provider = new AwsBedrockCompletionProvider(modelName, {
+        config: { ...rates, inferenceModelType },
+      });
       const body = Buffer.from(
         JSON.stringify({
           output: { message: { role: 'assistant', content: [{ text: 'Hello' }] } },

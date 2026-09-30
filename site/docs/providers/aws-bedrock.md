@@ -241,7 +241,7 @@ providers:
 
 An unspecified direction uses the existing automatic rate, when available. For models without verified InvokeModel pricing, supply both rates or `cost`. Rates must be finite, nonnegative numbers; invalid or incomplete rates leave cost unavailable, which does not mean the call was free.
 
-For Claude and Nova, cache-read and cache-write charges follow their existing model-specific ratios using the effective input rate. If a response includes cache tokens for another model family, an input/output override leaves cost unavailable because those cache rates are unknown. These overrides require no additional AWS permissions or pricing API calls.
+For Claude and Nova, cache-read and cache-write charges follow their existing model-specific ratios using the effective input rate. Application inference-profile ARNs with `inferenceModelType: nova` or `nova2` also use the Nova cache ratios when both rates are supplied. If a response includes cache tokens for an unidentified model family, an input/output override leaves cost unavailable because those cache rates are unknown. These overrides require no additional AWS permissions or pricing API calls.
 
 ### Performance Configuration
 

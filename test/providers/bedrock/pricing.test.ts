@@ -459,6 +459,23 @@ describe('explicit Bedrock cost rates', () => {
     ).toBeCloseTo(expected);
   });
 
+  it.each([
+    ['custom-model', 'nova'],
+    ['arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/profile-id', undefined],
+    ['arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/profile-id', 'claude'],
+  ] as const)(
+    'does not infer unknown cache rates for %s with family %s',
+    (model, inferenceModelType) => {
+      expect(
+        calculateBedrockCost(model, 10, 20, 20, 5, undefined, undefined, {
+          inputCost: 0.01,
+          outputCost: 0.02,
+          inferenceModelType,
+        }),
+      ).toBeUndefined();
+    },
+  );
+
   it('omits a charge when cache meters are unknown', () => {
     expect(
       calculateBedrockCost('custom-model', 10, 20, 20, 5, undefined, undefined, {

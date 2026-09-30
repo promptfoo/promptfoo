@@ -14,6 +14,7 @@ export type BedrockServiceTier = {
 };
 
 export interface BedrockCostConfig {
+  inferenceModelType?: string;
   cost?: number;
   inputCost?: number;
   outputCost?: number;
@@ -41,8 +42,13 @@ type BedrockPricing = {
  */
 const NOVA_CACHE_READ_RATIO = 0.25;
 
-function isNovaPromptCachingModel(normalizedModelId: string): boolean {
-  return normalizedModelId.includes('amazon.nova-');
+function isNovaPromptCachingModel(normalizedModelId: string, config: BedrockCostConfig): boolean {
+  return (
+    normalizedModelId.includes('amazon.nova-') ||
+    (normalizedModelId.includes('arn:') &&
+      normalizedModelId.includes('inference-profile') &&
+      (config.inferenceModelType === 'nova' || config.inferenceModelType === 'nova2'))
+  );
 }
 
 /**
@@ -489,7 +495,7 @@ export function calculateBedrockCost(
     hasOverrides &&
     (cacheReadTokens > 0 || cacheWriteTokens > 0) &&
     !normalizedModelId.includes('anthropic.claude') &&
-    !isNovaPromptCachingModel(normalizedModelId)
+    !isNovaPromptCachingModel(normalizedModelId, config)
   ) {
     // An input/output override cannot price an unknown model's cache meters.
     return undefined;
@@ -502,7 +508,7 @@ export function calculateBedrockCost(
         cacheWriteTokens,
         normalizedModelId,
       )
-    : isNovaPromptCachingModel(normalizedModelId)
+    : isNovaPromptCachingModel(normalizedModelId, config)
       ? promptTokens * inputRate + cacheReadTokens * inputRate * NOVA_CACHE_READ_RATIO
       : promptTokens * inputRate;
   const cost = inputCost + completionTokens * outputRate;
