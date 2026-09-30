@@ -106,19 +106,29 @@ describeEvaluator('evaluator options and hooks', () => {
     'rejects invalid %s values before running providers or starting timers',
     async (name) => {
       vi.useFakeTimers();
+      const scheduled = vi.spyOn(globalThis, 'setTimeout');
+      const otherOption = name === 'timeoutMs' ? 'maxEvalTimeMs' : 'timeoutMs';
+      const otherTimeoutMs = 61_337;
       const testSuite: TestSuite = {
         providers: [mockApiProvider],
         prompts: [toPrompt('Fixture request')],
         tests: [{}],
       };
-      for (const value of [-1, Number.NaN, Number.POSITIVE_INFINITY, '100', null]) {
-        await expect(
-          evaluate(testSuite, new Eval({}), { [name]: value, silent: true }),
-        ).rejects.toThrow(`${name} must be a finite, nonnegative number of milliseconds`);
+      try {
+        for (const value of [-1, Number.NaN, Number.POSITIVE_INFINITY, '100', null]) {
+          await expect(
+            evaluate(testSuite, new Eval({}), {
+              [name]: value,
+              [otherOption]: otherTimeoutMs,
+              silent: true,
+            }),
+          ).rejects.toThrow(`${name} must be a finite, nonnegative number of milliseconds`);
+        }
+        expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+        expect(scheduled).not.toHaveBeenCalledWith(expect.any(Function), otherTimeoutMs);
+      } finally {
+        scheduled.mockRestore();
       }
-      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
-      await vi.advanceTimersByTimeAsync(0);
-      expect(vi.getTimerCount()).toBe(0);
     },
   );
 
@@ -198,6 +208,8 @@ describeEvaluator('evaluator options and hooks', () => {
 
   it('cancels the total timer when setup throws', async () => {
     vi.useFakeTimers();
+    const scheduled = vi.spyOn(globalThis, 'setTimeout');
+    const cleared = vi.spyOn(globalThis, 'clearTimeout');
     vi.mocked(runExtensionHook).mockRejectedValueOnce(new Error('fixture setup failed'));
     const suite: TestSuite = {
       providers: [mockApiProvider],
@@ -205,11 +217,17 @@ describeEvaluator('evaluator options and hooks', () => {
       tests: [{}],
       extensions: ['file://fixture.js'],
     };
-    await expect(
-      evaluate(suite, new Eval({}), { maxEvalTimeMs: 2_147_483_647 + 100, silent: true }),
-    ).rejects.toThrow('fixture setup failed');
-    await vi.advanceTimersByTimeAsync(0);
-    expect(vi.getTimerCount()).toBe(0);
+    try {
+      await expect(
+        evaluate(suite, new Eval({}), { maxEvalTimeMs: 2_147_483_647 + 100, silent: true }),
+      ).rejects.toThrow('fixture setup failed');
+      const deadlineChunk = scheduled.mock.calls.findIndex((call) => call[1] === 2_147_483_647);
+      expect(deadlineChunk).toBeGreaterThanOrEqual(0);
+      expect(cleared).toHaveBeenCalledWith(scheduled.mock.results[deadlineChunk].value);
+    } finally {
+      scheduled.mockRestore();
+      cleared.mockRestore();
+    }
   });
 
   it('should use the options from the test if they exist', async () => {
