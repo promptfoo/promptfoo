@@ -86,6 +86,20 @@ class SandboxAssertionTest(unittest.TestCase):
         self.assertIn("sandbox unavailable", result["reason"])
         self.sandbox.run_code.assert_not_called()
 
+    def test_metrics_use_a_provider_name_without_serialized_config(self):
+        for identity, expected in [
+            ({"label": "local-model"}, "local-model"),
+            ({"id": "echo"}, "echo"),
+            ({}, "unknown"),
+        ]:
+            with self.subTest(identity=identity):
+                self.context["provider"] = {
+                    **identity,
+                    "config": {"apiKey": "dummy-private-key", "basePath": "x" * 300},
+                }
+                self.assertTrue(validator.get_assert(self.code, self.context)["pass"])
+                self.assertEqual(self.metrics.call_args.args[1], expected)
+
     def test_wrong_answer_fails(self):
         self.sandbox.run_code.return_value = Execution(logs=Logs(stdout=["5\n"]))
         self.assertFalse(validator.get_assert(self.code, self.context)["pass"])

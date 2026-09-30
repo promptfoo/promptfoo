@@ -53,6 +53,8 @@ def _extract_function(output: str, fn_name: str) -> str | None:
 def get_assert(output, context):
     task_id = context.get("id", str(time.time()))
     provider = context.get("provider", "unknown")
+    if isinstance(provider, dict):
+        provider = provider.get("label") or provider.get("id") or "unknown"
     model = context.get("model", "unknown")
     variables = context["vars"]
     started = time.monotonic()
