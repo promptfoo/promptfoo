@@ -96,6 +96,44 @@ describe('cart coupon routing', () => {
     expect(window.history.length).toBe(length + 1);
   });
 
+  it.each(['push', 'replace'] as const)(
+    'captures a coupon before a batched %s navigation replaces it',
+    (method) => {
+      const { result } = setup();
+      act(() => {
+        result.current.history.push('/store?coupon=welcome#offer');
+        result.current.history[method]('/docs/intro?utm=next#start', { redirected: true });
+      });
+      expect(result.current.cart.couponCode).toBe('WELCOME');
+      expect(localStorage.getItem(couponKey)).toBe('WELCOME');
+      expect(window.location.pathname).toBe('/docs/intro');
+      expect(window.location.search).toBe('?utm=next');
+      expect(window.location.hash).toBe('#start');
+      expect(result.current.location.state).toEqual({ redirected: true });
+    },
+  );
+
+  it('uses the last coupon when several navigations are batched', () => {
+    const { result } = setup();
+    act(() => {
+      result.current.history.push('/store?coupon=first');
+      result.current.history.replace('/store?coupon=second');
+      result.current.history.push('/docs/intro');
+    });
+    expect(result.current.cart.couponCode).toBe('SECOND');
+    expect(localStorage.getItem(couponKey)).toBe('SECOND');
+  });
+
+  it('stops observing router navigation after unmount', () => {
+    const { result, unmount } = setup();
+    const history = result.current.history;
+    unmount();
+    history.push('/store?coupon=after#offer');
+    expect(localStorage.getItem(couponKey)).toBeNull();
+    expect(window.location.search).toBe('?coupon=after');
+    expect(window.location.hash).toBe('#offer');
+  });
+
   it('keeps the coupon when navigating back and forward through cleaned URLs', async () => {
     const { result } = setup();
     act(() => result.current.history.push('/store?coupon=code#items'));

@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
-import { useHistory, useLocation } from '@docusaurus/router';
+import { useHistory } from '@docusaurus/router';
 import { useCart } from './useFourthwall';
 
 import type { FourthwallCart, FourthwallProduct } from './types';
@@ -39,7 +39,6 @@ const CartContext = createContext<CartContextValue | null>(null);
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const history = useHistory();
-  const location = useLocation();
   const {
     cart,
     isLoading,
@@ -68,22 +67,29 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const urlCoupon = params.get('coupon');
-    if (!urlCoupon) {
-      return;
-    }
-    const code = urlCoupon.trim().toUpperCase();
-    setCouponCode(code);
-    try {
-      localStorage.setItem(COUPON_STORAGE_KEY, code);
-    } catch {
-      // Private browsing
-    }
-    params.delete('coupon');
-    const search = params.toString();
-    history.replace({ ...location, search: search ? `?${search}` : '' });
-  }, [history, location]);
+    const applyCoupon = (location: typeof history.location) => {
+      const params = new URLSearchParams(location.search);
+      const urlCoupon = params.get('coupon');
+      if (!urlCoupon) {
+        return;
+      }
+      const code = urlCoupon.trim().toUpperCase();
+      setCouponCode(code);
+      try {
+        localStorage.setItem(COUPON_STORAGE_KEY, code);
+      } catch {
+        // Storage may be unavailable.
+      }
+      params.delete('coupon');
+      const search = params.toString();
+      history.replace({ ...location, search: search ? `?${search}` : '' });
+    };
+
+    // Observe each transition, including destinations React batches out of the render.
+    const unlisten = history.listen(applyCoupon);
+    applyCoupon(history.location);
+    return unlisten;
+  }, [history]);
 
   const clearCoupon = useCallback(() => {
     setCouponCode(null);
