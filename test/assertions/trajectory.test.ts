@@ -109,6 +109,26 @@ const defaultParams = {
 };
 
 describe('trajectory utilities', () => {
+  it('prefers the full command line over command-name attributes', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'command',
+          name: 'process',
+          startTime: 0,
+          attributes: {
+            'command.name': 'python',
+            'process.command_line': 'python --version',
+          },
+        },
+      ],
+    });
+    expect(steps).toHaveLength(1);
+    expect(steps[0].type).toBe('command');
+    expect(steps[0].name).toBe('python --version');
+  });
+
   it('treats configured shell tool names as command steps', () => {
     const customShellTrace: TraceData = {
       traceId: 'custom-shell',

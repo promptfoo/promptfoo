@@ -442,7 +442,7 @@ function redactTraceValue(
   if (value && typeof value === 'object') {
     const record = value as Record<string, unknown>;
     const headerName = typeof record.name === 'string' ? record.name : undefined;
-    const redacted: Record<string, unknown> = {};
+    const redacted: Record<string, unknown> = Object.create(null);
     for (const entryKey in record) {
       if (!Object.prototype.hasOwnProperty.call(record, entryKey)) {
         continue;
@@ -536,7 +536,10 @@ function redactTraceEvidence(text: string): string {
       /(^|\s)((?:--?(?:api[-_]?key|pass|password|proxy-pass|proxy-user|secret|token|user)|-u)(?:\s+|=))(?:"[^"]*"|'[^']*'|[^\s"'`\\;]+)/gi,
       '$1$2[REDACTED]',
     )
-    .replace(/\b(?:sshpass|redis-cli|sqlcmd)\b[^\r\n;&|]*/gi, redactShortPasswordFlags)
+    .replace(
+      /\b(?:sshpass|redis-cli|sqlcmd|mysql|mysqldump|mariadb(?:-dump)?|twine)\b[^\r\n;&|]*/gi,
+      redactShortPasswordFlags,
+    )
     .replace(
       /\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{35}|[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|(?:Bearer|Basic)\s+[^\s"'`\\]+)/gi,
       '[REDACTED]',
@@ -589,13 +592,11 @@ function redactShortPasswordFlags(command: string): string {
 }
 
 function getShortPasswordFlag(command: string): string | undefined {
-  return /^sshpass\b/i.test(command)
-    ? 'p'
-    : /^redis-cli\b/i.test(command)
-      ? 'a'
-      : /^sqlcmd\b/i.test(command)
-        ? 'P'
-        : undefined;
+  const executable = command.trim().split(/\s+/, 1)[0].split(/[\\/]/).pop() ?? '';
+  if (/^(?:sshpass|mysql|mysqldump|mariadb(?:-dump)?|twine)$/i.test(executable)) {
+    return 'p';
+  }
+  return /^redis-cli$/i.test(executable) ? 'a' : /^sqlcmd$/i.test(executable) ? 'P' : undefined;
 }
 
 function truncateTraceEvidence(text: string, limit: number): string {

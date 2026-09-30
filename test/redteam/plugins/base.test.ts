@@ -2594,6 +2594,121 @@ describe('RedteamGraderBase', () => {
       },
     );
 
+    it.each(['summary', 'arguments'])(
+      'preserves own JSON properties while redacting trace %s',
+      async (source) => {
+        vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'OK' });
+        const data =
+          '{"__proto__":{"path":"example.invalid/fixture","password":"fixture-private-value"}}';
+        await grader.getResult(
+          'test prompt',
+          'done',
+          mockTest,
+          undefined,
+          undefined,
+          undefined,
+          false,
+          {
+            ...(source === 'summary'
+              ? { traceSummary: data }
+              : {
+                  traceData: {
+                    traceId: 'trace',
+                    evaluationId: 'eval',
+                    testCaseId: 'test',
+                    spans: [
+                      {
+                        spanId: 'fixture',
+                        name: 'tool',
+                        startTime: 0,
+                        attributes: { 'tool.arguments': data },
+                      },
+                    ],
+                  },
+                }),
+          },
+        );
+        const rubric = String(vi.mocked(matchesLlmRubric).mock.calls[0][0]);
+        expect(rubric).toContain('__proto__');
+        expect(rubric).toContain('example.invalid/fixture');
+        expect(rubric).toContain('[REDACTED]');
+        expect(rubric).not.toContain('fixture-private-value');
+      },
+    );
+
+    it('preserves the full command line in trace evidence', async () => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'OK' });
+      await grader.getResult(
+        'test prompt',
+        'done',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        false,
+        {
+          traceData: {
+            traceId: 'trace',
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: [
+              {
+                spanId: 'fixture',
+                name: 'process',
+                startTime: 0,
+                attributes: {
+                  'command.name': 'python',
+                  'process.command_line': 'python --version',
+                },
+              },
+            ],
+          },
+        },
+      );
+      expect(String(vi.mocked(matchesLlmRubric).mock.calls[0][0])).toContain('python --version');
+    });
+
+    it.each([
+      ['mysql', '-pfixture-private-value'],
+      ['mysqldump', '-pfixture-private-value'],
+      ['mariadb', '-pfixture-private-value'],
+      ['mariadb-dump', '-pfixture-private-value'],
+      ['twine', 'upload', '-p', 'fixture-private-value'],
+      ['/usr/bin/mysql', '-pfixture-private-value'],
+      ['/usr/bin/twine', 'upload', '-p', 'fixture-private-value'],
+    ])('redacts short password flags in trace strings and argv: %s', async (...argv) => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'OK' });
+      await grader.getResult(
+        'test prompt',
+        'done',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        false,
+        {
+          traceSummary: argv.join(' '),
+          traceData: {
+            traceId: 'trace',
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: [
+              {
+                spanId: 'fixture',
+                name: 'tool',
+                startTime: 0,
+                attributes: { 'tool.arguments': argv },
+              },
+            ],
+          },
+        },
+      );
+      const rubric = String(vi.mocked(matchesLlmRubric).mock.calls[0][0]);
+      expect(rubric).toContain(argv[0]);
+      expect(rubric).toContain('[REDACTED]');
+      expect(rubric).not.toContain('fixture-private-value');
+    });
+
     it.each([false, true])(
       'redacts credentials in trace summaries and shell arguments (JSON: %s)',
       async (jsonSummary) => {

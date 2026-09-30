@@ -7,11 +7,11 @@ type ToolAttributeFamily = {
 };
 
 export const COMMAND_ATTRIBUTE_KEYS = [
+  'process.command_line',
   'codex.command',
   'command',
   'command.name',
   'command_name',
-  'process.command_line',
 ] as const;
 
 export const SEARCH_ATTRIBUTE_KEYS = [

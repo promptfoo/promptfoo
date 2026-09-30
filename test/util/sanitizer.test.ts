@@ -395,6 +395,20 @@ describe('isSecretEnvVarName', () => {
 });
 
 describe('sanitizeObject', () => {
+  it('preserves own __proto__ data while redacting nested credentials', () => {
+    const input = JSON.parse(
+      '{"__proto__":{"path":"example.invalid/fixture","password":"fixture-private-value"}}',
+    );
+    const output = sanitizeObject(input);
+    expect(Object.hasOwn(output, '__proto__')).toBe(true);
+    expect(Object.getPrototypeOf(output)).toBe(Object.prototype);
+    expect(output.path).toBeUndefined();
+    expect(JSON.parse(JSON.stringify(output))).toEqual(
+      JSON.parse('{"__proto__":{"path":"example.invalid/fixture","password":"[REDACTED]"}}'),
+    );
+    expect(input.__proto__.password).toBe('fixture-private-value');
+  });
+
   describe('environment variable maps', () => {
     it.each([
       'url',
