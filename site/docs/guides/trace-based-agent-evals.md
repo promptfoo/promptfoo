@@ -124,11 +124,10 @@ Use `contextTransform` when the provider response carries retrieved documents. K
 
 ## CI
 
-Use an isolated config directory per job and fail if the receiver cannot start:
+For a repository with the initialized example at its root, install its dependencies and run the offline trajectory config. The base config intentionally fails a duration check. Use an isolated config directory per job and fail if the receiver cannot start:
 
 ```yaml
 permissions:
-  actions: read
   contents: read
 
 jobs:
@@ -141,8 +140,9 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
+      - run: npm install
       - name: Run trace eval
-        run: npx promptfoo eval -c promptfooconfig.yaml --no-cache -o eval-output.json
+        run: npx promptfoo@latest eval -c promptfooconfig.trajectory.yaml --no-cache -o eval-output.json
 ```
 
 A JavaScript assertion runs before row aggregation, so it cannot compare the current row's final aggregate or component scores.
