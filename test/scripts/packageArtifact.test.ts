@@ -8,7 +8,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { packPackageArtifact } from '../../scripts/packPackageArtifact';
 import { mockProcessEnv } from '../util/utils';
 
-const npmExecPath = execSync('npm exec --offline -- node -p process.env.npm_execpath', {
+// Command mode avoids package resolution and finds node.exe on Windows.
+const npmExecPath = execSync('npm exec --offline --call "node -p process.env.npm_execpath"', {
   encoding: 'utf8',
 }).trim();
 const directories: string[] = [];
