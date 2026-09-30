@@ -12,8 +12,6 @@ This example compares two Go providers that share an OpenAI client. See the
 
 ## Directory Structure
 
-This example shows two implementations of the same provider interface:
-
 ```text
 provider-golang/
 ├── go.mod               # Root module definition
@@ -26,12 +24,6 @@ provider-golang/
 │   └── provider.go      # Provider with same interface (package evaluation)
 └── promptfooconfig.yaml # Config comparing both implementations
 ```
-
-The structure demonstrates how to:
-
-1. Keep shared Go code in a single module
-2. Implement the same provider interface in different ways
-3. Compare multiple implementations in one config
 
 Both providers use named packages and support standard Go builds:
 
