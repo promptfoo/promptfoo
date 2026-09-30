@@ -241,7 +241,7 @@ describe('ResultsCharts', () => {
     }).not.toThrow();
   });
 
-  it.each([0, 1])('counts uniform scores of %s in a single histogram bin', (score) => {
+  it.each([2, -2])('counts uniform custom scores of %s in a single histogram bin', (score) => {
     const mockTable = {
       head: {
         prompts: [
@@ -252,8 +252,8 @@ describe('ResultsCharts', () => {
       },
       body: Array.from({ length: 3 }, () => ({
         outputs: [
-          { score, pass: score === 1, text: 'valid output' },
-          { score, pass: score === 1, text: 'valid output' },
+          { score, pass: score > 0, text: 'valid output' },
+          { score, pass: score > 0, text: 'valid output' },
         ],
         vars: [],
       })),
