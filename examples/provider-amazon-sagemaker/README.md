@@ -40,8 +40,16 @@ python deploy-test-model.py --help
 ```
 
 The helper uses Boto3, so the `sagemaker` Python SDK is not required. Deployment
-creates billable AWS resources and needs the execution role and permissions
-described in the script. To skip deployment, use an existing endpoint.
+creates billable AWS resources. Configure a
+[SageMaker execution role](https://docs.aws.amazon.com/sagemaker/latest/dg/sagemaker-roles.html)
+that SageMaker can assume to access the model's resources.
+
+The AWS identity running the helper needs `sagemaker:CreateModel`,
+`sagemaker:CreateEndpointConfig`, `sagemaker:CreateEndpoint`, and
+`sagemaker:DescribeEndpoint`. It also needs `iam:GetRole` when using `--role-name`,
+or `iam:ListRoles` for automatic role discovery, plus
+[`iam:PassRole`](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_passrole.html)
+scoped to the selected execution role. To skip deployment, use an existing endpoint.
 
 ## Environment Variables
 
