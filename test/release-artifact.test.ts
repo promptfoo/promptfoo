@@ -123,11 +123,116 @@ describe('exact artifact release', () => {
       ).toBe(needsNativeBuild);
     }
     expect(pack).toContain('npm run --silent package:pack -- --destination');
-    expect(validate).toContain('npm rebuild --prefix "$consumer_dir" --ignore-scripts=false');
     // Older releases only export per-test rows when their isolated database is written.
     expect(validate).not.toContain('--no-write');
     expect(validate).toContain('PROMPTFOO_CONFIG_DIR="$consumer_dir/config"');
   });
+
+  it.each(['none', 'rebuild', 'result'])(
+    'runs legacy backfill acceptance with %s failure',
+    (failure) => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'backfill-acceptance-'));
+      directories.push(root);
+      const fixture = path.join(root, 'fixture');
+      const native = path.join(root, 'native');
+      const tarball = path.join(root, 'promptfoo-0.0.0.tgz').replaceAll('\\', '/');
+      const nativeTarball = path.join(root, 'better-sqlite3-0.0.0.tgz').replaceAll('\\', '/');
+      fs.mkdirSync(fixture);
+      fs.mkdirSync(native);
+      // Newer npm requires explicit approval even for these local test lifecycle scripts.
+      fs.writeFileSync(
+        path.join(root, 'fixtures.npmrc'),
+        `allow-scripts=file:${tarball},file:${nativeTarball}\n`,
+      );
+      fs.writeFileSync(
+        path.join(fixture, 'package.json'),
+        JSON.stringify({
+          name: 'promptfoo',
+          version: '0.0.0',
+          bin: { promptfoo: 'cli.cjs' },
+          dependencies: { 'better-sqlite3': `file:${nativeTarball}` },
+          scripts: { install: 'node -e "process.exit(99)"' },
+        }),
+      );
+      fs.writeFileSync(
+        path.join(native, 'package.json'),
+        JSON.stringify({
+          name: 'better-sqlite3',
+          version: '0.0.0',
+          main: 'binding.cjs',
+          scripts: { install: 'node install.cjs' },
+        }),
+      );
+      fs.writeFileSync(
+        path.join(native, 'install.cjs'),
+        `const fs = require('node:fs');
+require('node:assert/strict').equal(fs.existsSync('binding.cjs'), false);
+if (process.env.BACKFILL_FAILURE === 'rebuild') throw new Error('fixture native rebuild failed');
+fs.writeFileSync('binding.cjs', 'module.exports = true;');
+`,
+      );
+      fs.writeFileSync(
+        path.join(fixture, 'cli.cjs'),
+        `#!/usr/bin/env node
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+assert.equal(require('better-sqlite3'), true);
+fs.appendFileSync(process.env.BACKFILL_EVIDENCE, process.argv[2] + '\\n');
+if (process.argv[2] === '--version') console.log('0.0.0');
+else {
+  assert.equal(process.argv[2], 'eval');
+  const config = JSON.parse(fs.readFileSync(process.argv[process.argv.indexOf('--config') + 1]));
+  assert.deepEqual(config.providers, ['echo']);
+  assert(process.argv.includes('--no-cache'));
+  fs.writeFileSync(process.argv[process.argv.indexOf('--output') + 1], JSON.stringify({
+    results: { results: [{ success: true, score: process.env.BACKFILL_FAILURE === 'result' ? 0 : 1,
+      response: { output: config.prompts[0] } }] }
+  }));
+}
+`,
+      );
+      const validate = workflow.jobs['build-npm-backfill'].steps.find(
+        (step) => step.name === 'Validate historical npm package',
+      )!.run!;
+      const evidence = path.join(root, 'cli-calls');
+      const bash =
+        process.platform === 'win32'
+          ? path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Git/bin/bash.exe')
+          : 'bash';
+      const result = spawnSync(bash, ['-e', '-o', 'pipefail'], {
+        input:
+          'npm pack "$NATIVE_FIXTURE" --ignore-scripts --pack-destination "$RUNNER_TEMP"\n' +
+          'npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP"\n' +
+          validate,
+        cwd: fixture,
+        encoding: 'utf8',
+        timeout: 15_000,
+        env: {
+          ...process.env,
+          RUNNER_TEMP: root.replaceAll('\\', '/'),
+          PACKAGE_TARBALL: tarball,
+          NATIVE_FIXTURE: native.replaceAll('\\', '/'),
+          BACKFILL_EVIDENCE: evidence,
+          BACKFILL_FAILURE: failure,
+          npm_config_offline: 'true',
+          npm_config_userconfig: path.join(root, '.npmrc'),
+          npm_config_globalconfig: path.join(root, 'fixtures.npmrc'),
+          npm_config_cache: path.join(root, 'npm-cache'),
+        },
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.status === 0, result.stderr).toBe(failure === 'none');
+      expect(fs.existsSync(evidence)).toBe(failure !== 'rebuild');
+      if (failure === 'rebuild') {
+        expect(result.stderr).toContain('fixture native rebuild failed');
+      } else {
+        expect(fs.readFileSync(evidence, 'utf8')).toBe('--version\neval\n');
+      }
+      expect(
+        fs.readdirSync(root).some((name) => name.startsWith('promptfoo-backfill-consumer.')),
+      ).toBe(false);
+    },
+  );
 
   it('rejects wrong identity, version, and publish configuration before publishing', () => {
     const run = workflow.jobs['publish-npm'].steps.find(
