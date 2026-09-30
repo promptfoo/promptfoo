@@ -1,17 +1,24 @@
-import { once } from 'node:events';
+import { EventEmitter, once } from 'node:events';
 import { connect } from 'node:net';
 import * as http from 'http';
 
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
+import cliState from '../../../src/cliState';
+import { getEnvString } from '../../../src/envars';
 import {
   cleanAssistantResponse,
+  generateChatKitHTML,
   OpenAiChatKitProvider,
 } from '../../../src/providers/openai/chatkit';
+import { ChatKitBrowserPool } from '../../../src/providers/openai/chatkit-pool';
+import * as fetchModule from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
 const playwrightMetadata = vi.hoisted(() => ({ version: '1.63.0' }));
 vi.mock('playwright/package.json', () => ({ default: playwrightMetadata }));
+
+const mockServerRequestHandler = vi.hoisted(() => vi.fn());
 
 const browserMocks = vi.hoisted(() => ({ launch: vi.fn(), createServer: vi.fn() }));
 
@@ -38,123 +45,18 @@ function resetBrowserMocks() {
     close: vi.fn().mockResolvedValue(undefined),
   };
   const server = {
-    listen: vi.fn((_port: number, callback: () => void) => callback()),
+    listen: vi.fn((_port: number, _host: string, callback: () => void) => callback()),
     address: vi.fn().mockReturnValue({ port: 3000 }),
     close: vi.fn((callback?: (error?: Error) => void) => callback?.()),
     closeAllConnections: vi.fn(),
     once: vi.fn(),
   };
   browserMocks.launch.mockResolvedValue(browser);
-  browserMocks.createServer.mockReturnValue(server);
+  browserMocks.createServer.mockImplementation((handler) => {
+    mockServerRequestHandler.mockImplementation(handler);
+    return server;
+  });
   return { page, context, browser, server };
-}
-
-// Helper to access the generated HTML (we test via the provider's internal HTML generation)
-function getGeneratedHTML(provider: OpenAiChatKitProvider): string {
-  // Access private method via casting
-  const config = (provider as any).chatKitConfig;
-  const apiKey = 'test-key';
-  const workflowId = config.workflowId;
-  const version = config.version;
-  const userId = config.userId;
-
-  // Generate HTML the same way the provider does internally
-  const versionClause = version ? `, version: '${version}'` : '';
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>ChatKit Eval</title>
-</head>
-<body>
-  <openai-chatkit id="chatkit"></openai-chatkit>
-
-  <script src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js"></script>
-
-  <script>
-    window.__state = { ready: false, responses: [], threadId: null, error: null, responding: false };
-
-    async function init() {
-      const chatkit = document.getElementById('chatkit');
-
-      // Wait for element to be ready
-      let attempts = 0;
-      while (typeof chatkit.setOptions !== 'function' && attempts < 100) {
-        await new Promise(r => setTimeout(r, 100));
-        attempts++;
-      }
-
-      if (typeof chatkit.setOptions !== 'function') {
-        window.__state.error = 'ChatKit component failed to initialize';
-        return;
-      }
-
-      let cachedSecret = null;
-
-      chatkit.setOptions({
-        api: {
-          getClientSecret: async (existing) => {
-            if (existing) return existing;
-            if (cachedSecret) return cachedSecret;
-
-            const res = await fetch('https://api.openai.com/v1/chatkit/sessions', {
-              method: 'POST',
-              headers: {
-                'Authorization': 'Bearer ${apiKey}',
-                'Content-Type': 'application/json',
-                'OpenAI-Beta': 'chatkit_beta=v1',
-                'X-OpenAI-Originator': 'promptfoo'
-              },
-              body: JSON.stringify({
-                workflow: { id: '${workflowId}'${versionClause} },
-                user: '${userId}'
-              })
-            });
-
-            if (!res.ok) {
-              const text = await res.text();
-              throw new Error('Session failed: ' + res.status + ' ' + text);
-            }
-
-            const data = await res.json();
-            cachedSecret = data.client_secret;
-            return cachedSecret;
-          }
-        },
-        header: { enabled: false },
-        history: { enabled: false },
-      });
-
-      chatkit.addEventListener('chatkit.ready', () => {
-        window.__state.ready = true;
-      });
-
-      chatkit.addEventListener('chatkit.error', (e) => {
-        window.__state.error = e.detail.error?.message || 'Unknown error';
-      });
-
-      chatkit.addEventListener('chatkit.thread.change', (e) => {
-        window.__state.threadId = e.detail.threadId;
-      });
-
-      chatkit.addEventListener('chatkit.response.start', () => {
-        window.__state.responding = true;
-      });
-
-      chatkit.addEventListener('chatkit.response.end', () => {
-        window.__state.responding = false;
-        window.__state.responses.push({ timestamp: Date.now() });
-      });
-
-      window.__chatkit = chatkit;
-    }
-
-    init().catch(e => {
-      window.__state.error = e.message;
-    });
-  </script>
-</body>
-</html>`;
 }
 
 describe('OpenAiChatKitProvider', () => {
@@ -333,6 +235,118 @@ describe('OpenAiChatKitProvider', () => {
         restoreEnv();
       }
     });
+
+    it.each([false, true])(
+      'binds delayed session minting to its evaluation scope (shared provider: %s)',
+      async (shared) => {
+        const pool = ChatKitBrowserPool.getInstance();
+        await cliState.withEnv({ OPENAI_API_BASE_URL: 'http://127.0.0.1:9001/v1' }, () =>
+          pool.initialize(),
+        );
+        const acquire = vi
+          .spyOn(pool, 'acquirePage')
+          .mockRejectedValue(new Error('stop after registration'));
+        const registrations = vi.spyOn(pool, 'registerTemplate');
+        const fetchSpy = vi
+          .spyOn(fetchModule, 'fetchWithRetries')
+          .mockImplementation(
+            async () => new Response(JSON.stringify({ client_secret: 'fixture-session' })),
+          );
+        const first = new OpenAiChatKitProvider('wf_shared', { config: { apiKey: 'fixture-key' } });
+        const second = shared
+          ? first
+          : new OpenAiChatKitProvider('wf_shared', { config: { apiKey: 'fixture-key' } });
+        const scopes = [
+          { OPENAI_API_BASE_URL: 'http://127.0.0.1:9001/v1' },
+          { OPENAI_API_BASE_URL: 'http://127.0.0.1:9002/v1' },
+        ];
+        try {
+          await Promise.all([
+            cliState.withEnv(scopes[0], () => first.callApi('first')),
+            cliState.withEnv(scopes[1], () => second.callApi('second')),
+          ]);
+          await cliState.withEnv(scopes[0], () => first.callApi('repeat'));
+          const keys = registrations.mock.results.map(({ value }) => value);
+          expect(keys[0]).not.toBe(keys[1]);
+          expect(keys[0]).toBe(keys[2]);
+          const responses = keys.slice(0, 2).map((key) => {
+            const response = Object.assign(new EventEmitter(), {
+              writeHead: vi.fn(),
+              end: vi.fn(),
+            });
+            mockServerRequestHandler(
+              {
+                method: 'POST',
+                headers: { host: '127.0.0.1:3000' },
+                url: `/template/${encodeURIComponent(key)}/session`,
+              },
+              response,
+            );
+            return response;
+          });
+          await vi.waitFor(() =>
+            expect(responses.every((response) => response.end.mock.calls.length === 1)).toBe(true),
+          );
+          expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual(
+            scopes.map((env) => `${env.OPENAI_API_BASE_URL}/chatkit/sessions`),
+          );
+          for (const [, init] of fetchSpy.mock.calls) {
+            expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer fixture-key');
+          }
+        } finally {
+          acquire.mockRestore();
+          registrations.mockRestore();
+          fetchSpy.mockRestore();
+          await pool.shutdown();
+          ChatKitBrowserPool.resetInstance();
+        }
+      },
+    );
+
+    it('should keep pooled session factories isolated by provider instance', async () => {
+      const pool = ChatKitBrowserPool.getInstance();
+      const registrations = vi.spyOn(pool, 'registerTemplate');
+      const acquire = vi
+        .spyOn(pool, 'acquirePage')
+        .mockRejectedValue(new Error('stop after registration'));
+      const sharedConfig = {
+        usePool: true,
+        workflowId: 'wf_shared',
+        userId: 'shared-user',
+      };
+      const firstProvider = new OpenAiChatKitProvider('wf_shared', {
+        config: { ...sharedConfig, apiKey: 'first-key' },
+      });
+      const secondProvider = new OpenAiChatKitProvider('wf_shared', {
+        config: { ...sharedConfig, apiKey: 'second-key' },
+      });
+
+      try {
+        await Promise.all([
+          firstProvider.callApi('first prompt'),
+          secondProvider.callApi('second prompt'),
+        ]);
+        await firstProvider.callApi('third prompt');
+
+        const [firstKey, secondKey, repeatedFirstKey] = registrations.mock.results.map(
+          ({ value }) => value,
+        );
+        expect(firstKey).toBe(repeatedFirstKey);
+        expect(firstKey).not.toBe(secondKey);
+        expect(pool.getStats().templates).toBe(2);
+        await pool.shutdown();
+        expect(pool.getStats().templates).toBe(0);
+        await firstProvider.callApi('after shutdown');
+        expect(registrations.mock.results[3].value).not.toBe(firstKey);
+        expect(firstKey).not.toContain('first-key');
+        expect(secondKey).not.toContain('second-key');
+      } finally {
+        acquire.mockRestore();
+        registrations.mockRestore();
+        await pool.shutdown();
+        ChatKitBrowserPool.resetInstance();
+      }
+    });
   });
 
   describe('cleanup', () => {
@@ -472,12 +486,16 @@ describe('OpenAiChatKitProvider', () => {
   });
 
   describe('HTML template generation', () => {
-    it('should include responding state tracking in window.__state', () => {
-      const provider = new OpenAiChatKitProvider('wf_test123', {
-        config: { apiKey: 'test-key' },
-      });
+    it('keeps session minting behind the local provider endpoint', () => {
+      const html = generateChatKitHTML('/api/chatkit/session');
 
-      const html = getGeneratedHTML(provider);
+      expect(html).toContain("fetch('/api/chatkit/session'");
+      expect(html).not.toContain('Authorization');
+      expect(html).not.toContain('https://api.openai.com/v1/chatkit/sessions');
+    });
+
+    it('should include responding state tracking in window.__state', () => {
+      const html = generateChatKitHTML('/api/chatkit/session');
 
       // Verify the responding state is included
       expect(html).toContain('responding: false');
@@ -486,39 +504,268 @@ describe('OpenAiChatKitProvider', () => {
     });
 
     it('should have chatkit.response.start event listener', () => {
-      const provider = new OpenAiChatKitProvider('wf_test123', {
-        config: { apiKey: 'test-key' },
-      });
-
-      const html = getGeneratedHTML(provider);
+      const html = generateChatKitHTML('/api/chatkit/session');
 
       // Verify the response.start listener is included for multi-step workflow tracking
       expect(html).toContain("chatkit.addEventListener('chatkit.response.start'");
     });
 
     it('should have chatkit.response.end event listener', () => {
-      const provider = new OpenAiChatKitProvider('wf_test123', {
-        config: { apiKey: 'test-key' },
-      });
-
-      const html = getGeneratedHTML(provider);
+      const html = generateChatKitHTML('/api/chatkit/session');
 
       // Verify the response.end listener is included
       expect(html).toContain("chatkit.addEventListener('chatkit.response.end'");
     });
   });
 
+  describe('session route', () => {
+    it.each([undefined, 'false', 'true'])(
+      'verifies TLS unless explicitly disabled: %s',
+      async (insecure) => {
+        const restore = mockProcessEnv({ PROMPTFOO_INSECURE_SSL: insecure });
+        const fetchSpy = vi
+          .spyOn(fetchModule, 'fetchWithRetries')
+          .mockResolvedValue(new Response(JSON.stringify({ client_secret: 'fixture-session' })));
+        const provider = new OpenAiChatKitProvider('wf_fixture', {
+          config: { apiKey: 'fixture-key' },
+        });
+        try {
+          await (provider as any).createChatKitClientSecret();
+          expect(fetchSpy.mock.calls[0][1]?.rejectUnauthorized).toBe(insecure !== 'true');
+        } finally {
+          fetchSpy.mockRestore();
+          restore();
+        }
+      },
+    );
+
+    it('keeps concurrent provider transport settings separate from the suite', async () => {
+      const observed: Array<{ verification: boolean | undefined; ca: string | undefined }> = [];
+      const fetchSpy = vi
+        .spyOn(fetchModule, 'fetchWithRetries')
+        .mockImplementation(async (_url, options) => {
+          await Promise.resolve();
+          observed.push({
+            verification: options?.rejectUnauthorized,
+            ca: getEnvString('PROMPTFOO_CA_CERT_PATH'),
+          });
+          return new Response(JSON.stringify({ client_secret: 'fixture-session' }));
+        });
+      const verified = new OpenAiChatKitProvider('wf_fixture', {
+        config: { apiKey: 'fixture-key' },
+        env: { PROMPTFOO_INSECURE_SSL: 'false', PROMPTFOO_CA_CERT_PATH: 'provider-a.pem' },
+      });
+      const insecure = new OpenAiChatKitProvider('wf_fixture', {
+        config: { apiKey: 'fixture-key' },
+        env: { PROMPTFOO_INSECURE_SSL: 'true', PROMPTFOO_CA_CERT_PATH: 'provider-b.pem' },
+      });
+      try {
+        await cliState.withEnv(
+          { PROMPTFOO_INSECURE_SSL: 'true', PROMPTFOO_CA_CERT_PATH: 'suite.pem' },
+          async () => {
+            await Promise.all([
+              (verified as any).createChatKitClientSecret(),
+              (insecure as any).createChatKitClientSecret(),
+            ]);
+            expect(getEnvString('PROMPTFOO_CA_CERT_PATH')).toBe('suite.pem');
+          },
+        );
+        expect(observed).toEqual(
+          expect.arrayContaining([
+            { verification: true, ca: 'provider-a.pem' },
+            { verification: false, ca: 'provider-b.pem' },
+          ]),
+        );
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
+
+    it('uses provider configuration and keeps sessions out of the response cache', async () => {
+      const fetchSpy = vi.spyOn(fetchModule, 'fetchWithRetries').mockImplementation(
+        async () =>
+          new Response(JSON.stringify({ client_secret: 'session-fixture' }), {
+            headers: { 'content-type': 'application/json' },
+          }),
+      );
+      const provider = new OpenAiChatKitProvider('wf_fixture', {
+        config: {
+          apiKey: 'account-fixture',
+          apiBaseUrl: 'https://gateway.example/v1?route=a%2Fb&route=c',
+          organization: 'fixture-org',
+          headers: { authorization: 'Bearer custom-fixture', 'x-route': 'fixture' },
+          version: '2',
+          userId: 'fixture-user',
+        },
+      });
+      try {
+        await expect((provider as any).createChatKitClientSecret()).resolves.toBe(
+          'session-fixture',
+        );
+        await expect((provider as any).createChatKitClientSecret()).resolves.toBe(
+          'session-fixture',
+        );
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+        const [url, request, timeout, retries] = fetchSpy.mock.calls[0];
+        expect(url).toBe('https://gateway.example/v1/chatkit/sessions?route=a%2Fb&route=c');
+        const headers = new Headers(request?.headers);
+        expect(headers.get('authorization')).toBe('Bearer custom-fixture');
+        expect(headers.get('openai-organization')).toBe('fixture-org');
+        expect(headers.get('openai-beta')).toBe('chatkit_beta=v1');
+        expect(headers.get('x-route')).toBe('fixture');
+        expect(JSON.parse(request?.body as string)).toEqual({
+          workflow: { id: 'wf_fixture', version: '2' },
+          user: 'fixture-user',
+        });
+        expect(timeout).toBeGreaterThan(0);
+        expect(retries).toBe(0);
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
+
+    it.each([
+      {
+        response: () => new Response('{}', { status: 500 }),
+        error: 'ChatKit session request failed: 500',
+      },
+      { response: () => new Response('{}'), error: 'did not include a client secret' },
+    ])('rejects unusable session responses: $error', async ({ response, error }) => {
+      const fetchSpy = vi
+        .spyOn(fetchModule, 'fetchWithRetries')
+        .mockImplementation(async () => response());
+      const provider = new OpenAiChatKitProvider('wf_fixture', {
+        config: { apiKey: 'account-fixture' },
+      });
+      try {
+        await expect((provider as any).createChatKitClientSecret()).rejects.toThrow(error);
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
+
+    it('adds Promptfoo request headers when minting a client secret', async () => {
+      const fetchSpy = vi.spyOn(fetchModule, 'fetchWithRetries').mockResolvedValue(
+        new Response(JSON.stringify({ client_secret: 'secret-123' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+      const provider = new OpenAiChatKitProvider('wf_test123', {
+        config: { apiKey: 'test-key' },
+      });
+
+      try {
+        const secret = await (provider as any).createChatKitClientSecret();
+
+        expect(secret).toBe('secret-123');
+        const [, requestInit] = fetchSpy.mock.calls[0];
+        expect(new Headers(requestInit?.headers).get('x-openai-originator')).toBe('promptfoo');
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
+
+    it.each(['disconnect', 'cleanup'])(
+      'cancels pending standalone session minting on %s',
+      async (reason) => {
+        const provider = new OpenAiChatKitProvider('wf_test123', {
+          config: { apiKey: 'fixture-key' },
+        });
+        let signal: AbortSignal | undefined;
+        const fetchSpy = vi.spyOn(fetchModule, 'fetchWithRetries').mockImplementation(
+          (_url, options) =>
+            new Promise((_resolve, reject) => {
+              signal = options?.signal as AbortSignal;
+              signal.addEventListener('abort', () => reject(signal!.reason), { once: true });
+            }),
+        );
+        const response = Object.assign(new EventEmitter(), { writeHead: vi.fn(), end: vi.fn() });
+        try {
+          await (provider as any).initialize();
+          (provider as any).server.closeAllConnections.mockImplementation(() =>
+            response.emit('close'),
+          );
+          mockServerRequestHandler(
+            { method: 'POST', url: '/api/chatkit/session', headers: { host: '127.0.0.1:3000' } },
+            response,
+          );
+          expect(signal?.aborted).toBe(false);
+          if (reason === 'cleanup') {
+            await provider.cleanup();
+          } else {
+            response.emit('close');
+          }
+          await vi.waitFor(() => expect(response.listenerCount('close')).toBe(0));
+          expect(signal?.aborted).toBe(true);
+          expect(response.writeHead).not.toHaveBeenCalled();
+          expect(response.end).not.toHaveBeenCalled();
+        } finally {
+          fetchSpy.mockRestore();
+          await provider.cleanup();
+        }
+      },
+    );
+
+    it('returns client secrets through the local provider route', async () => {
+      const provider = new OpenAiChatKitProvider('wf_test123', {
+        config: { apiKey: 'test-key' },
+      });
+      vi.spyOn(provider as any, 'createChatKitClientSecret').mockResolvedValue('secret-123');
+
+      await (provider as any).initialize();
+
+      const writeHead = vi.fn();
+      const end = vi.fn();
+
+      mockServerRequestHandler(
+        {
+          method: 'POST',
+          url: '/api/chatkit/session',
+          headers: { host: '127.0.0.1:3000', origin: 'http://127.0.0.1:3000' },
+        },
+        Object.assign(new EventEmitter(), {
+          writeHead,
+          end,
+        }),
+      );
+
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(writeHead).toHaveBeenCalledWith(200, {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+      });
+      expect(end).toHaveBeenCalledWith(JSON.stringify({ client_secret: 'secret-123' }));
+    });
+
+    it.each([
+      ['GET', '/api/chatkit/session'],
+      ['POST', '/'],
+      ['GET', '/missing'],
+    ])('returns 404 for %s %s without minting a session', async (method, url) => {
+      const provider = new OpenAiChatKitProvider('wf_test123', {
+        config: { apiKey: 'test-key' },
+      });
+      const mint = vi.spyOn(provider as any, 'createChatKitClientSecret');
+      await (provider as any).initialize();
+      const response = { writeHead: vi.fn(), end: vi.fn() };
+
+      mockServerRequestHandler({ method, url, headers: { host: '127.0.0.1:3000' } }, response);
+
+      expect(response.writeHead).toHaveBeenCalledWith(404);
+      expect(mint).not.toHaveBeenCalled();
+    });
+  });
+
   describe('configuration validation', () => {
-    it('should reject invalid workflowId format', () => {
-      // The validateWorkflowId function in the source code rejects invalid formats
-      // This gets triggered during HTML generation, not during construction
+    it('rejects an invalid workflowId before starting the browser', async () => {
       const provider = new OpenAiChatKitProvider('invalid-workflow', {
         config: { apiKey: 'test-key' },
       });
 
-      // The validation happens when HTML is generated, which we can test via the helper
-      // Invalid workflow ID should not match the expected pattern
-      expect((provider as any).chatKitConfig.workflowId).toBe('invalid-workflow');
+      await expect((provider as any).initialize()).rejects.toThrow('Invalid workflowId format');
     });
 
     it('should accept valid workflowId format', () => {

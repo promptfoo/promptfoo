@@ -12,9 +12,11 @@
  *   - Pages are workflow-specific (different workflows get different pages)
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import * as http from 'http';
 
 import logger from '../../logger';
+import { isHttpRateLimitError } from '../../util/fetch/errors';
 import { CHROMIUM_INSTALL_HINT, loadPlaywright } from '../browserDependencies';
 import { providerRegistry } from '../providerRegistry';
 import type { Browser, BrowserContext, Page } from 'playwright';
@@ -39,6 +41,54 @@ interface ChatKitPoolConfig {
   serverPort?: number;
 }
 
+type ChatKitTemplateRegistration = {
+  html: string;
+  providerNamespace?: string;
+  settings?: string;
+  createClientSecret?: (signal: AbortSignal) => Promise<string>;
+};
+
+export function isLocalChatKitRequest(req: http.IncomingMessage, port: number): boolean {
+  const expected = new URL(`http://127.0.0.1:${port}`);
+  return (
+    (req.headers.host === expected.host || req.headers.host === `127.0.0.1:${port}`) &&
+    (req.headers.origin === undefined || req.headers.origin === expected.origin)
+  );
+}
+
+export async function serveChatKitSession(
+  res: http.ServerResponse,
+  createClientSecret: (signal: AbortSignal) => Promise<string>,
+): Promise<void> {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  res.once('close', abort);
+  try {
+    const clientSecret = await createClientSecret(controller.signal);
+    if (!controller.signal.aborted) {
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+      });
+      res.end(JSON.stringify({ client_secret: clientSecret }));
+    }
+  } catch (error) {
+    if (!controller.signal.aborted) {
+      logger.error('[ChatKit] Failed to create client secret', { error });
+      const rateLimit = isHttpRateLimitError(error);
+      const message = rateLimit
+        ? error.kind === 'quota'
+          ? 'Quota exceeded: ChatKit session unavailable'
+          : 'ChatKit session rate limit exceeded'
+        : 'Failed to create ChatKit session';
+      res.writeHead(rateLimit ? 429 : 500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: message }));
+    }
+  } finally {
+    res.removeListener('close', abort);
+  }
+}
+
 /**
  * Singleton browser pool for ChatKit evaluations.
  * Supports high concurrency by reusing browser contexts.
@@ -52,9 +102,16 @@ export class ChatKitBrowserPool {
   private server: http.Server | null = null;
   private serverPort: number = 0;
   private pages: PooledPage[] = [];
-  private waitQueue: Array<{ templateKey: string; resolve: (page: PooledPage) => void }> = [];
+  private pendingPageCreations = 0;
+  private waitQueue: Array<{
+    templateKey: string;
+    resolve: (page: PooledPage) => void;
+    reject: (error: unknown) => void;
+    stopWaiting: () => void;
+  }> = [];
+  private servingWaiters = false;
   private config: ChatKitPoolConfig;
-  private templates: Map<string, string> = new Map(); // templateKey -> HTML
+  private templates: Map<string, ChatKitTemplateRegistration> = new Map();
   private initialized: boolean = false;
   private initPromise: Promise<void> | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -152,30 +209,64 @@ export class ChatKitBrowserPool {
   }
 
   /**
-   * Generate a template key from workflow configuration.
-   * This ensures different workflows get isolated pages.
+   * Generate a template key from workflow and provider configuration.
+   * The provider namespace keeps session factories isolated without putting
+   * credentials or endpoint details into the key.
    */
-  static generateTemplateKey(workflowId: string, version?: string, userId?: string): string {
-    // Use a simple concatenation - workflowId is the primary differentiator
-    // version and userId are included for completeness but workflowId is key
-    return `${workflowId}:${version || 'default'}:${userId || 'default'}`;
+  static generateTemplateKey(
+    workflowId: string,
+    version?: string,
+    userId?: string,
+    providerNamespace?: string,
+  ): string {
+    const workflowKey = `${workflowId}:${version || 'default'}:${userId || 'default'}`;
+    return providerNamespace ? `${workflowKey}:${providerNamespace}` : workflowKey;
   }
 
   /**
    * Register a template for a workflow configuration
    */
-  setTemplate(templateKey: string, html: string): void {
+  setTemplate(
+    templateKey: string,
+    html: string,
+    createClientSecret?: (signal: AbortSignal) => Promise<string>,
+  ): void {
     const existing = this.templates.get(templateKey);
-    if (existing !== html) {
-      this.templates.set(templateKey, html);
+    const htmlChanged = existing?.html !== html;
+    const createClientSecretChanged = existing?.createClientSecret !== createClientSecret;
+
+    if (htmlChanged || createClientSecretChanged) {
+      this.templates.set(templateKey, { html, createClientSecret });
       logger.debug('[ChatKitPool] Registered template', { templateKey });
-      // Mark pages with this template as needing refresh if template changed
+      // Refresh pages when the template or session factory changes because
+      // each page caches its client secret.
       for (const page of this.pages) {
         if (page.templateKey === templateKey) {
           page.ready = false;
         }
       }
     }
+  }
+
+  registerTemplate(
+    providerNamespace: string,
+    settings: string,
+    createHtml: (key: string) => string,
+    createClientSecret: (signal: AbortSignal) => Promise<string>,
+  ): string {
+    for (const [key, template] of this.templates) {
+      if (template.providerNamespace === providerNamespace && template.settings === settings) {
+        return key;
+      }
+    }
+    const key = `${providerNamespace}:${crypto.randomUUID()}`;
+    this.templates.set(key, {
+      providerNamespace,
+      settings,
+      html: createHtml(key),
+      createClientSecret: AsyncLocalStorage.bind(createClientSecret),
+    });
+    return key;
   }
 
   /**
@@ -211,18 +302,37 @@ export class ChatKitBrowserPool {
 
     // Create shared HTTP server with per-template routing
     this.server = http.createServer((req, res) => {
-      // Extract template key from URL path: /template/<key>
-      const url = new URL(req.url || '/', `http://localhost`);
-      const pathParts = url.pathname.split('/').filter(Boolean);
+      if (!isLocalChatKitRequest(req, this.serverPort)) {
+        res.writeHead(403);
+        res.end('Forbidden');
+        return;
+      }
+      let route: RegExpMatchArray | null;
+      let templateKey: string;
+      try {
+        const pathname = new URL(req.url || '/', `http://127.0.0.1:${this.serverPort}`).pathname;
+        route = pathname.match(/^\/template\/([^/]+)(\/session)?$/);
+        templateKey = route ? decodeURIComponent(route[1]) : '';
+      } catch {
+        res.writeHead(400);
+        res.end('Invalid template path');
+        return;
+      }
 
-      if (pathParts[0] === 'template' && pathParts[1]) {
-        const templateKey = decodeURIComponent(pathParts[1]);
+      if (route) {
         const template = this.templates.get(templateKey);
 
         if (template) {
-          res.writeHead(200, { 'Content-Type': 'text/html' });
-          res.end(template);
-          return;
+          if (req.method === 'POST' && route[2] && template.createClientSecret) {
+            void serveChatKitSession(res, template.createClientSecret);
+            return;
+          }
+
+          if (req.method === 'GET' && !route[2]) {
+            res.writeHead(200, { 'Content-Type': 'text/html' });
+            res.end(template.html);
+            return;
+          }
         }
       }
 
@@ -235,7 +345,7 @@ export class ChatKitBrowserPool {
       this.server!.once('error', (err: NodeJS.ErrnoException) => {
         reject(new Error(`Failed to start ChatKit pool server: ${err.message}`));
       });
-      this.server!.listen(this.config.serverPort, () => {
+      this.server!.listen(this.config.serverPort, '127.0.0.1', () => {
         const address = this.server!.address();
         this.serverPort = typeof address === 'object' ? address?.port || 0 : 0;
         logger.debug('[ChatKitPool] Server started', { port: this.serverPort });
@@ -292,8 +402,14 @@ export class ChatKitBrowserPool {
       (p) => !p.inUse && !p.ready && p.templateKey === templateKey,
     );
     if (needsRefresh) {
-      await this.refreshPooledPage(needsRefresh);
       needsRefresh.inUse = true;
+      try {
+        await this.refreshPooledPage(needsRefresh);
+      } catch (error) {
+        needsRefresh.inUse = false;
+        await this.tryServeWaiters();
+        throw error;
+      }
       logger.debug('[ChatKitPool] Acquired and refreshed page', {
         templateKey,
         poolSize: this.pages.length,
@@ -302,15 +418,18 @@ export class ChatKitBrowserPool {
     }
 
     // Create new page if under limit
-    if (this.pages.length < this.config.maxConcurrency) {
-      const pooledPage = await this.createPooledPage(templateKey);
-      pooledPage.inUse = true;
-      this.pages.push(pooledPage);
-      logger.debug('[ChatKitPool] Created new page', {
-        templateKey,
-        poolSize: this.pages.length,
-      });
-      return pooledPage;
+    if (this.pages.length + this.pendingPageCreations < this.config.maxConcurrency) {
+      try {
+        const pooledPage = await this.createReservedPooledPage(templateKey);
+        logger.debug('[ChatKitPool] Created new page', {
+          templateKey,
+          poolSize: this.pages.length,
+        });
+        return pooledPage;
+      } catch (error) {
+        await this.tryServeWaiters();
+        throw error;
+      }
     }
 
     // Wait for a page with matching template to become available
@@ -339,7 +458,16 @@ export class ChatKitBrowserPool {
         resolve(page);
       };
 
-      this.waitQueue.push({ templateKey, resolve: wrappedResolve });
+      this.waitQueue.push({
+        templateKey,
+        resolve: wrappedResolve,
+        reject: (error) => {
+          clearTimeout(timeoutId);
+          reject(error);
+        },
+        stopWaiting: () => clearTimeout(timeoutId),
+      });
+      void this.tryServeWaiters();
     });
   }
 
@@ -356,21 +484,20 @@ export class ChatKitBrowserPool {
     } catch (error) {
       logger.warn('[ChatKitPool] Failed to reset page, recreating', { error });
       // Page is broken, remove it from the pool
-      const index = this.pages.indexOf(pooledPage);
-      if (index >= 0) {
-        this.pages.splice(index, 1);
-      }
       try {
         await pooledPage.context.close();
       } catch {
         // Ignore close errors
       }
+      const index = this.pages.indexOf(pooledPage);
+      if (index >= 0) {
+        this.pages.splice(index, 1);
+      }
 
       // Create replacement - if this fails, we just reduce pool size
       // The pool will recover by creating new pages on demand
       try {
-        const newPage = await this.createPooledPage(originalTemplateKey);
-        this.pages.push(newPage);
+        const newPage = await this.createReservedPooledPage(originalTemplateKey);
         pooledPage = newPage;
       } catch (createError) {
         logger.warn('[ChatKitPool] Failed to create replacement page', { error: createError });
@@ -402,32 +529,51 @@ export class ChatKitBrowserPool {
    * Try to serve waiting requests by creating new pages if we have capacity
    */
   private async tryServeWaiters(): Promise<void> {
-    // Process waiters while we have capacity and waiters exist
-    while (this.waitQueue.length > 0 && this.pages.length < this.config.maxConcurrency) {
-      const waiter = this.waitQueue.shift();
-      if (!waiter) {
-        break;
-      }
+    if (this.servingWaiters) {
+      return;
+    }
+    this.servingWaiters = true;
+    try {
+      // Replace idle pages from other templates when the pool is full.
+      while (this.waitQueue.length > 0) {
+        if (this.pages.length + this.pendingPageCreations >= this.config.maxConcurrency) {
+          const idlePage = this.pages.find((page) => !page.inUse);
+          if (!idlePage) {
+            break;
+          }
+          // Keep the slot occupied until its context closes.
+          idlePage.inUse = true;
+          await idlePage.context.close().catch(() => {});
+          const index = this.pages.indexOf(idlePage);
+          if (index >= 0) {
+            this.pages.splice(index, 1);
+          }
+        }
 
-      try {
-        const newPage = await this.createPooledPage(waiter.templateKey);
-        newPage.inUse = true;
-        this.pages.push(newPage);
-        waiter.resolve(newPage);
-        logger.debug('[ChatKitPool] Created page for waiting request', {
-          templateKey: waiter.templateKey,
-          poolSize: this.pages.length,
-          remainingWaiters: this.waitQueue.length,
-        });
-      } catch (error) {
-        logger.warn('[ChatKitPool] Failed to create page for waiter', {
-          templateKey: waiter.templateKey,
-          error,
-        });
-        // Put waiter back at the front of the queue to retry later
-        this.waitQueue.unshift(waiter);
-        break;
+        const waiter = this.waitQueue.shift();
+        if (!waiter) {
+          break;
+        }
+        waiter.stopWaiting();
+
+        try {
+          const newPage = await this.createReservedPooledPage(waiter.templateKey);
+          waiter.resolve(newPage);
+          logger.debug('[ChatKitPool] Created page for waiting request', {
+            templateKey: waiter.templateKey,
+            poolSize: this.pages.length,
+            remainingWaiters: this.waitQueue.length,
+          });
+        } catch (error) {
+          logger.warn('[ChatKitPool] Failed to create page for waiter', {
+            templateKey: waiter.templateKey,
+            error,
+          });
+          waiter.reject(error);
+        }
       }
+    } finally {
+      this.servingWaiters = false;
     }
   }
 
@@ -440,7 +586,12 @@ export class ChatKitBrowserPool {
 
     // Check if pool is completely idle (no pages in use, no waiters)
     const inUseCount = this.pages.filter((p) => p.inUse).length;
-    if (inUseCount === 0 && this.waitQueue.length === 0 && this.pages.length > 0) {
+    if (
+      inUseCount === 0 &&
+      this.pendingPageCreations === 0 &&
+      this.waitQueue.length === 0 &&
+      this.pages.length > 0
+    ) {
       logger.debug('[ChatKitPool] Pool idle, scheduling shutdown', {
         delay: IDLE_SHUTDOWN_DELAY_MS,
       });
@@ -448,7 +599,7 @@ export class ChatKitBrowserPool {
       this.idleTimer = setTimeout(() => {
         // Double-check still idle
         const stillInUse = this.pages.filter((p) => p.inUse).length;
-        if (stillInUse === 0 && this.waitQueue.length === 0) {
+        if (stillInUse === 0 && this.pendingPageCreations === 0 && this.waitQueue.length === 0) {
           logger.debug('[ChatKitPool] Auto-shutting down idle pool');
           this.shutdown().catch((err) => {
             logger.debug('[ChatKitPool] Error during idle shutdown', { error: String(err) });
@@ -492,7 +643,7 @@ export class ChatKitBrowserPool {
       const page = await context.newPage();
 
       // Navigate to the template-specific URL
-      const templateUrl = `http://localhost:${this.serverPort}/template/${encodeURIComponent(templateKey)}`;
+      const templateUrl = `http://127.0.0.1:${this.serverPort}/template/${encodeURIComponent(templateKey)}`;
       await page.goto(templateUrl, {
         waitUntil: 'domcontentloaded',
       });
@@ -516,6 +667,24 @@ export class ChatKitBrowserPool {
         // Ignore close errors
       }
       throw error;
+    }
+  }
+
+  private async createReservedPooledPage(templateKey: string): Promise<PooledPage> {
+    const browser = this.browser;
+    this.pendingPageCreations++;
+    try {
+      const page = await this.createPooledPage(templateKey);
+      if (this.browser !== browser) {
+        await page.context.close().catch(() => {});
+        throw new Error('ChatKit pool shut down while creating a page');
+      }
+      page.inUse = true;
+      this.pages.push(page);
+      return page;
+    } finally {
+      this.pendingPageCreations--;
+      this.scheduleIdleShutdown();
     }
   }
 
@@ -549,10 +718,10 @@ export class ChatKitBrowserPool {
     // Cancel any pending idle timer
     this.cancelIdleTimer();
 
-    // Clear pending waiters - they will timeout via PAGE_ACQUIRE_TIMEOUT_MS
-    if (this.waitQueue.length > 0) {
-      logger.debug('[ChatKitPool] Clearing pending waiters', { count: this.waitQueue.length });
-      this.waitQueue = [];
+    const browser = this.browser;
+    this.browser = null;
+    for (const waiter of this.waitQueue.splice(0)) {
+      waiter.reject(new Error('ChatKit pool shut down while waiting for a page'));
     }
 
     // Close all contexts
@@ -566,13 +735,12 @@ export class ChatKitBrowserPool {
     this.pages = [];
 
     // Close browser
-    if (this.browser) {
+    if (browser) {
       try {
-        await this.browser.close();
+        await browser.close();
       } catch {
         // Ignore errors
       }
-      this.browser = null;
     }
 
     // Close server

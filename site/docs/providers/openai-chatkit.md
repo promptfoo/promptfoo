@@ -363,13 +363,16 @@ The provider:
 
 1. Starts a local HTTP server with the ChatKit embed
 2. Acquires a browser context from the pool
-3. Waits for ChatKit to initialize via the OpenAI session API
+3. Creates a ChatKit session on the local server and passes its client secret to the browser
 4. Sends messages through the ChatKit JavaScript API
 5. Extracts responses from the DOM
 6. Processes approval steps if configured
 7. Returns the response and releases the context back to the pool
 
 ChatKit workflows require browser automation because they don't expose a direct API.
+
+Session requests verify TLS certificates by default and use the configured proxy and custom CA.
+Set `PROMPTFOO_CA_CERT_PATH` for a private CA; `PROMPTFOO_INSECURE_SSL=true` disables verification.
 
 ## Environment Variables
 
