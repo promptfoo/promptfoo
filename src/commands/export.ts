@@ -164,7 +164,8 @@ export function exportCommand(program: Command) {
         if (
           !cmdObj.output &&
           error instanceof RangeError &&
-          /Invalid string length|ERR_STRING_TOO_LONG/i.test(error.message)
+          (('code' in error && error.code === 'ERR_STRING_TOO_LONG') ||
+            /Invalid string length|Cannot create a string longer than/i.test(error.message))
         ) {
           logger.error(
             'Eval too large for console output. Export rows with --output output.jsonl instead.',

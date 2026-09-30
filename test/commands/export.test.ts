@@ -210,13 +210,19 @@ describe('exportCommand', () => {
     expect(logger.info).toHaveBeenCalledWith(JSON.stringify(expectedJson, null, 2));
   });
 
-  it.each(['Invalid string length', 'ERR_STRING_TOO_LONG'])(
+  it.each([
+    new RangeError('Invalid string length'),
+    new RangeError('Cannot create a string longer than 0x1fffffe8 characters'),
+    Object.assign(new RangeError('String exceeds the engine limit'), {
+      code: 'ERR_STRING_TOO_LONG',
+    }),
+  ])(
     'recommends row-wise JSONL when console serialization exceeds the string limit: %s',
-    async (message) => {
+    async (error) => {
       vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
       exportCommand(program);
       const stringify = vi.spyOn(JSON, 'stringify').mockImplementationOnce(() => {
-        throw new RangeError(message);
+        throw error;
       });
       try {
         await program.parseAsync(['node', 'test', 'export', 'eval', 'test-id']);
