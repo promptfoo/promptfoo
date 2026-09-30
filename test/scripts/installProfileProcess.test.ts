@@ -5,7 +5,6 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  npmInvocation,
   runInstallProfileCommand,
   terminateProcessTree,
 } from '../../scripts/installProfileProcess';
@@ -74,133 +73,6 @@ describe('terminateProcessTree', () => {
       expect(exec).not.toHaveBeenCalled();
     },
   );
-});
-
-describe('npmInvocation', () => {
-  const nodePath = 'C:\\Program Files\\nodejs\\node.exe';
-
-  function existingPaths(...paths: string[]) {
-    return vi
-      .spyOn(fs, 'existsSync')
-      .mockImplementation((candidate) => paths.includes(String(candidate)));
-  }
-
-  it('uses npm directly on POSIX without probing the Windows installation', () => {
-    const exists = vi.spyOn(fs, 'existsSync');
-    const exec = vi.spyOn(childProcess, 'execFileSync');
-
-    expect(npmInvocation({ platform: 'linux' })).toEqual({
-      command: 'npm',
-      prefix: ['--workspaces=false'],
-    });
-    expect(exists).not.toHaveBeenCalled();
-    expect(exec).not.toHaveBeenCalled();
-  });
-
-  it('runs an existing npm_execpath CLI with the Node executable', () => {
-    const npmExecPath = 'D:\\npm\\bin\\npm-cli.js';
-    existingPaths(npmExecPath);
-    const exec = vi.spyOn(childProcess, 'execFileSync');
-
-    expect(npmInvocation({ platform: 'win32', nodePath, npmExecPath })).toEqual({
-      command: nodePath,
-      prefix: [npmExecPath, '--workspaces=false'],
-    });
-    expect(exec).not.toHaveBeenCalled();
-  });
-
-  it('locates a CLI from where.exe results without executing npm.cmd or a shell', () => {
-    const cli = 'D:\\npm tools\\node_modules\\npm\\bin\\npm-cli.js';
-    existingPaths(cli);
-    const exec = vi
-      .spyOn(childProcess, 'execFileSync')
-      .mockReturnValue('C:\\old\\npm\r\nC:\\old\\npm.cmd\r\nD:\\npm tools\\npm.cmd\r\n');
-
-    expect(npmInvocation({ platform: 'win32', nodePath, npmExecPath: '' })).toEqual({
-      command: nodePath,
-      prefix: [cli, '--workspaces=false'],
-    });
-    expect(exec).toHaveBeenCalledExactlyOnceWith('where.exe', ['npm'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      timeout: 10000,
-    });
-  });
-
-  it.each(['npm.exe', 'NPM.EXE'])('keeps the active %s version-manager shim', (filename) => {
-    const shim = `D:\\version manager\\bin\\${filename}`;
-    existingPaths('C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js');
-    vi.spyOn(childProcess, 'execFileSync').mockReturnValue(
-      `${shim}\r\nC:\\Program Files\\nodejs\\npm.cmd\r\n`,
-    );
-
-    expect(npmInvocation({ platform: 'win32', nodePath, npmExecPath: '' })).toEqual({
-      command: shim,
-      prefix: ['--workspaces=false'],
-    });
-  });
-
-  it('keeps an earlier npm CLI ahead of a later executable shim', () => {
-    const cli = 'D:\\npm tools\\node_modules\\npm\\bin\\npm-cli.js';
-    existingPaths(cli);
-    vi.spyOn(childProcess, 'execFileSync').mockReturnValue(
-      'D:\\npm tools\\npm.cmd\r\nD:\\version manager\\npm.exe\r\n',
-    );
-
-    expect(npmInvocation({ platform: 'win32', nodePath, npmExecPath: '' })).toEqual({
-      command: nodePath,
-      prefix: [cli, '--workspaces=false'],
-    });
-  });
-
-  it.each(['D:\\npm.cmd', 'D:\\yarn.js', 'D:\\missing\\npm-cli.js'])(
-    'does not execute a wrapper, different package manager, or missing npm_execpath: %s',
-    (npmExecPath) => {
-      const cli = 'D:\\valid\\node_modules\\npm\\bin\\npm-cli.js';
-      existingPaths(cli, 'D:\\npm.cmd', 'D:\\yarn.js');
-      const exec = vi.spyOn(childProcess, 'execFileSync').mockReturnValue('D:\\valid\\npm.cmd\r\n');
-
-      expect(npmInvocation({ platform: 'win32', nodePath, npmExecPath })).toEqual({
-        command: nodePath,
-        prefix: [cli, '--workspaces=false'],
-      });
-      expect(exec).toHaveBeenCalledTimes(1);
-      expect(exec.mock.calls[0][0]).toBe('where.exe');
-    },
-  );
-
-  it('uses the Node sibling npm installation when where.exe fails', () => {
-    const cli = 'C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js';
-    existingPaths(cli);
-    vi.spyOn(childProcess, 'execFileSync').mockImplementation(() => {
-      throw new Error('where.exe failed');
-    });
-
-    expect(npmInvocation({ platform: 'win32', nodePath, npmExecPath: '' })).toEqual({
-      command: nodePath,
-      prefix: [cli, '--workspaces=false'],
-    });
-  });
-
-  it('does not treat other where.exe filenames as npm wrappers', () => {
-    existingPaths('D:\\unrelated\\node_modules\\npm\\bin\\npm-cli.js');
-    vi.spyOn(childProcess, 'execFileSync').mockReturnValue('D:\\unrelated\\npm.ps1\r\n');
-
-    expect(() => npmInvocation({ platform: 'win32', nodePath, npmExecPath: '' })).toThrow(
-      'Cannot locate the npm JavaScript CLI',
-    );
-  });
-
-  it('reports missing npm without exposing environment values or discovered paths', () => {
-    existingPaths();
-    vi.spyOn(childProcess, 'execFileSync').mockReturnValue('D:\\private-path\\npm.cmd\r\n');
-
-    expect(() => npmInvocation({ platform: 'win32', nodePath, npmExecPath: '' })).toThrow(
-      new Error(
-        'Cannot locate the npm JavaScript CLI. Install npm alongside Node.js or run this script with npm.',
-      ),
-    );
-  });
 });
 
 describe('install profile commands', () => {
@@ -305,10 +177,18 @@ it('keeps npm lockfiles inside consumers matched by an ancestor workspace', () =
         private: true,
       }),
     );
-    const npm = npmInvocation();
+    const npmCli = process.env.npm_execpath;
+    expect(npmCli, 'Run this test through npm or npx').toBeTruthy();
     childProcess.execFileSync(
-      npm.command,
-      [...npm.prefix, 'install', '--package-lock-only', '--ignore-scripts', '--offline'],
+      process.execPath,
+      [
+        npmCli!,
+        '--workspaces=false',
+        'install',
+        '--package-lock-only',
+        '--ignore-scripts',
+        '--offline',
+      ],
       {
         cwd: consumer,
         env: { ...process.env, npm_config_cache: path.join(root, 'cache') },

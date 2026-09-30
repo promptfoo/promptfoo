@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import childProcess from 'node:child_process';
 import fs from 'node:fs';
-import path from 'node:path';
 
 export type CommandResult = {
   code: number | null;
@@ -112,64 +111,4 @@ export function terminateProcessTree(pid: number, platform = process.platform): 
     }
     throw error;
   }
-}
-
-function existingNpmCli(candidate: string | undefined): candidate is string {
-  return (
-    !!candidate &&
-    path.win32.basename(candidate).toLowerCase() === 'npm-cli.js' &&
-    fs.existsSync(candidate)
-  );
-}
-
-/** Invoke npm on Windows without executing a .cmd file or using a shell. */
-export function npmInvocation(
-  options: { platform?: NodeJS.Platform; nodePath?: string; npmExecPath?: string } = {},
-): { command: string; prefix: string[] } {
-  if ((options.platform ?? process.platform) !== 'win32') {
-    return { command: 'npm', prefix: ['--workspaces=false'] };
-  }
-
-  const nodePath = options.nodePath ?? process.execPath;
-  const npmExecPath = options.npmExecPath ?? process.env.npm_execpath;
-  if (existingNpmCli(npmExecPath)) {
-    return { command: nodePath, prefix: [npmExecPath, '--workspaces=false'] };
-  }
-
-  let npmPaths: string[] = [];
-  try {
-    npmPaths = childProcess
-      .execFileSync('where.exe', ['npm'], {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-        timeout: 10000,
-      })
-      .split(/\r?\n/)
-      .map((entry) => entry.trim())
-      .filter((entry) =>
-        ['npm', 'npm.cmd', 'npm.exe'].includes(path.win32.basename(entry).toLowerCase()),
-      );
-  } catch {
-    // A Node installation may include npm even when its wrappers are absent from PATH.
-  }
-
-  for (const executable of [...npmPaths, nodePath]) {
-    if (path.win32.basename(executable).toLowerCase() === 'npm.exe') {
-      return { command: executable, prefix: ['--workspaces=false'] };
-    }
-    const candidate = path.win32.join(
-      path.win32.dirname(executable),
-      'node_modules',
-      'npm',
-      'bin',
-      'npm-cli.js',
-    );
-    if (existingNpmCli(candidate)) {
-      return { command: nodePath, prefix: [candidate, '--workspaces=false'] };
-    }
-  }
-
-  throw new Error(
-    'Cannot locate the npm JavaScript CLI. Install npm alongside Node.js or run this script with npm.',
-  );
 }

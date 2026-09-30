@@ -10,7 +10,7 @@ import { parseArgs } from 'node:util';
 
 import { describeDirectDependencies, inventoryTree } from './installProfileInventory';
 import { assertIsolatedConsumerRoot } from './installProfileIsolation';
-import { npmInvocation, runInstallProfileCommand as run } from './installProfileProcess';
+import { runInstallProfileCommand as run } from './installProfileProcess';
 
 import type { CommandResult } from './installProfileProcess';
 
@@ -352,7 +352,7 @@ export async function measureInstallProfiles(args = process.argv.slice(2)): Prom
   );
   validateProxyEnvironment(process.env);
   const scripts = values['install-scripts'] && !values['no-install-scripts'];
-  const npm = npmInvocation();
+  const npm = { command: 'npm', prefix: ['--workspaces=false'] };
   // Respect a configured registry (e.g. a company mirror) without copying any
   // other npm configuration or credentials into the isolated consumer.
   let registryUrl = values.registry;
