@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createServer } from 'node:http';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 
 import { API } from 'typescript/unstable/sync';
-import { shouldCopyDrizzlePath } from './postbuild';
+import { assertBuiltAssetsPackaged } from './packPackageArtifact';
 
 type PackFile = {
   mode: number;
@@ -31,12 +35,12 @@ type ArtifactEvalOutput = {
         output?: unknown;
       };
       success?: boolean;
+      score?: number;
     }>;
   };
 };
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const drizzleDir = path.join(ROOT, 'drizzle');
 const requiredPackagedPaths = [
   'dist/drizzle/meta/_journal.json',
   'dist/src/app/index.html',
@@ -48,6 +52,7 @@ const requiredPackagedPaths = [
   'dist/src/contracts.js',
   'dist/src/index.cjs',
   'dist/src/index.d.ts',
+  'dist/src/index.d.cts',
   'dist/src/index.js',
   'dist/src/main.js',
   'dist/src/package.json',
@@ -65,18 +70,6 @@ const requiredPackagedPaths = [
   'dist/src/tracing/proto/opentelemetry/proto/resource/v1/resource.proto',
   'dist/src/tracing/proto/opentelemetry/proto/trace/v1/trace.proto',
 ];
-
-function listFiles(rootDir: string): string[] {
-  return fs.readdirSync(rootDir, { withFileTypes: true }).flatMap((entry) => {
-    const fullPath = path.join(rootDir, entry.name);
-
-    if (entry.isDirectory()) {
-      return listFiles(fullPath);
-    }
-
-    return [path.relative(ROOT, fullPath).split(path.sep).join('/')];
-  });
-}
 
 function run(
   command: string,
@@ -163,28 +156,13 @@ function runNpm(args: string[], cwd: string, envOverrides: NodeJS.ProcessEnv = {
   return run(process.execPath, [process.env.npm_execpath, ...args], cwd, envOverrides);
 }
 
-function assertPackagedFiles(packResult: PackResult): void {
+function assertPackagedFiles(packResult: PackResult, compareSource: boolean): void {
   const packagedPaths = new Set(packResult.files.map((file) => file.path));
   const missingPaths = requiredPackagedPaths.filter((file) => !packagedPaths.has(file));
-  const missingDrizzleFiles = listFiles(drizzleDir)
-    .filter(shouldCopyDrizzlePath)
-    .map((file) => `dist/${file}`)
-    .filter((file) => !packagedPaths.has(file));
-  const missingWebAppFiles = listFiles(path.join(ROOT, 'dist', 'src', 'app'))
-    .filter((file) => !file.endsWith('.map'))
-    .filter((file) => !packagedPaths.has(file));
-
   assert.deepEqual(missingPaths, [], `Missing packaged runtime assets: ${missingPaths.join(', ')}`);
-  assert.deepEqual(
-    missingDrizzleFiles,
-    [],
-    `Missing packaged Drizzle files: ${missingDrizzleFiles.join(', ')}`,
-  );
-  assert.deepEqual(
-    missingWebAppFiles,
-    [],
-    `Missing packaged web app files: ${missingWebAppFiles.join(', ')}`,
-  );
+  if (compareSource) {
+    assertBuiltAssetsPackaged(ROOT, packResult.files);
+  }
   assert(
     packResult.files.every((file) => !file.path.endsWith('.map')),
     'Source maps should be excluded from the package',
@@ -285,7 +263,11 @@ function assertExportsResolve(
   );
 }
 
-function runInstalledBinVersion(consumerDir: string, configDir: string, binName: string): string {
+export function runInstalledBinVersion(
+  consumerDir: string,
+  configDir: string,
+  binName: 'promptfoo' | 'pf',
+): string {
   const binPath = path.join(
     consumerDir,
     'node_modules',
@@ -300,9 +282,15 @@ function runInstalledBinVersion(consumerDir: string, configDir: string, binName:
   };
 
   if (process.platform === 'win32') {
+    // Keep the working directory out of cmd.exe's command string. Paths can contain
+    // percent signs, which cmd.exe expands even inside quotes.
+    const command =
+      binName === 'promptfoo'
+        ? '.\\node_modules\\.bin\\promptfoo.cmd'
+        : '.\\node_modules\\.bin\\pf.cmd';
     return run(
       process.env.ComSpec || 'cmd.exe',
-      ['/d', '/s', '/c', `"${binPath}" --version`],
+      ['/d', '/s', '/c', command, '--version'],
       consumerDir,
       envOverrides,
     );
@@ -424,48 +412,41 @@ function writeConsumerScripts(consumerDir: string): void {
     "  throw new Error('Missing MCP auth JSON Schema export');",
     '}',
   ];
-  fs.writeFileSync(
-    path.join(consumerDir, 'import-package.mjs'),
-    [
-      "import { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } from 'promptfoo';",
-      "import { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } from 'promptfoo/contracts';",
-      "import { McpAuthInputJsonSchema, McpAuthInputSchema, McpAuthSchema } from 'promptfoo/contracts';",
-      "import { McpConfigInputJsonSchema, McpConfigInputSchema, McpConfigSchema } from 'promptfoo/contracts';",
-      "import { HttpAuthInputSchema, HttpProviderConfigInputSchema, HttpProviderConfigInputJsonSchema } from 'promptfoo/contracts';",
-      '',
-      'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
-      "  if (!value || typeof value.safeParse !== 'function') {",
-      "    throw new Error('Missing expected ESM schema export');",
-      '  }',
-      '}',
-      'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
-      "  throw new Error('Missing expected ESM provider capability export');",
-      '}',
-      ...authAssertions,
-      '',
-    ].join('\n'),
-  );
-  fs.writeFileSync(
-    path.join(consumerDir, 'require-package.cjs'),
-    [
-      "const { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } = require('promptfoo');",
-      "const { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } = require('promptfoo/contracts');",
-      "const { McpAuthInputJsonSchema, McpAuthInputSchema, McpAuthSchema } = require('promptfoo/contracts');",
-      "const { McpConfigInputJsonSchema, McpConfigInputSchema, McpConfigSchema } = require('promptfoo/contracts');",
-      "const { HttpAuthInputSchema, HttpProviderConfigInputSchema, HttpProviderConfigInputJsonSchema } = require('promptfoo/contracts');",
-      '',
-      'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
-      "  if (!value || typeof value.safeParse !== 'function') {",
-      "    throw new Error('Missing expected CJS schema export');",
-      '  }',
-      '}',
-      'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
-      "  throw new Error('Missing expected CJS provider capability export');",
-      '}',
-      ...authAssertions,
-      '',
-    ].join('\n'),
-  );
+  for (const filename of ['import-package.mjs', 'require-package.cjs']) {
+    const imports = [
+      ['promptfoo', 'AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema'],
+      [
+        'promptfoo/contracts',
+        'EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator',
+      ],
+      ['promptfoo/contracts', 'McpAuthInputJsonSchema, McpAuthInputSchema, McpAuthSchema'],
+      ['promptfoo/contracts', 'McpConfigInputJsonSchema, McpConfigInputSchema, McpConfigSchema'],
+      [
+        'promptfoo/contracts',
+        'HttpAuthInputSchema, HttpProviderConfigInputSchema, HttpProviderConfigInputJsonSchema',
+      ],
+    ].map(([specifier, names]) =>
+      filename.endsWith('.mjs')
+        ? `import { ${names} } from '${specifier}';`
+        : `const { ${names} } = require('${specifier}');`,
+    );
+    fs.writeFileSync(
+      path.join(consumerDir, filename),
+      [
+        ...imports,
+        'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
+        "  if (!value || typeof value.safeParse !== 'function') {",
+        "    throw new Error('Missing expected schema export');",
+        '  }',
+        '}',
+        'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
+        "  throw new Error('Missing expected provider capability export');",
+        '}',
+        ...authAssertions,
+        '',
+      ].join('\n'),
+    );
+  }
   fs.writeFileSync(
     path.join(consumerDir, 'import-contracts.ts'),
     [
@@ -504,17 +485,63 @@ function writeConsumerScripts(consumerDir: string): void {
       '',
     ].join('\n'),
   );
+  // Only root API callers skip Drizzle's broken optional-driver declarations.
+  for (const [config, file, module, skipLibCheck] of [
+    ['tsconfig.json', 'import-contracts.ts', 'NodeNext', false],
+    ['tsconfig.node16-cjs.json', 'require-contracts.cts', 'Node16', false],
+    ['tsconfig.api-esm.json', 'import-api.ts', 'NodeNext', true],
+    ['tsconfig.api-cjs.json', 'require-api.cts', 'Node16', true],
+  ] as const) {
+    fs.writeFileSync(
+      path.join(consumerDir, config),
+      JSON.stringify({
+        compilerOptions: {
+          module,
+          moduleResolution: module,
+          noEmit: true,
+          strict: true,
+          skipLibCheck,
+        },
+        include: [file],
+      }),
+    );
+  }
+  const apiTypesBody = [
+    "const provider: ApiProvider = { id: () => 'local', callApi: async (prompt) => ({ output: prompt }) };",
+    "const suite: EvaluateTestSuite = { prompts: ['hello'], providers: [provider], tests: [{ assert: [{ type: 'equals', value: 'hello' }] }], writeLatestResults: false };",
+    'async function consume() {',
+    '  const record = await evaluate(suite, { cache: false });',
+    '  const summary = await record.toEvaluateSummary();',
+    '  const successes: number = summary.stats.successes;',
+    '  const id: string = record.id;',
+    '  void successes; void id;',
+    '  // @ts-expect-error Eval keeps its typed result surface',
+    '  await record.nonexistentMethod();',
+    '  // @ts-expect-error success counts remain numeric',
+    "  const invalid: typeof summary.stats.successes = 'wrong';",
+    '  void invalid;',
+    '}',
+    'void consume;',
+    '// @ts-expect-error providers are a required part of the public eval input',
+    "void evaluate({ prompts: ['hello'] });",
+  ].join('\n');
   fs.writeFileSync(
-    path.join(consumerDir, 'tsconfig.json'),
-    JSON.stringify({
-      compilerOptions: {
-        module: 'NodeNext',
-        moduleResolution: 'NodeNext',
-        noEmit: true,
-        strict: true,
-      },
-      include: ['import-contracts.ts'],
-    }),
+    path.join(consumerDir, 'import-api.ts'),
+    [
+      "import { evaluate } from 'promptfoo';",
+      "import type { ApiProvider, EvaluateTestSuite } from 'promptfoo';",
+      apiTypesBody,
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'require-api.cts'),
+    [
+      "import api = require('promptfoo');",
+      'const { evaluate } = api;',
+      'type ApiProvider = api.ApiProvider;',
+      'type EvaluateTestSuite = api.EvaluateTestSuite;',
+      apiTypesBody,
+    ].join('\n'),
   );
   fs.writeFileSync(
     path.join(consumerDir, 'require-contracts.cts'),
@@ -547,18 +574,94 @@ function writeConsumerScripts(consumerDir: string): void {
       '',
     ].join('\n'),
   );
-  fs.writeFileSync(
-    path.join(consumerDir, 'tsconfig.node16-cjs.json'),
-    JSON.stringify({
-      compilerOptions: {
-        module: 'Node16',
-        moduleResolution: 'Node16',
-        noEmit: true,
-        strict: true,
-      },
-      include: ['require-contracts.cts'],
-    }),
+}
+
+async function runInstalledCodexSecurityEval(
+  consumerDir: string,
+  configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+): Promise<void> {
+  const script = `const mode = process.argv[2];
+if (mode === 'missing') {
+  assert.throws(() => require.resolve('@openai/codex-security'), { code: 'MODULE_NOT_FOUND' });
+}
+const ordinary = await evaluate({
+  prompts: ['hello fixture'],
+  providers: ['echo'],
+  tests: [{ vars: {}, assert: [{ type: 'equals', value: 'hello fixture' }] }],
+}, { cache: false, maxConcurrency: 1 });
+const { results: ordinaryResults } = await ordinary.toEvaluateSummary();
+assert.equal(ordinaryResults.length, 1);
+assert.equal(ordinaryResults[0].success, true);
+assert.equal(ordinaryResults[0].score, 1);
+// The supported SDK must stop at repository validation, before running any scan.
+const record = await evaluate({
+  prompts: ['Validate SDK installation'],
+  providers: [{ id: 'openai:codex-security', config: {
+    repository: path.join(process.cwd(), 'does-not-exist'),
+  } }],
+  tests: [{ vars: {} }],
+}, { cache: false, maxConcurrency: 1 });
+const summary = await record.toEvaluateSummary();
+assert.equal(summary.results.length, 1);
+assert.equal(summary.results[0].success, false);
+assert.equal(summary.results[0].score, 0);
+assert.ok(summary.results[0].response.error.includes(mode === 'installed'
+  ? 'Repository is not a directory'
+  : 'npm install promptfoo @openai/codex-security@^0.1.31'));
+if (mode === 'incompatible') {
+  assert.ok(summary.results[0].response.error.includes('incompatible (0.1.28)'));
+}
+`;
+  const scriptPaths = ['codex-security.mjs', 'codex-security.cjs'].map((name) =>
+    path.join(consumerDir, name),
   );
+  fs.writeFileSync(
+    scriptPaths[0],
+    `import assert from 'node:assert/strict';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import { evaluate } from 'promptfoo';
+const require = createRequire(import.meta.url);
+${script}`,
+  );
+  fs.writeFileSync(
+    scriptPaths[1],
+    `const assert = require('node:assert/strict');
+const path = require('node:path');
+const { evaluate } = require('promptfoo');
+(async () => {
+${script}
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+`,
+  );
+  const env = {
+    PROMPTFOO_CONFIG_DIR: configDir,
+    PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+    PROMPTFOO_DISABLE_TELEMETRY: '1',
+    PROMPTFOO_DISABLE_UPDATE: 'true',
+  };
+  for (const mode of ['missing', 'incompatible', 'installed']) {
+    if (mode !== 'missing') {
+      runNpm(
+        [
+          'install',
+          '--ignore-scripts',
+          '--no-audit',
+          '--no-fund',
+          '--no-package-lock',
+          mode === 'incompatible'
+            ? '@openai/codex-security@0.1.28'
+            : '@openai/codex-security@^0.1.31',
+        ],
+        consumerDir,
+        npmEnv,
+      );
+    }
+    for (const scriptPath of scriptPaths) {
+      await runAsync(process.execPath, [scriptPath, mode], consumerDir, env);
+    }
+  }
 }
 
 async function runInstalledCompressionEval(consumerDir: string, configDir: string): Promise<void> {
@@ -674,6 +777,7 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
     assert(Array.isArray(results), 'Installed promptfoo output is missing evaluation results');
     assert.equal(results.length, 2, 'Expected one result for each compressed provider');
     for (const result of results) {
+      assert.equal(result.score, 1);
       assert.equal(result.success, true, `Compressed provider failed: ${JSON.stringify(result)}`);
       assert.equal(
         result.error,
@@ -700,6 +804,8 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
 async function assertOptionalBrowserDependencies(
   consumerDir: string,
   configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+  withOptionalDependencies: boolean,
 ): Promise<void> {
   const assertions = `
     const incompatible = process.argv[2] === 'incompatible';
@@ -741,7 +847,7 @@ async function assertOptionalBrowserDependencies(
       });`,
     );
   }
-  for (const state of ['missing', 'incompatible']) {
+  for (const state of withOptionalDependencies ? ['missing', 'incompatible'] : ['missing']) {
     if (state === 'incompatible') {
       runNpm(
         [
@@ -753,6 +859,7 @@ async function assertOptionalBrowserDependencies(
           'playwright@1.62.0',
         ],
         consumerDir,
+        npmEnv,
       );
     }
     for (const format of ['mjs', 'cjs']) {
@@ -764,12 +871,15 @@ async function assertOptionalBrowserDependencies(
       });
     }
   }
-  await runInstalledCompressionEval(consumerDir, configDir);
+  if (withOptionalDependencies) {
+    await runInstalledCompressionEval(consumerDir, configDir);
+  }
 }
 
 async function runInstalledTransformersProvider(
   consumerDir: string,
   configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
 ): Promise<void> {
   const modelDir = path.join(consumerDir, 'tiny-bert');
   fs.cpSync(path.join(ROOT, 'test/fixtures/transformers/tiny-bert'), modelDir, { recursive: true });
@@ -854,21 +964,47 @@ ${script}
   runNpm(
     ['install', '--ignore-scripts', '--no-audit', '--no-fund', '@huggingface/transformers@3.8.1'],
     consumerDir,
+    npmEnv,
   );
   await runMode('incompatible');
   runNpm(
     ['install', '--ignore-scripts', '--no-audit', '--no-fund', '@huggingface/transformers@^4.0.0'],
     consumerDir,
+    npmEnv,
   );
   await runMode('installed');
 }
 
 async function main(): Promise<void> {
+  const { values } = parseArgs({
+    options: {
+      profile: { type: 'string', default: 'default' },
+      registry: { type: 'string', default: 'https://registry.npmjs.org/' },
+      tarball: { type: 'string' },
+    },
+  });
+  const suppliedTarball = values.tarball === undefined ? undefined : path.resolve(values.tarball);
+  if (suppliedTarball) {
+    assert(suppliedTarball.endsWith('.tgz'), '--tarball must be a local .tgz file');
+    assert(fs.statSync(suppliedTarball).isFile(), '--tarball must be an existing file');
+  }
+  const originalHash = suppliedTarball
+    ? createHash('sha512').update(fs.readFileSync(suppliedTarball)).digest('hex')
+    : undefined;
+  assert(
+    ['default', 'omit-optional'].includes(values.profile),
+    `Unknown install profile: ${values.profile}`,
+  );
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-'));
   const artifactsDir = path.join(tempDir, 'artifacts');
   const configDir = path.join(tempDir, 'config');
   const consumerDir = path.join(tempDir, 'consumer');
   const consumerNpmrc = path.join(tempDir, 'consumer.npmrc');
+  const consumerNpmEnv = {
+    npm_config_engine_strict: 'false',
+    npm_config_userconfig: consumerNpmrc,
+    npm_config_registry: values.registry,
+  };
 
   try {
     fs.mkdirSync(artifactsDir);
@@ -876,10 +1012,10 @@ async function main(): Promise<void> {
     fs.mkdirSync(consumerDir);
     fs.writeFileSync(consumerNpmrc, '');
 
-    const packOutput = runNpm(
-      ['pack', '--ignore-scripts', '--json', '--pack-destination', artifactsDir],
-      ROOT,
-    );
+    // npm's dry-run inspects the supplied archive without repacking it or running hooks.
+    const packOutput = suppliedTarball
+      ? runNpm(['pack', suppliedTarball, '--dry-run', '--ignore-scripts', '--json'], ROOT)
+      : runNpm(['pack', '--ignore-scripts', '--json', '--pack-destination', artifactsDir], ROOT);
     let packResults: PackResult[];
     try {
       packResults = JSON.parse(packOutput) as PackResult[];
@@ -890,9 +1026,9 @@ async function main(): Promise<void> {
 
     const [packResult] = packResults;
     assert.equal(packResult.name, 'promptfoo');
-    assertPackagedFiles(packResult);
+    assertPackagedFiles(packResult, !suppliedTarball);
 
-    const tarballPath = path.join(artifactsDir, packResult.filename);
+    const tarballPath = suppliedTarball ?? path.join(artifactsDir, packResult.filename);
     assert(fs.existsSync(tarballPath), `Missing tarball: ${tarballPath}`);
 
     fs.writeFileSync(
@@ -903,21 +1039,20 @@ async function main(): Promise<void> {
         type: 'module',
       }),
     );
+    console.log(`Installing packed consumer (${values.profile})...`);
     runNpm(
       [
         'install',
+        ...(values.profile === 'omit-optional' ? ['--omit=optional'] : ['--include=optional']),
         '--ignore-scripts',
+        '--omit=dev',
         '--no-audit',
         '--no-fund',
         '--no-package-lock',
-        '--registry=https://registry.npmjs.org/',
         tarballPath,
       ],
       consumerDir,
-      {
-        npm_config_engine_strict: 'false',
-        npm_config_userconfig: consumerNpmrc,
-      },
+      consumerNpmEnv,
     );
 
     const installedPackageDir = path.join(consumerDir, 'node_modules', 'promptfoo');
@@ -930,34 +1065,114 @@ async function main(): Promise<void> {
     };
     assert.equal(installedPackageJson.version, packResult.version);
     assertExportsResolve(installedPackageDir, installedPackageJson);
-    assertProviderTypeDocumentation(installedPackageDir);
-
-    writeConsumerScripts(consumerDir);
-    run(process.execPath, ['import-package.mjs'], consumerDir);
-    run(process.execPath, ['require-package.cjs'], consumerDir);
-    const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
-    for (const tsconfig of ['tsconfig.json', 'tsconfig.node16-cjs.json']) {
-      run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
-    }
-    assertInstalledWebApp(installedPackageDir);
-
-    for (const binName of ['promptfoo', 'pf']) {
-      assert.equal(
-        runInstalledBinVersion(consumerDir, configDir, binName).trim(),
-        packResult.version,
+    const packageRequire = createRequire(path.join(installedPackageDir, 'package.json'));
+    if (values.profile === 'omit-optional') {
+      assert.throws(() => packageRequire.resolve('@anthropic-ai/claude-agent-sdk'), {
+        code: 'MODULE_NOT_FOUND',
+      });
+    } else {
+      const relative = path.relative(
+        fs.realpathSync(consumerDir),
+        fs.realpathSync(packageRequire.resolve('@anthropic-ai/claude-agent-sdk')),
+      );
+      assert(
+        relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative),
       );
     }
-    await runInstalledCompressionEval(consumerDir, configDir);
-    await assertOptionalBrowserDependencies(consumerDir, configDir);
-    await runInstalledTransformersProvider(consumerDir, configDir);
+    assertProviderTypeDocumentation(installedPackageDir);
 
-    console.log(`Verified installed package artifact: ${packResult.filename}`);
+    // Consumer files live outside the repository so neither workspaces nor devDependencies
+    // can satisfy undeclared package imports. Keep all user state local to this fixture.
+    const consumerEnv = {
+      NODE_PATH: '',
+      PROMPTFOO_CONFIG_DIR: configDir,
+      PROMPTFOO_CACHE_PATH: path.join(tempDir, 'cache'),
+      PROMPTFOO_DISABLE_TELEMETRY: '1',
+      PROMPTFOO_DISABLE_UPDATE: 'true',
+      PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+    };
+    writeConsumerScripts(consumerDir);
+    fs.cpSync(path.join(ROOT, 'test', 'fixtures', 'package-artifact'), consumerDir, {
+      recursive: true,
+    });
+    run(process.execPath, ['import-package.mjs'], consumerDir, consumerEnv);
+    run(process.execPath, ['require-package.cjs'], consumerDir, consumerEnv);
+    const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
+    for (const tsconfig of [
+      'tsconfig.json',
+      'tsconfig.node16-cjs.json',
+      'tsconfig.api-esm.json',
+      'tsconfig.api-cjs.json',
+    ]) {
+      run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
+    }
+    for (const script of ['import-api.mjs', 'require-api.cjs']) {
+      console.log(await runAsync(process.execPath, [script], consumerDir, consumerEnv));
+    }
+    assertInstalledWebApp(installedPackageDir);
+    const installedMigrations = path.join(installedPackageDir, 'dist', 'drizzle');
+    const journal = JSON.parse(
+      fs.readFileSync(path.join(installedMigrations, 'meta', '_journal.json'), 'utf8'),
+    ) as { entries: Array<{ tag: string }> };
+    assert(journal.entries.length > 0, 'Expected installed migration journal entries');
+    for (const { tag } of journal.entries) {
+      assert(
+        fs.statSync(path.join(installedMigrations, `${tag}.sql`)).isFile(),
+        `Missing installed migration: ${tag}`,
+      );
+    }
+
+    for (const binName of ['promptfoo', 'pf'] as const) {
+      if (values.profile === 'omit-optional') {
+        // The CLI currently initializes SQLite before handling --version. Omission removes
+        // libsql's native platform package: verify its actionable failure, not a crash.
+        assert.throws(
+          () => runInstalledBinVersion(consumerDir, configDir, binName),
+          (error: unknown) =>
+            error instanceof Error &&
+            (error.cause as { status?: number })?.status === 1 &&
+            error.message.includes('could not load its SQLite dependency') &&
+            error.message.includes('Required package: @libsql/'),
+        );
+      } else {
+        assert.equal(
+          runInstalledBinVersion(consumerDir, configDir, binName).trim(),
+          packResult.version,
+        );
+      }
+    }
+    if (values.profile === 'default') {
+      await runInstalledCodexSecurityEval(consumerDir, configDir, consumerNpmEnv);
+      await runInstalledCompressionEval(consumerDir, configDir);
+    }
+    await assertOptionalBrowserDependencies(
+      consumerDir,
+      configDir,
+      consumerNpmEnv,
+      values.profile === 'default',
+    );
+    if (values.profile === 'default') {
+      await runInstalledTransformersProvider(consumerDir, configDir, consumerNpmEnv);
+    }
+
+    if (suppliedTarball) {
+      assert.equal(
+        createHash('sha512').update(fs.readFileSync(suppliedTarball)).digest('hex'),
+        originalHash,
+        'The tested tarball changed during validation',
+      );
+    }
+    console.log(
+      `Verified installed package artifact (${values.profile}): ${path.basename(tarballPath)}`,
+    );
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
-main().catch((error: unknown) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((error: unknown) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

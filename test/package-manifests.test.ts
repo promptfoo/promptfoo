@@ -431,13 +431,14 @@ describe('package manifests', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const sitePackageJson = readPackageJson<PackageManifest>('site/package.json');
     const packageLock =
-      readPackageJson<PackageLockManifest<{ optional?: boolean }>>('package-lock.json');
+      readPackageJson<PackageLockManifest<{ optional?: boolean; devOptional?: boolean }>>(
+        'package-lock.json',
+      );
     for (const dependency of [
       '@alcalzone/ansi-tokenize',
       '@anthropic-ai/claude-agent-sdk',
       '@langfuse/client',
       '@modelcontextprotocol/sdk',
-      '@openai/codex-security',
       '@opencode-ai/sdk',
       '@slack/web-api',
       'hono',
@@ -454,13 +455,9 @@ describe('package manifests', () => {
     expect(sitePackageJson.dependencies).not.toHaveProperty('sharp');
     expect(sitePackageJson.devDependencies).not.toHaveProperty('sharp');
 
-    for (const dependency of [
-      '@alcalzone/ansi-tokenize',
-      '@openai/codex-security',
-      '@opencode-ai/sdk',
-      '@slack/web-api',
-    ]) {
-      expect(packageLock.packages[`node_modules/${dependency}`]?.optional, dependency).toBe(true);
+    for (const dependency of ['@alcalzone/ansi-tokenize', '@opencode-ai/sdk', '@slack/web-api']) {
+      const entry = packageLock.packages[`node_modules/${dependency}`];
+      expect(entry?.optional || entry?.devOptional, dependency).toBe(true);
     }
   });
 
