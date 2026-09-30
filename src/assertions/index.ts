@@ -270,7 +270,11 @@ const ASSERTION_HANDLERS: Record<
   meteor: async (params: AssertionParams) => {
     try {
       const { handleMeteorAssertion } = await import('./meteor.js');
-      return handleMeteorAssertion(params);
+      // Must await: without it the returned promise escapes this try, so a
+      // rejection from the missing optional `natural` dependency bypasses the
+      // catch below and surfaces as a row-level error instead of a failed
+      // assertion.
+      return await handleMeteorAssertion(params);
     } catch (error) {
       if (
         error instanceof Error &&
