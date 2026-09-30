@@ -1837,6 +1837,7 @@ export function validateFunctionCall(
   output: string | object,
   functions?: Tool[] | string,
   vars?: Record<string, VarValue>,
+  additionalFunctions?: Tool[] | string,
 ) {
   let functionCalls: FunctionCall[];
   try {
@@ -1859,14 +1860,21 @@ export function validateFunctionCall(
     );
   }
 
-  const interpolatedFunctions = loadFile(functions, vars) as Tool[];
+  const interpolatedFunctions = [functions, additionalFunctions]
+    .filter((configured) => configured !== undefined)
+    .flatMap((configured) => loadFile(configured, vars) as Tool[]);
 
   for (const functionCall of functionCalls) {
     // Parse function call and validate it against schema
     const functionName = functionCall.name;
     const functionArgs = parseStringObject(functionCall.args);
     const functionSchema = interpolatedFunctions
-      ?.flatMap((tool) => tool.functionDeclarations ?? [])
+      .flatMap((tool) => {
+        const native = tool as { type?: string; name?: string; parameters?: Schema };
+        return native.type === 'function' && native.name
+          ? [{ name: native.name, parameters: native.parameters }]
+          : (tool.functionDeclarations ?? []);
+      })
       .find((declaration) => declaration.name === functionName);
     if (!functionSchema) {
       throw new Error(`Called "${functionName}", but there is no function with that name`);

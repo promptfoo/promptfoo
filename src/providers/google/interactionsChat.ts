@@ -17,10 +17,12 @@ import {
 import {
   calculateGoogleCost,
   geminiFormatAndSystemInstructions,
+  getGoogleResponseServiceTier,
   mergeGoogleCompletionOptions,
   parseStringObject,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
+  validateFunctionCall,
 } from './util';
 
 import type {
@@ -698,6 +700,15 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     return getInteractionsApiKey(this.config, this.env);
   }
 
+  validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
+    validateFunctionCall(
+      output,
+      this.config.tools,
+      vars,
+      (this.config.passthrough as { tools?: Tool[] | string } | undefined)?.tools,
+    );
+  }
+
   toString(): string {
     const service = this.isVertexMode ? 'Vertex AI' : 'Google AI Studio';
     return `[Google ${service} Interactions Provider ${this.modelName}]`;
@@ -839,6 +850,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
         ...(!error.raw && lastData ? { raw: lastData } : {}),
         metadata: {
           ...error.metadata,
+          ...(executedToolCalls.length > 0 ? { rateLimitRetryable: false } : {}),
           ...(executedToolCalls.length > 0 ? { toolCalls: executedToolCalls } : {}),
           ...(groundingCalls.length > 0 ? { groundingToolCalls: groundingCalls } : {}),
         },
@@ -880,6 +892,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
         roundUsage.cached,
         roundUsage.cachedAudio,
         roundUsage.cachedImage,
+        result.serviceTier,
       );
       if (roundCost === undefined) {
         fullyPriced = false;
@@ -945,8 +958,15 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       }
 
       // Vertex ignores stored history, so it always resends the timeline.
-      // Function-call steps are server output; only results are valid input steps.
-      timeline.push(...results);
+      // Function-call steps are not input items, but intermediate model output is.
+      const latestResult = turnSteps.map((step) => step.type).lastIndexOf('function_result');
+      timeline.push(
+        ...turnSteps
+          .slice(latestResult + 1)
+          .filter((step) => step.type === 'model_output')
+          .map((step) => ({ type: 'model_output', content: step.content })),
+        ...results,
+      );
       const useServerState = store && !this.isVertexMode && Boolean(data.id);
       currentPreviousInteractionId = useServerState ? data.id : currentPreviousInteractionId;
       currentInput = useServerState ? results : timeline;
@@ -1048,20 +1068,24 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     // generationConfig; both must reach response_format, or opting into
     // Interactions would silently downgrade structured output to free text.
     const rawResponseSchema =
+      passthroughGenerationConfig.responseSchema ??
+      passthroughGenerationConfig.response_schema ??
       config.responseSchema ??
       config.generationConfig?.response_schema ??
-      (config.generationConfig as { responseSchema?: unknown } | undefined)?.responseSchema ??
-      passthroughGenerationConfig.responseSchema ??
-      passthroughGenerationConfig.response_schema;
+      (config.generationConfig as { responseSchema?: unknown } | undefined)?.responseSchema;
     let responseFormat: unknown;
     if (rawResponseSchema) {
-      const schema = maybeLoadFromExternalFile(
-        renderVarsInObject(rawResponseSchema, context?.vars),
-      );
+      const renderedSchema = renderVarsInObject(rawResponseSchema, context?.vars);
+      const schema = maybeLoadFromExternalFile(renderedSchema);
       try {
         // `responseSchema` is typed as a string, so a literal schema arrives
         // unparsed; Interactions needs the object itself.
-        responseFormat = lowercaseSchemaTypes(parseStringObject(schema));
+        const parsedSchema = parseStringObject(schema);
+        responseFormat = lowercaseSchemaTypes(
+          typeof renderedSchema === 'string' && renderedSchema.startsWith('file://')
+            ? renderVarsInObject(parsedSchema, context?.vars)
+            : parsedSchema,
+        );
       } catch (err) {
         return {
           error: `Gemini Interactions API error: responseSchema is not valid JSON: ${String(err)}`,
@@ -1200,16 +1224,22 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     body: Record<string, unknown>,
     config: GoogleProviderConfig,
     abortSignal?: AbortSignal,
-  ): Promise<{ data: InteractionResponse } | { error: ProviderResponse }> {
+  ): Promise<
+    | { data: InteractionResponse; serviceTier?: ReturnType<typeof getGoogleResponseServiceTier> }
+    | { error: ProviderResponse }
+  > {
     const requestTimeoutMs = config.timeoutMs ?? getRequestTimeoutMs();
     let data: InteractionResponse;
     let httpStatus: number;
     let httpStatusText: string;
+    let responseHeaders: Record<string, string> | undefined;
+    let serviceTier: ReturnType<typeof getGoogleResponseServiceTier>;
     try {
       ({
         data,
         status: httpStatus,
         statusText: httpStatusText,
+        headers: responseHeaders,
       } = (await fetchWithCache(
         endpoint,
         {
@@ -1221,10 +1251,17 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
         requestTimeoutMs,
         'json',
         true,
-      )) as { data: InteractionResponse; cached: boolean; status: number; statusText: string });
+      )) as {
+        data: InteractionResponse;
+        cached: boolean;
+        status: number;
+        statusText: string;
+        headers?: Record<string, string>;
+      });
     } catch (err) {
       return { error: { error: `Gemini Interactions API error: ${String(err)}` } };
     }
+    serviceTier = getGoogleResponseServiceTier(responseHeaders, data?.usage);
 
     if (data?.error?.message) {
       return {
@@ -1262,6 +1299,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
           data,
           status: httpStatus,
           statusText: httpStatusText,
+          headers: responseHeaders,
         } = (await fetchWithCache(
           `${endpoint}/${encodeURIComponent(data.id)}`,
           {
@@ -1274,10 +1312,17 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
           // Always bust: caching a poll would freeze the interaction on its
           // first `in_progress` snapshot and guarantee a timeout.
           true,
-        )) as { data: InteractionResponse; cached: boolean; status: number; statusText: string });
+        )) as {
+          data: InteractionResponse;
+          cached: boolean;
+          status: number;
+          statusText: string;
+          headers?: Record<string, string>;
+        });
       } catch (err) {
         return { error: { error: `Gemini Interactions API polling error: ${String(err)}` } };
       }
+      serviceTier = getGoogleResponseServiceTier(responseHeaders, data?.usage) ?? serviceTier;
       pollCount++;
       if (data?.error?.message) {
         return {
@@ -1322,6 +1367,6 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       };
     }
 
-    return { data };
+    return { data, serviceTier };
   }
 }

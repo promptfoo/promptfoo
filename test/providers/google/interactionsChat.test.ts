@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
@@ -7,6 +11,8 @@ import {
   geminiContentsToInteractionsInput,
   toInteractionsTools,
 } from '../../../src/providers/google/interactionsChat';
+import { createProviderRateLimitOptions } from '../../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import { checkProviderApiKeys } from '../../../src/util/provider';
 
 vi.mock('../../../src/cache', () => ({ fetchWithCache: vi.fn() }));
@@ -386,6 +392,103 @@ describe('GoogleInteractionsChatProvider', () => {
       // Cost is computed against the tier, so the request has to actually use it.
       expect(bodyOf(mockFetchWithCache.mock.calls[0]).service_tier).toBe('priority');
     });
+
+    it('prices a priority request at the actual standard processing tier', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        ...interaction(),
+        headers: { 'x-gemini-service-tier': 'standard' },
+      } as any);
+      const downgraded = await make({ service_tier: 'priority' }).callApi('Hello');
+      const standard = await make({ service_tier: 'standard' }).callApi('Hello');
+      expect(downgraded.cost).toBe(standard.cost);
+      expect(downgraded.cost).toBeGreaterThan(0);
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      const priority = await make({ service_tier: 'priority' }).callApi('Hello');
+      expect(priority.cost).toBeGreaterThan(standard.cost!);
+      mockFetchWithCache
+        .mockResolvedValueOnce({
+          ...interaction({ status: 'in_progress' }),
+          headers: { 'x-gemini-service-tier': 'standard' },
+        } as any)
+        .mockResolvedValueOnce(interaction() as any);
+      const polled = await make({ service_tier: 'priority' }).callApi('Hello');
+      expect(polled.cost).toBe(standard.cost);
+    });
+
+    it('renders loaded schema content once after resolving the filename', async () => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'interactions-schema-'));
+      try {
+        fs.writeFileSync(
+          path.join(directory, 'schema.json'),
+          JSON.stringify({
+            type: 'OBJECT',
+            properties: { color: { type: 'STRING', description: '{{ description }}' } },
+          }),
+        );
+        mockFetchWithCache.mockResolvedValue(interaction() as any);
+        await make({ responseSchema: `file://${directory}/{{ filename }}.json` }).callApi('Hello', {
+          vars: { filename: 'schema', description: 'A "color"\n{{ literal }}', literal: 'unused' },
+        } as any);
+        expect(
+          bodyOf(mockFetchWithCache.mock.calls[0]).response_format.properties.color.description,
+        ).toBe('A "color"\n{{ literal }}');
+      } finally {
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    });
+
+    it.each(['responseSchema', 'response_schema'])(
+      'uses the passthrough %s over base schemas',
+      async (key) => {
+        mockFetchWithCache.mockResolvedValue(interaction() as any);
+        await make({
+          responseSchema: { type: 'STRING' },
+          generationConfig: { response_schema: { type: 'NUMBER' } },
+          passthrough: { generation_config: { [key]: { type: 'BOOLEAN' } } },
+        }).callApi('Hello');
+        expect(bodyOf(mockFetchWithCache.mock.calls[0]).response_format).toEqual({
+          type: 'boolean',
+        });
+      },
+    );
+
+    it.each(['tools', 'passthrough'])(
+      'validates native function calls configured through %s',
+      async (location) => {
+        const tools = [
+          {
+            type: 'function',
+            name: 'lookup',
+            parameters: {
+              type: 'object',
+              properties: { item: { type: 'string' } },
+              required: ['item'],
+            },
+          },
+        ];
+        const provider = make(location === 'tools' ? { tools } : { passthrough: { tools } });
+        mockFetchWithCache.mockResolvedValue(
+          interaction({
+            steps: [
+              {
+                type: 'function_call',
+                id: 'lookup-1',
+                name: 'lookup',
+                arguments: { item: 'leaf' },
+              },
+            ],
+          }) as any,
+        );
+        const result = await provider.callApi('Find a leaf');
+        expect(result.error).toBeUndefined();
+        expect(() => provider.validateFunctionToolCall(result.output!)).not.toThrow();
+        expect(() =>
+          provider.validateFunctionToolCall(
+            JSON.stringify([{ functionCall: { name: 'lookup', args: { item: 1 } } }]),
+          ),
+        ).toThrow(/does not match schema/);
+      },
+    );
 
     it('maps a nested generationConfig response schema onto response_format', async () => {
       mockFetchWithCache.mockResolvedValue(interaction() as any);
@@ -882,6 +985,63 @@ describe('GoogleInteractionsChatProvider', () => {
       expect(result.metadata?.toolCalls).toEqual([
         { name: 'get_weather', args: { location: 'Boston' }, result: '52F and rain' },
       ]);
+    });
+
+    it.each([false, true])(
+      'retains intermediate model output in stateless history (Vertex: %s)',
+      async (vertexai) => {
+        if (vertexai) {
+          mockVertexAuth();
+        }
+        const pending = pendingCall();
+        pending.data.steps.unshift({
+          type: 'model_output',
+          content: [{ type: 'text', text: 'Looking up the forecast.' }],
+        });
+        mockFetchWithCache
+          .mockResolvedValueOnce(pending as any)
+          .mockResolvedValueOnce(finalAnswer() as any);
+        const result = await make({
+          ...toolConfig,
+          vertexai,
+          projectId: 'fixture',
+          functionToolCallbacks: { get_weather: () => '52F and rain' },
+        }).callApi('Weather in Boston?');
+        expect(result.output).toBe('52F and rain');
+        expect(
+          bodyOf(mockFetchWithCache.mock.calls[1]).input.map((item: any) => item.type),
+        ).toEqual(['user_input', 'model_output', 'function_result']);
+        expect(bodyOf(mockFetchWithCache.mock.calls[1]).input[1].content).toEqual([
+          { type: 'text', text: 'Looking up the forecast.' },
+        ]);
+      },
+    );
+
+    it('does not replay completed callbacks after a continuation rate limit', async () => {
+      vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', 'false');
+      const callback = vi.fn(() => 'fixture weather');
+      const provider = make({ ...toolConfig, functionToolCallbacks: { get_weather: callback } });
+      mockFetchWithCache.mockResolvedValueOnce(pendingCall() as any).mockResolvedValue({
+        data: { error: { message: 'Rate limit exceeded' } },
+        status: 429,
+        statusText: 'Too Many Requests',
+      } as any);
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      try {
+        const result = await registry.execute(
+          provider,
+          () => provider.callApi('Weather?'),
+          createProviderRateLimitOptions(),
+        );
+        expect(result.error).toContain('Rate limit');
+        expect(result.metadata?.rateLimitRetryable).toBe(false);
+        expect(result.tokenUsage?.numRequests).toBe(1);
+        expect(callback).toHaveBeenCalledOnce();
+        expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
+        expect(Object.values(registry.getMetrics())[0].retriedRequests).toBe(0);
+      } finally {
+        registry.dispose();
+      }
     });
 
     it('resolves a function call against server-side state when store is enabled', async () => {
