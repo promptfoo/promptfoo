@@ -164,6 +164,10 @@ function assertPackagedFiles(packResult: PackResult, compareSource: boolean): vo
     assertBuiltAssetsPackaged(ROOT, packResult.files);
   }
   assert(
+    packResult.files.every((file) => !file.path.endsWith('.tsbuildinfo')),
+    'TypeScript incremental build state should be excluded from the package',
+  );
+  assert(
     packResult.files.every((file) => !file.path.endsWith('.map')),
     'Source maps should be excluded from the package',
   );
@@ -1061,8 +1065,13 @@ async function main(): Promise<void> {
       profile: { type: 'string', default: 'default' },
       registry: { type: 'string', default: 'https://registry.npmjs.org/' },
       tarball: { type: 'string' },
+      'runtime-assets': { type: 'string', default: 'none' },
     },
   });
+  assert(
+    ['none', 'python-go', 'all'].includes(values['runtime-assets']),
+    `Unknown runtime asset profile: ${values['runtime-assets']}`,
+  );
   const suppliedTarball = values.tarball === undefined ? undefined : path.resolve(values.tarball);
   if (suppliedTarball) {
     assert(suppliedTarball.endsWith('.tgz'), '--tarball must be a local .tgz file');
@@ -1075,7 +1084,10 @@ async function main(): Promise<void> {
     ['default', 'omit-optional'].includes(values.profile),
     `Unknown install profile: ${values.profile}`,
   );
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-'));
+  // Module resolution canonicalizes paths (for example /var to /private/var on macOS).
+  const tempDir = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-')),
+  );
   const artifactsDir = path.join(tempDir, 'artifacts');
   const configDir = path.join(tempDir, 'config');
   const consumerDir = path.join(tempDir, 'consumer');
@@ -1223,6 +1235,7 @@ async function main(): Promise<void> {
     }
     await runOptionalOpenAiAgentsChecks(consumerDir, configDir);
     if (values.profile === 'default') {
+      console.log(await runAsync(process.execPath, ['migrations.mjs'], consumerDir, consumerEnv));
       await runInstalledCodexSecurityEval(consumerDir, configDir, consumerNpmEnv);
       await runInstalledCompressionEval(consumerDir, configDir);
     }
@@ -1236,6 +1249,17 @@ async function main(): Promise<void> {
       await runInstalledTransformersProvider(consumerDir, configDir, consumerNpmEnv);
     }
 
+    if (values['runtime-assets'] !== 'none') {
+      console.log(
+        await runAsync(
+          process.execPath,
+          ['runtime-assets.mjs', ...(values['runtime-assets'] === 'all' ? ['--ruby'] : [])],
+          consumerDir,
+          consumerEnv,
+        ),
+      );
+    }
+
     if (suppliedTarball) {
       assert.equal(
         createHash('sha512').update(fs.readFileSync(suppliedTarball)).digest('hex'),
@@ -1243,12 +1267,12 @@ async function main(): Promise<void> {
         'The tested tarball changed during validation',
       );
     }
-    console.log(
-      `Verified installed package artifact (${values.profile}): ${path.basename(tarballPath)}`,
-    );
   } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    console.log('Removing temporary artifact consumer...');
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+    console.log('Removed temporary artifact consumer');
   }
+  console.log(`Verified installed package artifact (${values.profile})`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

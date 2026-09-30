@@ -32,7 +32,7 @@ export function assertBuiltAssetsPackaged(
       .filter(shouldCopyDrizzlePath)
       .map((file) => `dist/${file}`),
     ...listFiles(packageDir, path.join(packageDir, 'dist', 'src', 'app')).filter(
-      (file) => !file.endsWith('.map'),
+      (file) => !file.endsWith('.map') && !file.endsWith('.tsbuildinfo'),
     ),
   ];
   const missing = expectedPaths.filter((file) => !packagedPaths.has(file));
