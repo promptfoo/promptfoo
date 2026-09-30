@@ -247,6 +247,10 @@ All standard LiteLLM parameters are passed through:
 4. **Rate limiting**: LiteLLM handles rate limiting automatically
 5. **Cost tracking**: LiteLLM provides built-in cost tracking
 
+## Custom IDs and grading
+
+Custom provider IDs appear unchanged in evaluation results. LiteLLM embedding providers support similarity assertions but cannot serve as text graders.
+
 ## Troubleshooting
 
 If you encounter issues:
@@ -261,7 +265,3 @@ If you encounter issues:
 - [LiteLLM Documentation](https://docs.litellm.ai/docs/)
 - [Provider Configuration](./index.md)
 - [OpenAI Provider](./openai.md)
-
-### Provider identity and capabilities
-
-Custom provider IDs appear unchanged in evaluation results. LiteLLM embedding providers can grade similarity assertions, but cannot serve as text graders. Chat providers retain function-call validation and MCP cleanup. Wrappers forward request context and options to the underlying provider.

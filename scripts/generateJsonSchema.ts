@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { UnifiedConfigSchema } from '../src/types';
 import { CONFIG_PROVIDER_INPUT_KEYS } from '../src/types/configAliases';
 import { TRANSFORM_KEYS } from '../src/util/transform';
+import { ApiProviderObjectSchema, ApiProviderSchema } from '../src/validators/providers';
 import { StringOrFunctionSchema } from '../src/validators/shared';
 
 const transformSchemaKeys: Set<string> = new Set(TRANSFORM_KEYS);
@@ -62,6 +63,17 @@ const schemaContent = z.toJSONSchema(UnifiedConfigSchema, {
   unrepresentable: 'any',
   reused: 'ref',
   override: ({ zodSchema, jsonSchema }) => {
+    // The runtime transform retains the original provider for subclass capability checks.
+    // Publish its validated object shape instead of the transform's unknown input.
+    if (zodSchema === ApiProviderSchema) {
+      const { $schema: _, ...providerSchema } = z.toJSONSchema(ApiProviderObjectSchema, {
+        target: 'draft-07',
+        io: 'input',
+        unrepresentable: 'any',
+        reused: 'inline',
+      });
+      Object.assign(jsonSchema, providerSchema);
+    }
     // Config files can only represent string transforms. Preserve runtime support for function
     // transforms in the Zod schema, but keep generated JSON Schema string-only for editor/Ajv use.
     if (zodSchema === StringOrFunctionSchema) {

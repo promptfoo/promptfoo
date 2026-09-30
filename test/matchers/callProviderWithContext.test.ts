@@ -179,14 +179,10 @@ describe('callProviderWithContext', () => {
 
     expect(contextRegistry.executeSpy).not.toHaveBeenCalled();
     expect(wrapperRegistry.executeSpy).toHaveBeenCalledTimes(1);
-    expect(provider.callApi).toHaveBeenCalledWith(
-      'grade this',
-      {
-        prompt: { raw: 'grade this', label: 'rubric' },
-        vars,
-      },
-      undefined,
-    );
+    expect(provider.callApi).toHaveBeenCalledWith('grade this', {
+      prompt: { raw: 'grade this', label: 'rubric' },
+      vars,
+    });
   });
 
   it.each([false, true])(

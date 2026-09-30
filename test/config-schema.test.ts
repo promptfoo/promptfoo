@@ -515,6 +515,12 @@ describe('config-schema.json', () => {
       );
     });
 
+    it.each([null, false, 42, []])('rejects invalid provider values: %j', (provider) => {
+      const config = { prompts: ['hello'], redteam: { provider } };
+      expect(UnifiedConfigSchema.safeParse(config).success).toBe(false);
+      expect(ajv.validate(schema, config)).toBe(false);
+    });
+
     it('emits string-only types for every transform field in the JSON schema', () => {
       // Guard against the StringOrFunctionSchema leaking into the generated
       // config-schema.json via a `z.custom` → `{}` (any) branch. Every transform
