@@ -18,17 +18,17 @@ import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
+import { getResultIndexKey } from './evaluator/resultIndex';
+import {
+  PROMPTFOO_METADATA_KEY,
+  sanitizeResultForJsonlArtifact,
+} from './evaluator/resultProcessing';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
-import {
-  getResultIndexKey,
-  PROMPTFOO_METADATA_KEY,
-  sanitizeResultForJsonlArtifact,
-} from './models/evalResult';
-import { generateIdFromPrompt } from './models/prompt';
 import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
 import { CIProgressReporter } from './progress/ciProgressReporter';
+import { generateIdFromPrompt } from './prompts/id';
 import { type AgentWorkspace, createAgentWorkspaceForConfig } from './providers/agentWorkspace';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
