@@ -29,7 +29,7 @@ import { countTests, normalizePrompts, normalizeProviders } from './setupReadine
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
 import { validateYamlConfigDraft } from './yamlConfigValidation';
-import type { ConfigDraft } from '@promptfoo/types/configDraft';
+import type { EvalConfigState } from '@app/stores/evalConfig';
 
 type SetupStepId = 1 | 2 | 3 | 4;
 type EditorTab = 'ui' | 'yaml';
@@ -89,7 +89,9 @@ const EvaluateTestSuiteCreator = () => {
   const uiTabRef = React.useRef<HTMLButtonElement>(null);
   const yamlTabRef = React.useRef<HTMLButtonElement>(null);
   const [discardYamlDialogOpen, setDiscardYamlDialogOpen] = useState(false);
-  const [pendingImport, setPendingImport] = useState<ConfigDraft | null>(null);
+  const discardYamlDescriptionId = React.useId();
+  const importDescriptionId = React.useId();
+  const [pendingImport, setPendingImport] = useState<EvalConfigState['config'] | null>(null);
   const fileReaderRef = React.useRef<FileReader | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const uploadButtonRef = React.useRef<HTMLButtonElement>(null);
@@ -715,6 +717,8 @@ const EvaluateTestSuiteCreator = () => {
 
       <Dialog open={discardYamlDialogOpen} onOpenChange={setDiscardYamlDialogOpen}>
         <DialogContent
+          hideDescription={false}
+          aria-describedby={discardYamlDescriptionId}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             (editorTab === 'yaml' ? yamlTabRef : uiTabRef).current?.focus();
@@ -722,7 +726,7 @@ const EvaluateTestSuiteCreator = () => {
         >
           <DialogHeader>
             <DialogTitle>Discard unsaved YAML changes?</DialogTitle>
-            <DialogDescription>
+            <DialogDescription id={discardYamlDescriptionId}>
               Save your changes in the YAML editor before switching to the UI editor, or discard
               them to continue.
             </DialogDescription>
@@ -750,6 +754,8 @@ const EvaluateTestSuiteCreator = () => {
         onOpenChange={(open) => !open && setPendingImport(null)}
       >
         <DialogContent
+          hideDescription={false}
+          aria-describedby={importDescriptionId}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             uploadButtonRef.current?.focus();
@@ -757,7 +763,7 @@ const EvaluateTestSuiteCreator = () => {
         >
           <DialogHeader>
             <DialogTitle>Replace evaluation configuration?</DialogTitle>
-            <DialogDescription>
+            <DialogDescription id={importDescriptionId}>
               This replaces the current configuration and any unsaved YAML changes with the uploaded
               file. Fields missing from the file will be cleared.
             </DialogDescription>

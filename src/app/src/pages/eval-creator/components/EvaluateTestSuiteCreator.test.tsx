@@ -1,6 +1,6 @@
 import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvaluateTestSuiteCreator from './EvaluateTestSuiteCreator';
@@ -570,7 +570,8 @@ describe('EvaluateTestSuiteCreator', () => {
     await user.click(screen.getByRole('tab', { name: 'YAML Editor' }));
     const editor = screen.getByLabelText('YAML configuration editor');
     const original = (editor as HTMLTextAreaElement).value;
-    fireEvent.change(editor, { target: { value: 'description: Unsaved draft' } });
+    await user.clear(editor);
+    await user.type(editor, 'description: Unsaved draft');
 
     await user.click(screen.getByRole('tab', { name: 'UI Editor' }));
     await user.click(screen.getByRole('button', { name: 'Keep editing' }));
@@ -580,6 +581,9 @@ describe('EvaluateTestSuiteCreator', () => {
 
     await user.click(screen.getByRole('tab', { name: 'UI Editor' }));
     const dialog = screen.getByRole('dialog', { name: 'Discard unsaved YAML changes?' });
+    expect(dialog).toHaveAccessibleDescription(
+      'Save your changes in the YAML editor before switching to the UI editor, or discard them to continue.',
+    );
     await user.click(within(dialog).getByRole('button', { name: 'Discard changes' }));
     expect(screen.getByRole('tab', { name: 'UI Editor' })).toHaveAttribute('aria-selected', 'true');
     await waitFor(() => expect(screen.getByRole('tab', { name: 'UI Editor' })).toHaveFocus());
@@ -593,9 +597,9 @@ describe('EvaluateTestSuiteCreator', () => {
     useStore.getState().setConfig(initial);
     render(<EvaluateTestSuiteCreator />);
     await user.click(screen.getByRole('tab', { name: 'YAML Editor' }));
-    fireEvent.change(screen.getByLabelText('YAML configuration editor'), {
-      target: { value: 'description: Saved draft' },
-    });
+    const editor = screen.getByLabelText('YAML configuration editor');
+    await user.clear(editor);
+    await user.type(editor, 'description: Saved draft');
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await user.click(screen.getByRole('tab', { name: 'UI Editor' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -613,12 +617,16 @@ describe('EvaluateTestSuiteCreator', () => {
     const previous = useStore.getState().config;
     await user.click(screen.getByRole('tab', { name: 'YAML Editor' }));
     const editor = screen.getByLabelText('YAML configuration editor');
-    fireEvent.change(editor, { target: { value: 'description: Unsaved draft' } });
+    await user.clear(editor);
+    await user.type(editor, 'description: Unsaved draft');
     const file = new File(['description: Imported draft'], 'config.yaml', {
       type: 'application/yaml',
     });
     await user.upload(screen.getByLabelText('Upload YAML configuration'), file);
     const dialog = await screen.findByRole('dialog', { name: 'Replace evaluation configuration?' });
+    expect(dialog).toHaveAccessibleDescription(
+      'This replaces the current configuration and any unsaved YAML changes with the uploaded file. Fields missing from the file will be cleared.',
+    );
     expect(useStore.getState().config).toBe(previous);
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(editor).toHaveValue('description: Unsaved draft');
