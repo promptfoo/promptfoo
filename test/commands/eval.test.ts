@@ -82,6 +82,7 @@ vi.mock('../../src/redteam/shared', async (importOriginal) => {
 });
 vi.mock('../../src/share');
 vi.mock('../../src/table');
+vi.mock('../../src/telemetry', () => ({ default: { record: vi.fn() } }));
 vi.mock('../../src/util/cloud', async () => ({
   ...(await vi.importActual('../../src/util/cloud')),
   getDefaultTeam: vi.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
@@ -2173,6 +2174,217 @@ describe('evalCommand', () => {
     await doEval({}, defaultConfig, defaultConfigPath, {});
 
     expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['success', 'throws synchronously'],
+    ['error', 'rejects'],
+  ])(
+    'awaits owned-provider cleanup after evaluation %s when another cleanup %s',
+    async (outcome, cleanupMode) => {
+      const cleanupError = new Error('MCP initialization failed');
+      const evaluationError = new Error('primary evaluation failed');
+      let startCleanup!: () => void;
+      let finishCleanup!: () => void;
+      const cleanupStarted = new Promise<void>((resolve) => {
+        startCleanup = resolve;
+      });
+      const cleanupFinished = new Promise<void>((resolve) => {
+        finishCleanup = resolve;
+      });
+      const failingProvider = {
+        id: () => 'failing-cleanup-provider',
+        callApi: async () => ({ output: 'ok' }),
+        cleanup: vi.fn(() => {
+          if (cleanupMode === 'throws synchronously') {
+            throw cleanupError;
+          }
+          return Promise.reject(cleanupError);
+        }),
+      } satisfies ApiProvider;
+      const slowProvider = {
+        id: () => 'slow-cleanup-provider',
+        callApi: async () => ({ output: 'ok' }),
+        cleanup: vi.fn(async () => {
+          startCleanup();
+          await cleanupFinished;
+        }),
+      } satisfies ApiProvider;
+      const config = { prompts: [], outputPath: ['cleanup-results.json'] } as UnifiedConfig;
+      vi.mocked(resolveConfigs)
+        .mockReset()
+        .mockResolvedValue({
+          config,
+          // A repeated reference is still one provider, cleaned up once.
+          testSuite: { prompts: [], providers: [failingProvider, slowProvider, slowProvider] },
+          basePath: path.resolve('/'),
+        });
+      vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
+      vi.mocked(writeMultipleOutputs).mockReset().mockResolvedValue(undefined);
+      vi.mocked(evaluate)
+        .mockReset()
+        .mockImplementation(async (_suite, evalRecord) => {
+          if (outcome === 'error') {
+            throw evaluationError;
+          }
+          return evalRecord as Eval;
+        });
+      let settled = false;
+      const evaluation = doEval(
+        { write: false, table: false, share: false },
+        config,
+        undefined,
+        {},
+      );
+      void evaluation.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+
+      try {
+        await cleanupStarted;
+        expect(settled).toBe(false);
+        finishCleanup();
+        if (outcome === 'error') {
+          await expect(evaluation).rejects.toBe(evaluationError);
+          expect(writeMultipleOutputs).not.toHaveBeenCalled();
+        } else {
+          const result = await evaluation;
+          expect(writeMultipleOutputs).toHaveBeenCalledWith(['cleanup-results.json'], result, null);
+        }
+        expect(failingProvider.cleanup).toHaveBeenCalledExactlyOnceWith();
+        expect(slowProvider.cleanup).toHaveBeenCalledOnce();
+        expect(logger.warn).toHaveBeenCalledWith('Provider cleanup failed after evaluation.', {
+          error: cleanupError,
+        });
+      } finally {
+        finishCleanup();
+        await Promise.allSettled([evaluation]);
+        vi.mocked(evaluate).mockReset();
+        vi.mocked(resolveConfigs).mockReset();
+        vi.mocked(writeMultipleOutputs).mockReset();
+      }
+    },
+  );
+
+  it('keeps overlapping watch runs tied to their own config, options and outputs', async () => {
+    const base = { prompts: [], providers: [], tests: [] } as UnifiedConfig;
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_TEST_VARS: undefined });
+    const environments = new Map<string, Record<string, string | undefined>>();
+    const setup = vi
+      .spyOn(await import('../../src/util/index'), 'setupEnv')
+      .mockImplementation((envPath, options) => {
+        if (typeof envPath !== 'string') {
+          return;
+        }
+        const environment = options?.processEnv;
+        if (!environment) {
+          throw new Error('Expected a programmatic environment-file scope');
+        }
+        environments.set(envPath, environment);
+        if (envPath === 'watch-a.env') {
+          environment.PROMPTFOO_STRIP_TEST_VARS = 'true';
+        }
+      });
+    const defaults = vi.spyOn(defaultConfigModule, 'loadDefaultConfig').mockResolvedValue({
+      defaultConfig: base,
+      defaultConfigPath: undefined,
+    });
+    const runs = [
+      { name: 'initial' },
+      { name: 'watch-a', timeoutMs: 111 },
+      { name: 'watch-b', timeoutMs: 222 },
+      { name: 'watch-c' },
+    ];
+    vi.mocked(resolveConfigs).mockReset();
+    for (const { name, timeoutMs } of runs) {
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: {
+          ...base,
+          description: name,
+          metadata: { run: name },
+          ...(name !== 'initial' && { outputPath: [`${name}.json`] }),
+          ...(timeoutMs && { evaluateOptions: { timeoutMs } }),
+        },
+        testSuite: { prompts: [{ raw: name, label: name }], providers: [] },
+        commandLineOptions: {
+          tags: { source: name },
+          ...(name !== 'initial' && { envPath: `${name}.env` }),
+        },
+        basePath: path.dirname(defaultConfigPath),
+      });
+    }
+    vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
+    vi.mocked(writeMultipleOutputs).mockReset().mockResolvedValue(undefined);
+    let startA!: () => void;
+    let releaseA!: () => void;
+    const startedA = new Promise<void>((resolve) => {
+      startA = resolve;
+    });
+    const heldA = new Promise<void>((resolve) => {
+      releaseA = resolve;
+    });
+    vi.mocked(checkCloudPermissions).mockImplementation(async (config) => {
+      if (config.description === 'watch-a') {
+        startA();
+        await heldA;
+      }
+    });
+    const completed = new Map<string, { record: Eval; timeoutMs?: number; stripVars: boolean }>();
+    vi.mocked(evaluate)
+      .mockReset()
+      .mockImplementation(async (suite, record, options) => {
+        completed.set(suite.prompts[0].label, {
+          record: record as Eval,
+          timeoutMs: options?.timeoutMs,
+          stripVars: getEnvBool('PROMPTFOO_STRIP_TEST_VARS'),
+        });
+        return record as Eval;
+      });
+    let pendingA: Promise<unknown> | undefined;
+
+    try {
+      await doEval(
+        { watch: true, write: false, table: false, share: false },
+        base,
+        defaultConfigPath,
+        { timeoutMs: 999 },
+      );
+      const onChange = chokidarMocks.handlers.get('change')!;
+      pendingA = Promise.resolve(onChange(defaultConfigPath));
+      await startedA;
+      await onChange('second.yaml');
+      releaseA();
+      await pendingA;
+      await onChange('third.yaml');
+
+      for (const { name, timeoutMs } of runs.slice(1)) {
+        const result = completed.get(name)!;
+        expect(result.timeoutMs).toBe(timeoutMs ?? 999);
+        expect(result.stripVars).toBe(name === 'watch-a');
+        expect(result.record.config).toMatchObject({
+          description: name,
+          metadata: { run: name },
+          tags: { source: name },
+        });
+        expect(writeMultipleOutputs).toHaveBeenCalledWith([`${name}.json`], result.record, null);
+      }
+      expect(environments.get('watch-a.env')).not.toBe(environments.get('watch-b.env'));
+    } finally {
+      releaseA();
+      await pendingA;
+      defaults.mockRestore();
+      setup.mockRestore();
+      restoreEnv();
+      vi.mocked(evaluate).mockReset();
+      vi.mocked(resolveConfigs).mockReset();
+      vi.mocked(checkCloudPermissions).mockReset().mockResolvedValue(undefined);
+      vi.mocked(writeMultipleOutputs).mockReset();
+    }
   });
 
   it('should handle redteam config', async () => {

@@ -25,6 +25,7 @@ export class PythonWorker {
   private crashCount: number = 0;
   private stderrLogger = new PythonStderrLogger('Python worker stderr: ');
   private readonly maxCrashes: number = 3;
+  private cancelInitialization?: () => void;
   private pendingRequest: {
     responseFile: string;
     resolve: (result: unknown) => void;
@@ -45,6 +46,9 @@ export class PythonWorker {
   }
 
   private async startWorker(): Promise<void> {
+    if (this.shuttingDown) {
+      throw new Error('Python worker shut down during initialization');
+    }
     const wrapperPath = path.join(getWrapperDir('python'), 'persistent_wrapper.py');
 
     // Validate and resolve Python path using smart detection (tries python3, then python)
@@ -52,6 +56,9 @@ export class PythonWorker {
       this.pythonPath || 'python',
       typeof this.pythonPath === 'string',
     );
+    if (this.shuttingDown) {
+      throw new Error('Python worker shut down during initialization');
+    }
 
     this.process = new PythonShell(wrapperPath, {
       mode: 'text',
@@ -63,7 +70,11 @@ export class PythonWorker {
 
     // Listen for READY signal
     return new Promise((resolve, reject) => {
+      let awaitingReady = true;
       const readyTimeout = setTimeout(() => {
+        if (!finishWaiting()) {
+          return;
+        }
         // Kill the process to prevent orphaned Python processes
         // and avoid triggering handleCrash() which would retry
         this.shuttingDown = true;
@@ -73,10 +84,33 @@ export class PythonWorker {
         }
         reject(new Error('Worker failed to become ready within timeout'));
       }, 30000);
+      const finishWaiting = () => {
+        if (!awaitingReady) {
+          return false;
+        }
+        awaitingReady = false;
+        clearTimeout(readyTimeout);
+        if (this.cancelInitialization === cancelInitialization) {
+          this.cancelInitialization = undefined;
+        }
+        return true;
+      };
+      const cancelInitialization = () => {
+        if (finishWaiting()) {
+          reject(new Error('Python worker shut down during initialization'));
+        }
+      };
+      this.cancelInitialization = cancelInitialization;
 
       this.process!.on('message', (message: string) => {
         if (message.trim() === 'READY') {
-          clearTimeout(readyTimeout);
+          if (!finishWaiting()) {
+            return;
+          }
+          if (this.shuttingDown) {
+            reject(new Error('Python worker shut down during initialization'));
+            return;
+          }
           this.ready = true;
           logger.debug(`Python worker ready for ${this.scriptPath}`);
           // Notify pool that worker is ready (triggers queue processing)
@@ -90,12 +124,22 @@ export class PythonWorker {
       });
 
       this.process!.on('error', (err) => {
-        clearTimeout(readyTimeout);
-        reject(err);
+        if (finishWaiting()) {
+          reject(err);
+        }
       });
 
       this.process!.on('close', () => {
         this.flushStderr();
+        if (finishWaiting()) {
+          reject(
+            new Error(
+              this.shuttingDown
+                ? 'Python worker shut down during initialization'
+                : 'Python worker closed before becoming ready',
+            ),
+          );
+        }
         if (!this.shuttingDown) {
           this.handleCrash();
         }
@@ -274,12 +318,15 @@ export class PythonWorker {
   }
 
   async shutdown(): Promise<void> {
-    if (!this.process) {
+    this.shuttingDown = true;
+    this.cancelInitialization?.();
+    const workerProcess = this.process;
+    if (!workerProcess) {
       return;
     }
 
     try {
-      this.shuttingDown = true;
+      const needsForce = !this.ready || this.busy;
 
       // Reject any in-flight request promptly
       if (this.pendingRequest) {
@@ -287,26 +334,31 @@ export class PythonWorker {
         this.pendingRequest = null;
       }
 
+      if (needsForce) {
+        workerProcess.kill('SIGTERM');
+        this.process = null;
+        return;
+      }
+
       // Note: PythonShell.send() adds newline automatically in 'text' mode
-      this.process.send('SHUTDOWN');
+      workerProcess.send('SHUTDOWN');
 
       // Wait for exit (5s timeout)
       await Promise.race([
         new Promise<void>((resolve) => {
-          this.process!.on('close', () => resolve());
+          workerProcess.on('close', () => resolve());
         }),
         new Promise<void>((resolve) => setTimeout(resolve, 5000).unref()),
       ]);
     } catch (error) {
       logger.error(`Error during worker shutdown: ${error}`);
     } finally {
-      if (this.process) {
-        this.process.kill('SIGTERM');
+      if (this.process === workerProcess) {
+        workerProcess.kill('SIGTERM');
         this.process = null;
       }
       this.ready = false;
       this.busy = false;
-      this.shuttingDown = false;
     }
   }
 }
