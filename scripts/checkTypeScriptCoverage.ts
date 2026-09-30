@@ -37,14 +37,14 @@ function isRootOwnedTypeScriptFile(filePath: string, configuredRoots: string[]):
   );
 }
 
-export function getTrackedTypeScriptFiles(repositoryRoot = repoRoot): string[] {
-  const configuredRoots = fs.existsSync(path.join(repositoryRoot, 'architecture/layers.json'))
-    ? readLayerConfig(repositoryRoot).layers.flatMap((layer) =>
-        layer.roots.map((root) =>
-          normalizePath(path.relative(repositoryRoot, path.resolve(repositoryRoot, root))),
-        ),
-      )
+function getConfiguredRoots(repositoryRoot: string): string[] {
+  return fs.existsSync(path.join(repositoryRoot, 'architecture/layers.json'))
+    ? readLayerConfig(repositoryRoot).layers.flatMap((layer) => layer.roots)
     : [];
+}
+
+export function getTrackedTypeScriptFiles(repositoryRoot = repoRoot): string[] {
+  const configuredRoots = getConfiguredRoots(repositoryRoot);
   return execFileSync('git', ['ls-files', '-z'], {
     cwd: repositoryRoot,
     encoding: 'utf8',
@@ -119,7 +119,10 @@ export function findMissingRootTypeScriptFiles(repositoryRoot = repoRoot): strin
   const rootConfigPath = path.join(repositoryRoot, 'tsconfig.json');
   const rootConfig = readProjectConfig(rootConfigPath, repositoryRoot);
   const projectFiles = getProjectFiles(rootConfig, rootConfigPath, repositoryRoot);
-  const packageProjectFiles = new Map<string, Set<string>>();
+  const productProjectFiles = new Map<string, Set<string>>();
+  const configuredRoots = getConfiguredRoots(repositoryRoot).filter(
+    (root) => !hasPrefix(`${root}/`, rootOwnedPrefixes),
+  );
   const visited = new Set([rootConfigPath]);
 
   function visitReferences(config: ProjectConfig, configPath: string): void {
@@ -137,10 +140,15 @@ export function findMissingRootTypeScriptFiles(repositoryRoot = repoRoot): strin
         path.relative(repositoryRoot, path.dirname(referencedConfigPath)),
       )}/`;
 
-      // Package projects must be explicitly referenced. They can own only files
-      // beneath their own directory; root source and tooling keep their ratchet.
-      if (projectPrefix.startsWith('packages/')) {
-        const ownedFiles = packageProjectFiles.get(projectPrefix) ?? new Set<string>();
+      // Referenced product projects own only files beneath their own directory.
+      // Standard source and tooling directories keep the root compiler requirement.
+      if (
+        projectPrefix.startsWith('packages/') ||
+        configuredRoots.some(
+          (root) => root.startsWith(projectPrefix) || projectPrefix.startsWith(`${root}/`),
+        )
+      ) {
+        const ownedFiles = productProjectFiles.get(projectPrefix) ?? new Set<string>();
         for (const filePath of getProjectFiles(
           referencedConfig,
           referencedConfigPath,
@@ -150,18 +158,17 @@ export function findMissingRootTypeScriptFiles(repositoryRoot = repoRoot): strin
             ownedFiles.add(filePath);
           }
         }
-        packageProjectFiles.set(projectPrefix, ownedFiles);
+        productProjectFiles.set(projectPrefix, ownedFiles);
       }
       visitReferences(referencedConfig, referencedConfigPath);
     }
   }
 
   visitReferences(rootConfig, rootConfigPath);
-  // A registered package owns its subtree even if the root also includes it.
   // Prefer the closest project so a parent cannot mask a child's missing files.
-  const packageProjects = [...packageProjectFiles].sort(([a], [b]) => b.length - a.length);
+  const productProjects = [...productProjectFiles].sort(([a], [b]) => b.length - a.length);
   return getTrackedTypeScriptFiles(repositoryRoot).filter((filePath) => {
-    const owner = packageProjects.find(([prefix]) => filePath.startsWith(prefix));
+    const owner = productProjects.find(([prefix]) => filePath.startsWith(prefix));
     return !(owner?.[1] ?? projectFiles).has(filePath);
   });
 }
@@ -178,7 +185,7 @@ export function runTypeScriptCoverageCheck(): number {
     console.error(`- ${filePath}`);
   }
   console.error(
-    'Add them to their owning tsconfig: the nearest referenced package project for owned files under packages/, otherwise the root project.',
+    'Add them to their owning tsconfig: the nearest referenced project for packages or configured product roots, otherwise the root project.',
   );
   return 1;
 }

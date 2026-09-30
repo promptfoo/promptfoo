@@ -64,6 +64,19 @@ export function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join('/');
 }
 
+function normalizeSourceRoot(repoRoot: string, root: unknown): string {
+  if (typeof root !== 'string' || !root.trim() || path.isAbsolute(root)) {
+    throw new Error(
+      `Architecture root "${String(root)}" must be a nonempty repository-relative path.`,
+    );
+  }
+  const relative = normalizePath(path.relative(repoRoot, path.resolve(repoRoot, root)));
+  if (!relative || relative === '..' || relative.startsWith('../')) {
+    throw new Error(`Architecture root "${root}" must be inside the repository.`);
+  }
+  return relative;
+}
+
 function validateLayerDefinition(
   repoRoot: string,
   configPath: string,
@@ -102,8 +115,9 @@ function validateLayerDefinition(
     );
   }
 
+  layer.roots = layer.roots.map((root) => normalizeSourceRoot(repoRoot, root));
   return layer.roots.map((root) => {
-    if (typeof root !== 'string' || !fs.existsSync(path.join(repoRoot, root))) {
+    if (!fs.existsSync(path.join(repoRoot, root))) {
       throw new Error(`Architecture layer "${layer.name}" root "${String(root)}" does not exist.`);
     }
     return { layerName: layer.name, root };
@@ -245,25 +259,31 @@ export function getSourceFiles(
 ): string[] {
   const roots = [
     ...new Set(
-      [...DEFAULT_SOURCE_ROOTS, ...additionalRoots].map((root) => escapeGlob(normalizePath(root))),
+      [...DEFAULT_SOURCE_ROOTS, ...additionalRoots].map((root) =>
+        normalizeSourceRoot(repoRoot, root),
+      ),
     ),
   ];
   return globSync(
-    roots.flatMap((root) =>
-      TYPESCRIPT_EXTENSIONS.includes(path.extname(root))
-        ? [root]
-        : TYPESCRIPT_EXTENSIONS.map((extension) => `${root}/**/*${extension}`),
-    ),
+    roots.flatMap((root) => {
+      const literalRoot = escapeGlob(root);
+      return fs.statSync(path.join(repoRoot, root), { throwIfNoEntry: false })?.isFile()
+        ? TYPESCRIPT_EXTENSIONS.includes(path.extname(root))
+          ? [literalRoot]
+          : []
+        : TYPESCRIPT_EXTENSIONS.map((extension) => `${literalRoot}/**/*${extension}`);
+    }),
     {
       cwd: repoRoot,
       nobrace: true,
+      dot: true,
       ignore: [
         ...['ts', 'mts', 'cts'].map((extension) => `**/*.d.${extension}`),
         '**/node_modules/**',
         'packages/**/dist/**',
         ...(includeApp ? [] : ['src/app/**']),
         ...ignoredRoots.flatMap((root) => {
-          const literalRoot = escapeGlob(normalizePath(root));
+          const literalRoot = escapeGlob(normalizeSourceRoot(repoRoot, root));
           return [literalRoot, `${literalRoot}/**`];
         }),
       ],

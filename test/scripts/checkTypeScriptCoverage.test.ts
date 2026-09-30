@@ -95,6 +95,54 @@ describe('package TypeScript coverage', () => {
     expect(result.stdout).toContain('internal/shared/index.ts(1,14): error TS2322');
   });
 
+  it('accepts referenced projects owning configured product roots outside packages', () => {
+    write('internal/widget/src/index.ts', 'export {};');
+    write('internal/widget/src/omitted.ts', 'export {};');
+    write('architecture/layers.json', {
+      publicFacade: 'src/index.ts',
+      layers: [{ name: 'widget', roots: ['internal/widget/src'], allowedDependencies: [] }],
+    });
+    write('internal/widget/tsconfig.json', {
+      compilerOptions: { composite: true },
+      files: ['src/index.ts'],
+    });
+    write('tsconfig.json', {
+      include: ['src', 'internal'],
+      references: [{ path: './internal/widget' }],
+    });
+    expect(findMissingRootTypeScriptFiles(repositoryRoot)).toEqual([
+      'internal/widget/src/omitted.ts',
+    ]);
+
+    write('internal/widget/tsconfig.json', {
+      compilerOptions: { composite: true },
+      include: ['src'],
+    });
+    write('tsconfig.json', { include: ['src'], references: [{ path: './internal/widget' }] });
+    expect(findMissingRootTypeScriptFiles(repositoryRoot)).toEqual([]);
+  });
+
+  it.each(['src', 'test', 'scripts'])(
+    'keeps configured %s files in the root compiler project',
+    (directory) => {
+      const root = `${directory}/owned`;
+      write(`${root}/index.ts`, 'export {};');
+      write('architecture/layers.json', {
+        publicFacade: 'src/index.ts',
+        layers: [{ name: 'owned', roots: [root], allowedDependencies: [] }],
+      });
+      write(`${root}/tsconfig.json`, {
+        compilerOptions: { composite: true },
+        include: ['*.ts'],
+      });
+      write('tsconfig.json', {
+        include: ['src/index.ts'],
+        references: [{ path: `./${root}` }],
+      });
+      expect(findMissingRootTypeScriptFiles(repositoryRoot)).toEqual([`${root}/index.ts`]);
+    },
+  );
+
   it('preserves explicit app and action project exemptions even when their roots are configured', () => {
     write('src/app/widget.tsx', 'export {};');
     write('test/code-scan-action/wrapper.ts', 'export {};');

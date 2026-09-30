@@ -132,7 +132,9 @@ Assign new package source to a layer in `architecture/layers.json`. The same
 import, dependency, and edge-count rules apply to all classified files.
 Nested `node_modules`, declaration files, and `packages/**/dist` output are
 excluded. Add other generated files or directories to `ignoredRoots`. Layer roots
-and ignored roots are literal paths, not glob patterns.
+and ignored roots are nonempty repository-relative paths, not glob patterns.
+Hidden TypeScript files are included, and a directory name ending in `.ts` is
+still scanned as a directory.
 
 When moving a layer into a private workspace, include its implementation root
 and compatibility shims in that layer. An exact source alias such as
@@ -141,12 +143,14 @@ broader `@promptfoo` alias. Architecture aliases do not configure the compiler,
 bundler, or package exports.
 
 Tracked TypeScript files under `packages/` or other configured product roots
-must belong to the root compiler project unless a package project owns them.
-Reference separate package projects from the root `tsconfig.json`; the check
-also follows solution references. The nearest referenced package project owns
-files below its directory, even if a parent project also includes them. Projects
-in the same directory combine their file lists. A package project cannot cover
-files outside its own directory.
+must belong to the root compiler project unless an explicitly referenced
+product project owns them. Reference projects from the root `tsconfig.json`;
+the check also follows solution references. This applies to `packages/` and
+configured product roots elsewhere. The nearest referenced project owns files
+below its directory, even if a parent project also includes them. Projects in
+the same directory combine their file lists. A project cannot cover files
+outside its own directory. Files under `src/`, `test/`, and `scripts/` keep the
+root-project requirement, apart from the existing app and action exemptions.
 
 The coverage check validates compiler configuration and tracked-file membership.
 It does not typecheck package source. When extracting a package, add its actual

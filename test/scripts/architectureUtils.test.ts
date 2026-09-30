@@ -295,26 +295,48 @@ describe('getSourceFiles', () => {
     );
   });
 
-  it.each(['internal/routes/[id].ts', 'internal/[routes]/index.ts', 'internal/{old,new}/index.ts'])(
-    'scans literal configured roots containing glob characters: %s',
-    (sourceFile) => {
-      write('src/index.ts');
-      write(sourceFile, "import 'node:fs';");
-      const root = sourceFile.endsWith('index.ts') ? path.dirname(sourceFile) : sourceFile;
-      const config: LayerConfig = {
-        publicFacade: 'src/index.ts',
-        leafLayers: ['routes'],
-        layers: [
-          { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
-          { name: 'routes', roots: [root], allowedDependencies: [] },
-        ],
-      };
+  it.each([
+    'internal/routes/[id].ts',
+    'internal/[routes]/index.ts',
+    'internal/{old,new}/index.ts',
+    'internal/plugin.ts/index.ts',
+    'internal/plugin.tsx/index.ts',
+    'internal/plugin.mts/index.ts',
+    'internal/plugin.cts/index.ts',
+  ])('scans literal configured roots containing glob characters: %s', (sourceFile) => {
+    write('src/index.ts');
+    write(sourceFile, "import 'node:fs';");
+    const root = sourceFile.endsWith('index.ts') ? path.dirname(sourceFile) : sourceFile;
+    const config: LayerConfig = {
+      publicFacade: 'src/index.ts',
+      leafLayers: ['routes'],
+      layers: [
+        { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
+        { name: 'routes', roots: [root], allowedDependencies: [] },
+      ],
+    };
 
-      expect(findViolations(repoRoot, config)).toEqual([
-        expect.objectContaining({ kind: 'leaf-external', importer: sourceFile }),
-      ]);
-    },
-  );
+    expect(findViolations(repoRoot, config)).toEqual([
+      expect.objectContaining({ kind: 'leaf-external', importer: sourceFile }),
+    ]);
+  });
+
+  it('rejects empty scan and ignore roots before starting the glob', () => {
+    expect(() => getSourceFiles(repoRoot, true, [], [''])).toThrow('root');
+    expect(() => getSourceFiles(repoRoot, true, [''])).toThrow('root');
+  });
+
+  it('includes dot-prefixed sources while retaining dependency and output exclusions', () => {
+    write('packages/widget/src/.internal.ts');
+    write('packages/widget/src/.private/index.ts');
+    write('packages/widget/.cache/node_modules/vendor/index.ts');
+    write('packages/widget/dist/.internal.ts');
+    write('packages/widget/src/.types.d.ts');
+    expect(getSourceFiles(repoRoot)).toEqual([
+      'packages/widget/src/.internal.ts',
+      'packages/widget/src/.private/index.ts',
+    ]);
+  });
 
   it('treats ignored roots as literal files and directories', () => {
     write('src/[generated]/index.ts');
@@ -444,6 +466,11 @@ describe('readLayerConfig', () => {
     expect(() => readLayerConfig(repoRoot)).toThrow(
       'Architecture layer "core" contains an invalid allowedImportPaths entry.',
     );
+  });
+
+  it.each(['', ' ', '..', '../outside', '/absolute'])('rejects invalid source root %j', (root) => {
+    writeConfig({ publicFacade: 'src/index.ts', layers: [coreLayer({ roots: [root] })] });
+    expect(() => readLayerConfig(repoRoot)).toThrow('root');
   });
 
   it('rejects missing layer roots', () => {
