@@ -90,13 +90,12 @@ function acquireStartedOtlpReceiver(): boolean {
   return true;
 }
 
-function isTracingEnabledForSuite(testSuite: TestSuite): boolean {
+export function isTracingEnabledForSuite(testSuite: TestSuite): boolean {
   return (
-    getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
-    testSuite.tracing?.enabled === true ||
+    isTracingEnabled({}, testSuite) ||
     (typeof testSuite.defaultTest === 'object' &&
-      testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
-    testSuite.tests?.some((test) => test.metadata?.tracingEnabled === true) === true
+      isTracingEnabled(testSuite.defaultTest, testSuite)) ||
+    testSuite.tests?.some((test) => isTracingEnabled(test, testSuite)) === true
   );
 }
 
@@ -320,12 +319,22 @@ export async function stopOtlpReceiverIfNeeded(
  * Check if tracing is enabled for a test case
  *
  * Tracing is enabled if any of the following are true:
- * 1. Test case metadata has `tracingEnabled: true`
- * 2. TestSuite YAML config has `tracing.enabled: true`
+ * 1. Test case metadata has `tracingEnabled: true` or `tracing.enabled: true`
+ * 2. TestSuite YAML config has `tracing.enabled: true` or `redteam.tracing.enabled: true`
  * 3. Environment variable `PROMPTFOO_TRACING_ENABLED` is set to true
  */
 export function isTracingEnabled(test: TestCase, testSuite?: TestSuite): boolean {
-  const metadataEnabled = test.metadata?.tracingEnabled === true;
+  const configs = [
+    testSuite?.redteam?.tracing,
+    test.metadata?.tracing,
+    test.metadata?.strategyConfig?.tracing,
+  ];
+  const effectiveConfig = Object.assign(
+    {},
+    ...configs.flatMap((entry) => [entry, entry?.strategies?.[test.metadata?.strategyId ?? '']]),
+  );
+  const metadataEnabled =
+    test.metadata?.tracingEnabled === true || effectiveConfig.enabled === true;
   const yamlConfigEnabled = testSuite?.tracing?.enabled === true;
   const envEnabled = getEnvBool('PROMPTFOO_TRACING_ENABLED', false);
 

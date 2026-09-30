@@ -1,16 +1,22 @@
 import { ExportResultCode } from '@opentelemetry/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalSpanExporter } from '../../src/tracing/localSpanExporter';
+import { TempoProvider } from '../../src/tracing/providers/tempo';
+import * as fetchModule from '../../src/util/fetch/index';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-node';
 
 // Mock the store module
 const mockAddSpans = vi.fn();
+const releaseReservation = vi.fn();
 const mockTraceStore = {
   addSpans: mockAddSpans,
+  reserveLocalSpan: vi.fn(() => releaseReservation),
+  markTraceIncomplete: vi.fn(),
 };
 
 vi.mock('../../src/tracing/store', () => ({
   getTraceStore: vi.fn(() => mockTraceStore),
+  LOCAL_SPAN_EXPORT_FAILURE: 'local span export failed',
 }));
 
 // Mock logger
@@ -29,6 +35,8 @@ describe('LocalSpanExporter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAddSpans.mockResolvedValue({ stored: true });
+    mockTraceStore.reserveLocalSpan.mockReturnValue(releaseReservation);
+    mockTraceStore.markTraceIncomplete.mockResolvedValue(undefined);
     exporter = new LocalSpanExporter();
   });
 
@@ -71,7 +79,7 @@ describe('LocalSpanExporter', () => {
       links: [],
       events: [],
       resource: { attributes: overrides.resourceAttributes ?? {} },
-      instrumentationLibrary: { name: 'test' },
+      instrumentationScope: { name: 'test', version: '1.0' },
       duration: [0, 700000000],
       ended: true,
       droppedAttributesCount: 0,
@@ -88,6 +96,92 @@ describe('LocalSpanExporter', () => {
   }
 
   describe('export', () => {
+    it.each(['stored', 'orphan', 'failed'])(
+      'releases span ownership after %s export only when persistence has finished',
+      async (mode) => {
+        vi.useFakeTimers();
+        const span = createMockSpan();
+        exporter.reserveSpan(span.spanContext());
+        expect(releaseReservation).not.toHaveBeenCalled();
+        if (mode === 'orphan') {
+          mockAddSpans.mockResolvedValue({ stored: false, reason: 'missing' });
+        } else if (mode === 'failed') {
+          mockAddSpans.mockRejectedValue(new Error('database unavailable'));
+        }
+        const result = exportSpans([span]);
+        await vi.runAllTimersAsync();
+        await result;
+        expect(releaseReservation).toHaveBeenCalledTimes(1);
+        await exporter.shutdown();
+        expect(releaseReservation).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('keeps failed spans reserved until their incomplete marker is persisted', async () => {
+      const span = createMockSpan();
+      exporter.reserveSpan(span.spanContext());
+      mockAddSpans.mockRejectedValue(new Error('database unavailable'));
+      let finishMarker!: () => void;
+      mockTraceStore.markTraceIncomplete.mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            finishMarker = resolve;
+          }),
+      );
+
+      const result = exportSpans([span]);
+      await vi.waitFor(() =>
+        expect(mockTraceStore.markTraceIncomplete).toHaveBeenCalledWith(
+          'trace-id-123',
+          'local span export failed',
+        ),
+      );
+      expect(releaseReservation).not.toHaveBeenCalled();
+      finishMarker();
+
+      expect((await result).code).toBe(ExportResultCode.FAILED);
+      expect(releaseReservation).toHaveBeenCalledOnce();
+    });
+
+    it('retains ownership until shutdown when recording export failure also fails', async () => {
+      const span = createMockSpan();
+      exporter.reserveSpan(span.spanContext());
+      const error = new Error('database unavailable');
+      mockAddSpans.mockRejectedValue(error);
+      mockTraceStore.markTraceIncomplete.mockRejectedValue(new Error('marker unavailable'));
+
+      expect(await exportSpans([span])).toEqual({ code: ExportResultCode.FAILED, error });
+      expect(releaseReservation).not.toHaveBeenCalled();
+      await exporter.shutdown();
+      expect(releaseReservation).toHaveBeenCalledOnce();
+    });
+
+    it('marks conversion failures incomplete and continues exporting other traces', async () => {
+      const invalid = createMockSpan();
+      Object.defineProperty(invalid, 'resource', {
+        get() {
+          throw new Error('invalid resource');
+        },
+      });
+      const valid = createMockSpan({ traceId: 'other-trace' });
+      exporter.reserveSpan(invalid.spanContext());
+      exporter.reserveSpan(valid.spanContext());
+
+      expect((await exportSpans([invalid, valid])).code).toBe(ExportResultCode.FAILED);
+      expect(mockTraceStore.markTraceIncomplete).toHaveBeenCalledWith(
+        'trace-id-123',
+        'local span export failed',
+      );
+      expect(mockAddSpans).toHaveBeenCalledOnce();
+      expect(releaseReservation).toHaveBeenCalledTimes(2);
+    });
+
+    it('releases an abandoned span at shutdown', async () => {
+      exporter.reserveSpan(createMockSpan().spanContext());
+      await exporter.shutdown();
+      expect(releaseReservation).toHaveBeenCalledOnce();
+    });
+
     it('should export empty span array successfully', async () => {
       const result = await exportSpans([]);
 
@@ -209,6 +303,62 @@ describe('LocalSpanExporter', () => {
       );
     });
 
+    it.each([3, 'SPAN_KIND_CLIENT'])(
+      'matches a Tempo mirror with fractional times and scope metadata (kind: %s)',
+      async (kind) => {
+        const traceId = 'a'.repeat(32);
+        const spanId = 'b'.repeat(16);
+        const span = createMockSpan({
+          traceId,
+          spanId,
+          startTime: [1800000000, 125500013],
+          endTime: [1800000000, 130750047],
+          resourceAttributes: { 'service.name': 'target-service' },
+        });
+        await exportSpans([span]);
+        const fetch = vi.spyOn(fetchModule, 'fetchWithProxy').mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              batches: [
+                {
+                  resource: {
+                    attributes: [{ key: 'service.name', value: { stringValue: 'target-service' } }],
+                  },
+                  scopeSpans: [
+                    {
+                      scope: span.instrumentationScope,
+                      spans: [
+                        {
+                          traceId,
+                          spanId,
+                          name: span.name,
+                          kind,
+                          startTimeUnixNano: '1800000000125500013',
+                          endTimeUnixNano: '1800000000130750047',
+                          attributes: [{ key: 'test.attr', value: { stringValue: 'value' } }],
+                          status: span.status,
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            }),
+            { headers: { 'content-type': 'application/json' } },
+          ),
+        );
+        try {
+          const mirror = await new TempoProvider({
+            id: 'tempo',
+            endpoint: 'http://localhost:3200',
+          }).fetchTrace(traceId);
+          expect(mirror?.spans).toEqual(mockAddSpans.mock.calls[0][1]);
+        } finally {
+          fetch.mockRestore();
+        }
+      },
+    );
+
     it('should include parent span ID when present', async () => {
       const span = createMockSpan({
         parentSpanId: 'parent-span-id',
@@ -245,6 +395,10 @@ describe('LocalSpanExporter', () => {
         [
           expect.objectContaining({
             attributes: {
+              'otel.scope.name': 'test',
+              'otel.scope.version': '1.0',
+              'otel.span.kind': 'client',
+              'otel.span.kind_code': 3,
               'gen_ai.provider.name': 'openai',
               'gen_ai.request.model': 'gpt-4',
               'gen_ai.usage.input_tokens': 100,
@@ -275,6 +429,10 @@ describe('LocalSpanExporter', () => {
         [
           expect.objectContaining({
             attributes: {
+              'otel.scope.name': 'test',
+              'otel.scope.version': '1.0',
+              'otel.span.kind': 'client',
+              'otel.span.kind_code': 3,
               'service.name': 'configured-promptfoo-service',
               'service.version': '1.2.3',
               'deployment.environment': 'span',

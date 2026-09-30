@@ -5,11 +5,15 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import { eq } from 'drizzle-orm';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import request from 'supertest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { spansTable, tracesTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
-import { TraceStore } from '../../src/tracing/store';
+import { OTLPReceiver } from '../../src/tracing/otlpReceiver';
+import { TempoProvider } from '../../src/tracing/providers/tempo';
+import { type SpanData, TraceStore } from '../../src/tracing/store';
+import { fetchTraceContext } from '../../src/tracing/traceContext';
 import EvalFactory from '../factories/evalFactory';
 import { removeTempDir } from '../util/utils';
 
@@ -26,29 +30,702 @@ describe('TraceStore span persistence', () => {
     await db.delete(tracesTable).run();
   });
 
-  async function createTrace(traceId: string): Promise<TraceStore> {
+  async function createTrace(
+    traceId: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<TraceStore> {
     const evaluation = await EvalFactory.create({ numResults: 0 });
     const traceStore = new TraceStore();
     await traceStore.createTrace({
       evaluationId: evaluation.id,
       testCaseId: `${traceId}-test`,
       traceId,
+      metadata,
     });
     return traceStore;
   }
 
-  it('ignores duplicate span IDs in a single insertion', async () => {
+  it.each(['getSpans', 'getTrace', 'getTracesByEvaluation'] as const)(
+    'redacts credential echoes from %s without changing stored evidence',
+    async (method) => {
+      const traceId = 'read-redaction';
+      const store = await createTrace(traceId);
+      const secret = 'PRIVATE_TRACE_READ_RECEIPT';
+      await store.addSpans(traceId, [
+        {
+          spanId: 'source',
+          name: 'grader source',
+          startTime: 1,
+          attributes: { authorization: secret, 'promptfoo.span.role': 'grader' },
+        },
+        {
+          spanId: 'echo',
+          name: `tool ${secret}`,
+          startTime: 2,
+          statusMessage: `error ${secret}`,
+          attributes: {
+            'tool.name': 'query',
+            'tool.arguments': JSON.stringify({ sql: `SELECT '${secret}'` }),
+            [secret]: 'echoed key',
+          },
+        },
+      ]);
+      const original = await store.getTrace(traceId, { sanitizeAttributes: false });
+      expect(JSON.stringify(original)).toContain(secret);
+      const result =
+        method === 'getSpans'
+          ? await store.getSpans(traceId, {
+              earliestStartTime: 2,
+              includeInternalSpans: false,
+              spanFilter: [`tool ${secret}`],
+              maxSpans: 1,
+            })
+          : method === 'getTrace'
+            ? await store.getTrace(traceId)
+            : await store.getTracesByEvaluation(original!.evaluationId!);
+      expect(JSON.stringify(result)).not.toContain(secret);
+      if (method === 'getSpans') {
+        expect(result).toMatchObject([
+          { spanId: 'echo', name: 'tool <redacted>', statusMessage: 'error <redacted>' },
+        ]);
+      }
+      expect(await store.getTrace(traceId, { sanitizeAttributes: false })).toEqual(original);
+    },
+  );
+
+  it('rejects external span collisions without changing locally stored evidence', async () => {
+    const traceId = 'local-span-collision';
+    const store = await createTrace(traceId, {
+      promptfooExternalSpanIds: ['local'],
+      promptfooLocalSpanHashes: { local: 'forged' },
+    });
+    const db = await getDb();
+    expect(
+      (await db.select().from(tracesTable).where(eq(tracesTable.traceId, traceId)))[0].metadata,
+    ).not.toHaveProperty('promptfooLocalSpanHashes');
+    const original = {
+      spanId: 'local',
+      name: 'promptfoo.target',
+      startTime: 1,
+      endTime: 2,
+      statusCode: 1,
+    };
+    await store.addSpans(traceId, [original]);
+    const stored = await store.getSpans(traceId, { sanitizeAttributes: false });
+    await expect(
+      store.addSpans(
+        traceId,
+        [
+          {
+            ...original,
+            name: 'db.query',
+            parentSpanId: 'fake',
+            statusCode: 2,
+            attributes: {
+              'db.statement': 'DELETE FROM users',
+              promptfooExternalSpanIds: ['local'],
+            },
+          },
+        ],
+        { source: 'external', updateExisting: true },
+      ),
+    ).rejects.toMatchObject({ name: 'TraceEvidenceError' });
+    expect(await store.getSpans(traceId, { sanitizeAttributes: false })).toEqual(stored);
+    expect((await store.getTraceMetadata(traceId))?.promptfooExternalSpanIds).toBeUndefined();
+  });
+
+  it.each([false, true])('rejects changed external retries after redaction=%s', async (redact) => {
+    const traceId = 'external-retry';
+    const store = await createTrace(traceId);
+    const original = {
+      spanId: 'external',
+      name: 'query',
+      startTime: 1,
+      endTime: 2,
+      attributes: { 'db.statement': 'SELECT 1', 'private.note': 'PRIVATE_RETRY_VALUE' },
+    };
+    const options = {
+      source: 'external' as const,
+      ...(redact && {
+        redactSpans: (spans: SpanData[]) =>
+          spans.map((span) => ({
+            ...span,
+            attributes: { ...span.attributes, 'private.note': '[REDACTED]' },
+          })),
+      }),
+    };
+    await store.addSpans(traceId, [original], options);
+    const reopened = new TraceStore();
+    await reopened.addSpans(traceId, [original], options);
+    const refreshed = { ...original, endTime: 3 };
+    await reopened.addSpans(traceId, [refreshed], { ...options, updateExisting: true });
+    await reopened.addSpans(traceId, [refreshed], options);
+    const stored = await reopened.getSpans(traceId, { sanitizeAttributes: false });
+    await expect(
+      reopened.addSpans(
+        traceId,
+        [
+          {
+            ...original,
+            attributes: { ...original.attributes, 'db.statement': 'DROP TABLE users' },
+          },
+          { spanId: 'new', name: 'query', startTime: 3 },
+        ],
+        options,
+      ),
+    ).rejects.toMatchObject({ name: 'TraceEvidenceError' });
+    expect(await reopened.getSpans(traceId, { sanitizeAttributes: false })).toEqual(stored);
+    expect((await reopened.getTraceMetadata(traceId))?.promptfooTraceIncomplete).toBe(
+      'conflicting trace evidence',
+    );
+    for (const providerConfig of [
+      undefined,
+      { id: 'tempo' as const, endpoint: 'http://localhost:3200' },
+    ]) {
+      await expect(
+        fetchTraceContext(traceId, { providerConfig, maxRetries: 0, queryDelay: 0 }),
+      ).rejects.toMatchObject({
+        name: 'TraceEvidenceError',
+        message: 'Cannot grade incomplete trace: conflicting trace evidence.',
+      });
+    }
+    expect(JSON.stringify(await reopened.getTrace(traceId))).not.toContain(
+      'promptfooLocalSpanHashes',
+    );
+  });
+
+  it('persists external span ownership across store instances and allows its refresh', async () => {
+    const traceId = 'external-span-refresh';
+    const store = await createTrace(traceId, { label: 'kept' });
+    const original = { spanId: 'external', name: 'query', startTime: 1 };
+    await store.addSpans(traceId, [original], { source: 'external', updateExisting: true });
+    const reopened = new TraceStore();
+    await reopened.addSpans(traceId, [{ ...original, endTime: 3, statusCode: 1 }], {
+      source: 'external',
+      updateExisting: true,
+    });
+    expect(await reopened.getSpans(traceId)).toMatchObject([
+      { ...original, endTime: 3, statusCode: 1 },
+    ]);
+    expect(await reopened.getTraceMetadata(traceId)).toMatchObject({
+      label: 'kept',
+      promptfooExternalSpanIds: ['external'],
+    });
+  });
+
+  it('imports children alongside an equivalent local mirror without changing ownership', async () => {
+    const traceId = 'mirrored-local-span';
+    const store = await createTrace(traceId);
+    const local = {
+      spanId: 'local',
+      name: 'promptfoo.target',
+      startTime: 1,
+      endTime: 2,
+      attributes: { 'tool.name': 'request', 'service.name': 'test' },
+    };
+    await store.addSpans(traceId, [local]);
+    const [original] = await store.getSpans(traceId, { sanitizeAttributes: false });
+    const child = { spanId: 'child', parentSpanId: 'local', name: 'db.query', startTime: 1.5 };
+    const options = {
+      source: 'external' as const,
+      updateExisting: true,
+    };
+    await store.addSpans(
+      traceId,
+      [
+        {
+          ...local,
+          statusCode: 0,
+          statusMessage: '',
+          attributes: { 'service.name': 'test', 'tool.name': 'request' },
+        },
+        child,
+      ],
+      options,
+    );
+    expect(await store.getSpans(traceId, { sanitizeAttributes: false })).toEqual([
+      original,
+      expect.objectContaining(child),
+    ]);
+    expect((await store.getTraceMetadata(traceId))?.promptfooExternalSpanIds).toEqual(['child']);
+    await store.addSpans(traceId, [{ ...child, endTime: 2 }], options);
+    await expect(
+      store.addSpans(traceId, [{ ...local, statusCode: 2 }], options),
+    ).rejects.toMatchObject({ name: 'TraceEvidenceError' });
+    expect((await store.getTraceMetadata(traceId))?.promptfooExternalSpanIds).toEqual(['child']);
+  });
+
+  it.each([false, true])(
+    'recognizes raw local mirrors after real redaction (first snapshot has mirror: %s)',
+    async (includeMirror) => {
+      const traceId = 'f'.repeat(32);
+      const store = await createTrace(traceId);
+      const local = {
+        spanId: 'local',
+        name: 'request PRIVATE_MIRROR_VALUE',
+        startTime: 1,
+        endTime: 2,
+        statusMessage: 'response PRIVATE_MIRROR_VALUE',
+        attributes: { 'private.note': 'PRIVATE_MIRROR_VALUE', 'tool.name': 'request' },
+      };
+      const child = { spanId: 'child', parentSpanId: 'local', name: 'query', startTime: 1.5 };
+      await store.addSpans(traceId, [local]);
+      const fetchTrace = vi.spyOn(TempoProvider.prototype, 'fetchTrace');
+      const fetchSnapshot = async (spans: SpanData[]) => {
+        fetchTrace.mockResolvedValueOnce({ traceId, spans, fetchedAt: Date.now() });
+        return fetchTraceContext(traceId, {
+          providerConfig: { id: 'tempo', endpoint: 'http://localhost:3200' },
+          queryDelay: 0,
+          maxRetries: 0,
+          redactAttributes: ['private.note'],
+        });
+      };
+      try {
+        await fetchSnapshot(includeMirror ? [local, child] : [child]);
+        await fetchSnapshot([local, { ...child, endTime: 2 }]);
+        const reopened = new TraceStore();
+        const stored = await reopened.getTrace(traceId, { sanitizeAttributes: false });
+        expect(stored?.spans).toHaveLength(2);
+        expect(stored?.spans?.find((span) => span.spanId === 'child')?.endTime).toBe(2);
+        expect(JSON.stringify(stored)).not.toContain('PRIVATE_MIRROR_VALUE');
+        expect(stored?.metadata?.promptfooExternalSpanIds).toEqual(['child']);
+        for (const output of [
+          stored,
+          await reopened.getTraceMetadata(traceId),
+          await reopened.getTracesByEvaluation(stored!.evaluationId!),
+        ]) {
+          expect(JSON.stringify(output)).not.toContain('promptfooLocalSpanHashes');
+        }
+        await expect(
+          fetchSnapshot([
+            {
+              ...local,
+              name: 'request DIFFERENT_PRIVATE_VALUE',
+              statusMessage: 'response DIFFERENT_PRIVATE_VALUE',
+              attributes: { ...local.attributes, 'private.note': 'DIFFERENT_PRIVATE_VALUE' },
+            },
+            { ...child, endTime: 3 },
+          ]),
+        ).rejects.toMatchObject({ name: 'TraceEvidenceError' });
+        expect(await reopened.getTrace(traceId, { sanitizeAttributes: false })).toEqual(stored);
+      } finally {
+        fetchTrace.mockRestore();
+      }
+    },
+  );
+
+  it('rejects unverifiable mirrors of historically redacted local spans', async () => {
+    const traceId = 'historical-redaction';
+    const store = await createTrace(traceId);
+    const local = { spanId: 'local', name: 'request [REDACTED]', startTime: 1 };
+    await store.addSpans(traceId, [local]);
+    const db = await getDb();
+    await db
+      .update(spansTable)
+      .set({ attributes: { 'promptfoo.redaction.history': '[REDACTED]' } })
+      .where(eq(spansTable.traceId, traceId))
+      .run();
+    await expect(
+      store.addSpans(traceId, [local], { source: 'external', updateExisting: true }),
+    ).rejects.toMatchObject({ name: 'TraceEvidenceError' });
+  });
+
+  it.each(['getSpans', 'getTrace', 'getTracesByEvaluation'] as const)(
+    'redacts credentials found only in text through %s',
+    async (method) => {
+      const traceId = 'free-text-credentials';
+      const store = await createTrace(traceId);
+      const secret = 'ghp_' + 'x'.repeat(36);
+      await store.addSpans(traceId, [
+        {
+          spanId: 'tool',
+          name: `tool failed ${secret}`,
+          startTime: 1,
+          statusMessage: `Request failed ${secret}`,
+          attributes: { 'tool.name': 'request' },
+        },
+      ]);
+      const original = await store.getTrace(traceId, { sanitizeAttributes: false });
+      const result =
+        method === 'getSpans'
+          ? await store.getSpans(traceId)
+          : method === 'getTrace'
+            ? await store.getTrace(traceId)
+            : await store.getTracesByEvaluation(original!.evaluationId!);
+      expect(JSON.stringify(result)).not.toContain(secret);
+      expect(JSON.stringify(result)).toContain('tool failed');
+      expect(await store.getTrace(traceId, { sanitizeAttributes: false })).toEqual(original);
+      expect(JSON.stringify(original)).toContain(secret);
+    },
+  );
+
+  it('rejects cumulative redaction payloads over 10 MiB before reading them into the redactor', async () => {
+    const store = await createTrace('redaction-size');
+    const redactSpans = vi.fn((spans) => spans);
+    const attributes = { payload: '界'.repeat(2 * 1024 * 1024) };
+    await store.addSpans(
+      'redaction-size',
+      [{ spanId: 'first', name: 'first', startTime: 1, attributes }],
+      { redactSpans },
+    );
+    redactSpans.mockClear();
+    await expect(
+      store.addSpans(
+        'redaction-size',
+        [{ spanId: 'second', name: 'second', startTime: 2, attributes }],
+        { redactSpans },
+      ),
+    ).rejects.toThrow('Trace limit exceeded');
+    expect(redactSpans).not.toHaveBeenCalled();
+    const spans = await store.getSpans('redaction-size');
+    expect(spans.map((span) => span.spanId)).toEqual(['first']);
+  });
+
+  it('enforces cumulative payload limits without a redactor', async () => {
+    const traceId = 'unredacted-size';
+    const store = await createTrace(traceId);
+    const attributes = { payload: 'x'.repeat(6 * 1024 * 1024) };
+    await store.addSpans(traceId, [{ spanId: 'first', name: 'first', startTime: 1, attributes }]);
+    await expect(
+      store.addSpans(traceId, [{ spanId: 'second', name: 'second', startTime: 2, attributes }]),
+    ).rejects.toThrow('Trace limit exceeded');
+    expect(await store.getSpans(traceId)).toHaveLength(1);
+  });
+
+  it('rejects oversized span batches without a redactor', async () => {
+    const traceId = 'unredacted-count';
+    const store = await createTrace(traceId);
+    await expect(
+      store.addSpans(
+        traceId,
+        Array.from({ length: 10_001 }, (_, index) => ({
+          spanId: String(index),
+          name: 'span',
+          startTime: 1,
+        })),
+      ),
+    ).rejects.toThrow('Trace limit exceeded');
+    expect(await store.getSpans(traceId)).toHaveLength(0);
+  });
+
+  it.each([false, true])(
+    'accepts retries at the unique span cap (upsert: %s)',
+    async (updateExisting) => {
+      const traceId = 'redaction-count';
+      const store = await createTrace(traceId);
+      for (let start = 0; start < 10_000; start += 500) {
+        await store.addSpans(
+          traceId,
+          Array.from({ length: 500 }, (_, offset) => ({
+            spanId: String(start + offset),
+            name: 'original',
+            startTime: 1,
+          })),
+        );
+      }
+      await store.addSpans(traceId, [{ spanId: '0', name: 'replacement', startTime: 1 }], {
+        updateExisting,
+        redactSpans: (spans) => spans,
+      });
+      const spans = await store.getSpans(traceId);
+      expect(spans).toHaveLength(10_000);
+      expect(spans.find((span) => span.spanId === '0')?.name).toBe(
+        updateExisting ? 'replacement' : 'original',
+      );
+    },
+  );
+
+  it.each([false, true])(
+    'does not count replacement bytes twice (upsert: %s)',
+    async (updateExisting) => {
+      const traceId = 'redaction-replacement-size';
+      const store = await createTrace(traceId);
+      const original = {
+        spanId: 'same',
+        name: 'original',
+        startTime: 1,
+        attributes: { payload: '界'.repeat(2 * 1024 * 1024) },
+      };
+      await store.addSpans(traceId, [original]);
+      await store.addSpans(traceId, [{ ...original, name: 'replacement' }], {
+        updateExisting,
+        redactSpans: (spans) => spans,
+      });
+      const spans = await store.getSpans(traceId);
+      expect(spans).toHaveLength(1);
+      expect(spans[0].name).toBe(updateExisting ? 'replacement' : 'original');
+    },
+  );
+
+  it.each(['otlp-first', 'external-first'])(
+    'shares redaction history across trace ingestors (%s)',
+    async (order) => {
+      const traceId = 'c'.repeat(32);
+      await createTrace(traceId, { otlpHttpRedactAttributes: ['authorization'] });
+      const receiver = new OTLPReceiver({ acceptFormats: ['json'] });
+      const fetchTrace = vi.spyOn(TempoProvider.prototype, 'fetchTrace');
+      const providerConfig = { id: 'tempo' as const, endpoint: 'http://localhost:3200' };
+      const source = {
+        spanId: '2'.repeat(16),
+        name: 'source',
+        startTime: 1,
+        attributes: { authorization: 'PRIVATE_OTHER_INGESTOR' },
+      };
+      const bootstrap = { spanId: '1'.repeat(16), name: 'bootstrap', startTime: 1 };
+      const echo = {
+        spanId: '3'.repeat(16),
+        name: 'tool.call',
+        startTime: 1,
+        attributes: { 'db.statement': "SELECT 'PRIVATE_OTHER_INGESTOR'" },
+      };
+      const external = async (span: typeof bootstrap) => {
+        fetchTrace.mockResolvedValueOnce({ traceId, spans: [span], fetchedAt: Date.now() });
+        await fetchTraceContext(traceId, {
+          providerConfig,
+          queryDelay: 0,
+          maxRetries: 0,
+          redactAttributes: ['authorization'],
+        });
+      };
+      const otlp = async (span: typeof bootstrap & { attributes?: Record<string, string> }) => {
+        await request(receiver.getApp())
+          .post('/v1/traces')
+          .send({
+            resourceSpans: [
+              {
+                scopeSpans: [
+                  {
+                    spans: [
+                      {
+                        traceId,
+                        spanId: span.spanId,
+                        name: span.name,
+                        startTimeUnixNano: '1000000000',
+                        attributes: Object.entries(span.attributes ?? {}).map(([key, value]) => ({
+                          key,
+                          value: { stringValue: value },
+                        })),
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          })
+          .expect(200);
+      };
+      try {
+        const [first, second] = order === 'otlp-first' ? [otlp, external] : [external, otlp];
+        await first(bootstrap);
+        await second(source);
+        await first(echo);
+        const db = await getDb();
+        const rows = await db.select().from(spansTable).where(eq(spansTable.traceId, traceId));
+        expect(rows).toHaveLength(3);
+        expect(JSON.stringify(rows)).not.toContain('PRIVATE_OTHER_INGESTOR');
+      } finally {
+        await receiver.stop();
+        fetchTrace.mockRestore();
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'refreshes completed external SQL evidence (redaction: %s)',
+    async (redact) => {
+      const traceId = 'external-update';
+      const store = await createTrace(traceId);
+      const initial = {
+        spanId: 'query',
+        name: 'query pending',
+        startTime: 1,
+        attributes: { 'db.statement': 'SELECT id FROM public_records' },
+      };
+      const completed = {
+        ...initial,
+        name: 'query completed',
+        endTime: 2,
+        statusCode: 2,
+        attributes: {
+          'db.statement': 'SELECT id FROM private_records',
+          'tool.output': { authorized: false },
+        },
+      };
+      const fetchTrace = vi.spyOn(TempoProvider.prototype, 'fetchTrace');
+      const providerConfig = { id: 'tempo' as const, endpoint: 'http://localhost:3200' };
+      try {
+        for (const span of [initial, completed]) {
+          fetchTrace.mockResolvedValueOnce({ traceId, spans: [span], fetchedAt: Date.now() });
+          await fetchTraceContext(traceId, {
+            providerConfig,
+            queryDelay: 0,
+            maxRetries: 0,
+            redactAttributes: redact ? ['authorization'] : [],
+          });
+        }
+        const spans = await store.getSpans(traceId, { sanitizeAttributes: false });
+        expect(spans).toHaveLength(1);
+        expect(spans[0]).toMatchObject(completed);
+      } finally {
+        fetchTrace.mockRestore();
+      }
+    },
+  );
+
+  it.each(['plain', 'json'])(
+    'redacts stored text when the %s source arrives in a later OTLP upload',
+    async (format) => {
+      const traceId = 'e'.repeat(32);
+      const traceStore = await createTrace(traceId, {
+        otlpHttpRedactAttributes: ['authorization'],
+      });
+      const receiver = new OTLPReceiver({
+        acceptFormats: ['json'],
+        redactAttributes: ['authorization'],
+      });
+      const secret = 'PRIVATE_REVERSE_UPLOAD_RECEIPT';
+      const send = (span: Record<string, unknown>) =>
+        request(receiver.getApp())
+          .post('/v1/traces')
+          .send({
+            resourceSpans: [
+              {
+                scopeSpans: [
+                  {
+                    spans: [
+                      { traceId, spanId: '1'.repeat(16), startTimeUnixNano: '1000000000', ...span },
+                    ],
+                  },
+                ],
+              },
+            ],
+          });
+      await send({
+        name: `echo ${secret}`,
+        status: { code: 2, message: `error ${secret}` },
+        attributes: [
+          { key: 'tool.name', value: { stringValue: `process ${secret}` } },
+          { key: 'db.statement', value: { stringValue: `SELECT '${secret}'` } },
+          {
+            key: 'tool.arguments',
+            value: { stringValue: JSON.stringify({ sql: `SELECT '${secret}'` }) },
+          },
+        ],
+      }).expect(200);
+      await send({
+        spanId: '2'.repeat(16),
+        name: 'source',
+        attributes: [
+          {
+            key: 'authorization',
+            value: { stringValue: format === 'json' ? JSON.stringify({ token: secret }) : secret },
+          },
+        ],
+      }).expect(200);
+      const db = await getDb();
+      const rows = await db.select().from(spansTable).where(eq(spansTable.traceId, traceId));
+      expect(rows).toHaveLength(2);
+      expect(JSON.stringify(rows)).not.toContain(secret);
+      expect(JSON.stringify(await traceStore.getTrace(traceId))).not.toContain(secret);
+      await receiver.stop();
+    },
+  );
+
+  it.each(['concurrent', 'restart'])(
+    'keeps stored and new text private across %s uploads',
+    async (mode) => {
+      const traceId = 'd'.repeat(32);
+      await createTrace(traceId, { otlpHttpRedactAttributes: ['authorization'] });
+      const receiver = new OTLPReceiver({ acceptFormats: ['json'] });
+      const secret = 'PRIVATE_OLD_TRACE_RECEIPT';
+      const send = (id: string, name: string, authorization?: string) =>
+        request(receiver.getApp())
+          .post('/v1/traces')
+          .send({
+            resourceSpans: [
+              {
+                scopeSpans: [
+                  {
+                    spans: [
+                      {
+                        traceId,
+                        spanId: id.repeat(16),
+                        name,
+                        startTimeUnixNano: '1000000000',
+                        attributes: authorization
+                          ? [{ key: 'authorization', value: { stringValue: authorization } }]
+                          : [],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          })
+          .expect(200);
+      if (mode === 'concurrent') {
+        await send('1', `echo ${secret} OTHER_PRIVATE_VALUE`);
+        await Promise.all([
+          send('2', 'first source', secret),
+          send('3', 'second source', 'OTHER_PRIVATE_VALUE'),
+        ]);
+      } else {
+        await send('1', 'source', secret);
+        await receiver.stop();
+        await send('2', `echo ${secret}`);
+      }
+      const db = await getDb();
+      const rows = await db.select().from(spansTable).where(eq(spansTable.traceId, traceId));
+      expect(rows).toHaveLength(mode === 'concurrent' ? 3 : 2);
+      expect(JSON.stringify(rows)).not.toContain(secret);
+      expect(JSON.stringify(rows)).not.toContain('OTHER_PRIVATE_VALUE');
+      await receiver.stop();
+    },
+  );
+
+  it('accepts identical span retries in a single insertion', async () => {
     const traceStore = await createTrace('single-insertion');
 
     await traceStore.addSpans('single-insertion', [
       { spanId: 'duplicate-span', name: 'first', startTime: 1 },
-      { spanId: 'duplicate-span', name: 'second', startTime: 2 },
+      { spanId: 'duplicate-span', name: 'first', startTime: 1 },
     ]);
 
     const spans = await traceStore.getSpans('single-insertion');
     expect(spans).toHaveLength(1);
     expect(spans[0]).toMatchObject({ name: 'first', spanId: 'duplicate-span' });
   });
+
+  it.each([false, true])(
+    'rejects conflicting duplicate IDs before applying redaction (update: %s)',
+    async (updateExisting) => {
+      const traceId = 'conflicting-duplicate';
+      const store = await createTrace(traceId);
+      await expect(
+        store.addSpans(
+          traceId,
+          [
+            { spanId: 'duplicate', name: 'public', startTime: 1 },
+            { spanId: 'duplicate', name: 'PRIVATE_DUPLICATE', startTime: 1 },
+          ],
+          {
+            updateExisting,
+            redactSpans: (spans) =>
+              spans.map((span) => ({
+                ...span,
+                name: span.name.replace('PRIVATE_DUPLICATE', '[REDACTED]'),
+              })),
+          },
+        ),
+      ).rejects.toMatchObject({ name: 'TraceEvidenceError' });
+      expect(await store.getSpans(traceId, { sanitizeAttributes: false })).toEqual([]);
+      const [record] = await (await getDb())
+        .select()
+        .from(tracesTable)
+        .where(eq(tracesTable.traceId, traceId));
+      expect(record.metadata ?? {}).not.toHaveProperty('promptfooLocalSpanHashes');
+    },
+  );
 
   it('ignores duplicate span IDs across concurrent insertions', async () => {
     const traceStore = await createTrace('concurrent-insertions');

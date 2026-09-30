@@ -264,6 +264,26 @@ describe('evaluatorTracing', () => {
   });
 
   describe('isTracingEnabled', () => {
+    it.each(['test', 'strategy'] as const)(
+      'honors a %s opt-out over a global strategy default',
+      (source) => {
+        const tracing = { enabled: false };
+        const test: TestCase = {
+          metadata: {
+            strategyId: 'goat',
+            ...(source === 'test' ? { tracing } : { strategyConfig: { tracing } }),
+          },
+        };
+        const suite: TestSuite = {
+          providers: [],
+          prompts: [],
+          redteam: { tracing: { strategies: { goat: { enabled: true } } } },
+        };
+        expect(isTracingEnabled(test, suite)).toBe(false);
+        expect(isTracingEnabled(test, { ...suite, tracing: { enabled: true } })).toBe(true);
+      },
+    );
+
     it('should return false when no tracing is configured', () => {
       const test: TestCase = { vars: {} };
       expect(isTracingEnabled(test)).toBe(false);
@@ -293,6 +313,36 @@ describe('evaluatorTracing', () => {
       expect(isTracingEnabled(test, testSuite)).toBe(true);
     });
 
+    it('enables trace context and the receiver from redteam tracing', async () => {
+      const testSuite: TestSuite = {
+        providers: [],
+        prompts: [],
+        redteam: { tracing: { enabled: true } },
+        tracing: { enabled: false, otlp: { http: { enabled: true, port: 4318 } } },
+      };
+      expect(isTracingEnabled({}, testSuite)).toBe(true);
+      expect(await startOtlpReceiverIfNeeded(testSuite)).toBe(true);
+      expect(mockStartOTLPReceiver).toHaveBeenCalledOnce();
+    });
+
+    it.each(['test', 'defaultTest'] as const)(
+      'creates trace context and starts the receiver for nested %s tracing',
+      async (source) => {
+        const test = { metadata: { tracing: { enabled: true, includeInGrading: true } } };
+        const suite: TestSuite = {
+          providers: [],
+          prompts: [],
+          ...(source === 'test' ? { tests: [test] } : { defaultTest: test }),
+          tracing: { enabled: false, otlp: { http: { enabled: true, port: 4318 } } },
+        };
+        expect(await startOtlpReceiverIfNeeded(suite)).toBe(true);
+        expect(mockStartOTLPReceiver).toHaveBeenCalledOnce();
+        const context = await generateTraceContextIfNeeded(test, {}, 0, 0, suite);
+        expect(context?.traceparent).toMatch(/^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/);
+        expect(mockCreateTrace).toHaveBeenCalledOnce();
+      },
+    );
+
     it('should return false when testSuite.tracing.enabled is false', () => {
       const test: TestCase = { vars: {} };
       const testSuite = {
@@ -301,6 +351,47 @@ describe('evaluatorTracing', () => {
         tracing: { enabled: false },
       } as unknown as TestSuite;
       expect(isTracingEnabled(test, testSuite)).toBe(false);
+    });
+
+    it.each(['global', 'test', 'strategy'] as const)(
+      'creates trace context for a strategy enabled through %s configuration',
+      async (source) => {
+        const config = { enabled: false, strategies: { goat: { enabled: true } } };
+        const test: TestCase = {
+          metadata: {
+            strategyId: 'goat',
+            ...(source === 'test' && { tracing: config }),
+            ...(source === 'strategy' && { strategyConfig: { tracing: config } }),
+          },
+        };
+        const suite: TestSuite = {
+          providers: [],
+          prompts: [],
+          tests: [test],
+          tracing: { enabled: false, otlp: { http: { enabled: true, port: 4318 } } },
+          ...(source === 'global' && { redteam: { tracing: config } }),
+        };
+        expect(await startOtlpReceiverIfNeeded(suite)).toBe(true);
+        expect(mockStartOTLPReceiver).toHaveBeenCalledOnce();
+        const context = await generateTraceContextIfNeeded(test, {}, 0, 0, suite);
+        expect(context?.traceparent).toMatch(/^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/);
+        expect(mockCreateTrace).toHaveBeenCalledOnce();
+        expect(
+          isTracingEnabled({ metadata: { ...test.metadata, strategyId: 'basic' } }, suite),
+        ).toBe(false);
+      },
+    );
+
+    it('honors a disabled strategy override when global redteam tracing is enabled', () => {
+      const suite: TestSuite = {
+        providers: [],
+        prompts: [],
+        redteam: {
+          tracing: { enabled: true, strategies: { goat: { enabled: false } } },
+        },
+      };
+      expect(isTracingEnabled({ metadata: { strategyId: 'goat' } }, suite)).toBe(false);
+      expect(isTracingEnabled({ metadata: { strategyId: 'basic' } }, suite)).toBe(true);
     });
 
     it('should return true when any source enables tracing', () => {

@@ -112,6 +112,10 @@ const SENSITIVE_PATTERNS: Array<{
   { pattern: /\b(sk-[a-zA-Z0-9_-]{20,})/g, replacement: '<REDACTED_API_KEY>' },
   { pattern: /\b(pk-[a-zA-Z0-9_-]{20,})/g, replacement: '<REDACTED_API_KEY>' },
   {
+    pattern: /\b(?:gh[pousr]_[a-zA-Z0-9]{20,}|github_pat_[a-zA-Z0-9_]{20,})/g,
+    replacement: '<REDACTED_API_KEY>',
+  },
+  {
     pattern: /\b(api[_-]?key["']?\s*[:=]\s*["']?)([a-zA-Z0-9_-]{16,})/gi,
     replacement: '$1<REDACTED>',
   },
@@ -120,8 +124,12 @@ const SENSITIVE_PATTERNS: Array<{
   { pattern: /\b(password["']?\s*[:=]\s*["']?)([^\s"',}{]+)/gi, replacement: '$1<REDACTED>' },
   // Authorization headers
   {
-    pattern: /(Authorization["']?\s*[:=]\s*["']?)(Bearer\s+)?([a-zA-Z0-9_.-]{16,})/gi,
+    pattern: /\b(Authorization["']?\s*[:=]\s*["']?)((?:Bearer|Basic)\s+)([a-zA-Z0-9_./~+=-]+)/gi,
     replacement: '$1$2<REDACTED>',
+  },
+  {
+    pattern: /(Authorization["']?\s*[:=]\s*["']?)([a-zA-Z0-9_.-]{16,})/gi,
+    replacement: '$1<REDACTED>',
   },
   // AWS credentials
   { pattern: /\b(AKIA[A-Z0-9]{16})/g, replacement: '<REDACTED_AWS_KEY>' },

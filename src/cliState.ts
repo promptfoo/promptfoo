@@ -4,6 +4,8 @@ import { setEnvOverridesProvider } from './envOverrides';
 
 import type { EnvOverrides, TestSuite, UnifiedConfig } from './types/index';
 
+type RedteamTracingConfig = NonNullable<TestSuite['redteam']>['tracing'];
+
 export interface ActiveOtlpReceiver {
   host: string;
   port: number;
@@ -63,6 +65,7 @@ interface CliState {
   // Maximum concurrency from CLI -j flag (propagated to providers like Python)
   maxConcurrency?: number;
   readonly requestTracingConfig?: TestSuite['tracing'];
+  readonly requestRedteamTracingConfig?: RedteamTracingConfig;
   readonly activeOtlpReceiver?: ActiveOtlpReceiver;
 
   withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T>;
@@ -76,6 +79,7 @@ interface CliState {
   withRequestTracingConfig<T>(
     tracingConfig: NonNullable<TestSuite['tracing']>,
     fn: () => Promise<T>,
+    redteamTracingConfig?: RedteamTracingConfig,
   ): Promise<T>;
   setActiveOtlpReceiver(receiver?: ActiveOtlpReceiver): void;
 }
@@ -93,6 +97,7 @@ const envContext = new AsyncLocalStorage<{
 }>();
 const requestTracingConfigContext = new AsyncLocalStorage<{
   tracingConfig: NonNullable<TestSuite['tracing']>;
+  redteamTracingConfig?: RedteamTracingConfig;
 }>();
 let globalMaxConcurrency: number | undefined;
 let activeOtlpReceiver: ActiveOtlpReceiver | undefined;
@@ -166,14 +171,18 @@ const state: CliState = {
   get requestTracingConfig() {
     return requestTracingConfigContext.getStore()?.tracingConfig;
   },
+  get requestRedteamTracingConfig() {
+    return requestTracingConfigContext.getStore()?.redteamTracingConfig;
+  },
   get activeOtlpReceiver() {
     return activeOtlpReceiver;
   },
   withRequestTracingConfig<T>(
     tracingConfig: NonNullable<TestSuite['tracing']>,
     fn: () => Promise<T>,
+    redteamTracingConfig?: RedteamTracingConfig,
   ): Promise<T> {
-    return requestTracingConfigContext.run({ tracingConfig }, fn);
+    return requestTracingConfigContext.run({ tracingConfig, redteamTracingConfig }, fn);
   },
   setActiveOtlpReceiver(receiver?: ActiveOtlpReceiver): void {
     activeOtlpReceiver = receiver

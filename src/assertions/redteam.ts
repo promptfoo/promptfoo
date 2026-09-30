@@ -7,6 +7,7 @@ import {
   getTargetConversation,
   withGradingUsage,
 } from '../redteam/grading/storedResult';
+import { resolveTracingOptions } from '../redteam/providers/tracingOptions';
 import { isAttackProvider } from '../redteam/shared/attackProviders';
 import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
 import { isApiProvider, isProviderOptions } from '../types/providers';
@@ -24,11 +25,7 @@ import type {
   ProviderResponse,
 } from '../types/index';
 
-/**
- * Analyzes grader errors in the redteam history.
- * Returns whether some (but not all) turns have grader errors.
- * If ALL turns have errors, we should still ERROR. If only SOME have errors, we can be more lenient.
- */
+/** Distinguish partial grader failures from a run with no usable verdicts. */
 function analyzeGraderErrors(redteamHistory: Array<{ graderError?: string }> | undefined): {
   hasAnyErrors: boolean;
   allTurnsHaveErrors: boolean;
@@ -140,10 +137,12 @@ function getRedteamPrompt(
 }
 
 function createInitialGradingContext({
+  assertion,
   assertionValueContext,
   providerResponse,
+  test,
   conversationTranscript,
-}: Pick<AssertionParams, 'assertionValueContext' | 'providerResponse'> & {
+}: Pick<AssertionParams, 'assertion' | 'assertionValueContext' | 'providerResponse' | 'test'> & {
   conversationTranscript?: string;
 }): RedteamGradingContext {
   const gradingContext: RedteamGradingContext = {
@@ -152,8 +151,19 @@ function createInitialGradingContext({
   };
 
   if (assertionValueContext.trace) {
-    gradingContext.traceData = assertionValueContext.trace;
-    gradingContext.traceSummary = summarizeTrajectoryForJudge(assertionValueContext.trace);
+    const usesExecutionEvidence =
+      assertion.type === 'promptfoo:redteam:sql-injection' ||
+      assertion.type === 'promptfoo:redteam:shell-injection';
+    const tracing = usesExecutionEvidence
+      ? resolveTracingOptions({ strategyId: test.metadata?.strategyId ?? 'basic', test })
+      : undefined;
+    if (!usesExecutionEvidence || (tracing?.enabled && tracing.includeInGrading)) {
+      const trace = assertionValueContext.trace;
+      gradingContext.traceData = trace;
+      if (!usesExecutionEvidence) {
+        gradingContext.traceSummary = summarizeTrajectoryForJudge(trace);
+      }
+    }
   }
 
   return gradingContext;
@@ -201,6 +211,12 @@ export const handleRedteam = async (
   const { lastUserPrompt, conversationTranscript } = conversation;
   const effectivePrompt = getRedteamPrompt(prompt, test, providerResponse, lastUserPrompt);
   invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);
+  const usesExecutionEvidence =
+    assertion.type === 'promptfoo:redteam:sql-injection' ||
+    assertion.type === 'promptfoo:redteam:shell-injection';
+  const tracing = usesExecutionEvidence
+    ? resolveTracingOptions({ strategyId: test.metadata?.strategyId ?? 'basic', test })
+    : undefined;
 
   // Hydra and Goblin retain their current-turn grading behavior. Their saved
   // messages are still available for attack generation and reporting.
@@ -220,6 +236,7 @@ export const handleRedteam = async (
       ? cloneTokenUsageBreakdown(storedResult.tokensUsed)
       : undefined;
   if (
+    !(tracing?.enabled && tracing.includeInGrading) &&
     hasStrategyGrade &&
     typeof storedResult.metadata?.redteamGradingAssertionHash === 'string' &&
     storedResult.metadata.redteamGradingAssertionHash === getGradingAssertionHash(assertion) &&
@@ -264,6 +281,8 @@ export const handleRedteam = async (
     assertionValueContext,
     providerResponse,
     conversationTranscript: gradesCurrentTurnOnly ? undefined : conversationTranscript,
+    assertion,
+    test,
   });
   const webPageUuid =
     (providerResponse.metadata?.webPageUuid as string | undefined) ||
@@ -346,6 +365,9 @@ export const handleRedteam = async (
       },
     };
   } catch (error) {
+    if (error instanceof Error && error.name === 'TraceEvidenceError') {
+      throw error;
+    }
     // For iterative strategies, check if only SOME turns had grader errors (not all).
     // If only some failed, we can be lenient. If ALL failed, we should still ERROR.
     const redteamHistory = providerResponse.metadata?.redteamHistory as

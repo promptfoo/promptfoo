@@ -1091,7 +1091,7 @@ The `trace-span-count` assertion counts the number of spans in a trace that matc
 :::note
 Trace assertions require tracing to be enabled in your evaluation. See the [tracing documentation](/docs/tracing/) for setup instructions.
 
-If trace data is not available, the assertion will throw an error rather than failing, indicating that the assertion could not be evaluated.
+If trace data is not available, the assertion will throw an error rather than failing, indicating that the assertion could not be evaluated. Tempo, Braintrust, and Langfuse snapshots containing malformed records are also rejected, even when other spans are valid.
 :::
 
 Example:

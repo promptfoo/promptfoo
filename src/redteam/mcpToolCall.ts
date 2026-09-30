@@ -1,4 +1,8 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import Ajv from 'ajv';
+import Ajv2019 from 'ajv/dist/2019.js';
+import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 
 export type McpToolDefinition = {
@@ -14,8 +18,12 @@ export type McpToolCall = {
 const TOOL_NAME_FIELDS = ['tool', 'toolName', 'function', 'functionName', 'name'] as const;
 const TOOL_ARGS_FIELDS = ['args', 'arguments', 'params', 'parameters'] as const;
 
-const ajv = new Ajv({ allErrors: true, strictSchema: false });
+const ajv = new Ajv({ allErrors: true, strictSchema: false, addUsedSchema: false });
 addFormats(ajv);
+const ajv2019 = new Ajv2019({ allErrors: true, strictSchema: false, addUsedSchema: false });
+addFormats(ajv2019);
+const ajv2020 = new Ajv2020({ allErrors: true, strictSchema: false, addUsedSchema: false });
+addFormats(ajv2020);
 
 export function parseMcpToolCall(
   value: unknown,
@@ -36,24 +44,44 @@ export function parseMcpToolCall(
   }
 
   const record = parsed as Record<string, unknown>;
-  const toolName = TOOL_NAME_FIELDS.map((field) => record[field]).find(
-    (fieldValue): fieldValue is string =>
-      typeof fieldValue === 'string' && allowedToolNames.has(fieldValue),
-  );
+  let toolName: string | undefined;
+  for (const field of TOOL_NAME_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(record, field)) {
+      continue;
+    }
+    const value = record[field];
+    if (
+      typeof value !== 'string' ||
+      !allowedToolNames.has(value) ||
+      (toolName !== undefined && toolName !== value)
+    ) {
+      return undefined;
+    }
+    toolName = value;
+  }
 
   if (!toolName) {
     return undefined;
   }
 
-  const rawArgs =
-    TOOL_ARGS_FIELDS.map((field) => record[field]).find(
-      (fieldValue) =>
-        typeof fieldValue === 'object' && fieldValue !== null && !Array.isArray(fieldValue),
-    ) ?? {};
+  let rawArgs: Record<string, unknown> | undefined;
+  for (const field of TOOL_ARGS_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(record, field)) {
+      continue;
+    }
+    const value = record[field];
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return undefined;
+    }
+    if (rawArgs !== undefined && !isDeepStrictEqual(rawArgs, value)) {
+      return undefined;
+    }
+    rawArgs = value as Record<string, unknown>;
+  }
 
   return {
     tool: toolName,
-    args: rawArgs as Record<string, unknown>,
+    args: rawArgs ?? {},
   };
 }
 
@@ -71,7 +99,16 @@ export function validateMcpToolCall(
   }
 
   try {
-    return ajv.validate(tool.inputSchema ?? { type: 'object' }, toolCall.args) === true;
+    const schema = tool.inputSchema ?? { type: 'object' };
+    const dialect =
+      typeof schema.$schema === 'string' ? schema.$schema.replace(/#$/, '') : undefined;
+    const validator =
+      dialect === 'https://json-schema.org/draft/2020-12/schema'
+        ? ajv2020
+        : dialect === 'https://json-schema.org/draft/2019-09/schema'
+          ? ajv2019
+          : ajv;
+    return validator.validate(schema, toolCall.args) === true;
   } catch {
     return false;
   }

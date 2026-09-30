@@ -120,6 +120,7 @@ describe('index.ts exports', () => {
     'normalizeInputs',
     'ProbeLimitExceededError',
     'redteam',
+    'summarizeSemanticFrontierDiagnosticsFromTests',
   ];
 
   const expectedSchemaExports = [

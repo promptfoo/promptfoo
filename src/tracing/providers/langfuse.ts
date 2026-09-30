@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import logger from '../../logger';
 import { getNormalizedToolAttributes } from '../toolAttributes';
 import {
@@ -191,6 +193,24 @@ function observationAttributes(observation: LangfuseObservation): Record<string,
   const observationName =
     typeof observation.name === 'string' && observation.name.trim() ? observation.name : undefined;
 
+  if (observation.type === 'TOOL') {
+    for (const [key, value] of [
+      ['tool.arguments', parsedInput],
+      ['gen_ai.tool.call.arguments', parsedInput],
+      ['gen_ai.tool.call.result', parsedOutput],
+    ] as const) {
+      if (
+        value !== undefined &&
+        Object.prototype.hasOwnProperty.call(telemetryAttributes, key) &&
+        !isDeepStrictEqual(value, parseJsonValue(telemetryAttributes[key]))
+      ) {
+        throw new TraceProviderError(
+          'Langfuse tool observation has conflicting input or output attributes',
+        );
+      }
+    }
+  }
+
   return {
     ...resourceAttributes,
     ...metadata,
@@ -260,11 +280,7 @@ function observationAttributes(observation: LangfuseObservation): Record<string,
   };
 }
 
-function transformObservation(
-  observation: LangfuseObservation,
-  traceId: string,
-  options?: FetchTraceOptions,
-): SpanData | null {
+function transformObservation(observation: LangfuseObservation, traceId: string): SpanData | null {
   if (
     typeof observation.id !== 'string' ||
     !observation.id ||
@@ -276,10 +292,7 @@ function transformObservation(
   }
 
   const startTime = Date.parse(observation.startTime);
-  if (
-    Number.isNaN(startTime) ||
-    (options?.earliestStartTime !== undefined && startTime < options.earliestStartTime)
-  ) {
+  if (Number.isNaN(startTime)) {
     return null;
   }
 
@@ -318,31 +331,40 @@ function transformObservation(
 
 function addObservations(
   observations: unknown[],
-  spans: SpanData[],
-  seenSpanIds: Set<string>,
+  spans: Map<string, SpanData>,
   traceId: string,
   maxSpans: number,
   options?: FetchTraceOptions,
-): void {
+): boolean {
+  let incomplete = false;
   for (const observation of observations) {
     if (!observation || typeof observation !== 'object' || Array.isArray(observation)) {
+      incomplete = true;
       logger.warn('[LangfuseProvider] Skipping malformed observation');
       continue;
     }
 
-    const span = transformObservation(observation as LangfuseObservation, traceId, options);
+    const span = transformObservation(observation as LangfuseObservation, traceId);
     if (!span) {
+      incomplete = true;
       logger.warn('[LangfuseProvider] Skipping malformed or unrelated observation');
       continue;
     }
-    if (!seenSpanIds.has(span.spanId)) {
-      seenSpanIds.add(span.spanId);
-      spans.push(span);
+    if (options?.earliestStartTime !== undefined && span.startTime < options.earliestStartTime) {
+      continue;
     }
-    if (spans.length >= maxSpans) {
-      return;
+    const previous = spans.get(span.spanId);
+    if (previous && !isDeepStrictEqual(previous, span)) {
+      throw new TraceProviderError('Conflicting duplicate Langfuse observation IDs');
+    }
+    if (!previous) {
+      spans.set(span.spanId, span);
+    }
+    if (spans.size >= maxSpans) {
+      return incomplete;
     }
   }
+  return incomplete;
 }
 
 function getNextCursor(
@@ -434,23 +456,22 @@ export class LangfuseProvider implements TraceProvider {
 
     const normalizedTraceId = traceId.toLowerCase();
     const maxSpans = Math.min(Math.max(options?.maxSpans ?? MAX_SPANS, 1), MAX_SPANS);
-    const pageSize = Math.min(maxSpans, MAX_PAGE_SIZE);
     const timeoutSignal = AbortSignal.timeout(this.config.timeout ?? 10_000);
     const signal = options?.abortSignal
       ? AbortSignal.any([timeoutSignal, options.abortSignal])
       : timeoutSignal;
-    const spans: SpanData[] = [];
-    const seenSpanIds = new Set<string>();
+    const spans = new Map<string, SpanData>();
     const seenCursors = new Set<string>();
     let page: number | undefined;
     let cursor: string | undefined;
     let remainingBytes = MAX_TRACE_RESPONSE_BYTES;
+    let incomplete = false;
 
     do {
       const url = new URL(`${this.baseUrl}/api/public/v2/observations`);
       url.searchParams.set('traceId', normalizedTraceId);
       url.searchParams.set('fields', 'core,basic,io,metadata,model,usage');
-      url.searchParams.set('limit', String(pageSize));
+      url.searchParams.set('limit', String(Math.min(MAX_PAGE_SIZE, maxSpans)));
       if (options?.earliestStartTime !== undefined) {
         url.searchParams.set('fromStartTime', new Date(options.earliestStartTime).toISOString());
       }
@@ -484,7 +505,9 @@ export class LangfuseProvider implements TraceProvider {
       const contentLength = Number(response.headers.get('content-length'));
       if (contentLength > remainingBytes) {
         await releaseResponse(response, 'Langfuse');
-        throw new TraceProviderError('Langfuse trace exceeds the maximum response size');
+        throw new TraceProviderError('Langfuse trace exceeds the maximum response size', {
+          limitExceeded: true,
+        });
       }
       const body = await readLimitedResponse(response, 'Langfuse', remainingBytes);
       remainingBytes -= new TextEncoder().encode(body).byteLength;
@@ -493,23 +516,39 @@ export class LangfuseProvider implements TraceProvider {
         throw new TraceProviderError('Langfuse returned an invalid observations response');
       }
 
-      addObservations(result.data, spans, seenSpanIds, normalizedTraceId, maxSpans, options);
+      incomplete =
+        addObservations(result.data, spans, normalizedTraceId, MAX_SPANS + 1, options) ||
+        incomplete;
+      if (spans.size > MAX_SPANS) {
+        throw new TraceProviderError('Langfuse trace exceeds the maximum span count', {
+          limitExceeded: true,
+        });
+      }
+      if (maxSpans < MAX_SPANS && spans.size >= maxSpans) {
+        break;
+      }
       page = getNextPage(result);
       cursor = page ? undefined : getNextCursor(result, seenCursors);
-    } while ((page || cursor) && spans.length < maxSpans);
+    } while (page || cursor);
 
-    if (spans.length === 0) {
+    if (spans.size === 0 && !incomplete) {
       return null;
     }
 
     const services = new Set<string>();
-    for (const span of spans) {
+    for (const span of spans.values()) {
       const service = span.attributes?.['service.name'];
       if (typeof service === 'string') {
         services.add(service);
       }
     }
 
-    return { traceId: normalizedTraceId, spans, services: [...services], fetchedAt: Date.now() };
+    return {
+      traceId: normalizedTraceId,
+      spans: [...spans.values()].slice(0, maxSpans),
+      ...(incomplete && { incomplete }),
+      services: [...services],
+      fetchedAt: Date.now(),
+    };
   }
 }
