@@ -96,6 +96,8 @@
     // POSIX utility used by workspace FIFO regression tests.
     "mkfifo",
     "modelaudit",
+    // POSIX process-tree discovery for package fixture cleanup.
+    "ps",
     "ruby",
     "security"
   ],

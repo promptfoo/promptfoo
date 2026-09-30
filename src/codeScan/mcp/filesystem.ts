@@ -53,6 +53,13 @@ function resolveFilesystemMcpServerEntry(): string {
 }
 
 function getFilesystemMcpLaunch(rootDir: string): { args: string[]; cwd: string } {
+  // Preserve a caller's numeric heap limit without forwarding ambient loaders or preloads.
+  const heapLimit = [
+    ...(process.env.NODE_OPTIONS ?? '').matchAll(
+      /(?:^|\s)--max[-_]old[-_]space[-_]size(?:=|\s+)([1-9]\d*)(?=\s|$)/g,
+    ),
+  ].at(-1)?.[1];
+  const nodeArgs = heapLimit ? [`--max-old-space-size=${heapLimit}`] : [];
   const canonicalRoot = realpathSync(rootDir);
   const outsideRoot = (file: string): string => {
     const canonicalFile = realpathSync(file);
@@ -71,7 +78,7 @@ function getFilesystemMcpLaunch(rootDir: string): { args: string[]; cwd: string 
 
   const entry = outsideRoot(resolveFilesystemMcpServerEntry());
   if (!process.versions.pnp) {
-    return { args: [entry, canonicalRoot], cwd: dirname(entry) };
+    return { args: [...nodeArgs, entry, canonicalRoot], cwd: dirname(entry) };
   }
 
   // Resolve only the installed package's loaders; never inherit ambient NODE_OPTIONS.
@@ -84,6 +91,7 @@ function getFilesystemMcpLaunch(rootDir: string): { args: string[]; cwd: string 
   }
   return {
     args: [
+      ...nodeArgs,
       '--require',
       pnpLoader,
       '--experimental-loader',
@@ -312,9 +320,9 @@ export async function stopFilesystemMcpServer(mcpProcess: ChildProcess): Promise
 
     const sendSignal = (signal: NodeJS.Signals) => {
       try {
-        if (!mcpProcess.kill(signal)) {
-          onError(new Error(`Could not send ${signal} to process ${mcpProcess.pid}`));
-        }
+        // False can mean the child already exited but its exit event is still queued.
+        // Keep waiting for that event or the bounded confirmation deadline.
+        mcpProcess.kill(signal);
       } catch (error) {
         onError(error instanceof Error ? error : new Error(String(error)));
       }

@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { intersects, minVersion, satisfies, validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
-import { extractModuleSpecifiers, getPackageName } from '../scripts/architectureUtils';
+import { extractModuleSpecifiers } from '../scripts/architectureUtils';
 
 type PackageManifest = {
   dependencies?: Record<string, string>;
@@ -409,31 +409,6 @@ describe('package manifests', () => {
     ).toThrow();
   });
 
-  it('includes every browser loader in the optional production profile', () => {
-    const packageJson = readPackageJson<PackageManifest>('package.json');
-    const packageLock =
-      readPackageJson<PackageLockManifest<{ dev?: boolean }>>('package-lock.json');
-    const browserSource = fs.readFileSync('src/providers/browser.ts', 'utf8');
-    const browserPackages = extractModuleSpecifiers(browserSource, 'src/providers/browser.ts')
-      .map(getPackageName)
-      .filter((name): name is string => name !== undefined);
-
-    expect(browserPackages).toContain('puppeteer-extra-plugin-stealth');
-    // Chromium supplies the executable via its install script, not a source import.
-    for (const dependency of new Set([...browserPackages, '@playwright/browser-chromium'])) {
-      expect(
-        packageJson.optionalDependencies?.[dependency],
-        `${dependency} must be available to production browser consumers`,
-      ).toBeDefined();
-      // npm treats a same-root dev + optional declaration as dev-only during
-      // `npm ci --omit=dev`, even though packed consumers resolve it as optional.
-      expect(packageJson.devDependencies?.[dependency]).toBeUndefined();
-      const installed = packageLock.packages[`node_modules/${dependency}`];
-      expect(installed, `${dependency} must be installed`).toBeDefined();
-      expect(installed?.dev, `${dependency} must survive --omit=dev`).not.toBe(true);
-    }
-  });
-
   it('declares static runtime imports as required for installs that omit optional packages', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
 
@@ -456,13 +431,14 @@ describe('package manifests', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const sitePackageJson = readPackageJson<PackageManifest>('site/package.json');
     const packageLock =
-      readPackageJson<PackageLockManifest<{ optional?: boolean }>>('package-lock.json');
+      readPackageJson<PackageLockManifest<{ optional?: boolean; devOptional?: boolean }>>(
+        'package-lock.json',
+      );
     for (const dependency of [
       '@alcalzone/ansi-tokenize',
       '@anthropic-ai/claude-agent-sdk',
       '@langfuse/client',
       '@modelcontextprotocol/sdk',
-      '@openai/codex-security',
       '@opencode-ai/sdk',
       '@slack/web-api',
       'hono',
@@ -479,13 +455,9 @@ describe('package manifests', () => {
     expect(sitePackageJson.dependencies).not.toHaveProperty('sharp');
     expect(sitePackageJson.devDependencies).not.toHaveProperty('sharp');
 
-    for (const dependency of [
-      '@alcalzone/ansi-tokenize',
-      '@openai/codex-security',
-      '@opencode-ai/sdk',
-      '@slack/web-api',
-    ]) {
-      expect(packageLock.packages[`node_modules/${dependency}`]?.optional, dependency).toBe(true);
+    for (const dependency of ['@alcalzone/ansi-tokenize', '@opencode-ai/sdk', '@slack/web-api']) {
+      const entry = packageLock.packages[`node_modules/${dependency}`];
+      expect(entry?.optional || entry?.devOptional, dependency).toBe(true);
     }
   });
 

@@ -161,7 +161,7 @@ describe('filesystem MCP launcher', () => {
         SystemRoot: 'C:\\Windows',
         GITHUB_TOKEN: 'test-token',
         PROMPTFOO_API_KEY: 'test-key',
-        NODE_OPTIONS: '--max-old-space-size=4096',
+        NODE_OPTIONS: '--require=/untrusted/preload.cjs --import=/untrusted/loader.mjs',
         npm_config_before: '2026-03-29T00:00:00.000Z',
         NPM_CONFIG_BEFORE: '2026-03-29T00:00:00.000Z',
         Npm_Config_Before: '2026-03-29T00:00:00.000Z',
@@ -201,6 +201,43 @@ describe('filesystem MCP launcher', () => {
       SystemRoot: 'C:\\Windows',
     });
   });
+
+  it.each([
+    ['--max-old-space-size=4096 --require=/untrusted/preload.cjs', '4096'],
+    ['--import=/untrusted/loader.mjs --max_old_space_size 128', '128'],
+    ['--max-old-space-size=64 --max_old_space_size=96 --require=/untrusted/preload.cjs', '96'],
+  ])('preserves only the numeric heap limit from %s', (nodeOptions, heapLimit) => {
+    const restore = mockProcessEnv({ NODE_OPTIONS: nodeOptions });
+    try {
+      startFilesystemMcpServer(rootDir);
+      expect(mocks.spawn).toHaveBeenCalledWith(
+        process.execPath,
+        [`--max-old-space-size=${heapLimit}`, serverEntry, rootDir],
+        expect.anything(),
+      );
+      expect(mocks.spawn.mock.calls[0][2].env).not.toHaveProperty('NODE_OPTIONS');
+    } finally {
+      restore();
+    }
+  });
+
+  it.each(['0', '-1', '4g', '4.5', '64--require=/untrusted/preload.cjs'])(
+    'does not forward an invalid heap limit %s',
+    (heapLimit) => {
+      const restore = mockProcessEnv({ NODE_OPTIONS: `--max-old-space-size=${heapLimit}` });
+      try {
+        startFilesystemMcpServer(rootDir);
+        expect(mocks.spawn).toHaveBeenCalledWith(
+          process.execPath,
+          [serverEntry, rootDir],
+          expect.anything(),
+        );
+        expect(mocks.spawn.mock.calls[0][2].env).not.toHaveProperty('NODE_OPTIONS');
+      } finally {
+        restore();
+      }
+    },
+  );
 
   it.each(['entry', 'symlink', 'root-symlink'])(
     'rejects a server inside the scanned repository (%s)',
@@ -449,11 +486,48 @@ describe('filesystem MCP cleanup', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it.each(['SIGTERM', 'SIGKILL'] as const)(
+    'waits for an already-dead child exit notification after %s returns false',
+    async (failedSignal) => {
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      const child = createFakeProcess();
+      vi.mocked(child.kill).mockImplementation((signal) => signal !== failedSignal);
+      const settled = vi.fn();
+      const stopped = stopFilesystemMcpServer(child);
+      void stopped.then(settled, settled);
+      await vi.advanceTimersByTimeAsync(failedSignal === 'SIGKILL' ? 5000 : 0);
+      expect(child.kill).toHaveBeenLastCalledWith(failedSignal);
+      expect(settled).not.toHaveBeenCalled();
+
+      child.emit('exit', 0, null);
+      await expect(stopped).resolves.toBeUndefined();
+      expect(settled).toHaveBeenCalledOnce();
+      expect(child.listenerCount('exit')).toBe(0);
+      expect(child.listenerCount('error')).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('bounds the exit wait when both signals return false without confirming exit', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    const child = createFakeProcess();
+    vi.mocked(child.kill).mockReturnValue(false);
+    const settled = vi.fn();
+    const stopped = stopFilesystemMcpServer(child);
+    void stopped.then(settled, settled);
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(settled).toHaveBeenCalledOnce();
+    await expect(stopped).rejects.toThrow('Timed out waiting for process 1234 to exit');
+    expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+    expect(child.kill).toHaveBeenCalledWith('SIGKILL');
+    expect(child.listenerCount('exit')).toBe(0);
+    expect(child.listenerCount('error')).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it.each([
-    ['SIGTERM', 'false'],
     ['SIGTERM', 'throw'],
     ['SIGTERM', 'error'],
-    ['SIGKILL', 'false'],
     ['SIGKILL', 'throw'],
     ['SIGKILL', 'error'],
   ] as const)('rejects and cleans up when %s fails via %s', async (failedSignal, failure) => {
