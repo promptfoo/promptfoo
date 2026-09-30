@@ -494,6 +494,69 @@ describe('PortkeyChatCompletionProvider', () => {
       },
     );
 
+    it.each([undefined, 'https://configured.example'])(
+      'requires prompt authorization for a custom host change from %s',
+      (portkeyCustomHost) => {
+        const provider = new PortkeyChatCompletionProvider('fixture-model', {
+          config: {
+            portkeyApiKey: 'fake-portkey',
+            portkeyProvider: 'openai',
+            apiKey: 'fake-upstream',
+            portkeyCustomHost,
+          },
+        });
+        expect(() =>
+          provider.getOpenAiRequestHeaders({
+            'X-Portkey-Custom-Host': 'https://selected.example',
+          }),
+        ).toThrow('Portkey prompt headers change upstream credential routing');
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each<Record<string, string>>([
+      { 'X-Portkey-Provider': 'anthropic' },
+      { 'X-Portkey-Virtual-Key': 'selected-key' },
+      { 'X-Portkey-Custom-Host': 'https://selected.example' },
+    ])('requires prompt authorization despite an inherited bearer: %j', (route) => {
+      const provider = new PortkeyChatCompletionProvider('fixture-model', {
+        config: {
+          portkeyApiKey: 'fake-portkey',
+          portkeyProvider: 'openai',
+          headers: { Authorization: 'Bearer fake-provider' },
+        },
+      });
+      expect(() => provider.getOpenAiRequestHeaders(route)).toThrow(
+        'Portkey prompt headers change upstream credential routing',
+      );
+      const headers = new Headers(
+        provider.getOpenAiRequestHeaders({
+          ...route,
+          authorization: 'Bearer fake-prompt',
+        }),
+      );
+      expect(headers.get('authorization')).toBe('Bearer fake-prompt');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('preserves an unchanged custom host and inherited authorization', () => {
+      const provider = new PortkeyChatCompletionProvider('fixture-model', {
+        config: {
+          portkeyApiKey: 'fake-portkey',
+          portkeyCustomHost: 'https://configured.example',
+          headers: { authorization: 'Bearer fake-provider' },
+        },
+      });
+      const headers = new Headers(
+        provider.getOpenAiRequestHeaders({
+          'X-Portkey-Custom-Host': 'https://configured.example',
+          'X-Request-Id': 'fixture',
+        }),
+      );
+      expect(headers.get('x-portkey-custom-host')).toBe('https://configured.example');
+      expect(headers.get('authorization')).toBe('Bearer fake-provider');
+    });
+
     it('applies prompt headers case-insensitively without changing the configured route', () => {
       const provider = new PortkeyChatCompletionProvider('fixture-model', {
         config: {

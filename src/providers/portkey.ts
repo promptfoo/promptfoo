@@ -173,8 +173,9 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
     const routeChanged =
       providerRoute.get('x-portkey-provider')?.toLowerCase() !==
         requestRoute.get('x-portkey-provider')?.toLowerCase() ||
-      providerRoute.get('x-portkey-virtual-key') !== requestRoute.get('x-portkey-virtual-key');
-    if (!hasHeaderOverride(headers, 'Authorization') && routeChanged) {
+      providerRoute.get('x-portkey-virtual-key') !== requestRoute.get('x-portkey-virtual-key') ||
+      providerRoute.get('x-portkey-custom-host') !== requestRoute.get('x-portkey-custom-host');
+    if (!hasHeaderOverride(customHeaders, 'Authorization') && routeChanged) {
       throw new Error(
         'Portkey prompt headers change upstream credential routing. Configure the route on the provider or set Authorization explicitly.',
       );
