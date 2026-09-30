@@ -11,10 +11,7 @@ export function handleSmoothScroll(
     return;
   }
   const offset = 80;
-  const top =
-    element.getBoundingClientRect().top +
-    (respectReducedMotion ? window.scrollY : window.pageYOffset) -
-    offset;
+  const top = element.getBoundingClientRect().top + window.scrollY - offset;
   const prefersReducedMotion =
     respectReducedMotion &&
     (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false);
