@@ -710,6 +710,7 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
 async function runInstalledTransformersProvider(
   consumerDir: string,
   configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
 ): Promise<void> {
   const modelDir = path.join(consumerDir, 'tiny-bert');
   fs.cpSync(path.join(ROOT, 'test/fixtures/transformers/tiny-bert'), modelDir, { recursive: true });
@@ -794,11 +795,13 @@ ${script}
   runNpm(
     ['install', '--ignore-scripts', '--no-audit', '--no-fund', '@huggingface/transformers@3.8.1'],
     consumerDir,
+    npmEnv,
   );
   await runMode('incompatible');
   runNpm(
     ['install', '--ignore-scripts', '--no-audit', '--no-fund', '@huggingface/transformers@^4.0.0'],
     consumerDir,
+    npmEnv,
   );
   await runMode('installed');
 }
@@ -836,6 +839,11 @@ async function main(): Promise<void> {
   const configDir = path.join(tempDir, 'config');
   const consumerDir = path.join(tempDir, 'consumer');
   const consumerNpmrc = path.join(tempDir, 'consumer.npmrc');
+  const consumerNpmEnv = {
+    npm_config_engine_strict: 'false',
+    npm_config_userconfig: consumerNpmrc,
+    npm_config_registry: values.registry,
+  };
 
   try {
     fs.mkdirSync(artifactsDir);
@@ -880,14 +888,10 @@ async function main(): Promise<void> {
         '--no-audit',
         '--no-fund',
         '--no-package-lock',
-        `--registry=${values.registry}`,
         tarballPath,
       ],
       consumerDir,
-      {
-        npm_config_engine_strict: 'false',
-        npm_config_userconfig: consumerNpmrc,
-      },
+      consumerNpmEnv,
     );
 
     const installedPackageDir = path.join(consumerDir, 'node_modules', 'promptfoo');
@@ -982,7 +986,7 @@ async function main(): Promise<void> {
     if (values.profile === 'default') {
       console.log(await runAsync(process.execPath, ['migrations.mjs'], consumerDir, consumerEnv));
       await runInstalledCompressionEval(consumerDir, configDir);
-      await runInstalledTransformersProvider(consumerDir, configDir);
+      await runInstalledTransformersProvider(consumerDir, configDir, consumerNpmEnv);
     }
 
     if (values['runtime-assets'] !== 'none') {
