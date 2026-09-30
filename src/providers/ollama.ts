@@ -620,7 +620,7 @@ export class OllamaCompletionProvider implements ApiProvider {
       );
     } catch (err) {
       return {
-        error: `API call error: ${String(err)}. Output:\n${response?.data}`,
+        error: `API call error: ${String(err)}`,
       };
     }
     logger.debug(`\tOllama generate API response: ${response.data}`);
@@ -788,7 +788,7 @@ export class OllamaChatProvider implements ApiProvider {
       );
     } catch (err) {
       return {
-        error: `API call error: ${String(err)}. Output:\n${response?.data}`,
+        error: `API call error: ${String(err)}`,
       };
     }
     logger.debug('[Ollama Chat] API response received', {
