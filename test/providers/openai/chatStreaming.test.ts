@@ -296,11 +296,11 @@ describe('Streaming API', () => {
   });
 
   it.each(['tool', 'legacy', 'tool-empty', 'legacy-empty'])(
-    'preserves established %s function identifiers',
+    'preserves %s identifiers when later names are absent or empty',
     async (kind) => {
       const functionDeltas = [
         { name: 'weather', arguments: '{' },
-        { name: kind.endsWith('empty') ? '' : 'weather', arguments: '}' },
+        { name: kind.endsWith('empty') ? '' : undefined, arguments: '}' },
       ];
       const chunks: unknown[] = functionDeltas.map((fn, index) => ({
         choices: [
@@ -337,8 +337,16 @@ describe('Streaming API', () => {
       expect(result.output).toBe('Clear skies');
     },
   );
-  it.each(['tool', 'legacy'])('assembles fragmented %s function names', async (kind) => {
-    const frames = ['get_', 'weather'].map((name, index) => ({
+  it.each(
+    ['tool', 'legacy'].flatMap((kind) =>
+      [
+        ['get_', 'weather'],
+        ['foo', 'foo'],
+        ['foo', 'foo', 'foofoo'],
+      ].map((names) => ({ kind, names })),
+    ),
+  )('assembles $kind function name fragments $names', async ({ kind, names }) => {
+    const frames = names.map((name, index) => ({
       choices: [
         {
           index: 0,
@@ -364,7 +372,7 @@ describe('Streaming API', () => {
     mockFetchWithRetries.mockResolvedValue(new Response(body));
     const callback = vi.fn().mockResolvedValue('Clear skies');
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
-      config: { stream: true, functionToolCallbacks: { get_weather: callback } },
+      config: { stream: true, functionToolCallbacks: { [names.join('')]: callback } },
     });
 
     const result = await provider.callApi('Weather?');

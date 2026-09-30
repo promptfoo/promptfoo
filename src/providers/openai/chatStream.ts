@@ -118,9 +118,7 @@ function appendFunctionCall(
   functionCallDelta: { name?: string; arguments?: string },
 ) {
   choice.functionCall ??= { name: '', arguments: '' };
-  if (functionCallDelta.name !== choice.functionCall.name) {
-    choice.functionCall.name = appendText(choice.functionCall.name, functionCallDelta.name);
-  }
+  choice.functionCall.name = appendText(choice.functionCall.name, functionCallDelta.name);
   choice.functionCall.arguments = appendText(
     choice.functionCall.arguments,
     functionCallDelta.arguments,
@@ -152,9 +150,7 @@ function appendToolCalls(
     if (toolCallDelta.id != null && toolCallDelta.id !== '') {
       toolCall.id = appendText('', toolCallDelta.id);
     }
-    if (toolCallDelta.function?.name !== toolCall.function.name) {
-      toolCall.function.name = appendText(toolCall.function.name, toolCallDelta.function?.name);
-    }
+    toolCall.function.name = appendText(toolCall.function.name, toolCallDelta.function?.name);
     toolCall.function.arguments = appendText(
       toolCall.function.arguments,
       toolCallDelta.function?.arguments,
