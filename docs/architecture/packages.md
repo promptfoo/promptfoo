@@ -140,3 +140,26 @@ to move dependencies into future packages without guessing at ownership.
 It includes direct, optional, and peer dependency declarations. Peers marked
 optional in `peerDependenciesMeta` appear as `optional-peer`; other peers appear
 as `peer`. These labels describe the package contract, not what is installed.
+
+## Verify the release artifact
+
+CI builds the package, packs it once, and runs the installed-package checks on
+that tarball. The release workflow uploads a snapshot before those checks run,
+so installed code cannot change the uploaded package. A separate publish job
+starts only after the checks pass. It has no checkout and publishes that snapshot
+with lifecycle scripts disabled, without rebuilding the package.
+
+```bash
+npm run build
+npm run package:pack -- --destination /tmp/promptfoo-package
+npm run test:package-artifact -- --tarball /tmp/promptfoo-package/promptfoo-VERSION.tgz
+```
+
+Replace `VERSION` with the version from `package.json`. Without `--tarball`, the
+test command still packs the current build itself. Both paths check packaged
+assets, public exports, ESM/CommonJS imports, TypeScript declarations, and local
+HTTP evaluations using the installed CLI.
+
+Manual npm backfills use the requested release tag. Older tags without the
+`--tarball` harness are installed and checked for the expected version before
+publishing; newer tags run the full installed-package checks.

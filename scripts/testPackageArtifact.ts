@@ -171,7 +171,7 @@ function assertPackagedFiles(packResult: PackResult): void {
     .map((file) => `dist/${file}`)
     .filter((file) => !packagedPaths.has(file));
   const missingWebAppFiles = listFiles(path.join(ROOT, 'dist', 'src', 'app'))
-    .filter((file) => !file.endsWith('.map'))
+    .filter((file) => !file.endsWith('.map') && !file.endsWith('.tsbuildinfo'))
     .filter((file) => !packagedPaths.has(file));
 
   assert.deepEqual(missingPaths, [], `Missing packaged runtime assets: ${missingPaths.join(', ')}`);
@@ -188,6 +188,10 @@ function assertPackagedFiles(packResult: PackResult): void {
   assert(
     packResult.files.every((file) => !file.path.endsWith('.map')),
     'Source maps should be excluded from the package',
+  );
+  assert(
+    packResult.files.every((file) => !file.path.endsWith('.tsbuildinfo')),
+    'Incremental compiler state should be excluded from the package',
   );
   assert(
     packResult.files.every((file) => !file.path.startsWith('dist/test/')),
@@ -698,6 +702,19 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
 }
 
 async function main(): Promise<void> {
+  const tarballArgumentIndex = process.argv.indexOf('--tarball');
+  const tarballArgument =
+    tarballArgumentIndex === -1 ? undefined : process.argv[tarballArgumentIndex + 1];
+  if (tarballArgumentIndex !== -1 && (!tarballArgument || tarballArgument.startsWith('--'))) {
+    throw new Error('--tarball requires a path to an existing package artifact.');
+  }
+  const explicitTarball = tarballArgument ? path.resolve(ROOT, tarballArgument) : undefined;
+  if (explicitTarball) {
+    assert(
+      fs.statSync(explicitTarball).isFile(),
+      `Not a package artifact file: ${explicitTarball}`,
+    );
+  }
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-'));
   const artifactsDir = path.join(tempDir, 'artifacts');
   const configDir = path.join(tempDir, 'config');
@@ -710,10 +727,9 @@ async function main(): Promise<void> {
     fs.mkdirSync(consumerDir);
     fs.writeFileSync(consumerNpmrc, '');
 
-    const packOutput = runNpm(
-      ['pack', '--ignore-scripts', '--json', '--pack-destination', artifactsDir],
-      ROOT,
-    );
+    const packOutput = explicitTarball
+      ? runNpm(['pack', '--ignore-scripts', '--dry-run', '--json', explicitTarball], ROOT)
+      : runNpm(['pack', '--ignore-scripts', '--json', '--pack-destination', artifactsDir], ROOT);
     let packResults: PackResult[];
     try {
       packResults = JSON.parse(packOutput) as PackResult[];
@@ -726,7 +742,7 @@ async function main(): Promise<void> {
     assert.equal(packResult.name, 'promptfoo');
     assertPackagedFiles(packResult);
 
-    const tarballPath = path.join(artifactsDir, packResult.filename);
+    const tarballPath = explicitTarball ?? path.join(artifactsDir, packResult.filename);
     assert(fs.existsSync(tarballPath), `Missing tarball: ${tarballPath}`);
 
     fs.writeFileSync(

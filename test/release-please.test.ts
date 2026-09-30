@@ -19,9 +19,23 @@ type ReleasePleaseConfig = {
   'last-release-sha'?: unknown;
 };
 
-type WorkflowStep = { uses?: unknown };
+type WorkflowStep = {
+  name?: string;
+  uses?: string;
+  run?: string;
+  with?: Record<string, unknown>;
+  env?: Record<string, unknown>;
+};
 type ReleasePleaseWorkflow = {
-  jobs?: { 'release-please'?: { steps?: WorkflowStep[] } };
+  jobs?: Record<
+    string,
+    {
+      steps?: WorkflowStep[];
+      permissions?: Record<string, string>;
+      needs?: string | string[];
+      if?: string;
+    }
+  >;
 };
 type ReleaseDriftWorkflow = {
   jobs?: {
@@ -111,4 +125,55 @@ describe('release-please automation', () => {
       .find((line) => line.includes(`uses: ${releaseStep.uses}`));
     expect(usesLine).toMatch(/#\s+v\d+(?:\.\d+){0,2}(?:[-+][\w.-]+)?\s*$/);
   });
+});
+
+describe('npm artifact publication', () => {
+  const workflow = yaml.load(
+    readRepoFile('.github/workflows/release-please.yml'),
+  ) as ReleasePleaseWorkflow;
+
+  it.each([
+    ['build', 'publish-npm'],
+    ['build-npm-backfill', 'publish-npm-backfill'],
+  ])('keeps %s separate from publish credentials', (buildName, publishName) => {
+    const build = workflow.jobs?.[buildName];
+    const publish = workflow.jobs?.[publishName];
+    expect(build?.permissions?.['id-token']).toBeUndefined();
+    const checkout = build?.steps?.find((step) => step.uses?.startsWith('actions/checkout@'));
+    expect(checkout?.with?.['persist-credentials']).toBe(false);
+    expect(publish?.permissions?.['id-token']).toBe('write');
+    expect([publish?.needs].flat()).toContain(buildName);
+    expect(publish?.if).toContain(`needs.${buildName}.result == 'success'`);
+    expect(publish?.steps?.some((step) => step.uses?.startsWith('actions/checkout@'))).toBe(false);
+    expect(publish?.steps?.some((step) => /npm (?:ci|install)/.test(step.run ?? ''))).toBe(false);
+    const command = publish?.steps?.find((step) => step.run?.includes('npm publish'));
+    expect(command?.env?.NODE_AUTH_TOKEN).toBe('');
+    expect(command?.run).toContain('npm publish "${tarballs[0]}" --ignore-scripts');
+  });
+
+  it('uses the installed command for backfills with older package layouts', () => {
+    const step = workflow.jobs?.['build-npm-backfill']?.steps?.find(
+      (candidate) => candidate.name === 'Test package artifact',
+    );
+    expect(step?.run).toContain('node "$consumer_dir/node_modules/.bin/promptfoo" --version');
+    expect(step?.run).not.toContain('/dist/src/entrypoint.js');
+  });
+
+  it.each(['build', 'build-npm-backfill'])(
+    'snapshots %s artifacts before running installed code',
+    (buildName) => {
+      const steps = workflow.jobs?.[buildName]?.steps ?? [];
+      const testIndex = steps.findIndex((step) => step.name === 'Test package artifact');
+      const uploadIndex = steps.findIndex((step) =>
+        step.uses?.startsWith('actions/upload-artifact@'),
+      );
+      expect(testIndex).toBeGreaterThan(-1);
+      expect(uploadIndex).toBeGreaterThan(-1);
+      expect(uploadIndex).toBeLessThan(testIndex);
+      expect(steps[testIndex].env?.PACKAGE_TARBALL).toBe(
+        '${{ steps.package-artifact.outputs.tarball }}',
+      );
+      expect(steps[uploadIndex].with?.path).toBe('${{ steps.package-artifact.outputs.tarball }}');
+    },
+  );
 });

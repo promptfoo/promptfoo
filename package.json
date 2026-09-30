@@ -43,7 +43,8 @@
     "dist",
     "!dist/test",
     "!dist/src/__mocks__",
-    "!dist/**/*.map"
+    "!dist/**/*.map",
+    "!dist/**/*.tsbuildinfo"
   ],
   "engines": {
     "node": ">=22.22.0"
@@ -108,7 +109,8 @@
     "tsc": "tsc --noEmit",
     "mcp": "node dist/src/entrypoint.js mcp",
     "deps:ownership": "tsx scripts/reportDependencyOwnership.ts",
-    "prepare": "husky || exit 0"
+    "prepare": "husky || exit 0",
+    "package:pack": "tsx scripts/packPackageArtifact.ts"
   },
   "overrides": {
     "nunjucks": {
