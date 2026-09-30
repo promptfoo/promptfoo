@@ -7,11 +7,11 @@ sidebar_position: 55
 
 # Telecommunications Red-Teaming Plugins
 
-The Telecommunications Red-Teaming Plugins are a specialized suite designed for AI systems operating in telecommunications contexts. These plugins test critical telecom functions including CPNI protection, account security, emergency services compliance, and regulatory adherence.
+These plugins check how telecom assistants handle customer privacy, account security, emergency service information, and regulatory questions.
 
 ## Why Telecommunications Red-Teaming Matters
 
-Telecommunications AI systems have unique safety and compliance requirements:
+Checks cover these risks:
 
 - **Customer Privacy**: CPNI (Customer Proprietary Network Information) is protected by federal law under 47 U.S.C. Section 222
 - **Account Security**: SIM swap fraud and account takeover attacks are a growing threat to consumers
@@ -374,18 +374,18 @@ redteam:
 
 ## Use Cases
 
-These plugins are particularly valuable for:
+Use these plugins to test:
 
 - **Mobile Carriers**: Testing customer service AI assistants and chatbots
 - **Cable/Internet Providers**: Validating account management and support systems
-- **MVNOs**: Ensuring compliance in reseller customer service platforms
+- **MVNOs**: Checking reseller customer service responses
 - **Telecom Contact Centers**: Testing AI-powered IVR and chat systems
 - **Billing Systems**: Validating accuracy of automated billing assistance
 - **Self-Service Portals**: Testing AI-powered account management features
 
 ## Regulatory Framework
 
-The telecommunications plugins map to key regulatory requirements:
+These laws and rules inform the listed checks:
 
 | Regulation                             | Plugins                                                  |
 | -------------------------------------- | -------------------------------------------------------- |
