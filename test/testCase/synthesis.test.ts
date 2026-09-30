@@ -44,10 +44,7 @@ describe('synthesize', () => {
     { output: [{ name: 'Persona 1' }, { name: 'Persona 2' }] },
     { output: '{"personas": "Persona 1"}' },
   ])('rejects a response without a personas array: $output', async ({ output }) => {
-    const mockProvider = createMockProvider({
-      id: 'mock-provider',
-      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({ output }),
-    });
+    const mockProvider = createMockProvider({ response: { output } });
     vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
 
     await expect(
@@ -55,8 +52,6 @@ describe('synthesize', () => {
         provider: 'mock-provider',
         prompts: ['Test prompt'],
         tests: [],
-        numPersonas: 2,
-        numTestCasesPerPersona: 1,
       }),
     ).rejects.toThrow('Expected the personas response to contain a "personas" array.');
     expect(mockProvider.callApi).toHaveBeenCalledTimes(1);
