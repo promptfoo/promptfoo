@@ -580,6 +580,94 @@ function writeConsumerScripts(consumerDir: string): void {
   );
 }
 
+async function runInstalledCodexSecurityEval(
+  consumerDir: string,
+  configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+): Promise<void> {
+  const script = `const mode = process.argv[2];
+if (mode === 'missing') {
+  assert.throws(() => require.resolve('@openai/codex-security'), { code: 'MODULE_NOT_FOUND' });
+}
+const ordinary = await evaluate({
+  prompts: ['hello fixture'],
+  providers: ['echo'],
+  tests: [{ vars: {}, assert: [{ type: 'equals', value: 'hello fixture' }] }],
+}, { cache: false, maxConcurrency: 1 });
+const { results: ordinaryResults } = await ordinary.toEvaluateSummary();
+assert.equal(ordinaryResults.length, 1);
+assert.equal(ordinaryResults[0].success, true);
+assert.equal(ordinaryResults[0].score, 1);
+// The supported SDK must stop at repository validation, before running any scan.
+const record = await evaluate({
+  prompts: ['Validate SDK installation'],
+  providers: [{ id: 'openai:codex-security', config: {
+    repository: path.join(process.cwd(), 'does-not-exist'),
+  } }],
+  tests: [{ vars: {} }],
+}, { cache: false, maxConcurrency: 1 });
+const summary = await record.toEvaluateSummary();
+assert.equal(summary.results.length, 1);
+assert.equal(summary.results[0].success, false);
+assert.equal(summary.results[0].score, 0);
+assert.ok(summary.results[0].response.error.includes(mode === 'installed'
+  ? 'Repository is not a directory'
+  : 'npm install promptfoo @openai/codex-security@^0.1.31'));
+if (mode === 'incompatible') {
+  assert.ok(summary.results[0].response.error.includes('incompatible (0.1.28)'));
+}
+`;
+  const scriptPaths = ['codex-security.mjs', 'codex-security.cjs'].map((name) =>
+    path.join(consumerDir, name),
+  );
+  fs.writeFileSync(
+    scriptPaths[0],
+    `import assert from 'node:assert/strict';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import { evaluate } from 'promptfoo';
+const require = createRequire(import.meta.url);
+${script}`,
+  );
+  fs.writeFileSync(
+    scriptPaths[1],
+    `const assert = require('node:assert/strict');
+const path = require('node:path');
+const { evaluate } = require('promptfoo');
+(async () => {
+${script}
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+`,
+  );
+  const env = {
+    PROMPTFOO_CONFIG_DIR: configDir,
+    PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+    PROMPTFOO_DISABLE_TELEMETRY: '1',
+    PROMPTFOO_DISABLE_UPDATE: 'true',
+  };
+  for (const mode of ['missing', 'incompatible', 'installed']) {
+    if (mode !== 'missing') {
+      runNpm(
+        [
+          'install',
+          '--ignore-scripts',
+          '--no-audit',
+          '--no-fund',
+          '--no-package-lock',
+          mode === 'incompatible'
+            ? '@openai/codex-security@0.1.28'
+            : '@openai/codex-security@^0.1.31',
+        ],
+        consumerDir,
+        npmEnv,
+      );
+    }
+    for (const scriptPath of scriptPaths) {
+      await runAsync(process.execPath, [scriptPath, mode], consumerDir, env);
+    }
+  }
+}
+
 async function runInstalledCompressionEval(consumerDir: string, configDir: string): Promise<void> {
   const expectedOutput = 'compressed response';
   const requestedPaths: string[] = [];
@@ -1067,6 +1155,7 @@ async function main(): Promise<void> {
     }
     if (values.profile === 'default') {
       console.log(await runAsync(process.execPath, ['migrations.mjs'], consumerDir, consumerEnv));
+      await runInstalledCodexSecurityEval(consumerDir, configDir, consumerNpmEnv);
       await runInstalledCompressionEval(consumerDir, configDir);
     }
     await assertOptionalBrowserDependencies(
