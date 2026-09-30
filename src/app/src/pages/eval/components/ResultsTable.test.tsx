@@ -66,6 +66,7 @@ vi.mock('./EvalOutputCell', () => {
       rowPositionIndex,
       promptIndex,
       tracePromptIndex,
+      testCaseId,
       searchText,
       evaluationId,
     }: {
@@ -74,6 +75,7 @@ vi.mock('./EvalOutputCell', () => {
       rowPositionIndex?: number;
       promptIndex?: number;
       tracePromptIndex?: number;
+      testCaseId?: string;
       searchText?: string;
       evaluationId?: string;
     }) => {
@@ -84,6 +86,7 @@ vi.mock('./EvalOutputCell', () => {
           data-rowpositionindex={rowPositionIndex}
           data-promptindex={promptIndex}
           data-tracepromptindex={tracePromptIndex}
+          data-testcaseid={testCaseId}
           data-searchtext={searchText}
           data-evaluationid={evaluationId}
         >
@@ -917,6 +920,7 @@ describe('ResultsTable Metrics Display', () => {
           body: [
             {
               ...mockTable.body[0],
+              test: { metadata: { testCaseId: 'main-custom-case' } },
               outputs: [
                 null,
                 null,
@@ -926,6 +930,7 @@ describe('ResultsTable Metrics Display', () => {
                   text: 'comparison output',
                   sourceEvalId: 'comparison-eval',
                   sourcePromptIndex: 0,
+                  sourceTestCaseId: 'comparison-custom-case',
                 },
               ],
             },
@@ -938,6 +943,7 @@ describe('ResultsTable Metrics Display', () => {
       const cell = screen.getByTestId('eval-output-cell');
       expect(cell).toHaveAttribute('data-promptindex', '2');
       expect(cell).toHaveAttribute('data-tracepromptindex', '0');
+      expect(cell).toHaveAttribute('data-testcaseid', 'comparison-custom-case');
     });
 
     it('remounts a failed blob image and its open lightbox after a table refresh', async () => {

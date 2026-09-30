@@ -80,7 +80,7 @@ try {
       spans: [
         {
           spanId: 'share-span',
-          name: 'provider call',
+          name: 'stored operation '.repeat(260),
           startTime: 1,
           attributes: {
             'evaluation.id': source.id,

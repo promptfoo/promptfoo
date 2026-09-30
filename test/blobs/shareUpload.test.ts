@@ -178,35 +178,45 @@ describe('share-time blob upload', () => {
     expect(uploadBlobRemote).toHaveBeenCalledOnce();
   });
 
-  it('bounds recorded result uploads while allowing independent rows to overlap', async () => {
-    const cache = createRemoteBlobUploadCache();
-    let activeUploads = 0;
-    let maxActiveUploads = 0;
-    const releaseUploads: Array<() => void> = [];
-    vi.mocked(uploadBlobRemote).mockImplementation(async () => {
-      activeUploads += 1;
-      maxActiveUploads = Math.max(maxActiveUploads, activeUploads);
-      await new Promise<void>((resolve) => releaseUploads.push(resolve));
-      activeUploads -= 1;
-      return remoteBlobResult;
-    });
-    for (let i = 0; i < 5; i++) {
-      recordResultBlobRefsForShare('promptfoo://blob/' + String(i).repeat(64), cache, {
-        localEvalId: 'local-eval-plan',
-        remoteEvalId: 'remote-eval-plan',
-        promptIdx: i,
+  it.each(['result', 'trace'] as const)(
+    'bounds %s uploads while allowing independent rows to overlap',
+    async (kind) => {
+      const cache = createRemoteBlobUploadCache();
+      let activeUploads = 0;
+      let maxActiveUploads = 0;
+      const releaseUploads: Array<() => void> = [];
+      vi.mocked(uploadBlobRemote).mockImplementation(async () => {
+        activeUploads += 1;
+        maxActiveUploads = Math.max(maxActiveUploads, activeUploads);
+        await new Promise<void>((resolve) => releaseUploads.push(resolve));
+        activeUploads -= 1;
+        return remoteBlobResult;
       });
-    }
+      const hash = 'a'.repeat(64);
+      for (let i = 0; i < 5; i++) {
+        recordResultBlobRefsForShare(`promptfoo://blob/${hash}`, cache, {
+          localEvalId: 'local-eval-plan',
+          remoteEvalId: 'remote-eval-plan',
+          promptIdx: i,
+        });
+      }
 
-    const uploadPromise = uploadRecordedResultBlobRefsForShare(cache);
-    await vi.waitFor(() => expect(uploadBlobRemote).toHaveBeenCalledTimes(4));
-    releaseUploads.shift()?.();
-    await vi.waitFor(() => expect(uploadBlobRemote).toHaveBeenCalledTimes(5));
-    releaseUploads.splice(0).forEach((release) => release());
-    await uploadPromise;
-    expect(uploadBlobRemote).toHaveBeenCalledTimes(5);
-    expect(maxActiveUploads).toBe(4);
-  });
+      const uploadPromise =
+        kind === 'result'
+          ? uploadRecordedResultBlobRefsForShare(cache)
+          : uploadTraceBlobRefsForShare(`promptfoo://blob/${hash}`, cache, {
+              localEvalId: 'local-eval-plan',
+              remoteEvalId: 'remote-eval-plan',
+            });
+      await vi.waitFor(() => expect(uploadBlobRemote).toHaveBeenCalledTimes(4));
+      releaseUploads.shift()?.();
+      await vi.waitFor(() => expect(uploadBlobRemote).toHaveBeenCalledTimes(5));
+      releaseUploads.splice(0).forEach((release) => release());
+      await uploadPromise;
+      expect(uploadBlobRemote).toHaveBeenCalledTimes(5);
+      expect(maxActiveUploads).toBe(4);
+    },
+  );
 
   it('uses recorded result provenance for a blob later referenced by a trace', async () => {
     const hash = '8'.repeat(64);

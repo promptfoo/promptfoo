@@ -123,6 +123,7 @@ describe('self-hosted sharing end to end', () => {
         expect(remoteTrace.metadata).not.toHaveProperty('promptIdx');
         expect(remoteTrace.metadata).not.toHaveProperty('testIdx');
         expect(remoteTrace.traceId).not.toBe(traceId);
+        expect(remoteTrace.spans[0].name).toBe('stored operation '.repeat(260));
         expect(remoteTrace.spans[0].attributes).toMatchObject({
           'evaluation.id': remoteEvalId,
           'promptfoo.eval.id': remoteEvalId,

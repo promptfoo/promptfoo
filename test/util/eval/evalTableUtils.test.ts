@@ -52,6 +52,25 @@ describe('evalTableUtils', () => {
     expect(mockTable.body[0].outputs[0].sourceEvalId).toBe('unrelated-eval');
   });
 
+  it('retains each source row test-case ID for comparison trace lookup', () => {
+    mockTable.body[0].test.metadata = { testCaseId: 'main-custom-case' };
+    const comparison = structuredClone(mockTable);
+    comparison.body[0].test.metadata = { testCaseId: 'comparison-custom-case' };
+    comparison.body[1].outputs[0].id = 'comparison-result';
+    const merged = mergeComparisonTables('main-eval', mockTable, [
+      { evalId: 'comparison-eval', table: comparison },
+    ]);
+    expect(merged.body[0].outputs.map((output) => output.sourceTestCaseId)).toEqual([
+      'main-custom-case',
+      'main-custom-case',
+      'comparison-custom-case',
+      'comparison-custom-case',
+    ]);
+    expect(merged.body[1].outputs[0].sourceTestCaseId).toBeUndefined();
+    expect(merged.body[1].outputs[2].sourceTestCaseId).toBe('comparison-result');
+    expect(comparison.body[0].outputs[0].sourceTestCaseId).toBeUndefined();
+  });
+
   beforeEach(() => {
     mockTable = {
       head: {

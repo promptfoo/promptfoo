@@ -651,11 +651,15 @@ export function mergeComparisonTables(
     },
     body: mainTable.body.map((row) => {
       const testIdx = row.testIdx;
-      const comparedOutputs = comparisonData.flatMap(({ evalId, table }) =>
-        (table.body.find((compRow) => compRow.testIdx === testIdx)?.outputs ?? []).map(
-          (output, sourcePromptIndex) => ({ ...output, sourceEvalId: evalId, sourcePromptIndex }),
-        ),
-      );
+      const comparedOutputs = comparisonData.flatMap(({ evalId, table }) => {
+        const sourceRow = table.body.find((compRow) => compRow.testIdx === testIdx);
+        return (sourceRow?.outputs ?? []).map((output, sourcePromptIndex) => ({
+          ...output,
+          sourceEvalId: evalId,
+          sourcePromptIndex,
+          sourceTestCaseId: sourceRow?.test?.metadata?.testCaseId || output.id,
+        }));
+      });
 
       return {
         ...row,
@@ -664,6 +668,7 @@ export function mergeComparisonTables(
             ...output,
             sourceEvalId: mainEvalId,
             sourcePromptIndex,
+            sourceTestCaseId: row.test?.metadata?.testCaseId || output.id,
           })),
           ...comparedOutputs,
         ],

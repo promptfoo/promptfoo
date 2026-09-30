@@ -2276,7 +2276,11 @@ function ResultsTable({
                         ? output.sourceEvalId
                         : evalId || undefined
                     }
-                    testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
+                    testCaseId={
+                      output.sourceTestCaseId ||
+                      info.row.original.test?.metadata?.testCaseId ||
+                      output.id
+                    }
                   />
                 </ErrorBoundary>
               ) : (

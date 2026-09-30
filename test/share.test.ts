@@ -1498,6 +1498,96 @@ describe('createShareableUrl', () => {
       expect(resultBody.response.metadata.evaluationId).toBe(remoteEvalId);
     });
 
+    it('keeps result coordinates when an inlined blob is also referenced by a trace', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      vi.mocked(envars.getEnvBool).mockImplementation((_key, fallback) => Boolean(fallback));
+      const uploads = await vi.importActual<typeof import('../src/blobs/shareUpload')>(
+        '../src/blobs/shareUpload',
+      );
+      const inline = await vi.importActual<typeof import('../src/util/inlineBlobsForShare')>(
+        '../src/util/inlineBlobsForShare',
+      );
+      vi.mocked(createRemoteBlobUploadCache).mockImplementation(
+        uploads.createRemoteBlobUploadCache,
+      );
+      vi.mocked(recordResultBlobRefsForShare).mockImplementation(
+        uploads.recordResultBlobRefsForShare,
+      );
+      vi.mocked(uploadRecordedResultBlobRefsForShare).mockImplementation(
+        uploads.uploadRecordedResultBlobRefsForShare,
+      );
+      vi.mocked(uploadTraceBlobRefsForShare).mockImplementation(
+        uploads.uploadTraceBlobRefsForShare,
+      );
+      vi.mocked(inlineBlobRefsForShare).mockImplementation(inline.inlineBlobRefsForShare);
+
+      const sharedHash = 'a'.repeat(64);
+      const resultOnlyHash = 'b'.repeat(64);
+      const sharedUri = `promptfoo://blob/${sharedHash}`;
+      const row = {
+        id: 'inline-result',
+        promptIdx: 0,
+        testIdx: 2,
+        response: { output: `${sharedUri} promptfoo://blob/${resultOnlyHash}` },
+      } as EvalResult;
+      mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+        yield [row];
+      });
+      mockEval.getTotalResultRowCount = vi.fn().mockResolvedValue(1);
+      mockEval.getTraces = vi.fn().mockResolvedValue([
+        {
+          traceId: 'inline-trace',
+          evaluationId: mockEval.id,
+          testCaseId: 'inline-result',
+          metadata: { image: sharedUri },
+          spans: [],
+        },
+      ]);
+      mockFetch.mockResolvedValue({ ok: true, json: async () => ({ id: 'shared-inline-eval' }) });
+      const authorized = vi.spyOn(await import('../src/blobs'), 'getShareAuthorizedBlob');
+      authorized.mockImplementation(async (hash) => ({
+        data: Buffer.from(hash),
+        metadata: {
+          createdAt: '2026-06-10T00:00:00.000Z',
+          key: hash,
+          mimeType: 'image/png',
+          provider: 'fixture',
+          sizeBytes: 64,
+        },
+      }));
+      const upload = vi.spyOn(await import('../src/blobs/remoteUpload'), 'uploadBlobRemote');
+      upload.mockResolvedValue({
+        deduplicated: false,
+        ref: {
+          uri: sharedUri,
+          hash: sharedHash,
+          mimeType: 'image/png',
+          sizeBytes: 64,
+          provider: 'fixture',
+        },
+      });
+      try {
+        await createShareableUrl(mockEval as Eval, { silent: true });
+        const [sent] = JSON.parse(mockFetch.mock.calls[1][1].body);
+        expect(sent.response.output).not.toContain('promptfoo://blob/');
+        expect(upload).toHaveBeenCalledExactlyOnceWith(
+          Buffer.from(sharedHash),
+          'image/png',
+          {
+            evalId: 'shared-inline-eval',
+            kind: 'image',
+            location: 'share',
+            promptIdx: 0,
+            testIdx: 2,
+          },
+          expect.any(Object),
+        );
+      } finally {
+        authorized.mockRestore();
+        upload.mockRestore();
+      }
+    });
+
     it('inlines authorized result blobs and separately transfers authorized trace blobs', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       vi.mocked(envars.getEnvBool).mockImplementation((_key, defaultValue) =>

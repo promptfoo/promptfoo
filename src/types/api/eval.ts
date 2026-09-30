@@ -242,7 +242,6 @@ export const MAX_TRACES_PER_APPEND_REQUEST = 1_000;
 export const MAX_SPANS_PER_TRACE = 10_000;
 export const MAX_SPANS_PER_APPEND_REQUEST = 20_000;
 const MAX_TRACE_IDENTIFIER_LENGTH = 512;
-const MAX_TRACE_NAME_LENGTH = 4_096;
 const MAX_TRACE_RECORD_LENGTH = 1_000_000;
 const MAX_TRACE_REQUEST_LENGTH = 8 * 1024 * 1024;
 
@@ -261,7 +260,7 @@ const TraceSpanRequestSchema = z
     // Empty legacy span IDs/names have historically been storable and must remain shareable.
     spanId: z.string().max(MAX_TRACE_IDENTIFIER_LENGTH),
     parentSpanId: z.string().max(MAX_TRACE_IDENTIFIER_LENGTH).optional(),
-    name: z.string().max(MAX_TRACE_NAME_LENGTH),
+    name: z.string(),
     startTime: z.number().finite(),
     endTime: z.number().finite().optional(),
     attributes: z.record(z.string(), z.unknown()).optional(),
