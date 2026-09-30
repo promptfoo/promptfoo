@@ -1756,9 +1756,6 @@ async function runEvalInternal({
           });
           const response = normalizeCachedTargetResponse(providerCall.response);
           latencyMs = providerCall.latencyMs;
-          if (stepWorkspace) {
-            response.metadata = { ...response.metadata, ...(await stepWorkspace.metadata()) };
-          }
 
           updateConversationHistory({
             conversationKey: state.conversationKey,
@@ -1810,6 +1807,11 @@ async function runEvalInternal({
               : abortSignal;
           const delayBeforeGrading = shouldDeferGradingForTest(test);
           try {
+            if (stepWorkspace) {
+              const workspaceMetadata = await stepWorkspace.metadata();
+              response.metadata = { ...response.metadata, ...workspaceMetadata };
+              Object.assign((ret.metadata ??= {}), workspaceMetadata);
+            }
             if (delayBeforeGrading) {
               await applyProviderDelayIfNeeded(provider, response, abortSignal);
             }
@@ -4173,8 +4175,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
               }
             },
             providerCallQueue,
-            shouldSkipStaleRows: () =>
-              didTimeout || (abortController.signal.aborted && !completedTarget),
+            shouldSkipStaleRows: () => didTimeout || abortController.signal.aborted,
           },
           context,
         ),
@@ -4194,7 +4195,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           }, timeoutMs);
         }),
       ]);
-      if (abortController.signal.aborted && !completedTarget) {
+      if (abortController.signal.aborted) {
         didTimeout = true;
         throw abortController.signal.reason;
       }

@@ -12,6 +12,7 @@ import { __resetPromptConversationCacheForTests, evaluate } from '../../src/eval
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { asEvaluateResult } from '../../src/models/evalResult';
+import * as agentWorkspace from '../../src/providers/agentWorkspace';
 import { EchoProvider } from '../../src/providers/echo';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import {
@@ -38,8 +39,8 @@ afterEach(() => {
 
 describeEvaluator('evaluator execution control', () => {
   it.each(
-    ['provider transform', 'test transform', 'binary storage'].flatMap((stage) =>
-      ['cancellation', 'timeout'].map((stop) => [stage, stop]),
+    ['provider transform', 'test transform', 'binary storage', 'workspace metadata'].flatMap(
+      (stage) => ['cancellation', 'timeout'].map((stop) => [stage, stop]),
     ),
   )('retains a completed target when %s is interrupted by %s', async (stage, stop) => {
     const controller = new AbortController();
@@ -53,8 +54,26 @@ describeEvaluator('evaluator execution control', () => {
       stage === 'binary storage'
         ? vi.spyOn(blobExtractor, 'extractAndStoreBinaryData').mockImplementationOnce(wait)
         : undefined;
+    const workspaceSpy =
+      stage === 'workspace metadata'
+        ? vi
+            .spyOn(agentWorkspace, 'createAgentWorkspaceForConfig')
+            .mockImplementationOnce(async (_config, _vars, signal) => ({
+              dir: '/inert-workspace',
+              strategy: 'git',
+              remove: vi.fn().mockResolvedValue(undefined),
+              metadata: () => {
+                signal?.addEventListener('abort', () => pendingOperation.reject(signal.reason), {
+                  once: true,
+                });
+                return wait();
+              },
+            }))
+        : undefined;
     const transformSpy =
-      stage === 'binary storage' ? undefined : vi.mocked(transform).mockImplementationOnce(wait);
+      stage === 'binary storage' || stage === 'workspace metadata'
+        ? undefined
+        : vi.mocked(transform).mockImplementationOnce(wait);
     const provider: ApiProvider = {
       id: () => 'completed-target',
       ...(stage === 'provider transform' && { transform: 'provider transform' }),
@@ -68,7 +87,7 @@ describeEvaluator('evaluator execution control', () => {
     const suite: TestSuite = {
       providers: [provider],
       prompts: [toPrompt('hello')],
-      tests: [stage === 'binary storage' ? {} : { options: { transform: 'test transform' } }],
+      tests: [transformSpy ? { options: { transform: 'test transform' } } : {}],
     };
     const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
     if (stop === 'timeout') {
@@ -106,6 +125,7 @@ describeEvaluator('evaluator execution control', () => {
     } finally {
       pendingOperation.reject(new Error('fixture released'));
       extraction?.mockRestore();
+      workspaceSpy?.mockRestore();
       transformSpy?.mockRestore();
     }
   });
@@ -247,6 +267,41 @@ describeEvaluator('evaluator execution control', () => {
       expect((await record.getResults())[0]).toMatchObject({ success: true, score: 1 });
     } finally {
       sleep.mockRestore();
+    }
+  });
+
+  it('retains a row timeout during a post-provider delay', async () => {
+    const provider: ApiProvider = {
+      id: () => 'delayed-provider',
+      delay: 10_000,
+      callApi: vi.fn().mockResolvedValue({
+        output: 'ready',
+        cost: 0.25,
+        tokenUsage: { prompt: 2, completion: 3, total: 5, numRequests: 1 },
+      }),
+    };
+    const suite: TestSuite = { providers: [provider], prompts: [toPrompt('hello')], tests: [{}] };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    vi.useFakeTimers();
+    const delay = vi.spyOn(time, 'sleepWithAbort');
+    const pending = evaluate(suite, record, { timeoutMs: 100 });
+    try {
+      await vi.waitFor(() => expect(delay).toHaveBeenCalledOnce());
+      await vi.advanceTimersByTimeAsync(100);
+      await pending;
+      const rows = await record.getResults();
+      expect(rows).toHaveLength(1);
+      expect(asEvaluateResult(rows[0])).toMatchObject({
+        response: { output: 'ready' },
+        cost: 0.25,
+        tokenUsage: { total: 5, numRequests: 1 },
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ERROR,
+        error: 'Evaluation timed out after 100ms',
+      });
+    } finally {
+      delay.mockRestore();
     }
   });
 

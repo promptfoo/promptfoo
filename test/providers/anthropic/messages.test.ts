@@ -15,7 +15,7 @@ import { MCPClient } from '../../../src/providers/mcp/client';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
 import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file';
 import * as util from '../../../src/util/index';
-import { mockProcessEnv } from '../../util/utils';
+import { createDeferred, mockProcessEnv } from '../../util/utils';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { Mocked, MockedFunction } from 'vitest';
 
@@ -187,6 +187,51 @@ describe('AnthropicMessagesProvider', () => {
   });
 
   describe('callApi', () => {
+    it.each(['during', 'after'])(
+      'retains completed output when cancellation arrives %s a cache write',
+      async (stage) => {
+        const controller = new AbortController();
+        const started = createDeferred<void>();
+        const pending = createDeferred<void>();
+        class CacheWriteProvider extends AnthropicMessagesProvider {
+          protected override async setCachedResponse(): Promise<void> {
+            started.resolve();
+            if (stage === 'during') {
+              await pending.promise;
+            } else {
+              controller.abort(new Error('cancelled cache write'));
+            }
+          }
+        }
+        enableCache();
+        const provider = new CacheWriteProvider('claude-3-5-sonnet-20241022', {
+          config: { stream: false },
+        });
+        const create = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+          content: [{ type: 'text', text: 'Completed answer' }],
+          usage: { input_tokens: 7, output_tokens: 4 },
+          stop_reason: 'end_turn',
+        } as Anthropic.Messages.Message);
+        try {
+          const call = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+          await started.promise;
+          if (stage === 'during') {
+            controller.abort(new Error('cancelled cache write'));
+          }
+          const response = await call;
+          expect(response).toMatchObject({
+            output: 'Completed answer',
+            tokenUsage: { prompt: 7, completion: 4, total: 11 },
+          });
+          expect(response.cost).toBeGreaterThan(0);
+          expect(response.error).toContain('cancelled cache write');
+        } finally {
+          pending.resolve();
+          create.mockRestore();
+        }
+      },
+    );
+
     it('stops waiting when tool loading is cancelled', async () => {
       const loader = vi
         .spyOn(util, 'maybeLoadToolsFromExternalFile')

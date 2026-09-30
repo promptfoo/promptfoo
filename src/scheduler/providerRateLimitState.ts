@@ -197,13 +197,10 @@ export class ProviderRateLimitState extends EventEmitter {
 
         if (isRateLimited) {
           this.handleRateLimit(retryAfterMs);
-        }
-        if (options.abortSignal?.aborted) {
-          this.failedRequests++;
-          return result;
-        }
-
-        if (isRateLimited) {
+          if (options.abortSignal?.aborted) {
+            this.failedRequests++;
+            return result;
+          }
           // Check if we should retry
           if (shouldRetry(attempt, undefined, true, retryPolicy)) {
             attempt++;

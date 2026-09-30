@@ -1187,6 +1187,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     }
 
     const responses: Anthropic.Messages.Message[] = [];
+    let completedResponse: ProviderResponse | undefined;
     try {
       const signal = options?.abortSignal;
       const initialMessage = await this.sendMessage(
@@ -1230,27 +1231,6 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
 
       const message = toCachedMessage(resolvedMessage, responses);
-      if (shouldUseResponseCache && message.stop_reason !== 'pause_turn') {
-        try {
-          options?.abortSignal?.throwIfAborted();
-          await awaitWithAbort(
-            this.setCachedResponse(
-              cache,
-              cacheKey,
-              ephemeralCacheKey,
-              cacheClearGeneration,
-              getCacheTtlMs(),
-              JSON.stringify(message),
-            ),
-            options?.abortSignal,
-          );
-        } catch (err) {
-          options?.abortSignal?.throwIfAborted();
-          logger.error(`Failed to cache response: ${String(err)}`);
-        }
-      }
-
-      options?.abortSignal?.throwIfAborted();
       // Sonnet 5.5 returns progress between tool calls in thinking blocks.
       const outputMessage = isClaudeSonnet55Model(this.modelName)
         ? {
@@ -1273,9 +1253,31 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         processedOutputFormat,
         false,
       );
-      return mcpMetadata
+      completedResponse = mcpMetadata
         ? { ...response, metadata: { ...response.metadata, ...mcpMetadata } }
         : response;
+      if (shouldUseResponseCache && message.stop_reason !== 'pause_turn') {
+        try {
+          options?.abortSignal?.throwIfAborted();
+          await awaitWithAbort(
+            this.setCachedResponse(
+              cache,
+              cacheKey,
+              ephemeralCacheKey,
+              cacheClearGeneration,
+              getCacheTtlMs(),
+              JSON.stringify(message),
+            ),
+            options?.abortSignal,
+          );
+        } catch (err) {
+          options?.abortSignal?.throwIfAborted();
+          logger.error(`Failed to cache response: ${String(err)}`);
+        }
+      }
+
+      options?.abortSignal?.throwIfAborted();
+      return completedResponse;
     } catch (err) {
       logger.error(
         `Anthropic Messages API call error: ${err instanceof Error ? err.message : String(err)}`,
@@ -1287,8 +1289,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
       const lastResponse = responses[responses.length - 1];
       return {
+        ...completedResponse,
         error,
-        ...(lastResponse
+        ...(!completedResponse && lastResponse
           ? {
               tokenUsage: getTokenUsage(withMergedAnthropicUsage(lastResponse, responses), false),
               cost: getAnthropicCostFromCalls(this.modelName, config, responses),

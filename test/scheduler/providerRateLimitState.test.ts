@@ -103,8 +103,8 @@ describe('ProviderRateLimitState', () => {
         });
         expect(state.getMetrics().activeRequests).toBe(0);
         expect(state.getMetrics().retriedRequests).toBe(0);
-        expect(state.getMetrics().completedRequests).toBe(0);
-        expect(state.getMetrics().failedRequests).toBe(1);
+        expect(state.getMetrics().completedRequests).toBe(status === 200 ? 1 : 0);
+        expect(state.getMetrics().failedRequests).toBe(status === 429 ? 1 : 0);
         expect(state.getMetrics().rateLimitHits).toBe(status === 429 ? 1 : 0);
         const nextCall = vi.fn().mockResolvedValue('next');
         const next = state.executeWithRetry('next', nextCall, {});
@@ -114,6 +114,32 @@ describe('ProviderRateLimitState', () => {
         await expect(next).resolves.toBe('next');
       },
     );
+
+    it('counts a completed response as success when cancellation arrives with it', async () => {
+      const controller = new AbortController();
+      const success = vi.spyOn(state as any, 'handleSuccess');
+      try {
+        const response = { output: 'ready', tokenUsage: { total: 5 } };
+        await expect(
+          state.executeWithRetry(
+            'completed',
+            async () => {
+              controller.abort(new Error('cancelled after response'));
+              return response;
+            },
+            { abortSignal: controller.signal },
+          ),
+        ).resolves.toBe(response);
+        expect(state.getMetrics()).toMatchObject({
+          completedRequests: 1,
+          failedRequests: 0,
+          activeRequests: 0,
+        });
+        expect(success).toHaveBeenCalledOnce();
+      } finally {
+        success.mockRestore();
+      }
+    });
 
     it('should execute function and return result', async () => {
       const result = await state.executeWithRetry('req-1', async () => 'success', {});
