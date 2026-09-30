@@ -295,6 +295,39 @@ describe('getSourceFiles', () => {
     );
   });
 
+  it.each(['internal/routes/[id].ts', 'internal/[routes]/index.ts', 'internal/{old,new}/index.ts'])(
+    'scans literal configured roots containing glob characters: %s',
+    (sourceFile) => {
+      write('src/index.ts');
+      write(sourceFile, "import 'node:fs';");
+      const root = sourceFile.endsWith('index.ts') ? path.dirname(sourceFile) : sourceFile;
+      const config: LayerConfig = {
+        publicFacade: 'src/index.ts',
+        leafLayers: ['routes'],
+        layers: [
+          { name: 'facade', roots: ['src/index.ts'], allowedDependencies: [] },
+          { name: 'routes', roots: [root], allowedDependencies: [] },
+        ],
+      };
+
+      expect(findViolations(repoRoot, config)).toEqual([
+        expect.objectContaining({ kind: 'leaf-external', importer: sourceFile }),
+      ]);
+    },
+  );
+
+  it('treats ignored roots as literal files and directories', () => {
+    write('src/[generated]/index.ts');
+    write('src/g/index.ts');
+    write('src/[id].ts');
+    write('src/i.ts');
+
+    expect(getSourceFiles(repoRoot, true, ['src/[generated]', 'src/[id].ts'])).toEqual([
+      'src/g/index.ts',
+      'src/i.ts',
+    ]);
+  });
+
   it.each(['internal/tool.cjs', 'internal/tool'])(
     'enforces single-file layer boundaries for %s',
     (specifier) => {

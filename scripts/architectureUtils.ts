@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { builtinModules } from 'node:module';
 import path from 'node:path';
 
-import { globSync } from 'glob';
+import { escape as escapeGlob, globSync } from 'glob';
 import { type Node, parseSync, Visitor } from 'oxc-parser';
 
 export interface LayerDefinition {
@@ -243,19 +243,29 @@ export function getSourceFiles(
   ignoredRoots: string[] = [],
   additionalRoots: string[] = [],
 ): string[] {
-  const roots = [...new Set([...DEFAULT_SOURCE_ROOTS, ...additionalRoots].map(normalizePath))];
+  const roots = [
+    ...new Set(
+      [...DEFAULT_SOURCE_ROOTS, ...additionalRoots].map((root) => escapeGlob(normalizePath(root))),
+    ),
+  ];
   return globSync(
-    roots.map((root) =>
-      TYPESCRIPT_EXTENSIONS.includes(path.extname(root)) ? root : `${root}/**/*.{ts,tsx,mts,cts}`,
+    roots.flatMap((root) =>
+      TYPESCRIPT_EXTENSIONS.includes(path.extname(root))
+        ? [root]
+        : TYPESCRIPT_EXTENSIONS.map((extension) => `${root}/**/*${extension}`),
     ),
     {
       cwd: repoRoot,
+      nobrace: true,
       ignore: [
-        '**/*.d.{ts,mts,cts}',
+        ...['ts', 'mts', 'cts'].map((extension) => `**/*.d.${extension}`),
         '**/node_modules/**',
         'packages/**/dist/**',
         ...(includeApp ? [] : ['src/app/**']),
-        ...ignoredRoots.flatMap((root) => [normalizePath(root), `${normalizePath(root)}/**`]),
+        ...ignoredRoots.flatMap((root) => {
+          const literalRoot = escapeGlob(normalizePath(root));
+          return [literalRoot, `${literalRoot}/**`];
+        }),
       ],
       nodir: true,
     },
