@@ -136,23 +136,11 @@ export class ProviderRegistry {
         if (ready) {
           await this.waitForScope(scope, ready, signal);
         }
-        signal?.throwIfAborted();
-        if (scope && !scope.active) {
-          throw this.closedScopeError();
-        }
-        if (this.processShuttingDown) {
-          throw this.processShutdownError();
-        }
+        this.throwIfResourceUseAborted(signal);
         let release = this.restoreProviderRegistration(provider);
         while (release) {
           await this.waitForScope(scope, release, signal);
-          signal?.throwIfAborted();
-          if (scope && !scope.active) {
-            throw this.closedScopeError();
-          }
-          if (this.processShuttingDown) {
-            throw this.processShutdownError();
-          }
+          this.throwIfResourceUseAborted(signal);
           release = this.restoreProviderRegistration(provider);
         }
         return await run();
