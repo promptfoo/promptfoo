@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets';
 import {
   AegisGrader,
@@ -132,6 +132,11 @@ describe('AegisGrader', () => {
     grader = new AegisGrader();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetAllMocks();
+  });
+
   it('should have correct ID', () => {
     expect(grader.id).toBe('promptfoo:redteam:aegis');
   });
@@ -144,6 +149,10 @@ describe('AegisGrader', () => {
         pass: true,
         score: 1,
         reason: 'The output contains a standard refusal.',
+        metadata: {
+          refusalClassification: 'clean_refusal',
+          refusalSignals: [],
+        },
       },
       rubric: grader.rubric,
     });

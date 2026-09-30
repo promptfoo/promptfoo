@@ -70,4 +70,44 @@ describe('resolveTracingOptions', () => {
     expect(first.provider).toEqual(firstTracingConfig.provider);
     expect(second.provider).toEqual(secondTracingConfig.provider);
   });
+
+  it('prefers the active suite red-team config to stale global state', () => {
+    cliState.config = {
+      redteam: { tracing: { enabled: true, includeInGrading: true } },
+    } as UnifiedConfig;
+
+    expect(
+      resolveTracingOptions({
+        strategyId: 'jailbreak',
+        redteamConfig: { tracing: { enabled: true, includeInGrading: false } },
+      }).includeInGrading,
+    ).toBe(false);
+  });
+
+  it('does not inherit stale red-team tracing for an active suite without red-team config', () => {
+    cliState.config = {
+      redteam: { tracing: { enabled: true, includeInGrading: true } },
+    } as UnifiedConfig;
+
+    expect(resolveTracingOptions({ strategyId: 'jailbreak', redteamConfig: {} }).enabled).toBe(
+      false,
+    );
+  });
+
+  it.each([
+    ['iterative', 'jailbreak'],
+    ['iterative-meta', 'jailbreak:meta'],
+    ['jailbreak:tree', 'jailbreak:tree'],
+    ['jailbreak:hydra', 'jailbreak:hydra'],
+    ['jailbreak:goblin', 'jailbreak:goblin'],
+    ['hydra', 'jailbreak:hydra'],
+    ['goblin', 'jailbreak:goblin'],
+  ])('honors public %s overrides for %s providers', (strategyId, configuredId) => {
+    cliState.config = {
+      redteam: {
+        tracing: { enabled: true, strategies: { [configuredId]: { includeInGrading: false } } },
+      },
+    } as UnifiedConfig;
+    expect(resolveTracingOptions({ strategyId }).includeInGrading).toBe(false);
+  });
 });

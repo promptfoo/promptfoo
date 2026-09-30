@@ -251,7 +251,7 @@ tests:
         provider: openai:gpt-6-luna
 ```
 
-Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments and `shell` calls with `commands` arrays, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
+Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. When a span has both `process.command_line` and command-name attributes, Promptfoo uses the full command line. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments and `shell` calls with `commands` arrays, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
 
 ### Turn marker spans {#per-llm-turn-spans}
 
@@ -352,6 +352,13 @@ A built-in sanitizer masks common credential-shaped keys (`authorization`, `api_
 `token`, `password`, `cookie`, …) when traces are read, but does not prevent those values
 from being stored. Don't rely on `redactAttributes` alone to cover built-in provider spans.
 
+When red-team tracing uses `includeInGrading`, model graders receive a bounded trace summary
+plus sampled tool arguments, commands, paths, and request URLs. Promptfoo masks common
+credential forms before shortening that evidence, including short password flags for MySQL,
+MariaDB, and Twine in command strings and argument arrays. Values over 32,000 characters are omitted;
+the combined summary is limited to 16,000 characters. Keep sensitive data out of traces and
+use deterministic assertions when complete trajectory evidence is required.
+
 :::
 
 Trace retention (`storage.retentionDays`) prunes traces and spans older than the given number
@@ -436,6 +443,8 @@ Here's how it works:
 
 To pull traces from your tracing service, add it under `tracing.provider` in your configuration. The provider ID identifies the service, and its settings tell Promptfoo how to connect.
 
+External trace polling compares the selected spans' contents, including updated attributes and status, before stopping early. It still stops at the configured retry limit; an unchanged snapshot does not prove the trace is complete.
+
 #### Grafana Tempo
 
 Use the `tempo` trace provider to pull traces from Grafana Tempo:
@@ -455,6 +464,8 @@ tracing:
 ```
 
 After your application responds, Promptfoo waits for `queryDelay` before looking up its trace. Set this long enough for your application to send its spans and for Tempo to make them available. Both `queryDelay` and `timeout` are measured in milliseconds. Tempo supports bearer tokens, username and password authentication, and custom headers such as `X-Scope-OrgID`.
+
+When retries are configured, Promptfoo waits for the fetched span set to stabilize before using it for grading.
 
 Use environment variables for tokens, passwords, and authentication headers. Promptfoo keeps these references when it saves an eval, so it can resolve them again if you resume the run. Literal credentials are removed from saved evals and exported results.
 

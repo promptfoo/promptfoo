@@ -29,7 +29,7 @@ import {
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import { textToAudio } from '../../strategies/simpleAudio';
-import { isBasicRefusal } from '../../util';
+import { classifyRefusal } from '../../util';
 import {
   callGradingProvider,
   externalizeResponseForRedteamHistory,
@@ -589,7 +589,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
         });
 
         // Check if response is a refusal
-        if (isBasicRefusal(responseText)) {
+        if (classifyRefusal(responseText).kind === 'clean_refusal') {
           logger.debug('[VoiceCrescendo] Detected refusal, trying different approach');
           if (backtrackCount < this.maxBacktracks) {
             backtrackCount++;

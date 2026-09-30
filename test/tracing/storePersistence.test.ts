@@ -69,6 +69,36 @@ describe('TraceStore span persistence', () => {
     expect(spans[0]).toMatchObject({ name: 'target.call', spanId: 'shared-span' });
   });
 
+  it('refreshes partial external spans without duplicating or crossing traces', async () => {
+    const traceStore = await createTrace('external-refresh');
+    await createTrace('separate-trace');
+    const initial = { spanId: 'shared-span', name: 'fixture operation', startTime: 1 };
+    await traceStore.addSpans('external-refresh', [initial]);
+    await traceStore.addSpans('separate-trace', [initial]);
+    await traceStore.addSpans(
+      'external-refresh',
+      [
+        {
+          ...initial,
+          endTime: 2,
+          statusCode: 1,
+          attributes: { 'fixture.detail': 'completed' },
+        },
+      ],
+      { updateExisting: true },
+    );
+    await traceStore.addSpans('external-refresh', [initial], { updateExisting: true });
+
+    const refreshed = await traceStore.getSpans('external-refresh');
+    expect(refreshed).toHaveLength(1);
+    expect(refreshed[0]).toMatchObject({
+      endTime: 2,
+      statusCode: 1,
+      attributes: { 'fixture.detail': 'completed' },
+    });
+    expect((await traceStore.getSpans('separate-trace'))[0].endTime).toBeUndefined();
+  });
+
   it('allows the same span ID in different traces', async () => {
     const firstTraceStore = await createTrace('first-trace');
     const secondTraceStore = await createTrace('second-trace');
@@ -217,6 +247,24 @@ describe('TraceStore span persistence', () => {
     expect(spans.map((span) => span.name)).toEqual(['chat gpt-4.1-mini', 'execute_tool search']);
   });
 
+  it('computes max depth before name filters remove ancestors', async () => {
+    const traceStore = await createTrace('depth-before-filter');
+    await traceStore.addSpans('depth-before-filter', [
+      { spanId: 'root', name: 'root', startTime: 1 },
+      { spanId: 'middle', parentSpanId: 'root', name: 'middle', startTime: 2 },
+      {
+        spanId: 'tool',
+        parentSpanId: 'middle',
+        name: 'execute_tool search',
+        startTime: 3,
+      },
+    ]);
+
+    await expect(
+      traceStore.getSpans('depth-before-filter', { spanFilter: ['tool'], maxDepth: 2 }),
+    ).resolves.toEqual([]);
+  });
+
   it('excludes descendants of grading spans even when external SDKs omit role attributes', async () => {
     const traceStore = await createTrace('grader-descendants');
     await traceStore.addSpans('grader-descendants', [
@@ -331,6 +379,30 @@ describe('TraceStore span persistence', () => {
       'cccccccccccccccc',
       'aaaaaaaaaaaaaaaa',
     ]);
+  });
+
+  it('does not recurse forever when local spans have cyclic parents', async () => {
+    const traceStore = await createTrace('cyclic-parents');
+    await traceStore.addSpans('cyclic-parents', [
+      { spanId: 'aaaaaaaaaaaaaaaa', parentSpanId: 'bbbbbbbbbbbbbbbb', name: 'first', startTime: 1 },
+      {
+        spanId: 'bbbbbbbbbbbbbbbb',
+        parentSpanId: 'cccccccccccccccc',
+        name: 'second',
+        startTime: 2,
+      },
+      { spanId: 'cccccccccccccccc', parentSpanId: 'dddddddddddddddd', name: 'third', startTime: 3 },
+      {
+        spanId: 'dddddddddddddddd',
+        parentSpanId: 'eeeeeeeeeeeeeeee',
+        name: 'fourth',
+        startTime: 4,
+      },
+      { spanId: 'eeeeeeeeeeeeeeee', parentSpanId: 'ffffffffffffffff', name: 'fifth', startTime: 5 },
+      { spanId: 'ffffffffffffffff', parentSpanId: 'aaaaaaaaaaaaaaaa', name: 'sixth', startTime: 6 },
+    ]);
+
+    await expect(traceStore.getSpans('cyclic-parents', { maxDepth: 5 })).resolves.toHaveLength(6);
   });
 });
 

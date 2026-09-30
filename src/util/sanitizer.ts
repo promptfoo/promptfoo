@@ -453,7 +453,7 @@ function isSafeTracingCredentialTemplate(value: unknown): value is string {
   return typeof value === 'string' && SAFE_TRACING_CREDENTIAL_TEMPLATE.test(value.trim());
 }
 
-function isTracingCredentialHeader(name: string, value: string): boolean {
+export function isTracingCredentialHeader(name: string, value: string): boolean {
   const normalizedName = name.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
   return (
     isSecretField(name) ||
@@ -1186,6 +1186,14 @@ function sanitizePlainObject(
       (key !== rawKey && Object.prototype.hasOwnProperty.call(obj, key))
     ) {
       key = `${redactedKey}#${++keySuffix}`;
+    }
+    if (key === '__proto__') {
+      Object.defineProperty(sanitized, key, {
+        value: undefined,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
     }
     if (isSecretKey(key)) {
       sanitized[key] = REDACTED;
