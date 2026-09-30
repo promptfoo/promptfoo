@@ -232,6 +232,62 @@ describe('share-time blob upload', () => {
     });
   });
 
+  it('retains inline result provenance without scheduling a duplicate upload', async () => {
+    const hash = 'a'.repeat(64);
+    const uri = `promptfoo://blob/${hash}`;
+    const cache = createRemoteBlobUploadCache();
+    recordResultBlobRefsForShare(
+      { output: uri },
+      cache,
+      { localEvalId: 'source', remoteEvalId: 'recipient', promptIdx: 0, testIdx: 0 },
+      { output: 'data:image/png;base64,aW1hZ2U=' },
+    );
+
+    await uploadRecordedResultBlobRefsForShare(cache);
+    expect(getShareAuthorizedBlob).not.toHaveBeenCalled();
+    expect(uploadBlobRemote).not.toHaveBeenCalled();
+
+    await uploadTraceBlobRefsForShare(uri, cache, {
+      localEvalId: 'source',
+      remoteEvalId: 'recipient',
+    });
+    expect(uploadBlobRemote).toHaveBeenCalledOnce();
+    expect(uploadBlobRemote).toHaveBeenCalledWith(storedBlob.data, 'image/png', {
+      evalId: 'recipient',
+      kind: 'image',
+      location: 'share',
+      promptIdx: 0,
+      testIdx: 0,
+    });
+  });
+
+  it('uploads remaining result refs while retaining provenance for inline media', async () => {
+    const inlineHash = 'a'.repeat(64);
+    const remainingHash = 'b'.repeat(64);
+    const inlineUri = `promptfoo://blob/${inlineHash}`;
+    const remainingUri = `promptfoo://blob/${remainingHash}`;
+    const cache = createRemoteBlobUploadCache();
+    const context = { localEvalId: 'source', remoteEvalId: 'recipient', promptIdx: 2, testIdx: 1 };
+    recordResultBlobRefsForShare([inlineUri, remainingUri], cache, context, [
+      'data:image/png;base64,aW1hZ2U=',
+      remainingUri,
+    ]);
+
+    await uploadRecordedResultBlobRefsForShare(cache);
+    expect(getShareAuthorizedBlob).toHaveBeenCalledExactlyOnceWith(remainingHash, 'source');
+
+    await uploadTraceBlobRefsForShare([inlineUri, remainingUri], cache, {
+      localEvalId: 'source',
+      remoteEvalId: 'recipient',
+    });
+    expect(getShareAuthorizedBlob).toHaveBeenCalledTimes(2);
+    expect(getShareAuthorizedBlob).toHaveBeenLastCalledWith(inlineHash, 'source');
+    expect(uploadBlobRemote).toHaveBeenCalledTimes(2);
+    for (const call of vi.mocked(uploadBlobRemote).mock.calls) {
+      expect(call[2]).toMatchObject({ promptIdx: 2, testIdx: 1 });
+    }
+  });
+
   it('does not upload a copied blob URI that is not share-authorized for the eval', async () => {
     const hash = 'd'.repeat(64);
     vi.mocked(getShareAuthorizedBlob).mockResolvedValue(null);

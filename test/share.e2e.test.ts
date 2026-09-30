@@ -118,10 +118,10 @@ describe('self-hosted sharing end to end', () => {
           metadata: {
             evaluationId: remoteEvalId,
             media: media.uri,
-            promptIdx: 0,
-            testIdx: 0,
           },
         });
+        expect(remoteTrace.metadata).not.toHaveProperty('promptIdx');
+        expect(remoteTrace.metadata).not.toHaveProperty('testIdx');
         expect(remoteTrace.traceId).not.toBe(traceId);
         expect(remoteTrace.spans[0].attributes).toMatchObject({
           'evaluation.id': remoteEvalId,

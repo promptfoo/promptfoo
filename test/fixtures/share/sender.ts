@@ -75,8 +75,6 @@ try {
       metadata: {
         evaluationId: source.id,
         media: media.ref.uri,
-        promptIdx: 0,
-        testIdx: 0,
         traceId,
       },
       spans: [

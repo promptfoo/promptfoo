@@ -779,12 +779,17 @@ describe('createShareableUrl', () => {
       releaseUpload?.();
 
       await expect(sharePromise).resolves.toBe('https://app.example.com/eval/manual-share-id');
-      expect(recordResultBlobRefsForShare).toHaveBeenCalledWith(result, expect.any(Map), {
-        localEvalId: mockEval.id,
-        promptIdx: 2,
-        remoteEvalId: 'manual-share-id',
-        testIdx: 1,
-      });
+      expect(recordResultBlobRefsForShare).toHaveBeenCalledWith(
+        result,
+        expect.any(Map),
+        {
+          localEvalId: mockEval.id,
+          promptIdx: 2,
+          remoteEvalId: 'manual-share-id',
+          testIdx: 1,
+        },
+        result,
+      );
       expect(uploadRecordedResultBlobRefsForShare).toHaveBeenCalledWith(expect.any(Map), undefined);
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
@@ -2326,12 +2331,17 @@ describe('createShareableUrl', () => {
         endTime: 2000,
         statusCode: 1,
       });
-      expect(recordResultBlobRefsForShare).toHaveBeenCalledWith(resultRow, expect.any(Map), {
-        localEvalId: mockEvalWithTraces.id,
-        promptIdx: 2,
-        remoteEvalId: 'mock-eval-id',
-        testIdx: 1,
-      });
+      expect(recordResultBlobRefsForShare).toHaveBeenCalledWith(
+        resultRow,
+        expect.any(Map),
+        {
+          localEvalId: mockEvalWithTraces.id,
+          promptIdx: 2,
+          remoteEvalId: 'mock-eval-id',
+          testIdx: 1,
+        },
+        resultRow,
+      );
       expect(uploadRecordedResultBlobRefsForShare).toHaveBeenCalledWith(expect.any(Map), undefined);
       expect(uploadTraceBlobRefsForShare).toHaveBeenCalledWith(
         mockTraces[0],
@@ -2399,12 +2409,17 @@ describe('createShareableUrl', () => {
       expect(initialBody.traces[0].metadata.media).toBe(blobUri);
       // The mock leaves the raw URI unresolved, so it must fall back to an out-of-band upload.
       expect(inlineBlobRefsForShare).toHaveBeenCalled();
-      expect(recordResultBlobRefsForShare).toHaveBeenCalledWith(resultRow, expect.any(Map), {
-        localEvalId: mockEvalWithTraces.id,
-        promptIdx: 4,
-        remoteEvalId: 'mock-eval-id',
-        testIdx: 3,
-      });
+      expect(recordResultBlobRefsForShare).toHaveBeenCalledWith(
+        resultRow,
+        expect.any(Map),
+        {
+          localEvalId: mockEvalWithTraces.id,
+          promptIdx: 4,
+          remoteEvalId: 'mock-eval-id',
+          testIdx: 3,
+        },
+        resultRow,
+      );
       expect(uploadRecordedResultBlobRefsForShare).toHaveBeenCalledWith(expect.any(Map), undefined);
       expect(uploadTraceBlobRefsForShare).toHaveBeenCalledTimes(1);
       expect(uploadTraceBlobRefsForShare).toHaveBeenCalledWith(

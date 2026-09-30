@@ -762,12 +762,17 @@ async function prepareChunkForShare(
 
   if (remoteBlobUploadCache) {
     for (const [index, result] of remappedChunk.entries()) {
-      recordResultBlobRefsForShare(chunkToSend[index], remoteBlobUploadCache, {
-        localEvalId,
-        remoteEvalId,
-        promptIdx: result.promptIdx,
-        testIdx: result.testIdx,
-      });
+      recordResultBlobRefsForShare(
+        result,
+        remoteBlobUploadCache,
+        {
+          localEvalId,
+          remoteEvalId,
+          promptIdx: result.promptIdx,
+          testIdx: result.testIdx,
+        },
+        chunkToSend[index],
+      );
     }
   }
 
