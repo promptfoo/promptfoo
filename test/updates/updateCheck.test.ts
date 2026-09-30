@@ -15,8 +15,9 @@ vi.mock('../../src/version', () => ({
 }));
 
 import semver from 'semver';
-import { checkForUpdates } from '../../src/updates/updateCheck';
+import { checkForUpdates, getUpdateInstructions } from '../../src/updates/updateCheck';
 import { fetchWithTimeout } from '../../src/util/fetch/index';
+import { mockProcessEnv } from '../util/utils';
 
 const mockFetchWithTimeout = fetchWithTimeout as MockedFunction<typeof fetchWithTimeout>;
 const mockSemverGt = semver.gt as MockedFunction<typeof semver.gt>;
@@ -105,5 +106,47 @@ describe('checkForUpdates', () => {
     mockFetchWithTimeout.mockRejectedValue(new Error('Network error'));
 
     await expect(checkForUpdates({ throwOnError: true })).rejects.toThrow('Network error');
+  });
+});
+
+describe('getUpdateInstructions', () => {
+  let restoreEnvironment: () => void;
+
+  beforeEach(() => {
+    restoreEnvironment = mockProcessEnv({}, { clear: true });
+  });
+
+  afterEach(() => {
+    restoreEnvironment();
+  });
+
+  it('distinguishes supported global installs from temporary and other installations', () => {
+    const instructions = getUpdateInstructions();
+
+    expect(instructions).toContain('global npm installations on macOS or Linux');
+    expect(instructions).toContain('promptfoo update');
+    expect(instructions).toContain('npx promptfoo@latest');
+    expect(instructions).toContain('package manager that installed Promptfoo');
+  });
+
+  it('directs official image users to pull the image and rebuild derived images', () => {
+    vi.stubEnv('PROMPTFOO_OFFICIAL_DOCKER_IMAGE', 'true');
+
+    const instructions = getUpdateInstructions();
+
+    expect(instructions).toContain('docker pull ghcr.io/promptfoo/promptfoo:latest');
+    expect(instructions).toContain('rebuild, and redeploy');
+    expect(instructions).not.toContain('promptfoo update');
+  });
+
+  it('directs custom container users to update and rebuild their own image', () => {
+    vi.stubEnv('PROMPTFOO_RUNNING_IN_DOCKER', 'true');
+
+    const instructions = getUpdateInstructions();
+
+    expect(instructions).toContain('source, dependency, or parent image');
+    expect(instructions).toContain('rebuild and redeploy');
+    expect(instructions).not.toContain('docker pull');
+    expect(instructions).not.toContain('promptfoo update');
   });
 });
