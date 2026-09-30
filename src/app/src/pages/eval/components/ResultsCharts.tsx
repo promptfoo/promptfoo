@@ -97,13 +97,13 @@ function HistogramChart({ table }: ChartProps) {
     const maxScore = Math.max(...scores);
     const minScore = Math.min(...scores);
     const range = Math.ceil(maxScore) - Math.floor(minScore); // Adjust the range to be between whole numbers
-    const isDegenerate = range <= 0;
-    const binSize = isDegenerate ? 1 : range / 10; // Define the size of each bin
-    const bins = isDegenerate
-      ? [minScore]
-      : Array.from({ length: 11 }, (_, i) =>
-          Number.parseFloat((Math.floor(minScore) + i * binSize).toFixed(2)),
-        );
+    const binSize = range === 0 ? 1 : range / 10;
+    const bins =
+      range === 0
+        ? [minScore]
+        : Array.from({ length: 11 }, (_, i) =>
+            Number.parseFloat((Math.floor(minScore) + i * binSize).toFixed(2)),
+          );
 
     const datasets = table.head.prompts.map((prompt, promptIdx) => {
       const scores = table.body

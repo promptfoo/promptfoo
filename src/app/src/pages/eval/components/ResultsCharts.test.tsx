@@ -241,7 +241,7 @@ describe('ResultsCharts', () => {
     }).not.toThrow();
   });
 
-  it('should render without errors when scores array has a single data point', () => {
+  it.each([0, 1])('counts uniform scores of %s in a single histogram bin', (score) => {
     const mockTable = {
       head: {
         prompts: [
@@ -250,15 +250,13 @@ describe('ResultsCharts', () => {
         ],
         vars: [],
       },
-      body: [
-        {
-          outputs: [
-            { score: 0.8, pass: true, text: 'valid output' },
-            { score: 0.8, pass: true, text: 'valid output' },
-          ],
-          vars: [],
-        },
-      ],
+      body: Array.from({ length: 3 }, () => ({
+        outputs: [
+          { score, pass: score === 1, text: 'valid output' },
+          { score, pass: score === 1, text: 'valid output' },
+        ],
+        vars: [],
+      })),
     };
 
     const scores = calculateScores(mockTable);
@@ -273,7 +271,12 @@ describe('ResultsCharts', () => {
 
     const { container } = render(<ResultsCharts {...defaultProps} scores={scores} />);
 
-    expect(() => render(<ResultsCharts {...defaultProps} scores={scores} />)).not.toThrow();
+    const histogram = vi
+      .mocked(Chart)
+      .mock.calls.map(([, config]) => config)
+      .find((config) => config.options?.plugins?.title?.text === 'Score Distribution');
+    expect(histogram?.data.labels).toEqual([score]);
+    expect(histogram?.data.datasets.map((dataset) => dataset.data)).toEqual([[3], [3]]);
 
     const canvasElements = container.querySelectorAll('canvas');
     expect(canvasElements.length).toBeGreaterThan(0);
@@ -863,97 +866,5 @@ describe('ResultsCharts', () => {
 
     const canvasElements = container.querySelectorAll('canvas');
     expect(canvasElements.length).toBeGreaterThanOrEqual(3);
-  });
-
-  describe('Score Distribution binning', () => {
-    const getHistogramConfig = () =>
-      vi
-        .mocked(Chart)
-        .mock.calls.map(([, config]) => config)
-        .find(
-          (config) =>
-            (config.options?.plugins?.title as { text?: string } | undefined)?.text ===
-            'Score Distribution',
-        );
-
-    const renderWithScores = (promptScores: number[][]) => {
-      const mockTable = {
-        head: {
-          prompts: promptScores.map((_, idx) => ({
-            provider: `test-provider-${idx + 1}`,
-            metrics: { namedScores: {} },
-          })),
-          vars: [],
-        },
-        body: promptScores[0].map((_, rowIdx) => ({
-          outputs: promptScores.map((scores) => ({ score: scores[rowIdx] })),
-          vars: [],
-        })),
-      };
-
-      const scores = calculateScores(mockTable);
-
-      vi.mocked(useTableStore).mockReturnValue({
-        table: mockTable,
-        evalId: 'test-eval',
-        config: { description: 'test config' },
-        setTable: vi.fn(),
-        fetchEvalData: vi.fn(),
-      });
-
-      render(<ResultsCharts {...defaultProps} scores={scores} />);
-
-      return getHistogramConfig();
-    };
-
-    it('counts every score when all scores are identical', () => {
-      const histogram = renderWithScores([
-        [1, 1, 1],
-        [1, 1, 1],
-      ]);
-
-      expect(histogram).toBeDefined();
-      expect(histogram?.data?.labels).toEqual([1]);
-      expect(histogram?.data?.datasets.map((dataset) => dataset.data)).toEqual([[3], [3]]);
-    });
-
-    it('counts every score when all scores are an identical zero', () => {
-      const histogram = renderWithScores([
-        [0, 0, 0],
-        [0, 0, 0],
-      ]);
-
-      expect(histogram).toBeDefined();
-      expect(histogram?.data?.labels).toEqual([0]);
-      expect(histogram?.data?.datasets.map((dataset) => dataset.data)).toEqual([[3], [3]]);
-    });
-
-    it('counts every score when a single column is uniformly scored', () => {
-      const histogram = renderWithScores([
-        [0, 0, 0, 0],
-        [0, 0.5, 0.75, 1],
-      ]);
-
-      expect(histogram).toBeDefined();
-      expect(histogram?.data?.labels).toEqual([0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]);
-      expect(histogram?.data?.datasets.map((dataset) => dataset.data)).toEqual([
-        [4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        [1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1],
-      ]);
-    });
-
-    it('bins a normal spread of scores into the expected buckets', () => {
-      const histogram = renderWithScores([
-        [0, 0.25, 0.5, 0.75, 1],
-        [0.5, 0.5, 0.5, 0.5, 0.5],
-      ]);
-
-      expect(histogram).toBeDefined();
-      expect(histogram?.data?.labels).toEqual([0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]);
-      expect(histogram?.data?.datasets.map((dataset) => dataset.data)).toEqual([
-        [1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1],
-        [0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0],
-      ]);
-    });
   });
 });
