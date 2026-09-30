@@ -173,7 +173,7 @@ app.post('/chat', async (req, res) => {
     );
     const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...chat_history];
 
-    const client = await loadApiProvider('openai');
+    const client = await loadApiProvider('openai:chat:gpt-6-sol');
     const result = await client.callApi(JSON.stringify(messages));
 
     const { output: response } = result;

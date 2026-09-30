@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +13,7 @@ const platform = process.platform;
 afterEach(() => {
   vi.restoreAllMocks();
   vi.resetAllMocks();
+  vi.unstubAllEnvs();
   Object.defineProperty(process, 'platform', { value: platform });
 });
 
@@ -51,6 +53,54 @@ describe('installed package bin check', () => {
     expect(args).toEqual(['--version']);
     expect(options?.cwd).toBe('/tmp/package with spaces');
   });
+
+  it.each(['promptfoo', 'pf'] as const)(
+    'executes the real %s shim from a directory with shell metacharacters',
+    async (binName) => {
+      const actual =
+        await vi.importActual<typeof import('node:child_process')>('node:child_process');
+      vi.mocked(execFileSync).mockImplementation(actual.execFileSync);
+      vi.stubEnv('PROMPTFOO_TEST_NODE', process.execPath);
+      const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-bin-shim-'));
+      const consumerDir = path.join(temporaryRoot, '%PATH% & (package test)');
+      const configDir = path.join(temporaryRoot, 'config');
+      const binDir = path.join(consumerDir, 'node_modules', '.bin');
+      const fixtureDir = path.join(consumerDir, 'node_modules', 'fixture');
+      const script = `console.log(JSON.stringify({
+        args: process.argv.slice(2),
+        cwd: process.cwd(),
+        configDir: process.env.PROMPTFOO_CONFIG_DIR,
+      }));
+`;
+      try {
+        fs.mkdirSync(binDir, { recursive: true });
+        fs.mkdirSync(fixtureDir, { recursive: true });
+        fs.writeFileSync(path.join(fixtureDir, 'cli.cjs'), script);
+        if (platform === 'win32') {
+          fs.writeFileSync(
+            path.join(binDir, `${binName}.cmd`),
+            '@ECHO off\r\n"%PROMPTFOO_TEST_NODE%" "%~dp0\\..\\fixture\\cli.cjs" %*\r\n',
+          );
+        } else {
+          fs.writeFileSync(
+            path.join(binDir, binName),
+            `#!/usr/bin/env node
+${script}`,
+            {
+              mode: 0o755,
+            },
+          );
+        }
+
+        const output = JSON.parse(runInstalledBinVersion(consumerDir, configDir, binName));
+        expect(output.args).toEqual(['--version']);
+        expect(fs.realpathSync(output.cwd)).toBe(fs.realpathSync(consumerDir));
+        expect(output.configDir).toBe(configDir);
+      } finally {
+        fs.rmSync(temporaryRoot, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('rejects a missing installed bin before starting a process', () => {
     vi.spyOn(fs, 'existsSync').mockReturnValue(false);

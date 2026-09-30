@@ -62,7 +62,7 @@ describe('redteam chatbot provider selection', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(loadApiProvider).toHaveBeenCalledExactlyOnceWith('openai');
+    expect(loadApiProvider).toHaveBeenCalledExactlyOnceWith('openai:chat:gpt-6-sol');
     const messages = JSON.parse(callApi.mock.calls[0][0]);
     expect(messages[0]).toMatchObject({ role: 'system' });
     expect(messages.slice(1)).toEqual(history);
@@ -70,6 +70,30 @@ describe('redteam chatbot provider selection', () => {
       ...messages,
       { role: 'assistant', content: 'The showroom opens at 9 AM.' },
     ]);
+  });
+
+  it('resolves the public alias through the real provider registry', async () => {
+    const { loadApiProvider: realLoadApiProvider } = await import('../../src/providers');
+    const { OpenAiChatCompletionProvider } = await import('../../src/providers/openai/chat');
+    const call = vi
+      .spyOn(OpenAiChatCompletionProvider.prototype, 'callApi')
+      .mockResolvedValue({ output: 'The showroom opens at 9 AM.' });
+    loadApiProvider.mockImplementation(realLoadApiProvider);
+
+    const response = await request(app)
+      .post('/chat')
+      .set('Authorization', 'Bearer fixture')
+      .send({
+        api_provider: 'openai',
+        chat_history: [{ role: 'user', content: 'When does the showroom open?' }],
+      });
+
+    expect(response.status).toBe(200);
+    expect(call).toHaveBeenCalledOnce();
+    expect(response.body.chat_history.at(-1)).toEqual({
+      role: 'assistant',
+      content: 'The showroom opens at 9 AM.',
+    });
   });
 
   it.each([
