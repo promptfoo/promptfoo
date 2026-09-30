@@ -9,6 +9,7 @@ import {
   withCacheNamespace,
 } from '../../../src/cache';
 import logger from '../../../src/logger';
+import { CLAUDE_CODE_USER_AGENT } from '../../../src/providers/anthropic/claudeCodeAuth';
 import { hashAnthropicCacheValue } from '../../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { MCPClient } from '../../../src/providers/mcp/client';
@@ -5336,8 +5337,20 @@ describe('AnthropicMessagesProvider', () => {
       const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
       expect(headers['anthropic-beta']).toContain('claude-code-20250219');
       expect(headers['anthropic-beta']).toContain('oauth-2025-04-20');
-      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['user-agent']).toBe('claude-cli/2.1.285 (external, promptfoo)');
       expect(headers['x-app']).toBe('cli');
+    });
+
+    it('keeps the Claude Code user-agent version at the minimum required by newer models', () => {
+      const match = /claude-cli\/(\d+)\.(\d+)\.(\d+)/.exec(CLAUDE_CODE_USER_AGENT);
+      expect(match).toBeTruthy();
+      const [major, minor, patch] = match!.slice(1).map(Number);
+      // Anthropic rejects OAuth requests to newer models from older clients:
+      // claude-opus-5-5 answers with 400 invalid_request_error below 2.1.280.
+      // See https://github.com/promptfoo/promptfoo/issues/11322.
+      expect(major * 10_000 + minor * 100 + patch).toBeGreaterThanOrEqual(
+        2 * 10_000 + 1 * 100 + 280,
+      );
     });
 
     it('isolates response-cache namespaces for distinct Claude Code OAuth tenants', async () => {
@@ -5514,7 +5527,7 @@ describe('AnthropicMessagesProvider', () => {
 
       const [, requestOptions] = createSpy.mock.calls[0];
       const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
-      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['user-agent']).toBe('claude-cli/2.1.285 (external, promptfoo)');
       expect(headers['x-app']).toBe('cli');
     });
 
@@ -5541,7 +5554,7 @@ describe('AnthropicMessagesProvider', () => {
       const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
       expect(headers['anthropic-beta']).toContain('claude-code-20250219');
       expect(headers['anthropic-beta']).toContain('oauth-2025-04-20');
-      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['user-agent']).toBe('claude-cli/2.1.285 (external, promptfoo)');
       expect(headers['x-app']).toBe('cli');
     });
   });
