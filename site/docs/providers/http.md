@@ -1037,11 +1037,7 @@ providers:
         keyAlias: 'client-cert' # Optional: defaults to first available key
 ```
 
-The JKS file is processed using the `jks-js` library, which automatically:
-
-- Extracts the certificate and private key from the keystore
-- Converts them to PEM format for use with TLS
-- Selects the appropriate key based on the alias (or uses the first available)
+The `jks-js` library extracts the certificate and private key as PEM. If `keyAlias` is omitted, the provider selects the first entry containing both a certificate and a private key. An explicit alias must identify a usable pair.
 
 :::info
 JKS support uses the optional `jks-js` runtime package. Install it with:
@@ -1051,6 +1047,8 @@ npm install jks-js
 ```
 
 :::
+
+In the setup form, imported CA, certificate, and key arrays remain separate entries when edited. Opening the TLS tab does not set a verification override. An empty TLS form uses the server's transport settings. A verification-only override keeps the configured environment proxy and CA certificate. Custom certificate settings use a dedicated TLS connection.
 
 ### Advanced TLS Options
 
@@ -1183,7 +1181,7 @@ providers:
 | pfxPath            | string             | -       | Path to PFX/PKCS12 file                                                            |
 | jksPath            | string             | -       | Path to JKS keystore file                                                          |
 | jksContent         | string             | -       | Base64-encoded JKS keystore content                                                |
-| keyAlias           | string             | -       | Alias of the key to use from JKS (defaults to first available)                     |
+| keyAlias           | string             | -       | JKS key alias (defaults to the first certificate and private key pair)             |
 | passphrase         | string             | -       | Passphrase for encrypted private key, PFX, or JKS                                  |
 | rejectUnauthorized | boolean            | true    | If true, verify server certificate against CA                                      |
 | servername         | string             | -       | Server name for SNI (Server Name Indication) TLS extension                         |
