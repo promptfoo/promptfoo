@@ -373,7 +373,7 @@ See [Plugins](/docs/red-team/plugins/) for more information.
 - As a string: `"plugin-id"`
 - As an object: `{ id: "plugin-id", numTests: 10 }`
 
-Plugins use the global `numTests` value unless an override is set. The web setup preserves per-plugin settings through import, editing, export, and execution.
+Plugins use the global `numTests` value unless an override is set. The web setup preserves per-plugin settings through import, editing, and export.
 
 #### Available Plugins
 

@@ -111,6 +111,50 @@ describe('getEstimatedProbes', () => {
     expect(getEstimatedProbes(config)).toBe(528); // (5 + 17) * (1 + 1 + 10) * 2
   });
 
+  it('counts duplicate plugin configurations once using the last override', () => {
+    const config = {
+      ...baseConfig,
+      plugins: [
+        { id: 'contracts', numTests: 500, config: { key: 'value' } },
+        { id: 'contracts', numTests: 7, config: { key: 'value' } },
+        { id: 'contracts', numTests: 3, config: { key: 'different' } },
+        { id: 'contracts', numTests: 2, config: { key: 'value' }, severity: 'high' },
+      ],
+      strategies: [],
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(12);
+  });
+
+  it('applies each plugin language override before summing', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 5,
+      language: ['en', 'es'],
+      plugins: [
+        { id: 'contracts', numTests: 10, config: { language: 'fr' } },
+        { id: 'policy', numTests: 3, config: { language: ['de', 'it', 'pt'] } },
+        { id: 'overreliance', numTests: 2 },
+      ],
+      strategies: [],
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(23);
+  });
+
+  it('deduplicates intent entries before applying their language override', () => {
+    const plugin = {
+      id: 'intent',
+      numTests: 100,
+      config: { intent: ['first', 'second'], language: 'fr' },
+    };
+    const config = {
+      ...baseConfig,
+      language: ['en', 'es'],
+      plugins: [plugin, plugin],
+      strategies: [],
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(2);
+  });
+
   it('should calculate basic probes without strategies', () => {
     const config = {
       ...baseConfig,
