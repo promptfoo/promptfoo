@@ -7,6 +7,7 @@ import {
   geminiContentsToInteractionsInput,
   toInteractionsTools,
 } from '../../../src/providers/google/interactionsChat';
+import { checkProviderApiKeys } from '../../../src/util/provider';
 
 vi.mock('../../../src/cache', () => ({ fetchWithCache: vi.fn() }));
 
@@ -106,6 +107,33 @@ describe('GoogleInteractionsChatProvider', () => {
       expect(provider.id()).toBe('custom-id');
     });
   });
+
+  it.each(['ambient', 'scoped'])(
+    'accepts the generative API key alias during %s preflight',
+    async (scope) => {
+      for (const name of [
+        'GOOGLE_API_KEY',
+        'GEMINI_API_KEY',
+        'PALM_API_KEY',
+        'GOOGLE_GENERATIVE_AI_API_KEY',
+      ]) {
+        vi.stubEnv(name, '');
+      }
+      if (scope === 'ambient') {
+        vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'fixture-alias-key');
+      }
+      const provider = new GoogleInteractionsChatProvider('gemini-3.6-flash', {
+        config: { vertexai: false },
+        env: scope === 'scoped' ? { GOOGLE_GENERATIVE_AI_API_KEY: 'fixture-alias-key' } : undefined,
+      });
+      expect(checkProviderApiKeys([provider]).size).toBe(0);
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      await provider.callApi('Hello');
+      expect(mockFetchWithCache.mock.calls[0][1]?.headers).toMatchObject({
+        'x-goog-api-key': 'fixture-alias-key',
+      });
+    },
+  );
 
   describe('request mapping', () => {
     it('preserves system instructions in native Gemini prompt wrappers', async () => {
@@ -594,6 +622,69 @@ describe('GoogleInteractionsChatProvider', () => {
       expect(body).not.toHaveProperty('generationConfig');
     });
 
+    it.each(['responseSchema', 'response_schema'])(
+      'preserves snake-case generation_config %s',
+      async (key) => {
+        mockFetchWithCache.mockResolvedValue(interaction() as any);
+        const result = await make({
+          passthrough: {
+            generation_config: {
+              [key]: { type: 'OBJECT', properties: { color: { type: 'STRING' } } },
+              response_mime_type: 'application/json',
+            },
+          },
+        }).callApi('Hello');
+        expect(result.error).toBeUndefined();
+        const body = bodyOf(mockFetchWithCache.mock.calls[0]);
+        expect(body.response_format).toEqual({
+          type: 'object',
+          properties: { color: { type: 'string' } },
+        });
+        expect(body.generation_config).toBeUndefined();
+      },
+    );
+
+    it.each([
+      { inlineData: { mimeType: 'image/png', data: 'fixture' } },
+      { fileData: { mimeType: 'image/png', fileUri: 'https://example.com/fixture.png' } },
+    ])('rejects unsupported function-response media before requesting: %j', async (part) => {
+      const result = await make().callApi(
+        JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                functionResponse: {
+                  id: 'call_1',
+                  name: 'get_weather',
+                  response: { ok: true },
+                  parts: [part],
+                },
+              },
+            ],
+          },
+        ]),
+      );
+      expect(result.error).toContain('Function response media is not supported');
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('prices the effective prompt-level Vertex region', async () => {
+      mockVertexAuth();
+      mockFetchWithCache.mockResolvedValue(
+        interaction({ usage: { total_input_tokens: 1000, total_output_tokens: 100 } }) as any,
+      );
+      const provider = new GoogleInteractionsChatProvider('gemini-3.5-flash-lite', {
+        config: { vertexai: true, projectId: 'fixture', region: 'global' },
+      });
+      const result = await provider.callApi('Hello', {
+        vars: {},
+        prompt: { raw: 'Hello', label: 'regional', config: { region: 'us' } },
+      });
+      expect(mockFetchWithCache.mock.calls[0][0]).toContain('/locations/us/interactions');
+      expect(result.cost).toBeCloseTo(0.000605);
+    });
+
     it('prices the model selected through passthrough', async () => {
       mockFetchWithCache.mockResolvedValue(interaction() as any);
       const overridden = await make({ passthrough: { model: 'gemini-2.5-pro' } }).callApi('Hello');
@@ -854,6 +945,103 @@ describe('GoogleInteractionsChatProvider', () => {
         completionDetails: { reasoning: 30 },
       });
     });
+
+    it.each(['input', 'returned'])(
+      'does not replay calls answered in %s history',
+      async (where) => {
+        const callback = vi.fn(() => 'unused');
+        const pending = pendingCall();
+        const steps = [
+          ...pending.data.steps,
+          ...(where === 'returned' ? [{ type: 'function_result', call_id: 'call_1' }] : []),
+          ...finalAnswer().data.steps,
+        ];
+        mockFetchWithCache.mockResolvedValueOnce(interaction({ steps }) as any);
+        const prompt =
+          where === 'input'
+            ? JSON.stringify([
+                {
+                  role: 'user',
+                  parts: [
+                    {
+                      functionResponse: {
+                        id: 'call_1',
+                        name: 'get_weather',
+                        response: '52F and rain',
+                      },
+                    },
+                  ],
+                },
+              ])
+            : 'Weather?';
+        const result = await make({
+          ...toolConfig,
+          previousInteractionId: 'v1_prev',
+          functionToolCallbacks: { get_weather: callback },
+        }).callApi(prompt);
+        expect(result.output).toBe('52F and rain');
+        expect(callback).not.toHaveBeenCalled();
+        expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('prices each tool round before applying the context tier', async () => {
+      const first = pendingCall();
+      const final = finalAnswer();
+      const usage = { total_input_tokens: 110_000, total_output_tokens: 0 };
+      mockFetchWithCache
+        .mockResolvedValueOnce(interaction({ ...first.data, usage }) as any)
+        .mockResolvedValueOnce(interaction({ ...final.data, usage }) as any);
+      const provider = new GoogleInteractionsChatProvider('gemini-2.5-pro', {
+        config: {
+          apiKey: 'test-key',
+          vertexai: false,
+          ...toolConfig,
+          functionToolCallbacks: { get_weather: () => 'ok' },
+        } as any,
+      });
+      const result = await provider.callApi('Weather?');
+      expect(result.tokenUsage).toMatchObject({ prompt: 220_000, numRequests: 2 });
+      expect(result.cost).toBeCloseTo(0.275);
+    });
+
+    it.each(['http', 'abort'])(
+      'retains completed usage and callbacks after a follow-up %s failure',
+      async (failure) => {
+        const controller = new AbortController();
+        mockFetchWithCache.mockResolvedValueOnce(pendingCall() as any);
+        if (failure === 'http') {
+          mockFetchWithCache.mockResolvedValueOnce({
+            data: { error: { message: 'fixture unavailable' } },
+            status: 503,
+            statusText: 'Unavailable',
+          } as any);
+        }
+        const result = await make({
+          ...toolConfig,
+          functionToolCallbacks: {
+            get_weather: () => {
+              if (failure === 'abort') {
+                controller.abort();
+              }
+              return 'ok';
+            },
+          },
+        }).callApi('Weather?', undefined, { abortSignal: controller.signal });
+        expect(result.error).toContain(failure === 'abort' ? 'aborted' : 'fixture unavailable');
+        expect(result.tokenUsage).toMatchObject({
+          total: 30,
+          prompt: 10,
+          completion: 5,
+          numRequests: 1,
+        });
+        expect(result.cost).toBeGreaterThan(0);
+        expect(result.metadata?.toolCalls).toEqual([
+          { name: 'get_weather', args: { location: 'Boston' }, result: 'ok' },
+        ]);
+        expect(mockFetchWithCache).toHaveBeenCalledTimes(failure === 'abort' ? 1 : 2);
+      },
+    );
 
     it('feeds a failing callback back to the model instead of aborting the eval', async () => {
       mockFetchWithCache

@@ -19,6 +19,7 @@ export type InteractionContent = {
 export type InteractionStep = {
   type?: string;
   id?: string;
+  call_id?: string;
   name?: string;
   arguments?: unknown;
   content?: InteractionContent[];
@@ -84,18 +85,26 @@ export function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOver
 
 const VERTEX_INTERACTIONS_GLOBAL_HOST_LOCATIONS = new Set(['global', 'us', 'eu']);
 
+export function getVertexInteractionsRegion(
+  config: GoogleProviderConfig,
+  env?: EnvOverrides,
+): string {
+  return (
+    config.region ||
+    env?.VERTEX_REGION ||
+    getEnvString('VERTEX_REGION') ||
+    getEnvString('GOOGLE_CLOUD_LOCATION') ||
+    'global'
+  );
+}
+
 /** Resolve the Vertex AI Interactions endpoint for a project/region. */
 export function getVertexInteractionsEndpoint(
   config: GoogleProviderConfig,
   projectId: string,
   env?: EnvOverrides,
 ): string {
-  const region =
-    config.region ||
-    env?.VERTEX_REGION ||
-    getEnvString('VERTEX_REGION') ||
-    getEnvString('GOOGLE_CLOUD_LOCATION') ||
-    'global';
+  const region = getVertexInteractionsRegion(config, env);
   const configuredHost =
     config.apiBaseUrl ||
     config.apiHost ||
@@ -115,6 +124,17 @@ export type InteractionsTransport = {
   /** Only set on the AI Studio route; Vertex authenticates with OAuth. */
   apiKey?: string;
 };
+
+export function getInteractionsApiKey(
+  config: GoogleProviderConfig,
+  env?: EnvOverrides,
+): string | undefined {
+  const rawApiKey =
+    GoogleAuthManager.getApiKey(config, env).apiKey ||
+    env?.GOOGLE_GENERATIVE_AI_API_KEY ||
+    getEnvString('GOOGLE_GENERATIVE_AI_API_KEY');
+  return rawApiKey ? getNunjucksEngine().renderString(rawApiKey, {}) : undefined;
+}
 
 export async function resolveInteractionsTransport(
   config: GoogleProviderConfig,
@@ -170,11 +190,7 @@ export async function resolveInteractionsTransport(
     }
   }
 
-  const rawApiKey =
-    GoogleAuthManager.getApiKey(config, env).apiKey ||
-    env?.GOOGLE_GENERATIVE_AI_API_KEY ||
-    getEnvString('GOOGLE_GENERATIVE_AI_API_KEY');
-  const apiKey = rawApiKey ? getNunjucksEngine().renderString(rawApiKey, {}) : undefined;
+  const apiKey = getInteractionsApiKey(config, env);
   if (!apiKey) {
     return {
       error: `${label} requires an API key. Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, GEMINI_API_KEY, or PALM_API_KEY, or add apiKey to the provider config.`,

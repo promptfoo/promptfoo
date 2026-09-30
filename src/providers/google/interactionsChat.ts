@@ -7,9 +7,11 @@ import { getRequestTimeoutMs } from '../shared';
 import { GoogleGenericProvider } from './base';
 import {
   getInteractionModalityTokenCount,
+  getInteractionsApiKey,
   getInteractionsEndpoint,
   getLatestTurnSteps,
   getVertexInteractionsEndpoint,
+  getVertexInteractionsRegion,
   resolveInteractionsTransport,
 } from './interactionsShared';
 import {
@@ -176,7 +178,13 @@ function toFunctionResult(source: {
   id?: string;
   name?: string;
   response?: unknown;
+  parts?: unknown;
 }): InteractionInputItem {
+  if (source.parts !== undefined && (!Array.isArray(source.parts) || source.parts.length > 0)) {
+    throw new Error(
+      'Function response media is not supported by the Interactions chat adapter. Use generateContent.',
+    );
+  }
   const value = source.response ?? source;
   return {
     type: 'function_result',
@@ -557,6 +565,7 @@ function buildTokenUsage(totals: UsageTotals) {
 type ToolLoopResult = {
   lastData: InteractionResponse;
   totals: UsageTotals;
+  cost?: number;
   executedToolCalls: Array<{ name: string; args: unknown; result?: unknown; error?: string }>;
   groundingCalls: Array<Record<string, unknown>>;
   /** Calls already answered, so the final output does not repeat them. */
@@ -564,30 +573,34 @@ type ToolLoopResult = {
 };
 
 /** Fold one response's usage into the running totals for this call. */
-function accumulateUsage(totals: UsageTotals, usage: InteractionResponse['usage']): void {
+function accumulateUsage(totals: UsageTotals, usage: InteractionResponse['usage']): UsageTotals {
   const prompt = (usage?.total_input_tokens ?? 0) + (usage?.total_tool_use_tokens ?? 0);
   const completion = usage?.total_output_tokens ?? 0;
   const thoughts = usage?.total_reasoning_tokens ?? usage?.total_thought_tokens ?? 0;
-  totals.prompt += prompt;
-  totals.completion += completion;
-  totals.thoughts += thoughts;
-  totals.cached += usage?.total_cached_tokens ?? 0;
-  totals.total += usage?.total_tokens ?? prompt + completion + thoughts;
-  totals.audioIn +=
-    getInteractionModalityTokenCount(usage?.input_tokens_by_modality, ['audio']) +
-    getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, ['audio']);
-  totals.imageIn +=
-    getInteractionModalityTokenCount(usage?.input_tokens_by_modality, IMAGE_RATE_MODALITIES) +
-    getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, IMAGE_RATE_MODALITIES);
-  totals.audioOut += getInteractionModalityTokenCount(usage?.output_tokens_by_modality, ['audio']);
-  totals.cachedAudio += getInteractionModalityTokenCount(usage?.cached_tokens_by_modality, [
-    'audio',
-  ]);
-  totals.cachedImage += getInteractionModalityTokenCount(
-    usage?.cached_tokens_by_modality,
-    IMAGE_RATE_MODALITIES,
-  );
-  totals.requests++;
+  const round: UsageTotals = {
+    prompt,
+    completion,
+    thoughts,
+    cached: usage?.total_cached_tokens ?? 0,
+    total: usage?.total_tokens ?? prompt + completion + thoughts,
+    audioIn:
+      getInteractionModalityTokenCount(usage?.input_tokens_by_modality, ['audio']) +
+      getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, ['audio']),
+    imageIn:
+      getInteractionModalityTokenCount(usage?.input_tokens_by_modality, IMAGE_RATE_MODALITIES) +
+      getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, IMAGE_RATE_MODALITIES),
+    audioOut: getInteractionModalityTokenCount(usage?.output_tokens_by_modality, ['audio']),
+    cachedAudio: getInteractionModalityTokenCount(usage?.cached_tokens_by_modality, ['audio']),
+    cachedImage: getInteractionModalityTokenCount(
+      usage?.cached_tokens_by_modality,
+      IMAGE_RATE_MODALITIES,
+    ),
+    requests: 1,
+  };
+  for (const field of Object.keys(round) as Array<keyof UsageTotals>) {
+    totals[field] += round[field];
+  }
+  return round;
 }
 
 function resolveRetention(
@@ -654,9 +667,7 @@ function resolveRetention(
     passthrough,
     passthroughGenerationConfig: {
       ...(isPlainObject(passthroughGenerationConfigCamel) ? passthroughGenerationConfigCamel : {}),
-      ...buildGenerationConfig({
-        generationConfig: passthroughGenerationConfig,
-      } as GoogleProviderConfig),
+      ...(isPlainObject(passthroughGenerationConfig) ? passthroughGenerationConfig : {}),
     },
   };
 }
@@ -681,6 +692,10 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     return this.isVertexMode
       ? `vertex:interactions:${this.modelName}`
       : `google:interactions:${this.modelName}`;
+  }
+
+  getApiKey(): string | undefined {
+    return getInteractionsApiKey(this.config, this.env);
   }
 
   toString(): string {
@@ -770,13 +785,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     }
   }
 
-  /**
-   * Drive one exchange to completion, resolving tool calls along the way.
-   *
-   * Returns the final interaction plus the usage accumulated across every round,
-   * so the caller can report tokens for the whole exchange including
-   * intermediate requests.
-   */
+  /** Resolve tool calls and retain accounting for every completed request. */
   private async runToolLoop(args: {
     endpoint: string;
     headers: Record<string, string>;
@@ -801,6 +810,14 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     // same function_call can reappear on a later round. Track what we already
     // ran so a tool never fires twice and the loop cannot spin on stale calls.
     const executedCallIds = new Set<string>();
+    const recordAnsweredCalls = (steps: Array<{ type?: unknown; call_id?: unknown }>) => {
+      for (const step of steps) {
+        if (step.type === 'function_result' && typeof step.call_id === 'string') {
+          executedCallIds.add(step.call_id);
+        }
+      }
+    };
+    recordAnsweredCalls(args.input);
     const groundingCalls: Array<Record<string, unknown>> = [];
 
     // The full conversation, always. `currentInput` is what this round sends,
@@ -812,9 +829,25 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     let rounds = 0;
     const maxRounds = DEFAULT_MAX_TOOL_ROUNDS;
 
+    let totalCost = 0;
+    let fullyPriced = true;
+    const cost = () => (fullyPriced && totals.requests > 0 ? totalCost : undefined);
+    const failure = (error: ProviderResponse): { error: ProviderResponse } => ({
+      error: {
+        ...error,
+        ...(totals.requests > 0 ? { tokenUsage: buildTokenUsage(totals), cost: cost() } : {}),
+        ...(!error.raw && lastData ? { raw: lastData } : {}),
+        metadata: {
+          ...error.metadata,
+          ...(executedToolCalls.length > 0 ? { toolCalls: executedToolCalls } : {}),
+          ...(groundingCalls.length > 0 ? { groundingToolCalls: groundingCalls } : {}),
+        },
+      },
+    });
+
     while (rounds <= maxRounds) {
       if (abortSignal?.aborted) {
-        return { error: { error: 'Gemini Interactions request aborted.' } };
+        return failure({ error: 'Gemini Interactions request aborted.' });
       }
       rounds++;
       const body = {
@@ -827,11 +860,33 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
 
       const result = await this.postInteraction(endpoint, headers, body, config, abortSignal);
       if ('error' in result) {
-        return { error: result.error };
+        return failure(result.error);
       }
       const { data } = result;
       lastData = data;
-      accumulateUsage(totals, data.usage);
+      const roundUsage = accumulateUsage(totals, data.usage);
+      const roundCost = calculateGoogleCost(
+        typeof baseBody.model === 'string' ? baseBody.model : this.modelName,
+        this.isVertexMode
+          ? { ...config, region: getVertexInteractionsRegion(config, this.env) }
+          : config,
+        roundUsage.prompt,
+        roundUsage.completion + roundUsage.thoughts,
+        this.isVertexMode,
+        roundUsage.audioIn,
+        roundUsage.audioOut,
+        0,
+        roundUsage.imageIn,
+        roundUsage.cached,
+        roundUsage.cachedAudio,
+        roundUsage.cachedImage,
+      );
+      if (roundCost === undefined) {
+        fullyPriced = false;
+      } else {
+        totalCost += roundCost;
+      }
+      recordAnsweredCalls(data.steps ?? []);
       for (const grounding of data.usage?.grounding_tool_count || []) {
         groundingCalls.push({ ...grounding });
       }
@@ -874,7 +929,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       const results: InteractionInputItem[] = [];
       for (const call of runnable) {
         if (abortSignal?.aborted) {
-          return { error: { error: 'Gemini Interactions request aborted.' } };
+          return failure({ error: 'Gemini Interactions request aborted.' });
         }
         if (call.id) {
           executedCallIds.add(call.id);
@@ -898,11 +953,12 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     }
 
     if (!lastData) {
-      return { error: { error: 'Gemini Interactions API returned no data' } };
+      return failure({ error: 'Gemini Interactions API returned no data' });
     }
     return {
       lastData,
       totals,
+      cost: cost(),
       executedToolCalls,
       groundingCalls,
       executedCallIds,
@@ -1057,7 +1113,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     if ('error' in exchange) {
       return exchange.error;
     }
-    const { lastData, totals, executedToolCalls, groundingCalls } = exchange;
+    const { lastData, totals, cost, executedToolCalls, groundingCalls } = exchange;
     const { executedCallIds } = exchange;
     if (!lastData) {
       return { error: 'Gemini Interactions API returned no data' };
@@ -1080,6 +1136,12 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
         error:
           'The Interactions chat adapter does not support media output. Use the corresponding media provider.',
         raw: lastData,
+        tokenUsage: buildTokenUsage(totals),
+        cost,
+        metadata: {
+          ...(executedToolCalls.length > 0 ? { toolCalls: executedToolCalls } : {}),
+          ...(groundingCalls.length > 0 ? { groundingToolCalls: groundingCalls } : {}),
+        },
       };
     }
     const text = collectText(turnSteps);
@@ -1106,24 +1168,6 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     } else {
       output = text;
     }
-
-    const cost =
-      totals.requests === 0
-        ? undefined
-        : calculateGoogleCost(
-            typeof baseBody.model === 'string' ? baseBody.model : this.modelName,
-            this.isVertexMode ? { ...config, region: this.getRegion() } : config,
-            totals.prompt,
-            totals.completion + totals.thoughts,
-            this.isVertexMode,
-            totals.audioIn,
-            totals.audioOut,
-            0,
-            totals.imageIn,
-            totals.cached,
-            totals.cachedAudio,
-            totals.cachedImage,
-          );
 
     return {
       output,

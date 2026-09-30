@@ -2043,6 +2043,24 @@ describe('Provider Registry', () => {
       },
     );
 
+    it.each([
+      'google:interactions:gemini-3.6-flash',
+      'vertex:interactions:gemini-3.6-flash',
+      'google:gemini-3.6-flash',
+      'vertex:gemini-3.6-flash',
+      'vertex:chat:gemini-3.6-flash',
+    ])('preserves the explicit id for Interactions route %s', async (providerPath) => {
+      const options: ProviderOptions = {
+        id: 'my-evaluation-provider',
+        config: { interactions: true },
+      };
+      const factory = (await getProviderFactories(providerPath)).find((entry) =>
+        entry.test(providerPath),
+      );
+      const provider = await factory!.create(providerPath, options, { basePath: '/test', options });
+      expect(provider.id()).toBe('my-evaluation-provider');
+    });
+
     it('pins google:interactions routes to AI Studio', async () => {
       const providerPath = 'google:interactions:gemini-3.6-flash';
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));

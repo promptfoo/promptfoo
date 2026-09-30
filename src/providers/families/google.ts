@@ -48,7 +48,7 @@ export const googleProviderFactories: ProviderFactory[] = [
         const { GoogleInteractionsChatProvider } = await import('../google/interactionsChat');
         return new GoogleInteractionsChatProvider(interactionsModel, {
           ...providerOptions,
-          id: providerPath,
+          id: providerOptions.id ?? providerPath,
           config: { ...providerOptions.config, vertexai: true },
         });
       }
@@ -71,7 +71,7 @@ export const googleProviderFactories: ProviderFactory[] = [
         const { GoogleInteractionsChatProvider } = await import('../google/interactionsChat');
         return new GoogleInteractionsChatProvider(modelName, {
           ...providerOptions,
-          id: providerPath,
+          id: providerOptions.id ?? providerPath,
           config: { ...providerOptions.config, vertexai: true },
         });
       }
@@ -110,7 +110,7 @@ export const googleProviderFactories: ProviderFactory[] = [
           const { GoogleInteractionsChatProvider } = await import('../google/interactionsChat');
           return new GoogleInteractionsChatProvider(modelName, {
             ...providerOptions,
-            id: providerPath,
+            id: providerOptions.id ?? providerPath,
             config: { ...providerOptions.config, vertexai: false },
           });
         }
@@ -163,7 +163,7 @@ export const googleProviderFactories: ProviderFactory[] = [
         const { GoogleInteractionsChatProvider } = await import('../google/interactionsChat');
         return new GoogleInteractionsChatProvider(modelName, {
           ...providerOptions,
-          id: providerPath,
+          id: providerOptions.id ?? providerPath,
           config: { ...providerOptions.config, vertexai: false },
         });
       }

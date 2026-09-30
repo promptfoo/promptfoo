@@ -294,7 +294,7 @@ The chat adapter supports text, Gemini and OpenAI chat prompts, media inputs, sy
 
 Use `responseSchema` or `generationConfig.responseSchema` for structured output. Simple `googleSearch`, `codeExecution`, and `urlContext` tools are translated to Interactions tools. Native Interactions tools can be supplied through `passthrough.tools`.
 
-Unsupported controls return a provider error before a request is sent. These include `safetySettings`, required or named tool choices, thinking token budgets, MCP, function response schemas, and configured Gemini search-retrieval options. Keep those evaluations on `generateContent`. Media output, streaming, and background execution are not supported by this chat adapter; use the existing image, audio, or Omni providers for media output.
+Unsupported controls return a provider error before a request is sent. These include `safetySettings`, required or named tool choices, thinking token budgets, MCP, function response schemas or media, and configured Gemini search-retrieval options. Keep those evaluations on `generateContent`. Media output, streaming, and background execution are not supported by this chat adapter; use the existing image, audio, or Omni providers for media output.
 
 ### Storage and history
 
