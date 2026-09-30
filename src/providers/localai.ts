@@ -1,18 +1,9 @@
 import { fetchWithCache } from '../cache';
 import { getEnvFloat, getEnvString } from '../envars';
-import {
-  extractReasoningFromOpenAiCompatibleMessage,
-  getRequestTimeoutMs,
-  parseChatPrompt,
-} from './shared';
+import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvOverrides } from '../types/env';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  ProviderEmbeddingResponse,
-  ProviderResponse,
-} from '../types/index';
+import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types/index';
 
 function parseEnvFloat(value: string | undefined): number | undefined {
   if (value === undefined) {
@@ -25,7 +16,6 @@ function parseEnvFloat(value: string | undefined): number | undefined {
 interface LocalAiCompletionOptions {
   apiBaseUrl?: string;
   temperature?: number;
-  showThinking?: boolean;
 }
 
 class LocalAiGenericProvider implements ApiProvider {
@@ -65,7 +55,7 @@ class LocalAiGenericProvider implements ApiProvider {
 }
 
 export class LocalAiChatProvider extends LocalAiGenericProvider {
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(prompt: string): Promise<ProviderResponse> {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
     const body = {
       model: this.modelName,
@@ -97,14 +87,8 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
     }
 
     try {
-      const message = data.choices[0].message;
-      const reasoning = extractReasoningFromOpenAiCompatibleMessage(
-        message,
-        (context?.prompt?.config?.showThinking ?? this.config.showThinking) !== false,
-      );
       return {
-        output: message.content,
-        ...(reasoning && { reasoning }),
+        output: data.choices[0].message.content,
       };
     } catch (err) {
       return {

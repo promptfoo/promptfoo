@@ -1,7 +1,7 @@
 import logger from '../../logger';
-import { formatOpenAiError } from '../openai/util';
+import { formatOpenAiError, getOpenAICompletionTokenDetails } from '../openai/util';
 
-import type { ProviderResponse, ReasoningContent, TokenUsage } from '../../types/index';
+import type { ProviderResponse, TokenUsage } from '../../types/index';
 import type {
   ProcessedOutput,
   ProcessorConfig,
@@ -39,7 +39,7 @@ function extractMetadata(data: any, processedOutput: ProcessedOutput): Record<st
  * Extract token usage from response data, handling both OpenAI Chat Completions format
  * (prompt_tokens, completion_tokens) and Azure Responses format (input_tokens, output_tokens)
  */
-function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
+export function getResponsesTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
       const totalTokens =
@@ -49,34 +49,14 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
       const promptTokens = data.usage.prompt_tokens || data.usage.input_tokens || 0;
       const completionTokens = data.usage.completion_tokens || data.usage.output_tokens || 0;
       const totalTokens = data.usage.total_tokens || promptTokens + completionTokens;
-      const outputTokenDetails =
-        data.usage.completion_tokens_details ?? data.usage.output_tokens_details;
-      const cachedInputTokens =
-        data.usage.prompt_tokens_details?.cached_tokens ??
-        data.usage.input_tokens_details?.cached_tokens ??
-        0;
+      const completionDetails = getOpenAICompletionTokenDetails(data.usage);
 
       return {
         total: totalTokens,
         prompt: promptTokens,
         completion: completionTokens,
         numRequests: 1,
-        ...(outputTokenDetails
-          ? {
-              completionDetails: {
-                reasoning: outputTokenDetails.reasoning_tokens,
-                acceptedPrediction: outputTokenDetails.accepted_prediction_tokens,
-                rejectedPrediction: outputTokenDetails.rejected_prediction_tokens,
-                ...(cachedInputTokens > 0 ? { cacheReadInputTokens: cachedInputTokens } : {}),
-              },
-            }
-          : cachedInputTokens > 0
-            ? {
-                completionDetails: {
-                  cacheReadInputTokens: cachedInputTokens,
-                },
-              }
-            : {}),
+        ...(completionDetails ? { completionDetails } : {}),
       };
     }
   }
@@ -119,20 +99,16 @@ export class ResponsesProcessor {
 
       const processedOutput = await this.processOutput(data.output, context);
       const cost = this.config.costCalculator(this.config.modelName, data.usage, requestConfig);
-      const showThinking = requestConfig.showThinking !== false;
 
       if (processedOutput.isRefusal) {
         return {
           output: processedOutput.refusal,
-          tokenUsage: getTokenUsage(data, cached),
+          tokenUsage: getResponsesTokenUsage(data, cached),
           isRefusal: true,
           cached,
           ...(cost === undefined ? {} : { cost }),
           raw: data,
           metadata: extractMetadata(data, processedOutput),
-          ...(processedOutput.reasoning?.length && showThinking
-            ? { reasoning: processedOutput.reasoning }
-            : {}),
         };
       }
 
@@ -152,14 +128,11 @@ export class ResponsesProcessor {
 
       const result: ProviderResponse = {
         output: finalOutput,
-        tokenUsage: getTokenUsage(data, cached),
+        tokenUsage: getResponsesTokenUsage(data, cached),
         cached,
         ...(cost === undefined ? {} : { cost }),
         raw: data,
         metadata: extractMetadata(data, processedOutput),
-        ...(processedOutput.reasoning?.length && showThinking
-          ? { reasoning: processedOutput.reasoning }
-          : {}),
       };
 
       // Add annotations if present (for deep research citations)
@@ -190,7 +163,6 @@ export class ResponsesProcessor {
     let refusal = '';
     let isRefusal = false;
     const annotations: any[] = [];
-    const reasoningBlocks: ReasoningContent[] = [];
 
     // Process all output items
     for (const item of output) {
@@ -216,11 +188,6 @@ export class ResponsesProcessor {
       if (processed.annotations) {
         annotations.push(...processed.annotations);
       }
-
-      // Collect reasoning blocks
-      if (processed.reasoning) {
-        reasoningBlocks.push(...processed.reasoning);
-      }
     }
 
     return {
@@ -228,7 +195,6 @@ export class ResponsesProcessor {
       refusal,
       isRefusal,
       annotations: annotations.length > 0 ? annotations : undefined,
-      reasoning: reasoningBlocks.length > 0 ? reasoningBlocks : undefined,
     };
   }
 
@@ -239,7 +205,6 @@ export class ResponsesProcessor {
     content?: string;
     isRefusal?: boolean;
     annotations?: any[];
-    reasoning?: ReasoningContent[];
   }> {
     switch (item.type) {
       case 'function_call':
@@ -365,33 +330,17 @@ export class ResponsesProcessor {
     });
   }
 
-  private processReasoning(
-    item: any,
-    context: ProcessorContext,
-  ): Promise<{ reasoning?: ReasoningContent[] }> {
+  private processReasoning(item: any, context: ProcessorContext): Promise<{ content?: string }> {
     if (context.suppressReasoningOutput) {
       return Promise.resolve({});
     }
 
-    const reasoning: ReasoningContent[] = [];
-    if (Array.isArray(item.summary)) {
-      const reasoningText = item.summary
-        .map((summary: { text?: unknown }) =>
-          typeof summary.text === 'string' ? summary.text.trim() : '',
-        )
-        .filter(Boolean)
-        .join('\n');
-
-      if (reasoningText) {
-        reasoning.push({ type: 'reasoning', content: reasoningText });
-      }
+    if (!item.summary || !item.summary.length) {
+      return Promise.resolve({});
     }
 
-    if (typeof item.encrypted_content === 'string' && item.encrypted_content.trim()) {
-      reasoning.push({ type: 'redacted_thinking', data: item.encrypted_content });
-    }
-
-    return Promise.resolve(reasoning.length > 0 ? { reasoning } : {});
+    const reasoningText = `Reasoning: ${item.summary.map((s: { text: string }) => s.text).join('\n')}`;
+    return Promise.resolve({ content: reasoningText });
   }
 
   private processWebSearch(item: any): Promise<{ content?: string }> {

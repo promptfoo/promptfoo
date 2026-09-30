@@ -1,8 +1,10 @@
-import * as fs from 'node:fs';
+import * as fs from 'fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import { LumaRayVideoProvider } from '../../../src/providers/bedrock/luma-ray';
+
+import type { CallApiContextParams } from '../../../src/types/providers';
 
 // Mock hoisted for proper isolation with dynamic imports
 const mockBedrockSend = vi.hoisted(() => vi.fn());
@@ -62,7 +64,7 @@ vi.mock('../../../src/util/time', () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('node:fs', async (importOriginal) => {
+vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof fs>();
   return {
     ...actual,
@@ -469,14 +471,21 @@ describe('LumaRayVideoProvider', () => {
 
   describe('S3 Download and Blob Storage', () => {
     it('should download video from S3 and store as blob', async () => {
-      const result = await provider.callApi('A video to download');
+      const result = await provider.callApi('A video to download', {
+        evaluationId: 'eval-luma-ray',
+        promptIdx: 8,
+        testIdx: 7,
+      } as unknown as CallApiContextParams);
 
       expect(mockS3Send).toHaveBeenCalled();
       expect(mockStoreBlob).toHaveBeenCalledWith(
         expect.any(Buffer),
         'video/mp4',
         expect.objectContaining({
+          evalId: 'eval-luma-ray',
           kind: 'video',
+          promptIdx: 8,
+          testIdx: 7,
         }),
       );
       expect(result.video?.blobRef).toBeDefined();

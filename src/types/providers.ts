@@ -23,7 +23,6 @@ export type {
   ProviderModerationResponse,
   ProviderResponse,
   ProviderSimilarityResponse,
-  ReasoningContent,
 } from '../contracts/providers';
 export type { TokenUsage } from './shared';
 export type ProviderId = string;
@@ -37,6 +36,13 @@ export type ProviderConfig =
   | ProviderOptions
   | ProviderOptionsMap;
 export type ProvidersConfig = ProviderId | ProviderFunction | ApiProvider | ProviderConfig[];
+
+export interface RemoteGenerationContext {
+  /** Provider IDs used for filtering, retry, and target identity. */
+  providerTargetIds: string[];
+  /** Cloud target database ID sent to Promptfoo Cloud task handlers. */
+  cloudTargetId?: string;
+}
 
 export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
 
@@ -120,7 +126,18 @@ export interface ApiProvider extends MinimalApiProvider {
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   config?: any;
   delay?: number;
+  /** True when callApi applies delay itself and the evaluator should not wait again. */
+  handlesOwnDelay?: boolean;
+  /**
+   * True when callApi owns retries for its operations, including requests that
+   * must not be replayed. Scheduling still applies, but the scheduler must not
+   * retry the whole call after its transport or SDK has finished. Subclasses
+   * replacing that behavior can override this with false to use scheduler retries.
+   */
+  handlesOwnRetries?: boolean;
   getSessionId?: () => string;
+  /** Native audio input content format accepted by this provider and its configured model. */
+  getAudioInputFormat?: () => 'openai' | 'google' | undefined;
   inputs?: Inputs;
   label?: ProviderLabel;
   transform?: string | TransformFunction;
@@ -146,7 +163,12 @@ export interface ApiClassificationProvider extends ApiProvider {
 }
 
 export interface ApiModerationProvider extends ApiProvider {
-  callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
+  callModerationApi: (
+    prompt: string,
+    response: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderModerationResponse>;
 }
 
 export type FilePath = string;

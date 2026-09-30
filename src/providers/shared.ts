@@ -1,13 +1,38 @@
-import yaml from 'js-yaml';
 import { getEnvBool, getEnvInt } from '../envars';
+import { loadYaml } from '../util/yamlLoad';
 
-import type { ApiProvider, ReasoningContent } from '../types/index';
+import type { ApiProvider } from '../types/index';
+
+/** Returns the complete model suffix after the given number of provider/type segments. */
+export function modelNameFromProviderPath(providerPath: string, segments: number): string {
+  return providerPath.split(':').slice(segments).join(':');
+}
 
 /**
  * The default timeout for API requests in milliseconds.
  */
 export function getRequestTimeoutMs(): number {
   return getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
+}
+
+/** Read a simple eval variable without evaluating template expressions. */
+export function resolveDirectTestVariable(value: unknown, vars?: Record<string, unknown>): unknown {
+  if (typeof value !== 'string' || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return value;
+  }
+  const variable = /^\{\{\s*([A-Za-z_]\w*)\s*\}\}$/.exec(value)?.[1];
+  return variable && vars && Object.prototype.hasOwnProperty.call(vars, variable)
+    ? vars[variable]
+    : value;
+}
+
+/** Match OpenAI-compatible output-limit environment precedence. */
+export function getOpenAIChatOutputLimitFromEnv(): number | undefined {
+  return getOpenAICompletionTokenLimitFromEnv() ?? getEnvInt('OPENAI_MAX_TOKENS');
+}
+
+export function getOpenAICompletionTokenLimitFromEnv(): number | undefined {
+  return getEnvInt('OPENAI_MAX_COMPLETION_TOKENS');
 }
 
 /**
@@ -40,6 +65,10 @@ export interface ProviderConfig {
   audioCost?: number;
   audioInputCost?: number;
   audioOutputCost?: number;
+  videoOutputCost?: number;
+  imageInputCost?: number;
+  service_tier?: string | null;
+  passthrough?: object;
 }
 
 /**
@@ -81,6 +110,17 @@ export function calculateCost(
   const outputCost =
     config.outputCost ?? config.cost ?? longContextCost?.output ?? model.cost.output;
   return inputCost * promptTokens + outputCost * completionTokens;
+}
+
+/**
+ * Clamp reported cached prompt tokens to [0, promptTokens] for cost billing.
+ *
+ * Providers occasionally report cached token counts that exceed prompt tokens
+ * (rounding) or values that are negative or non-finite; billing those raw would
+ * produce negative or NaN costs.
+ */
+export function clampCachedTokens(cachedTokens: number | undefined, promptTokens: number): number {
+  return Number.isFinite(cachedTokens) ? Math.min(Math.max(cachedTokens!, 0), promptTokens) : 0;
 }
 
 /**
@@ -134,7 +174,7 @@ export function parseChatPrompt<T>(prompt: string, defaultValue: T): T {
   if (trimmedPrompt.startsWith('- role:')) {
     try {
       // Try YAML - some legacy OpenAI prompts are YAML :(
-      return yaml.load(prompt) as T;
+      return loadYaml(prompt) as T;
     } catch (err) {
       throw new Error(`Chat Completion prompt is not a valid YAML string: ${err}\n\n${prompt}`);
     }
@@ -150,117 +190,6 @@ export function parseChatPrompt<T>(prompt: string, defaultValue: T): T {
       return defaultValue;
     }
   }
-}
-
-type OpenAiCompatibleReasoningMessage = {
-  reasoning?: unknown;
-  reasoning_content?: unknown;
-  thinking?: unknown;
-};
-
-export function extractReasoningFromOpenAiCompatibleMessage(
-  message: OpenAiCompatibleReasoningMessage | null | undefined,
-  showThinking: boolean = true,
-): ReasoningContent[] | undefined {
-  if (!showThinking || !message) {
-    return undefined;
-  }
-
-  const reasoning: ReasoningContent[] = [];
-  for (const value of [message.reasoning, message.reasoning_content, message.thinking]) {
-    if (typeof value === 'string' && value.trim()) {
-      reasoning.push({ type: 'reasoning', content: value });
-    }
-  }
-  return reasoning.length > 0 ? reasoning : undefined;
-}
-
-export function stripOpenAiCompatibleReasoningFields<T extends object>(
-  message: T,
-): Omit<T, 'reasoning' | 'reasoning_content' | 'thinking'> {
-  const {
-    reasoning: _reasoning,
-    reasoning_content: _reasoningContent,
-    thinking: _thinking,
-    ...rest
-  } = message as T & OpenAiCompatibleReasoningMessage;
-  return rest as Omit<T, 'reasoning' | 'reasoning_content' | 'thinking'>;
-}
-
-function getTextFromReasoningValue(value: unknown): string | undefined {
-  if (typeof value === 'string' && value.trim()) {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    const text = value.map(getTextFromReasoningValue).filter(Boolean).join('');
-    return text || undefined;
-  }
-
-  if (value && typeof value === 'object') {
-    return getStringField(value as Record<string, unknown>, [
-      'text',
-      'content',
-      'thinking',
-      'reasoning',
-    ]);
-  }
-
-  return undefined;
-}
-
-function getStringField(record: Record<string, unknown>, keys: string[]): string | undefined {
-  for (const key of keys) {
-    const text = getTextFromReasoningValue(record[key]);
-    if (text) {
-      return text;
-    }
-  }
-  return undefined;
-}
-
-export function splitReasoningFromContentParts(
-  content: unknown,
-  showThinking: boolean = true,
-): { output: unknown; reasoning?: ReasoningContent[] } {
-  if (!Array.isArray(content)) {
-    return { output: content };
-  }
-
-  const outputParts: unknown[] = [];
-  const outputText: string[] = [];
-  const reasoning: ReasoningContent[] = [];
-  let hasStructuredOutput = false;
-
-  for (const part of content) {
-    if (part && typeof part === 'object') {
-      const record = part as Record<string, unknown>;
-      if (record.type === 'thinking' || record.type === 'reasoning') {
-        const content = getStringField(record, ['thinking', 'content', 'text', 'reasoning']);
-        if (showThinking && content) {
-          reasoning.push({ type: 'reasoning', content });
-        }
-        continue;
-      }
-      if (record.type === 'text' && typeof record.text === 'string') {
-        outputText.push(record.text);
-        outputParts.push(part);
-        continue;
-      }
-      hasStructuredOutput = true;
-    } else if (typeof part === 'string') {
-      outputText.push(part);
-      outputParts.push(part);
-      continue;
-    }
-
-    outputParts.push(part);
-  }
-
-  return {
-    output: hasStructuredOutput ? outputParts : outputText.join(''),
-    reasoning: reasoning.length > 0 ? reasoning : undefined,
-  };
 }
 
 /**

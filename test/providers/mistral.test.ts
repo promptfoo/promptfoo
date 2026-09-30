@@ -172,117 +172,6 @@ describe('Mistral', () => {
       });
     });
 
-    it('should separate Magistral thinking content chunks from output', async () => {
-      const mockResponse = {
-        choices: [
-          {
-            message: {
-              content: [
-                { type: 'thinking', thinking: 'I should reason privately.' },
-                { type: 'text', text: 'Final answer.' },
-              ],
-            },
-          },
-        ],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      };
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: mockResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
-
-      const result = await provider.callApi('Test prompt');
-
-      expect(result.output).toBe('Final answer.');
-      expect(result.reasoning).toEqual([
-        { type: 'reasoning', content: 'I should reason privately.' },
-      ]);
-    });
-
-    it('should strip reasoning fields from structured tool-call output', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: {
-          choices: [
-            {
-              message: {
-                content: [
-                  { type: 'thinking', thinking: 'Private tool reasoning.' },
-                  { type: 'text', text: 'Calling tool.' },
-                ],
-                reasoning_content: 'Model-level private reasoning.',
-                tool_calls: [
-                  {
-                    id: 'call_1',
-                    type: 'function',
-                    function: { name: 'lookup', arguments: '{"query":"weather"}' },
-                  },
-                ],
-              },
-            },
-          ],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
-
-      const result = await provider.callApi('Test prompt');
-
-      expect(result.output).toEqual({
-        content: 'Calling tool.',
-        tool_calls: [
-          {
-            id: 'call_1',
-            type: 'function',
-            function: { name: 'lookup', arguments: '{"query":"weather"}' },
-          },
-        ],
-      });
-      expect(JSON.stringify(result.output).toLowerCase()).not.toContain('private');
-      expect(result.reasoning).toEqual([
-        { type: 'reasoning', content: 'Model-level private reasoning.' },
-        { type: 'reasoning', content: 'Private tool reasoning.' },
-      ]);
-    });
-
-    it('should pass Mistral reasoning controls without leaking hidden chunks', async () => {
-      const reasoningProvider = new MistralChatCompletionProvider('mistral-small-latest', {
-        config: { prompt_mode: 'reasoning', reasoning_effort: 'high', showThinking: false },
-      });
-      vi.spyOn(reasoningProvider, 'getApiKey').mockReturnValue('fake-api-key');
-
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: {
-          choices: [
-            {
-              message: {
-                content: [
-                  { type: 'reasoning', content: 'hidden reasoning' },
-                  { type: 'text', text: 'visible output' },
-                ],
-              },
-            },
-          ],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
-
-      const result = await reasoningProvider.callApi('Test prompt');
-      const requestBody = JSON.parse(
-        (vi.mocked(fetchWithCache).mock.calls[0][1] as RequestInit).body as string,
-      );
-
-      expect(requestBody).toMatchObject({ prompt_mode: 'reasoning', reasoning_effort: 'high' });
-      expect(result.output).toBe('visible output');
-      expect(result.reasoning).toBeUndefined();
-    });
-
     it('should preserve explicit zero for top_p, random_seed, and max_tokens', async () => {
       const zeroProvider = new MistralChatCompletionProvider('mistral-tiny', {
         config: { top_p: 0, random_seed: 0, max_tokens: 0 },
@@ -464,6 +353,66 @@ describe('Mistral', () => {
       expect(result.cost).toBeCloseTo(0.0011, 6);
     });
 
+    // Regression coverage: Mistral silently repoints `*-latest`/bare aliases to newer
+    // models. These lock the hardcoded pricing to whatever the alias resolves to today.
+    it.each([
+      // [model, input price/M, output price/M, expected cost for 400 in / 600 out]
+      // mistral-small-latest -> Mistral Small 4 (mistral-small-2603): $0.15/$0.60
+      ['mistral-small-latest', 0.00042],
+      // magistral-small-latest folded into Mistral Small 4: $0.15/$0.60
+      ['magistral-small-latest', 0.00042],
+      // mistral-medium-latest + bare mistral-medium -> Mistral Medium 3.5: $1.50/$7.50
+      ['mistral-medium-latest', 0.0051],
+      ['mistral-medium', 0.0051],
+      // mistral-medium-2604 is the canonical dated ID for Mistral Medium 3.5
+      ['mistral-medium-2604', 0.0051],
+      // version aliases that also resolve to Mistral Medium 3.5
+      ['mistral-medium-3-5', 0.0051],
+      // Mistral Code product aliases resolve to Codestral: $0.30/$0.90
+      ['mistral-code-latest', 0.00066],
+      // Devstral 2 agent alias: $0.40/$2.00
+      ['mistral-code-agent-latest', 0.00136],
+    ])('tracks current pricing for %s', async (model, expectedCost) => {
+      const provider = new MistralChatCompletionProvider(model);
+      vi.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'ok' } }],
+          usage: { total_tokens: 1000, prompt_tokens: 400, completion_tokens: 600 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test alias pricing');
+      expect(result.cost).toBeCloseTo(expectedCost, 6);
+    });
+
+    it('forwards prompt_cache_key in the request body', async () => {
+      const provider = new MistralChatCompletionProvider('mistral-large-latest', {
+        config: { prompt_cache_key: 'shared-prefix-1' },
+      });
+      vi.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'ok' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('Test prompt cache key');
+
+      const requestInit = vi.mocked(fetchWithCache).mock.calls[0]?.[1];
+      const body = JSON.parse(requestInit?.body as string);
+      expect(body.prompt_cache_key).toBe('shared-prefix-1');
+    });
+
     it('should use cache when enabled', async () => {
       vi.mocked(isCacheEnabled).mockReturnValue(true);
       vi.mocked(getCache).mockReturnValue({
@@ -553,66 +502,6 @@ describe('Mistral', () => {
         cacheKey,
         expect.objectContaining({ output: 'Fresh output' }),
       );
-    });
-
-    it('should isolate processed cache entries by effective showThinking', async () => {
-      const cacheGet = vi.fn().mockResolvedValue(null);
-      const cacheSet = vi.fn();
-      vi.mocked(isCacheEnabled).mockReturnValue(true);
-      vi.mocked(getCache).mockReturnValue({
-        get: cacheGet,
-        set: cacheSet,
-        wrap: vi.fn(),
-        del: vi.fn(),
-        clear: vi.fn(),
-        stores: [
-          {
-            get: vi.fn(),
-            set: vi.fn(),
-          },
-        ] as any,
-        mget: vi.fn(),
-        mset: vi.fn(),
-        mdel: vi.fn(),
-        reset: vi.fn(),
-        ttl: vi.fn(),
-        on: vi.fn(),
-        removeAllListeners: vi.fn(),
-      } as any);
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: {
-          choices: [
-            {
-              message: {
-                content: [
-                  { type: 'reasoning', content: 'private reasoning' },
-                  { type: 'text', text: 'Fresh output' },
-                ],
-              },
-            },
-          ],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
-
-      await provider.callApi('Same prompt', {
-        prompt: { raw: 'Same prompt', label: 'same', config: { showThinking: true } },
-      } as any);
-      await provider.callApi('Same prompt', {
-        prompt: { raw: 'Same prompt', label: 'same', config: { showThinking: false } },
-      } as any);
-
-      const [showThinkingKey, hideThinkingKey] = cacheGet.mock.calls.map(([key]) => key);
-      expect(showThinkingKey).toMatch(
-        /^mistral:chat:mistral-tiny:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/,
-      );
-      expect(hideThinkingKey).toMatch(
-        /^mistral:chat:mistral-tiny:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/,
-      );
-      expect(showThinkingKey).not.toBe(hideThinkingKey);
     });
 
     it('should isolate hashed cache keys by resolved API key', async () => {
@@ -991,7 +880,6 @@ describe('Mistral', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(result.output).toBe('Final answer');
-      expect(result.reasoning).toEqual([{ type: 'reasoning', content: 'Internal reasoning' }]);
     });
 
     it('should preserve chunk arrays that contain non-reasoning metadata', async () => {
@@ -1012,12 +900,7 @@ describe('Mistral', () => {
 
       const result = await provider.callApi('Test prompt');
 
-      expect(result.output).toEqual([
-        { type: 'text', text: 'Final answer' },
-        { type: 'citation', url: 'https://example.com' },
-      ]);
-      expect(JSON.stringify(result.output)).not.toContain('Internal reasoning');
-      expect(result.reasoning).toEqual([{ type: 'reasoning', content: 'Internal reasoning' }]);
+      expect(result.output).toEqual(content);
     });
 
     it('should preserve all choices in metadata when n returns multiple completions', async () => {
@@ -1100,6 +983,41 @@ describe('Mistral', () => {
     it('should create a provider with default options', () => {
       expect(provider.modelName).toBe('mistral-embed');
       expect(provider.config).toEqual({});
+    });
+
+    it('should support non-default embedding models such as codestral-embed', async () => {
+      const codestralProvider = new MistralEmbeddingProvider({ modelName: 'codestral-embed' });
+      vi.spyOn(codestralProvider, 'getApiKey').mockReturnValue('fake-api-key');
+      expect(codestralProvider.modelName).toBe('codestral-embed');
+      expect(codestralProvider.id()).toBe('mistral:embedding:codestral-embed');
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          model: 'codestral-embed',
+          data: [{ embedding: [0.1, 0.2, 0.3] }],
+          usage: { total_tokens: 1000, prompt_tokens: 1000 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await codestralProvider.callEmbeddingApi('Test code');
+
+      // Request sends the codestral-embed model
+      const requestInit = vi.mocked(fetchWithCache).mock.calls[0]?.[1];
+      const body = JSON.parse(requestInit?.body as string);
+      expect(body.model).toBe('codestral-embed');
+      // Codestral Embed input pricing is $0.15/1M: 1000 tokens => 0.00015
+      expect(result.cost).toBeCloseTo(0.00015, 6);
+    });
+
+    it('should warn on an unknown embedding model', () => {
+      const unknownProvider = new MistralEmbeddingProvider({ modelName: 'not-a-real-embed' });
+      expect(unknownProvider.modelName).toBe('not-a-real-embed');
+      expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+        expect.stringContaining('Using unknown Mistral embedding model'),
+      );
     });
 
     it('should call Mistral Embedding API and return embedding with correct structure', async () => {

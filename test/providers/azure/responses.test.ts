@@ -117,7 +117,7 @@ describe('AzureResponsesProvider', () => {
   describe('getAzureResponsesBody', () => {
     it('should create correct request body for basic prompt', async () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test');
-      const { body } = await provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body).toMatchObject({
         model: 'gpt-4.1-test',
@@ -147,7 +147,7 @@ describe('AzureResponsesProvider', () => {
         },
       });
 
-      const { body } = await provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(mockMaybeLoadResponseFormatFromExternalFile).toHaveBeenCalledWith(
         'file://test-schema.json',
@@ -185,7 +185,7 @@ describe('AzureResponsesProvider', () => {
         },
       });
 
-      const { body } = await provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.text.format).toMatchObject({
         type: 'json_schema',
@@ -204,7 +204,7 @@ describe('AzureResponsesProvider', () => {
         config: { temperature: 0.7 },
       });
 
-      const { body } = await provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body).not.toHaveProperty('temperature');
     });
@@ -214,7 +214,7 @@ describe('AzureResponsesProvider', () => {
         config: { temperature: 0.7 },
       });
 
-      const { body } = await provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.temperature).toBe(0.7);
     });
@@ -225,7 +225,7 @@ describe('AzureResponsesProvider', () => {
         config: { temperature: 0 },
       });
 
-      const { body } = await provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       // temperature: 0 should be present in the request body
       expect(body.temperature).toBe(0);
@@ -237,7 +237,7 @@ describe('AzureResponsesProvider', () => {
         config: { omitDefaults: true },
       });
 
-      const { body } = await provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.temperature).toBeUndefined();
       expect('temperature' in body).toBe(false);
@@ -253,7 +253,7 @@ describe('AzureResponsesProvider', () => {
         config: { omitDefaults: true },
       });
 
-      const { body } = await provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.temperature).toBe(0.5);
       expect('temperature' in body).toBe(true);
@@ -269,7 +269,7 @@ describe('AzureResponsesProvider', () => {
         config: { omitDefaults: true },
       });
 
-      const { body } = await provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.max_output_tokens).toBe(4096);
       expect('max_output_tokens' in body).toBe(true);
@@ -282,7 +282,7 @@ describe('AzureResponsesProvider', () => {
         config: { omitDefaults: true },
       });
 
-      const { body } = await provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.max_output_tokens).toBe(2048);
       expect('max_output_tokens' in body).toBe(true);
@@ -293,7 +293,7 @@ describe('AzureResponsesProvider', () => {
 
       const provider = new AzureResponsesProvider('o1-preview');
 
-      const { body } = await provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.max_output_tokens).toBe(2048);
       expect('max_output_tokens' in body).toBe(true);
@@ -302,7 +302,7 @@ describe('AzureResponsesProvider', () => {
     it('should not apply a hardcoded max_output_tokens default for reasoning models when omitDefaults is false', async () => {
       const provider = new AzureResponsesProvider('o1-preview');
 
-      const { body } = await provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.max_output_tokens).toBeUndefined();
       expect('max_output_tokens' in body).toBe(false);
@@ -313,7 +313,7 @@ describe('AzureResponsesProvider', () => {
         config: { omitDefaults: true },
       });
 
-      const { body } = await provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.max_output_tokens).toBeUndefined();
       expect('max_output_tokens' in body).toBe(false);
@@ -326,7 +326,7 @@ describe('AzureResponsesProvider', () => {
         config: { max_output_tokens: 0 } as any,
       });
 
-      const { body } = await provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       // max_output_tokens: 0 should be present in the request body
       expect(body.max_output_tokens).toBe(0);
@@ -338,7 +338,7 @@ describe('AzureResponsesProvider', () => {
         config: { verbosity: 'high' },
       });
 
-      const { body } = await provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.text).toMatchObject({
         format: { type: 'text' },
@@ -351,7 +351,7 @@ describe('AzureResponsesProvider', () => {
         config: { isReasoningModel: true, verbosity: 'medium' },
       });
 
-      const { body } = await provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.text).toMatchObject({
         format: { type: 'text' },
@@ -364,39 +364,12 @@ describe('AzureResponsesProvider', () => {
         config: { verbosity: 'high' },
       });
 
-      const { body } = await provider.getAzureResponsesBody('Hello world');
+      const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.text).toMatchObject({
         format: { type: 'text' },
       });
       expect(body.text.verbosity).toBeUndefined();
-    });
-
-    it('should include showThinking in config for per-call overrides', async () => {
-      const provider = new AzureResponsesProvider('o1-preview', {
-        config: { showThinking: true },
-      });
-
-      const { config } = await provider.getAzureResponsesBody('Hello world');
-
-      expect(config.showThinking).toBe(true);
-    });
-
-    it('should merge per-call showThinking config', async () => {
-      const provider = new AzureResponsesProvider('o1-preview', {
-        config: { showThinking: true },
-      });
-
-      const context = {
-        prompt: {
-          config: { showThinking: false },
-        },
-      };
-
-      const { config } = await provider.getAzureResponsesBody('Hello world', context as any);
-
-      // Per-call config should override provider config
-      expect(config.showThinking).toBe(false);
     });
   });
 
@@ -482,6 +455,144 @@ describe('AzureResponsesProvider', () => {
 
       // Verify the API was called (auth check passed)
       expect(mockFetchWithCache).toHaveBeenCalled();
+    });
+
+    it('reports non-zero cost from the Responses usage object (regression)', async () => {
+      // Regression for the costCalculator that passed `usage` into calculateAzureCost's ignored
+      // config slot (never forwarding token counts), so every Azure Responses eval reported cost 0.
+      const mockResponse = {
+        output: [
+          { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
+        ],
+        usage: { input_tokens: 1000, output_tokens: 500 },
+      };
+      mockFetchWithCache.mockResolvedValue({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new AzureResponsesProvider('gpt-4.1');
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
+        (provider as any).authHeaders = { 'api-key': 'test-key' };
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+
+      // gpt-4.1 is priced in AZURE_MODELS, and tokens now flow through, so cost must be > 0.
+      expect(result.cost).toBeGreaterThan(0);
+      expect(result.tokenUsage).toMatchObject({ prompt: 1000, completion: 500 });
+    });
+
+    it('applies the cached-input rate from Responses usage details', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
+          ],
+          usage: {
+            input_tokens: 2_000,
+            input_tokens_details: { cached_tokens: 500 },
+            output_tokens: 1_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new AzureResponsesProvider('gpt-5.6');
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
+        (provider as any).authHeaders = { 'api-key': 'test-key' };
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+
+      expect(result.cost).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 12);
+      expect(result.tokenUsage).toMatchObject({ prompt: 2_000, completion: 1_000, cached: 500 });
+    });
+
+    it('preserves full cached usage when the Responses result comes from disk cache', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
+          ],
+          usage: {
+            input_tokens: 2_000,
+            input_tokens_details: { cached_tokens: 500 },
+            output_tokens: 1_000,
+            total_tokens: 3_000,
+          },
+        },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AzureResponsesProvider('gpt-5.6');
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
+        (provider as any).authHeaders = { 'api-key': 'test-key' };
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+
+      expect(result.cached).toBe(true);
+      expect(result.tokenUsage).toMatchObject({ cached: 3_000, total: 3_000 });
+    });
+
+    it('applies priority pricing after Responses flattens passthrough fields', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
+          ],
+          usage: {
+            input_tokens: 2_000,
+            input_tokens_details: { cached_tokens: 500 },
+            output_tokens: 1_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AzureResponsesProvider('gpt-5.6-sol', {
+        config: { passthrough: { service_tier: 'priority' } },
+      });
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
+        (provider as any).authHeaders = { 'api-key': 'test-key' };
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+
+      expect(result.cost).toBeCloseTo((2 * (1_500 * 5 + 500 * 0.5 + 1_000 * 30)) / 1e6, 12);
+    });
+
+    it('prices image-token usage from Azure Responses details', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'ok' }] },
+          ],
+          usage: {
+            input_tokens: 1_000,
+            input_tokens_details: { image_tokens: 400 },
+            output_tokens: 0,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AzureResponsesProvider('gpt-image-1');
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
+        (provider as any).authHeaders = { 'api-key': 'test-key' };
+      });
+
+      const result = await provider.callApi('Describe the image');
+
+      expect(result.cost).toBeCloseTo((600 * 5 + 400 * 10) / 1e6, 12);
     });
 
     it('should validate external response_format files', async () => {

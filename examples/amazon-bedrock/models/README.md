@@ -7,6 +7,8 @@ npx promptfoo@latest init --example amazon-bedrock/models
 cd amazon-bedrock/models
 ```
 
+> **Legacy examples:** Nova Premier (`amazon.nova-premier-v1:0`) and Nova Sonic (`amazon.nova-sonic-v1:0`) have [Bedrock end-of-life dates of September 14, 2026](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html). New customers cannot use these Legacy models; select an Active model for new evals.
+
 ## Prerequisites
 
 1. Set up your AWS credentials:
@@ -36,15 +38,18 @@ cd amazon-bedrock/models
 
 This directory contains several example configurations for different Bedrock models:
 
-- [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 4.6 Opus, Claude 4.1 Opus, Claude 4 Opus/Sonnet, Claude Haiku 4.5
+- [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude Opus, Sonnet, and Haiku, including adaptive thinking and inference profiles
 - [`promptfooconfig.openai.yaml`](promptfooconfig.openai.yaml) - OpenAI GPT-OSS models (120B and 20B) with reasoning effort
-- [`promptfooconfig.openai-frontier.yaml`](promptfooconfig.openai-frontier.yaml) - OpenAI frontier models (GPT-5.5 and GPT-5.4) with native reasoning effort
+- [`promptfooconfig.openai-responses.yaml`](promptfooconfig.openai-responses.yaml) - OpenAI GPT-OSS 120B through the Bedrock Responses API (AWS credentials or `AWS_BEARER_TOKEN_BEDROCK`)
+- [`promptfooconfig.openai-frontier.yaml`](promptfooconfig.openai-frontier.yaml) - OpenAI GPT-6 Sol, GPT-5.6 Terra, and GPT-6 Luna with reasoning, explicit prompt caching, and streaming
+- [`promptfooconfig.grok.yaml`](promptfooconfig.grok.yaml) - xAI Grok 4.3 on the Bedrock Mantle endpoint (AWS credentials or `AWS_BEARER_TOKEN_BEDROCK`)
+- [`promptfooconfig.mantle.yaml`](promptfooconfig.mantle.yaml) - `bedrock:mantle:` Chat Completions endpoint for mantle-only models like GLM 4.6 and DeepSeek V3.1 (AWS credentials or `AWS_BEARER_TOKEN_BEDROCK`)
 - [`promptfooconfig.llama.yaml`](promptfooconfig.llama.yaml) - Llama3
 - [`promptfooconfig.mistral.yaml`](promptfooconfig.mistral.yaml) - Mistral
+- [`promptfooconfig.openai-compatible.yaml`](promptfooconfig.openai-compatible.yaml) - OpenAI-compatible families: Z.AI GLM, MiniMax, Moonshot Kimi, NVIDIA Nemotron, Google Gemma, Writer Palmyra
 - [`promptfooconfig.nova.yaml`](promptfooconfig.nova.yaml) - Amazon's Nova models
 - [`promptfooconfig.nova.tool.yaml`](promptfooconfig.nova.tool.yaml) - Nova with tool usage examples
 - [`promptfooconfig.nova.multimodal.yaml`](promptfooconfig.nova.multimodal.yaml) - Nova with multimodal capabilities
-- [`promptfooconfig.titan-text.yaml`](promptfooconfig.titan-text.yaml) - Titan text generation examples
 - [`promptfooconfig.kb.yaml`](promptfooconfig.kb.yaml) - Knowledge Base RAG example with citations and contextTransform
 - [`promptfooconfig.inference-profiles.yaml`](promptfooconfig.inference-profiles.yaml) - Comprehensive Application Inference Profiles example with multiple model types
 - [`promptfooconfig.inference-profiles-simple.yaml`](promptfooconfig.inference-profiles-simple.yaml) - Simple production-ready inference profile setup for high availability
@@ -59,22 +64,26 @@ The Converse API example (`promptfooconfig.converse.yaml`) demonstrates the unif
 
 ### Key Features
 
-- **Extended Thinking**: Enable Claude's reasoning capabilities with configurable token budgets
+- **Extended Thinking**: Claude Sonnet 5 uses adaptive thinking with `effort` to control reasoning depth
 - **Unified Interface**: Single API format works across Claude, Nova, Llama, Mistral, and more
-- **Show/Hide Thinking**: Control whether thinking content is returned in the `reasoning` field with `showThinking`
+- **Show/Hide Thinking**: Control whether thinking content appears in output with `showThinking`
 
 ### Configuration
 
 ```yaml
 providers:
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
-    label: Claude Sonnet 4.6 with Thinking
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5
+    label: Claude Sonnet 5 with Thinking
     config:
       region: us-west-2
       maxTokens: 20000
       thinking:
-        type: enabled
-        budget_tokens: 16000
+        type: adaptive
+        display: summarized
+      # Converse has no typed `effort` option; it is passed through as a raw field.
+      additionalModelRequestFields:
+        output_config:
+          effort: high
       showThinking: true
 ```
 
@@ -92,12 +101,11 @@ The Converse MCP example (`promptfooconfig.converse-mcp.yaml`) demonstrates how 
 
 ```yaml
 providers:
-  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
-    label: Claude Sonnet 4.6 with MCP
+  - id: bedrock:converse:us.anthropic.claude-sonnet-5
+    label: Claude Sonnet 5 with MCP
     config:
       region: us-east-1
       maxTokens: 1024
-      temperature: 0
       mcp:
         enabled: true
         servers:
@@ -139,7 +147,7 @@ For this example, you'll need to:
 
 ```yaml
 providers:
-  - id: bedrock:kb:us.anthropic.claude-sonnet-4-6
+  - id: bedrock:kb:us.anthropic.claude-sonnet-5
     config:
       region: 'us-east-2' # Change to your region
       knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID' # Replace with your KB ID
@@ -194,6 +202,12 @@ providers:
 - `titan` - Amazon Titan models
 - `deepseek` - DeepSeek models (with thinking capability)
 - `openai` - OpenAI GPT-OSS models
+- `zai` - Z.AI GLM models
+- `minimax` - MiniMax models
+- `moonshot` - Moonshot Kimi models
+- `nvidia` - NVIDIA Nemotron models
+- `writer` - Writer Palmyra models
+- `gemma` - Google Gemma models
 
 ### Running the Examples
 
@@ -207,7 +221,7 @@ We provide two inference profile examples:
 
    This includes:
    - Multiple inference profiles for different model families
-   - Comparison with direct model IDs
+   - Comparison with a system inference profile
    - Use of inference profiles for grading assertions
    - Various model-specific configurations
 
@@ -218,7 +232,7 @@ We provide two inference profile examples:
    This demonstrates:
    - A realistic customer support use case
    - High availability setup with failover
-   - Comparison between inference profile and direct model access
+   - Comparison between application and system inference profiles
    - Consistent grading using inference profiles
 
 **Note**: Replace the example ARNs with your actual application inference profile ARNs. To create an inference profile, visit the AWS Bedrock console and navigate to the "Application inference profiles" section.
@@ -236,37 +250,56 @@ The OpenAI example (`promptfooconfig.openai.yaml`) demonstrates OpenAI's GPT-OSS
 - **OpenAI API Format**: Uses familiar OpenAI parameters like `max_completion_tokens`
 - **Available in us-west-2**: Ensure you have model access in the correct region
 
+For the OpenAI-compatible Responses API variant, use
+`promptfooconfig.openai-responses.yaml`. It targets the shorter mantle model id
+`openai.gpt-oss-120b` through `bedrock:responses:`. Authenticate with either
+`AWS_BEARER_TOKEN_BEDROCK` or standard AWS credentials (explicit keys, a named
+profile, or the default credential chain). With AWS credentials, Promptfoo generates
+short-lived bearer tokens for requests using the optional
+`@aws/bedrock-token-generator` package. Explicit `config.accessKeyId` / `config.secretAccessKey`
+or `config.profile` override environment bearer tokens. Unset `AWS_BEARER_TOKEN_BEDROCK`
+when relying on environment AWS credentials or the default credential chain instead.
+
 Run the OpenAI example with:
 
 ```bash
 promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.openai.yaml
 ```
 
+Run the Responses API example with:
+
+```bash
+promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.openai-responses.yaml --no-cache
+```
+
 ## OpenAI Frontier Models Example
 
-The frontier example (`promptfooconfig.openai-frontier.yaml`) demonstrates OpenAI's GPT-5.x frontier models on Bedrock:
+The frontier example (`promptfooconfig.openai-frontier.yaml`) demonstrates these OpenAI frontier models on Bedrock:
 
-- **openai.gpt-5.5** - Flagship frontier reasoning model (available in `us-east-2`)
-- **openai.gpt-5.4** - Frontier reasoning model (available in `us-east-2` and `us-west-2`)
+- **openai.gpt-6-sol** - Max reasoning in `us-east-1`
+- **openai.gpt-5.6-terra** - Medium reasoning in `us-west-2`
+- **openai.gpt-6-luna** - Low reasoning with streaming in `us-east-1`
 
 ### Key Features
 
-- **Responses API**: Frontier models are served through Bedrock's OpenAI-compatible Responses API (the mantle endpoint), not `InvokeModel`. promptfoo routes `bedrock:openai.gpt-5.x` there automatically, so output matches the `openai:responses` provider.
-- **Bedrock API key auth**: Unlike the gpt-oss models (AWS SDK credentials), the frontier models authenticate with an Amazon Bedrock API key. Export it first:
+- **Responses API**: Promptfoo routes these frontier model IDs through Bedrock's OpenAI-compatible Responses API (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`) and preserves the Bedrock model ID.
+- **Authentication**: Use standard AWS credentials (explicit keys, a named profile, or the default credential chain) to generate short-lived bearer tokens with the optional `@aws/bedrock-token-generator` package. Alternatively, supply an Amazon Bedrock API key:
 
   ```bash
   export AWS_BEARER_TOKEN_BEDROCK="your_bedrock_api_key"
   ```
 
-- **Native Reasoning Effort**: `reasoning_effort` supports `none`, `low`, `medium`, `high`, and `xhigh` (`minimal` is not supported by these Bedrock models).
-- **Region-gated**: Request model access in a supported region before running.
+  Explicit AWS keys or `config.profile` override environment bearer tokens. Unset `AWS_BEARER_TOKEN_BEDROCK` when relying on environment AWS credentials or the default credential chain instead.
 
-These are the same model IDs that back OpenAI's [Codex](https://developers.openai.com/codex/) coding agent when it is configured with the `amazon-bedrock` provider.
+- **Prompt caching and streaming**: The example marks its stable system instructions with an explicit cache breakpoint, uses a stable `prompt_cache_key`, and enables streaming for Luna. Cache reads receive a 90% discount; cache writes cost 1.25x the uncached input rate.
+- **Region-gated**: Request model access in a [supported region](https://developers.openai.com/api/docs/guides/amazon-bedrock#endpoint-differences) before running.
 
-Run the frontier example with:
+The providers use different reasoning efforts, output limits, and streaming settings to demonstrate the available controls. Use matching settings when comparing model performance.
+
+From this example directory, run:
 
 ```bash
-promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.openai-frontier.yaml
+npx promptfoo@latest eval -c promptfooconfig.openai-frontier.yaml --no-cache -o results.json
 ```
 
 ## New Converse API Features (SDK 3.943+)

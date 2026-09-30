@@ -29,46 +29,6 @@ interface TestResult {
   };
 }
 
-type ProviderInput = string | { id: string; config?: Record<string, unknown> };
-type ReasoningContent =
-  | { type: 'thinking'; thinking: string; signature?: string }
-  | { type: 'redacted_thinking'; data: string }
-  | { type: 'reasoning'; content: string }
-  | { type: 'thought'; thought: string; signature?: string }
-  | { type: 'think'; content: string };
-
-function reasoningToString(reasoning: ReasoningContent[] | undefined): string {
-  return (reasoning ?? [])
-    .map((block) => {
-      switch (block.type) {
-        case 'thinking':
-          return block.thinking;
-        case 'redacted_thinking':
-          return '[Redacted]';
-        case 'reasoning':
-        case 'think':
-          return block.content;
-        case 'thought':
-          return block.thought;
-      }
-    })
-    .filter(Boolean)
-    .join('\n\n');
-}
-
-const DEFAULT_REASONING_TEST_PROMPT = dedent`
-  Please solve this step-by-step reasoning problem:
-
-  A farmer has 17 sheep. All but 9 die. How many sheep are left alive?
-
-  Requirements:
-  1. Show your step-by-step reasoning
-  2. Explain any assumptions you make
-  3. Provide the final numerical answer
-
-  This tests logical reasoning, reading comprehension, and instruction following.
-`;
-
 /**
  * Tool to test AI provider connectivity and response quality
  */
@@ -87,8 +47,8 @@ export function registerTestProviderTool(server: McpServer) {
         .describe(
           dedent`
             Provider to test. Examples:
-            - "openai:gpt-4o"
-            - "anthropic:messages:claude-sonnet-4" 
+            - "openai:gpt-5.6"
+            - "anthropic:claude-sonnet-5"
             - {"id": "custom-provider", "config": {...}}
             - path to custom provider file
           `,
@@ -119,15 +79,98 @@ export function registerTestProviderTool(server: McpServer) {
     },
     async (args) => {
       const { provider, testPrompt, timeoutMs = 30000 } = args;
+
+      // Track whether user provided a custom prompt
       const isCustomPrompt = Boolean(testPrompt);
-      const defaultPrompt = testPrompt || DEFAULT_REASONING_TEST_PROMPT;
+
+      // Use a comprehensive test prompt that evaluates reasoning, accuracy, and instruction following
+      const defaultPrompt =
+        testPrompt ||
+        dedent`
+          Please solve this step-by-step reasoning problem:
+
+          A farmer has 17 sheep. All but 9 die. How many sheep are left alive?
+
+          Requirements:
+          1. Show your step-by-step reasoning
+          2. Explain any assumptions you make
+          3. Provide the final numerical answer
+
+          This tests logical reasoning, reading comprehension, and instruction following.
+        `;
 
       try {
+        // Extract provider ID for error messages
+        const _providerId = typeof provider === 'string' ? provider : provider.id;
+
+        // Load the provider
         const apiProvider = await loadProvider(provider);
-        return await runProviderTest(apiProvider, defaultPrompt, isCustomPrompt, timeoutMs);
+
+        // Test the provider with timeout and detailed metrics
+        const startTime = Date.now();
+
+        try {
+          const response = await withTimeout(
+            apiProvider.callApi(defaultPrompt),
+            timeoutMs,
+            `Provider test`,
+          );
+
+          const endTime = Date.now();
+          const responseTime = endTime - startTime;
+
+          // Evaluate response quality (skip correctness check for custom prompts)
+          const responseQuality = evaluateResponseQuality(response.output, isCustomPrompt);
+
+          const testResult: TestResult = {
+            providerId: typeof apiProvider.id === 'function' ? apiProvider.id() : apiProvider.id,
+            success: true,
+            responseTime,
+            response: response.output,
+            tokenUsage: response.tokenUsage,
+            cost: response.cost,
+            timedOut: false,
+            metadata: {
+              prompt: defaultPrompt,
+              completedAt: new Date(endTime).toISOString(),
+              model: (response as any).model || 'unknown',
+              responseQuality,
+              promptLength: defaultPrompt.length,
+              responseLength: response.output?.length || 0,
+              isCustomPrompt,
+            },
+          };
+
+          return createToolResponse('test_provider', true, testResult);
+        } catch (error) {
+          const endTime = Date.now();
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+          const timedOut = errorMessage.includes('timed out');
+
+          const testResult: TestResult = {
+            providerId: typeof apiProvider.id === 'function' ? apiProvider.id() : apiProvider.id,
+            success: false,
+            responseTime: endTime - startTime,
+            error: errorMessage,
+            timedOut,
+            metadata: {
+              prompt: defaultPrompt,
+              failedAt: new Date(endTime).toISOString(),
+              timeoutMs,
+              errorType: timedOut ? 'timeout' : 'api_error',
+            },
+          };
+
+          return createToolResponse(
+            'test_provider',
+            false,
+            testResult,
+            `Provider test failed: ${errorMessage}`,
+          );
+        }
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-        const providerId = getProviderId(provider);
+        const providerId = typeof provider === 'string' ? provider : provider.id;
 
         // Provide specific error guidance
         if (errorMessage.includes('credentials')) {
@@ -149,12 +192,8 @@ export function registerTestProviderTool(server: McpServer) {
             {
               providerId,
               suggestion:
-                'Use format like "openai:gpt-4" or check available providers with "promptfoo providers"',
-              examples: [
-                'openai:gpt-4o',
-                'anthropic:messages:claude-3-sonnet',
-                'azure:deployment-name',
-              ],
+                'Use format like "openai:gpt-5.6" or check available providers with "promptfoo providers"',
+              examples: ['openai:gpt-5.6', 'anthropic:claude-sonnet-5', 'azure:deployment-name'],
             },
             `Provider "${providerId}" not found. Check the provider ID format.`,
           );
@@ -171,7 +210,7 @@ export function registerTestProviderTool(server: McpServer) {
   );
 }
 
-async function loadProvider(provider: ProviderInput) {
+async function loadProvider(provider: string | { id: string; config?: Record<string, unknown> }) {
   if (typeof provider === 'string') {
     return await loadApiProvider(provider);
   } else {
@@ -183,128 +222,21 @@ async function loadProvider(provider: ProviderInput) {
   }
 }
 
-async function runProviderTest(
-  apiProvider: Awaited<ReturnType<typeof loadProvider>>,
-  defaultPrompt: string,
-  isCustomPrompt: boolean,
-  timeoutMs: number,
-) {
-  const startTime = Date.now();
-
-  try {
-    const response = await withTimeout(
-      apiProvider.callApi(defaultPrompt),
-      timeoutMs,
-      `Provider test`,
-    );
-    const endTime = Date.now();
-    return createToolResponse(
-      'test_provider',
-      true,
-      buildSuccessResult(apiProvider, response, defaultPrompt, isCustomPrompt, endTime - startTime),
-    );
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    const testResult = buildFailureResult(
-      apiProvider,
-      defaultPrompt,
-      timeoutMs,
-      errorMessage,
-      Date.now() - startTime,
-    );
-
-    return createToolResponse(
-      'test_provider',
-      false,
-      testResult,
-      `Provider test failed: ${errorMessage}`,
-    );
-  }
-}
-
-function buildSuccessResult(
-  apiProvider: Awaited<ReturnType<typeof loadProvider>>,
-  response: Awaited<ReturnType<Awaited<ReturnType<typeof loadProvider>>['callApi']>>,
-  defaultPrompt: string,
-  isCustomPrompt: boolean,
-  responseTime: number,
-): TestResult {
-  const reasoningStr = response.reasoning ? reasoningToString(response.reasoning) : undefined;
-
-  return {
-    providerId: getApiProviderId(apiProvider),
-    success: true,
-    responseTime,
-    response: response.output,
-    tokenUsage: response.tokenUsage,
-    cost: response.cost,
-    timedOut: false,
-    metadata: {
-      prompt: defaultPrompt,
-      completedAt: new Date(Date.now()).toISOString(),
-      model: (response as any).model || 'unknown',
-      responseQuality: evaluateResponseQuality(response.output, isCustomPrompt, reasoningStr),
-      promptLength: defaultPrompt.length,
-      responseLength: (response.output?.length || 0) + (reasoningStr?.length || 0),
-      isCustomPrompt,
-    },
-  };
-}
-
-function buildFailureResult(
-  apiProvider: Awaited<ReturnType<typeof loadProvider>>,
-  defaultPrompt: string,
-  timeoutMs: number,
-  errorMessage: string,
-  responseTime: number,
-): TestResult {
-  const timedOut = errorMessage.includes('timed out');
-
-  return {
-    providerId: getApiProviderId(apiProvider),
-    success: false,
-    responseTime,
-    error: errorMessage,
-    timedOut,
-    metadata: {
-      prompt: defaultPrompt,
-      failedAt: new Date(Date.now()).toISOString(),
-      timeoutMs,
-      errorType: timedOut ? 'timeout' : 'api_error',
-    },
-  };
-}
-
-function getProviderId(provider: ProviderInput): string {
-  return typeof provider === 'string' ? provider : provider.id;
-}
-
-function getApiProviderId(apiProvider: Awaited<ReturnType<typeof loadProvider>>): string {
-  return typeof apiProvider.id === 'function' ? apiProvider.id() : apiProvider.id;
-}
-
 /**
  * Evaluate response quality based on response characteristics.
  * For custom prompts, we only check response length and structure (not correctness).
  * For the default prompt, we also verify the answer is correct (9).
  */
-function evaluateResponseQuality(
-  response: string | undefined,
-  isCustomPrompt: boolean,
-  reasoning?: string,
-): string {
-  if (!response && !reasoning) {
+function evaluateResponseQuality(response: string | undefined, isCustomPrompt: boolean): string {
+  if (!response) {
     return 'no_response';
   }
 
-  // Combine output and reasoning for quality evaluation
-  const fullContent = [response, reasoning].filter(Boolean).join(' ');
-  const length = fullContent.length;
+  const length = response.length;
   const hasReasoning =
-    !!reasoning ||
-    fullContent.toLowerCase().includes('step') ||
-    fullContent.toLowerCase().includes('because') ||
-    fullContent.toLowerCase().includes('therefore');
+    response.toLowerCase().includes('step') ||
+    response.toLowerCase().includes('because') ||
+    response.toLowerCase().includes('therefore');
 
   // For custom prompts, only evaluate based on response length and structure
   if (isCustomPrompt) {
@@ -321,7 +253,7 @@ function evaluateResponseQuality(
   }
 
   // For default prompt, also check for correct answer (9)
-  const hasCorrectAnswer = response ? /\b9\b/.test(response) : false;
+  const hasCorrectAnswer = /\b9\b/.test(response);
 
   if (length > 200 && hasReasoning && hasCorrectAnswer) {
     return 'excellent';

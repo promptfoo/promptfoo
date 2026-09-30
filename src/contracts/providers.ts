@@ -19,6 +19,7 @@ export interface ProviderModerationResponse {
   cached?: boolean;
   error?: string;
   flags?: ModerationFlag[];
+  tokenUsage?: TokenUsage;
 }
 
 export interface GuardrailResponse {
@@ -27,14 +28,6 @@ export interface GuardrailResponse {
   flagged?: boolean;
   reason?: string;
 }
-
-/** Native reasoning/thinking content returned separately from visible model output. */
-export type ReasoningContent =
-  | { type: 'thinking'; thinking: string; signature?: string }
-  | { type: 'redacted_thinking'; data: string }
-  | { type: 'reasoning'; content: string }
-  | { type: 'thought'; thought: string; signature?: string }
-  | { type: 'think'; content: string };
 
 export interface ImageOutput {
   data?: string; // data URI or base64
@@ -45,6 +38,8 @@ export interface ImageOutput {
 export interface ProviderResponse {
   cached?: boolean;
   cost?: number;
+  /** Actual target-provider cost incurred during this run, excluding response-cache replays. */
+  incurredCost?: number;
   error?: string;
   /**
    * Indicates that a remote Promptfoo server already materialized multi-input vars
@@ -88,8 +83,6 @@ export interface ProviderResponse {
   prompt?: string | ChatMessage[];
   raw?: string | any;
   output?: string | any;
-  /** Provider-native reasoning content, omitted when thinking display is disabled. */
-  reasoning?: ReasoningContent[];
   /**
    * Input materialization metadata returned by a remote Promptfoo server.
    */

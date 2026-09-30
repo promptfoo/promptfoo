@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleContextRelevance } from '../../src/assertions/contextRelevance';
 import * as contextUtils from '../../src/assertions/contextUtils';
+import { DEFAULT_RAG_ASSERTION_THRESHOLD } from '../../src/assertions/ragDefaults';
 import { matchesContextRelevance } from '../../src/matchers/rag';
 import { createMockProvider } from '../factories/provider';
 
@@ -158,7 +159,7 @@ describe('handleContextRelevance', () => {
     );
   });
 
-  it('should use default threshold of 0 when not provided', async () => {
+  it('should use default threshold of 0.5 when not provided', async () => {
     const mockResult = { pass: true, score: 1, reason: 'Perfect relevance' };
     vi.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
@@ -193,12 +194,69 @@ describe('handleContextRelevance', () => {
     expect(matchesContextRelevance).toHaveBeenCalledWith(
       'test query',
       'test context',
-      0,
+      0.5,
       {},
       undefined,
     );
     expect(result.metadata).toEqual({
       context: 'test context',
+    });
+  });
+
+  it('should invert omitted-threshold not-context-relevance results', async () => {
+    const mockResult = {
+      pass: false,
+      score: 0.4,
+      reason: 'Context relevance 0.40 is < 0.5',
+      metadata: {
+        score: 0.4,
+        extractedSentences: [],
+      },
+    };
+    vi.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const result = await handleContextRelevance({
+      assertion: {
+        type: 'not-context-relevance',
+      },
+      test: {
+        vars: {
+          query: 'test query',
+          context: 'test context',
+        },
+        options: {},
+      },
+      output: 'test output',
+      prompt: 'test prompt',
+      baseType: 'context-relevance',
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: { query: 'test query', context: 'test context' },
+        test: { vars: { query: 'test query', context: 'test context' }, options: {} },
+        logProbs: undefined,
+        provider: createMockProvider({ id: 'id', config: {} }),
+        providerResponse: { output: 'out', tokenUsage: {} },
+      },
+      inverse: true,
+      outputString: 'test output',
+      providerResponse: { output: 'out', tokenUsage: {} },
+    } as any);
+
+    expect(matchesContextRelevance).toHaveBeenCalledWith(
+      'test query',
+      'test context',
+      0.5,
+      {},
+      undefined,
+    );
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(0.6);
+    expect(result.reason).toBe('Context relevance 0.40 is < 0.5');
+    expect(result.metadata).toEqual({
+      context: 'test context',
+      score: 0.4,
+      extractedSentences: [],
     });
   });
 
@@ -296,9 +354,91 @@ describe('handleContextRelevance', () => {
       undefined,
       { output: 'out', tokenUsage: {} },
     );
-    expect(matchesContextRelevance).toHaveBeenCalledWith('q', 'cx', 0, {}, undefined);
+    expect(matchesContextRelevance).toHaveBeenCalledWith('q', 'cx', 0.5, {}, undefined);
     expect(result.metadata).toEqual({
       context: 'cx',
     });
+  });
+
+  it('should fail not-context-relevance when relevance is at or above the default threshold', async () => {
+    // The companion to the "invert a below-threshold result" case: a passing
+    // grade must invert to a failure. Without this, a regression that only ever
+    // returned `pass: true` from an inverse assertion would go unnoticed.
+    const mockResult = { pass: true, score: 0.9, reason: 'Context is highly relevant' };
+    vi.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const result = await handleContextRelevance({
+      assertion: { type: 'not-context-relevance' },
+      test: {
+        vars: { query: 'What is the capital of France?', context: 'test context' },
+        options: {},
+      },
+      output: 'test output',
+      prompt: 'test prompt',
+      baseType: 'context-relevance',
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: { query: 'What is the capital of France?', context: 'test context' },
+        test: {
+          vars: { query: 'What is the capital of France?', context: 'test context' },
+          options: {},
+        },
+        logProbs: undefined,
+        provider: createMockProvider({ id: 'id', config: {} }),
+        providerResponse: { output: 'out', tokenUsage: {} },
+      },
+      inverse: true,
+      outputString: 'test output',
+      providerResponse: { output: 'out', tokenUsage: {} },
+    } as any);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBeCloseTo(0.1);
+    expect(matchesContextRelevance).toHaveBeenCalledWith(
+      'What is the capital of France?',
+      'test context',
+      DEFAULT_RAG_ASSERTION_THRESHOLD,
+      {},
+      undefined,
+    );
+  });
+
+  it('should not invert grader errors for not-context-relevance', async () => {
+    // A grading provider that errored produced no verdict to invert. Flipping it
+    // would turn an infrastructure failure into a silent pass, so the
+    // grader-error result must survive the inverse untouched.
+    const mockResult = {
+      pass: false,
+      score: 0,
+      reason: 'grading provider failed',
+      metadata: { graderError: true as const },
+    };
+    vi.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const result = await handleContextRelevance({
+      assertion: { type: 'not-context-relevance' },
+      test: { vars: { query: 'q', context: 'c' }, options: {} },
+      output: 'out',
+      prompt: 'p',
+      baseType: 'context-relevance',
+      assertionValueContext: {
+        prompt: 'p',
+        vars: { query: 'q', context: 'c' },
+        test: { vars: { query: 'q', context: 'c' }, options: {} },
+        logProbs: undefined,
+        provider: createMockProvider({ id: 'id', config: {} }),
+        providerResponse: { output: 'out', tokenUsage: {} },
+      },
+      inverse: true,
+      outputString: 'out',
+      providerResponse: { output: 'out', tokenUsage: {} },
+    } as any);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('grading provider failed');
+    expect(result.metadata).toEqual({ graderError: true, context: 'test context' });
   });
 });
