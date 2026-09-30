@@ -87,6 +87,9 @@ describe('OTLPTracingExporter', () => {
           gitText: 'git push -u origin main',
           curlArgs: ['curl', '-u', 'fixture-user:fixture-password'],
           curlText: 'curl -u fixture-user:fixture-password',
+          curlLong: 'curl --user fixture-user:fixture-password',
+          identity: ['docker', 'exec', '--user', 'root', 'app', 'id'],
+          identityText: 'docker exec --user root app id',
           requiredOption: ['client', '--password', '-fixture-value'],
         },
         format,
@@ -99,11 +102,43 @@ describe('OTLPTracingExporter', () => {
         },
       });
       expect(attributes.curlText).toBe('curl -u <redacted>');
+      expect(attributes.curlLong).toBe('curl --user <redacted>');
+      expect(attributes.identity).toEqual({
+        arrayValue: {
+          values: ['docker', 'exec', '--user', 'root', 'app', 'id'].map((stringValue) => ({
+            stringValue,
+          })),
+        },
+      });
+      expect(attributes.identityText).toBe('docker exec --user root app id');
       expect(attributes.requiredOption).toEqual({
         arrayValue: {
           values: ['client', '--password', '<redacted>'].map((stringValue) => ({ stringValue })),
         },
       });
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'preserves text after quoted headers and TypeScript generic syntax in %s',
+    async (format) => {
+      const { attributes } = await exportCustomData(
+        {
+          command: `curl -H "Authorization: Bearer fixture-value" https://example.test && echo done`,
+          singleQuote: `curl -H 'Cookie: fixture=value' https://example.test && echo done`,
+          genericType: `rg 'Promise<Session>' src`,
+          nestedType: 'const value: Promise<Array<Session>> = result;',
+        },
+        format,
+      );
+      expect(attributes.command).toBe(
+        'curl -H "Authorization: <redacted>" https://example.test && echo done',
+      );
+      expect(attributes.singleQuote).toBe(
+        "curl -H 'Cookie: <redacted>' https://example.test && echo done",
+      );
+      expect(attributes.genericType).toBe("rg 'Promise<Session>' src");
+      expect(attributes.nestedType).toBe('const value: Promise<Array<Session>> = result;');
     },
   );
 
@@ -518,7 +553,7 @@ describe('OTLPTracingExporter', () => {
     async (format) => {
       const { attributes, payload } = await exportCustomData(
         {
-          text: 'Authorization=Custom opaque-auth curl --user alice:opaque-user',
+          text: 'curl --user alice:opaque-user -H "Authorization: Custom opaque-auth"',
           embedded: 'Request: "{\\"p\\u0061ssword\\":\\"opaque-embedded\\"}"',
           native: {
             assertion: { type: 'contains', value: 'Paris' },

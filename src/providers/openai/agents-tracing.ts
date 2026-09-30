@@ -718,8 +718,11 @@ function sanitizeCredentialText(value: string): string {
     )
     .replace(/(\/\/)[^\s/?#]+@/g, (_match, prefix: string) => `${prefix}<redacted>@`)
     .replace(
-      /(\b(?:Authorization\s*:|Authorization\s*=(?=[ \t]*(?:Bearer|Basic|Token|Api[-_]?Key|Digest|Negotiate|AWS4-HMAC-SHA256)\b)|Cookie\s*:)[ \t]*)[^\r\n]*/gi,
-      (_match, prefix: string) => `${prefix}<redacted>`,
+      /(["'])(\b(?:Authorization\s*:|Authorization\s*=(?=[ \t]*(?:Bearer|Basic|Token|Api[-_]?Key|Digest|Negotiate|AWS4-HMAC-SHA256)\b)|Cookie\s*:)[ \t]*)(?:\\[^\r\n]|(?!\1)[^\\\r\n])*(?:\1|(?=[\r\n]|$))|(\b(?:Authorization\s*:|Authorization\s*=(?=[ \t]*(?:Bearer|Basic|Token|Api[-_]?Key|Digest|Negotiate|AWS4-HMAC-SHA256)\b)|Cookie\s*:)[ \t]*)[^\r\n]*/gi,
+      (match, quote: string | undefined, quotedPrefix: string, prefix: string) =>
+        quote
+          ? `${quote}${quotedPrefix}<redacted>${match.endsWith(quote) ? quote : ''}`
+          : `${prefix}<redacted>`,
     )
     .replace(
       /(\bAuthorization\s*=\s*)([A-Za-z][A-Za-z\d-]*\s+)[^\s;,"'{}\]]+/gi,
@@ -753,9 +756,7 @@ function isCurlCommand(executable: unknown): boolean {
 function isCredentialOption(option: string, usesCurlAuth: boolean): boolean {
   return (
     isCredentialAttributeKey(option) ||
-    option === '--user' ||
-    option === '--proxy-user' ||
-    (option === '-u' && usesCurlAuth)
+    (usesCurlAuth && ['-u', '--user', '--proxy-user'].includes(option))
   );
 }
 
@@ -768,7 +769,7 @@ function hasCredentialNamedPayload(value: string): boolean {
     }
   }
   // Excluding nested delimiters keeps malformed markup scans linear.
-  for (const [, tag] of value.matchAll(/<([^<>\r\n]*)>/g)) {
+  for (const [, tag] of value.matchAll(/(?<![\w$])<([^<>\r\n]*)>/g)) {
     if (['redacted', 'REDACTED_API_KEY', 'REDACTED_AWS_KEY'].includes(tag)) {
       continue;
     }
