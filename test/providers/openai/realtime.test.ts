@@ -3165,6 +3165,60 @@ describe('OpenAI Realtime Provider', () => {
       },
     );
 
+    it.each([
+      ['Authorization', false],
+      ['api-key', false],
+      ['X-Tenant', false],
+      ['Authorization', true],
+    ] as const)(
+      'reuses persistent connections only with the same effective %s header (Azure: %s)',
+      async (name, azureApiKeyAuth) => {
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: {
+            apiKey: 'fixture-key',
+            maintainContext: true,
+            safety_identifier: 'same-user',
+            azureApiKeyAuth,
+            headers: azureApiKeyAuth ? { 'api-key': 'gateway-key' } : undefined,
+          },
+        });
+        try {
+          for (const headers of [
+            { [name]: 'first-value', 'X-Static': 'same' },
+            { 'x-static': 'same', [name.toLowerCase()]: 'first-value' },
+            { [name]: 'second-value', 'X-Static': 'same' },
+            { 'X-Static': 'same' },
+          ]) {
+            const pending = provider.callApi('hi', {
+              vars: {},
+              prompt: { raw: 'hi', label: 'hi', config: { headers } },
+              test: { metadata: { conversationId: 'same-conversation' } },
+            });
+            await flushMicrotasks();
+            mockHandlers.open.forEach((handler) => handler());
+            await flushMicrotasks();
+            simulateGaFlow();
+            expect(await pending).toMatchObject({ output: 'ok' });
+          }
+          const sentHeaders = (MockWebSocket as any).mock.calls.map(([, options]: any[]) =>
+            new Headers(options.headers).get(name),
+          );
+          expect(sentHeaders).toEqual(
+            azureApiKeyAuth
+              ? [null]
+              : [
+                  'first-value',
+                  'second-value',
+                  name === 'Authorization' ? 'Bearer fixture-key' : null,
+                ],
+          );
+          expect(mockWs.close).toHaveBeenCalledTimes(azureApiKeyAuth ? 0 : 2);
+        } finally {
+          provider.cleanup();
+        }
+      },
+    );
+
     it('uses default OpenAI base for direct WebSocket', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
       const promise = provider.directWebSocketRequest('hi');

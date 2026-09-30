@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import WebSocket from 'ws';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
@@ -159,7 +161,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   // callers wait on this promise rather than racing each other to send on a
   // socket whose state is still CONNECTING.
   private connectionReady: Promise<void> | null = null;
-  private connectionSafetyIdentifier: string | undefined;
+  private connectionConfig: { url: string; headers: Record<string, string> } | undefined;
   private persistentConnectionLifecycleCleanup: (() => void) | null = null;
   // Per-provider serialization queue. Concurrent calls on the same provider
   // instance share one socket; the OpenAI Realtime wire shape is not designed
@@ -1959,7 +1961,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     this.persistentConnectionLifecycleCleanup = null;
     this.persistentConnection = null;
     this.connectionReady = null;
-    this.connectionSafetyIdentifier = undefined;
+    this.connectionConfig = undefined;
     // Realtime item IDs are scoped to the socket session. Reusing them after a
     // reconnect makes conversation.item.create point at a missing item.
     this.previousItemId = null;
@@ -2023,10 +2025,15 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   private openPersistentConnection(
     requestHeaders = this.getRealtimeRequestHeaders(),
   ): Promise<void> {
-    const safetyIdentifier = Object.entries(requestHeaders).find(
-      ([name]) => name.toLowerCase() === 'openai-safety-identifier',
-    )?.[1];
-    if (this.persistentConnection && this.connectionSafetyIdentifier !== safetyIdentifier) {
+    const wsUrl = this.getWebSocketUrl(this.modelName);
+    const headers = this.buildRealtimeWsHeaders(wsUrl, requestHeaders);
+    const connectionConfig = {
+      url: wsUrl,
+      headers: Object.fromEntries(
+        Object.entries(headers).map(([name, value]) => [name.toLowerCase(), value]),
+      ),
+    };
+    if (this.connectionConfig && !isDeepStrictEqual(this.connectionConfig, connectionConfig)) {
       this.cleanup();
     }
     // Reuse the cached promise only if the underlying socket is still live.
@@ -2050,18 +2057,17 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       return this.connectionReady;
     }
 
-    const wsUrl = this.getWebSocketUrl(this.modelName);
     logger.debug(`Opening persistent WebSocket: ${sanitizeUrlForLogging(wsUrl)}`);
 
     const wsOptions = {
-      headers: this.buildRealtimeWsHeaders(wsUrl, requestHeaders),
+      headers,
       handshakeTimeout: 10000,
       perMessageDeflate: false,
     };
 
     const ws = new WebSocket(wsUrl, wsOptions);
     this.persistentConnection = ws;
-    this.connectionSafetyIdentifier = safetyIdentifier;
+    this.connectionConfig = connectionConfig;
 
     this.connectionReady = new Promise<void>((resolve, reject) => {
       const removeBeforeOpenListeners = () => {
