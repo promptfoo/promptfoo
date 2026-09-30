@@ -1,5 +1,5 @@
 import { trace } from '@opentelemetry/api';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import logger from '../../src/logger';
 import {
@@ -11,11 +11,16 @@ import {
   hasLocalModel,
   parseProviderPath,
 } from '../../src/providers/docker';
+import { createDeferred } from '../util/utils';
 
 vi.mock('../../src/cache');
 vi.mock('../../src/logger');
 
 describe('docker model runner provider', () => {
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -25,7 +30,7 @@ describe('docker model runner provider', () => {
       vi.mocked(fetchWithCache).mockRejectedValue(new Error('some error'));
 
       await expect(fetchLocalModels('http://localhost:12434/engines/v1')).rejects.toThrow(
-        'Failed to connect to Docker Model Runner. Is it enabled? Are the API endpoints enabled? For details, see https://docs.docker.com/ai/model-runner.',
+        'Failed to connect to Docker Model Runner. Is it enabled? Are the API endpoints enabled? For details, see https://docs.docker.com/ai/model-runner. \nsome error',
       );
     });
   });
@@ -305,6 +310,49 @@ describe('docker model runner provider', () => {
     });
 
     describe('DMREmbeddingProvider', () => {
+      it('does not probe models when embedding work is already aborted', async () => {
+        const reason = new DOMException('Embedding cancelled', 'AbortError');
+        const signal = AbortSignal.abort(reason);
+        vi.mocked(fetchWithCache).mockRejectedValue(new Error('Unexpected model probe'));
+        const provider = new DMREmbeddingProvider('ai/embedding', {
+          config: { apiBaseUrl: 'http://localhost:12434/engines/v1', apiKey: 'dmr' },
+        });
+
+        await expect(
+          provider.callEmbeddingApi('text', undefined, { abortSignal: signal }),
+        ).rejects.toBe(reason);
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      });
+
+      it('cancels an in-flight embedding model probe without starting an embedding request', async () => {
+        const controller = new AbortController();
+        const reason = new DOMException('Embedding cancelled', 'AbortError');
+        const started = createDeferred<void>();
+        vi.mocked(fetchWithCache).mockImplementation((_url, options) => {
+          started.resolve();
+          const signal = options?.signal;
+          if (!signal) {
+            return Promise.reject(new Error('Missing probe signal'));
+          }
+          return new Promise((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+          });
+        });
+        const provider = new DMREmbeddingProvider('ai/embedding', {
+          config: { apiBaseUrl: 'http://localhost:12434/engines/v1', apiKey: 'dmr' },
+        });
+
+        const request = provider.callEmbeddingApi('text', undefined, {
+          abortSignal: controller.signal,
+        });
+        const cancelled = expect(request).rejects.toBe(reason);
+        await started.promise;
+        controller.abort(reason);
+        await cancelled;
+        expect(fetchWithCache).toHaveBeenCalledOnce();
+        expect(logger.warn).not.toHaveBeenCalled();
+      });
+
       it('warns when model is not found but continues execution', async () => {
         vi.mocked(fetchWithCache)
           .mockResolvedValueOnce({

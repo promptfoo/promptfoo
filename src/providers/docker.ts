@@ -26,26 +26,32 @@ type ModelsReply = {
   data?: Model[];
 };
 
-export async function fetchLocalModels(apiBaseUrl: string): Promise<Model[]> {
+export async function fetchLocalModels(apiBaseUrl: string, signal?: AbortSignal): Promise<Model[]> {
+  signal?.throwIfAborted();
   try {
     const { data } = await fetchWithCache<ModelsReply>(
       `${apiBaseUrl}/models`,
-      undefined,
+      signal ? { signal } : undefined,
       undefined,
       'json',
       true,
       0,
     );
     return data?.data ?? [];
-  } catch (e: any) {
+  } catch (error) {
+    signal?.throwIfAborted();
     throw new Error(
-      `Failed to connect to Docker Model Runner. Is it enabled? Are the API endpoints enabled? For details, see https://docs.docker.com/ai/model-runner. \n${e.message}`,
+      `Failed to connect to Docker Model Runner. Is it enabled? Are the API endpoints enabled? For details, see https://docs.docker.com/ai/model-runner. \n${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
 
-export async function hasLocalModel(modelId: string, apiBaseUrl: string): Promise<boolean> {
-  const localModels = await fetchLocalModels(apiBaseUrl);
+export async function hasLocalModel(
+  modelId: string,
+  apiBaseUrl: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const localModels = await fetchLocalModels(apiBaseUrl, signal);
   return localModels.some(
     (model) => model && model.id?.toLocaleLowerCase() === modelId?.toLocaleLowerCase(),
   );
@@ -160,7 +166,7 @@ export class DMREmbeddingProvider extends OpenAiEmbeddingProvider {
   async callEmbeddingApi(
     ...args: Parameters<OpenAiEmbeddingProvider['callEmbeddingApi']>
   ): Promise<ProviderEmbeddingResponse> {
-    if (!(await hasLocalModel(this.modelName, this.getApiUrl()))) {
+    if (!(await hasLocalModel(this.modelName, this.getApiUrl(), args[2]?.abortSignal))) {
       logger.warn(
         `Model '${this.modelName}' not found. Run 'docker model pull ${this.modelName}'.`,
       );
