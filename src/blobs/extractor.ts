@@ -240,19 +240,8 @@ async function externalizeDataUrls(
     if (!isDataUrl(value)) {
       return { value, mutated: false };
     }
-    const parsed = extractBase64(value);
-    if (!parsed) {
-      return { value, mutated: false };
-    }
-    // Pass the raw data-URL through `storeOnce` so it canonicalizes on the
-    // parsed bytes, sharing the per-response cache with `output` / `images[]`
-    // / `turns[]` / top-level audio.
-    const storedRef = await storeOnce(
-      value,
-      parsed.mimeType,
-      location,
-      getKindFromMimeType(parsed.mimeType),
-    );
+    const mimeType = value.slice(5, value.indexOf(';'));
+    const storedRef = await storeOnce(value, mimeType, location, getKindFromMimeType(mimeType));
     if (!storedRef) {
       return { value, mutated: false };
     }
@@ -448,19 +437,17 @@ export async function extractAndStoreBinaryData(
 
   // Output data URL (images/audio) inside string
   if (typeof response.output === 'string' && isDataUrl(response.output)) {
-    const parsed = extractBase64(response.output);
-    if (parsed && shouldExternalize(parsed.buffer)) {
-      const stored = await storeOnce(
-        response.output,
-        parsed.mimeType,
-        'response.output',
-        getKindFromMimeType(parsed.mimeType),
-      );
-      if (stored) {
-        next.output = stored.uri;
-        mutated = true;
-        logger.debug('[BlobExtractor] Stored output blob', { ...context, hash: stored.hash });
-      }
+    const mimeType = response.output.slice(5, response.output.indexOf(';'));
+    const stored = await storeOnce(
+      response.output,
+      mimeType,
+      'response.output',
+      getKindFromMimeType(mimeType),
+    );
+    if (stored) {
+      next.output = stored.uri;
+      mutated = true;
+      logger.debug('[BlobExtractor] Stored output blob', { ...context, hash: stored.hash });
     }
   }
 

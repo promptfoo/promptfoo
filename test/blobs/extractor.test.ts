@@ -248,6 +248,35 @@ describe('Local blob extraction', () => {
     expect(result?.images?.[0].blobRef?.uri).toContain('promptfoo://blob/');
   });
 
+  it.each([
+    { field: 'output', mimeType: 'image/png', kind: 'image' },
+    { field: 'output', mimeType: 'audio/wav', kind: 'audio' },
+    { field: 'metadata', mimeType: 'image/png', kind: 'image' },
+    { field: 'metadata', mimeType: 'audio/wav', kind: 'audio' },
+  ])('decodes a $mimeType data URL in $field once', async ({ field, mimeType, kind }) => {
+    const bytes = Buffer.alloc(2000, 5);
+    const base64 = bytes.toString('base64');
+    const dataUrl = `data:${mimeType};base64,${base64}`;
+    const response: ProviderResponse =
+      field === 'output' ? { output: dataUrl } : { metadata: { preview: dataUrl } };
+    const decode = vi.spyOn(Buffer, 'from');
+
+    try {
+      const result = await extractAndStoreBinaryData(response);
+
+      expect(decode.mock.calls.filter(([value]) => value === base64)).toHaveLength(1);
+      expect(mockStoreBlob).toHaveBeenCalledExactlyOnceWith(bytes, mimeType, {
+        location: field === 'output' ? 'response.output' : 'response.metadata.preview',
+        kind,
+      });
+      expect(field === 'output' ? result?.output : result?.metadata?.preview).toBe(
+        'promptfoo://blob/abc123def456',
+      );
+    } finally {
+      decode.mockRestore();
+    }
+  });
+
   it('should reuse the same image blob when output and images contain identical data URIs', async () => {
     const largeBase64 = Buffer.alloc(2000).toString('base64');
     const dataUri = `data:image/png;base64,${largeBase64}`;
