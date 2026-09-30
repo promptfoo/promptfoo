@@ -71,7 +71,11 @@ export function markMediaLoadFailed(
   if (retryingBlobMediaElements.has(element)) {
     return;
   }
-  retryingBlobMediaElements.set(element, version);
+  const mountedVersion = element.dataset.mediaRefreshKey?.slice(source.length + 1);
+  retryingBlobMediaElements.set(
+    element,
+    mountedVersion === undefined ? version : Number(mountedVersion),
+  );
 
   const retryTimer = window.setTimeout(() => {
     pendingBlobMediaRetryTimers.delete(element);

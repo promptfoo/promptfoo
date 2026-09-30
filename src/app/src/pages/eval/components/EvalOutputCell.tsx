@@ -358,6 +358,7 @@ function renderMediaNode({
         src={primaryRenderedImageSrc}
         alt={output.prompt}
         style={{ width: '100%' }}
+        data-media-refresh-key={getMediaRefreshKey(primaryRenderedImageSrc)}
         onError={(event) => markMediaLoadFailed(primaryRenderedImageSrc, event.currentTarget)}
         onLoad={(event) => markMediaLoadSucceeded(primaryRenderedImageSrc, event.currentTarget)}
         onClick={() => toggleLightbox(primaryRenderedImageSrc)}
@@ -381,6 +382,7 @@ function renderMediaNode({
             <source
               src={outputAudioSource.src}
               type={outputAudioSource.type || 'audio/mpeg'}
+              data-media-refresh-key={getMediaRefreshKey(outputAudioSource.src)}
               onError={(event) => markMediaLoadFailed(outputAudioSource.src, event.currentTarget)}
             />
             Your browser does not support the audio element.
@@ -420,6 +422,7 @@ function renderMediaNode({
             <source
               src={videoSource.src}
               type={videoSource.type || 'video/mp4'}
+              data-media-refresh-key={getMediaRefreshKey(videoSource.src)}
               onError={(event) => markMediaLoadFailed(videoSource.src, event.currentTarget)}
             />
             Your browser does not support the video element.
@@ -536,6 +539,7 @@ function renderStructuredImages({
           alt={output.prompt || 'Generated image'}
           loading="lazy"
           style={{ display: 'block', width: '100%', cursor: 'pointer' }}
+          data-media-refresh-key={getMediaRefreshKey(src)}
           onError={(event) => markMediaLoadFailed(src, event.currentTarget)}
           onLoad={(event) => markMediaLoadSucceeded(src, event.currentTarget)}
           onClick={() => toggleLightbox(src)}
@@ -1068,6 +1072,7 @@ function renderResponseAudioPlayer(
         <source
           src={responseAudioSource.src}
           type={responseAudioSource.type || 'audio/mpeg'}
+          data-media-refresh-key={getMediaRefreshKey(responseAudioSource.src)}
           onError={(event) => markMediaLoadFailed(responseAudioSource.src, event.currentTarget)}
         />
         Your browser does not support the audio element.
@@ -1432,6 +1437,7 @@ function EvalOutputCell({
             loading="lazy"
             src={src}
             alt={alt}
+            data-media-refresh-key={getMediaRefreshKey(src)}
             onError={(event) => markMediaLoadFailed(src, event.currentTarget)}
             onLoad={(event) => markMediaLoadSucceeded(src, event.currentTarget)}
             onClick={() => toggleLightbox(src)}
@@ -1736,6 +1742,7 @@ function EvalOutputCell({
           <img
             src={lightboxImage}
             alt="Lightbox"
+            data-media-refresh-key={getMediaRefreshKey(lightboxImage)}
             onError={(event) => markMediaLoadFailed(lightboxImage, event.currentTarget)}
             onLoad={(event) => markMediaLoadSucceeded(lightboxImage, event.currentTarget)}
           />

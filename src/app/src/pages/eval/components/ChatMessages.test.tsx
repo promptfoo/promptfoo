@@ -317,6 +317,37 @@ describe('ChatMessages', () => {
     }
   });
 
+  it.each([false, true])(
+    'keeps shared-source recoveries mounted in either load order (%s)',
+    (reverse) => {
+      const timers = useTestTimers();
+      try {
+        const blobHash = (reverse ? 'ef' : 'cd').repeat(32);
+        const messages: Message[] = ['First image', 'Second image'].map((content) => ({
+          role: 'user',
+          content,
+          image: { blobRef: { uri: `promptfoo://blob/${blobHash}` } },
+        }));
+        const { rerender } = render(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+        const images = screen.getAllByAltText('Input');
+        act(() => images.forEach((image) => image.dispatchEvent(new Event('error'))));
+        act(() => timers.advanceBy(250));
+        act(() => {
+          (reverse ? [...images].reverse() : images).forEach((image) =>
+            image.dispatchEvent(new Event('load')),
+          );
+        });
+
+        rerender(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+        screen
+          .getAllByAltText('Input')
+          .forEach((image, index) => expect(image).toBe(images[index]));
+      } finally {
+        restoreTestTimers();
+      }
+    },
+  );
+
   it('keeps a successful replacement mounted through later refreshes and retries', () => {
     const messages: Message[] = [
       {

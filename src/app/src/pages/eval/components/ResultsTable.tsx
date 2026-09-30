@@ -113,6 +113,7 @@ function StorageRefAudioPlayer({
       <source
         src={audioUrl}
         type={`audio/${format}`}
+        data-media-refresh-key={getMediaRefreshKey(audioUrl)}
         onError={(event) => markMediaLoadFailed(audioUrl, event.currentTarget)}
       />
       Your browser does not support the audio element.
@@ -359,6 +360,7 @@ function renderMediaVariableCell({
         <source
           src={audioSource.src}
           type={audioSource.type || 'audio/mpeg'}
+          data-media-refresh-key={getMediaRefreshKey(audioSource.src)}
           onError={(event) => markMediaLoadFailed(audioSource.src, event.currentTarget)}
         />
         Your browser does not support the audio element.
@@ -373,6 +375,7 @@ function renderMediaVariableCell({
         <source
           src={videoSrc}
           type={`video/${format || 'mp4'}`}
+          data-media-refresh-key={getMediaRefreshKey(videoSrc)}
           onError={(event) => markMediaLoadFailed(videoSrc, event.currentTarget)}
         />
         Your browser does not support the video element.
@@ -1402,6 +1405,7 @@ function renderImageCellContent({
           objectFit: 'contain',
           cursor: 'pointer',
         }}
+        data-media-refresh-key={mediaRefreshKey}
         onError={(event) => markMediaLoadFailed(imgSrc, event.currentTarget)}
         onLoad={(event) => markMediaLoadSucceeded(imgSrc, event.currentTarget)}
         onClick={() => toggleLightbox(imgSrc)}
@@ -1420,6 +1424,7 @@ function renderImageCellContent({
               maxHeight: '90vh',
               objectFit: 'contain',
             }}
+            data-media-refresh-key={getMediaRefreshKey(lightboxImage)}
             onError={(event) => markMediaLoadFailed(lightboxImage, event.currentTarget)}
             onLoad={(event) => markMediaLoadSucceeded(lightboxImage, event.currentTarget)}
           />
