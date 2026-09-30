@@ -107,11 +107,12 @@ For file transcription, see [audio transcription](#audio-transcription). For Age
 
 Choose a model you can access, then test it with representative inputs. [OpenAI's model catalog](https://developers.openai.com/api/docs/models) lists current availability, capabilities, and limits. The main text-model choices are:
 
-| Model         | Starting point for                            |
-| ------------- | --------------------------------------------- |
-| `gpt-6-luna`  | Simple tasks and high-volume evals            |
-| `gpt-6-sol`   | Complex tasks with balanced cost              |
-| `gpt-6-astra` | The most demanding reasoning and coding tasks |
+| Model         | Starting point for                                  |
+| ------------- | --------------------------------------------------- |
+| `gpt-6-luna`  | Simple tasks and high-volume evals                  |
+| `gpt-6-sol`   | Complex tasks with balanced cost                    |
+| `gpt-6.1-sol` | Complex coding, computer use, and professional work |
+| `gpt-6-astra` | The most demanding reasoning and coding tasks       |
 
 Check [OpenAI pricing](https://developers.openai.com/api/docs/pricing) before a large run. Model access and API billing belong to your OpenAI account.
 
@@ -159,6 +160,21 @@ Sampling and log-probability options are supported only with reasoning effort `n
 When reasoning effort is known to be `none`, Promptfoo defaults `temperature` to `0` unless `omitDefaults: true`.
 
 For advanced Responses conversations, a [`configuration_update`](https://developers.openai.com/api/docs/guides/reasoning#change-reasoning-mid-conversation) input can change the effort mid-conversation. Promptfoo accounts for these updates in standard, single-agent requests; Pro and multi-agent modes use the request-level effort. If stored conversation history makes the effort unknown, Promptfoo forwards explicit sampling options for the API to validate.
+
+### GPT-6.1 Sol
+
+Use `openai:gpt-6.1-sol` for Responses, or `openai:chat:gpt-6.1-sol` for Chat Completions without tools. Tool calling requires Responses.
+
+```yaml
+providers:
+  - id: openai:gpt-6.1-sol
+    config:
+      reasoning:
+        effort: high
+      max_output_tokens: 8192
+```
+
+GPT-6.1 Sol accepts `low`, `medium` (the API default), `high`, `xhigh`, and `max`; it does not accept `none` or `minimal`. Promptfoo removes unsupported sampling and log-probability parameters. The model supports US and EU data residency, but Fast mode is unavailable with EU residency. See the [GPT-6.1 Sol model guide](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
 
 ### Fine-tuned models {#fine-tuned-and-legacy-completion-models}
 
@@ -228,12 +244,30 @@ For non-reasoning requests, Promptfoo defaults to `temperature: 0` and an output
 | `functionToolCallbacks`                    | Map function names to local callbacks. See [callbacks](#automatically-handling-function-tool-calls).                                                                  |
 | `passthrough`                              | Add fields directly to the request body, or override generated fields. Model-specific validation still applies. Supported by Chat, Responses, embeddings, and speech. |
 | `prompt_cache_key`, `prompt_cache_options` | Configure [OpenAI prompt caching](#prompt-caching-and-included-tool-results).                                                                                         |
-| `service_tier`                             | Request a service tier supported by your model and account.                                                                                                           |
+| `service_tier`                             | Request a service tier supported by your model and account, including [Ultrafast](#ultrafast-mode).                                                                   |
 | `maxRetries`                               | Retry count for HTTP requests; defaults to 4. Set to 0 to disable retries. Hard quota failures are not retried.                                                       |
 
 For endpoint-specific fields, see the [Chat Completions reference](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create) and [Responses reference](https://developers.openai.com/api/reference/resources/responses/methods/create). Promptfoo's [configuration types](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai/types.ts) describe the named provider options. An API field without a named option may need `passthrough`.
 
 </details>
+
+### Ultrafast mode
+
+Set `service_tier: ultrafast` to opt in on a supported model:
+
+```yaml
+providers:
+  - id: openai:gpt-6-astra
+    config:
+      service_tier: ultrafast
+      reasoning:
+        effort: low
+      max_output_tokens: 2048
+```
+
+Ultrafast is available for GPT-6 Astra and in preview for GPT-5.6 Sol. It supports US data residency and global processing only. Access and rate limits depend on your OpenAI account; see the [Ultrafast guide](https://developers.openai.com/api/docs/guides/ultrafast-mode). GPT-6.1 Sol is not currently listed as supporting this tier.
+
+GPT-6 Astra Ultrafast costs six times its Standard token rates. Promptfoo uses the returned service tier to estimate cost when available. For models without published Ultrafast rates, estimates require explicit `inputCost` and `outputCost`. See [Ultrafast pricing](https://developers.openai.com/api/docs/pricing?latest-pricing=ultrafast).
 
 ### Connection settings
 
@@ -284,9 +318,10 @@ Current standard rates in USD per million tokens, for requests with up to 272,00
 | ----------- | ----- | ------------ | ------------ | ------ |
 | GPT-6 Luna  | $0.10 | $0.01        | $0.125       | $0.50  |
 | GPT-6 Sol   | $2    | $0.20        | $2.50        | $10    |
+| GPT-6.1 Sol | $2    | $0.10        | $2.50        | $10    |
 | GPT-6 Astra | $10   | $1           | $12.50       | $50    |
 
-Above 272,000 input tokens, input, cached-input, and cache-write rates double; output rates increase by 50%. Batch and Flex cost half the standard rates. Fast mode (`fast` or `priority`) costs twice the standard rates. Regional processing adds 10%. GPT-6 Astra, Sol, and Luna support EU data residency only with Standard processing. Rates verified September 24, 2026; see [OpenAI pricing](https://developers.openai.com/api/docs/pricing).
+Above 272,000 input tokens, input, cached-input, and cache-write rates double; output rates increase by 50%. Batch and Flex cost half the standard rates. Fast mode (`fast` or `priority`) costs twice the standard rates. Regional processing adds 10%. GPT-6 Astra, Sol, and Luna support EU data residency only with Standard processing. Rates verified September 29, 2026; see [OpenAI pricing](https://developers.openai.com/api/docs/pricing).
 
 For Chat Completions and Responses, set `inputCost` and `outputCost` to override rates in **dollars per token**, not per million tokens. For audio, use `audioInputCost` and `audioOutputCost`. The older `cost` and `audioCost` options are shared input/output fallbacks. These settings affect Promptfoo's estimates, not API billing.
 
