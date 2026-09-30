@@ -121,7 +121,7 @@ class SandboxTest(unittest.TestCase):
                     elif name == "CPU limit":
                         self.assertTrue(executions[-1]["timeout"])
                     elif name == "memory limit":
-                        self.assertTrue(executions[-1]["oom_killed"])
+                        self.assertTrue(executions[-1]["oom_killed"], executions[-1])
         self.assertEqual(len(created_ids), len(cases))
 
 
