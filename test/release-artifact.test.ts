@@ -324,7 +324,8 @@ else {
     const env = {
       ...process.env,
       RUNNER_TEMP: root.replaceAll('\\', '/'),
-      PACKAGE_DIR: root.replaceAll('\\', '/'),
+      // GNU tar treats Windows drive letters as remote archive paths.
+      PACKAGE_DIR: '.',
       PUBLISH_EVIDENCE: evidence.replaceAll('\\', '/'),
       EXPECTED_VERSION: '1.2.3',
       REGISTRY_URL: 'https://registry.invalid/',
