@@ -642,14 +642,23 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
 
 const ABORTED_GRADING_PREFIX = 'Aborted: ';
 
-function applyGradingError(row: EvaluateResult, error: unknown, abortSignal?: AbortSignal) {
-  const errorAsError = error instanceof Error ? error : undefined;
-  // Require both signals: a third-party SDK that throws `AbortError` during a
-  // non-aborted run is a real bug, and a real SyntaxError caught microseconds
-  // after an unrelated abort is also a real bug.
-  const aborted = Boolean(abortSignal?.aborted) && isAbortError(error);
+// Require both: an AbortError during a run that was not cancelled is a real bug, and so is an
+// unrelated error that surfaces just after cancellation.
+function isGradingAbort(error: unknown, abortSignal?: AbortSignal): boolean {
+  return Boolean(abortSignal?.aborted && (isAbortError(error) || error === abortSignal.reason));
+}
 
-  if (aborted) {
+function applyGradingError(
+  row: Pick<
+    EvaluateResult,
+    'error' | 'failureReason' | 'success' | 'score' | 'namedScores' | 'promptIdx' | 'testIdx'
+  >,
+  error: unknown,
+  abortSignal?: AbortSignal,
+) {
+  const errorAsError = error instanceof Error ? error : undefined;
+
+  if (isGradingAbort(error, abortSignal)) {
     // Skip stack serialization on the abort path — debug logs usually go
     // unread and a noisy shutdown can fire this per row.
     const shortMessage = errorAsError?.message ?? String(error);
@@ -1486,21 +1495,28 @@ async function gradeRunEvalResponse({
     return;
   }
 
-  const checkResult = await withProviderCallExecutionContext(
-    { abortSignal, rateLimitRegistry },
-    () =>
-      runAssertions({
-        prompt: renderedPrompt,
-        provider,
-        providerResponse: assertionProviderResponse,
-        test,
-        vars,
-        latencyMs: response.latencyMs ?? latencyMs,
-        assertScoringFunction: test.assertScoringFunction as ScoringFunction,
-        traceId,
-      }),
-  );
-  applyGradingResult(ret, checkResult);
+  try {
+    const checkResult = await withProviderCallExecutionContext(
+      { abortSignal, rateLimitRegistry },
+      () =>
+        runAssertions({
+          prompt: renderedPrompt,
+          provider,
+          providerResponse: assertionProviderResponse,
+          test,
+          vars,
+          latencyMs: response.latencyMs ?? latencyMs,
+          assertScoringFunction: test.assertScoringFunction as ScoringFunction,
+          traceId,
+        }),
+    );
+    applyGradingResult(ret, checkResult);
+  } catch (error) {
+    if (!isGradingAbort(error, abortSignal)) {
+      throw error;
+    }
+    applyGradingError(ret, error, abortSignal);
+  }
   ret.response = processedResponse;
 }
 
@@ -2981,6 +2997,18 @@ function markComparisonRows(
   }
 }
 
+function hasCompletedComparison(
+  result: EvaluationStoreResult,
+  type: 'select-best' | 'max-score',
+): boolean {
+  return (
+    result.gradingResult?.assertion?.type === type ||
+    result.gradingResult?.componentResults?.some(
+      (component) => component.assertion?.type === type,
+    ) === true
+  );
+}
+
 type ComparisonErrorState = Pick<
   EvaluationStoreResult,
   'success' | 'score' | 'failureReason' | 'error'
@@ -4189,6 +4217,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           prompts,
         });
       }
+      checkAbort();
     } catch (err) {
       if (!combinedAbortSignal.aborted) {
         cleanupProgressAfterError(progressBarManager, ciProgressReporter, err);
@@ -4477,6 +4506,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
   private async processComparisonAssertions({
     ciProgressReporter,
+    isEvalTimedOut,
     isWebUI,
     progressBarManager,
     prompts,
@@ -4487,6 +4517,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     runEvalOptions,
   }: {
     ciProgressReporter: CIProgressReporter | null;
+    isEvalTimedOut: () => boolean;
     isWebUI: boolean;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
@@ -4504,27 +4535,81 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       runEvalOptions,
     });
 
-    const compareCount = await this.processSelectBestAssertions({
-      ciProgressReporter,
-      compareRowsCount,
-      isWebUI,
-      progressBarManager,
-      prompts,
-      providerAbortSignal,
-      repeatCacheContextByTestIdx,
-      rowsWithSelectBestAssertion,
-      runEvalOptions,
-    });
+    const pendingSelectBest = new Set(rowsWithSelectBestAssertion);
+    const pendingMaxScore = new Set(rowsWithMaxScoreAssertion);
+    try {
+      const compareCount = await this.processSelectBestAssertions({
+        ciProgressReporter,
+        compareRowsCount,
+        isWebUI,
+        progressBarManager,
+        prompts,
+        providerAbortSignal,
+        repeatCacheContextByTestIdx,
+        rowsWithSelectBestAssertion: pendingSelectBest,
+        runEvalOptions,
+      });
 
-    await this.processMaxScoreAssertions({
-      ciProgressReporter,
-      compareCount,
-      isWebUI,
-      progressBarManager,
-      prompts,
-      rowsWithMaxScoreAssertion,
-      runEvalOptions,
-    });
+      await this.processMaxScoreAssertions({
+        ciProgressReporter,
+        compareCount,
+        isWebUI,
+        progressBarManager,
+        prompts,
+        providerAbortSignal,
+        rowsWithMaxScoreAssertion: pendingMaxScore,
+        runEvalOptions,
+      });
+      providerAbortSignal?.throwIfAborted();
+    } catch (error) {
+      if (!isGradingAbort(error, providerAbortSignal)) {
+        throw error;
+      }
+      await this.markComparisonRowsAborted(
+        new Set([...pendingSelectBest, ...pendingMaxScore]),
+        prompts,
+        error,
+        providerAbortSignal,
+      );
+      if (!isEvalTimedOut()) {
+        return false;
+      }
+      logger.debug('Comparison grading stopped at the evaluation deadline');
+    }
+    return true;
+  }
+
+  private async markComparisonRowsAborted(
+    testIndexes: Set<number>,
+    prompts: CompletedPrompt[],
+    error: unknown,
+    abortSignal?: AbortSignal,
+  ) {
+    for (const testIdx of testIndexes) {
+      const results = await this.getResultsToCompare(testIdx);
+      for (const result of results) {
+        if (result.failureReason === ResultFailureReason.ERROR) {
+          continue;
+        }
+        const metrics = prompts[result.promptIdx]?.metrics;
+        const previous = {
+          success: result.success,
+          score: result.score,
+          failureReason: result.failureReason,
+          error: result.error,
+        };
+        setComparisonError(result, previous);
+        const completedNamedScores = result.namedScores;
+        applyGradingError(result, error, abortSignal);
+        // Earlier per-row assertions finished before the comparison was interrupted.
+        result.namedScores = completedNamedScores;
+        this.updateComparisonResultCounts(result, previous, metrics);
+        this.trackFinalJsonlResult(result);
+        if (this.store.persisted && !this.store.hasResultPersistenceFailure(result)) {
+          await this.store.saveResult(result);
+        }
+      }
+    }
   }
 
   private async processSelectBestAssertions({
@@ -4550,6 +4635,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }) {
     let compareCount = 0;
     for (const testIdx of rowsWithSelectBestAssertion) {
+      providerAbortSignal?.throwIfAborted();
       compareCount++;
       await this.processSelectBestAssertionForTest({
         ciProgressReporter,
@@ -4563,6 +4649,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         runEvalOptions,
         testIdx,
       });
+      rowsWithSelectBestAssertion.delete(testIdx);
     }
     return compareCount;
   }
@@ -4597,6 +4684,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const resultsToCompare = await this.getResultsToCompare(testIdx);
     if (resultsToCompare.length === 0) {
       logger.warn(`Expected results to be found for test index ${testIdx}`);
+      return;
+    }
+
+    if (
+      cliState.resume &&
+      resultsToCompare.every((result) => hasCompletedComparison(result, 'select-best'))
+    ) {
       return;
     }
 
@@ -4649,7 +4743,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           ),
       );
     } catch (error) {
-      if (providerAbortSignal?.aborted && isAbortError(error)) {
+      if (isGradingAbort(error, providerAbortSignal)) {
         throw error;
       }
       const graderId = comparisonProviderId(assertion.provider ?? savedTest.options?.provider);
@@ -4708,6 +4802,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     isWebUI,
     progressBarManager,
     prompts,
+    providerAbortSignal,
     rowsWithMaxScoreAssertion,
     runEvalOptions,
   }: {
@@ -4716,6 +4811,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     isWebUI: boolean;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
+    providerAbortSignal?: AbortSignal;
     rowsWithMaxScoreAssertion: Set<number>;
     runEvalOptions: RunEvalOptions[];
   }) {
@@ -4725,6 +4821,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     let currentCompareCount = compareCount;
     for (const testIdx of rowsWithMaxScoreAssertion) {
+      providerAbortSignal?.throwIfAborted();
       currentCompareCount++;
       await this.processMaxScoreAssertionForTest({
         ciProgressReporter,
@@ -4735,6 +4832,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         runEvalOptions,
         testIdx,
       });
+      rowsWithMaxScoreAssertion.delete(testIdx);
     }
   }
 
@@ -4758,6 +4856,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const resultsToCompare = await this.getResultsToCompare(testIdx);
     if (resultsToCompare.length === 0) {
       logger.warn(`Expected results to be found for test index ${testIdx}`);
+      return;
+    }
+
+    if (
+      cliState.resume &&
+      resultsToCompare.every((result) => hasCompletedComparison(result, 'max-score'))
+    ) {
       return;
     }
 
@@ -4903,19 +5008,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
   }
 
-  private async applySelectBestGradingResult({
-    gradingResult,
-    metrics,
-    result,
-  }: {
-    gradingResult: GradingResult;
-    metrics: CompletedPrompt['metrics'] | undefined;
-    result: TResult;
-  }) {
+  private restoreComparisonResult(
+    result: TResult,
+    metrics: CompletedPrompt['metrics'] | undefined,
+  ) {
     if (result.failureReason === ResultFailureReason.ERROR) {
       const saved = getComparisonError(result);
       if (!saved) {
-        return;
+        return false;
       }
       const previous = {
         success: result.success,
@@ -4928,6 +5028,21 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       result.error = saved.error;
       setComparisonError(result);
       this.updateComparisonResultCounts(result, previous, metrics);
+    }
+    return true;
+  }
+
+  private async applySelectBestGradingResult({
+    gradingResult,
+    metrics,
+    result,
+  }: {
+    gradingResult: GradingResult;
+    metrics: CompletedPrompt['metrics'] | undefined;
+    result: TResult;
+  }) {
+    if (!this.restoreComparisonResult(result, metrics)) {
+      return;
     }
     const wasSuccess = result.success;
     const wasScore = result.score;
@@ -4944,7 +5059,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     metrics: CompletedPrompt['metrics'] | undefined;
     result: TResult;
   }) {
-    if (result.failureReason === ResultFailureReason.ERROR) {
+    // A failed select-best grader must remain an error until that grader succeeds.
+    if (
+      result.failureReason === ResultFailureReason.ERROR &&
+      !result.error?.startsWith(ABORTED_GRADING_PREFIX)
+    ) {
+      return;
+    }
+    if (!this.restoreComparisonResult(result, metrics)) {
       return;
     }
     const wasSuccess = result.success;
@@ -5182,7 +5304,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       // Internal signal includes all abort sources
       combinedAbortSignal = AbortSignal.any([combinedAbortSignal, globalAbortController.signal]);
       globalTimeout = setTimeout(() => {
-        evalTimedOut = true;
+        // Keep the first cancellation cause if the deadline expires while saving interrupted rows.
+        evalTimedOut = !providerAbortSignal?.aborted;
         globalAbortController?.abort();
       }, maxEvalTimeMs);
     }
@@ -5394,17 +5517,28 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return interruptedEval;
     }
 
-    await this.processComparisonAssertions({
-      ciProgressReporter,
-      isWebUI,
-      progressBarManager,
-      prompts,
-      providerAbortSignal,
-      repeatCacheContextByTestIdx,
-      rowsWithMaxScoreAssertion,
-      rowsWithSelectBestAssertion,
-      runEvalOptions,
-    });
+    if (
+      !(await this.processComparisonAssertions({
+        ciProgressReporter,
+        isEvalTimedOut: () => evalTimedOut,
+        isWebUI,
+        progressBarManager,
+        prompts,
+        providerAbortSignal,
+        repeatCacheContextByTestIdx,
+        rowsWithMaxScoreAssertion,
+        rowsWithSelectBestAssertion,
+        runEvalOptions,
+      }))
+    ) {
+      return this.saveInterruptedEval({
+        ciProgressReporter,
+        globalTimeout,
+        processingContext,
+        progressBarManager,
+        prompts,
+      });
+    }
 
     await this.finalizeEvaluation({
       assertionTypes,

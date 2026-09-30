@@ -320,14 +320,16 @@ export async function runRuby<T = unknown>(
   scriptPath: string,
   method: string,
   args: (string | number | object | undefined)[],
-  options: { rubyExecutable?: string } = {},
+  options: { rubyExecutable?: string; abortSignal?: AbortSignal } = {},
 ): Promise<T> {
+  options.abortSignal?.throwIfAborted();
   const absPath = path.resolve(scriptPath);
   const customPath = options.rubyExecutable || getEnvString('PROMPTFOO_RUBY');
   let rubyPath = customPath || 'ruby';
   let tempDirectory: string | undefined;
 
   rubyPath = await validateRubyPath(rubyPath, typeof customPath === 'string');
+  options.abortSignal?.throwIfAborted();
 
   const wrapperPath = path.join(getWrapperDir('ruby'), 'wrapper.rb');
 
@@ -341,11 +343,29 @@ export async function runRuby<T = unknown>(
     const outputPath = await writeSecureTempFile(tempDirectory, 'output.json', '');
     logger.debug('[Ruby] Running script', { scriptPath: absPath, method });
 
-    const { stdout, stderr } = await execFileAsync(
+    options.abortSignal?.throwIfAborted();
+    const execution = execFileAsync(
       rubyPath,
       [wrapperPath, absPath, method, tempJsonPath, outputPath],
-      { env: getProcessEnv() },
+      {
+        env: getProcessEnv(),
+        ...(options.abortSignal ? { signal: options.abortSignal } : {}),
+      },
     );
+
+    const closed =
+      options.abortSignal && execution.child
+        ? new Promise<void>((resolve) => execution.child.once('close', () => resolve()))
+        : undefined;
+    // execFile abort sends SIGTERM, which a provider may ignore.
+    const { stdout, stderr } = await execution.finally(async () => {
+      if (options.abortSignal?.aborted) {
+        execution.child?.kill('SIGKILL');
+      }
+      // Keep the request files until the process exits.
+      await closed;
+    });
+    options.abortSignal?.throwIfAborted();
 
     if (stdout) {
       logger.debug(stdout.trim());

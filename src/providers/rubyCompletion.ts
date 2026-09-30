@@ -13,6 +13,7 @@ import { sanitizeScriptContext } from './scriptContext';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderClassificationResponse,
   ProviderEmbeddingResponse,
   ProviderOptions,
@@ -161,6 +162,7 @@ function validateRubyScriptResult(apiType: RubyApiType, functionName: string, re
  * Supports text generation, embeddings, and classification tasks.
  */
 export class RubyProvider implements ApiProvider {
+  readonly supportsEmbeddingCancellation = true;
   config: RubyProviderConfig;
 
   private scriptPath: string;
@@ -238,11 +240,14 @@ export class RubyProvider implements ApiProvider {
     prompt: string,
     context: CallApiContextParams | undefined,
     apiType: RubyApiType,
+    abortSignal?: AbortSignal,
   ): Promise<any> {
+    abortSignal?.throwIfAborted();
     if (!this.isInitialized) {
       await this.initialize();
     }
 
+    abortSignal?.throwIfAborted();
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
@@ -263,6 +268,7 @@ export class RubyProvider implements ApiProvider {
       logger.debug(`RubyProvider cache hit: ${Boolean(cachedResult)}`);
     }
 
+    abortSignal?.throwIfAborted();
     if (cachedResult) {
       logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
       const parsedResult = JSON.parse(cachedResult as string);
@@ -300,8 +306,10 @@ export class RubyProvider implements ApiProvider {
       const functionName = this.functionName || apiType;
       const result = await runRuby(absPath, functionName, args, {
         rubyExecutable: this.config.rubyExecutable,
+        ...(abortSignal ? { abortSignal } : {}),
       });
 
+      abortSignal?.throwIfAborted();
       validateRubyScriptResult(apiType, functionName, result);
 
       // Store result in cache if enabled and no errors
@@ -336,8 +344,12 @@ export class RubyProvider implements ApiProvider {
    * @param prompt - The input text to generate embeddings for
    * @returns Provider response with embedding array
    */
-  async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
-    return this.executeRubyScript(prompt, undefined, 'call_embedding_api');
+  async callEmbeddingApi(
+    prompt: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
+    return this.executeRubyScript(prompt, undefined, 'call_embedding_api', options?.abortSignal);
   }
 
   /**

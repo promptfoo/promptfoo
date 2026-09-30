@@ -27,6 +27,7 @@ import type {
   ApiEmbeddingProvider,
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../../types/providers';
@@ -3017,6 +3018,8 @@ export class AwsBedrockEmbeddingProvider
   extends AwsBedrockGenericProvider
   implements ApiEmbeddingProvider
 {
+  readonly supportsEmbeddingCancellation = true;
+
   declare config: BedrockEmbeddingOptions;
 
   constructor(
@@ -3034,7 +3037,11 @@ export class AwsBedrockEmbeddingProvider
     throw new Error('callApi is not implemented for embedding provider');
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
     const params = this.modelName.includes('cohere.embed')
       ? {
           texts: [text],
@@ -3048,13 +3055,17 @@ export class AwsBedrockEmbeddingProvider
     let response;
     try {
       const bedrockInstance = await this.getBedrockInstance();
-      response = await bedrockInstance.invokeModel({
+      const command = {
         modelId: this.modelName,
         accept: 'application/json',
         contentType: 'application/json',
         body: JSON.stringify(params),
-      });
+      };
+      response = options?.abortSignal
+        ? await bedrockInstance.invokeModel(command, { abortSignal: options.abortSignal })
+        : await bedrockInstance.invokeModel(command);
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       return {
         error: `API call error: ${String(err)}`,
       };
