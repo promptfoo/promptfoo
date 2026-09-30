@@ -1,4 +1,4 @@
-# HTTP streaming with time to first token
+# provider-http/streaming (HTTP Streaming and Time to First Token)
 
 This example measures time to first displayed text (TTFT) and total response latency through Promptfoo's HTTP provider. Evaluations wait for the full response before scoring.
 
