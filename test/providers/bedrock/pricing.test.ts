@@ -158,28 +158,43 @@ describe('calculateBedrockCost', () => {
   });
 
   describe('OpenAI GPT-5.6 frontier models on Converse', () => {
-    // Bedrock rates include the 10% regional-processing uplift over the first-party rates.
     it.each([
-      { id: 'us.openai.gpt-5.6-sol', input: 4.4, output: 22 },
-      { id: 'us.openai.gpt-5.6-terra', input: 2.2, output: 13.2 },
-      { id: 'us.openai.gpt-5.6-luna', input: 0.22, output: 1.32 },
-    ])('prices $id', ({ id, input, output }) => {
-      expect(calculateBedrockCost(id, INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, 'us-east-1')).toBeCloseTo(
-        costAtRates(input, output),
-        6,
-      );
-    });
-
-    it('applies the 272k long-context tier', () => {
-      expect(calculateBedrockCost('us.openai.gpt-5.6-sol', 272_000, 1_000)).toBeCloseTo(
-        (272_000 / 1e6) * 4.4 + (1_000 / 1e6) * 22,
-        6,
-      );
-      expect(calculateBedrockCost('us.openai.gpt-5.6-sol', 272_001, 1_000)).toBeCloseTo(
-        (272_001 / 1e6) * 8.8 + (1_000 / 1e6) * 33,
-        6,
-      );
-    });
+      { id: 'us.openai.gpt-5.6-sol', input: 4.4, output: 22, longInput: 8.8, longOutput: 33 },
+      { id: 'us.openai.gpt-5.6-terra', input: 2.2, output: 13.2, longInput: 4.4, longOutput: 19.8 },
+      {
+        id: 'us.openai.gpt-5.6-luna',
+        input: 0.22,
+        output: 1.32,
+        longInput: 0.44,
+        longOutput: 1.98,
+      },
+      { id: 'global.openai.gpt-5.6-sol', input: 4, output: 20, longInput: 8, longOutput: 30 },
+      { id: 'global.openai.gpt-5.6-terra', input: 2, output: 12, longInput: 4, longOutput: 18 },
+      {
+        id: 'global.openai.gpt-5.6-luna',
+        input: 0.2,
+        output: 1.2,
+        longInput: 0.4,
+        longOutput: 1.8,
+      },
+    ])(
+      'prices $id at standard and long-context rates',
+      ({ id, input, output, longInput, longOutput }) => {
+        for (const model of [id, `arn:aws:bedrock:us-east-2::inference-profile/${id}`]) {
+          expect(
+            calculateBedrockCost(model, INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, 'us-east-1'),
+          ).toBeCloseTo(costAtRates(input, output), 10);
+          expect(calculateBedrockCost(model, 272_000, 1_000)).toBeCloseTo(
+            (272_000 / 1e6) * input + (1_000 / 1e6) * output,
+            10,
+          );
+          expect(calculateBedrockCost(model, 272_001, 1_000)).toBeCloseTo(
+            (272_001 / 1e6) * longInput + (1_000 / 1e6) * longOutput,
+            10,
+          );
+        }
+      },
+    );
 
     it.each([
       [100, 0],

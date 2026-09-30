@@ -174,8 +174,24 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   // OpenAI GPT-OSS (open-weight models served via InvokeModel/Converse).
   'openai.gpt-oss-120b': { input: 0.15, output: 0.6 },
   'openai.gpt-oss-20b': { input: 0.07, output: 0.3 },
-  // GPT-5.6 Converse rates from the September 2026 catalog, including the regional uplift.
-  // Keep these models out of the InvokeModel allowlist; cache-token pricing is not modeled.
+  // AWS GPT-5.6 model cards distinguish global and regional rates (checked 2026-09-30).
+  // Specific global keys must precede regional fallbacks. Cache-token pricing is not modeled.
+  // https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-56-sol.html
+  'global.openai.gpt-5.6-sol': {
+    input: 4,
+    output: 20,
+    longContext: { threshold: 272_000, input: 8, output: 30 },
+  },
+  'global.openai.gpt-5.6-terra': {
+    input: 2,
+    output: 12,
+    longContext: { threshold: 272_000, input: 4, output: 18 },
+  },
+  'global.openai.gpt-5.6-luna': {
+    input: 0.2,
+    output: 1.2,
+    longContext: { threshold: 272_000, input: 0.4, output: 1.8 },
+  },
   'openai.gpt-5.6-sol': {
     input: 4.4,
     output: 22,

@@ -2915,13 +2915,18 @@ Third line`;
     });
 
     it.each([
-      { reads: 0, writes: 0, expected: 0.0154 },
-      { reads: 200, writes: 0, expected: undefined },
-      { reads: 0, writes: 100, expected: undefined },
+      { model: 'us.openai.gpt-5.6-sol', reads: 0, writes: 0, expected: 0.0154 },
+      { model: 'us.openai.gpt-5.6-sol', reads: 200, writes: 0, expected: undefined },
+      { model: 'us.openai.gpt-5.6-sol', reads: 0, writes: 100, expected: undefined },
+      { model: 'global.openai.gpt-5.6-sol', reads: 0, writes: 0, expected: 0.014 },
+      { model: 'global.openai.gpt-5.6-terra', reads: 0, writes: 0, expected: 0.008 },
+      { model: 'global.openai.gpt-5.6-luna', reads: 0, writes: 0, expected: 0.0008 },
+      { model: 'global.openai.gpt-5.6-sol', reads: 200, writes: 0, expected: undefined },
+      { model: 'global.openai.gpt-5.6-sol', reads: 0, writes: 100, expected: undefined },
     ])(
-      'handles GPT-5.6 cache reads=$reads and writes=$writes',
-      async ({ reads, writes, expected }) => {
-        const provider = new AwsBedrockConverseProvider('us.openai.gpt-5.6-sol', {
+      'prices $model with cache reads=$reads and writes=$writes',
+      async ({ model, reads, writes, expected }) => {
+        const provider = new AwsBedrockConverseProvider(model, {
           config: { region: 'us-east-1' },
         });
         mockSend.mockResolvedValueOnce(
