@@ -1190,4 +1190,18 @@ describe('evaluation-scoped media URLs', () => {
       `![x](https://api.example.com${expected})`,
     );
   });
+
+  it('scopes current-origin absolute blob URLs with a relative API base', () => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('/promptfoo'));
+    const url = `${window.location.origin}/promptfoo/api/blobs/${hash}?evalId=previous-eval`;
+    const scoped = `/promptfoo${expected}`;
+    expect(resolveBlobUri(url, evalId)).toBe(scoped);
+    expect(resolveImageSource(url, evalId)).toBe(scoped);
+    expect(resolveVideoSource({ url }, evalId)?.src).toBe(scoped);
+    expect(normalizeMediaText(`![x](${url})`, evalId)).toBe(`![x](${scoped})`);
+
+    const external = `https://images.example.test/promptfoo/api/blobs/${hash}`;
+    expect(resolveBlobUri(external, evalId)).toBeUndefined();
+    expect(normalizeMediaText(`![x](${external})`, evalId)).toBe(`![x](${external})`);
+  });
 });

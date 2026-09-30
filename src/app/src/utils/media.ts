@@ -185,7 +185,13 @@ export function resolveBlobUri(uri?: string | null, evaluationId?: string): stri
   }
 
   const apiBase = getApiBaseUrl() || window.location.origin;
-  const blobPath = uri.startsWith(`${apiBase}/api/blobs/`) ? uri.slice(apiBase.length) : uri;
+  const absoluteApiBase = apiBase.startsWith('/')
+    ? new URL(apiBase, window.location.origin).href.replace(/\/$/, '')
+    : apiBase;
+  const matchingBase = [apiBase, absoluteApiBase].find((base) =>
+    uri.startsWith(`${base}/api/blobs/`),
+  );
+  const blobPath = matchingBase ? uri.slice(matchingBase.length) : uri;
   const blobPrefix = blobPath.startsWith(BLOB_URI_PREFIX)
     ? BLOB_URI_PREFIX
     : blobPath.startsWith('/api/blobs/')
