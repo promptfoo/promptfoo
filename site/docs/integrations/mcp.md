@@ -7,7 +7,7 @@ sidebar_position: 20
 
 # Using MCP (Model Context Protocol) in Promptfoo
 
-Promptfoo supports the Model Context Protocol (MCP) for advanced tool use, and agentic workflows. MCP allows you to connect your Promptfoo providers to an external MCP server, such as the [modelcontextprotocol/server-memory](https://github.com/modelcontextprotocol/server-memory), to enable tool orchestration, and more.
+Promptfoo supports the Model Context Protocol (MCP) for tool use and agentic workflows. You can connect a Promptfoo provider to an external MCP server, such as the [memory server](https://github.com/modelcontextprotocol/servers/tree/main/src/memory), to give it tools.
 
 :::note MCP SDK dependency
 
@@ -21,7 +21,9 @@ npm install @modelcontextprotocol/sdk
 
 ## Basic Configuration
 
-For OpenAI, use an explicit `openai:chat:<model>` provider with `config.mcp`. Responses providers use OpenAI's [hosted MCP tools](#openai-responses-api-mcp-integration) instead.
+For OpenAI, use an explicit `openai:chat:<model>` provider with `config.mcp` so Promptfoo connects to the MCP server. GPT-6 Sol and Luna require `reasoning_effort: none` for these Chat Completions tool calls. Responses providers use OpenAI's [hosted MCP tools](#openai-responses-api-mcp-integration) instead.
+
+Set `OPENAI_API_KEY` for the OpenAI examples below.
 
 To enable MCP for a provider, add the `mcp` block to your provider's `config` in your `promptfooconfig.yaml`:
 
@@ -63,9 +65,9 @@ MCP servers can be run locally or accessed remotely. For development and testing
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-5.6-luna
+  - id: openai:chat:gpt-6-luna
     config:
-      apiKey: <your-api-key>
+      reasoning_effort: none
       mcp:
         enabled: true
         server:
@@ -76,9 +78,9 @@ providers:
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-5.6-luna
+  - id: openai:chat:gpt-6-luna
     config:
-      apiKey: <your-api-key>
+      reasoning_effort: none
       mcp:
         enabled: true
         server:
@@ -103,8 +105,9 @@ Promptfoo allows a single provider to connect to multiple MCP servers by using t
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:chat:gpt-5.6-luna
+  - id: openai:chat:gpt-6-luna
     config:
+      reasoning_effort: none
       mcp:
         enabled: true
         servers:
@@ -125,7 +128,7 @@ providers:
 
 ```yaml
 providers:
-  - id: anthropic:claude-sonnet-4-5-20250929
+  - id: anthropic:claude-sonnet-5
     config:
       mcp:
         enabled: true
@@ -159,9 +162,9 @@ providers:
           args: ['-y', '@modelcontextprotocol/server-memory']
           name: gemini-memory
 
-  - id: openai:chat:gpt-5.6-luna
+  - id: openai:chat:gpt-6-luna
     config:
-      apiKey: <your-api-key>
+      reasoning_effort: none
       mcp:
         enabled: true
         server:
@@ -170,7 +173,7 @@ providers:
           headers:
             X-API-Key: openai-server-api-key
 
-  - id: anthropic:claude-sonnet-4-5-20250929
+  - id: anthropic:claude-sonnet-5
     config:
       mcp:
         enabled: true
@@ -219,8 +222,9 @@ MCP tool calls have a default timeout of 60 seconds. For long-running tools, inc
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-5.6-luna
+  - id: openai:chat:gpt-6-luna
     config:
+      reasoning_effort: none
       mcp:
         enabled: true
         timeout: 900000 # 15 minutes in milliseconds
