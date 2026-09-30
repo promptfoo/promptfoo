@@ -346,6 +346,49 @@ ${nativeSource}`,
     }
   }
 
+  it.each(['--max-old-space-size=128 --max_old_space_size 64', '--max-old-space-size 64'])(
+    'preserves only the last caller heap limit in isolated children (%s)',
+    (heapOptions) => {
+      const expectedHeapLimit = Number(
+        execFileSync(
+          process.execPath,
+          [
+            '--max-old-space-size=64',
+            '-p',
+            'require("node:v8").getHeapStatistics().heap_size_limit',
+          ],
+          { encoding: 'utf8' },
+        ),
+      );
+      const { root, temporary } = prepareConsumer('');
+      const fixture = path.join(root, 'heap-limit.mjs');
+      fs.writeFileSync(
+        fixture,
+        `import assert from 'node:assert/strict';
+import { getHeapStatistics } from 'node:v8';
+if (process.argv[2] === '--child') {
+  assert.equal(process.env.NODE_OPTIONS, '--max-old-space-size=64');
+  assert.equal(getHeapStatistics().heap_size_limit, ${expectedHeapLimit});
+  console.log('isolated-heap-limit-sentinel');
+} else {
+  process.env.NODE_OPTIONS = ${JSON.stringify(`${heapOptions} --require ./must-not-load.cjs`)};
+  const { runIsolated } = await import('./isolated.mjs');
+  await runIsolated(import.meta.url, { label: 'heap-limit', timeoutMs: 1500 });
+}
+`,
+      );
+      const result = spawnSync(process.execPath, [fixture], {
+        encoding: 'utf8',
+        timeout: 5_000,
+        env: { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary },
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain('isolated-heap-limit-sentinel');
+      expect(fs.readdirSync(temporary)).toEqual([]);
+    },
+  );
+
   async function killRecordedProcesses(files: string[]) {
     for (const file of files) {
       if (!fs.existsSync(file)) {

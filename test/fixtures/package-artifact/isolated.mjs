@@ -21,6 +21,16 @@ const platformEnv = Object.fromEntries(
     .map((key) => [key, process.env[key]]),
 );
 
+// Preserve the caller's heap limit without forwarding loaders or other injected code.
+const heapLimit = [
+  ...(process.env.NODE_OPTIONS ?? '').matchAll(
+    /(?:^|\s)--max[-_]old[-_]space[-_]size(?:=|\s+)([1-9]\d*)(?=\s|$)/g,
+  ),
+].at(-1)?.[1];
+if (heapLimit) {
+  platformEnv.NODE_OPTIONS = `--max-old-space-size=${heapLimit}`;
+}
+
 export function isolatedEnv(stateDir) {
   return {
     ...platformEnv,
