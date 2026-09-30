@@ -39,6 +39,7 @@ import {
   OUTPUT_SANITIZE_MAX_DEPTH,
   REDACTED,
   sanitizeObject,
+  stripAssertionRubricPrompts,
 } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
@@ -170,6 +171,7 @@ function projectTranscriptMetadata<T>(
     stripVars: boolean;
     stripGrading: boolean;
   },
+  testMetadata?: AtomicTestCase['metadata'],
 ): T {
   const record = asRecord(metadata);
   if (
@@ -189,6 +191,8 @@ function projectTranscriptMetadata<T>(
       'skillCalls',
       'structuredOutput',
       'permissionDenials',
+      'bestImageDescription',
+      'bestImageUrl',
       'audio',
     ]) {
       delete projected[key];
@@ -306,21 +310,47 @@ function projectTranscriptMetadata<T>(
       });
     }
   }
+  const userMetadata = asRecord(testMetadata);
+  if (userMetadata) {
+    for (const [key, value] of Object.entries(record)) {
+      if (
+        Object.prototype.hasOwnProperty.call(userMetadata, key) &&
+        isDeepStrictEqual(value, userMetadata[key])
+      ) {
+        projected[key] = value;
+      }
+    }
+  }
   return projected as T;
 }
 
-// Metadata stripping follows the grading schema, not arbitrary assertion/output objects.
-function projectGradingResult<T>(gradingResult: T, stripMetadata: boolean, depth = 0): T {
+// Grading projection follows the schema, not arbitrary assertion/output objects.
+function projectGradingResult<T>(
+  gradingResult: T,
+  stripMetadata: boolean,
+  stripPrompt: boolean,
+  depth = 0,
+): T {
   const record = asRecord(gradingResult);
-  if (!stripMetadata || !record) {
+  if ((!stripMetadata && !stripPrompt) || !record) {
     return gradingResult;
   }
   if (depth > OUTPUT_SANITIZE_MAX_DEPTH) {
     return REDACTED as T;
   }
-  const { metadata, ...projected } = record;
+  const projected = { ...record };
+  if (stripMetadata) {
+    delete projected.metadata;
+  }
+  if (stripPrompt && 'assertion' in projected) {
+    projected.assertion = stripAssertionRubricPrompts(projected.assertion);
+  }
   const tokensUsed = record.tokensUsed as GradingResult['tokensUsed'];
-  if (asRecord(metadata)?.cachedResponse === true && !tokensUsed?.incurredTokenUsage) {
+  if (
+    stripMetadata &&
+    asRecord(record.metadata)?.cachedResponse === true &&
+    !tokensUsed?.incurredTokenUsage
+  ) {
     const usage = createEmptyTokenUsage();
     accumulateGradingTokenUsage(usage, tokensUsed, { cached: true });
     projected.tokensUsed = {
@@ -331,7 +361,7 @@ function projectGradingResult<T>(gradingResult: T, stripMetadata: boolean, depth
   }
   if (Array.isArray(record.componentResults)) {
     projected.componentResults = record.componentResults.map((component) =>
-      projectGradingResult(component, stripMetadata, depth + 1),
+      projectGradingResult(component, stripMetadata, stripPrompt, depth + 1),
     );
   }
   return projected as T;
@@ -343,8 +373,16 @@ export function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: bool
   }
   // Older imported rows may carry a primitive prompt with a valid promptId.
   const record = asRecord(prompt) ?? {};
+  const config = asRecord(record.config);
+  const projectedConfig = config ? { ...config } : undefined;
+  if (projectedConfig) {
+    delete projectedConfig.prefix;
+    delete projectedConfig.suffix;
+    delete projectedConfig.rubricPrompt;
+  }
   return {
     ...record,
+    ...(projectedConfig && { config: projectedConfig }),
     ...('display' in record ? { display: '[prompt stripped]' } : {}),
     ...('template' in record ? { template: '[prompt stripped]' } : {}),
     label: '[prompt stripped]',
@@ -424,8 +462,18 @@ function projectTestCase(
     );
   }
   if (options.stripPrompt && testCase.options && asRecord(testCase.options)) {
-    const { prefix: _prefix, suffix: _suffix, ...rest } = testCase.options;
+    const {
+      prefix: _prefix,
+      suffix: _suffix,
+      rubricPrompt: _rubricPrompt,
+      ...rest
+    } = testCase.options;
     projectedTestCase.options = rest;
+  }
+  if (options.stripPrompt && Array.isArray(testCase.assert)) {
+    projectedTestCase.assert = testCase.assert.map((assertion) =>
+      stripAssertionRubricPrompts(assertion),
+    );
   }
 
   if (options.stripOutput) {
@@ -1004,25 +1052,23 @@ export function projectTracesForOutput(traces: TraceData[], stripFlags = getStri
           return Object.keys(projected).length ? projected : undefined;
         };
         let name = span.name;
-        if (shouldStripResponseOutput && span.attributes) {
-          if (
-            COMMAND_ATTRIBUTE_KEYS.some((key) => key in span.attributes!) &&
-            name.startsWith('exec ')
-          ) {
+        const attributes = asRecord(span.attributes);
+        if (shouldStripResponseOutput && typeof name === 'string' && attributes) {
+          if (COMMAND_ATTRIBUTE_KEYS.some((key) => key in attributes) && name.startsWith('exec ')) {
             name = 'exec [output stripped]';
           } else if (
-            SEARCH_ATTRIBUTE_KEYS.some((key) => key in span.attributes!) &&
+            SEARCH_ATTRIBUTE_KEYS.some((key) => key in attributes) &&
             name.startsWith('search "')
           ) {
             name = 'search "[output stripped]"';
-          } else if (name === span.attributes['otel.log.body']) {
+          } else if (name === attributes['otel.log.body']) {
             name = '[output stripped]';
           }
         }
         const events = asRecord(span)?.events;
         return {
           ...span,
-          name,
+          ...(typeof name === 'string' && { name }),
           attributes: projectAttributes(span.attributes),
           ...(Array.isArray(events) && {
             events: events.map((event) => {
@@ -1139,7 +1185,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
     response,
     gradingResult: shouldStripGradingResult
       ? null
-      : projectGradingResult(redacted.gradingResult, shouldStripMetadata),
+      : projectGradingResult(redacted.gradingResult, shouldStripMetadata, shouldStripPromptText),
     namedScores: sanitizeForDb(artifactResult.namedScores),
     metadata: shouldStripMetadata
       ? {}
@@ -1156,6 +1202,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
             stripVars: shouldStripTestVars,
             stripGrading: shouldStripGradingResult,
           },
+          (artifactResult.testCase as AtomicTestCase | undefined)?.metadata,
         ),
   } as T;
 }
@@ -1266,7 +1313,7 @@ export function sanitizeTableForArtifact(
       }),
       gradingResult: shouldStripGradingResult
         ? null
-        : projectGradingResult(redacted.gradingResult, shouldStripMetadata),
+        : projectGradingResult(redacted.gradingResult, shouldStripMetadata, shouldStripPromptText),
       metadata: shouldStripMetadata
         ? {}
         : projectTranscriptMetadata(
@@ -1282,6 +1329,7 @@ export function sanitizeTableForArtifact(
               stripVars: shouldStripTestVars,
               stripGrading: shouldStripGradingResult,
             },
+            output.testCase?.metadata,
           ),
       testCase: sanitizeTestCase(output.testCase) as AtomicTestCase,
     } as EvaluateTableOutput;
@@ -1727,7 +1775,7 @@ export default class EvalResult {
       error: this.error || undefined,
       gradingResult: shouldStripGradingResult
         ? null
-        : projectGradingResult(this.gradingResult, shouldStripMetadata),
+        : projectGradingResult(this.gradingResult, shouldStripMetadata, shouldStripPromptText),
       id: this.id,
       latencyMs: this.latencyMs,
       namedScores: this.namedScores,
@@ -1759,6 +1807,7 @@ export default class EvalResult {
               stripVars: shouldStripTestVars,
               stripGrading: shouldStripGradingResult,
             },
+            this.testCase?.metadata,
           ),
       failureReason: this.failureReason,
     };

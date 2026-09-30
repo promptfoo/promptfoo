@@ -719,6 +719,23 @@ function stripConfigProviderPrompts(provider: unknown): unknown {
   );
 }
 
+/** Remove grading prompts from an assertion or nested assertion set. */
+export function stripAssertionRubricPrompts<T>(assertion: T, depth = 0): T {
+  if (!isRecord(assertion)) {
+    return assertion;
+  }
+  if (depth > OUTPUT_SANITIZE_MAX_DEPTH) {
+    return REDACTED as T;
+  }
+  const { rubricPrompt: _rubricPrompt, ...projected }: Record<string, unknown> = assertion;
+  if (Array.isArray(assertion.assert)) {
+    projected.assert = assertion.assert.map((child) =>
+      stripAssertionRubricPrompts(child, depth + 1),
+    );
+  }
+  return projected as T;
+}
+
 /** Sanitize exported/shared configuration while preserving safe tracing env references. */
 export function sanitizeConfigForOutput(
   config: Partial<UnifiedConfig>,
@@ -807,6 +824,10 @@ export function sanitizeConfigForOutput(
       if (isRecord(test.options)) {
         delete test.options.prefix;
         delete test.options.suffix;
+        delete test.options.rubricPrompt;
+      }
+      if (Array.isArray(test.assert)) {
+        test.assert = test.assert.map((assertion) => stripAssertionRubricPrompts(assertion));
       }
     }
     if (stripVars) {
