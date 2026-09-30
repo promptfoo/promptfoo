@@ -434,6 +434,39 @@ describe('Metadata Filter Tests', () => {
     expect(parsed.results.results[0].response.output).toContain('Alice');
   });
 
+  it('1.8.3.4b - comma-separated --filter-metadata values use OR logic within one key', () => {
+    const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');
+    const outputPath = path.join(OUTPUT_DIR, 'metadata-or-output.json');
+
+    const { exitCode } = runCli(
+      [
+        'eval',
+        '-c',
+        configPath,
+        '-o',
+        outputPath,
+        '--no-cache',
+        '--filter-metadata',
+        'category=auth,admin',
+        '--filter-metadata',
+        'priority=high',
+      ],
+      { cwd: CONFIGS_DIR },
+    );
+
+    expect(exitCode).toBe(0);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+
+    // category ORs to auth|admin, priority pins high: Alice (auth/high)
+    // and Charlie (admin/high). Diana (auth/low) and Bob (profile) drop out.
+    expect(parsed.results.results.length).toBe(2);
+    const outputs = parsed.results.results.map((r: any) => r.response.output as string);
+    expect(outputs.some((o: string) => o.includes('Alice'))).toBe(true);
+    expect(outputs.some((o: string) => o.includes('Charlie'))).toBe(true);
+  });
+
   it('1.8.3.5 - multiple --filter-metadata returns empty when no tests match all conditions', () => {
     const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');
     const outputPath = path.join(OUTPUT_DIR, 'metadata-nomatch-output.json');

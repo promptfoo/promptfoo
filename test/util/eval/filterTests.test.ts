@@ -219,6 +219,72 @@ describe('filterTests', () => {
         expect(result).toHaveLength(1);
       });
 
+      it('should match any comma-separated value within one key (OR logic)', async () => {
+        const result = await filterTests(multiMetadataTestSuite, {
+          metadata: ['env=dev,prod'],
+        });
+        expect(result).toHaveLength(4);
+      });
+
+      it('should OR within a key and AND across repeated flags together', async () => {
+        const result = await filterTests(multiMetadataTestSuite, {
+          metadata: ['type=unit,integration', 'priority=high,medium'],
+        });
+        expect(result.map((t: TestCase) => t.vars?.var1).sort()).toEqual([
+          'test1',
+          'test3',
+          'test4',
+        ]);
+      });
+
+      it('should narrow OR values with a second key', async () => {
+        const result = await filterTests(multiMetadataTestSuite, {
+          metadata: ['env=dev,prod', 'priority=high'],
+        });
+        expect(result.map((t: TestCase) => t.vars?.var1).sort()).toEqual(['test1', 'test3']);
+      });
+
+      it('should OR against array-valued metadata', async () => {
+        const arrayMetadataSuite: TestSuite = {
+          prompts: [],
+          providers: [],
+          tests: [
+            {
+              description: 'array-meta',
+              vars: { var1: 'test1' },
+              assert: [],
+              metadata: { tags: ['alpha', 'beta'] },
+            },
+            {
+              description: 'other-array-meta',
+              vars: { var1: 'test2' },
+              assert: [],
+              metadata: { tags: ['gamma'] },
+            },
+          ],
+        };
+        const result = await filterTests(arrayMetadataSuite, {
+          metadata: ['tags=beta,gamma'],
+        });
+        expect(result).toHaveLength(2);
+      });
+
+      it('should keep comma-free single values byte-identical to before', async () => {
+        const result = await filterTests(multiMetadataTestSuite, {
+          metadata: ['env=dev'],
+        });
+        expect(result.map((t: TestCase) => t.vars?.var1).sort()).toEqual(['test1', 'test3']);
+      });
+
+      it('should throw on an empty value in a comma list', async () => {
+        await expect(
+          filterTests(multiMetadataTestSuite, { metadata: ['env=dev,,prod'] }),
+        ).rejects.toThrow('empty value');
+        await expect(
+          filterTests(multiMetadataTestSuite, { metadata: ['env=dev,'] }),
+        ).rejects.toThrow('empty value');
+      });
+
       it('should throw error if any filter in array is invalid', async () => {
         await expect(
           filterTests(multiMetadataTestSuite, {
