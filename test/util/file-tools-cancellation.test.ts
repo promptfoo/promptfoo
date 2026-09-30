@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -10,7 +10,8 @@ describe('executable tools import cancellation', () => {
   let directory: string;
 
   beforeEach(async () => {
-    directory = await mkdtemp(path.join(os.tmpdir(), 'promptfoo-tools-import-'));
+    // Keep native and test-runner imports on the same path through temporary-directory aliases.
+    directory = await realpath(await mkdtemp(path.join(os.tmpdir(), 'promptfoo-tools-import-')));
     await writeFile(path.join(directory, 'package.json'), '{"type":"module"}');
   });
 

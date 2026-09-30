@@ -113,17 +113,12 @@ describe('selected caller observer error through real iterative evaluation', () 
       await done;
       expect(target.callApi).toHaveBeenCalledTimes(origin === 'independent' ? 2 : 1);
       expect(observer).toHaveBeenCalledTimes(origin === 'independent' ? 2 : 1);
-      if (origin === 'independent') {
-        expect(rejection).toMatchObject({
-          message: 'Rate limit exceeded for raw-selected-observer after 2 attempts',
-        });
-        expect(response).toBeUndefined();
+      expect(rejection).toBeUndefined();
+      expect(response?.error).toBe(origin === 'success' ? undefined : failure.message);
+      if (origin === 'success') {
+        expect(response?.output).toBe('Hello.');
       } else {
-        expect(rejection).toBeUndefined();
-        expect(response?.error).toBe(origin === 'observer' ? failure.message : undefined);
-        if (origin === 'success') {
-          expect(response?.output).toBe('Hello.');
-        }
+        expect(response).toMatchObject({ output: '', tokenUsage: { numRequests: 1 } });
       }
       expect(isResponseHeadersObserverErrorResponse(response)).toBe(origin === 'observer');
       expect(Object.getOwnPropertyDescriptors(failure)).toEqual(descriptors);

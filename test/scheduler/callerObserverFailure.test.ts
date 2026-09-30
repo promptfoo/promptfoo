@@ -74,9 +74,7 @@ describe('caller observer exceptions at actual provider retry boundaries', () =>
         expect(String(url)).toBe(
           providerPath.startsWith('snowflake:')
             ? 'https://observer-failure.fixture.test/v1/api/v2/cortex/inference:complete'
-            : providerPath.startsWith('xai:')
-              ? 'https://api.x.ai/v1/chat/completions'
-              : 'https://observer-failure.fixture.test/v1/chat/completions',
+            : 'https://observer-failure.fixture.test/v1/chat/completions',
         );
         return new Response(
           JSON.stringify({
@@ -720,8 +718,7 @@ describe('caller observer exceptions at actual provider retry boundaries', () =>
       });
       providers.push(raw);
       const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
-        // xAI selects its endpoint in the constructor; the entire fetch is mocked.
-        expect(String(url)).toBe('https://api.x.ai/v1/chat/completions');
+        expect(String(url)).toBe('https://xai-retry.fixture.test/v1/chat/completions');
         const first = fetch.mock.calls.length === 1;
         return new Response(
           JSON.stringify(
