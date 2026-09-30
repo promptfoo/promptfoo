@@ -729,7 +729,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     );
   });
 
-  it('treats JSON null as no results for a failed eval', async () => {
+  it.each(['false', 'true'])('treats JSON null as no results with sharing %s', async (share) => {
     await runEvaluation();
     fs.writeFileSync(path.join(tempDir, '.promptfoo-results/results.json'), 'null');
     evalJobStatus = 'failed';
@@ -745,6 +745,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
         const comment = await runScript(commentJob.script[0], {
           CI_API_V4_URL: origin + '/api/v4',
           CI_SERVER_URL: origin,
+          PROMPTFOO_SHARE: share,
         });
 
         expect(comment.status).toBe(0);

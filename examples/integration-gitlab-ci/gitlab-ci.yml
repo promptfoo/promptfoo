@@ -366,7 +366,7 @@
       let body = `${marker}\n${pipelineMarker}\n### Promptfoo eval: ${outcome}`;
       body += total ? `\n\n${successes}/${total} tests passed` : '\n\nNo results were written.';
 
-      if (share === 'true' && typeof result.shareableUrl === 'string') {
+      if (share === 'true' && typeof result?.shareableUrl === 'string') {
         try {
           const shareUrl = new URL(result.shareableUrl);
           const sharingApp = new URL(sharingAppBaseUrl);
