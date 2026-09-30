@@ -13,7 +13,7 @@ import {
   withGenAISpan,
 } from '../tracing/genaiTracer';
 import { resolveAgenticWorkingDir, validateAgenticWorkingDir } from './agentic-utils';
-import { assertIsolatedWorkingDir, clearRepositoryEnv } from './agentWorkspace';
+import { assertIsolatedWorkingDir, clearRepositoryEnv, isAgentWorkspace } from './agentWorkspace';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -128,6 +128,9 @@ export type PiThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'x
  * Pi provider configuration
  */
 export interface PiProviderConfig {
+  /** Base directory supplied by the provider loader for config-relative paths. */
+  basePath?: string;
+
   /**
    * Model pattern or ID passed to `--model`.
    * Supports pi's `provider/id` form and optional `:<thinking>` suffix
@@ -330,11 +333,6 @@ interface PiPreparedCall {
   workingDir: string | undefined;
 }
 
-function resolveBasePath(): string {
-  // Config-relative paths use the same base as working_dir.
-  return cliState.basePath ? path.resolve(cliState.basePath) : process.cwd();
-}
-
 function truncateStderr(stderr: string): string {
   const trimmed = stderr.trim();
   if (trimmed.length <= MAX_STDERR_LENGTH) {
@@ -419,6 +417,7 @@ export class PiProvider implements ApiProvider {
   env?: EnvOverrides;
 
   private providerId = 'pi';
+  private readonly basePath: string;
   /** Memoized findPiCliScript result; null = searched and not found */
   private cachedCliScript: string | null | undefined;
 
@@ -431,6 +430,7 @@ export class PiProvider implements ApiProvider {
   ) {
     const { config, env, id } = options;
     this.config = config ?? {};
+    this.basePath = path.resolve(config?.basePath ?? cliState.basePath ?? process.cwd());
     this.env = env;
     this.providerId = id ?? this.providerId;
   }
@@ -451,7 +451,7 @@ export class PiProvider implements ApiProvider {
     if (config.pi_path) {
       const resolved = path.isAbsolute(config.pi_path)
         ? config.pi_path
-        : path.resolve(resolveBasePath(), config.pi_path);
+        : path.resolve(this.basePath, config.pi_path);
       if (resolved.endsWith('.js') || resolved.endsWith('.mjs')) {
         return { command: process.execPath, argsPrefix: [resolved] };
       }
@@ -461,7 +461,7 @@ export class PiProvider implements ApiProvider {
     // The node_modules walk is stable for the lifetime of a provider instance;
     // cache it so repeated calls don't re-stat the directory tree.
     if (this.cachedCliScript === undefined) {
-      this.cachedCliScript = findPiCliScript([cliState.basePath, process.cwd()]) ?? null;
+      this.cachedCliScript = findPiCliScript([this.basePath, process.cwd()]) ?? null;
     }
     if (this.cachedCliScript) {
       logger.debug(`[Pi] Using project-local pi CLI: ${this.cachedCliScript}`);
@@ -603,9 +603,7 @@ export class PiProvider implements ApiProvider {
   }
 
   private buildEnv(config: PiProviderConfig): Record<string, string> {
-    // Seed with the full ambient environment, then overlay the configured
-    // provider env (EnvOverrides + config.env). Insertion order does not affect
-    // the resulting Record's values, so the merge is order-independent.
+    // Provider configuration overrides the inherited environment.
     const env: Record<string, string> = {};
     for (const [key, value] of Object.entries(process.env)) {
       if (value !== undefined) {
@@ -648,19 +646,27 @@ export class PiProvider implements ApiProvider {
     if (!raw) {
       return undefined;
     }
-    return path.isAbsolute(raw) ? raw : path.resolve(resolveBasePath(), raw);
+    return path.isAbsolute(raw) ? raw : path.resolve(this.basePath, raw);
   }
 
   private prepareCall(context?: CallApiContextParams): PiPreparedCall {
     const promptConfig = (context?.prompt?.config ?? {}) as PiProviderConfig;
     const config: PiProviderConfig = {
       ...this.config,
-      ...promptConfig,
-      // Shallow spread would replace the whole env record; merge it instead.
-      ...(this.config.env || promptConfig.env
-        ? { env: { ...this.config.env, ...promptConfig.env } }
-        : {}),
+      model: promptConfig.model ?? this.config.model,
+      provider_id: promptConfig.provider_id ?? this.config.provider_id,
+      thinking: promptConfig.thinking ?? this.config.thinking,
     };
+
+    // Only the evaluator may replace the working directory with a registered copy.
+    // Test rows cannot change process, tool, credential, or resource-loading controls.
+    if (
+      this.config.copy_working_dir &&
+      typeof promptConfig.working_dir === 'string' &&
+      isAgentWorkspace(promptConfig.working_dir)
+    ) {
+      config.working_dir = promptConfig.working_dir;
+    }
 
     if (config.apiKey && !this.getApiKeyEnvVar(config)) {
       throw new Error(
@@ -675,7 +681,7 @@ export class PiProvider implements ApiProvider {
 
     if (config.working_dir) {
       const workingDir =
-        resolveAgenticWorkingDir(config.working_dir, cliState.basePath) ?? process.cwd();
+        resolveAgenticWorkingDir(config.working_dir, this.basePath) ?? process.cwd();
       validateAgenticWorkingDir(workingDir, config.working_dir);
       return { config, workingDir };
     }

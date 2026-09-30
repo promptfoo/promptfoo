@@ -373,11 +373,11 @@ Implemented capabilities:
   guidance when missing.
 - Supports provider/model selection, thinking levels, and system prompt
   replacement or extension.
-- Supports temporary or configured working directories with OpenCode-style safe
-  defaults: chat-only without `working_dir`, read-only tools (`read`, `grep`,
-  `find`, `ls`) with it.
-- Disables extension/skill/prompt-template/context-file discovery by default for
-  reproducible evals; each is opt-in.
+- Uses a temporary directory with tools disabled when `working_dir` is unset.
+  A configured directory enables `read`, `grep`, `find`, and `ls`; these tools
+  are not restricted to that directory.
+- Disables extension, skill, prompt-template, and context-file discovery by default;
+  each can be enabled in provider configuration.
 - Maps per-message usage to summed `tokenUsage` and USD `cost`, and surfaces tool
   activity in `metadata.toolCalls`.
 - Detects agent failures from `stopReason: error|aborted` because pi exits 0 in
@@ -399,7 +399,7 @@ Important limits:
   boundary. Pi's own install telemetry is disabled by the default `--offline`.
 - Project-local file trust (`.pi/settings.json`, project extensions/skills/
   templates, `.pi/SYSTEM.md`) is off by default (`--no-approve`) and is a
-  separate axis from `load_*` discovery; opt in with `trust_project_files`
+  configured separately from `load_*` discovery; enable it with `trust_project_files`
   (`--approve`), which is all-or-nothing.
 - Prompts use RPC messages to preserve whitespace. Responses are not cached because
   Pi can read files and runtime settings outside the configured working directory.

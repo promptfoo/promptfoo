@@ -5,6 +5,7 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import { createAgentWorkspace } from '../../src/providers/agentWorkspace';
 import {
   findPiCliScript,
   PI_READONLY_TOOLS,
@@ -324,7 +325,7 @@ describe('PiProvider', () => {
       expect(args).not.toContain('--no-approve');
     });
 
-    it('merges prompt-level config over provider config', async () => {
+    it('allows per-test model selection', async () => {
       mockPiRun(defaultEvents());
       const provider = new PiProvider({ config: { model: 'openai/gpt-4o-mini' } });
 
@@ -341,7 +342,7 @@ describe('PiProvider', () => {
       expect(args[args.indexOf('--model') + 1]).toBe('anthropic/claude-sonnet-4-5');
     });
 
-    it('deep-merges prompt-level env with provider-level env', async () => {
+    it('keeps environment configuration provider-only', async () => {
       mockPiRun(defaultEvents());
       const provider = new PiProvider({
         config: { env: { KEEP_ME: 'base', OVERRIDE_ME: 'base' } },
@@ -358,7 +359,86 @@ describe('PiProvider', () => {
 
       const env = spawnedOptions().env;
       expect(env.KEEP_ME).toBe('base');
-      expect(env.OVERRIDE_ME).toBe('prompt');
+      expect(env.OVERRIDE_ME).toBe('base');
+    });
+  });
+
+  describe('provider-only execution controls', () => {
+    it('ignores per-test process, tool, path, and resource configuration', async () => {
+      mockPiRun(defaultEvents());
+      const provider = new PiProvider({
+        config: { pi_path: '/trusted/pi.mjs', no_tools: true, timeout: 10_000 },
+      });
+
+      const result = await provider.callApi('hello', {
+        prompt: {
+          raw: 'hello',
+          label: 'test',
+          config: {
+            pi_path: '/unused/row.mjs',
+            basePath: '/unused',
+            working_dir: '/unused',
+            copy_working_dir: true,
+            agent_dir: '/unused/agent',
+            no_tools: false,
+            tools: ['read'],
+            extra_args: ['--version'],
+            load_extensions: true,
+            load_skills: true,
+            load_prompt_templates: true,
+            load_context_files: true,
+            trust_project_files: true,
+            system_prompt: 'row setting',
+            append_system_prompt: 'row setting',
+            timeout: 0,
+            max_output_bytes: 1,
+            offline: false,
+            apiKey: 'unused-fixture-key',
+            api_key_env: 'PI_ROW_FIXTURE_KEY',
+          },
+        },
+        vars: {},
+      });
+
+      expect(result.output).toBe('hello');
+      expect(mockSpawn.mock.calls[0][0]).toBe(process.execPath);
+      expect(spawnedArgs()[0]).toBe('/trusted/pi.mjs');
+      expect(spawnedArgs()).toEqual([
+        '/trusted/pi.mjs',
+        '--mode',
+        'rpc',
+        '--no-session',
+        '--offline',
+        '--no-tools',
+        '--no-extensions',
+        '--no-skills',
+        '--no-prompt-templates',
+        '--no-context-files',
+        '--no-approve',
+      ]);
+      expect(spawnedOptions().cwd).not.toBe('/unused');
+      expect(spawnedOptions().env.PI_ROW_FIXTURE_KEY).toBeUndefined();
+      expect(spawnedOptions().env.PI_CODING_AGENT_DIR).not.toBe('/unused/agent');
+    });
+
+    it('accepts an evaluator-managed workspace when copy_working_dir is configured', async () => {
+      const source = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-workspace-source-'));
+      const workspace = await createAgentWorkspace(source, 'copy');
+      try {
+        mockPiRun(defaultEvents());
+        const provider = new PiProvider({
+          config: { working_dir: source, copy_working_dir: 'copy', no_tools: true },
+        });
+        await provider.callApi('hello', {
+          prompt: { raw: 'hello', label: 'test', config: { working_dir: workspace.dir } },
+          vars: {},
+        });
+        expect(spawnedOptions().cwd).toBe(workspace.dir);
+        expect(spawnedArgs()).toContain('--no-tools');
+      } finally {
+        await workspace.remove();
+        fs.rmSync(source, { recursive: true, force: true });
+      }
     });
   });
 
@@ -453,6 +533,25 @@ describe('PiProvider', () => {
         expect(spawnedOptions().env.PI_CODING_AGENT_DIR).toBe(expected);
       } finally {
         cliState.basePath = original;
+      }
+    });
+
+    it('keeps loader-supplied paths stable after the CLI base path changes', async () => {
+      const base = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-config-base-'));
+      const original = cliState.basePath;
+      try {
+        mockPiRun(defaultEvents());
+        const provider = new PiProvider({
+          config: { basePath: base, pi_path: './pi.mjs', agent_dir: './agent', working_dir: '.' },
+        });
+        cliState.basePath = '/another/config';
+        await provider.callApi('hello');
+        expect(spawnedArgs()[0]).toBe(path.join(base, 'pi.mjs'));
+        expect(spawnedOptions().cwd).toBe(base);
+        expect(spawnedOptions().env.PI_CODING_AGENT_DIR).toBe(path.join(base, 'agent'));
+      } finally {
+        cliState.basePath = original;
+        fs.rmSync(base, { recursive: true, force: true });
       }
     });
 

@@ -140,7 +140,9 @@ With `bash`, `edit`, or `write` enabled, the agent executes commands and modifie
 | `offline`               | `boolean`                 | `true`        | Pass `--offline` to skip pi's startup version checks and telemetry (LLM calls are unaffected) |
 | `max_output_bytes`      | `number`                  | `33554432`    | Cap on retained stdout before the run is aborted (guards against runaway/large tool output)   |
 
-Extension, skill, prompt-template, and context-file discovery are disabled by default so eval prompts are processed verbatim and results stay reproducible. The provider also passes `--no-approve`, so project-local pi files (a `.pi/settings.json`, project extensions, or a `.pi/SYSTEM.md` in the `working_dir`) are ignored even if the project was previously trusted. Discovery (`load_*`) and trust are independent: context files load without trust, while project-local extensions/skills/templates and `.pi/SYSTEM.md` require `trust_project_files: true` (`--approve`). pi's trust is all-or-nothing — enabling it trusts every project-local pi file, including a `settings.json` that can change the model.
+Extension, skill, prompt-template, and context-file discovery are disabled by default. The provider also passes `--no-approve`, so project-local pi files (a `.pi/settings.json`, project extensions, or a `.pi/SYSTEM.md` in the `working_dir`) are ignored even if the project was previously trusted. Discovery (`load_*`) and trust are independent: context files load without trust, while project-local extensions/skills/templates and `.pi/SYSTEM.md` require `trust_project_files: true` (`--approve`). Enabling project trust applies to every project-local Pi file, including a `settings.json` that can change the model.
+
+Per-test `options` can change `model`, `provider_id`, and `thinking`. Configure process paths, credentials, tools, resource discovery, environment variables, and other execution settings on the provider. When the provider enables `copy_working_dir`, promptfoo supplies its managed workspace for each eval step.
 
 ## Response Format
 
@@ -150,7 +152,7 @@ The provider returns:
 - `tokenUsage` - Tokens summed across the final run's assistant turns (`prompt`, `completion`, `total`, `cached`, `numRequests`); cache reads/writes are exposed as `completionDetails.cacheReadInputTokens` and `completionDetails.cacheCreationInputTokens` when pi reports them
 - `cost` - USD cost as reported by pi
 - `metadata.toolCalls` - Tools the agent invoked, with arguments and error status
-- `metadata.model` / `metadata.provider_id` - Model that actually served the run
+- `metadata.model` / `metadata.provider_id` - Model and provider reported by Pi
 - `raw` - JSON of all assistant messages
 
 If pi auto-retries after a transient provider/runtime error, `tokenUsage` and `cost` reflect the final (successful) attempt; tokens spent on the discarded failed attempts are not included.
