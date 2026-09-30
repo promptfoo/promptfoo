@@ -527,6 +527,14 @@ export function findViolations(
   const publicFacade = normalizePath(config.publicFacade);
   const leafLayers = new Set(config.leafLayers ?? []);
   const layersByName = new Map(config.layers.map((layer) => [layer.name, layer]));
+  const allowedExternalByLayer = new Map(
+    config.layers
+      .filter((layer) => leafLayers.has(layer.name))
+      .map((layer) => [
+        layer.name,
+        new Set((layer.allowedExternal ?? []).map((entry) => entry.replace(/^node:/, ''))),
+      ]),
+  );
   const violations: BoundaryViolation[] = [];
 
   for (const {
@@ -541,21 +549,15 @@ export function findViolations(
     }
 
     const importerIsLeaf = leafLayers.has(importerLayer);
-    const allowedExternal = importerIsLeaf
-      ? new Set(
-          (layersByName.get(importerLayer)?.allowedExternal ?? []).map((entry) =>
-            entry.replace(/^node:/, ''),
-          ),
-        )
-      : null;
+    const allowedExternal = allowedExternalByLayer.get(importerLayer);
 
     if (!resolvedImport || !importedLayer) {
       // Not an internal module (internal relative / src-rooted / aliased imports resolve above).
       // A leaf layer may import only its allowlisted external packages and Node builtins; flag
       // any other bare specifier.
-      if (importerIsLeaf) {
+      if (allowedExternal) {
         const externalName = getExternalModuleName(specifier);
-        if (externalName && !allowedExternal!.has(externalName)) {
+        if (externalName && !allowedExternal.has(externalName)) {
           violations.push({
             kind: 'leaf-external',
             importer,
@@ -580,17 +582,15 @@ export function findViolations(
       });
     }
 
-    if (leafLayers.has(importerLayer)) {
-      if (importedLayer !== importerLayer) {
-        violations.push({
-          kind: 'leaf',
-          importer,
-          importerLayer,
-          specifier,
-          imported: resolvedImport,
-          importedLayer,
-        });
-      }
+    if (importerIsLeaf && importedLayer !== importerLayer) {
+      violations.push({
+        kind: 'leaf',
+        importer,
+        importerLayer,
+        specifier,
+        imported: resolvedImport,
+        importedLayer,
+      });
     }
 
     const importerConfig = layersByName.get(importerLayer);
@@ -601,7 +601,7 @@ export function findViolations(
     if (
       importedLayer !== importerLayer &&
       resolvedImport !== publicFacade &&
-      !leafLayers.has(importerLayer) &&
+      !importerIsLeaf &&
       importerConfig &&
       !allowedLayerDependency
     ) {
