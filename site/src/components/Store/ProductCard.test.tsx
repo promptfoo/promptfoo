@@ -140,6 +140,33 @@ describe('ProductCard', () => {
     expect(screen.getByText('$19.99')).toBeInTheDocument();
   });
 
+  it.each([
+    ['AVAILABLE', 1, '$20.00'],
+    ['AVAILABLE', 0, '$10.00'],
+    ['SOLD_OUT', 1, '$10.00'],
+  ] as const)('prices %s products with %i available units', (state, inStock, price) => {
+    const product: FourthwallProduct = {
+      ...mockProduct,
+      state: { type: state },
+      variants: [
+        {
+          ...mockProduct.variants[0],
+          id: 'unavailable',
+          unitPrice: { value: 10, currency: 'USD' },
+          stock: { type: 'LIMITED', inStock: 0 },
+        },
+        {
+          ...mockProduct.variants[0],
+          id: 'available',
+          unitPrice: { value: 20, currency: 'USD' },
+          stock: { type: 'LIMITED', inStock },
+        },
+      ],
+    };
+    render(<ProductCard product={product} onClick={vi.fn()} />);
+    expect(screen.getByText(price)).toBeInTheDocument();
+  });
+
   it('handles product with single image', () => {
     const singleImageProduct = {
       ...mockProduct,

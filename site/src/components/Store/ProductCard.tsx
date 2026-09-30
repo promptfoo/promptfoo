@@ -4,7 +4,7 @@ import Box from '@mui/material/Box';
 import ButtonBase from '@mui/material/ButtonBase';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
-import { formatPrice, isProductSoldOut } from './useFourthwall';
+import { formatPrice, isInStock, isProductSoldOut } from './useFourthwall';
 
 import type { FourthwallProduct } from './types';
 
@@ -23,14 +23,15 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
   const hasHoverImage = Boolean(hoverImage);
   const soldOut = isProductSoldOut(product);
 
-  const lowestPrice = useMemo(
-    () =>
-      product.variants.reduce(
-        (min, v) => (v.unitPrice.value < min.value ? v.unitPrice : min),
-        product.variants[0]?.unitPrice ?? { value: 0, currency: 'USD' },
-      ),
-    [product.variants],
-  );
+  const lowestPrice = useMemo(() => {
+    const variants = soldOut
+      ? product.variants
+      : product.variants.filter((variant) => isInStock(variant.stock));
+    return variants.reduce(
+      (min, variant) => (variant.unitPrice.value < min.value ? variant.unitPrice : min),
+      variants[0]?.unitPrice ?? { value: 0, currency: 'USD' },
+    );
+  }, [product.variants, soldOut]);
 
   return (
     <ButtonBase

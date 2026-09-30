@@ -9,7 +9,7 @@ import {
   stripHtml,
 } from './useFourthwall';
 
-import type { FourthwallProduct } from './types';
+import type { FourthwallProduct, FourthwallStock } from './types';
 
 describe('formatPrice', () => {
   it('formats USD prices correctly', () => {
@@ -101,6 +101,17 @@ describe('isInStock', () => {
 
   it('returns true for limited stock with inventory remaining', () => {
     expect(isInStock({ type: 'LIMITED', inStock: 5 })).toBe(true);
+  });
+
+  it.each([
+    { type: 'BACKORDERED', inStock: 2 },
+    { type: 'LIMITED', inStock: '2' },
+    { type: 'LIMITED', inStock: Infinity },
+    { type: 'LIMITED', inStock: NaN },
+    { type: 'LIMITED', inStock: -1 },
+    { type: 'LIMITED' },
+  ])('rejects unknown or invalid stock: %j', (stock) => {
+    expect(isInStock(stock as FourthwallStock)).toBe(false);
   });
 
   it('returns false for limited stock with no inventory remaining', () => {

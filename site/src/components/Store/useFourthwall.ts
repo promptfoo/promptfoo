@@ -314,7 +314,10 @@ export function stripHtml(html: string): string {
 }
 
 export function isInStock(stock: FourthwallStock): boolean {
-  return stock.type === 'UNLIMITED' || stock.inStock > 0;
+  return (
+    stock.type === 'UNLIMITED' ||
+    (stock.type === 'LIMITED' && Number.isFinite(stock.inStock) && stock.inStock > 0)
+  );
 }
 
 export function isProductSoldOut(product: FourthwallProduct): boolean {
