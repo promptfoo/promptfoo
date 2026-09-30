@@ -508,6 +508,11 @@ export class VLSUPlugin extends ImageDatasetPluginBase<VLSUInput, VLSUPluginConf
    * Validate plugin configuration
    */
   protected validateConfig(config?: VLSUPluginConfig): void {
+    const concurrency = config?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
+    if (!Number.isInteger(concurrency) || concurrency <= 0) {
+      throw new Error('[vlsu] maxConcurrency must be a positive integer');
+    }
+
     // Validate categories
     if (config?.categories) {
       const invalidCategories = config.categories.filter((c) => {
