@@ -1,7 +1,10 @@
 import type { Server } from 'node:http';
 
+import { eq } from 'drizzle-orm';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { getDb } from '../../src/database';
+import { evalResultsTable, evalsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
@@ -9,6 +12,7 @@ import { createApp } from '../../src/server/server';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
@@ -108,6 +112,150 @@ describe('eval routes', () => {
     payload.score = score;
     return payload;
   }
+
+  describe('POST /:evalId/results/:id/check', () => {
+    async function fixture() {
+      const evaluation = await EvalFactory.create();
+      testEvalIds.add(evaluation.id);
+      const [result] = await EvalResult.findManyByEvalId(evaluation.id);
+      return { evaluation, result, url: `/api/eval/${evaluation.id}/results/${result.id}/check` };
+    }
+
+    async function snapshot(evalId: string) {
+      const db = await getDb();
+      return {
+        eval: await db.select().from(evalsTable).where(eq(evalsTable.id, evalId)),
+        results: await db
+          .select()
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.evalId, evalId)),
+      };
+    }
+
+    it.each([true, false])(
+      'previews a check without changing saved rows or metrics (pass: %s)',
+      async (pass) => {
+        const { evaluation, result, url } = await fixture();
+        const before = await snapshot(evaluation.id);
+        const value = pass ? String(result.response!.output) : 'Absent fixture text';
+        const response = await api.post(url).send({ assertion: { type: 'contains', value } });
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ pass, score: Number(pass), reason: expect.any(String) });
+        expect(await snapshot(evaluation.id)).toEqual(before);
+      },
+    );
+
+    it('keeps failed previews usable with short-circuit mode enabled', async () => {
+      const { evaluation, url } = await fixture();
+      const before = await snapshot(evaluation.id);
+      vi.stubEnv('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES', 'true');
+      try {
+        const response = await api
+          .post(url)
+          .send({ assertion: { type: 'contains', value: 'Absent fixture text' } });
+        expect(response.status).toBe(200);
+        expect(response.body).toMatchObject({ pass: false, score: 0 });
+        expect(await snapshot(evaluation.id)).toEqual(before);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('ignores saved scoring settings and leaves manual and comparison grades untouched', async () => {
+      const { evaluation, result, url } = await fixture();
+      result.testCase.assertScoringFunction = 'file://unused-fixture-scoring.js';
+      result.score = 0.75;
+      result.success = false;
+      result.gradingResult = {
+        pass: false,
+        score: 0.75,
+        reason: 'Saved comparison',
+        componentResults: [
+          { pass: true, score: 1, reason: 'Human review', assertion: { type: 'human' } },
+          {
+            pass: false,
+            score: 0,
+            reason: 'Comparison',
+            assertion: { type: 'select-best', value: 'Fixture' },
+          },
+        ],
+      };
+      await result.save();
+      const before = await snapshot(evaluation.id);
+      const response = await api
+        .post(url)
+        .send({ assertion: { type: 'contains', value: String(result.response!.output) } });
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({ pass: true, score: 1 });
+      expect(await snapshot(evaluation.id)).toEqual(before);
+    });
+
+    it.each([
+      { type: 'llm-rubric', value: 'Fixture criteria' },
+      { type: 'javascript', value: 'true' },
+      { type: 'contains', value: 'file://fixture.txt' },
+      { type: 'contains', value: 'package:fixture:check' },
+      { type: 'contains', value: '{{fixture}}' },
+      { type: 'contains', value: 'Fixture #} text' },
+      { type: 'contains', value: 'fixture', provider: 'echo' },
+    ])('rejects unsupported options without changing the evaluation', async (assertion) => {
+      const { evaluation, url } = await fixture();
+      const before = await snapshot(evaluation.id);
+      expect((await api.post(url).send({ assertion })).status).toBe(400);
+      expect(await snapshot(evaluation.id)).toEqual(before);
+    });
+
+    it.each([{ output: null }, { error: 'Fixture provider unavailable' }])(
+      'rejects a result without usable output',
+      async (providerResponse) => {
+        const { evaluation, result, url } = await fixture();
+        result.response = providerResponse;
+        await result.save();
+        const before = await snapshot(evaluation.id);
+        expect((await api.post(url).send({ assertion: { type: 'is-json' } })).status).toBe(400);
+        expect(await snapshot(evaluation.id)).toEqual(before);
+      },
+    );
+
+    it.each([
+      { savedFlag: 'true', processFlag: 'false', expectedStatus: 400 },
+      { savedFlag: undefined, processFlag: 'true', expectedStatus: 400 },
+      { savedFlag: 'false', processFlag: 'true', expectedStatus: 200 },
+    ])(
+      'honors output stripping with saved=$savedFlag and process=$processFlag',
+      async ({ savedFlag, processFlag, expectedStatus }) => {
+        const { evaluation, result, url } = await fixture();
+        evaluation.config.env =
+          savedFlag === undefined ? {} : { PROMPTFOO_STRIP_RESPONSE_OUTPUT: savedFlag };
+        await evaluation.save();
+        const before = await snapshot(evaluation.id);
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: processFlag });
+        try {
+          const response = await api
+            .post(url)
+            .send({ assertion: { type: 'equals', value: 'Different fixture output' } });
+          expect(response.status).toBe(expectedStatus);
+          if (expectedStatus === 400) {
+            expect(response.body).toEqual({ error: 'This result has no saved output to check' });
+            expect(JSON.stringify(response.body)).not.toContain(String(result.response!.output));
+          } else {
+            expect(response.body).toMatchObject({ pass: false, score: 0 });
+          }
+          expect(await snapshot(evaluation.id)).toEqual(before);
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
+    it('requires the result to belong to the requested evaluation', async () => {
+      const { result } = await fixture();
+      const response = await api
+        .post(`/api/eval/other-eval/results/${result.id}/check`)
+        .send({ assertion: { type: 'is-json' } });
+      expect(response.status).toBe(404);
+    });
+  });
 
   describe('POST /', () => {
     it('returns 500 when v4 prompt persistence fails', async () => {

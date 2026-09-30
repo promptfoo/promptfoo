@@ -1,6 +1,7 @@
 import React, { useCallback, useId, useMemo } from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { IS_RUNNING_LOCALLY } from '@app/constants';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
@@ -24,6 +25,7 @@ import {
   ClipboardCopy,
   Hash,
   Link,
+  ListChecks,
   Pencil,
   Search,
   Star,
@@ -33,6 +35,7 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import logger from '../../../../../logger';
+import CheckOutputDialog from './CheckOutputDialog';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { stringifyAssertionValue } from './EvaluationPanel';
@@ -1053,6 +1056,7 @@ function renderOutputActions({
   handleCommentOpen,
   handlePromptOpen,
   handlePromptClose,
+  handleCheckOutput,
   setActionsHovered,
 }: {
   showExtraActions: boolean;
@@ -1081,6 +1085,7 @@ function renderOutputActions({
   handleCommentOpen: () => void;
   handlePromptOpen: () => void;
   handlePromptClose: () => void;
+  handleCheckOutput?: () => void;
   setActionsHovered: (hovered: boolean) => void;
 }): React.ReactNode {
   const passActionLabel = isRedteam ? 'Mark as safe' : 'Mark test passed';
@@ -1094,6 +1099,21 @@ function renderOutputActions({
     >
       {showExtraActions && (
         <>
+          {handleCheckOutput && (
+            <Tooltip disableHoverableContent>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="action p-1 rounded hover:bg-muted transition-colors"
+                  onClick={handleCheckOutput}
+                  aria-label="Check saved output"
+                >
+                  <ListChecks className="size-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Check saved output</TooltipContent>
+            </Tooltip>
+          )}
           <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
               <button
@@ -1312,6 +1332,7 @@ function EvalOutputCell({
     showPassReasons,
     maxImageWidth,
     maxImageHeight,
+    inComparisonMode,
   } = useResultsViewSettingsStore();
 
   const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
@@ -1319,6 +1340,7 @@ function EvalOutputCell({
   const { replayEvaluation, fetchTraces } = useEvalOperations();
 
   const [openPrompt, setOpen] = React.useState(false);
+  const [openCheckOutput, setOpenCheckOutput] = React.useState(false);
   const locationHash = useEvalDetailsHash();
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
     getHumanRating(output)?.pass ?? null,
@@ -1665,12 +1687,29 @@ function EvalOutputCell({
         handleCommentOpen,
         handlePromptOpen,
         handlePromptClose,
+        handleCheckOutput:
+          evaluationId &&
+          output.id &&
+          output.response?.output != null &&
+          !output.response.error &&
+          !inComparisonMode &&
+          IS_RUNNING_LOCALLY
+            ? () => setOpenCheckOutput(true)
+            : undefined,
         setActionsHovered,
       })}
       {lightboxOpen && lightboxImage && (
         <div className="lightbox" onClick={() => toggleLightbox()}>
           <img src={lightboxImage} alt="Lightbox" />
         </div>
+      )}
+      {openCheckOutput && evaluationId && output.id && (
+        <CheckOutputDialog
+          key={`${evaluationId}:${output.id}`}
+          evalId={evaluationId}
+          resultId={output.id}
+          onClose={() => setOpenCheckOutput(false)}
+        />
       )}
       {commentDialogOpen && (
         <CommentDialog

@@ -1,6 +1,6 @@
 {
   "app -> contracts": 7,
-  "app -> legacy-contracts": 94,
+  "app -> legacy-contracts": 95,
   "app -> legacy-runtime": 7,
   "app -> node": 22,
   "app -> providers": 7,
@@ -44,7 +44,7 @@
   "redteam -> legacy-runtime": 142,
   "redteam -> node": 208,
   "redteam -> providers": 38,
-  "view-server -> core": 1,
+  "view-server -> core": 2,
   "view-server -> legacy-contracts": 21,
   "view-server -> legacy-runtime": 35,
   "view-server -> node": 45,

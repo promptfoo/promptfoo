@@ -499,6 +499,13 @@ const smokeCases: SmokeCase[] = [
   },
   {
     method: 'post',
+    openApiPath: '/api/eval/{evalId}/results/{id}/check',
+    path: '/api/eval/eval-1/results/result-1/check',
+    body: {},
+    expectedStatus: 400,
+  },
+  {
+    method: 'post',
     openApiPath: '/api/eval/{evalId}/results/{id}/rating',
     path: '/api/eval/eval-1/results/result-1/rating',
     body: {},
