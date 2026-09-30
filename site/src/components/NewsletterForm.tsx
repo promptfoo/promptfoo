@@ -24,7 +24,7 @@ function NewsletterEmbed(): React.ReactElement {
     };
   }, []);
 
-  return <div ref={containerRef} />;
+  return <div className={styles.container} ref={containerRef} />;
 }
 
 const NewsletterForm: React.FC = () => {
