@@ -57,7 +57,7 @@ A Portkey request can carry two credentials, and they are sent in different plac
 
 For direct passthrough, set `portkeyProvider` to the upstream provider. OpenAI passthrough can use `OPENAI_API_KEY`; other providers need an explicit `apiKey`. Credential selection follows the effective `x-portkey-provider` and `x-portkey-virtual-key` headers, including provider-level overrides. Catalog slugs, virtual keys, and models without an upstream selector use credentials managed by Portkey and do not forward a bearer automatically.
 
-Prompt headers override matching provider headers case-insensitively and preserve the other provider headers. Changes to `x-portkey-provider` or `x-portkey-virtual-key` require an explicit `Authorization` header, or the request fails before contacting Portkey. Otherwise, configure the route on the provider.
+Prompt headers override matching provider headers case-insensitively and preserve the other provider headers. Changes to `x-portkey-provider`, `x-portkey-virtual-key`, or `x-portkey-custom-host` require an explicit `Authorization` header in the prompt config, or the request fails before contacting Portkey. An inherited provider-level authorization does not permit a route change. Otherwise, configure the route on the provider.
 
 To send additional headers, use `config.headers`:
 
