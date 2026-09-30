@@ -1,9 +1,22 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createRequire } from 'node:module';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadMathJs } from '../src/evaluatorHelpers';
 
+vi.mock('node:module', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:module')>();
+  return { ...actual, createRequire: vi.fn(actual.createRequire) };
+});
+
+const requireMathJs = vi.fn();
+
+beforeEach(() => {
+  vi.mocked(createRequire).mockReturnValue(requireMathJs as unknown as NodeJS.Require);
+});
+
 afterEach(() => {
-  vi.doUnmock('mathjs');
-  vi.resetModules();
+  requireMathJs.mockReset();
+  vi.mocked(createRequire).mockRestore();
 });
 
 describe('derived metric Math.js loading', () => {
@@ -16,18 +29,17 @@ describe('derived metric Math.js loading', () => {
       },
     ),
   ])('preserves unexpected package loading errors: %s', async (error) => {
-    vi.doMock('mathjs', () => {
+    requireMathJs.mockImplementation(() => {
       throw error;
     });
 
-    // Vitest wraps a failing mock factory with the original exception as its cause.
-    await expect(loadMathJs()).rejects.toHaveProperty('cause', error);
+    await expect(loadMathJs()).rejects.toBe(error);
   });
 
   it.each(['14.8.1', '16.0.0', 'invalid'])(
     'rejects incompatible version %s at use time',
     async (version) => {
-      vi.doMock('mathjs', () => ({ version, evaluate: vi.fn() }));
+      requireMathJs.mockReturnValue({ version, evaluate: vi.fn() });
 
       await expect(loadMathJs()).rejects.toThrow(`require mathjs@^15.1.1; found ${version}`);
     },
@@ -35,7 +47,7 @@ describe('derived metric Math.js loading', () => {
 
   it('returns the compatible expression evaluator without wrapping its semantics', async () => {
     const evaluate = vi.fn();
-    vi.doMock('mathjs', () => ({ version: '15.2.0', evaluate }));
+    requireMathJs.mockReturnValue({ version: '15.2.0', evaluate });
 
     expect((await loadMathJs()).evaluate).toBe(evaluate);
     expect(evaluate).not.toHaveBeenCalled();

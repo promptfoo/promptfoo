@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import fs from 'fs/promises';
 import * as path from 'path';
 
@@ -40,7 +41,8 @@ export async function loadMathJs(): Promise<typeof import('mathjs')> {
     'For a global installation, use npm install -g promptfoo mathjs@^15.1.1.';
   let math: typeof import('mathjs');
   try {
-    math = await import('mathjs');
+    // Keep the optional peer unresolved until string metrics are actually used.
+    math = createRequire(import.meta.url)('mathjs');
   } catch (error) {
     if (isMissingPackageImportError(error, 'mathjs')) {
       throw Object.assign(
