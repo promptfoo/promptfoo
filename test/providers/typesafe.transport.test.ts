@@ -360,6 +360,71 @@ describe('TypeSafe HTTP transport integration', () => {
     }
   });
 
+  describe.each(['callApi', 'callClassificationApi'] as const)('%s account cooldown', (method) => {
+    it.each([
+      { header: 'Retry-After', value: '1', waitMs: 1000 },
+      { header: 'Retry-After', value: '120', waitMs: 120_000 },
+      { header: 'Retry-After', value: '0', waitMs: 0 },
+      { header: 'Retry-After', value: 'Thu, 01 Jan 2026 00:00:01 GMT', waitMs: 1000 },
+      { header: 'x-ratelimit-reset-requests', value: '1s', waitMs: 1000 },
+      { header: 'x-ratelimit-reset-requests', value: '2m', waitMs: 120_000 },
+      { header: 'x-ratelimit-reset-requests', value: '2025-12-31T23:59:59Z', waitMs: 0 },
+    ])(
+      'honors $header=$value for the next same-account request',
+      async ({ header, value, waitMs }) => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+        const restoreSchedulerEnv = mockProcessEnv({
+          PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: 'false',
+        });
+        const registry = new RateLimitRegistry({ maxConcurrency: 4 });
+        const provider = createProvider({ maxRetries: 0, labels: ['polite', 'rude'] });
+        const completed = vi.fn();
+        mockFetch
+          .mockResolvedValueOnce(
+            jsonResponse(
+              { error: 'Too many requests' },
+              { status: 429, statusText: 'Too Many Requests', headers: { [header]: value } },
+            ),
+          )
+          .mockResolvedValueOnce(method === 'callApi' ? gradeResponse() : choiceResponse());
+        const invoke = () =>
+          registry.execute(
+            provider,
+            () => provider[method]('Thank you'),
+            createProviderRateLimitOptions(),
+          );
+        let subsequent: Promise<unknown> | undefined;
+        try {
+          expect((await invoke()).error).toContain('429 Too Many Requests');
+          expect(mockFetch).toHaveBeenCalledTimes(1);
+          subsequent = invoke().then(completed, (error: unknown) => error);
+
+          if (waitMs > 0) {
+            await vi.advanceTimersByTimeAsync(waitMs - 1);
+            expect(completed).not.toHaveBeenCalled();
+            expect(mockFetch).toHaveBeenCalledTimes(1);
+            await vi.advanceTimersByTimeAsync(1);
+          } else {
+            await vi.advanceTimersByTimeAsync(0);
+          }
+
+          expect(completed).toHaveBeenCalledOnce();
+          expect(completed.mock.calls[0][0].error).toBeUndefined();
+          expect(mockFetch).toHaveBeenCalledTimes(2);
+          expect(registry.getMetrics()[provider.getRateLimitKey()]).toMatchObject({
+            rateLimitHits: 1,
+            retriedRequests: 0,
+          });
+        } finally {
+          registry.dispose();
+          await subsequent;
+          restoreSchedulerEnv();
+        }
+      },
+    );
+  });
+
   it('preserves the missing-key error when scheduled', async () => {
     const registry = new RateLimitRegistry({ maxConcurrency: 1 });
     const provider = createProvider({ apiKey: undefined });

@@ -811,11 +811,19 @@ describe('TypeSafeProvider', () => {
     it.each([false, true])(
       'preserves exhausted rate-limit details and quota semantics (quota=%s)',
       async (quota) => {
+        const resetAt = Date.now() + 120_000;
         mockedFetchWithCache.mockRejectedValue(
           new HttpRateLimitError({
             status: 429,
-            statusText: 'Too Many Requests',
-            headers: { 'x-typesafe-request-id': 'req_exhausted' },
+            statusText: `Too Many Requests ${API_KEY}`,
+            retryAfterMs: 1000,
+            resetAt,
+            headers: {
+              'x-typesafe-request-id': 'req_exhausted',
+              authorization: `Bearer ${API_KEY}`,
+              'set-cookie': `session=${API_KEY}`,
+              'retry-after': `invalid-${API_KEY}`,
+            },
             body: { detail: 'Capacity exceeded', apiKey: API_KEY },
             ...(quota ? { code: 'credit_balance_exhausted' } : {}),
           }),
@@ -826,6 +834,18 @@ describe('TypeSafeProvider', () => {
         expect(result.error).toContain('Capacity exceeded');
         expect(result.error).toContain(quota ? 'Quota exceeded' : 'Rate limit exceeded');
         expect(result.error).not.toContain(API_KEY);
+        expect(result.metadata).toEqual({
+          rateLimitKind: quota ? 'quota' : 'rate_limit',
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: {
+              'retry-after-ms': '1000',
+              'x-ratelimit-reset-requests': String(resetAt),
+            },
+          },
+        });
+        expect(JSON.stringify(result)).not.toContain(API_KEY);
         if (quota) {
           expect(result.error).not.toContain('retry after');
         }

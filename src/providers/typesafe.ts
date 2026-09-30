@@ -126,7 +126,7 @@ type TypeSafeResult =
       requestId?: string;
       deleteFromCache?: () => Promise<void>;
     }
-  | { error: string };
+  | { error: string; metadata?: ProviderResponse['metadata'] };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -563,6 +563,22 @@ export class TypeSafeProvider implements ApiClassificationProvider {
             this.apiKey,
             err.kind === 'quota',
           ),
+          metadata: {
+            rateLimitKind: err.kind,
+            http: {
+              status: err.status,
+              statusText: 'Too Many Requests',
+              // Preserve parsed timing without exposing arbitrary upstream headers.
+              headers: {
+                ...(err.retryAfterMs === undefined
+                  ? {}
+                  : { 'retry-after-ms': String(err.retryAfterMs) }),
+                ...(err.resetAt === undefined
+                  ? {}
+                  : { 'x-ratelimit-reset-requests': String(Math.max(Date.now(), err.resetAt)) }),
+              },
+            },
+          },
         };
       }
       return { error: `TypeSafe API call error: ${safeErrorDetail(String(err), this.apiKey)}` };
@@ -589,7 +605,7 @@ export class TypeSafeProvider implements ApiClassificationProvider {
       options?.abortSignal,
     );
     if ('error' in result) {
-      return { error: result.error };
+      return result;
     }
 
     const { data, cached, latencyMs, requestId } = result;
@@ -664,7 +680,7 @@ export class TypeSafeProvider implements ApiClassificationProvider {
       options?.abortSignal,
     );
     if ('error' in result) {
-      return { error: result.error };
+      return result;
     }
 
     try {
