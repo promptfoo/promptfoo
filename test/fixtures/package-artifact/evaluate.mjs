@@ -40,6 +40,9 @@ export async function checkEvaluate(api, mode) {
   }
   assert.equal(summary.stats.successes, 1);
   assert.equal(summary.stats.failures, 1);
+  const table = api.generateTable(await record.getTable());
+  assert.match(table, /\[PASS\]/);
+  assert.match(table, /\[FAIL\]/);
 
   // A custom provider error must remain an error result rather than a passing assertion.
   const failed = await api.evaluate(

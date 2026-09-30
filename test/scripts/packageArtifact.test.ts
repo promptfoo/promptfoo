@@ -1,4 +1,4 @@
-import { execFileSync, execSync, spawnSync } from 'node:child_process';
+import { execFileSync, execSync, spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -391,19 +391,50 @@ throw new Error('artifact-native-binding-sentinel');`,
     expect(fs.readdirSync(temporary)).toEqual([]);
   });
 
-  it.each([false, true])(
+  it('removes owned state and signal listeners after a successful child exits', () => {
+    const { root, temporary } = prepareConsumer('');
+    const fixture = path.join(root, 'success.mjs');
+    fs.writeFileSync(
+      fixture,
+      `import assert from 'node:assert/strict';
+import { runIsolated } from './isolated.mjs';
+if (process.argv[2] !== '--child') {
+  const signals = ['SIGINT', 'SIGTERM'];
+  const before = signals.map((signal) => process.listenerCount(signal));
+  await runIsolated(import.meta.url, { label: 'success' });
+  assert.deepEqual(signals.map((signal) => process.listenerCount(signal)), before);
+}
+`,
+    );
+    const result = spawnSync(process.execPath, [fixture], {
+      encoding: 'utf8',
+      timeout: 8_000,
+      env: { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary },
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    expect(fs.readdirSync(temporary)).toEqual([]);
+  });
+
+  it.each(['none', 'inherited', 'detached'] as const)(
     'terminates a stalled native check and cleans owned state (descendant: %s)',
-    async (withDescendant) => {
+    async (mode) => {
       const timeoutMs = 1_500;
       const descendant = `require('node:fs').writeFileSync(process.argv[1], String(process.pid));
 setInterval(() => {}, 1000);`;
       const { root, temporary, nativeDir, fixture } = prepareConsumer(
-        withDescendant
-          ? `require('node:child_process').spawnSync(process.execPath,
+        mode === 'detached'
+          ? `require('node:child_process').spawn(process.execPath,
+['-e', ${JSON.stringify(descendant)}, __dirname + '/descendant-pid'], {
+  stdio: 'ignore', detached: true,
+}).unref();
+Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);`
+          : mode === 'inherited'
+            ? `require('node:child_process').spawnSync(process.execPath,
 ['-e', ${JSON.stringify(descendant)}, __dirname + '/descendant-pid'], { stdio: 'inherit' });`
-          : 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);',
+            : 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);',
       );
-      const pidFiles = ['native-pid', ...(withDescendant ? ['descendant-pid'] : [])].map((name) =>
+      const pidFiles = ['native-pid', ...(mode === 'none' ? [] : ['descendant-pid'])].map((name) =>
         path.join(nativeDir, name),
       );
       const output = path.join(root, 'supervisor.log');
@@ -433,6 +464,61 @@ setInterval(() => {}, 1000);`;
         });
         expect(fs.readdirSync(temporary)).toEqual([]);
       } finally {
+        fs.closeSync(descriptor);
+        killRecordedProcesses(pidFiles);
+      }
+    },
+  );
+
+  it.runIf(process.platform !== 'win32').each([
+    { signal: 'SIGINT', detached: false },
+    { signal: 'SIGTERM', detached: false },
+    { signal: 'SIGINT', detached: true },
+    { signal: 'SIGTERM', detached: true },
+  ] as const)(
+    'terminates owned processes and cleans state on $signal (detached: $detached)',
+    async ({ signal, detached }) => {
+      const descendant = `require('node:fs').writeFileSync(process.argv[1], String(process.pid));
+setInterval(() => {}, 1000);`;
+      const { root, temporary, nativeDir, fixture } = prepareConsumer(
+        `require('node:child_process').spawn(process.execPath,
+['-e', ${JSON.stringify(descendant)}, __dirname + '/descendant-pid'], {
+  stdio: 'ignore', detached: ${detached},
+}).unref();
+Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);`,
+      );
+      const pidFiles = ['native-pid', 'descendant-pid'].map((name) => path.join(nativeDir, name));
+      const descriptor = fs.openSync(path.join(root, 'supervisor.log'), 'w');
+      const supervisor = spawn(process.execPath, [fixture], {
+        stdio: ['ignore', descriptor, descriptor],
+        timeout: 8_000,
+        killSignal: 'SIGKILL',
+        env: { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary },
+      });
+      const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+        (resolve, reject) => {
+          supervisor.once('error', reject);
+          supervisor.once('close', (code, signal) => resolve({ code, signal }));
+        },
+      );
+      try {
+        await vi.waitFor(() => expect(pidFiles.every((file) => fs.existsSync(file))).toBe(true), {
+          timeout: 3_000,
+          interval: 20,
+        });
+        expect(supervisor.kill(signal)).toBe(true);
+        const result = await closed;
+        expect(result.code).not.toBe(0);
+        expect(result.signal).toBe(signal);
+        const pids = pidFiles.map((file) => Number(fs.readFileSync(file, 'utf8')));
+        await vi.waitFor(() => expect(pids.filter(processIsRunning)).toEqual([]), {
+          timeout: 1_000,
+          interval: 20,
+        });
+        expect(fs.readdirSync(temporary)).toEqual([]);
+      } finally {
+        supervisor.kill('SIGKILL');
+        await closed;
         fs.closeSync(descriptor);
         killRecordedProcesses(pidFiles);
       }
