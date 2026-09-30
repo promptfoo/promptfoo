@@ -1364,8 +1364,10 @@ async function applyRunEvalResponseOutcome({
   }
 
   if (response.output === null || response.output === undefined) {
-    applyEmptyResponseOutcome(ret, isRedteam);
-    return;
+    if (!(isRedteam && test.metadata?.isSafe === true)) {
+      applyEmptyResponseOutcome(ret, isRedteam);
+      return;
+    }
   }
 
   await gradeRunEvalResponse({
@@ -1457,9 +1459,10 @@ async function gradeRunEvalResponse({
 
   const assertionProviderResponse = {
     ...processedResponse,
-    // Keep generated audio available to graders after persistence replaces its
-    // inline bytes with a blob reference in the saved result.
+    output: response.output == null ? response.output : processedResponse.output,
+    // Keep inline media available to graders while saving blob references in the result.
     ...(response.audio?.data ? { audio: response.audio } : {}),
+    ...(response.images ? { images: response.images } : {}),
     providerTransformedOutput,
   };
 
@@ -1526,8 +1529,9 @@ async function transformRunEvalResponse({
   processedResponse: ProviderResponse;
   providerTransformedOutput: ProviderResponse['output'];
 }> {
-  const processedResponse = { ...response };
-  if (provider.transform) {
+  const hasOutput = response.output != null;
+  const processedResponse = { ...response, output: hasOutput ? response.output : '' };
+  if (hasOutput && provider.transform) {
     processedResponse.output = await transform(provider.transform, processedResponse.output, {
       vars,
       prompt,
@@ -1536,7 +1540,7 @@ async function transformRunEvalResponse({
   const providerTransformedOutput = processedResponse.output;
 
   const testTransform = test.options?.transform || test.options?.postprocess;
-  if (testTransform) {
+  if (hasOutput && testTransform) {
     processedResponse.output = await transform(testTransform, processedResponse.output, {
       vars,
       prompt,

@@ -1,6 +1,7 @@
 ---
+title: BeaverTails
 sidebar_label: BeaverTails
-description: Red team LLM safety boundaries using BeaverTails dataset of 330k harmful prompts to protect AI systems from abuse, hate speech, and malicious content exploitation
+description: Test safety responses with BeaverTails requests and check for unjustified refusals with curated harmless controls
 ---
 
 # BeaverTails Dataset for LLM Safety Testing
@@ -54,6 +55,23 @@ redteam:
     - id: beavertails
       numTests: 25
 ```
+
+### Testing for Over-Blocking
+
+BeaverTails tests unsafe requests by default. Enable safe controls to check for unjustified refusals:
+
+```yaml
+redteam:
+  plugins:
+    - id: beavertails
+      config:
+        includeSafe: true
+      numTests: 20
+```
+
+With `includeSafe: true`, the plugin aims for an even mix of unsafe dataset requests and curated harmless controls. BeaverTails labels apply to prompt/response pairs, so a safe dataset label alone does not establish that its prompt is harmless. Subcategory filters apply to unsafe records; the controls remain general requests. If either group has too few records, the plugin fills from available cases and logs a warning.
+
+Safe controls fail for unjustified safety refusals of harmless, in-scope requests. A helpful answer with a disclaimer, or a justified purpose/capability redirect, can pass. Results retain the BeaverTails metric and identify controls with `isSafe`.
 
 ### Filtering by Subcategory
 

@@ -121,6 +121,9 @@ export function wrapProviderWithRateLimiting(
     ...provider,
     // Explicitly delegate id() since prototype methods aren't copied by spread
     id: () => provider.id(),
+    ...(provider.getAudioInputFormat && {
+      getAudioInputFormat: provider.getAudioInputFormat.bind(provider),
+    }),
     callApi: async (
       prompt: string,
       context?: CallApiContextParams,

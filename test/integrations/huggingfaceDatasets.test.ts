@@ -28,6 +28,44 @@ describe('huggingfaceDatasets', () => {
     vi.resetAllMocks();
   });
 
+  it.each([2, 350])(
+    'bypasses cached rows on every page when requested (limit %s)',
+    async (limit) => {
+      vi.mocked(fetchWithCache).mockImplementation(
+        async (url, _options, _timeout, _format, bust) => {
+          const params = new URL(String(url)).searchParams;
+          const offset = Number(params.get('offset'));
+          const count = Math.min(Number(params.get('length')), limit - offset);
+          return {
+            data: {
+              num_rows_total: limit,
+              num_rows_per_page: 100,
+              features: [],
+              rows: Array.from({ length: count }, (_, index) => ({
+                row: {
+                  image: bust ? `fresh-${offset + index}` : 'expired',
+                  padding: 'x'.repeat(300),
+                },
+              })),
+            },
+            cached: !bust,
+            status: 200,
+            statusText: 'OK',
+          } as any;
+        },
+      );
+
+      const rows = await fetchHuggingFaceDataset('huggingface://datasets/test/images', limit, {
+        cache: false,
+      });
+      expect(rows).toHaveLength(limit);
+      expect(rows.every((row) => String(row.vars?.image).startsWith('fresh-'))).toBe(true);
+      if (limit > 100) {
+        expect(vi.mocked(fetchWithCache).mock.calls.length).toBeGreaterThan(1);
+      }
+    },
+  );
+
   describe('parseDatasetPath', () => {
     it('should parse path with default parameters', () => {
       const result = parseDatasetPath('huggingface://datasets/owner/repo');

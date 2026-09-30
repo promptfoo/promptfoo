@@ -1,11 +1,12 @@
 ---
+title: Aegis
 sidebar_label: Aegis
 description: Red team LLM content safety using NVIDIA's Aegis dataset to detect harmful outputs across 13 risk categories including hate speech, violence, and exploitation
 ---
 
 # Aegis: NVIDIA AI Content Safety Dataset
 
-The Aegis plugin uses NVIDIA's [Aegis AI Content Safety Dataset](https://huggingface.co/datasets/nvidia/Aegis-AI-Content-Safety-Dataset-1.0), a collection of over 26,000 manually annotated human-LLM interactions designed for content safety evaluation.
+The Aegis plugin uses NVIDIA's [Aegis AI Content Safety Dataset](https://huggingface.co/datasets/nvidia/Aegis-AI-Content-Safety-Dataset-1.0), which contains labeled examples for evaluating model safety.
 
 The dataset covers 13 critical safety categories:
 
@@ -30,9 +31,9 @@ The dataset also includes **Safe** content and **Needs Caution** examples for am
 The plugin:
 
 - Fetches test cases from NVIDIA's professionally annotated dataset
-- Samples from multiple interaction formats (user prompts, multi-turn conversations)
-- Tests model responses against the comprehensive 13-category safety taxonomy
-- Evaluates both clear violations and edge cases marked as "Needs Caution"
+- Samples user-message records from the dataset
+- Tests model responses against a safety rubric aligned with the 13-category Aegis taxonomy
+- Includes both safe and unsafe records when safe controls are enabled
 
 ## Quick Start
 
@@ -61,20 +62,35 @@ redteam:
       numTests: 25 # Default is 5
 ```
 
+### Testing for Over-Blocking
+
+Aegis tests unsafe and "needs caution" requests by default. Enable safe controls to check for unjustified refusals:
+
+```yaml
+redteam:
+  plugins:
+    - id: aegis
+      config:
+        includeSafe: true
+      numTests: 20
+```
+
+With `includeSafe: true`, the plugin aims for an even mix of safe and unsafe/needs-caution requests. Odd totals include one more unsafe request. If either group has too few records, it fills from the available records and logs a warning.
+
+Safe controls fail when the assistant withholds help for a harmless, in-scope request because it treats the request as unsafe. Answers with a disclaimer can pass, as can justified redirects based on the assistant's purpose or capabilities. Results retain the Aegis metric; `isSafe` and `safetyLabel` identify the controls.
+
 ## Grading
 
-The plugin evaluates model responses using the same methodology as NVIDIA's research, checking if outputs appropriately handle unsafe content across all 13 safety categories. The grader looks for:
+The plugin evaluates whether model responses appropriately handle unsafe content across the Aegis safety categories. The grader looks for:
 
 - Proper identification of safety violations
 - Appropriate refusal of harmful requests
 - Nuanced handling of ambiguous "Needs Caution" cases
-- Consistent safety responses across conversation turns
 
 ## Dataset Information
 
-- **Size**: 26,000+ annotated examples (ongoing expansion)
 - **Annotation**: Professional team of 12 annotators with quality assurance
-- **Formats**: User prompts, system prompts, single-turn and multi-turn conversations
+- **Formats**: The dataset includes several interaction formats; the plugin samples user-message records
 - **License**: CC-BY-4.0 (open source)
 
 ## References

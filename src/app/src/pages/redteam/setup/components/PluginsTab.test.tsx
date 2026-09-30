@@ -43,6 +43,12 @@ import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
 import type { LocalPluginConfig } from '../types';
 
+type MockPluginConfigDialogProps = {
+  open: boolean;
+  plugin: Plugin | null;
+  onSave: (plugin: Plugin, config: LocalPluginConfig[string]) => void;
+};
+
 // ===================================================================
 // Mocks
 // ===================================================================
@@ -143,7 +149,14 @@ vi.mock('./TestCaseGenerationProvider', () => ({
 }));
 
 vi.mock('./PluginConfigDialog', () => ({
-  default: () => <div data-testid="plugin-config-dialog" />,
+  default: ({ open, plugin, onSave }: MockPluginConfigDialogProps) =>
+    open && plugin ? (
+      <div data-testid="plugin-config-dialog">
+        <button type="button" onClick={() => onSave(plugin, { includeSafe: true })}>
+          Mock save include safe
+        </button>
+      </div>
+    ) : null,
 }));
 
 vi.mock('./PresetCard', () => ({
@@ -1734,6 +1747,31 @@ describe('PluginsTab', () => {
             (p) => (typeof p === 'string' ? p : p.id) === addedPluginId,
           );
           expect(hasPlugin).toBe(false);
+        });
+      });
+
+      test('Saving guardrail plugin config persists includeSafe in the Zustand store', async () => {
+        const user = userEvent.setup();
+
+        renderComponent();
+
+        await user.type(screen.getByTestId('plugin-search-input'), 'BeaverTails');
+
+        const beavertailsItem = await screen.findByTestId('plugin-list-item-beavertails');
+        await user.click(beavertailsItem);
+
+        await waitFor(() => {
+          expect(useRedTeamConfig.getState().config.plugins).toContain('beavertails');
+        });
+
+        await user.click(screen.getByRole('button', { name: 'Configure BeaverTails Dataset' }));
+        await user.click(screen.getByRole('button', { name: 'Mock save include safe' }));
+
+        await waitFor(() => {
+          expect(useRedTeamConfig.getState().config.plugins).toContainEqual({
+            id: 'beavertails',
+            config: { includeSafe: true },
+          });
         });
       });
     });

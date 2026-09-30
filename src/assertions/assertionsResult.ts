@@ -242,16 +242,20 @@ export class AssertionsResult {
   private namedScoreWeights: Record<string, number> = Object.create(null);
   private result: GradingResult | null = null;
   private failedContentSafetyChecks: boolean = false;
+  private readonly isSafeControl: boolean;
 
   constructor({
     threshold,
     parentAssertionSet,
+    isSafeControl = false,
   }: {
     threshold?: number;
     parentAssertionSet?: ParentAssertionSet;
+    isSafeControl?: boolean;
   } = {}) {
     this.threshold = threshold;
     this._parentAssertionSet = parentAssertionSet;
+    this.isSafeControl = isSafeControl;
   }
 
   get parentAssertionSet() {
@@ -276,7 +280,7 @@ export class AssertionsResult {
     const isRedteamGuardrail =
       result.assertion?.type === 'guardrails' && result.assertion?.config?.purpose === 'redteam';
 
-    if (isRedteamGuardrail && !result.pass) {
+    if (isRedteamGuardrail && !result.pass && !this.isSafeControl) {
       this.failedContentSafetyChecks = true;
     }
 

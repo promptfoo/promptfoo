@@ -160,6 +160,9 @@ export const PluginConfigSchema = z.object({
   inputs: InputsSchema.optional(),
   maxCharsPerMessage: z.number().int().positive().optional(),
 
+  // Add harmless controls to measure unjustified refusals.
+  includeSafe: z.boolean().optional(),
+
   // Allow for the inclusion of a nonce to prevent caching of test cases.
   __nonce: z.number().optional(),
 });

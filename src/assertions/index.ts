@@ -435,11 +435,12 @@ async function runAssertionInternal({
   const resolvedVars = vars || test.vars || {};
 
   const { cost, logProbs, output: originalOutput } = providerResponse;
-  let output = originalOutput;
+  const missingSafeControlOutput = test.metadata?.isSafe === true && originalOutput == null;
+  let output = missingSafeControlOutput ? '' : originalOutput;
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
 
-  if (assertion.transform) {
+  if (assertion.transform && !missingSafeControlOutput) {
     output = await transform(assertion.transform, output, {
       vars: resolvedVars,
       prompt: { label: prompt },
@@ -777,6 +778,7 @@ export async function runAssertions({
 
   const mainAssertResult = new AssertionsResult({
     threshold: test.threshold,
+    isSafeControl: test.metadata?.isSafe === true,
   });
   const subAssertResults: AssertionsResult[] = [];
   const asserts: {
@@ -788,6 +790,7 @@ export async function runAssertions({
       if (assertion.type === 'assert-set') {
         const subAssertResult = new AssertionsResult({
           threshold: assertion.threshold,
+          isSafeControl: test.metadata?.isSafe === true,
           parentAssertionSet: {
             assertionSet: assertion,
             index: i,
