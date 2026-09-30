@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TlsHttpsConfigTab from './TlsHttpsConfigTab';
@@ -55,7 +55,9 @@ describe('TlsHttpsConfigTab', () => {
     );
     expect(key).toHaveAttribute('spellcheck', 'false');
     expect(key).toHaveAttribute('autocomplete', 'new-password');
-    fireEvent.change(key, { target: { value: 'replacement-key' } });
+    await user.click(key);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('replacement-key');
     expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('tls', {
       ...tls,
       key: 'replacement-key',

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import AuthorizationTab from './AuthorizationTab';
@@ -144,7 +144,9 @@ describe('AuthorizationTab secret fields', () => {
       expect(input).toHaveValue('fixture-secret');
       expect(updateCustomTarget).not.toHaveBeenCalled();
 
-      fireEvent.change(input, { target: { value: 'replacement-secret' } });
+      await user.click(input);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('replacement-secret');
       expect(updateCustomTarget).toHaveBeenLastCalledWith(group, {
         ...config[group],
         [field]: 'replacement-secret',
