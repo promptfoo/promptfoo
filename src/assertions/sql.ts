@@ -1,4 +1,9 @@
+import { createRequire } from 'node:module';
+
 import { type Option as sqlParserOption } from 'node-sql-parser';
+import semverSatisfies from 'semver/functions/satisfies.js';
+import { isMissingPackageImportError } from '../util/packageImportErrors';
+import { getPackageVersion } from '../util/packageVersion';
 import { coerceString } from './utils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -117,16 +122,29 @@ type SqlParserModule = {
 };
 
 async function createSqlParser() {
+  const installHelp =
+    'Install it alongside promptfoo with: npm install promptfoo node-sql-parser@^5.4.0 (or npm install -g promptfoo node-sql-parser@^5.4.0 for a global install).';
+  const installMessage = `node-sql-parser is not installed. ${installHelp}`;
   let sqlParserModule: SqlParserModule;
   try {
+    const entryPoint = createRequire(import.meta.url).resolve('node-sql-parser');
+    const version = getPackageVersion('node-sql-parser', entryPoint);
+    if (!version || !semverSatisfies(version, '^5.4.0')) {
+      throw new Error(
+        `node-sql-parser ${version ?? '(unknown version)'} is not supported. ${installHelp}`,
+      );
+    }
     sqlParserModule = await import('node-sql-parser');
-  } catch {
-    throw new Error('node-sql-parser is not installed. Please install it first');
+  } catch (error) {
+    if (isMissingPackageImportError(error, 'node-sql-parser')) {
+      throw new Error(installMessage);
+    }
+    throw error;
   }
 
   const SqlParser = sqlParserModule.Parser ?? sqlParserModule.default?.Parser;
   if (!SqlParser) {
-    throw new Error('node-sql-parser is not installed. Please install it first');
+    throw new Error(installMessage);
   }
   return new SqlParser();
 }

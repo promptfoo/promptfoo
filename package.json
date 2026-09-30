@@ -306,8 +306,6 @@
     "ibm-cloud-sdk-core": "^5.6.2",
     "jks-js": "^1.1.5",
     "natural": "^8.1.1",
-    "node-sql-parser": "^5.4.0",
-    "pdf-parse": "^2.4.5",
     "pem": "~1.14.8",
     "playwright": "^1.63.0",
     "playwright-extra": "^4.3.6",
@@ -417,10 +415,18 @@
   },
   "homepage": "https://promptfoo.dev",
   "peerDependencies": {
-    "@huggingface/transformers": "*"
+    "@huggingface/transformers": "*",
+    "node-sql-parser": "*",
+    "pdf-parse": "*"
   },
   "peerDependenciesMeta": {
     "@huggingface/transformers": {
+      "optional": true
+    },
+    "node-sql-parser": {
+      "optional": true
+    },
+    "pdf-parse": {
       "optional": true
     }
   }
