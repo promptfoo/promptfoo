@@ -90,11 +90,9 @@ export async function loadApiProvider(
 ): Promise<ApiProvider> {
   const env = context.env ?? cliState.env;
   const basePath = context.basePath ?? cliState.basePath;
-  const provider = await cliState.withBasePath(basePath, () =>
+  return cliState.withBasePath(basePath, () =>
     cliState.withEnv(env, () => createApiProvider(providerPath, { ...context, basePath, env })),
   );
-  trackProvider(provider);
-  return provider;
 }
 
 async function createApiProvider(
@@ -272,17 +270,19 @@ export async function resolveProvider(
     if (resolvedProviders[provider]) {
       return resolvedProviders[provider];
     }
-    return await loadApiProvider(provider, context);
+    return trackProvider(await loadApiProvider(provider, context));
   } else if (typeof provider === 'object') {
     const descriptor = normalizeProviderRef(provider);
     invariant(
       descriptor.kind === 'options' || descriptor.kind === 'map',
       `Provider object must have an 'id' field or be a ProviderOptionsMap (e.g. { "openai:responses:gpt-5.4": { config: ... } }). Got: ${describeInvalidProvider(provider)}`,
     );
-    return await loadApiProvider(descriptor.loadProviderPath, {
-      ...context,
-      options: descriptor.loadOptions,
-    });
+    return trackProvider(
+      await loadApiProvider(descriptor.loadProviderPath, {
+        ...context,
+        options: descriptor.loadOptions,
+      }),
+    );
   } else if (typeof provider === 'function') {
     const descriptor = normalizeProviderRef(provider);
     return createProviderFromFunction(
@@ -384,7 +384,11 @@ async function loadProviderBatch<T>(
         return;
       }
       cleaned.add(provider);
-      await cleanupProvider(provider);
+      try {
+        await cleanupProvider(provider);
+      } catch (error) {
+        logger.warn('Provider cleanup failed after provider load error', { error });
+      }
     };
     await Promise.allSettled([...created].map(cleanup));
     for (const load of tracked) {

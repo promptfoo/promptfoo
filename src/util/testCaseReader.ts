@@ -16,6 +16,7 @@ import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets';
 import logger from '../logger';
 import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 import { loadApiProvider } from '../providers/index';
+import { trackProvider } from '../providers/lifecycle';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import { isApiProvider } from '../types/providers';
@@ -547,16 +548,20 @@ async function readTestWithEnv(
   if (loadProviders && testCase.provider && typeof testCase.provider !== 'function') {
     // Load provider - resolve paths relative to the test case's location
     if (typeof testCase.provider === 'string') {
-      testCase.provider = await loadApiProvider(testCase.provider, {
-        basePath: effectiveBasePath,
-        env,
-      });
+      testCase.provider = trackProvider(
+        await loadApiProvider(testCase.provider, {
+          basePath: effectiveBasePath,
+          env,
+        }),
+      );
     } else if (typeof testCase.provider.id === 'string') {
-      testCase.provider = await loadApiProvider(testCase.provider.id, {
-        options: testCase.provider as ProviderOptions,
-        basePath: effectiveBasePath,
-        env,
-      });
+      testCase.provider = trackProvider(
+        await loadApiProvider(testCase.provider.id, {
+          options: testCase.provider as ProviderOptions,
+          basePath: effectiveBasePath,
+          env,
+        }),
+      );
     }
   }
 

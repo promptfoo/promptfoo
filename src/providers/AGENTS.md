@@ -13,8 +13,9 @@ Each provider:
 
 ## Provider Lifecycle & Cleanup
 
-The evaluator cleans providers created from evaluation configuration. Direct loader callers
-own their returned providers, and caller-supplied instances remain caller-owned.
+The evaluator cleans providers created from evaluation configuration. Internal load sites
+explicitly enroll those instances with `trackProvider` or `trackConfiguredProviders`. Direct
+loader callers own their returned providers, including loads inside a caller-supplied provider.
 
 **If your provider allocates resources** (Python workers, connections, child processes):
 

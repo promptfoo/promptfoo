@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 import logger from '../logger';
+import { isApiProvider } from '../types/providers';
 import { providerRegistry } from './providerRegistry';
 
 import type { ApiProvider } from '../types/providers';
@@ -19,10 +20,18 @@ export async function cleanupProvider(provider: ApiProvider): Promise<void> {
     return;
   }
   scope?.cleaned.add(provider);
-  await provider.cleanup?.();
+  if (providerRegistry.has(provider)) {
+    await providerRegistry.shutdown(provider);
+  } else {
+    await provider.cleanup?.();
+  }
 }
 
-/** Only providers constructed within the operation belong to this scope. */
+export function hasProviderCleanupScope(): boolean {
+  return providerScope.getStore() !== undefined;
+}
+
+/** Call sites explicitly enroll providers constructed for this operation. */
 export async function withProviderCleanup<T>(
   operation: () => Promise<T>,
   hasFailure: () => boolean = () => false,
@@ -49,10 +58,10 @@ export async function withProviderCleanup<T>(
   });
 }
 
-export function trackProvider(provider: ApiProvider): void {
+export function trackProvider<T extends ApiProvider>(provider: T): T {
   const scope = providerScope.getStore();
-  if (!scope || providerRegistry.has(provider)) {
-    return;
+  if (!scope) {
+    return provider;
   }
   scope.owned.add(provider);
   if (scope.closed) {
@@ -60,5 +69,18 @@ export function trackProvider(provider: ApiProvider): void {
     void cleanupProvider(provider).catch((error) => {
       logger.warn('Provider cleanup failed after evaluation error', { error });
     });
+  }
+  return provider;
+}
+
+/** Exclude provider instances supplied by the caller when enrolling a loaded config. */
+export function trackConfiguredProviders(providers: ApiProvider[], configured: unknown): void {
+  const borrowed = new Set(
+    (Array.isArray(configured) ? configured : [configured]).filter(isApiProvider),
+  );
+  for (const provider of providers) {
+    if (!borrowed.has(provider)) {
+      trackProvider(provider);
+    }
   }
 }
