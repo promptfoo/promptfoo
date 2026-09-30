@@ -1449,7 +1449,7 @@ METEOR requires the optional `natural` package. Install it before using METEOR a
 npm install natural@^8.1.0
 ```
 
-If the package is not installed, you'll receive an error message with installation instructions when attempting to use METEOR assertions.
+If the package is not installed, METEOR assertions return a failed result (`pass: false`, `score: 0`) with installation instructions in the reason.
 :::
 
 #### How METEOR Works
