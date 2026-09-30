@@ -118,6 +118,8 @@ export interface FunctionDeclaration {
   /** Live API function execution mode. Extended Thinking requires NON_BLOCKING. */
   behavior?: 'BLOCKING' | 'NON_BLOCKING';
   parameters?: Schema;
+  parametersJsonSchema?: unknown;
+  parameters_json_schema?: unknown;
   response?: Schema;
 }
 

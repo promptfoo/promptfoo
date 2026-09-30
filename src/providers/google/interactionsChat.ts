@@ -290,9 +290,12 @@ export function toInteractionsTools(tools: Tool[]): Record<string, unknown>[] {
           type: 'function',
           name: declaration.name,
           ...(declaration.description ? { description: declaration.description } : {}),
-          ...(declaration.parameters
-            ? { parameters: lowercaseSchemaTypes(declaration.parameters) }
-            : {}),
+          ...(declaration.parametersJsonSchema !== undefined ||
+          declaration.parameters_json_schema !== undefined
+            ? { parameters: declaration.parametersJsonSchema ?? declaration.parameters_json_schema }
+            : declaration.parameters
+              ? { parameters: lowercaseSchemaTypes(declaration.parameters) }
+              : {}),
         });
       }
     }
@@ -857,25 +860,10 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       },
     });
 
-    while (rounds <= maxRounds) {
-      if (abortSignal?.aborted) {
-        return failure({ error: 'Gemini Interactions request aborted.' });
-      }
-      rounds++;
-      const body = {
-        ...baseBody,
-        input: currentInput,
-        ...(currentPreviousInteractionId
-          ? { previous_interaction_id: currentPreviousInteractionId }
-          : {}),
-      };
-
-      const result = await this.postInteraction(endpoint, headers, body, config, abortSignal);
-      if ('error' in result) {
-        return failure(result.error);
-      }
-      const { data } = result;
-      lastData = data;
+    const recordRound = (
+      data: InteractionResponse,
+      serviceTier?: ReturnType<typeof getGoogleResponseServiceTier>,
+    ) => {
       const roundUsage = accumulateUsage(totals, data.usage);
       const roundCost = calculateGoogleCost(
         typeof baseBody.model === 'string' ? baseBody.model : this.modelName,
@@ -892,17 +880,42 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
         roundUsage.cached,
         roundUsage.cachedAudio,
         roundUsage.cachedImage,
-        result.serviceTier,
+        serviceTier,
       );
       if (roundCost === undefined) {
         fullyPriced = false;
       } else {
         totalCost += roundCost;
       }
-      recordAnsweredCalls(data.steps ?? []);
       for (const grounding of data.usage?.grounding_tool_count || []) {
         groundingCalls.push({ ...grounding });
       }
+    };
+
+    while (rounds <= maxRounds) {
+      if (abortSignal?.aborted) {
+        return failure({ error: 'Gemini Interactions request aborted.' });
+      }
+      rounds++;
+      const body = {
+        ...baseBody,
+        input: currentInput,
+        ...(currentPreviousInteractionId
+          ? { previous_interaction_id: currentPreviousInteractionId }
+          : {}),
+      };
+
+      const result = await this.postInteraction(endpoint, headers, body, config, abortSignal);
+      if ('error' in result) {
+        if (isInteractionResponse(result.error.raw) && result.error.raw.usage) {
+          recordRound(result.error.raw, result.serviceTier);
+        }
+        return failure(result.error);
+      }
+      const { data } = result;
+      lastData = data;
+      recordRound(data, result.serviceTier);
+      recordAnsweredCalls(data.steps ?? []);
 
       const turnSteps = getLatestTurnSteps(data);
       const functionCalls = collectPendingFunctionCalls(turnSteps, executedCallIds);
@@ -1228,7 +1241,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     abortSignal?: AbortSignal,
   ): Promise<
     | { data: InteractionResponse; serviceTier?: ReturnType<typeof getGoogleResponseServiceTier> }
-    | { error: ProviderResponse }
+    | { error: ProviderResponse; serviceTier?: ReturnType<typeof getGoogleResponseServiceTier> }
   > {
     const requestTimeoutMs = config.timeoutMs ?? getRequestTimeoutMs();
     let data: InteractionResponse;
@@ -1236,6 +1249,10 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     let httpStatusText: string;
     let responseHeaders: Record<string, string> | undefined;
     let serviceTier: ReturnType<typeof getGoogleResponseServiceTier>;
+    const failure = (message: string) => ({
+      error: { error: message, raw: data },
+      serviceTier,
+    });
     try {
       ({
         data,
@@ -1266,18 +1283,11 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     serviceTier = getGoogleResponseServiceTier(responseHeaders, data?.usage);
 
     if (data?.error?.message) {
-      return {
-        error: { error: `Gemini Interactions API error: ${data.error.message}`, raw: data },
-      };
+      return failure(`Gemini Interactions API error: ${data.error.message}`);
     }
     if (httpStatus && (httpStatus < 200 || httpStatus >= 300)) {
       // Gateways and proxies can fail without a Google-shaped `error.message` body.
-      return {
-        error: {
-          error: `Gemini Interactions API error: HTTP ${httpStatus} ${httpStatusText}`.trim(),
-          raw: data,
-        },
-      };
+      return failure(`Gemini Interactions API error: HTTP ${httpStatus} ${httpStatusText}`.trim());
     }
 
     const pollTimeoutMs = requestTimeoutMs;
@@ -1286,12 +1296,9 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     while (data?.status === 'in_progress' && data.id) {
       const elapsed = Date.now() - pollStartedAt;
       if (elapsed >= pollTimeoutMs) {
-        return {
-          error: {
-            error: `Gemini interaction timed out after ${pollTimeoutMs}ms (status: ${data.status})`,
-            raw: data,
-          },
-        };
+        return failure(
+          `Gemini interaction timed out after ${pollTimeoutMs}ms (status: ${data.status})`,
+        );
       }
       if (pollCount > 0) {
         await sleep(Math.min(1_000, pollTimeoutMs - elapsed));
@@ -1322,23 +1329,17 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
           headers?: Record<string, string>;
         });
       } catch (err) {
-        return { error: { error: `Gemini Interactions API polling error: ${String(err)}` } };
+        return failure(`Gemini Interactions API polling error: ${String(err)}`);
       }
       serviceTier = getGoogleResponseServiceTier(responseHeaders, data?.usage) ?? serviceTier;
       pollCount++;
       if (data?.error?.message) {
-        return {
-          error: { error: `Gemini Interactions API error: ${data.error.message}`, raw: data },
-        };
+        return failure(`Gemini Interactions API error: ${data.error.message}`);
       }
       if (httpStatus && (httpStatus < 200 || httpStatus >= 300)) {
-        return {
-          error: {
-            error:
-              `Gemini Interactions API polling error: HTTP ${httpStatus} ${httpStatusText}`.trim(),
-            raw: data,
-          },
-        };
+        return failure(
+          `Gemini Interactions API polling error: HTTP ${httpStatus} ${httpStatusText}`.trim(),
+        );
       }
     }
 
@@ -1354,19 +1355,12 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
         status: data.status,
       });
     } else if (data?.status && !['completed', 'requires_action'].includes(data.status)) {
-      return {
-        error: {
-          error: `Gemini interaction did not complete (status: ${data.status})`,
-          raw: data,
-        },
-      };
+      return failure(`Gemini interaction did not complete (status: ${data.status})`);
     }
 
     const failedStep = getLatestTurnSteps(data).find((step) => step.error?.message);
     if (failedStep) {
-      return {
-        error: { error: `Gemini Interactions API error: ${failedStep.error?.message}`, raw: data },
-      };
+      return failure(`Gemini Interactions API error: ${failedStep.error?.message}`);
     }
 
     return { data, serviceTier };

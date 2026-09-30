@@ -455,6 +455,43 @@ describe('GoogleInteractionsChatProvider', () => {
       },
     );
 
+    it.each(['parametersJsonSchema', 'parameters_json_schema'])(
+      'preserves and validates native declaration %s',
+      async (field) => {
+        const parameters = {
+          type: 'object',
+          properties: { value: { const: { type: 'STRING' } } },
+          required: ['value'],
+        };
+        const provider = make({
+          tools: [{ functionDeclarations: [{ name: 'lookup', [field]: parameters }] }],
+        });
+        mockFetchWithCache.mockResolvedValue(
+          interaction({
+            steps: [
+              {
+                type: 'function_call',
+                id: 'native-schema',
+                name: 'lookup',
+                arguments: { value: { type: 'STRING' } },
+              },
+            ],
+          }) as any,
+        );
+        const result = await provider.callApi('Return the fixture');
+        expect(result.error).toBeUndefined();
+        expect(bodyOf(mockFetchWithCache.mock.calls[0]).tools[0].parameters).toEqual(parameters);
+        expect(() => provider.validateFunctionToolCall(result.output!)).not.toThrow();
+        expect(() =>
+          provider.validateFunctionToolCall(
+            JSON.stringify([
+              { functionCall: { name: 'lookup', args: { value: { type: 'string' } } } },
+            ]),
+          ),
+        ).toThrow(/does not match schema/);
+      },
+    );
+
     it.each(['tools', 'passthrough'])(
       'validates native function calls configured through %s',
       async (location) => {
@@ -1447,6 +1484,60 @@ describe('GoogleInteractionsChatProvider', () => {
   });
 
   describe('error handling', () => {
+    it.each([
+      { kind: 'failed', continuation: false },
+      { kind: 'step', continuation: false },
+      { kind: 'http', continuation: false },
+      { kind: 'failed', continuation: true },
+      { kind: 'step', continuation: true },
+      { kind: 'http', continuation: true },
+    ])(
+      'retains reported usage and actual-tier cost for $kind errors, continuation=$continuation',
+      async ({ kind, continuation }) => {
+        if (continuation) {
+          mockFetchWithCache.mockResolvedValueOnce({
+            ...interaction({
+              status: 'requires_action',
+              steps: [{ type: 'function_call', id: 'call_1', name: 'lookup', arguments: {} }],
+            }),
+            headers: { 'x-gemini-service-tier': 'standard' },
+          } as any);
+        }
+        mockFetchWithCache.mockResolvedValueOnce({
+          ...interaction(
+            kind === 'step'
+              ? { steps: [{ type: 'model_output', error: { message: 'fixture model failure' } }] }
+              : { status: 'failed' },
+          ),
+          ...(kind === 'http' ? { status: 503, statusText: 'Unavailable' } : {}),
+          headers: { 'x-gemini-service-tier': 'standard' },
+        } as any);
+        const result = await make({
+          service_tier: 'priority',
+          tools: [{ functionDeclarations: [{ name: 'lookup' }] }],
+          functionToolCallbacks: { lookup: () => 'fixed answer' },
+        }).callApi('Hello');
+        const rounds = continuation ? 2 : 1;
+        expect(result.error).toBeTruthy();
+        expect(result.tokenUsage).toMatchObject({
+          total: 30 * rounds,
+          prompt: 10 * rounds,
+          completion: 5 * rounds,
+          numRequests: rounds,
+        });
+        expect(mockFetchWithCache).toHaveBeenCalledTimes(rounds);
+        if (continuation) {
+          expect(result.metadata?.toolCalls).toEqual([
+            { name: 'lookup', args: {}, result: 'fixed answer' },
+          ]);
+          expect(result.metadata?.rateLimitRetryable).toBe(false);
+        }
+        mockFetchWithCache.mockResolvedValueOnce(interaction() as any);
+        const reference = await make({ service_tier: 'standard' }).callApi('Hello');
+        expect(result.cost).toBeCloseTo(reference.cost! * rounds, 10);
+      },
+    );
+
     it('surfaces a Google-shaped error body', async () => {
       mockFetchWithCache.mockResolvedValue({
         data: { error: { message: 'Model not found' } },

@@ -1875,14 +1875,23 @@ export function validateFunctionCall(
           ? [{ name: native.name, parameters: native.parameters, nativeSchema: true }]
           : (tool.functionDeclarations ?? []).map((declaration) => ({
               ...declaration,
-              nativeSchema: false,
+              parameters:
+                declaration.parametersJsonSchema ??
+                declaration.parameters_json_schema ??
+                declaration.parameters,
+              nativeSchema:
+                declaration.parametersJsonSchema !== undefined ||
+                declaration.parameters_json_schema !== undefined,
             }));
       })
       .find((declaration) => declaration.name === functionName);
     if (!functionSchema) {
       throw new Error(`Called "${functionName}", but there is no function with that name`);
     }
-    if (Object.keys(functionArgs).length !== 0 && functionSchema?.parameters) {
+    if (
+      functionSchema.parameters !== undefined &&
+      (functionSchema.nativeSchema || Object.keys(functionArgs).length !== 0)
+    ) {
       const parameterSchema = functionSchema.nativeSchema
         ? functionSchema.parameters
         : normalizeSchemaTypes(functionSchema.parameters);
