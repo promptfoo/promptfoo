@@ -4601,28 +4601,18 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           continue;
         }
         const metrics = prompts[result.promptIdx]?.metrics;
-        const wasSuccess = result.success;
-        const wasScore = result.score;
+        const previous = {
+          success: result.success,
+          score: result.score,
+          failureReason: result.failureReason,
+          error: result.error,
+        };
+        setComparisonError(result, previous);
         const completedNamedScores = result.namedScores;
         applyGradingError(result, error, abortSignal);
         // Earlier per-row assertions finished before the comparison was interrupted.
         result.namedScores = completedNamedScores;
-        if (wasSuccess) {
-          this.stats.successes--;
-          if (metrics) {
-            metrics.testPassCount--;
-          }
-        } else {
-          this.stats.failures--;
-          if (metrics) {
-            metrics.testFailCount--;
-          }
-        }
-        this.stats.errors++;
-        if (metrics) {
-          metrics.testErrorCount++;
-          metrics.score -= wasScore;
-        }
+        this.updateComparisonResultCounts(result, previous, metrics);
         this.trackFinalJsonlResult(result);
         if (this.store.persisted && !this.store.hasResultPersistenceFailure(result)) {
           await this.store.saveResult(result);
@@ -5013,19 +5003,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
   }
 
-  private async applySelectBestGradingResult({
-    gradingResult,
-    metrics,
-    result,
-  }: {
-    gradingResult: GradingResult;
-    metrics: CompletedPrompt['metrics'] | undefined;
-    result: TResult;
-  }) {
+  private restoreComparisonResult(
+    result: TResult,
+    metrics: CompletedPrompt['metrics'] | undefined,
+  ) {
     if (result.failureReason === ResultFailureReason.ERROR) {
       const saved = getComparisonError(result);
       if (!saved) {
-        return;
+        return false;
       }
       const previous = {
         success: result.success,
@@ -5038,6 +5023,21 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       result.error = saved.error;
       setComparisonError(result);
       this.updateComparisonResultCounts(result, previous, metrics);
+    }
+    return true;
+  }
+
+  private async applySelectBestGradingResult({
+    gradingResult,
+    metrics,
+    result,
+  }: {
+    gradingResult: GradingResult;
+    metrics: CompletedPrompt['metrics'] | undefined;
+    result: TResult;
+  }) {
+    if (!this.restoreComparisonResult(result, metrics)) {
+      return;
     }
     const wasSuccess = result.success;
     const wasScore = result.score;
@@ -5054,7 +5054,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     metrics: CompletedPrompt['metrics'] | undefined;
     result: TResult;
   }) {
-    if (result.failureReason === ResultFailureReason.ERROR) {
+    // A failed select-best grader must remain an error until that grader succeeds.
+    if (
+      result.failureReason === ResultFailureReason.ERROR &&
+      !result.error?.startsWith(ABORTED_GRADING_PREFIX)
+    ) {
+      return;
+    }
+    if (!this.restoreComparisonResult(result, metrics)) {
       return;
     }
     const wasSuccess = result.success;
