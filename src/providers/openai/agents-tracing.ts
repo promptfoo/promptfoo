@@ -1,5 +1,4 @@
 import logger from '../../logger';
-import { sanitizeBody } from '../../tracing/genaiTracer';
 import { encodeExportTraceServiceRequest } from '../../tracing/protobuf';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { getTracingServiceName } from '../tracing';
@@ -580,7 +579,7 @@ function sanitizeSerializedAttribute(value: string): string {
       if (isRecord(parsed) || Array.isArray(parsed)) {
         const state = { changed: false };
         const sanitized = sanitizeStructuredAttribute(parsed, state);
-        return state.changed ? JSON.stringify(sanitized) : sanitizeCredentialText(value);
+        return state.changed ? JSON.stringify(sanitized) : value;
       }
     } catch (error) {
       if (error instanceof RangeError) {
@@ -664,7 +663,7 @@ function sanitizeCredentialText(value: string): string {
   }
 
   // Embedded encoded JSON cannot be traversed safely as an ordinary text value.
-  for (const [, encodedKey] of value.matchAll(/\\+"((?:\\.|[^"\\]){0,4096})\\+"\s*:/g)) {
+  for (const [, encodedKey] of value.matchAll(/(?<!\\)\\+"((?:\\.|[^"\\]){0,4096})\\+"\s*:/g)) {
     let key = encodedKey;
     try {
       key = JSON.parse(`"${encodedKey}"`);
@@ -696,7 +695,9 @@ function sanitizeCredentialText(value: string): string {
   value = sanitized + value.slice(copied);
 
   // Preserve escapes before the generic masker can shorten quoted credentials.
-  return redactQuotedCredentials(sanitizeBody(redactQuotedCredentials(value)))
+  return redactQuotedCredentials(value)
+    .replace(/\b(?:sk|pk)-[a-zA-Z0-9_-]{20,}\b/g, '<REDACTED_API_KEY>')
+    .replace(/\bAKIA[A-Z0-9]{16}\b/g, '<REDACTED_AWS_KEY>')
     .replace(/\bAIza[a-zA-Z0-9_-]{35}\b/g, '<redacted>')
     .replace(
       /^([ \t]*)([A-Za-z_][A-Za-z\d_.-]*)([ \t]+)(?![ \t:=])([^\r\n]+)/gm,
@@ -717,10 +718,7 @@ function sanitizeCredentialText(value: string): string {
         }
       },
     )
-    .replace(
-      /(?<![\w])((?:[a-z][a-z\d+.-]*:)?\/\/)[^\s/?#]+@/gi,
-      (_match, prefix: string) => `${prefix}<redacted>@`,
-    )
+    .replace(/(\/\/)[^\s/?#]+@/g, (_match, prefix: string) => `${prefix}<redacted>@`)
     .replace(
       /(\b(?:Authorization\s*:|Authorization\s*=(?=[ \t]*(?:Bearer|Basic|Token|Api[-_]?Key|Digest|Negotiate|AWS4-HMAC-SHA256)\b)|Cookie\s*:)[ \t]*)[^\r\n]*/gi,
       (_match, prefix: string) => `${prefix}<redacted>`,
@@ -765,7 +763,7 @@ function isCredentialOption(option: string, usesCurlAuth: boolean): boolean {
 
 function hasCredentialNamedPayload(value: string): boolean {
   for (const [, quotedName, unquotedName] of value.matchAll(
-    /content-disposition:[^\r\n]*?\bname\s*=\s*(?:["']([^"'\r\n]*)["']|([^\s;]+))/gi,
+    /^content-disposition:[^\r\n]*?\bname\s*=\s*(?:["']([^"'\r\n]*)["']|([^\s;]+))/gim,
   )) {
     if (isCredentialAttributeKey(quotedName ?? unquotedName)) {
       return true;
@@ -926,7 +924,7 @@ function sanitizeAttributeByKey(key: string, value: unknown): unknown {
     }
     // Preserve intentional toJSON objects; inspect native byte views before serialization.
     if (Array.isArray(value) || (isRecord(value) && typeof value.toJSON !== 'function')) {
-      return sanitizeStructuredAttribute(value);
+      return sanitizeStructuredAttribute(value, { changed: false }, false, isHeaderContainer(key));
     }
     return value;
   } catch {
@@ -934,13 +932,21 @@ function sanitizeAttributeByKey(key: string, value: unknown): unknown {
   }
 }
 
-function isCredentialPairValue(source: Record<string, unknown> | unknown[], key: string) {
+function isHeaderContainer(key: string): boolean {
+  return /(?:^|[._-])(?:raw[_-]?)?headers$/i.test(key);
+}
+
+function isCredentialPairValue(
+  source: Record<string, unknown> | unknown[],
+  key: string,
+  headerPairs: boolean,
+) {
   if (Array.isArray(source)) {
     const option = source[Number(key) - 1];
     if (typeof option !== 'string') {
       return false;
     }
-    if (Number(key) % 2 === 1 && /^[A-Za-z][A-Za-z\d_.-]*$/.test(option)) {
+    if (headerPairs && Number(key) % 2 === 1 && /^[A-Za-z][A-Za-z\d_.-]*$/.test(option)) {
       return isCredentialAttributeKey(option);
     }
     return (
@@ -1007,9 +1013,10 @@ function sanitizeStructuredAttribute(
   value: Record<string, unknown> | unknown[],
   state: { changed: boolean } = { changed: false },
   normalizeScalars = false,
+  headerPairs = false,
 ): Record<string, unknown> | unknown[] | string {
   try {
-    return sanitizeStructuredAttributeValue(value, state, normalizeScalars);
+    return sanitizeStructuredAttributeValue(value, state, normalizeScalars, headerPairs);
   } catch {
     state.changed = true;
     return '<redacted>';
@@ -1020,6 +1027,7 @@ function sanitizeStructuredAttributeValue(
   value: Record<string, unknown> | unknown[],
   state: { changed: boolean },
   normalizeScalars: boolean,
+  headerPairs: boolean,
 ): Record<string, unknown> | unknown[] | string {
   const budget = { remaining: MAX_STRUCTURED_ATTRIBUTE_NODES };
   if (isJwe(value, budget)) {
@@ -1028,12 +1036,15 @@ function sanitizeStructuredAttributeValue(
   }
   type StructuredValue = Record<string, unknown> | unknown[];
   const root: StructuredValue = Array.isArray(value) ? [] : {};
-  const stack: Array<{ source: StructuredValue; target: StructuredValue; depth: number }> = [
-    { source: value, target: root, depth: 0 },
-  ];
+  const stack: Array<{
+    source: StructuredValue;
+    target: StructuredValue;
+    depth: number;
+    headerPairs: boolean;
+  }> = [{ source: value, target: root, depth: 0, headerPairs }];
 
   while (stack.length > 0) {
-    const { source, target, depth } = stack.pop()!;
+    const { source, target, depth, headerPairs: sourceHeaders } = stack.pop()!;
     if (Array.isArray(source) && source.length > budget.remaining) {
       state.changed = true;
       return '<redacted>';
@@ -1047,7 +1058,7 @@ function sanitizeStructuredAttributeValue(
       let sanitized: unknown;
       if (
         ArrayBuffer.isView(entry) ||
-        isCredentialPairValue(source, key) ||
+        isCredentialPairValue(source, key, sourceHeaders) ||
         isCredentialAttributeKey(key) ||
         isPrivateJwkParameter(source, key) ||
         isJwe(entry, budget)
@@ -1065,7 +1076,12 @@ function sanitizeStructuredAttributeValue(
           state.changed = true;
         } else {
           const child: StructuredValue = Array.isArray(entry) ? [] : {};
-          stack.push({ source: entry, target: child, depth: depth + 1 });
+          stack.push({
+            source: entry,
+            target: child,
+            depth: depth + 1,
+            headerPairs: isHeaderContainer(key) || (sourceHeaders && Array.isArray(source)),
+          });
           sanitized = child;
         }
       } else {

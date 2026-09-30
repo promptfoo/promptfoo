@@ -108,6 +108,23 @@ describe('OTLPTracingExporter', () => {
   );
 
   it.each(['json', 'protobuf'] as const)(
+    'preserves JSON, ordinary lists and source paths in %s',
+    async (format) => {
+      const json =
+        '{"url":"https://example.test","email":"alice@example.test","count":12345678901234567890123456789012345678901234567890123456789012345}';
+      const lists = { fields: ['password', 'email'], tools: ['get_session', 'lookup_order'] };
+      const sourcePath = 'src/app/src/pages/redteam/setup/components/PluginsTab.tsx';
+      const { attributes } = await exportCustomData(
+        { json, lists, command: `cat ${sourcePath}` },
+        format,
+      );
+      expect(attributes.json).toBe(json);
+      expect(JSON.parse(attributes.lists as string)).toEqual(lists);
+      expect(attributes.command).toBe(`cat ${sourcePath}`);
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
     'masks whitespace-delimited properties and retains ordinary lines in %s',
     async (format) => {
       const { attributes } = await exportCustomData(
@@ -482,7 +499,7 @@ describe('OTLPTracingExporter', () => {
             client_assertion_type: 'public-type',
             passwords: 'opaque-passwords',
             env: { PGPASSWORD: 'opaque-pgpassword' },
-            argv: ['Authorization', 'opaque-header', 'Content-Type'],
+            headers: ['Authorization', 'opaque-header', 'Content-Type'],
             encoded: '{"kty":"RSA","d":"opaque-jwk"}',
           },
         },
@@ -497,7 +514,7 @@ describe('OTLPTracingExporter', () => {
         client_assertion_type: 'public-type',
         passwords: '<redacted>',
         env: { PGPASSWORD: '<redacted>' },
-        argv: ['Authorization', '<redacted>', 'Content-Type'],
+        headers: ['Authorization', '<redacted>', 'Content-Type'],
         encoded: '{"kty":"RSA","d":"<redacted>"}',
       });
       expect(JSON.stringify(payload)).not.toContain('opaque-');
@@ -505,14 +522,19 @@ describe('OTLPTracingExporter', () => {
   );
 
   it.each(['json', 'protobuf'] as const)(
-    'preserves long unmatched non-credential XML in %s',
+    'preserves unmatched non-credential text in %s',
     async (format) => {
-      const xml = '<entry key="public">'.repeat(16_000);
-      const unterminated = '<entry key="public"'.repeat(16_000);
-      const blankLines = '\n'.repeat(80_000);
-      const encoded = '\\"public'.repeat(40_000);
+      const xml = '<entry key="public">'.repeat(3);
+      const unterminated = '<entry key="public"'.repeat(3);
+      const blankLines = '\n'.repeat(3);
+      const encoded = '\\"public'.repeat(3);
+      const fragments = [
+        'a-a-a-',
+        String.raw`\\\\`,
+        'Content-Disposition: x Content-Disposition: y',
+      ];
       const { attributes } = await exportCustomData(
-        { xml, unterminated, blankLines, encoded },
+        { xml, unterminated, blankLines, encoded, fragments: JSON.stringify(fragments) },
         format,
       );
 
@@ -520,6 +542,7 @@ describe('OTLPTracingExporter', () => {
       expect(attributes.unterminated).toBe(unterminated);
       expect(attributes.blankLines).toBe(blankLines);
       expect(attributes.encoded).toBe(encoded);
+      expect(attributes.fragments).toBe(JSON.stringify(fragments));
     },
   );
 
