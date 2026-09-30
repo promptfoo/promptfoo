@@ -19,6 +19,7 @@ beforeEach(() => {
   createGateway.mockReset();
 });
 afterEach(() => {
+  createGateway.mockReset();
   metadata.version = '6.0.277';
 });
 
