@@ -31,12 +31,6 @@ The evaluator (`src/evaluator.ts`) manages provider lifecycle. After evaluation 
 
 See `docs/agents/logging.md` - use logger with object context (auto-sanitized).
 
-## Operation Capabilities and Wrappers
-
-`ProviderIdentity<TConfig>` describes identity, typed configuration, and cleanup independently of a text operation. `ProviderOperations` supplies operation signatures; use `hasProviderCapability(provider, method)` before dispatching. The public `ApiProvider` keeps its legacy `callApi` shape for compatibility. Providers with inherited or explicit throwing text stubs must declare `promptfooCapabilities` so they cannot be selected as text graders. Legacy providers without a declaration are detected by callable methods.
-
-Wrappers must preserve custom IDs, configuration, supported operations, context and options, cleanup, and function/tool validators. Bind delegated hooks to their owner. See `litellm.ts` and `test/providers/capabilities.test.ts`.
-
 ## Common Patterns
 
 **OpenAI-compatible providers** extend `OpenAiChatCompletionProvider`. See `src/providers/quiverai.ts` for a minimal example or `src/providers/openrouter.ts` for a more complex one.
@@ -151,16 +145,6 @@ ls examples/myprovider/promptfooconfig.yaml
 ```
 
 **Reference existing providers** - 50+ implementations to learn from.
-
-## Gemini maintenance
-
-AI Studio and Vertex share `google/gemini.ts` for request construction, streamed-content parsing, and token accounting. The provider classes own authentication, transport, caching, pricing, and final response fields. Cover shared request and parser changes in `test/providers/google/geminiPipeline.test.ts`.
-
-Preserve each provider's request field order, response-schema handling, system-instruction names, and unknown-usage and error contracts. Vertex also keeps its context/examples and Model Armor fields. Its non-Gemini paths stay separate.
-
-## Tool callbacks
-
-Use `executeCallback` from `functionCallbackExecutor.ts` for callback loading, reference-aware caching, and traced execution. Keep file-export policy and output conversion in each adapter. Pass `transformOutput` to record the serialized result before the tool span closes. The execution record retains the tool name, arguments, call ID, output, and original error.
 
 ## Creator inputs
 

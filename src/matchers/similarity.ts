@@ -1,7 +1,6 @@
 import cliState from '../cliState';
 import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
-import { hasProviderCapability } from '../types/providers';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
   callGradingProvider,
@@ -109,7 +108,7 @@ async function calculateProviderSimilarity(
   metric: SimilarityMetric,
   tokensUsed: TokenUsage,
 ): Promise<number | Omit<GradingResult, 'assertion'>> {
-  if (metric === 'cosine' && hasProviderCapability(finalProvider, 'callSimilarityApi')) {
+  if (metric === 'cosine' && 'callSimilarityApi' in finalProvider) {
     const similarityResp = await callGradingProvider(finalProvider, 'similarity', () =>
       finalProvider.callSimilarityApi(expected, output),
     );
@@ -126,11 +125,10 @@ async function calculateProviderSimilarity(
     return similarityResp.similarity;
   }
 
-  const callEmbeddingApi = hasProviderCapability(finalProvider, 'callEmbeddingApi')
-    ? finalProvider.callEmbeddingApi
-    : undefined;
+  const callEmbeddingApi =
+    'callEmbeddingApi' in finalProvider ? finalProvider.callEmbeddingApi : undefined;
   if (typeof callEmbeddingApi !== 'function') {
-    if (hasProviderCapability(finalProvider, 'callSimilarityApi')) {
+    if ('callSimilarityApi' in finalProvider) {
       return fail(
         `Provider ${finalProvider.id()} only supports cosine similarity via callSimilarityApi`,
         tokensUsed,

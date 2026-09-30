@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { resolveProviderCreatorInput } from '../../src/providers/creator';
 import { loadApiProvider } from '../../src/providers/index';
+import { createLiteLLMProvider } from '../../src/providers/litellm';
+import { createNovitaProvider } from '../../src/providers/novita';
 import { createNscaleProvider } from '../../src/providers/nscale';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
 
@@ -8,6 +10,7 @@ import type { EnvOverrides } from '../../src/types/env';
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 it('passes canonical options through without reinterpreting model config', () => {
@@ -96,4 +99,41 @@ it('passes model configuration through the Nscale image delegation once', () => 
   });
   expect(provider.config).toMatchObject({ apiKey: 'fixture', size: '1024x1024' });
   expect(provider.config.config).toBeUndefined();
+});
+
+it.each(['chat', 'completion', 'embedding'])(
+  'preserves the custom ID on the LiteLLM %s wrapper',
+  (type) => {
+    const canonical = createLiteLLMProvider(`litellm:${type}:model`, {
+      providerOptions: { id: 'canonical-id' },
+    });
+    const legacy = createLiteLLMProvider(`litellm:${type}:model`, {
+      id: 'outer-id',
+      config: { id: 'nested-id' },
+    });
+    expect(canonical.id()).toBe('canonical-id');
+    expect(legacy.id()).toBe('nested-id');
+  },
+);
+
+it.each([
+  [{ NOVITA_API_KEY: 'outer-key' }, 'outer-key'],
+  [{}, 'process-fixture'],
+  [undefined, 'nested-key'],
+] as const)('preserves legacy Novita environment selection (%j)', (env, expected) => {
+  vi.stubEnv('NOVITA_API_KEY', 'process-fixture');
+  const provider = createNovitaProvider('novita:org/model', {
+    env,
+    config: { env: { NOVITA_API_KEY: 'nested-key' } },
+  });
+  expect((provider as unknown as { getApiKey(): string }).getApiKey()).toBe(expected);
+});
+
+it('keeps canonical Novita environment independent of legacy fields', () => {
+  const provider = createNovitaProvider('novita:org/model', {
+    providerOptions: { env: { NOVITA_API_KEY: 'canonical-key' } },
+    env: { NOVITA_API_KEY: 'outer-key' },
+    config: { env: { NOVITA_API_KEY: 'nested-key' } },
+  });
+  expect((provider as unknown as { getApiKey(): string }).getApiKey()).toBe('canonical-key');
 });

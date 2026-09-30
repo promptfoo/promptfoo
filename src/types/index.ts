@@ -75,11 +75,10 @@ export interface ProviderCallQueueRef {
 export * from '../redteam/types';
 export * from './agent';
 export * from './prompts';
-export { hasProviderCapability, isApiProvider, isProviderOptions } from './providers';
+export * from './providers';
 export * from './shared';
 export * from './tracing';
 
-export type * from './providers';
 export type { EnvOverrides };
 
 const FilterRangeSchema = z

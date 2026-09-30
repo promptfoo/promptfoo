@@ -868,7 +868,7 @@ describe('OpenAI Realtime Provider', () => {
 
       expect(directRequest).toHaveBeenCalledOnce();
       expect(persistentRequest).not.toHaveBeenCalled();
-      expect(provider.config.maintainContext).toBe(true);
+      expect(provider.config.maintainContext).toBe(false);
     });
 
     it('should maintain conversation context across multiple messages', async () => {

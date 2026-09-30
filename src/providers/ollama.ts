@@ -2,17 +2,17 @@ import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import {
-  type ApiProvider,
-  type CallApiContextParams,
-  inheritProviderCapabilities,
-  type ProviderEmbeddingResponse,
-  type ProviderResponse,
-  type TokenUsage,
-} from '../types/providers';
 import { normalizeFinishReason } from '../util/finishReason';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from './shared';
+
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+  TokenUsage,
+} from '../types/index';
 
 interface OllamaCompletionOptions {
   // Nested `options` members, per Ollama's current Options/Runner structs:
@@ -878,11 +878,6 @@ export class OllamaChatProvider implements ApiProvider {
 }
 
 export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
-  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
-  readonly promptfooCapabilities = inheritProviderCapabilities(
-    OllamaEmbeddingProvider.declaredProviderCapabilities,
-  );
-
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
     const { passthroughOptions, passthroughRest } = splitOllamaPassthrough(this.config);
     const params = {

@@ -175,6 +175,8 @@ export function createNovitaProvider(
 
   const novitaOptions: NovitaProviderOptions = {
     ...providerOptions,
+    // Legacy callers select the outer environment as a whole when present.
+    env: options.providerOptions ? providerOptions.env : (options.env ?? options.config?.env),
     config: (providerOptions.config ?? {}) as OpenAiCompletionOptions,
   };
 

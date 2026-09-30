@@ -31,44 +31,6 @@ describe('providerWrapper', () => {
   });
 
   describe('wrapProviderWithRateLimiting', () => {
-    it.each([
-      ['callEmbeddingApi', ['text']],
-      ['callClassificationApi', ['text']],
-      ['callSimilarityApi', ['expected', 'actual']],
-      ['callModerationApi', ['prompt', 'response']],
-    ] as const)(
-      'rate limits %s and forwards its receiver and arguments',
-      async (method, inputs) => {
-        const context = { prompt: { raw: 'text', label: 'text' }, vars: {} };
-        const options = { abortSignal: new AbortController().signal };
-        const response = { tokenUsage: { total: 2 } };
-        const operation = vi.fn().mockResolvedValue(response);
-        Object.defineProperty(mockProvider, method, { value: operation });
-        mockExecute.mockImplementation(async (_provider, callFn) => callFn());
-
-        const wrapped = wrapProviderWithRateLimiting(mockProvider, mockRegistry);
-        const result = await Reflect.apply(wrapped[method]!, wrapped, [
-          ...inputs,
-          context,
-          options,
-        ]);
-
-        expect(result).toBe(response);
-        expect(mockExecute).toHaveBeenCalledOnce();
-        expect(mockExecute).toHaveBeenCalledWith(
-          mockProvider,
-          expect.any(Function),
-          expect.objectContaining({
-            getHeaders: expect.any(Function),
-            isRateLimited: expect.any(Function),
-            getRetryAfter: expect.any(Function),
-          }),
-        );
-        expect(operation).toHaveBeenCalledWith(...inputs, context, options);
-        expect(operation.mock.contexts[0]).toBe(mockProvider);
-      },
-    );
-
     it('should wrap provider callApi with registry.execute', async () => {
       mockExecute.mockImplementation(async (_provider, callFn) => callFn());
 
