@@ -10,7 +10,7 @@ import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
-import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
+import { evaluate } from '../evaluator';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -169,20 +169,17 @@ function failEvalRun(
   throw new EvalRunError(message);
 }
 
-function handleRecoverableWatchError(error: unknown): boolean {
+// Chokidar does not await change handlers; rethrowing would terminate the watch session.
+function logWatchError(error: unknown): void {
   if (error instanceof ConfigResolutionError) {
     logConfigResolutionError(error);
-    return true;
+  } else if (!(error instanceof EmailValidationError)) {
+    // Account helpers already render their own user-facing failures.
+    logger.error(error instanceof Error ? error.message : String(error));
+    if (error instanceof Error && error.stack) {
+      logger.debug(error.stack);
+    }
   }
-  if (error instanceof EmailValidationError) {
-    // Account helpers already render these user-facing failures.
-    return true;
-  }
-  if (error instanceof EvalRunError || error instanceof PromptSuggestionsRejectedError) {
-    logger.error(error.message);
-    return true;
-  }
-  return false;
 }
 
 /**
@@ -290,15 +287,10 @@ async function doEvalWithEnv(
   cmdObj: Partial<CommandLineOptions & Command>,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
-  evaluateOptions: InternalEvaluateOptions,
+  initialEvaluateOptions: InternalEvaluateOptions,
   envFileOverrides: EnvOverrides | undefined,
 ): Promise<Eval> {
-  const isCliInvocation = isCliEventSource(evaluateOptions);
-
-  let config: Partial<UnifiedConfig> | undefined = undefined;
-  let testSuite: TestSuite | undefined = undefined;
-  let _basePath: string | undefined = undefined;
-  let commandLineOptions: Record<string, any> | undefined = undefined;
+  const isCliInvocation = isCliEventSource(initialEvaluateOptions);
 
   const configArgs = Array.isArray(cmdObj.config)
     ? cmdObj.config
@@ -339,13 +331,18 @@ async function doEvalWithEnv(
   let watchTermination: Promise<void> | undefined;
 
   const runEvaluationWithEnv = async (runEnv: EnvOverrides, initialization?: boolean) => {
+    let config: Partial<UnifiedConfig> | undefined;
+    let testSuite: TestSuite | undefined;
+    let _basePath: string | undefined;
+    let commandLineOptions: Record<string, any> | undefined;
+    let evaluateOptions = { ...initialEvaluateOptions };
+
     const startTime = Date.now();
     let testSources: Awaited<ReturnType<typeof resolveConfigs>>['testSources'];
     telemetry.record('command_used', {
       name: 'eval - started',
       watch: Boolean(cmdObj.watch),
-      // Only set when redteam is enabled for sure, because we don't know if config is loaded yet
-      ...(Boolean(config?.redteam) && { isRedteam: true }),
+      ...(Boolean(defaultConfig.redteam) && { isRedteam: true }),
     });
 
     if (cmdObj.write) {
@@ -880,9 +877,8 @@ async function doEvalWithEnv(
 
     // Graceful pause support via Ctrl+C (only when writing to database)
     const abortController = new AbortController();
-    const previousAbortSignal = evaluateOptions.abortSignal;
-    evaluateOptions.abortSignal = previousAbortSignal
-      ? AbortSignal.any([previousAbortSignal, abortController.signal])
+    const abortSignal = evaluateOptions.abortSignal
+      ? AbortSignal.any([evaluateOptions.abortSignal, abortController.signal])
       : abortController.signal;
 
     let paused = false;
@@ -898,8 +894,6 @@ async function doEvalWithEnv(
         clearTimeout(forceExitTimeout);
         forceExitTimeout = undefined;
       }
-      // Restore original abort signal for watch mode
-      evaluateOptions.abortSignal = previousAbortSignal;
     };
 
     // Pause/resume SIGINT behavior is CLI policy. Reusable callers should own cancellation.
@@ -945,7 +939,7 @@ async function doEvalWithEnv(
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
-        abortSignal: evaluateOptions.abortSignal,
+        abortSignal,
         isRedteam: Boolean(config.redteam),
       });
 
@@ -1252,10 +1246,7 @@ async function doEvalWithEnv(
             try {
               await runEvaluation();
             } catch (error) {
-              if (handleRecoverableWatchError(error)) {
-                return;
-              }
-              throw error;
+              logWatchError(error);
             }
           })
           .on('error', (error) => logger.error(`Watcher error: ${error}`))

@@ -1132,6 +1132,174 @@ describe('evalCommand', () => {
     }
   });
 
+  it('should keep watching after an unexpected failure on a file change', async () => {
+    // chokidar does not await the change handler, so rethrowing an unclassified error
+    // used to escape as an unhandled rejection and terminate the whole watch session.
+    const config = {
+      prompts: [],
+      providers: [],
+    } as UnifiedConfig;
+    const testSuite = {
+      prompts: [],
+      providers: [],
+    } as TestSuite;
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite,
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate)
+      .mockImplementationOnce(async (_testSuite, evalRecord) => evalRecord as Eval)
+      .mockRejectedValueOnce(new Error('provider exploded'));
+
+    try {
+      await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
+
+      const onChange = chokidarMocks.handlers.get('change');
+      expect(onChange).toBeDefined();
+
+      await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
+      expect(loggerErrorSpy).toHaveBeenCalledWith('provider exploded');
+    } finally {
+      loggerErrorSpy.mockRestore();
+    }
+  });
+
+  describe('watch run isolation', () => {
+    beforeEach(() => {
+      vi.mocked(resolveConfigs).mockReset();
+      vi.mocked(evaluate).mockReset();
+      vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
+    });
+
+    afterEach(() => {
+      vi.mocked(resolveConfigs).mockReset();
+      vi.mocked(evaluate).mockReset();
+    });
+
+    it('cleans up each failed run and recovers after evaluation and config errors', async () => {
+      const providers = Array.from({ length: 3 }, (_, index) => ({
+        id: () => `provider-${index}`,
+        callApi: vi.fn(async () => ({ output: 'ok' })),
+        cleanup: vi.fn().mockResolvedValue(undefined),
+      }));
+      for (const provider of providers.slice(0, 2)) {
+        vi.mocked(resolveConfigs).mockImplementationOnce(async () => {
+          trackProvider(provider);
+          return {
+            config: {},
+            testSuite: { prompts: [], providers: [provider] },
+            basePath: path.resolve('/'),
+          };
+        });
+      }
+      vi.mocked(evaluate)
+        .mockImplementationOnce(async (_suite, record) => record as Eval)
+        .mockRejectedValueOnce(new Error('hook failed'))
+        .mockImplementationOnce(async (_suite, record) => record as Eval);
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+      try {
+        await doEval({ watch: true, write: false }, {}, defaultConfigPath, {});
+        const onChange = chokidarMocks.handlers.get('change')!;
+        await expect(onChange(defaultConfigPath)).resolves.toBeUndefined();
+        expect(errorSpy).toHaveBeenCalledWith('hook failed');
+        expect(providers[1].cleanup).toHaveBeenCalledTimes(1);
+
+        // A failure before resolving providers must not reuse the previous run's suite.
+        vi.mocked(resolveConfigs).mockReset().mockRejectedValueOnce(new Error('invalid config'));
+        await expect(onChange(defaultConfigPath)).resolves.toBeUndefined();
+        expect(providers[1].cleanup).toHaveBeenCalledTimes(1);
+
+        vi.mocked(resolveConfigs).mockImplementationOnce(async () => {
+          trackProvider(providers[2]);
+          return {
+            config: {},
+            testSuite: { prompts: [], providers: [providers[2]] },
+            basePath: path.resolve('/'),
+          };
+        });
+        await expect(onChange(defaultConfigPath)).resolves.toBeUndefined();
+        expect(evaluate).toHaveBeenCalledTimes(3);
+        for (const provider of providers) {
+          expect(provider.cleanup).toHaveBeenCalledTimes(1);
+        }
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
+
+    it('reloads removed options after a failed run and preserves caller cancellation', async () => {
+      const controller = new AbortController();
+      const initialOptions: Parameters<typeof doEval>[3] = {
+        repeat: 2,
+        maxConcurrency: 2,
+        eventSource: 'library',
+        generationEventId: 'caller-generation',
+        abortSignal: controller.signal,
+      };
+      vi.mocked(resolveConfigs)
+        .mockResolvedValueOnce({
+          config: {},
+          testSuite: { prompts: [], providers: [] },
+          basePath: path.resolve('/'),
+        })
+        .mockResolvedValueOnce({
+          config: {
+            evaluateOptions: {
+              repeat: 3,
+              maxConcurrency: 4,
+              delay: 5,
+              eventSource: 'cli',
+              generationEventId: 'config-generation',
+            } as Parameters<typeof doEval>[3],
+          },
+          testSuite: { prompts: [], providers: [] },
+          basePath: path.resolve('/'),
+        })
+        .mockResolvedValueOnce({
+          config: {},
+          testSuite: { prompts: [], providers: [] },
+          basePath: path.resolve('/'),
+        });
+      vi.mocked(evaluate)
+        .mockImplementationOnce(async (_suite, record) => record as Eval)
+        .mockRejectedValueOnce(new Error('hook failed'))
+        .mockImplementationOnce(async (_suite, record) => record as Eval);
+
+      await doEval({ watch: true, write: false }, {}, defaultConfigPath, initialOptions);
+      await chokidarMocks.handlers.get('change')!(defaultConfigPath);
+      await chokidarMocks.handlers.get('change')!(defaultConfigPath);
+
+      expect(evaluate).toHaveBeenNthCalledWith(
+        2,
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ repeat: 3, maxConcurrency: 1, delay: 5 }),
+      );
+      expect(evaluate).toHaveBeenNthCalledWith(
+        3,
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ repeat: 2, maxConcurrency: 2, delay: undefined }),
+      );
+      for (const [, , options] of vi.mocked(evaluate).mock.calls) {
+        expect(options).toMatchObject({
+          eventSource: 'library',
+          generationEventId: 'caller-generation',
+        });
+        expect(options?.abortSignal?.aborted).toBe(false);
+      }
+      expect(initialOptions.abortSignal).toBe(controller.signal);
+      expect(initialOptions.repeat).toBe(2);
+      controller.abort();
+      for (const [, , options] of vi.mocked(evaluate).mock.calls) {
+        expect(options?.abortSignal?.aborted).toBe(true);
+      }
+    });
+  });
+
   it('should fail with explicit cloud UUID error when cloud fetch fails', async () => {
     const cloudConfigUuid = '12345678-1234-4234-8234-123456789abc';
     const cmdObj = { config: [cloudConfigUuid] };
@@ -2179,6 +2347,84 @@ describe('evalCommand', () => {
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
+  it('cleans up every provider without hiding the original evaluation error', async () => {
+    const runError = new Error('evaluation failed');
+    const cleanupErrors = [new Error('sync cleanup failed'), new Error('async cleanup failed')];
+    const cleanups = [
+      vi.fn(() => {
+        throw cleanupErrors[0];
+      }),
+      vi.fn().mockRejectedValue(cleanupErrors[1]),
+      vi.fn().mockResolvedValue(undefined),
+    ];
+    vi.mocked(resolveConfigs).mockImplementationOnce(async () => {
+      const resolved = {
+        config: {},
+        testSuite: {
+          prompts: [],
+          providers: cleanups.map((cleanup, index) => ({
+            id: () => `cleanup-provider-${index}`,
+            callApi: vi.fn(async () => ({ output: 'ok' })),
+            cleanup,
+          })),
+        },
+        basePath: path.resolve('/'),
+      };
+      resolved.testSuite.providers.forEach(trackProvider);
+      return resolved;
+    });
+    vi.mocked(evaluate).mockRejectedValueOnce(runError);
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    try {
+      await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toBe(runError);
+      for (const cleanup of cleanups) {
+        expect(cleanup).toHaveBeenCalledTimes(1);
+      }
+      expect(warnSpy).toHaveBeenCalledWith('Provider cleanup failed after evaluation error', {
+        error: cleanupErrors[0],
+      });
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('cleans constructed providers when config resolution fails before returning a suite', async () => {
+    const configError = new Error('invalid tests file');
+    const provider = {
+      id: () => 'cleanup-provider',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup: vi.fn(),
+    };
+    vi.mocked(resolveConfigs).mockImplementationOnce(async () => {
+      trackProvider(provider);
+      throw configError;
+    });
+    await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toBe(configError);
+    expect(provider.cleanup).toHaveBeenCalledOnce();
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it('reports cleanup failure after a successful run and still cleans remaining providers', async () => {
+    const cleanupError = new Error('cleanup failed');
+    const providers = [
+      {
+        id: () => 'failing',
+        callApi: async () => ({}),
+        cleanup: vi.fn().mockRejectedValue(cleanupError),
+      },
+      { id: () => 'other', callApi: async () => ({}), cleanup: vi.fn() },
+    ];
+    vi.mocked(resolveConfigs).mockImplementationOnce(async () => {
+      providers.forEach(trackProvider);
+      return { config: {}, testSuite: { prompts: [], providers }, basePath: path.resolve('/') };
+    });
+    vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => record as Eval);
+    await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toBe(cleanupError);
+    for (const provider of providers) {
+      expect(provider.cleanup).toHaveBeenCalledOnce();
+    }
+  });
+
   it('cleans constructed providers after evaluation fails', async () => {
     const cleanup = vi.fn();
     const provider = {
@@ -2707,10 +2953,14 @@ describe('checkCloudPermissions', () => {
 });
 
 describe('showRedteamProviderLabelMissingWarning', () => {
-  const mockWarn = vi.spyOn(logger, 'warn');
+  let mockWarn: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    mockWarn.mockClear();
+    mockWarn = vi.spyOn(logger, 'warn');
+  });
+
+  afterEach(() => {
+    mockWarn.mockRestore();
   });
 
   it('should show warning when provider has no label', () => {

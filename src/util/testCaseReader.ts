@@ -905,14 +905,7 @@ function hasGlobMagic(reference: string): boolean {
   return hasMagic(reference, { windowsPathsNoEscape: true, magicalBraces: true });
 }
 
-/**
- * Resolve a single `tests` string reference to the file paths the loader will read.
- *
- * Globs are expanded with the same `globSync` call `loadTestsFromGlob` uses, because
- * chokidar v5 does not expand glob patterns itself. Only concrete files are returned:
- * watching a pattern's parent directory instead would rerun the evaluation on every
- * unrelated edit beneath it, including the run's own output file.
- */
+/** Expand test references into files; watching parent directories causes unrelated reruns. */
 function resolveTestsFileReference(reference: string, basePath: string): string[] {
   reference = renderEnvOnlyInObject(reference);
   const withoutScheme = reference.replace(/^file:\/\//, '');
@@ -944,13 +937,7 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
   return [isScript ? withoutFunction : withoutSheet];
 }
 
-/**
- * Collect `file://` references contained inside a resolved tests file.
- *
- * Only declarative formats are inspected. Reading is best effort: a malformed or
- * unreadable file is left to the loader to report, since this runs only to decide what
- * to watch.
- */
+/** Inspect declarative tests files for references; leave read and parse errors to the loader. */
 function collectNestedFileReferences(testsFile: string, basePath: string): string[] {
   const ext = parsePath(testsFile).ext.slice(1).toLowerCase();
   if (!['yaml', 'yml', 'json', 'jsonl'].includes(ext)) {
@@ -970,13 +957,7 @@ function collectNestedFileReferences(testsFile: string, basePath: string): strin
   }
 }
 
-/**
- * Collect `file://` references nested anywhere inside a parsed value.
- *
- * Used for a test generator's `config` object, which `readStandaloneTestsFile` passes
- * through `maybeLoadConfigFromExternalFile` before invoking the generator, and for the
- * contents of a declarative tests file.
- */
+/** Collect nested references that the config loader resolves before evaluation. */
 function collectConfigFileReferences(
   value: unknown,
   basePath: string,
@@ -988,8 +969,7 @@ function collectConfigFileReferences(
   if (typeof value !== 'object' || value === null) {
     return [];
   }
-  // A YAML anchor can make a config self-referential, which would recurse forever.
-  // Visiting each node once also keeps a widely shared anchor from being re-expanded.
+  // YAML anchors can introduce cycles or shared objects.
   if (seen.has(value)) {
     return [];
   }
@@ -998,16 +978,7 @@ function collectConfigFileReferences(
   return children.flatMap((item) => collectConfigFileReferences(item, basePath, seen));
 }
 
-/**
- * Resolve the filesystem paths that a `tests` config reads, for watch mode.
- *
- * `readTests` accepts a bare file reference, a test-generator object, or an array of
- * either plus inline test cases. This mirrors that resolution so the watcher and the
- * loader agree on which files feed an evaluation, rather than duplicating the rules.
- *
- * Must be called with the raw `tests` value from the config file. `combineConfigs`
- * expands references into concrete test cases and discards the original reference.
- */
+/** Resolve watch paths from raw `tests`, before combineConfigs expands its references. */
 export function resolveTestsWatchPaths(
   tests: TestSuiteConfig['tests'],
   basePath: string = cliState.basePath || '',
@@ -1019,9 +990,7 @@ export function resolveTestsWatchPaths(
   const entries = Array.isArray(tests) ? tests : [tests];
   const paths = entries.flatMap((entry): string[] => {
     if (typeof entry === 'string') {
-      // A tests file may itself point at more files, e.g. a case with
-      // `vars: {data: file://vars.yaml}`. The loader reads those before the resolved
-      // config is built, so collect them here as well.
+      // Declarative tests can reference additional files.
       return resolveTestsFileReference(entry, basePath).flatMap((file) => [
         file,
         ...collectNestedFileReferences(file, basePath),
@@ -1037,21 +1006,21 @@ export function resolveTestsWatchPaths(
       ];
     }
     if ('vars' in entry && entry.vars) {
-      // `vars` may be a file reference, or a list of them, rather than a mapping, e.g.
-      // `{ vars: 'vars/*.yaml' }`. loadTestWithVars() hands both forms straight to
-      // readTestFiles(), so they carry no file:// scheme and resolve as written.
+      // Vars-file references support globs without a file:// prefix.
       if (typeof entry.vars === 'string' || Array.isArray(entry.vars)) {
         const references = Array.isArray(entry.vars) ? entry.vars : [entry.vars];
         return references.flatMap((value) =>
           typeof value === 'string' ? resolveTestsFileReference(value, basePath) : [],
         );
       }
-      // A mapping: only file:// values are file references, the rest are literal vars.
-      return Object.values(entry.vars).flatMap((value) =>
-        typeof value === 'string' && value.startsWith('file://')
-          ? resolveTestsFileReference(value, basePath)
-          : [],
-      );
+      // Arrays starting with non-strings are literal values, as in generateVarCombinations.
+      return Object.values(entry.vars)
+        .flatMap((value) => (Array.isArray(value) && typeof value[0] !== 'string' ? [] : value))
+        .flatMap((value) =>
+          typeof value === 'string' && value.startsWith('file://')
+            ? resolveTestsFileReference(value, basePath)
+            : [],
+        );
     }
     return [];
   });
