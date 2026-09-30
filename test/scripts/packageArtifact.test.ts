@@ -1,15 +1,24 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, execSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { packPackageArtifact } from '../../scripts/packPackageArtifact';
+import { mockProcessEnv } from '../util/utils';
 
+const npmExecPath = execSync('npm exec --offline -- node -p process.env.npm_execpath', {
+  encoding: 'utf8',
+}).trim();
 const directories: string[] = [];
+let restoreEnv: () => void;
+beforeEach(() => {
+  restoreEnv = mockProcessEnv({ npm_execpath: npmExecPath });
+});
 afterEach(() => {
+  restoreEnv();
   for (const directory of directories.splice(0)) {
     fs.rmSync(directory, { recursive: true, force: true });
   }
@@ -43,8 +52,6 @@ describe('package artifact profiles', () => {
 
 describe('package artifact packing', () => {
   it('packs prebuilt bytes without hooks and inspects an unchanged archive with spaces in its path', () => {
-    const npmExecPath = process.env.npm_execpath;
-    expect(npmExecPath).toBeTruthy();
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-packer-'));
     directories.push(root);
     const source = path.join(root, 'source');
@@ -69,7 +76,7 @@ describe('package artifact packing', () => {
     const metadata = JSON.parse(
       execFileSync(
         process.execPath,
-        [npmExecPath!, 'pack', renamed, '--dry-run', '--ignore-scripts', '--json'],
+        [npmExecPath, 'pack', renamed, '--dry-run', '--ignore-scripts', '--json'],
         { cwd: source, encoding: 'utf8' },
       ),
     );
