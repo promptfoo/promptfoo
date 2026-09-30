@@ -207,9 +207,9 @@ function getShadowRanges(
     }
     return false;
   };
-  const addParams = (node: { body: { start: number; end: number } | null; params: unknown[] }) => {
-    if (node.body && node.params.some(bindsName)) {
-      ranges.push([node.body.start, node.body.end]);
+  const addParams = (node: { start: number; end: number; params: unknown[] }) => {
+    if (node.params.some(bindsName)) {
+      ranges.push([node.start, node.end]);
     }
   };
   new Visitor({
@@ -222,8 +222,8 @@ function getShadowRanges(
       }
     },
     FunctionExpression(node) {
-      if (node.id?.name === name && node.body) {
-        ranges.push([node.body.start, node.body.end]);
+      if (node.id?.name === name) {
+        ranges.push([node.start, node.end]);
       }
       addParams(node);
     },

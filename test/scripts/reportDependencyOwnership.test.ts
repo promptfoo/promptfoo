@@ -1032,6 +1032,29 @@ describe('dependency ownership report', () => {
     ]);
   });
 
+  it.each([
+    "function load(require, value = require('local')) {}",
+    "const load = function (require, value = require('local')) {};",
+    "const load = (require, value = require('local')) => value;",
+    "function load(module, value = module.require('local')) {}",
+    "const load = function require(value = require('local')) {};",
+  ])('ignores local loaders in default parameters: %s', (source) => {
+    write('src/index.js', `${source}\nrequire('external');`);
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'external' }),
+    ]);
+  });
+
+  it('does not extend body-local loader bindings into default parameters', () => {
+    write(
+      'src/index.js',
+      "function load(value = require('external')) { var require = () => {}; require('local'); }",
+    );
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'external' }),
+    ]);
+  });
+
   it('does not treat a destructured property key as a require binding', () => {
     write('src/index.js', "const { require: loader } = registry; require('external');");
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
