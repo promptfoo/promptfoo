@@ -93,6 +93,7 @@ interface FilteredCountRow {
 
 interface RedteamReportResultRow {
   id: string;
+  legacyResultIndex: number | null;
   promptIdx: number;
   testIdx: number;
   promptId: string | null;
@@ -132,7 +133,6 @@ interface RedteamReportResultRow {
 
 type RedteamReportStripFlags = ReturnType<typeof getStripFlags>;
 const MAX_REPORT_TEXT_LENGTH = 10_240;
-const MAX_REPORT_ITEMS = 25;
 
 const REDTEAM_REPORT_ERROR_MARKER = '[error details stripped]';
 
@@ -181,7 +181,7 @@ function projectSuggestionsForRedteamReport(
         },
       ];
     })
-    .slice(0, MAX_REPORT_ITEMS);
+    .slice(0, 25);
 }
 
 function projectAssertionForRedteamReport(
@@ -202,39 +202,62 @@ const REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES = [
   ...Object.keys(categoryAliasesReverse).map((alias) => `${alias}/`),
 ];
 
-function reportPluginIdFromMetric(metric: unknown): string | undefined {
-  if (typeof metric !== 'string') {
-    return undefined;
+function hasRedteamReportIdentity(result: unknown): boolean {
+  if (!isRecord(result) || !isRecord(result.assertion)) {
+    return false;
+  }
+
+  const metric = result.assertion.metric;
+  return (
+    typeof metric === 'string' &&
+    (Object.prototype.hasOwnProperty.call(categoryAliasesReverse, metric) ||
+      REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES.some((prefix) => metric.startsWith(prefix)))
+  );
+}
+
+function reportIdentityFromMetric(metric: string | undefined | null): Record<string, string> {
+  if (!metric) {
+    return {};
   }
   if (isPolicyMetric(metric)) {
-    return deserializePolicyIdFromMetric(metric);
+    return { pluginId: 'policy', policyId: deserializePolicyIdFromMetric(metric) };
   }
-  return categoryAliasesReverse[metric.split('/')[0] as keyof typeof categoryAliasesReverse];
+  const pluginId =
+    categoryAliasesReverse[metric.split('/')[0] as keyof typeof categoryAliasesReverse];
+  return pluginId ? { pluginId } : {};
 }
 
-function reportIdentityMetric(gradingResult: GradingResult | null | undefined): string | undefined {
-  const components = gradingResult?.componentResults;
-  return Array.isArray(components)
-    ? components.find((component) => reportPluginIdFromMetric(component?.assertion?.metric))
-        ?.assertion?.metric
-    : undefined;
-}
-
-function reportIdentityMetadata(
-  metadata: EvaluateResult['metadata'],
-  testMetadata: AtomicTestCase['metadata'],
+function hasExplicitReportIdentity(
+  metadata: Record<string, unknown> | undefined,
+  testMetadata: Record<string, unknown> | undefined,
   harmCategory: unknown,
-  metric: unknown,
-): EvaluateResult['metadata'] {
-  const hasIdentity =
-    (typeof metadata?.pluginId === 'string' && metadata.pluginId !== 'policy') ||
-    (typeof testMetadata?.pluginId === 'string' && testMetadata.pluginId !== 'policy') ||
-    ((metadata?.pluginId === 'policy' || testMetadata?.pluginId === 'policy') &&
+): boolean {
+  const pluginIds = [metadata?.pluginId, testMetadata?.pluginId];
+  return (
+    pluginIds.some((id) => typeof id === 'string' && id !== 'policy') ||
+    (pluginIds.includes('policy') &&
       typeof (testMetadata?.policyId ?? metadata?.policyId) === 'string') ||
-    harmCategory ||
-    metadata?.harmCategory;
-  const pluginId = !hasIdentity && reportPluginIdFromMetric(metric);
-  return pluginId ? { ...metadata, pluginId } : metadata;
+    Boolean(harmCategory)
+  );
+}
+
+function jsonReportIdentityMetric(value: SQLWrapper, selectIndex = false): SQL<string | null> {
+  return sql<string | null>`(
+    SELECT ${selectIndex ? sql`identity_component.key` : sql`json_extract(identity_component.value, '$.assertion.metric')`}
+    FROM json_each(${value}, '$.componentResults') AS identity_component
+    WHERE identity_component.type = 'object' AND (
+      json_extract(identity_component.value, '$.assertion.metric') IN (${sql.join(
+        Object.keys(categoryAliasesReverse).map((alias) => sql`${alias}`),
+        sql`, `,
+      )}) OR (${sql.join(
+        REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES.map(
+          (prefix) =>
+            sql`substr(json_extract(identity_component.value, '$.assertion.metric'), 1, ${prefix.length}) = ${prefix}`,
+        ),
+        sql` OR `,
+      )})
+    ) ORDER BY identity_component.key LIMIT 1
+  )`;
 }
 
 function projectGradingResultForRedteamReport(
@@ -248,19 +271,13 @@ function projectGradingResultForRedteamReport(
     includeComponents && Array.isArray(gradingResult.componentResults)
       ? gradingResult.componentResults
       : undefined;
-  const compactComponents = components?.slice(0, MAX_REPORT_ITEMS);
-  const identityComponent = components?.find((component) =>
-    reportPluginIdFromMetric(component?.assertion?.metric),
-  );
-  if (identityComponent && compactComponents && !compactComponents.includes(identityComponent)) {
-    compactComponents.push(identityComponent);
-  }
-  const blockedModeration = components?.find(
+  const identityIndex = components?.findIndex(hasRedteamReportIdentity);
+  const moderationIndex = components?.findIndex(
     (component) => component?.assertion?.type === 'moderation' && component.pass === false,
   );
-  if (blockedModeration && compactComponents && !compactComponents.includes(blockedModeration)) {
-    compactComponents.push(blockedModeration);
-  }
+  const compactComponents = components?.filter(
+    (_, index) => index < 25 || index === identityIndex || index === moderationIndex,
+  );
   const componentResults = compactComponents
     ?.filter(isRecord)
     .map((componentResult) =>
@@ -391,7 +408,7 @@ function jsonSuggestionsOrNull(value: SQLWrapper, path: string): SQL<string | nu
           'replace-prompt', 'pre-filter', 'post-filter', 'note'
         )
         AND json_type(report_suggestion.value, '$.value') = 'text'
-        AND report_suggestion.key < ${MAX_REPORT_ITEMS}
+        AND report_suggestion.key < 25
     )
     ELSE NULL
   END`;
@@ -437,7 +454,7 @@ function normalizePromptForRedteamReport(prompt: unknown, bound = true): Prompt 
 
 function projectProviderForRedteamReport(
   provider: EvaluateResult['provider'] | unknown,
-  bound = true,
+  bounded = true,
 ): EvaluateResult['provider'] {
   if (!isRecord(provider)) {
     return { id: '' };
@@ -445,7 +462,7 @@ function projectProviderForRedteamReport(
   return {
     id: typeof provider.id === 'string' ? provider.id : '',
     ...(typeof provider.label === 'string' && {
-      label: bound ? provider.label.slice(0, MAX_REPORT_TEXT_LENGTH) : provider.label,
+      label: bounded ? provider.label.slice(0, MAX_REPORT_TEXT_LENGTH) : provider.label,
     }),
   };
 }
@@ -530,17 +547,22 @@ function createRedteamReportMetadata(
   if (stripFlags.shouldStripMetadata) {
     return {};
   }
+  const derivedIdentity =
+    !stripFlags.shouldStripGradingResult ||
+    hasExplicitReportIdentity(
+      { pluginId: row.metadataPluginId, policyId: row.metadataPolicyId },
+      { pluginId: row.testCasePluginId, policyId: row.testCasePolicyId },
+      parseJsonFragment<EvaluateResult['vars']>(row.vars)?.harmCategory || row.metadataHarmCategory,
+    )
+      ? {}
+      : reportIdentityFromMetric(row.identityMetric);
   const metadata = {
     ...(row.metadataPluginId !== null && { pluginId: row.metadataPluginId }),
     ...(row.metadataPolicyId !== null && { policyId: row.metadataPolicyId }),
     ...(row.metadataHarmCategory !== null && { harmCategory: row.metadataHarmCategory }),
+    ...derivedIdentity,
   };
-  return reportIdentityMetadata(
-    Object.keys(metadata).length > 0 ? metadata : undefined,
-    { pluginId: row.testCasePluginId, policyId: row.testCasePolicyId },
-    parseJsonFragment<EvaluateResult['vars']>(row.vars)?.harmCategory,
-    row.identityMetric,
-  );
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
 function createRedteamReportResult(
@@ -575,6 +597,7 @@ function createRedteamReportResult(
 
   return {
     ...(typeof row.id === 'string' && { id: row.id }),
+    ...(row.legacyResultIndex !== null && { legacyResultIndex: row.legacyResultIndex }),
     promptIdx: row.promptIdx,
     testIdx: row.testIdx,
     testCase: {
@@ -645,13 +668,22 @@ function projectResultForRedteamReport(
         ...(typeof metadata.harmCategory === 'string' && { harmCategory: metadata.harmCategory }),
       }
     : undefined;
-  const metric = reportIdentityMetric(result.gradingResult);
-  const projectedMetadata = reportIdentityMetadata(
-    allowlistedMetadata,
-    result.testCase?.metadata,
-    result.vars?.harmCategory,
-    metric,
-  );
+  const identityMetric = Array.isArray(result.gradingResult?.componentResults)
+    ? result.gradingResult.componentResults.find(hasRedteamReportIdentity)?.assertion?.metric
+    : undefined;
+  const derivedIdentity =
+    !stripFlags.shouldStripGradingResult ||
+    stripFlags.shouldStripMetadata ||
+    hasExplicitReportIdentity(
+      metadata,
+      result.testCase?.metadata,
+      (!stripFlags.shouldStripTestVars && result.vars?.harmCategory) || metadata?.harmCategory,
+    )
+      ? {}
+      : reportIdentityFromMetric(identityMetric);
+  const projectedMetadata = Object.keys(derivedIdentity).length
+    ? { ...allowlistedMetadata, ...derivedIdentity }
+    : allowlistedMetadata;
 
   const redteamFinalPromptCandidate =
     result.response?.metadata?.redteamFinalPrompt ?? metadata?.redteamFinalPrompt;
@@ -839,9 +871,7 @@ function projectConfigForRedteamReport(
       ? undefined
       : {
           id: providerId,
-          ...(typeof providerRecord?.label === 'string' && {
-            label: providerRecord.label.slice(0, MAX_REPORT_TEXT_LENGTH),
-          }),
+          ...(typeof providerRecord?.label === 'string' && { label: providerRecord.label }),
           ...(tools !== undefined && { config: { tools } }),
         };
   let policyIndex = 0;
@@ -1356,11 +1386,29 @@ export default class Eval {
     return row !== undefined;
   }
 
+  static async getReportTools(evalId: string): Promise<unknown[] | undefined> {
+    const db = await getDb();
+    const evaluation = await db
+      .select({ config: evalsTable.config })
+      .from(evalsTable)
+      .where(eq(evalsTable.id, evalId))
+      .get();
+    if (!evaluation) {
+      return undefined;
+    }
+    const config = sanitizeConfigForOutput(evaluation.config, getStripFlags(evaluation.config.env));
+    const provider = Array.isArray(config.providers) ? config.providers[0] : undefined;
+    const tools =
+      isRecord(provider) && isRecord(provider.config) ? provider.config.tools : undefined;
+    return tools == null ? [] : Array.isArray(tools) ? tools : [tools];
+  }
+
   static async getResultByIdAndIndices(
     evalId: string,
     testIdx: number,
     promptIdx: number,
     resultId?: string,
+    legacyResultIndex?: number,
   ): Promise<EvaluateResult | undefined> {
     const db = await getDb();
     const evaluation = await db
@@ -1372,12 +1420,9 @@ export default class Eval {
       return undefined;
     }
     const stripFlags = getStripFlags(evaluation.config.env);
-    const normalizedResult = await EvalResult.findByEvalIdAndIndices(
-      evalId,
-      testIdx,
-      promptIdx,
-      resultId,
-    );
+    const normalizedResult =
+      legacyResultIndex === undefined &&
+      (await EvalResult.findByEvalIdAndIndices(evalId, testIdx, promptIdx, resultId));
     if (normalizedResult) {
       return sanitizeResultForJsonlArtifact(
         normalizedResult.toEvaluateResult(stripFlags),
@@ -1387,7 +1432,7 @@ export default class Eval {
 
     const resultIdPredicate = resultId
       ? sql`AND json_type(legacy_result.value, '$.id') = 'text'
-            AND json_extract(legacy_result.value, '$.id') = ${resultId}`
+          AND json_extract(legacy_result.value, '$.id') = ${resultId}`
       : sql``;
     const legacyRows = await db.all<{ result: string }>(sql`
       SELECT legacy_result.value AS result
@@ -1404,12 +1449,10 @@ export default class Eval {
         AND COALESCE(json_extract(legacy_result.value, '$.testIdx'), legacy_result.key) = ${testIdx}
         AND COALESCE(json_extract(legacy_result.value, '$.promptIdx'), 0) = ${promptIdx}
         ${resultIdPredicate}
+        ${legacyResultIndex === undefined ? sql`` : sql`AND legacy_result.key = ${legacyResultIndex}`}
       LIMIT 2
     `);
-    if (legacyRows.length !== 1) {
-      return undefined;
-    }
-    const legacyRow = legacyRows[0];
+    const legacyRow = legacyRows.length === 1 ? legacyRows[0] : undefined;
     if (!legacyRow) {
       return undefined;
     }
@@ -2473,19 +2516,20 @@ export default class Eval {
     }
 
     if (!this.persisted) {
-      const summary = await this.toEvaluateSummary();
-      if (!stripFlags.shouldStripMetadata) {
-        summary.results.forEach((result, index) => {
-          const metric = reportIdentityMetric(this.results[index]?.gradingResult);
-          result.metadata = reportIdentityMetadata(
-            result.metadata,
-            result.testCase?.metadata,
-            result.vars?.harmCategory,
-            metric,
-          );
-        });
-      }
-      return projectSummaryForRedteamReport(summary, injectVar, stripFlags, true);
+      return projectSummaryForRedteamReport(
+        {
+          version: 3,
+          timestamp: new Date(this.createdAt).toISOString(),
+          prompts: this.prompts,
+          results: this.results.map((result) =>
+            result.toEvaluateResult({ ...stripFlags, shouldStripGradingResult: false }),
+          ),
+          stats: this.getStats(),
+        },
+        injectVar,
+        stripFlags,
+        true,
+      );
     }
 
     const reportVarKeys = [...new Set([injectVar, 'prompt', 'query', 'question', 'harmCategory'])];
@@ -2520,28 +2564,9 @@ export default class Eval {
       ? sql`CASE WHEN json_type(report_result.value, '$.vars') = 'object' THEN json_extract(report_result.value, '$.vars') ELSE ${jsonObjectFieldOrEmpty(validTestCaseJson, '$.vars')} END`
       : sql`CASE WHEN json_type(${validTestCaseJson}, '$.vars') = 'object' THEN json_extract(${validTestCaseJson}, '$.vars') ELSE json('{}') END`;
     const validReportComponentJson = sql`CASE WHEN report_component.type = 'object' THEN report_component.value ELSE json('{}') END`;
-    const identityComponentKey = sql<number | null>`(
-        SELECT report_component.key
-        FROM json_each(CASE WHEN json_type(${validGradingResultJson}, '$.componentResults') = 'array'
-          THEN json_extract(${validGradingResultJson}, '$.componentResults') ELSE json('[]') END) AS report_component
-        WHERE report_component.type = 'object' AND (
-          json_extract(${validReportComponentJson}, '$.assertion.metric') IN (${sql.join(
-            Object.keys(categoryAliasesReverse).map((alias) => sql`${alias}`),
-            sql`, `,
-          )})
-          OR (${sql.join(
-            REDTEAM_REPORT_IDENTITY_METRIC_PREFIXES.map(
-              (prefix) =>
-                sql`substr(json_extract(${validReportComponentJson}, '$.assertion.metric'), 1, ${prefix.length}) = ${prefix}`,
-            ),
-            sql` OR `,
-          )})
-        )
-        ORDER BY report_component.key
-        LIMIT 1
-      )`;
     const columns = {
       id: sources.id,
+      legacyResultIndex: legacy ? sql<number | null>`report_result.key` : sql<number | null>`NULL`,
       promptIdx: sources.promptIdx,
       testIdx: sources.testIdx,
       promptId: sources.promptId,
@@ -2682,24 +2707,21 @@ export default class Eval {
               json_extract(${validGradingResultJson}, '$.componentResults')
             ) AS report_component
             WHERE report_component.type = 'object'
-              AND (report_component.key < ${MAX_REPORT_ITEMS} OR report_component.key = ${identityComponentKey} OR report_component.key = (
-                SELECT blocked_component.key FROM json_each(json_extract(${validGradingResultJson}, '$.componentResults')) AS blocked_component
-                WHERE blocked_component.type = 'object'
-                  AND json_extract(blocked_component.value, '$.assertion.type') = 'moderation'
-                  AND json_extract(blocked_component.value, '$.pass') = 0
-                ORDER BY blocked_component.key LIMIT 1
+              AND (report_component.key < 25 OR report_component.key = ${jsonReportIdentityMetric(validGradingResultJson, true)} OR report_component.key IN (
+                SELECT moderation_component.key
+                FROM json_each(${validGradingResultJson}, '$.componentResults') AS moderation_component
+                WHERE moderation_component.type = 'object'
+                  AND json_extract(moderation_component.value, '$.assertion.type') = 'moderation'
+                  AND json_type(moderation_component.value, '$.pass') = 'false'
+                ORDER BY moderation_component.key LIMIT 1
               ))
           )
           ELSE NULL
         END`,
-      identityMetric: sql<string | null>`(
-        SELECT ${jsonBoundedTextOrNull(validReportComponentJson, '$.assertion.metric')}
-        FROM json_each(CASE WHEN json_type(${validGradingResultJson}, '$.componentResults') = 'array'
-          THEN json_extract(${validGradingResultJson}, '$.componentResults') ELSE json('[]') END) AS report_component
-        WHERE report_component.key = ${identityComponentKey}
-        ORDER BY report_component.key
-        LIMIT 1
-      )`,
+      identityMetric:
+        !stripFlags.shouldStripGradingResult || stripFlags.shouldStripMetadata
+          ? sql<string | null>`NULL`
+          : jsonReportIdentityMetric(validGradingResultJson),
       metadataPluginId: jsonTextOrNull(validMetadataJson, '$.pluginId'),
       metadataPolicyId: jsonTextOrNull(validMetadataJson, '$.policyId'),
       metadataHarmCategory: jsonTextOrNull(validMetadataJson, '$.harmCategory'),

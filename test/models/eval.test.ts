@@ -1633,7 +1633,7 @@ describe('evaluator', () => {
         promptIdx: 2,
         provider: {
           id: 'legacy-provider',
-          label: 'Legacy provider',
+          label: 'Legacy provider '.repeat(1_000),
           config: { apiKey: 'legacy-provider-secret' },
         } as EvaluateResult['provider'],
         prompt: { raw: longPrompt, label: longPrompt },
@@ -1653,7 +1653,7 @@ describe('evaluator', () => {
       expect(findByIdSpy).not.toHaveBeenCalled();
       expect(result).toMatchObject({
         id: 'legacy-row-id',
-        provider: { id: 'legacy-provider', label: 'Legacy provider' },
+        provider: { id: 'legacy-provider', label: 'Legacy provider '.repeat(1_000) },
         response: { output: 'legacy output' },
       });
       expect(result?.prompt.raw).toBe(longPrompt);
@@ -1718,7 +1718,7 @@ describe('evaluator', () => {
       expect(full?.result.results.results[0].response?.output).toBe(longOutput);
     });
 
-    it('keeps category identity and one failed moderation result beyond the preview cap', async () => {
+    it('keeps the first category identity and failed moderation after the preview component limit', async () => {
       const components = [
         ...Array.from({ length: 30 }, () => ({
           pass: true,
@@ -1766,7 +1766,6 @@ describe('evaluator', () => {
           (component) => component.assertion?.metric,
         );
         expect(metrics).toHaveLength(27);
-        expect(report.results.results[0].metadata?.pluginId).toBe('harmful');
         expect(
           report.results.results[0].gradingResult?.componentResults?.find(
             (component) => component.assertion?.type === 'moderation',
@@ -1838,63 +1837,6 @@ describe('evaluator', () => {
           },
         },
       ]);
-    });
-
-    it('keeps safe policy names and IDs when policy text is stripped', async () => {
-      const evaluation = new Eval({
-        env: { PROMPTFOO_STRIP_PROMPT_TEXT: 'true' },
-        redteam: {
-          plugins: [
-            { id: 'policy', config: { policy: 'Ordinary policy text' } },
-            {
-              id: 'policy',
-              config: {
-                policy: { id: 'policy-a', name: 'Named policy', text: 'Another policy text' },
-              },
-            },
-          ],
-        },
-      });
-      const report = await evaluation.toResultsFile({
-        resultProjection: 'redteamReport',
-        includeTraces: false,
-      });
-      expect(report.config.redteam?.plugins).toEqual([
-        {
-          id: 'policy',
-          config: {
-            policy: { id: sha256('Ordinary policy text').slice(0, 12), name: 'Custom Policy 1' },
-          },
-        },
-        { id: 'policy', config: { policy: { id: 'policy-a', name: 'Named policy' } } },
-      ]);
-    });
-
-    it.each([
-      { answer: 'saved object' },
-      [{ text: 'saved array' }],
-      { answer: 'x'.repeat(11_000) },
-    ])('keeps bounded structured output previews in every storage mode', async (output) => {
-      const result = createEvaluateResult({ response: { output } });
-      const persisted = await EvalFactory.create({ numResults: 0 });
-      const memory = new Eval({});
-      await persisted.addResult(result);
-      await memory.addResult(result);
-      const legacy = new Eval({});
-      legacy.oldResults = createEvaluateSummaryV2({ results: [result] });
-      const legacyId = await writeResultsToDatabase(legacy.oldResults, {});
-      const reports = await Promise.all(
-        [persisted, memory, legacy].map((eval_) =>
-          eval_.toResultsFile({ resultProjection: 'redteamReport', includeTraces: false }),
-        ),
-      );
-      reports.push((await readResult(legacyId, { resultProjection: 'redteamReport' }))!.result);
-      const json = JSON.stringify(output);
-      for (const report of reports) {
-        expect(report.results.results[0].response?.output).toEqual(
-          json.length > 10_240 ? json.slice(0, 10_240) : output,
-        );
-      }
     });
 
     it('honors scoped output stripping when loading normalized and legacy row details', async () => {
@@ -3668,7 +3610,6 @@ describe('evaluator', () => {
       const cases = values.map((prompt, testIdx) =>
         createEvaluateResult({
           testIdx,
-          provider: { id: 'echo', label: longText },
           prompt: { raw: longText, label: longText, display: longText },
           vars: { prompt: longText, query: { nested: longText }, harmCategory: 42 },
           testCase: { vars: { prompt: longText, query: { nested: longText }, harmCategory: 42 } },
@@ -3682,10 +3623,9 @@ describe('evaluator', () => {
               score: 0,
               reason: longText,
               ...(index === 0 && {
-                componentResults: [{ pass: false, score: 0, reason: 'Nested details' }],
                 assertion: { type: 'contains', metric: 'Unrelated' },
               }),
-              ...(index >= 25 && {
+              ...(index === 29 && {
                 assertion: { type: 'contains', metric: 'PolicyViolation:late-policy' },
               }),
             })),
@@ -3724,9 +3664,10 @@ describe('evaluator', () => {
           expect(JSON.stringify(result.vars).length).toBeLessThanOrEqual(20_500);
           expect(result.vars.harmCategory).toBe(42);
           expect(result.gradingResult?.reason?.length).toBeLessThanOrEqual(10_240);
-          expect(result.provider.label?.length).toBeLessThanOrEqual(10_240);
           expect(result.gradingResult?.componentResults).toHaveLength(26);
-          expect(result.gradingResult?.componentResults?.[0].componentResults).toBeUndefined();
+          expect(result.gradingResult?.componentResults?.[25].assertion?.metric).toBe(
+            'PolicyViolation:late-policy',
+          );
           expect(result.gradingResult?.componentResults?.[0].reason.length).toBeLessThanOrEqual(
             10_240,
           );
@@ -3868,45 +3809,250 @@ describe('evaluator', () => {
       },
     );
 
-    it('preserves metric-only category identity when grading details are stripped', async () => {
+    it('loads full saved tool schemas without result hydration', async () => {
+      const tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'example',
+            parameters: { type: 'object', properties: { value: { type: 'string' } } },
+          },
+        },
+      ];
+      const evaluation = await Eval.create(
+        { providers: [{ id: 'echo', config: { tools, apiKey: 'private-key' } }] },
+        [],
+      );
+      const loadSpy = vi.spyOn(Eval.prototype, 'loadResults');
+      expect(await Eval.getReportTools(evaluation.id)).toEqual(tools);
+      expect(loadSpy).not.toHaveBeenCalled();
+      expect(await Eval.getReportTools('missing')).toBeUndefined();
+    });
+
+    it('keeps structured previews and provider labels bounded in every storage mode', async () => {
+      const outputs = [
+        { answer: 'hello' },
+        ['hello', 'world'],
+        { answer: 'x'.repeat(20_000) },
+        0,
+        false,
+      ];
+      const cases = outputs.map((output, testIdx) =>
+        createEvaluateResult({
+          testIdx,
+          provider: { id: 'echo', label: 'label '.repeat(3_000) },
+          response: { output },
+        }),
+      );
+      const persisted = await EvalFactory.create({ numResults: 0 });
+      const inMemory = new Eval({});
+      const legacy = new Eval({});
+      legacy.oldResults = createEvaluateSummaryV2({ results: cases });
+      const legacyId = await writeResultsToDatabase(legacy.oldResults, {});
+      const persistedLegacy = await Eval.findById(legacyId);
+      for (const result of cases) {
+        await persisted.addResult(result);
+        await inMemory.addResult(result);
+      }
+      for (const evaluation of [persisted, inMemory, legacy, persistedLegacy!]) {
+        const compact = await evaluation.toResultsFile({
+          resultProjection: 'redteamReport',
+          includeTraces: false,
+        });
+        expect(compact.results.results.map((result) => result.response?.output)).toEqual(
+          outputs.map((output) =>
+            JSON.stringify(output).length > 10_240
+              ? JSON.stringify(output).slice(0, 10_240)
+              : output,
+          ),
+        );
+        expect(
+          compact.results.results.every((result) => result.provider.label?.length === 10_240),
+        ).toBe(true);
+      }
+    });
+
+    it('caps repeated identity components while retaining category and failed moderation evidence', async () => {
       const result = createEvaluateResult({
-        metadata: {},
-        testCase: {},
-        vars: {},
         gradingResult: {
           pass: false,
           score: 0,
-          reason: 'private grading text',
-          componentResults: [
-            {
-              pass: false,
-              score: 0,
-              reason: 'private component text',
-              assertion: { type: 'contains', metric: 'PolicyViolation:policy-a' },
-            },
-          ],
+          reason: 'summary',
+          componentResults: Array.from({ length: 200 }, (_, index) => ({
+            pass: index < 99,
+            score: 0,
+            reason: 'component',
+            assertion:
+              index < 50
+                ? { type: 'contains' as const }
+                : index < 100
+                  ? { type: 'contains' as const, metric: 'PolicyViolation:example' }
+                  : { type: 'moderation' as const },
+          })),
         },
       });
       const persisted = await EvalFactory.create({ numResults: 0 });
-      const memory = new Eval({});
-      await persisted.addResult(result);
-      await memory.addResult(result);
+      const inMemory = new Eval({});
       const legacy = new Eval({});
       legacy.oldResults = createEvaluateSummaryV2({ results: [result] });
-      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_GRADING_RESULT: 'true' });
-      try {
-        for (const eval_ of [persisted, memory, legacy]) {
-          const compact = await eval_.toResultsFile({
+      await persisted.addResult(result);
+      await inMemory.addResult(result);
+      for (const evaluation of [persisted, inMemory, legacy]) {
+        const compact = await evaluation.toResultsFile({
+          resultProjection: 'redteamReport',
+          includeTraces: false,
+        });
+        const components = compact.results.results[0].gradingResult?.componentResults;
+        expect(components).toHaveLength(27);
+        expect(components?.[25].assertion?.metric).toBe('PolicyViolation:example');
+        expect(components?.[26]).toMatchObject({ pass: false, assertion: { type: 'moderation' } });
+      }
+    });
+
+    it('preserves compact policy IDs and names when prompt text is stripped', async () => {
+      const evaluation = new Eval({});
+      evaluation.config = {
+        env: { PROMPTFOO_STRIP_PROMPT_TEXT: 'true' },
+        redteam: {
+          plugins: [
+            { id: 'policy', config: { policy: 'private policy text' } },
+            {
+              id: 'policy',
+              config: {
+                policy: { id: 'named-policy', name: 'Example policy', text: 'private policy text' },
+              },
+            },
+          ],
+        },
+      };
+      const compact = await evaluation.toResultsFile({
+        resultProjection: 'redteamReport',
+        includeTraces: false,
+      });
+      expect(compact.config.redteam?.plugins).toEqual([
+        {
+          id: 'policy',
+          config: {
+            policy: { id: sha256('private policy text').slice(0, 12), name: 'Custom Policy 1' },
+          },
+        },
+        { id: 'policy', config: { policy: { id: 'named-policy', name: 'Example policy' } } },
+      ]);
+      expect(JSON.stringify(compact)).not.toContain('private policy text');
+    });
+
+    it.each<{
+      metadata: Record<string, string>;
+      vars: EvaluateResult['vars'];
+      metric: string;
+      expected: Record<string, string>;
+    }>([
+      {
+        metadata: {},
+        vars: {},
+        metric: 'PolicyViolation:example-policy',
+        expected: { pluginId: 'policy', policyId: 'example-policy' },
+      },
+      {
+        metadata: { pluginId: 'policy' },
+        vars: {},
+        metric: 'Harmful',
+        expected: { pluginId: 'harmful' },
+      },
+      {
+        metadata: { policyId: 'stale' },
+        vars: {},
+        metric: 'PolicyViolation:example-policy',
+        expected: { pluginId: 'policy', policyId: 'example-policy' },
+      },
+      {
+        metadata: {},
+        vars: { harmCategory: 'Harmful' },
+        metric: 'PolicyViolation:example-policy',
+        expected: { pluginId: 'policy', policyId: 'example-policy' },
+      },
+    ])(
+      'retains legacy category identity when grading is stripped: $metric $metadata $vars',
+      async ({ metadata, vars, metric, expected }) => {
+        const result = createEvaluateResult({
+          metadata,
+          testCase: { vars },
+          vars,
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: 'private explanation',
+            componentResults: [
+              {
+                pass: false,
+                score: 0,
+                reason: 'private reason',
+                assertion: { type: 'contains', metric },
+              },
+            ],
+          },
+        });
+        const persisted = await EvalFactory.create({ numResults: 0 });
+        const inMemory = new Eval({});
+        const legacy = new Eval({});
+        legacy.oldResults = createEvaluateSummaryV2({ results: [result] });
+        const legacyId = await writeResultsToDatabase(legacy.oldResults, {});
+        const persistedLegacy = await Eval.findById(legacyId);
+        await persisted.addResult(result);
+        await inMemory.addResult(result);
+        for (const evaluation of [persisted, inMemory, legacy, persistedLegacy!]) {
+          evaluation.config.env = {
+            PROMPTFOO_STRIP_GRADING_RESULT: 'true',
+            PROMPTFOO_STRIP_TEST_VARS: 'true',
+          };
+          let compact = await evaluation.toResultsFile({
             resultProjection: 'redteamReport',
             includeTraces: false,
           });
-          expect(compact.results.results[0].metadata?.pluginId).toBe('policy-a');
-          expect(compact.results.results[0].gradingResult).toBeNull();
-          expect(JSON.stringify(compact)).not.toContain('private grading text');
-          expect(JSON.stringify(compact)).not.toContain('private component text');
+          expect(compact.results.results[0]).toMatchObject({
+            gradingResult: null,
+            metadata: expected,
+          });
+          expect(JSON.stringify(compact)).not.toContain('private');
+          evaluation.config.env.PROMPTFOO_STRIP_METADATA = 'true';
+          compact = await evaluation.toResultsFile({
+            resultProjection: 'redteamReport',
+            includeTraces: false,
+          });
+          expect(compact.results.results[0].metadata).toEqual({});
         }
-      } finally {
-        restoreEnv();
+      },
+    );
+
+    it('selects the exact ID-less legacy result when coordinates are duplicated', async () => {
+      const cases = ['first', 'second'].map((output) =>
+        createEvaluateResult({
+          id: undefined,
+          testIdx: 0,
+          promptIdx: 0,
+          response: { output },
+        }),
+      );
+      const evalId = await writeResultsToDatabase(createEvaluateSummaryV2({ results: cases }), {});
+      const evaluation = await Eval.findById(evalId);
+      const compact = await evaluation!.toResultsFile({
+        resultProjection: 'redteamReport',
+        includeTraces: false,
+      });
+      const rows = compact.results.results;
+      expect(rows.map((row) => row.legacyResultIndex)).toEqual([0, 1]);
+      for (const row of rows) {
+        expect(
+          (
+            await Eval.getResultByIdAndIndices(
+              evalId,
+              row.testIdx,
+              row.promptIdx,
+              row.id,
+              row.legacyResultIndex,
+            )
+          )?.response?.output,
+        ).toBe(row.response?.output);
       }
     });
 

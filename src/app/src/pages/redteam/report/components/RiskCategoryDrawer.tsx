@@ -25,7 +25,7 @@ import {
   getStrategyIdFromTest,
   type TestWithMetadata,
 } from './shared';
-import type { EvaluateResult, GradingResult } from '@promptfoo/types';
+import type { EvaluateResult } from '@promptfoo/types';
 
 interface RiskCategoryDrawerProps {
   open: boolean;
@@ -136,9 +136,6 @@ const RiskCategoryDrawer = ({
 }: RiskCategoryDrawerProps) => {
   const navigate = useNavigate();
   const [suggestionsDialogOpen, setSuggestionsDialogOpen] = React.useState(false);
-  const [currentGradingResult, setCurrentGradingResult] = React.useState<GradingResult | undefined>(
-    undefined,
-  );
   const [activeTab, setActiveTab] = React.useState(0);
   const [detailsDialogOpen, setDetailsDialogOpen] = React.useState(false);
   const [selectedTest, setSelectedTest] = React.useState<TestWithMetadata | null>(null);
@@ -160,7 +157,6 @@ const RiskCategoryDrawer = ({
     setSelectedTest(null);
     setDetailsDialogOpen(false);
     setSuggestionsDialogOpen(false);
-    setCurrentGradingResult(undefined);
     return () => {
       detailsAbortRef.current?.abort();
     };
@@ -185,11 +181,12 @@ const RiskCategoryDrawer = ({
   const loadFullTestDetails = async (
     test: TestWithMetadata,
     detailsKey: string,
-    view: 'details' | 'suggestions' = 'details',
+    dialog: 'details' | 'suggestions' = 'details',
   ) => {
     const compactResult = test.result;
     setSelectedTest(null);
     setDetailsDialogOpen(false);
+    setSuggestionsDialogOpen(false);
     setDetailsLoadError(null);
 
     if (!compactResult) {
@@ -215,9 +212,14 @@ const RiskCategoryDrawer = ({
     setLoadingDetailsKey(detailsKey);
 
     try {
-      const resultIdQuery = compactResult.id
-        ? `?resultId=${encodeURIComponent(compactResult.id)}`
-        : '';
+      const query = new URLSearchParams();
+      if (compactResult.id) {
+        query.set('resultId', compactResult.id);
+      }
+      if (compactResult.legacyResultIndex !== undefined) {
+        query.set('legacyResultIndex', String(compactResult.legacyResultIndex));
+      }
+      const resultIdQuery = query.size ? `?${query}` : '';
       const response = await callApi(
         `/results/${encodeURIComponent(evalId)}/rows/${compactResult.testIdx}/${compactResult.promptIdx}${resultIdQuery}`,
         { cache: 'no-store', signal: abortController.signal },
@@ -230,17 +232,13 @@ const RiskCategoryDrawer = ({
         return;
       }
 
-      if (view === 'suggestions') {
-        setCurrentGradingResult(fullResult.gradingResult ?? undefined);
-        setSuggestionsDialogOpen(true);
-      } else {
-        setSelectedTest({
-          ...test,
-          gradingResult: fullResult.gradingResult ?? undefined,
-          result: fullResult,
-        });
-        setDetailsDialogOpen(true);
-      }
+      setSelectedTest({
+        ...test,
+        gradingResult: fullResult.gradingResult ?? undefined,
+        result: fullResult,
+      });
+      setDetailsDialogOpen(dialog === 'details');
+      setSuggestionsDialogOpen(dialog === 'suggestions');
     } catch (error) {
       if (!isCurrentRequest()) {
         return;
@@ -280,8 +278,9 @@ const RiskCategoryDrawer = ({
         ? `coordinates:${test.result.testIdx}:${test.result.promptIdx}`
         : `${isFailed ? 'failure' : 'pass'}:${index}`;
     const strategyId = getStrategyIdFromTest(test);
-    // Full suggestions may be omitted from the compact grading preview.
-    const hasSuggestions = Boolean(test.gradingResult);
+    const hasSuggestions = test.gradingResult?.componentResults?.some(
+      (result) => (result.suggestions?.length || 0) > 0,
+    );
     const chatMessages = buildChatMessages(test);
     const maxTurns = Math.ceil(chatMessages.length / 2);
     const strategyLabel = strategyId
@@ -498,8 +497,11 @@ const RiskCategoryDrawer = ({
 
         <SuggestionsDialog
           open={suggestionsDialogOpen}
-          onClose={() => setSuggestionsDialogOpen(false)}
-          gradingResult={currentGradingResult}
+          onClose={() => {
+            setSuggestionsDialogOpen(false);
+            setSelectedTest(null);
+          }}
+          gradingResult={selectedTest?.gradingResult}
         />
         <EvalOutputPromptDialog
           open={detailsDialogOpen}

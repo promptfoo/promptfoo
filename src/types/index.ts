@@ -394,6 +394,8 @@ export function isResultFailureReason(value: number): value is ResultFailureReas
 }
 
 export interface EvaluateResult {
+  /** Array position used to load a compact legacy report row. */
+  legacyResultIndex?: number;
   id?: string; // on the new version 2, this is stored per-result
   description?: string; // on the new version 2, this is stored per-result // FIXME(ian): The EvalResult model doesn't pass this through, but that's ok since we can use testCase.description?
   promptIdx: number; // on the new version 2, this is stored per-result

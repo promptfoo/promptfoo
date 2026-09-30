@@ -34,6 +34,7 @@ const mocks = vi.hoisted(() => ({
     exists: vi.fn(),
     findById: vi.fn(),
     getResultByIdAndIndices: vi.fn(),
+    getReportTools: vi.fn(),
     latest: vi.fn(),
   },
   evalQueries: {
@@ -303,6 +304,7 @@ function setupDefaultMocks() {
   mocks.evalModel.exists.mockResolvedValue(false);
   mocks.evalModel.findById.mockResolvedValue(null);
   mocks.evalModel.getResultByIdAndIndices.mockResolvedValue(undefined);
+  mocks.evalModel.getReportTools.mockResolvedValue(undefined);
   mocks.getAvailableProviders.mockReturnValue([]);
   mocks.getEnvBool.mockReturnValue(false);
   mocks.getEnvFloat.mockReturnValue(undefined);
@@ -384,6 +386,12 @@ const smokeCases: SmokeCase[] = [
     method: 'get',
     openApiPath: '/api/results/{id}/rows/{testIdx}/{promptIdx}',
     path: '/api/results/missing-eval/rows/0/0',
+    expectedStatus: 404,
+  },
+  {
+    method: 'get',
+    openApiPath: '/api/results/{id}/tools',
+    path: '/api/results/missing-eval/tools',
     expectedStatus: 404,
   },
   { method: 'get', openApiPath: '/api/prompts', path: '/api/prompts', expectedStatus: 200 },

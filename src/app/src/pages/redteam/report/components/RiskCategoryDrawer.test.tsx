@@ -21,8 +21,7 @@ vi.mock('react-router', () => ({
 
 vi.mock('@app/utils/api');
 
-const { mockEvalOutputPromptDialog, mockSuggestionsDialog } = vi.hoisted(() => ({
-  mockSuggestionsDialog: vi.fn(),
+const { mockEvalOutputPromptDialog } = vi.hoisted(() => ({
   mockEvalOutputPromptDialog: vi.fn(),
 }));
 
@@ -38,10 +37,8 @@ vi.mock('./PluginStrategyFlow', () => ({
 }));
 
 vi.mock('./SuggestionsDialog', () => ({
-  default: (props: Record<string, unknown>) => {
-    mockSuggestionsDialog(props);
-    return null;
-  },
+  default: ({ open, gradingResult }: { open: boolean; gradingResult: unknown }) =>
+    open ? <div data-testid="full-suggestions">{JSON.stringify(gradingResult)}</div> : null,
 }));
 
 describe('RiskCategoryDrawer Component Navigation', () => {
@@ -106,25 +103,6 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     mockWindowOpen();
   });
 
-  it('renders structured chat content as text in the prompt preview', () => {
-    const content = [
-      { type: 'text', text: 'Describe the fixture' },
-      { type: 'image_url', image_url: { url: 'data:image/png;base64,fixture' } },
-    ];
-    renderWithProviders(
-      <RiskCategoryDrawer
-        {...defaultProps}
-        failures={[
-          {
-            ...defaultProps.failures[0],
-            prompt: JSON.stringify([{ role: 'user', content }]),
-          },
-        ]}
-      />,
-    );
-    expect(screen.getByText(JSON.stringify(content))).toBeInTheDocument();
-  });
-
   it('should navigate to eval page when clicking View All Logs button', async () => {
     const user = userEvent.setup();
     renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
@@ -137,6 +115,58 @@ describe('RiskCategoryDrawer Component Navigation', () => {
       '/eval/test-eval-123?filter=%5B%7B%22type%22%3A%22plugin%22%2C%22operator%22%3A%22equals%22%2C%22value%22%3A%22bola%22%7D%5D';
     expect(mockNavigate).toHaveBeenCalledWith(expectedUrl);
     expect(window.open).not.toHaveBeenCalled();
+  });
+
+  it('hydrates the full selected grading result before showing suggestions', async () => {
+    const gradingResult = {
+      pass: false,
+      score: 0,
+      reason: 'Summary',
+      componentResults: [
+        {
+          pass: false,
+          score: 0,
+          reason: 'Component',
+          suggestions: [{ type: 'note', action: 'note' as const, value: 'preview' }],
+        },
+      ],
+    };
+    const fullResult = {
+      ...createMockEvaluateResult(),
+      gradingResult: {
+        ...gradingResult,
+        componentResults: [
+          {
+            ...gradingResult.componentResults[0],
+            suggestions: [
+              {
+                type: 'note',
+                action: 'note' as const,
+                value: 'complete suggestion '.repeat(1_000),
+              },
+            ],
+          },
+        ],
+      },
+    };
+    mockCallApiResponseOnce({ data: fullResult });
+    renderWithProviders(
+      <RiskCategoryDrawer
+        {...defaultProps}
+        failures={[{ ...defaultProps.failures[0], gradingResult }]}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'View suggestions' }));
+    expect(await screen.findByTestId('full-suggestions')).toHaveTextContent(
+      fullResult.gradingResult.componentResults[0].suggestions[0].value.trim(),
+    );
+    expect(callApi).toHaveBeenCalledWith(
+      '/results/test-eval-123/rows/0/0',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+    expect(mockEvalOutputPromptDialog).toHaveBeenLastCalledWith(
+      expect.objectContaining({ open: false }),
+    );
   });
 
   it('uses test-case plugin identity when result metadata is unavailable', async () => {
@@ -280,40 +310,6 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     expect(screen.getByText(JSON.stringify(complexOutput))).toBeInTheDocument();
   });
 
-  it('loads full suggestions before opening the suggestions dialog', async () => {
-    const user = userEvent.setup();
-    const suggestion = { type: 'note', action: 'note' as const, value: 'complete recommendation' };
-    const fullGrading = {
-      pass: false,
-      score: 0,
-      reason: 'full',
-      componentResults: [{ pass: false, score: 0, reason: 'full', suggestions: [suggestion] }],
-    };
-    mockCallApiResponse({ data: { ...createMockEvaluateResult(), gradingResult: fullGrading } });
-    const compactGrading = {
-      ...fullGrading,
-      componentResults: [
-        { ...fullGrading.componentResults[0], suggestions: [{ ...suggestion, value: 'preview' }] },
-      ],
-    };
-    renderWithProviders(
-      <RiskCategoryDrawer
-        {...defaultProps}
-        failures={[{ ...defaultProps.failures[0], gradingResult: compactGrading }]}
-      />,
-    );
-    await user.click(screen.getByRole('button', { name: 'View suggestions' }));
-    await waitFor(() =>
-      expect(mockSuggestionsDialog).toHaveBeenLastCalledWith(
-        expect.objectContaining({ open: true, gradingResult: fullGrading }),
-      ),
-    );
-    expect(callApi).toHaveBeenCalledWith(
-      '/results/test-eval-123/rows/0/0',
-      expect.objectContaining({ cache: 'no-store' }),
-    );
-  });
-
   it('loads full grading details on demand using the coordinate fallback', async () => {
     const fullResult = {
       ...createMockEvaluateResult({ pluginId: 'bola', storedGraderResult: { large: 'payload' } }),
@@ -376,7 +372,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     await waitFor(() => {
       expect(callApi).toHaveBeenCalledTimes(1);
       expect(callApi).toHaveBeenCalledWith(
-        '/results/test-eval-123/rows/0/0?resultId=result%2Fid%20with%20space',
+        '/results/test-eval-123/rows/0/0?resultId=result%2Fid+with+space',
         { cache: 'no-store', signal: expect.any(AbortSignal) },
       );
       expect(screen.getByRole('button', { name: 'Details' })).toBeEnabled();

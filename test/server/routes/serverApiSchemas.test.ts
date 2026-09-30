@@ -34,6 +34,7 @@ vi.mock('../../../src/models/eval', () => ({
     findById: vi.fn(),
     exists: vi.fn(),
     getResultByIdAndIndices: vi.fn(),
+    getReportTools: vi.fn(),
   },
   getEvalSummaries: vi.fn(),
 }));
@@ -187,6 +188,26 @@ describe('inline server API DTO validation', () => {
     expect(mockedGetEvalSummaries).not.toHaveBeenCalled();
   });
 
+  it('loads saved tool definitions without loading evaluation rows', async () => {
+    mockedEval.getReportTools.mockResolvedValue([
+      { type: 'function', function: { name: 'example', parameters: { type: 'object' } } },
+    ]);
+    const response = await api.get('/api/results/eval-1/tools');
+    expect(response.status).toBe(200);
+    expect(response.body.data[0].function.parameters).toEqual({ type: 'object' });
+    expect(mockedEval.findById).not.toHaveBeenCalled();
+    expect(mockedReadResult).not.toHaveBeenCalled();
+  });
+
+  it('returns safe errors for missing or failed tool definition reads', async () => {
+    mockedEval.getReportTools.mockResolvedValue(undefined);
+    expect((await api.get('/api/results/missing/tools')).status).toBe(404);
+    mockedEval.getReportTools.mockRejectedValue(new Error('private database error'));
+    const response = await api.get('/api/results/eval-1/tools');
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: 'Failed to load report tools' });
+  });
+
   it('loads one bounded result row by test and prompt index', async () => {
     mockedEval.exists.mockResolvedValue(true);
     mockedEval.getResultByIdAndIndices.mockResolvedValue({
@@ -203,7 +224,13 @@ describe('inline server API DTO validation', () => {
       promptIdx: 3,
       response: { output: 'Selected output' },
     });
-    expect(mockedEval.getResultByIdAndIndices).toHaveBeenCalledWith('eval-1', 2, 3, 'row-1');
+    expect(mockedEval.getResultByIdAndIndices).toHaveBeenCalledWith(
+      'eval-1',
+      2,
+      3,
+      'row-1',
+      undefined,
+    );
     expect(mockedEval.findById).not.toHaveBeenCalled();
     expect(mockedReadResult).not.toHaveBeenCalled();
   });
