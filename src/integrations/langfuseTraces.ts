@@ -183,6 +183,9 @@ function extractChatChoiceText(choice: unknown): unknown | undefined {
   }
 
   if (isRecord(choice.message)) {
+    if (typeof choice.message.refusal === 'string' && choice.message.refusal) {
+      return choice.message.refusal;
+    }
     const content = choice.message.content;
     if (content != null && getMessageToolCalls(choice.message)) {
       return choice.message;

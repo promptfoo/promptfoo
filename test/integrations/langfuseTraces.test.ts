@@ -537,6 +537,28 @@ describe('langfuseTraces', () => {
       expect(tests[0].providerOutput).toBe('Hi there!');
     });
 
+    it.each([null, 'Earlier assistant text'])(
+      'extracts chat refusal text when message content is %j',
+      async (content) => {
+        const refusal = 'I cannot answer that request.';
+        mockTraceList.mockResolvedValue({
+          data: [
+            {
+              id: 'refusal-trace',
+              timestamp: '2024-01-01T00:00:00Z',
+              input: 'A fixture question',
+              output: { choices: [{ message: { content, refusal } }] },
+            },
+          ],
+          meta: { totalPages: 1 },
+        });
+
+        const tests = await fetchLangfuseTraces('langfuse://traces?limit=1');
+
+        expect(tests[0].providerOutput).toBe(refusal);
+      },
+    );
+
     it('should extract content from top-level chat message arrays', async () => {
       mockTraceList.mockResolvedValueOnce({
         data: [
