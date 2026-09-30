@@ -1,8 +1,7 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { renderVarsInObject } from '../../util/index';
+import { maybeLoadStructuredConfigFromExternalFileWithVars } from '../../util/file';
 import { getNunjucksEngine } from '../../util/templates';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
@@ -398,8 +397,9 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         );
       }
 
-      const schema = maybeLoadFromExternalFile(
-        renderVarsInObject(config.responseSchema, context?.vars),
+      const schema = maybeLoadStructuredConfigFromExternalFileWithVars(
+        config.responseSchema,
+        context?.vars,
       );
 
       body.generationConfig.response_schema = schema;

@@ -90,7 +90,6 @@ export const handleIsValidOpenAiToolsCall = async ({
         tools
           .filter((tool) => tool.type === 'function' && 'function' in tool)
           .map((tool) => tool.function),
-        test.vars,
       );
     });
     return {

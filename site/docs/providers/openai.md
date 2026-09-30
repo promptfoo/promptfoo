@@ -589,6 +589,32 @@ Promptfoo also converts nested Chat-style definitions to the Responses shape. Re
 
 </details>
 
+### Reusing schemas from test variables
+
+A template that refers to an object-valued test variable preserves the object in a tool schema:
+
+```yaml
+providers:
+  - id: openai:chat:gpt-5.4-mini
+    config:
+      tools:
+        - type: function
+          function:
+            name: extract_order
+            parameters: '{{ schema }}'
+tests:
+  - vars:
+      schema:
+        type: object
+        properties:
+          order_id:
+            type: string
+        required: [order_id]
+```
+
+Schema fields also accept `{{ schema | dump | safe }}`. Other filters and ordinary text templates
+keep their Nunjucks behavior. Text inside an inserted schema stays literal.
+
 ### Loading tools from a file {#loading-toolsfunctions-from-a-file}
 
 Set `config.tools` to a file reference. Static files contain an array of tool definitions:

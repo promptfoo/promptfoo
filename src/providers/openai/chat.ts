@@ -6,9 +6,9 @@ import {
   formatRateLimitErrorMessage,
   HttpRateLimitError,
 } from '../../util/fetch/errors';
+import { maybeLoadStructuredConfigFromExternalFileWithVars } from '../../util/file';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import {
-  maybeLoadFromExternalFileWithVars,
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
   renderVarsInObject,
@@ -475,7 +475,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : {}),
       ...(config.functions
         ? {
-            functions: maybeLoadFromExternalFileWithVars(config.functions, context?.vars),
+            functions: maybeLoadStructuredConfigFromExternalFileWithVars(
+              config.functions,
+              context?.vars,
+            ),
           }
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),

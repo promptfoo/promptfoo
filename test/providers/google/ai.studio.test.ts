@@ -1226,6 +1226,65 @@ describe('AIStudioChatProvider', () => {
       );
     });
 
+    it.each(['variable', 'file'])(
+      'preserves literal text in %s response schemas',
+      async (source) => {
+        const actualTemplates = await vi.importActual<typeof import('../../../src/util/templates')>(
+          '../../../src/util/templates',
+        );
+        vi.mocked(templates.getNunjucksEngine).mockImplementation(
+          actualTemplates.getNunjucksEngine,
+        );
+        const schema = {
+          type: 'object',
+          properties: {
+            answer: {
+              type: 'string',
+              description: 'Return {{literal}} exactly',
+              enum: ['{{literal}}'],
+            },
+          },
+          required: ['answer'],
+        };
+        vi.mocked(fs.existsSync).mockReturnValue(true);
+        vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(schema));
+        provider = new AIStudioChatProvider('gemini-pro', {
+          config: {
+            apiKey: 'test-key',
+            responseSchema: source === 'file' ? 'file://schema.json' : '{{ schema | dump | safe }}',
+          },
+        });
+
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: {
+            candidates: [{ content: { parts: [{ text: '{"answer":"{{literal}}"}' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 5,
+              totalTokenCount: 15,
+            },
+          },
+          cached: false,
+        } as any);
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
+          return {
+            contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+            coerced: false,
+            systemInstruction: undefined,
+          };
+        });
+
+        await provider.callGemini('test prompt', {
+          vars: { schema, literal: 'rewritten' },
+        } as any);
+
+        const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1] as any;
+        const body = JSON.parse(calledOptions.body);
+        expect(body.generationConfig.response_schema).toEqual(schema);
+        expect(body.generationConfig.response_mime_type).toBe('application/json');
+      },
+    );
+
     it('should handle safety ratings', async () => {
       const mockResponse = {
         data: {
