@@ -1,0 +1,350 @@
+import { BYTES_PER_SAMPLE, SAMPLE_RATES } from './types';
+
+import type { AudioChunk, AudioFormat } from './types';
+
+// Resample uninterrupted audio together so network chunk boundaries do not reset sample phase.
+function resampleChunks(chunks: AudioChunk[], outputRate: number) {
+  const segments: Array<{
+    data: Buffer[];
+    timestamp: number;
+    sampleRate: number;
+    samples: number;
+  }> = [];
+  for (const chunk of chunks) {
+    const data = audioDataToPcm16(base64ToBuffer(chunk.data), chunk.format);
+    const previous = segments[segments.length - 1];
+    if (
+      previous &&
+      previous.sampleRate === chunk.sampleRate &&
+      Math.abs(
+        previous.timestamp + (previous.samples / previous.sampleRate) * 1000 - chunk.timestamp,
+      ) < 1e-6
+    ) {
+      previous.data.push(data);
+      previous.samples += data.length / 2;
+    } else {
+      segments.push({
+        data: [data],
+        timestamp: chunk.timestamp,
+        sampleRate: chunk.sampleRate,
+        samples: data.length / 2,
+      });
+    }
+  }
+  return segments.map((segment) => ({
+    timestamp: segment.timestamp,
+    data: resamplePcm16(Buffer.concat(segment.data), segment.sampleRate, outputRate),
+  }));
+}
+
+export class AudioBuffer {
+  private chunks: AudioChunk[] = [];
+  private readonly format: AudioFormat;
+  private readonly sampleRate: number;
+
+  constructor(format: AudioFormat = 'pcm16', sampleRate: number = SAMPLE_RATES.OPENAI_REALTIME) {
+    this.format = format;
+    this.sampleRate = sampleRate;
+  }
+
+  append(chunk: AudioChunk): void {
+    this.chunks.push(chunk);
+  }
+
+  getChunks(): AudioChunk[] {
+    return [...this.chunks];
+  }
+
+  getChunkCount(): number {
+    return this.chunks.length;
+  }
+
+  isEmpty(): boolean {
+    return this.chunks.length === 0;
+  }
+
+  getDuration(): number {
+    return calculateDuration(this.toPcm16Buffer().length, this.sampleRate, 'pcm16');
+  }
+
+  toBuffer(): Buffer {
+    if (this.chunks.length === 0) {
+      return Buffer.alloc(0);
+    }
+
+    const buffers = this.chunks.map((chunk) => base64ToBuffer(chunk.data));
+    return Buffer.concat(buffers);
+  }
+
+  toWav(): Buffer {
+    return pcm16ToWav(this.toPcm16Buffer(), this.sampleRate);
+  }
+
+  getStartTime(): number | undefined {
+    return this.chunks[0]?.timestamp;
+  }
+
+  getEndTime(): number | undefined {
+    if (this.chunks.length === 0) {
+      return undefined;
+    }
+    const lastChunk = this.chunks[this.chunks.length - 1];
+    return lastChunk.timestamp + (lastChunk.duration || 0);
+  }
+
+  getSize(): number {
+    return this.chunks.reduce((sum, chunk) => {
+      return sum + base64ToBuffer(chunk.data).length;
+    }, 0);
+  }
+
+  clear(): void {
+    this.chunks = [];
+  }
+
+  getFormat(): AudioFormat {
+    return this.format;
+  }
+
+  getSampleRate(): number {
+    return this.sampleRate;
+  }
+
+  private toPcm16Buffer(): Buffer {
+    return Buffer.concat(
+      resampleChunks(this.chunks, this.sampleRate).map((segment) => segment.data),
+    );
+  }
+}
+
+export function pcm16ToWav(
+  pcmData: Buffer,
+  sampleRate: number = SAMPLE_RATES.OPENAI_REALTIME,
+  numChannels: number = 1,
+): Buffer {
+  const bitsPerSample = 16;
+  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+  const blockAlign = (numChannels * bitsPerSample) / 8;
+  const dataSize = pcmData.length;
+  const fileSize = 36 + dataSize;
+
+  // Create WAV header (44 bytes)
+  const header = Buffer.alloc(44);
+  let offset = 0;
+
+  // RIFF header
+  header.write('RIFF', offset);
+  offset += 4;
+  header.writeUInt32LE(fileSize, offset);
+  offset += 4;
+  header.write('WAVE', offset);
+  offset += 4;
+
+  // fmt chunk
+  header.write('fmt ', offset);
+  offset += 4;
+  header.writeUInt32LE(16, offset); // chunk size
+  offset += 4;
+  header.writeUInt16LE(1, offset); // audio format (PCM)
+  offset += 2;
+  header.writeUInt16LE(numChannels, offset);
+  offset += 2;
+  header.writeUInt32LE(sampleRate, offset);
+  offset += 4;
+  header.writeUInt32LE(byteRate, offset);
+  offset += 4;
+  header.writeUInt16LE(blockAlign, offset);
+  offset += 2;
+  header.writeUInt16LE(bitsPerSample, offset);
+  offset += 2;
+
+  // data chunk
+  header.write('data', offset);
+  offset += 4;
+  header.writeUInt32LE(dataSize, offset);
+
+  return Buffer.concat([header, pcmData]);
+}
+
+export function base64ToBuffer(base64: string): Buffer {
+  return Buffer.from(base64, 'base64');
+}
+
+export function bufferToBase64(buffer: Buffer): string {
+  return buffer.toString('base64');
+}
+
+function clampInt16(value: number): number {
+  return Math.max(-32768, Math.min(32767, value));
+}
+
+function decodeMuLawSample(value: number): number {
+  const byte = ~value & 0xff;
+  const sign = byte & 0x80;
+  const exponent = (byte >> 4) & 0x07;
+  const mantissa = byte & 0x0f;
+  let sample = ((mantissa << 3) + 0x84) << exponent;
+  sample -= 0x84;
+  return clampInt16(sign ? -sample : sample);
+}
+
+function decodeALawSample(value: number): number {
+  const byte = value ^ 0x55;
+  const sign = byte & 0x80;
+  const exponent = (byte >> 4) & 0x07;
+  const mantissa = byte & 0x0f;
+  const sample = exponent === 0 ? (mantissa << 4) + 8 : ((mantissa << 4) + 0x108) << (exponent - 1);
+  return clampInt16(sign ? sample : -sample);
+}
+
+export function audioDataToPcm16(data: Buffer, format: AudioFormat): Buffer {
+  if (format === 'pcm16') {
+    return data;
+  }
+
+  const decoded = Buffer.alloc(data.length * 2);
+  for (let i = 0; i < data.length; i++) {
+    const encodedSample = data[i] ?? 0;
+    const sample =
+      format === 'g711_ulaw' ? decodeMuLawSample(encodedSample) : decodeALawSample(encodedSample);
+    decoded.writeInt16LE(sample, i * 2);
+  }
+  return decoded;
+}
+
+export function resamplePcm16(data: Buffer, inputRate: number, outputRate: number): Buffer {
+  if (inputRate === outputRate || data.length === 0) {
+    return data;
+  }
+
+  const ratio = outputRate / inputRate;
+  const inputSamples = Math.floor(data.length / 2);
+  const outputSamples = Math.floor(inputSamples * ratio);
+  const output = Buffer.alloc(outputSamples * 2);
+
+  for (let i = 0; i < outputSamples; i++) {
+    const sourcePosition = i / ratio;
+    const lowerIndex = Math.floor(sourcePosition);
+    const upperIndex = Math.min(lowerIndex + 1, inputSamples - 1);
+    const fraction = sourcePosition - lowerIndex;
+    const lower = data.readInt16LE(lowerIndex * 2);
+    const upper = data.readInt16LE(upperIndex * 2);
+    const sample = Math.round(lower + (upper - lower) * fraction);
+    output.writeInt16LE(clampInt16(sample), i * 2);
+  }
+
+  return output;
+}
+
+export function calculateDuration(bytes: number, sampleRate: number, format: AudioFormat): number {
+  const bytesPerSample = BYTES_PER_SAMPLE[format];
+  const samples = bytes / bytesPerSample;
+  const seconds = samples / sampleRate;
+  return seconds * 1000;
+}
+
+function placeStereoChunks(
+  stereoBuffer: Buffer,
+  chunks: AudioChunk[],
+  startTime: number,
+  totalSamples: number,
+  sampleRate: number,
+  channelOffset: number,
+): void {
+  const bytesPerSample = 2; // PCM16 after format-aware decoding
+  const bytesPerFrame = 4; // Stereo: 2 bytes x 2 channels
+
+  for (const segment of resampleChunks(chunks, sampleRate)) {
+    const pcmData = segment.data;
+    const startPosition = Math.round(((segment.timestamp - startTime) / 1000) * sampleRate);
+    const numSamples = pcmData.length / bytesPerSample;
+
+    for (let i = 0; i < numSamples; i++) {
+      const sampleIndex = startPosition + i;
+      if (
+        sampleIndex >= 0 &&
+        sampleIndex < totalSamples &&
+        i * bytesPerSample + 1 < pcmData.length
+      ) {
+        const sample = pcmData.readInt16LE(i * bytesPerSample);
+        stereoBuffer.writeInt16LE(sample, sampleIndex * bytesPerFrame + channelOffset);
+      }
+    }
+  }
+}
+
+/**
+ * Place the agent on the left and caller on the right using sample timestamps,
+ * so network delivery timing does not change the recording's alignment.
+ */
+export function createStereoWav(agentBuffer: AudioBuffer, userBuffer: AudioBuffer): Buffer {
+  const sampleRate = Math.max(agentBuffer.getSampleRate(), userBuffer.getSampleRate());
+  const bytesPerSample = 2; // PCM16
+  const bytesPerFrame = 4; // Stereo: 2 bytes × 2 channels
+
+  // Get all chunks with their timestamps
+  const agentChunks = agentBuffer.getChunks();
+  const userChunks = userBuffer.getChunks();
+
+  if (agentChunks.length === 0 && userChunks.length === 0) {
+    return pcm16ToWav(Buffer.alloc(0), sampleRate, 2);
+  }
+
+  // Collect all valid timestamps to find timeline boundaries
+  const allChunks = [...agentChunks, ...userChunks].filter((c) => c.timestamp !== undefined);
+
+  if (allChunks.length === 0) {
+    // No valid timestamps - fall back to simple sequential placement
+    const agentPcm = Buffer.concat(
+      agentChunks.map((chunk) =>
+        resamplePcm16(
+          audioDataToPcm16(base64ToBuffer(chunk.data), chunk.format),
+          chunk.sampleRate,
+          sampleRate,
+        ),
+      ),
+    );
+    const userPcm = Buffer.concat(
+      userChunks.map((chunk) =>
+        resamplePcm16(
+          audioDataToPcm16(base64ToBuffer(chunk.data), chunk.format),
+          chunk.sampleRate,
+          sampleRate,
+        ),
+      ),
+    );
+    const maxSamples = Math.max(agentPcm.length, userPcm.length) / bytesPerSample;
+    const stereoBuffer = Buffer.alloc(Math.ceil(maxSamples) * bytesPerFrame);
+
+    for (let i = 0; i < maxSamples; i++) {
+      const agentSample =
+        i * bytesPerSample < agentPcm.length ? agentPcm.readInt16LE(i * bytesPerSample) : 0;
+      const userSample =
+        i * bytesPerSample < userPcm.length ? userPcm.readInt16LE(i * bytesPerSample) : 0;
+      stereoBuffer.writeInt16LE(agentSample, i * bytesPerFrame);
+      stereoBuffer.writeInt16LE(userSample, i * bytesPerFrame + 2);
+    }
+
+    return pcm16ToWav(stereoBuffer, sampleRate, 2);
+  }
+
+  // Find timeline boundaries from chunk timestamps
+  const startTime = Math.min(...allChunks.map((c) => c.timestamp!));
+  let endTime = startTime;
+  for (const chunk of allChunks) {
+    const chunkEnd = chunk.timestamp! + (chunk.duration || 0);
+    endTime = Math.max(endTime, chunkEnd);
+  }
+
+  // Add 500ms padding at the end
+  const durationMs = endTime - startTime + 500;
+  const totalSamples = Math.ceil((durationMs / 1000) * sampleRate);
+
+  // Allocate stereo buffer (initialized to silence)
+  const stereoBuffer = Buffer.alloc(totalSamples * bytesPerFrame);
+
+  placeStereoChunks(stereoBuffer, agentChunks, startTime, totalSamples, sampleRate, 0);
+  placeStereoChunks(stereoBuffer, userChunks, startTime, totalSamples, sampleRate, 2);
+
+  return pcm16ToWav(stereoBuffer, sampleRate, 2);
+}

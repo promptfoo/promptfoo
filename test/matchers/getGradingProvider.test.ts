@@ -145,52 +145,58 @@ describe('getGradingProvider', () => {
       expect(result).toBe(azureProvider);
     });
 
-    it('should skip defaultTest.provider when it is promptfoo:simulated-user', async () => {
-      const defaultProvider = createMockProvider({ id: 'default-provider' });
+    it.each(['promptfoo:simulated-user', 'promptfoo:simulated-voice-user', 'simulated-voice-user'])(
+      'should skip defaultTest.provider when it is %s',
+      async (id) => {
+        const defaultProvider = createMockProvider({ id: 'default-provider' });
 
-      (cliState as any).config = {
-        defaultTest: {
-          provider: {
-            id: 'promptfoo:simulated-user',
-            config: {
-              maxTurns: 3,
+        (cliState as any).config = {
+          defaultTest: {
+            provider: {
+              id,
+              config: {
+                maxTurns: 3,
+              },
             },
           },
-        },
-      };
+        };
 
-      const result = await getGradingProvider('text', undefined, defaultProvider);
+        const result = await getGradingProvider('text', undefined, defaultProvider);
 
-      expect(loadApiProvider).not.toHaveBeenCalled();
-      expect(result).toBe(defaultProvider);
-    });
+        expect(loadApiProvider).not.toHaveBeenCalled();
+        expect(result).toBe(defaultProvider);
+      },
+    );
 
-    it('should fall back to defaultTest.options.provider when defaultTest.provider is promptfoo:simulated-user', async () => {
-      const azureProvider = createMockProvider({ id: 'azureopenai:chat:gpt-4' });
+    it.each(['promptfoo:simulated-user', 'promptfoo:simulated-voice-user'])(
+      'should use the configured grader when defaultTest.provider is %s',
+      async (id) => {
+        const azureProvider = createMockProvider({ id: 'azureopenai:chat:gpt-4' });
 
-      (cliState as any).config = {
-        defaultTest: {
-          provider: {
-            id: 'promptfoo:simulated-user',
-            config: {
-              maxTurns: 3,
+        (cliState as any).config = {
+          defaultTest: {
+            provider: {
+              id,
+              config: {
+                maxTurns: 3,
+              },
+            },
+            options: {
+              provider: 'azureopenai:chat:gpt-4',
             },
           },
-          options: {
-            provider: 'azureopenai:chat:gpt-4',
-          },
-        },
-      };
+        };
 
-      vi.mocked(loadApiProvider).mockResolvedValue(azureProvider);
+        vi.mocked(loadApiProvider).mockResolvedValue(azureProvider);
 
-      const result = await getGradingProvider('text', undefined, null);
+        const result = await getGradingProvider('text', undefined, null);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('azureopenai:chat:gpt-4', {
-        basePath: undefined,
-      });
-      expect(result).toBe(azureProvider);
-    });
+        expect(loadApiProvider).toHaveBeenCalledWith('azureopenai:chat:gpt-4', {
+          basePath: undefined,
+        });
+        expect(result).toBe(azureProvider);
+      },
+    );
 
     it('should use defaultTest.options.provider.text when specified', async () => {
       const azureProvider = createMockProvider({ id: 'azureopenai:chat:gpt-4' });
@@ -214,6 +220,44 @@ describe('getGradingProvider', () => {
       });
       expect(result).toBe(azureProvider);
     });
+
+    it.each(['provider', 'options'] as const)(
+      'selects the requested modality before excluding simulated callers from %s',
+      async (source) => {
+        const providers = {
+          text: 'promptfoo:simulated-voice-user',
+          embedding: 'openai:embedding',
+          classification: 'huggingface:classification',
+        };
+        (cliState as any).config = {
+          defaultTest:
+            source === 'provider' ? { provider: providers } : { options: { provider: providers } },
+        };
+        vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+        for (const type of ['embedding', 'classification'] as const) {
+          expect(await getGradingProvider(type, undefined, null)).toBe(mockProvider);
+          expect(loadApiProvider).toHaveBeenLastCalledWith(providers[type], {
+            basePath: undefined,
+          });
+        }
+        vi.mocked(loadApiProvider).mockClear();
+        expect(await getGradingProvider('text', undefined, mockProvider)).toBe(mockProvider);
+        expect(loadApiProvider).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['provider', 'options'] as const)(
+      'uses the embedding default when %s configures only a text provider',
+      async (source) => {
+        const provider = { text: 'promptfoo:simulated-voice-user' };
+        (cliState as any).config = {
+          defaultTest: source === 'provider' ? { provider } : { options: { provider } },
+        };
+        expect(await getGradingProvider('embedding', undefined, mockProvider)).toBe(mockProvider);
+        expect(loadApiProvider).not.toHaveBeenCalled();
+      },
+    );
 
     it('should prefer defaultTest.provider over defaultTest.options.provider', async () => {
       const azureProvider = createMockProvider({ id: 'azureopenai:chat:gpt-4' });

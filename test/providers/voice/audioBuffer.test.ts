@@ -1,0 +1,465 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  AudioBuffer,
+  audioDataToPcm16,
+  base64ToBuffer,
+  bufferToBase64,
+  calculateDuration,
+  createStereoWav,
+  pcm16ToWav,
+  resamplePcm16,
+} from '../../../src/providers/voice/audioBuffer';
+
+import type { AudioChunk } from '../../../src/providers/voice/types';
+
+describe('AudioBuffer', () => {
+  it('resamples continuous chunks without losing phase at chunk boundaries', () => {
+    const agent = new AudioBuffer('pcm16', 16000);
+    const user = new AudioBuffer('pcm16', 16000);
+    const pcm = Buffer.alloc(3072);
+    for (let i = 0; i < 1536; i++) {
+      pcm.writeInt16LE(i + 100, i * 2);
+    }
+    for (let i = 0; i < 3; i++) {
+      agent.append({
+        data: pcm.subarray(i * 1024, (i + 1) * 1024).toString('base64'),
+        timestamp: ((i * 512) / 24000) * 1000,
+        duration: (512 / 24000) * 1000,
+        sampleRate: 24000,
+        format: 'pcm16',
+      });
+    }
+    const expected = resamplePcm16(pcm, 24000, 16000);
+    expect(agent.toWav().subarray(44)).toEqual(expected);
+    const stereo = createStereoWav(agent, user);
+    for (let i = 0; i < 1024; i++) {
+      expect(stereo.readInt16LE(44 + i * 4)).toBe(expected.readInt16LE(i * 2));
+    }
+  });
+
+  let audioBuffer: AudioBuffer;
+
+  beforeEach(() => {
+    audioBuffer = new AudioBuffer('pcm16', 24000);
+  });
+
+  describe('constructor', () => {
+    it('should create an empty buffer with default settings', () => {
+      const buffer = new AudioBuffer();
+      expect(buffer.isEmpty()).toBe(true);
+      expect(buffer.getFormat()).toBe('pcm16');
+      expect(buffer.getSampleRate()).toBe(24000);
+    });
+
+    it('should create a buffer with custom settings', () => {
+      const buffer = new AudioBuffer('g711_ulaw', 8000);
+      expect(buffer.getFormat()).toBe('g711_ulaw');
+      expect(buffer.getSampleRate()).toBe(8000);
+    });
+  });
+
+  describe('append and getChunks', () => {
+    it('should append chunks and retrieve them', () => {
+      const chunk1: AudioChunk = {
+        data: bufferToBase64(Buffer.from([0, 1, 2, 3])),
+        timestamp: 0,
+        format: 'pcm16',
+        sampleRate: 24000,
+      };
+      const chunk2: AudioChunk = {
+        data: bufferToBase64(Buffer.from([4, 5, 6, 7])),
+        timestamp: 100,
+        format: 'pcm16',
+        sampleRate: 24000,
+      };
+
+      audioBuffer.append(chunk1);
+      audioBuffer.append(chunk2);
+
+      const chunks = audioBuffer.getChunks();
+      expect(chunks).toHaveLength(2);
+      expect(chunks[0]).toEqual(chunk1);
+      expect(chunks[1]).toEqual(chunk2);
+    });
+
+    it('should return a copy of chunks (immutable)', () => {
+      const chunk: AudioChunk = {
+        data: bufferToBase64(Buffer.from([0, 1])),
+        timestamp: 0,
+        format: 'pcm16',
+        sampleRate: 24000,
+      };
+
+      audioBuffer.append(chunk);
+      const chunks1 = audioBuffer.getChunks();
+      const chunks2 = audioBuffer.getChunks();
+
+      expect(chunks1).not.toBe(chunks2);
+      expect(chunks1).toEqual(chunks2);
+    });
+  });
+
+  describe('isEmpty and getChunkCount', () => {
+    it('should report empty buffer correctly', () => {
+      expect(audioBuffer.isEmpty()).toBe(true);
+      expect(audioBuffer.getChunkCount()).toBe(0);
+    });
+
+    it('should report non-empty buffer correctly', () => {
+      audioBuffer.append({
+        data: bufferToBase64(Buffer.from([0, 1])),
+        timestamp: 0,
+        format: 'pcm16',
+        sampleRate: 24000,
+      });
+
+      expect(audioBuffer.isEmpty()).toBe(false);
+      expect(audioBuffer.getChunkCount()).toBe(1);
+    });
+  });
+
+  describe('getDuration', () => {
+    it('should return 0 for empty buffer', () => {
+      expect(audioBuffer.getDuration()).toBe(0);
+    });
+
+    it('should calculate duration correctly for PCM16', () => {
+      // 24000 samples/sec, 2 bytes/sample = 48000 bytes/sec
+      // 4800 bytes = 100ms
+      const data = Buffer.alloc(4800);
+      audioBuffer.append({
+        data: bufferToBase64(data),
+        timestamp: 0,
+        format: 'pcm16',
+        sampleRate: 24000,
+      });
+
+      expect(audioBuffer.getDuration()).toBe(100);
+    });
+  });
+
+  describe('toBuffer', () => {
+    it('should return empty buffer when no chunks', () => {
+      const result = audioBuffer.toBuffer();
+      expect(result.length).toBe(0);
+    });
+
+    it('should concatenate all chunks', () => {
+      const data1 = Buffer.from([0, 1, 2, 3]);
+      const data2 = Buffer.from([4, 5, 6, 7]);
+
+      audioBuffer.append({
+        data: bufferToBase64(data1),
+        timestamp: 0,
+        format: 'pcm16',
+        sampleRate: 24000,
+      });
+      audioBuffer.append({
+        data: bufferToBase64(data2),
+        timestamp: 100,
+        format: 'pcm16',
+        sampleRate: 24000,
+      });
+
+      const result = audioBuffer.toBuffer();
+      expect(result).toEqual(Buffer.from([0, 1, 2, 3, 4, 5, 6, 7]));
+    });
+  });
+
+  describe('toWav', () => {
+    it('should create valid WAV header', () => {
+      const pcmData = Buffer.alloc(100);
+      audioBuffer.append({
+        data: bufferToBase64(pcmData),
+        timestamp: 0,
+        format: 'pcm16',
+        sampleRate: 24000,
+      });
+
+      const wav = audioBuffer.toWav();
+
+      // Check WAV header
+      expect(wav.slice(0, 4).toString()).toBe('RIFF');
+      expect(wav.slice(8, 12).toString()).toBe('WAVE');
+      expect(wav.slice(12, 16).toString()).toBe('fmt ');
+      expect(wav.slice(36, 40).toString()).toBe('data');
+
+      // Header is 44 bytes + data
+      expect(wav.length).toBe(44 + pcmData.length);
+    });
+
+    it('should decode G.711 audio before creating WAV output', () => {
+      const g711Buffer = new AudioBuffer('g711_ulaw', 8000);
+      const encoded = Buffer.from([0xff, 0x7f, 0x00, 0x80]);
+      g711Buffer.append({
+        data: bufferToBase64(encoded),
+        timestamp: 0,
+        format: 'g711_ulaw',
+        sampleRate: 8000,
+      });
+
+      const wav = g711Buffer.toWav();
+
+      expect(wav.slice(0, 4).toString()).toBe('RIFF');
+      expect(wav.readUInt16LE(20)).toBe(1);
+      expect(wav.readUInt16LE(34)).toBe(16);
+      expect(wav.readUInt32LE(40)).toBe(encoded.length * 2);
+      expect(wav.length).toBe(44 + encoded.length * 2);
+    });
+
+    it('resamples emitted chunks to the recording sample rate', () => {
+      const sixteenKhzBuffer = new AudioBuffer('pcm16', 16000);
+      sixteenKhzBuffer.append({
+        data: bufferToBase64(Buffer.alloc(48000)),
+        timestamp: 0,
+        format: 'pcm16',
+        sampleRate: 24000,
+      });
+
+      const wav = sixteenKhzBuffer.toWav();
+
+      expect(wav.readUInt32LE(24)).toBe(16000);
+      expect(wav.readUInt32LE(40)).toBe(32000);
+      expect(sixteenKhzBuffer.getDuration()).toBe(1000);
+    });
+  });
+
+  describe('getStartTime and getEndTime', () => {
+    it('should return undefined for empty buffer', () => {
+      expect(audioBuffer.getStartTime()).toBeUndefined();
+      expect(audioBuffer.getEndTime()).toBeUndefined();
+    });
+
+    it('should return correct times', () => {
+      audioBuffer.append({
+        data: bufferToBase64(Buffer.from([0, 1])),
+        timestamp: 100,
+        duration: 50,
+        format: 'pcm16',
+        sampleRate: 24000,
+      });
+      audioBuffer.append({
+        data: bufferToBase64(Buffer.from([2, 3])),
+        timestamp: 200,
+        duration: 50,
+        format: 'pcm16',
+        sampleRate: 24000,
+      });
+
+      expect(audioBuffer.getStartTime()).toBe(100);
+      expect(audioBuffer.getEndTime()).toBe(250);
+    });
+  });
+
+  describe('clear', () => {
+    it('should clear all chunks', () => {
+      audioBuffer.append({
+        data: bufferToBase64(Buffer.from([0, 1])),
+        timestamp: 0,
+        format: 'pcm16',
+        sampleRate: 24000,
+      });
+
+      expect(audioBuffer.isEmpty()).toBe(false);
+
+      audioBuffer.clear();
+
+      expect(audioBuffer.isEmpty()).toBe(true);
+      expect(audioBuffer.getChunkCount()).toBe(0);
+    });
+  });
+});
+
+describe('pcm16ToWav', () => {
+  it('should create valid WAV file structure', () => {
+    const pcmData = Buffer.alloc(1000);
+    const wav = pcm16ToWav(pcmData, 24000);
+
+    // RIFF header
+    expect(wav.slice(0, 4).toString()).toBe('RIFF');
+    expect(wav.readUInt32LE(4)).toBe(36 + pcmData.length); // file size
+    expect(wav.slice(8, 12).toString()).toBe('WAVE');
+
+    // fmt chunk
+    expect(wav.slice(12, 16).toString()).toBe('fmt ');
+    expect(wav.readUInt32LE(16)).toBe(16); // chunk size
+    expect(wav.readUInt16LE(20)).toBe(1); // audio format (PCM)
+    expect(wav.readUInt16LE(22)).toBe(1); // channels
+    expect(wav.readUInt32LE(24)).toBe(24000); // sample rate
+    expect(wav.readUInt32LE(28)).toBe(48000); // byte rate
+    expect(wav.readUInt16LE(32)).toBe(2); // block align
+    expect(wav.readUInt16LE(34)).toBe(16); // bits per sample
+
+    // data chunk
+    expect(wav.slice(36, 40).toString()).toBe('data');
+    expect(wav.readUInt32LE(40)).toBe(pcmData.length);
+  });
+
+  it('should handle different sample rates', () => {
+    const pcmData = Buffer.alloc(100);
+    const wav = pcm16ToWav(pcmData, 48000);
+
+    expect(wav.readUInt32LE(24)).toBe(48000); // sample rate
+    expect(wav.readUInt32LE(28)).toBe(96000); // byte rate
+  });
+});
+
+describe('base64ToBuffer and bufferToBase64', () => {
+  it('should convert buffer to base64 and back', () => {
+    const original = Buffer.from([0, 1, 2, 255, 128, 64]);
+    const base64 = bufferToBase64(original);
+    const restored = base64ToBuffer(base64);
+
+    expect(restored).toEqual(original);
+  });
+
+  it('should handle empty buffer', () => {
+    const original = Buffer.alloc(0);
+    const base64 = bufferToBase64(original);
+    const restored = base64ToBuffer(base64);
+
+    expect(restored).toEqual(original);
+  });
+});
+
+describe('calculateDuration', () => {
+  it('should calculate duration for pcm16', () => {
+    // 24000 Hz, 2 bytes/sample
+    // 48000 bytes = 1 second = 1000ms
+    expect(calculateDuration(48000, 24000, 'pcm16')).toBe(1000);
+    expect(calculateDuration(4800, 24000, 'pcm16')).toBe(100);
+  });
+
+  it('should calculate duration for g711', () => {
+    // 8000 Hz, 1 byte/sample
+    // 8000 bytes = 1 second = 1000ms
+    expect(calculateDuration(8000, 8000, 'g711_ulaw')).toBe(1000);
+    expect(calculateDuration(800, 8000, 'g711_alaw')).toBe(100);
+  });
+});
+
+describe('audioDataToPcm16', () => {
+  it('passes PCM16 data through unchanged', () => {
+    const pcm = Buffer.from([0, 1, 2, 3]);
+    expect(audioDataToPcm16(pcm, 'pcm16')).toEqual(pcm);
+  });
+
+  it('decodes G.711 mu-law and A-law bytes into PCM16 samples', () => {
+    expect(audioDataToPcm16(Buffer.from([0xff, 0x7f]), 'g711_ulaw')).toHaveLength(4);
+    expect(audioDataToPcm16(Buffer.from([0xd5, 0x55]), 'g711_alaw')).toHaveLength(4);
+  });
+});
+
+describe('resamplePcm16', () => {
+  it('resamples PCM data while preserving duration', () => {
+    const input = Buffer.alloc(48000);
+    for (let i = 0; i < input.length; i += 2) {
+      input.writeInt16LE(1000, i);
+    }
+
+    const output = resamplePcm16(input, 24000, 16000);
+
+    expect(output).toHaveLength(32000);
+    expect(output.readInt16LE(0)).toBe(1000);
+  });
+});
+
+describe('createStereoWav', () => {
+  it('decodes G.711 chunks before placing them in a stereo WAV', () => {
+    const agent = new AudioBuffer('g711_ulaw', 8000);
+    const user = new AudioBuffer('g711_alaw', 8000);
+
+    agent.append({
+      data: bufferToBase64(Buffer.from([0xff, 0x7f])),
+      duration: 250,
+      format: 'g711_ulaw',
+      sampleRate: 8000,
+      timestamp: 0,
+    });
+    user.append({
+      data: bufferToBase64(Buffer.from([0xd5, 0x55])),
+      duration: 250,
+      format: 'g711_alaw',
+      sampleRate: 8000,
+      timestamp: 0,
+    });
+
+    const wav = createStereoWav(agent, user);
+
+    expect(wav.slice(0, 4).toString()).toBe('RIFF');
+    expect(wav.readUInt16LE(22)).toBe(2);
+    expect(wav.readUInt16LE(34)).toBe(16);
+    expect(wav.readUInt32LE(40)).toBeGreaterThan(0);
+  });
+
+  it('resamples tracks with different rates before stereo placement', () => {
+    const agent = new AudioBuffer('pcm16', 24000);
+    const user = new AudioBuffer('pcm16', 8000);
+    const agentData = Buffer.alloc(48000);
+    const userData = Buffer.alloc(16000);
+    for (let i = 0; i < agentData.length; i += 2) {
+      agentData.writeInt16LE(1000, i);
+    }
+    for (let i = 0; i < userData.length; i += 2) {
+      userData.writeInt16LE(2000, i);
+    }
+    agent.append({
+      data: bufferToBase64(agentData),
+      duration: 1000,
+      format: 'pcm16',
+      sampleRate: 24000,
+      timestamp: 0,
+    });
+    user.append({
+      data: bufferToBase64(userData),
+      duration: 1000,
+      format: 'pcm16',
+      sampleRate: 8000,
+      timestamp: 0,
+    });
+
+    const wav = createStereoWav(agent, user);
+
+    expect(wav.readUInt32LE(24)).toBe(24000);
+    expect(wav.readInt16LE(44 + 16000 * 4 + 2)).toBe(2000);
+  });
+});
+
+describe('streaming recording fidelity', () => {
+  it('keeps every sample at fractional-millisecond chunk boundaries', () => {
+    const agent = new AudioBuffer('pcm16', 24000);
+    const user = new AudioBuffer('pcm16', 24000);
+    const duration = calculateDuration(1024, 24000, 'pcm16');
+    for (let i = 0; i < 3; i++) {
+      const data = Buffer.alloc(1024);
+      for (let sample = 0; sample < 512; sample++) {
+        data.writeInt16LE(i + 1, sample * 2);
+      }
+      agent.append({
+        data: data.toString('base64'),
+        timestamp: i * duration,
+        duration,
+        format: 'pcm16',
+        sampleRate: 24000,
+      });
+    }
+    const wav = createStereoWav(agent, user);
+    for (let sample = 0; sample < 1536; sample++) {
+      expect(wav.readInt16LE(44 + sample * 4)).toBe(Math.floor(sample / 512) + 1);
+    }
+  });
+
+  it('uses the requested recording rate for higher-rate transport chunks', () => {
+    const agent = new AudioBuffer('pcm16', 16000);
+    const user = new AudioBuffer('pcm16', 16000);
+    agent.append({
+      data: Buffer.alloc(4800).toString('base64'),
+      timestamp: 0,
+      duration: 100,
+      format: 'pcm16',
+      sampleRate: 24000,
+    });
+    expect(createStereoWav(agent, user).readUInt32LE(24)).toBe(16000);
+    expect(agent.toWav().readUInt32LE(24)).toBe(16000);
+  });
+});

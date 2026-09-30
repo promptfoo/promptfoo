@@ -479,6 +479,24 @@ describe('Provider Registry', () => {
       expect(result.isRefusal).toBe(false);
     });
 
+    it('should handle the simulated voice user provider correctly', async () => {
+      const factory = providerMap.find((f) => f.test('promptfoo:simulated-voice-user'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        'promptfoo:simulated-voice-user',
+        mockProviderOptions,
+        mockContext,
+      );
+      expect(provider.id()).toBe(mockProviderOptions.id);
+      expect(provider.toString()).toBe('[SimulatedVoiceUser test-provider]');
+    });
+
+    it('uses the registered ID for the string-form simulated voice provider', async () => {
+      const provider = await registry.create('promptfoo:simulated-voice-user');
+      expect(provider.id()).toBe('promptfoo:simulated-voice-user');
+    });
+
     describe('OpenAI endpoint defaults', () => {
       it.each([
         ['chat', OpenAiChatCompletionProvider],

@@ -1,0 +1,941 @@
+import { ProxyAgent } from 'proxy-agent';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
+
+import type { VoiceProviderConfig } from '../../../src/providers/voice/types';
+
+// Use vi.hoisted to define the mock class before the vi.mock() hoisting
+// Avoid importing EventEmitter since that also gets hoisted
+const { MockWebSocket, mockWsInstances } = vi.hoisted(() => {
+  const instances: any[] = [];
+
+  class MockWS {
+    static OPEN = 1;
+    static CLOSED = 3;
+    readyState = 1; // OPEN
+    close = vi.fn();
+    send = vi.fn();
+    ping = vi.fn();
+    pong = vi.fn();
+
+    // Simple event emitter implementation
+    private listeners: Map<string, Array<(...args: any[]) => void>> = new Map();
+
+    constructor(
+      public url: string,
+      public options?: { agent?: ProxyAgent },
+    ) {
+      instances.push(this);
+    }
+
+    on(event: string, callback: (...args: any[]) => void) {
+      if (!this.listeners.has(event)) {
+        this.listeners.set(event, []);
+      }
+      this.listeners.get(event)!.push(callback);
+      return this;
+    }
+
+    emit(event: string, ...args: any[]) {
+      const callbacks = this.listeners.get(event);
+      if (callbacks) {
+        callbacks.forEach((cb) => cb(...args));
+      }
+      return true;
+    }
+
+    simulateOpen() {
+      this.emit('open');
+    }
+
+    simulateMessage(data: string | Buffer) {
+      this.emit('message', data);
+    }
+
+    simulateError(error: Error) {
+      this.emit('error', error);
+    }
+
+    simulateClose(code: number, reason: string) {
+      this.readyState = 3; // CLOSED
+      this.emit('close', code, Buffer.from(reason));
+    }
+  }
+
+  return { MockWebSocket: MockWS, mockWsInstances: instances };
+});
+
+vi.mock('ws', () => {
+  return {
+    default: MockWebSocket,
+  };
+});
+
+// Import after mocking
+import { OpenAIRealtimeConnection } from '../../../src/providers/voice/connections/openaiRealtime';
+
+describe('OpenAIRealtimeConnection', () => {
+  let connection: OpenAIRealtimeConnection;
+  let config: VoiceProviderConfig;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockWsInstances.length = 0;
+    vi.stubEnv('OPENAI_API_KEY', 'test-api-key');
+    for (const name of [
+      'HTTP_PROXY',
+      'HTTPS_PROXY',
+      'ALL_PROXY',
+      'NO_PROXY',
+      'http_proxy',
+      'https_proxy',
+      'all_proxy',
+      'no_proxy',
+      'npm_config_proxy',
+      'npm_config_https_proxy',
+      'npm_config_no_proxy',
+    ]) {
+      vi.stubEnv(name, '');
+    }
+
+    config = {
+      provider: 'openai',
+      model: 'gpt-realtime',
+      voice: 'alloy',
+      instructions: 'You are a helpful assistant.',
+      audioFormat: 'pcm16',
+      sampleRate: 24000,
+      turnDetection: {
+        mode: 'server_vad',
+        silenceThresholdMs: 500,
+        vadThreshold: 0.5,
+        minTurnDurationMs: 100,
+        maxTurnDurationMs: 30000,
+        prefixPaddingMs: 300,
+      },
+    };
+
+    connection = new OpenAIRealtimeConnection(config);
+  });
+
+  afterEach(() => {
+    connection.disconnect();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+
+  describe('constructor', () => {
+    it('should initialize with config', () => {
+      expect(connection.getConfig()).toEqual(config);
+      expect(connection.getState()).toBe('disconnected');
+      expect(connection.getSessionId()).toBeNull();
+    });
+
+    it('should use default model if not provided', () => {
+      const conn = new OpenAIRealtimeConnection({
+        ...config,
+        model: undefined,
+      });
+      expect(conn.getConfig().model).toBeUndefined();
+    });
+  });
+
+  describe('connect', () => {
+    it('should throw error if no API key', async () => {
+      vi.stubEnv('OPENAI_API_KEY', '');
+      const conn = new OpenAIRealtimeConnection({ ...config, apiKey: undefined });
+
+      await expect(conn.connect()).rejects.toThrow('OpenAI API key not found');
+    });
+
+    it('should connect successfully with API key', async () => {
+      const connectPromise = connection.connect();
+
+      const ws = mockWsInstances[mockWsInstances.length - 1];
+      expect(ws).toBeDefined();
+
+      // Simulate successful connection
+      ws.simulateOpen();
+
+      await expect(connectPromise).resolves.toBeUndefined();
+      expect(connection.isConnected()).toBe(true);
+    });
+
+    it.each(['disconnect', 'server close', 'timeout'])(
+      'routes through HTTPS_PROXY and releases the agent on %s',
+      async (ending) => {
+        vi.useFakeTimers();
+        vi.stubEnv('HTTPS_PROXY', 'http://127.0.0.1:3128');
+        const pending = connection.connect();
+        const ws = mockWsInstances.at(-1);
+        expect(ws.options.agent).toBeInstanceOf(ProxyAgent);
+        const destroy = vi.spyOn(ws.options.agent, 'destroy');
+        if (ending === 'timeout') {
+          const rejected = expect(pending).rejects.toThrow('Connection timeout');
+          await vi.advanceTimersByTimeAsync(15000);
+          await rejected;
+        } else {
+          ws.simulateOpen();
+          await pending;
+          if (ending === 'disconnect') {
+            connection.disconnect();
+          } else {
+            ws.simulateClose(1000, 'finished');
+          }
+        }
+        expect(destroy).toHaveBeenCalledOnce();
+      },
+    );
+
+    it('honors NO_PROXY for the realtime endpoint', async () => {
+      vi.stubEnv('HTTPS_PROXY', 'http://127.0.0.1:3128');
+      vi.stubEnv('NO_PROXY', 'api.openai.com');
+      const pending = connection.connect();
+      const ws = mockWsInstances.at(-1);
+      expect(ws.options.agent).toBeUndefined();
+      ws.simulateOpen();
+      await pending;
+    });
+
+    it('should handle connection error', async () => {
+      // Add error listener to prevent unhandled error event
+      const errorHandler = vi.fn();
+      connection.on('error', errorHandler);
+
+      const connectPromise = connection.connect();
+
+      const ws = mockWsInstances[mockWsInstances.length - 1];
+
+      // Simulate error during connection
+      ws.simulateError(new Error('Connection failed'));
+
+      await expect(connectPromise).rejects.toThrow('Connection failed');
+    });
+
+    it('should reject when the WebSocket handshake times out', async () => {
+      vi.useFakeTimers();
+      const errorHandler = vi.fn();
+      connection.on('error', errorHandler);
+
+      const connectPromise = connection.connect();
+      const rejection = expect(connectPromise).rejects.toThrow('Connection timeout');
+
+      await vi.advanceTimersByTimeAsync(15000);
+
+      await rejection;
+      expect(errorHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'Connection timeout' }),
+      );
+      vi.useRealTimers();
+    });
+
+    it('should reject handshake timeouts without requiring an error listener', async () => {
+      vi.useFakeTimers();
+      const connectPromise = connection.connect();
+      const rejection = expect(connectPromise).rejects.toThrow('Connection timeout');
+
+      await vi.advanceTimersByTimeAsync(15000);
+
+      await rejection;
+      vi.useRealTimers();
+    });
+
+    it('should reject when the WebSocket closes during its handshake', async () => {
+      const connectPromise = connection.connect();
+      const ws = mockWsInstances[mockWsInstances.length - 1];
+
+      ws.simulateClose(1006, 'authorization closed');
+
+      await expect(connectPromise).rejects.toThrow(
+        'WebSocket closed while connecting (1006): authorization closed',
+      );
+    });
+  });
+
+  describe('sendAudio', () => {
+    it('should not send if not ready', () => {
+      const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
+      connection.sendAudio({
+        data: 'base64audio',
+        timestamp: Date.now(),
+        format: 'pcm16',
+        sampleRate: 24000,
+      });
+
+      expect(sendSpy).not.toHaveBeenCalled();
+    });
+
+    it('keeps routed OpenAI PCM at 24 kHz regardless of configured recording rate', () => {
+      const rateAdjusted = new OpenAIRealtimeConnection({
+        ...config,
+        sampleRate: 16000,
+      });
+      const sendSpy = vi.spyOn(rateAdjusted as any, 'send').mockReturnValue(true);
+      (rateAdjusted as any).setReady();
+
+      rateAdjusted.sendAudio({
+        data: Buffer.alloc(960).toString('base64'),
+        timestamp: 0,
+        format: 'pcm16',
+        sampleRate: 24000,
+      });
+
+      const sent = sendSpy.mock.calls[0]?.[0] as { audio: string };
+      expect(Buffer.from(sent.audio, 'base64')).toHaveLength(960);
+    });
+
+    it('rejects unsupported routed format conversion into G.711 inputs', () => {
+      const compressed = new OpenAIRealtimeConnection({
+        ...config,
+        audioFormat: 'g711_ulaw',
+        sampleRate: undefined,
+      });
+      (compressed as any).setReady();
+
+      expect(() =>
+        compressed.sendAudio({
+          data: Buffer.alloc(8).toString('base64'),
+          timestamp: 0,
+          format: 'pcm16',
+          sampleRate: 24000,
+        }),
+      ).toThrow('without encoding support');
+    });
+  });
+
+  describe('configureSession', () => {
+    it('should reject session configuration before connecting', async () => {
+      await expect(connection.configureSession()).rejects.toThrow('not connected');
+    });
+
+    it('should use the Realtime GA session update shape', async () => {
+      (connection as any).state = 'connected';
+      const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
+
+      const configurePromise = connection.configureSession();
+
+      expect(sendSpy).toHaveBeenCalledWith({
+        type: 'session.update',
+        session: expect.objectContaining({
+          type: 'realtime',
+          output_modalities: ['audio'],
+          audio: {
+            input: expect.objectContaining({
+              format: { type: 'audio/pcm', rate: 24000 },
+            }),
+            output: {
+              format: { type: 'audio/pcm', rate: 24000 },
+              voice: 'alloy',
+            },
+          },
+        }),
+      });
+
+      expect((sendSpy.mock.calls[0][0] as any).session.audio.input).not.toHaveProperty(
+        'transcription',
+      );
+      connection.emit('session_configured');
+      await configurePromise;
+    });
+
+    it.each([
+      ['g711_ulaw', { type: 'audio/pcmu' }],
+      ['g711_alaw', { type: 'audio/pcma' }],
+    ] as const)('should map %s session audio formats', async (audioFormat, format) => {
+      const mappedConnection = new OpenAIRealtimeConnection({
+        ...config,
+        audioFormat,
+        sampleRate: undefined,
+        turnDetection: undefined,
+      });
+      (mappedConnection as any).state = 'connected';
+      const sendSpy = vi.spyOn(mappedConnection as any, 'send').mockReturnValue(true);
+
+      const configurePromise = mappedConnection.configureSession();
+      expect(sendSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          session: expect.objectContaining({
+            audio: expect.objectContaining({
+              input: expect.objectContaining({ format, turn_detection: null }),
+              output: expect.objectContaining({ format }),
+            }),
+          }),
+        }),
+      );
+
+      mappedConnection.emit('session_configured');
+      await configurePromise;
+    });
+  });
+
+  it.each(['failed', 'incomplete', 'cancelled'])(
+    'reports terminal response status %s',
+    (status) => {
+      const error = vi.fn();
+      connection.on('error', error);
+      const completed = vi.fn();
+      connection.on('transcript_done', completed);
+      (connection as any).handleMessage(
+        JSON.stringify({
+          type: 'response.output_audio_transcript.done',
+          transcript: 'Finished ###STOP###',
+        }),
+      );
+      (connection as any).handleMessage(
+        JSON.stringify({
+          type: 'response.done',
+          response: { status, status_details: { reason: 'fixture reason' } },
+        }),
+      );
+      expect(error).toHaveBeenCalledWith(
+        expect.objectContaining({ message: `OpenAI Realtime response ${status}: fixture reason` }),
+      );
+      expect(completed).not.toHaveBeenCalled();
+    },
+  );
+
+  it('reports usage before completing the transcript', () => {
+    const events: string[] = [];
+    const usage = vi.fn(() => events.push('usage'));
+    connection.on('usage', usage);
+    connection.on('transcript_done', () => events.push('transcript'));
+    (connection as any).handleMessage(
+      JSON.stringify({ type: 'response.output_audio_transcript.done', transcript: 'Done' }),
+    );
+    (connection as any).handleMessage(
+      JSON.stringify({
+        type: 'response.done',
+        response: {
+          status: 'completed',
+          usage: {
+            input_tokens: 12,
+            output_tokens: 8,
+            total_tokens: 20,
+            input_token_details: { cached_tokens: 3 },
+          },
+        },
+      }),
+    );
+    expect(usage).toHaveBeenCalledWith({
+      prompt: 12,
+      completion: 8,
+      total: 20,
+      cached: 3,
+      numRequests: 1,
+    });
+    expect(events).toEqual(['usage', 'transcript']);
+  });
+
+  it.each([false, true])(
+    'completes requested cancellation with partial transcript and audio already done=%s',
+    (audioAlreadyDone) => {
+      const error = vi.fn();
+      const audioDone = vi.fn();
+      const transcriptDone = vi.fn();
+      const usage = vi.fn();
+      connection.on('error', error);
+      connection.on('audio_done', audioDone);
+      connection.on('transcript_done', transcriptDone);
+      connection.on('usage', usage);
+      (connection as any).setReady();
+      vi.spyOn(connection as any, 'send').mockReturnValue(true);
+      const receive = (message: object) =>
+        (connection as any).handleMessage(JSON.stringify(message));
+      for (let turn = 0; turn < 2; turn++) {
+        receive({ type: 'response.created' });
+        receive({ type: 'response.output_audio_transcript.delta', delta: `Partial ${turn}` });
+        if (audioAlreadyDone) {
+          receive({ type: 'response.output_audio.done' });
+        }
+        connection.cancelResponse();
+        receive({
+          type: 'response.done',
+          response: { status: 'cancelled', usage: { input_tokens: 2, output_tokens: 1 } },
+        });
+        expect(audioDone).toHaveBeenCalledTimes(turn + 1);
+        expect(transcriptDone).toHaveBeenCalledTimes(turn + 1);
+        expect(transcriptDone).toHaveBeenLastCalledWith(`Partial ${turn}`);
+      }
+      expect(error).not.toHaveBeenCalled();
+      expect(usage).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it('finishes a requested cancellation before any transcript arrives', () => {
+    const transcriptDone = vi.fn();
+    const audioDone = vi.fn();
+    connection.on('transcript_done', transcriptDone);
+    connection.on('audio_done', audioDone);
+    (connection as any).setReady();
+    vi.spyOn(connection as any, 'send').mockReturnValue(true);
+    connection.cancelResponse();
+    (connection as any).handleMessage(
+      JSON.stringify({ type: 'response.done', response: { status: 'cancelled' } }),
+    );
+    expect(audioDone).toHaveBeenCalledOnce();
+    expect(transcriptDone).toHaveBeenCalledExactlyOnceWith('');
+  });
+
+  it('keeps the session ready when cancellation races with a completed response', () => {
+    const error = vi.fn();
+    connection.on('error', error);
+    (connection as any).setReady();
+    const send = vi.spyOn(connection as any, 'send').mockReturnValue(true);
+    connection.cancelResponse();
+    const eventId = (send.mock.calls[0][0] as { event_id: string }).event_id;
+    for (const message of [
+      { type: 'response.output_audio_transcript.done', transcript: 'Hello' },
+      { type: 'response.done', response: { status: 'completed' } },
+      { type: 'error', error: { code: 'response_cancel_not_active', event_id: eventId } },
+    ]) {
+      (connection as any).handleMessage(JSON.stringify(message));
+    }
+    expect(error).not.toHaveBeenCalled();
+    expect(connection.isReady()).toBe(true);
+  });
+
+  it.each([
+    { code: 'invalid_api_key' },
+    { code: 'response_cancel_not_active', event_id: 'unrelated-event' },
+  ])('reports cancellation errors that are not the expected race: %j', (apiError) => {
+    const error = vi.fn();
+    connection.on('error', error);
+    (connection as any).setReady();
+    vi.spyOn(connection as any, 'send').mockReturnValue(true);
+    connection.cancelResponse();
+    (connection as any).handleMessage(JSON.stringify({ type: 'error', error: apiError }));
+    expect(error).toHaveBeenCalledWith(expect.objectContaining({ message: apiError.code }));
+  });
+
+  it('reports a completed response with no transcript after an earlier successful turn', () => {
+    const error = vi.fn();
+    const completed = vi.fn();
+    connection.on('error', error);
+    connection.on('transcript_done', completed);
+    for (const message of [
+      { type: 'response.output_audio_transcript.done', transcript: 'Hello' },
+      { type: 'response.done', response: { status: 'completed' } },
+      { type: 'response.created' },
+      { type: 'response.done', response: { status: 'completed' } },
+    ]) {
+      (connection as any).handleMessage(JSON.stringify(message));
+    }
+    expect(completed).toHaveBeenCalledExactlyOnceWith('Hello');
+    expect(error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'OpenAI Realtime response completed without a transcript',
+      }),
+    );
+  });
+
+  it.each([
+    [{ code: 'rate_limit_exceeded' }, true],
+    [{ type: 'rate_limit_error' }, true],
+    [{ code: 'rate_limit_exceeded', type: 'billing_not_active' }, false],
+  ] as const)('preserves structured error classification for %j', (apiError, retryable) => {
+    for (const message of [
+      { type: 'error', error: apiError },
+      {
+        type: 'response.done',
+        response: { status: 'failed', status_details: { error: apiError } },
+      },
+    ]) {
+      const candidate = new OpenAIRealtimeConnection(config);
+      const error = vi.fn();
+      candidate.on('error', error);
+      (candidate as any).handleMessage(JSON.stringify(message));
+      expect(error).toHaveBeenCalledTimes(1);
+      const errorMessage = error.mock.calls[0][0].message;
+      expect(errorMessage).toContain(Object.values(apiError)[0]);
+      expect(isProviderResponseRateLimited({ error: errorMessage }, undefined)).toBe(retryable);
+      candidate.disconnect();
+    }
+  });
+
+  describe('commitAudio', () => {
+    it('should not commit if not ready', () => {
+      const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
+      connection.commitAudio();
+
+      expect(sendSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('requestResponse', () => {
+    it('should not request if not ready', () => {
+      const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
+      connection.requestResponse();
+
+      expect(sendSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('cancelResponse', () => {
+    it('should not cancel if not ready', () => {
+      const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
+      connection.cancelResponse();
+
+      expect(sendSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('clearAudioBuffer', () => {
+    it('should not clear if not ready', () => {
+      const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
+      connection.clearAudioBuffer();
+
+      expect(sendSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('ready audio controls', () => {
+    it('should send audio and response controls when ready', () => {
+      const sendSpy = vi.spyOn(connection as any, 'send').mockReturnValue(true);
+      (connection as any).setReady();
+
+      connection.sendAudio({
+        data: 'base64audio',
+        format: 'pcm16',
+        sampleRate: 24000,
+        timestamp: 0,
+      });
+      connection.commitAudio();
+      connection.requestResponse();
+      connection.clearAudioBuffer();
+      connection.cancelResponse();
+
+      expect(sendSpy.mock.calls.map(([message]) => message)).toEqual([
+        { type: 'input_audio_buffer.append', audio: 'base64audio' },
+        { type: 'input_audio_buffer.commit' },
+        { type: 'response.create' },
+        { type: 'input_audio_buffer.clear' },
+        { type: 'response.cancel', event_id: 'cancel-1' },
+      ]);
+    });
+  });
+
+  describe('handleMessage', () => {
+    it('records session.created without marking configured settings ready', () => {
+      const handler = vi.fn();
+      connection.on('session_configured', handler);
+
+      (connection as any).handleMessage(
+        JSON.stringify({
+          type: 'session.created',
+          session: { id: 'test-session-id' },
+        }),
+      );
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(connection.getSessionId()).toBe('test-session-id');
+      expect(connection.isReady()).toBe(false);
+    });
+
+    it('should emit session_configured on session.updated', () => {
+      const handler = vi.fn();
+      connection.on('session_configured', handler);
+
+      (connection as any).handleMessage(
+        JSON.stringify({
+          type: 'session.updated',
+          session: { id: 'updated-session-id' },
+        }),
+      );
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(connection.getSessionId()).toBe('updated-session-id');
+    });
+
+    it('should emit audio_delta on response.output_audio.delta', () => {
+      const handler = vi.fn();
+      connection.on('audio_delta', handler);
+
+      (connection as any).handleMessage(
+        JSON.stringify({
+          type: 'response.output_audio.delta',
+          delta: 'base64audiodata',
+        }),
+      );
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: 'base64audiodata',
+          format: 'pcm16',
+          sampleRate: 24000,
+        }),
+      );
+    });
+
+    it('should calculate audio duration using the configured Realtime audio format', () => {
+      const g711Connection = new OpenAIRealtimeConnection({
+        ...config,
+        audioFormat: 'g711_ulaw',
+        sampleRate: 8000,
+      });
+      const handler = vi.fn();
+      g711Connection.on('audio_delta', handler);
+
+      (g711Connection as any).handleMessage(
+        JSON.stringify({
+          type: 'response.output_audio.delta',
+          delta: Buffer.alloc(800).toString('base64'),
+        }),
+      );
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          duration: 100,
+          format: 'g711_ulaw',
+          sampleRate: 8000,
+          timestamp: 0,
+        }),
+      );
+    });
+
+    it('defaults G.711 audio chunks to the Realtime 8 kHz sample rate', () => {
+      const g711Connection = new OpenAIRealtimeConnection({
+        ...config,
+        audioFormat: 'g711_ulaw',
+        sampleRate: 24000,
+      });
+      const handler = vi.fn();
+      g711Connection.on('audio_delta', handler);
+
+      (g711Connection as any).handleMessage(
+        JSON.stringify({
+          type: 'response.output_audio.delta',
+          delta: Buffer.alloc(800).toString('base64'),
+        }),
+      );
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          duration: 100,
+          format: 'g711_ulaw',
+          sampleRate: 8000,
+        }),
+      );
+    });
+
+    it('should emit audio_done on response.output_audio.done', () => {
+      const handler = vi.fn();
+      connection.on('audio_done', handler);
+
+      (connection as any).handleMessage(
+        JSON.stringify({
+          type: 'response.output_audio.done',
+        }),
+      );
+
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it('should emit transcript_delta on response.output_audio_transcript.delta', () => {
+      const handler = vi.fn();
+      connection.on('transcript_delta', handler);
+
+      (connection as any).handleMessage(
+        JSON.stringify({
+          type: 'response.output_audio_transcript.delta',
+          delta: 'Hello ',
+        }),
+      );
+
+      expect(handler).toHaveBeenCalledWith('Hello ');
+    });
+
+    it('waits for terminal success before completing the transcript', () => {
+      const handler = vi.fn();
+      connection.on('transcript_done', handler);
+
+      (connection as any).handleMessage(
+        JSON.stringify({
+          type: 'response.output_audio_transcript.done',
+          transcript: 'Hello world',
+        }),
+      );
+
+      expect(handler).not.toHaveBeenCalled();
+      (connection as any).handleMessage(
+        JSON.stringify({ type: 'response.done', response: { status: 'completed' } }),
+      );
+      expect(handler).toHaveBeenCalledWith('Hello world');
+    });
+
+    it('should emit input_transcript on conversation.item.input_audio_transcription.completed', () => {
+      const handler = vi.fn();
+      connection.on('input_transcript', handler);
+
+      (connection as any).handleMessage(
+        JSON.stringify({
+          type: 'conversation.item.input_audio_transcription.completed',
+          transcript: 'User said this',
+        }),
+      );
+
+      expect(handler).toHaveBeenCalledWith('User said this');
+    });
+
+    it('should emit speech_started on input_audio_buffer.speech_started', () => {
+      const handler = vi.fn();
+      connection.on('speech_started', handler);
+
+      (connection as any).handleMessage(
+        JSON.stringify({
+          type: 'input_audio_buffer.speech_started',
+        }),
+      );
+
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it('should emit speech_stopped on input_audio_buffer.speech_stopped', () => {
+      const handler = vi.fn();
+      connection.on('speech_stopped', handler);
+
+      (connection as any).handleMessage(
+        JSON.stringify({
+          type: 'input_audio_buffer.speech_stopped',
+        }),
+      );
+
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it('should emit error on error message', () => {
+      const handler = vi.fn();
+      connection.on('error', handler);
+
+      (connection as any).handleMessage(
+        JSON.stringify({
+          type: 'error',
+          error: { message: 'Something went wrong' },
+        }),
+      );
+
+      expect(handler).toHaveBeenCalledWith(expect.any(Error));
+      expect(handler.mock.calls[0][0].message).toBe('Something went wrong');
+    });
+
+    it('should cover lifecycle and fallback realtime messages', () => {
+      const errorHandler = vi.fn();
+      const transcriptDone = vi.fn();
+      const inputTranscript = vi.fn();
+      connection.on('error', errorHandler);
+      connection.on('transcript_done', transcriptDone);
+      connection.on('input_transcript', inputTranscript);
+
+      for (const type of [
+        'input_audio_buffer.committed',
+        'input_audio_buffer.cleared',
+        'response.created',
+        'response.done',
+        'response.output_item.added',
+        'response.output_item.done',
+        'response.content_part.added',
+        'response.content_part.done',
+        'conversation.item.created',
+        'rate_limits.updated',
+        'custom.event',
+      ]) {
+        (connection as any).handleMessage(JSON.stringify({ type, rate_limits: [] }));
+      }
+
+      (connection as any).handleMessage(
+        JSON.stringify({ type: 'response.output_audio_transcript.done' }),
+      );
+      (connection as any).handleMessage(
+        JSON.stringify({ type: 'conversation.item.input_audio_transcription.completed' }),
+      );
+      (connection as any).handleMessage(JSON.stringify({ type: 'error', error: {} }));
+
+      (connection as any).handleMessage(
+        JSON.stringify({ type: 'response.done', response: { status: 'completed' } }),
+      );
+      expect(transcriptDone).toHaveBeenCalledWith('');
+      expect(inputTranscript).toHaveBeenCalledWith('');
+      expect(errorHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'Unknown OpenAI Realtime error' }),
+      );
+    });
+
+    it('should handle invalid JSON gracefully', () => {
+      const errorHandler = vi.fn();
+      connection.on('error', errorHandler);
+
+      // Should not throw
+      (connection as any).handleMessage('not valid json');
+
+      // Should not emit error for parse failure (just logs)
+      expect(errorHandler).not.toHaveBeenCalled();
+    });
+
+    it('should handle Buffer data', () => {
+      const handler = vi.fn();
+      connection.on('session_configured', handler);
+
+      (connection as any).handleMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'session.updated',
+            session: { id: 'buffer-session' },
+          }),
+        ),
+      );
+
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('state management', () => {
+    it('should return correct ready state', () => {
+      expect(connection.isReady()).toBe(false);
+
+      (connection as any).setReady();
+      expect(connection.isReady()).toBe(true);
+    });
+
+    it('should return correct connected state', () => {
+      expect(connection.isConnected()).toBe(false);
+
+      (connection as any).state = 'connected';
+      expect(connection.isConnected()).toBe(true);
+
+      (connection as any).state = 'ready';
+      expect(connection.isConnected()).toBe(true);
+    });
+  });
+
+  describe('disconnect', () => {
+    it('should reset state on disconnect', async () => {
+      // Connect first
+      const connectPromise = connection.connect();
+      const ws = mockWsInstances[mockWsInstances.length - 1];
+      ws.simulateOpen();
+      await connectPromise;
+
+      expect(connection.isConnected()).toBe(true);
+
+      // Disconnect
+      connection.disconnect();
+
+      expect(connection.getState()).toBe('disconnected');
+      expect(ws.close).toHaveBeenCalled();
+    });
+
+    it('should surface socket errors after an established connection', async () => {
+      const errorHandler = vi.fn();
+      connection.on('error', errorHandler);
+
+      const connectPromise = connection.connect();
+      const ws = mockWsInstances[mockWsInstances.length - 1];
+      ws.simulateOpen();
+      await connectPromise;
+
+      ws.simulateError(new Error('after open'));
+      expect(errorHandler).toHaveBeenCalledWith(expect.objectContaining({ message: 'after open' }));
+    });
+  });
+});

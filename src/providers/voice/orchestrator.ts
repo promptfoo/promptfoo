@@ -1,0 +1,657 @@
+import { EventEmitter } from 'events';
+
+import logger from '../../logger';
+import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
+import { AudioBuffer, createStereoWav } from './audioBuffer';
+import { OpenAIRealtimeConnection } from './connections/openaiRealtime';
+import { STOP_MARKER, TranscriptAccumulator } from './transcriptAccumulator';
+import { TurnDetector } from './turnDetection';
+
+import type { TokenUsage } from '../../contracts/shared';
+import type {
+  AudioChunk,
+  ConversationResult,
+  ConversationState,
+  OrchestratorConfig,
+  VoiceTurn,
+} from './types';
+
+const DEFAULT_MAX_TURNS = 10;
+const DEFAULT_TIMEOUT_MS = 120000; // 2 minutes
+const DEFAULT_SAMPLE_RATE = 24000;
+
+export class VoiceConversationOrchestrator extends EventEmitter {
+  private config: OrchestratorConfig;
+  private targetConnection: OpenAIRealtimeConnection | null = null;
+  private simulatedUserConnection: OpenAIRealtimeConnection | null = null;
+  private turnDetector: TurnDetector;
+  private transcript: TranscriptAccumulator;
+  private targetAudioBuffer: AudioBuffer;
+  private simulatedUserAudioBuffer: AudioBuffer;
+  private state: ConversationState = 'idle';
+  private turnCount = 0;
+  private tokenUsage: TokenUsage = {};
+  private startTime = 0;
+  private conversationTimeout: ReturnType<typeof setTimeout> | null = null;
+  private isTargetSpeaking = false;
+  private isSimulatedUserSpeaking = false;
+  // Track the global playback timeline position across both speakers.
+  // This ensures audio from both speakers is placed sequentially, not overlapping.
+  private globalAudioPositionMs = 0;
+  // Track offset to apply to each speaker's audio chunks.
+  // These offsets map each connection's internal timeline to the global timeline.
+  private targetAudioOffsetMs = 0;
+  private userAudioOffsetMs = 0;
+  // Baseline: where the previous response ended in the connection's internal timeline.
+  // This is set in audio_done and used to calculate relative position within the current response.
+  private targetBaselineMs = 0;
+  private userBaselineMs = 0;
+  // Track where the current response ends (updated on each chunk, copied to baseline in audio_done).
+  private targetCurrentEndMs = 0;
+  private userCurrentEndMs = 0;
+  private pendingTurnDetectorSpeaker: 'target' | 'user' | null = null;
+  private activeTurnDetectorSpeaker: 'target' | 'user' | null = null;
+  private targetAudioDonePending = false;
+  private userAudioDonePending = false;
+  private targetTranscriptDoneForTurn = false;
+  private userTranscriptDoneForTurn = false;
+
+  constructor(config: OrchestratorConfig) {
+    super();
+    this.config = {
+      maxTurns: DEFAULT_MAX_TURNS,
+      timeoutMs: DEFAULT_TIMEOUT_MS,
+      ...config,
+    };
+
+    this.turnDetector = new TurnDetector(this.config.turnDetection);
+    this.transcript = new TranscriptAccumulator();
+    this.targetAudioBuffer = new AudioBuffer(
+      this.config.targetConfig.audioFormat,
+      this.config.targetConfig.sampleRate || DEFAULT_SAMPLE_RATE,
+    );
+    this.simulatedUserAudioBuffer = new AudioBuffer(
+      this.config.simulatedUserConfig.audioFormat,
+      this.config.simulatedUserConfig.sampleRate || DEFAULT_SAMPLE_RATE,
+    );
+    this.setupTurnDetectorHandlers();
+  }
+
+  getState(): ConversationState {
+    return this.state;
+  }
+
+  getTurnCount(): number {
+    return this.turnCount;
+  }
+
+  getTranscript(): TranscriptAccumulator {
+    return this.transcript;
+  }
+
+  async start(): Promise<ConversationResult> {
+    if (this.state !== 'idle') {
+      throw new Error(`Cannot start conversation: already in state ${this.state}`);
+    }
+
+    this.resetRunState();
+    this.state = 'connecting';
+    this.startTime = Date.now();
+    this.emit('state_change', this.state);
+
+    try {
+      this.targetConnection = new OpenAIRealtimeConnection(this.config.targetConfig);
+      this.simulatedUserConnection = new OpenAIRealtimeConnection(this.config.simulatedUserConfig);
+    } catch (error) {
+      this.cleanup();
+      throw error;
+    }
+    for (const connection of [this.targetConnection, this.simulatedUserConnection]) {
+      connection.on('usage', (usage: TokenUsage) => accumulateTokenUsage(this.tokenUsage, usage));
+    }
+    this.setupTargetHandlers();
+    this.setupSimulatedUserHandlers();
+    const target = this.targetConnection;
+    const user = this.simulatedUserConnection;
+    const isConnecting = () => this.state === 'connecting' && this.targetConnection === target;
+
+    return new Promise((resolve, reject) => {
+      const onComplete = (result: ConversationResult) => {
+        this.removeListener('conversation_complete', onComplete);
+        resolve(result);
+      };
+      this.on('conversation_complete', onComplete);
+      this.setConversationTimeout();
+
+      const setup = async () => {
+        await target.connect();
+        if (!isConnecting()) {
+          return;
+        }
+        await user.connect();
+        if (!isConnecting()) {
+          return;
+        }
+        await target.configureSession();
+        if (!isConnecting()) {
+          return;
+        }
+        await user.configureSession();
+        if (!isConnecting()) {
+          return;
+        }
+
+        this.state = 'active';
+        this.emit('state_change', this.state);
+        await (this.config.targetSpeaksFirst === false ? user : target).requestResponse();
+      };
+      void setup().catch((error) => {
+        if (
+          this.targetConnection !== target ||
+          this.state === 'completed' ||
+          this.state === 'idle'
+        ) {
+          return;
+        }
+        this.state = 'error';
+        this.emit('state_change', this.state);
+        this.removeListener('conversation_complete', onComplete);
+        this.cleanup();
+        reject(error);
+      });
+    });
+  }
+
+  async stop(
+    reason: 'goal_achieved' | 'max_turns' | 'timeout' | 'user_hangup' = 'user_hangup',
+  ): Promise<void> {
+    if (this.state === 'idle' || this.state === 'completed') {
+      return;
+    }
+
+    logger.debug('[Orchestrator] Stopping conversation:', { reason });
+    await this.completeConversation(reason);
+  }
+
+  private shouldUseLocalTurnDetection(): boolean {
+    return this.config.turnDetection.mode !== 'server_vad';
+  }
+
+  private feedTurnDetector(speaker: 'target' | 'user', chunk: AudioChunk): void {
+    this.pendingTurnDetectorSpeaker = speaker;
+    if (this.shouldUseLocalTurnDetection()) {
+      this.turnDetector.onAudioChunk(chunk);
+    } else {
+      // Provider VAD is disabled for manually routed conversations; output
+      // audio is the reliable activity signal for enforcing turn timeouts.
+      this.turnDetector.onSpeechStart();
+    }
+    this.pendingTurnDetectorSpeaker = null;
+  }
+
+  private markAudioDoneForTurnDetection(speaker: 'target' | 'user'): void {
+    if (this.activeTurnDetectorSpeaker === speaker) {
+      this.turnDetector.onSpeechEnd(true);
+    }
+  }
+
+  private completeTranscriptTurn(speaker: 'agent' | 'user', text: string): boolean {
+    const turn = this.transcript.completeWithText(speaker, text);
+    if (!turn.trim()) {
+      return false;
+    }
+
+    this.turnCount++;
+    this.emit('turn_complete', { speaker, text: turn });
+
+    if (speaker === 'user' && turn.includes(STOP_MARKER)) {
+      logger.debug(`[Orchestrator] Stop marker detected in ${speaker} speech`);
+      void this.completeConversation('goal_achieved');
+      return true;
+    }
+
+    if (this.turnCount >= (this.config.maxTurns || DEFAULT_MAX_TURNS)) {
+      logger.debug('[Orchestrator] Max turns reached');
+      void this.completeConversation('max_turns');
+      return true;
+    }
+
+    return false;
+  }
+
+  private async requestNextResponse(connection: OpenAIRealtimeConnection): Promise<void> {
+    try {
+      await connection.commitAudio();
+      if (
+        this.state === 'active' &&
+        (this.targetConnection === connection || this.simulatedUserConnection === connection)
+      ) {
+        await connection.requestResponse();
+      }
+    } catch (error) {
+      if (this.targetConnection === connection || this.simulatedUserConnection === connection) {
+        await this.completeConversation(
+          'error',
+          error instanceof Error ? error : new Error(String(error)),
+        );
+      }
+    }
+  }
+
+  private maybeRequestSimulatedUserResponse(): void {
+    if (!this.targetAudioDonePending || !this.targetTranscriptDoneForTurn) {
+      return;
+    }
+
+    this.targetAudioDonePending = false;
+    this.targetTranscriptDoneForTurn = false;
+
+    if (this.state === 'active' && this.simulatedUserConnection?.isReady()) {
+      void this.requestNextResponse(this.simulatedUserConnection);
+    }
+  }
+
+  private maybeRequestTargetResponse(): void {
+    if (!this.userAudioDonePending || !this.userTranscriptDoneForTurn) {
+      return;
+    }
+
+    this.userAudioDonePending = false;
+    this.userTranscriptDoneForTurn = false;
+
+    if (this.state === 'active' && this.targetConnection?.isReady()) {
+      void this.requestNextResponse(this.targetConnection);
+    }
+  }
+
+  private setupTargetHandlers(): void {
+    if (!this.targetConnection) {
+      return;
+    }
+
+    // Audio from target → forward to simulated user
+    this.targetConnection.on('audio_delta', (chunk: AudioChunk) => {
+      this.targetTranscriptDoneForTurn = false;
+
+      // Map connection's internal timestamp to global timeline.
+      // The connection's internal timestamps are cumulative across all responses,
+      // so we subtract the baseline (where previous response ended) to get position within this response.
+      const internalStart = chunk.timestamp;
+      const internalEnd = internalStart + (chunk.duration || 0);
+      const relativePosition = internalStart - this.targetBaselineMs;
+
+      const adjustedChunk: AudioChunk = {
+        ...chunk,
+        timestamp: this.targetAudioOffsetMs + relativePosition,
+      };
+      if (this.config.recordFullAudio !== false) {
+        this.targetAudioBuffer.append(adjustedChunk);
+      }
+
+      // Track the furthest audio position in global timeline
+      const chunkEnd = adjustedChunk.timestamp + (adjustedChunk.duration || 0);
+      if (chunkEnd > this.globalAudioPositionMs) {
+        this.globalAudioPositionMs = chunkEnd;
+      }
+
+      // Track where this response ends (will become baseline after audio_done)
+      if (internalEnd > this.targetCurrentEndMs) {
+        this.targetCurrentEndMs = internalEnd;
+      }
+
+      // Forward audio to simulated user
+      if (this.simulatedUserConnection?.isReady()) {
+        this.simulatedUserConnection.sendAudio(chunk);
+      }
+
+      if (this.state !== 'active') {
+        return;
+      }
+      this.feedTurnDetector('target', chunk);
+      this.emit('target_audio', adjustedChunk);
+    });
+
+    // Target finished speaking
+    this.targetConnection.on('audio_done', () => {
+      logger.debug('[Orchestrator] Target audio done:', {
+        globalPosition: this.globalAudioPositionMs,
+        targetCurrentEndMs: this.targetCurrentEndMs,
+      });
+      this.markAudioDoneForTurnDetection('target');
+
+      // Update baseline for next target response (where this response ended)
+      this.targetBaselineMs = this.targetCurrentEndMs;
+
+      // Set the user's offset to start after target's audio ends
+      this.userAudioOffsetMs = this.globalAudioPositionMs;
+
+      this.isTargetSpeaking = false;
+      this.targetAudioDonePending = true;
+      this.maybeRequestSimulatedUserResponse();
+    });
+
+    // Transcript from target
+    this.targetConnection.on('transcript_delta', (delta: string) => {
+      this.transcript.append(delta);
+      this.emit('target_transcript_delta', delta);
+    });
+
+    this.targetConnection.on('transcript_done', (text: string) => {
+      this.targetTranscriptDoneForTurn = true;
+      if (!this.completeTranscriptTurn('agent', text)) {
+        this.maybeRequestSimulatedUserResponse();
+      }
+    });
+
+    // VAD events
+    this.targetConnection.on('speech_started', () => {
+      this.isTargetSpeaking = true;
+      this.turnDetector.onSpeechStart();
+      this.emit('target_speech_started');
+    });
+
+    this.targetConnection.on('speech_stopped', () => {
+      this.isTargetSpeaking = false;
+      this.turnDetector.onSpeechEnd();
+      this.emit('target_speech_stopped');
+    });
+
+    // Error handling
+    this.targetConnection.on('error', (error: Error) => {
+      logger.error('[Orchestrator] Target connection error:', { error });
+      void this.completeConversation('error', error);
+      if (this.listenerCount('error') > 0) {
+        this.emit('error', error);
+      }
+    });
+
+    this.targetConnection.on('close', () => {
+      logger.debug('[Orchestrator] Target connection closed');
+      if (this.state === 'active' || this.state === 'connecting') {
+        void this.completeConversation('error', new Error('Voice connection closed unexpectedly'));
+      }
+    });
+  }
+
+  private setupSimulatedUserHandlers(): void {
+    if (!this.simulatedUserConnection) {
+      return;
+    }
+
+    // Audio from simulated user → forward to target
+    this.simulatedUserConnection.on('audio_delta', (chunk: AudioChunk) => {
+      this.userTranscriptDoneForTurn = false;
+
+      // Map connection's internal timestamp to global timeline.
+      // The connection's internal timestamps are cumulative across all responses,
+      // so we subtract the baseline (where previous response ended) to get position within this response.
+      const internalStart = chunk.timestamp;
+      const internalEnd = internalStart + (chunk.duration || 0);
+      const relativePosition = internalStart - this.userBaselineMs;
+
+      const adjustedChunk: AudioChunk = {
+        ...chunk,
+        timestamp: this.userAudioOffsetMs + relativePosition,
+      };
+      if (this.config.recordFullAudio !== false) {
+        this.simulatedUserAudioBuffer.append(adjustedChunk);
+      }
+
+      // Track the furthest audio position in global timeline
+      const chunkEnd = adjustedChunk.timestamp + (adjustedChunk.duration || 0);
+      if (chunkEnd > this.globalAudioPositionMs) {
+        this.globalAudioPositionMs = chunkEnd;
+      }
+
+      // Track where this response ends (will become baseline after audio_done)
+      if (internalEnd > this.userCurrentEndMs) {
+        this.userCurrentEndMs = internalEnd;
+      }
+
+      // Forward audio to target
+      if (this.targetConnection?.isReady()) {
+        this.targetConnection.sendAudio(chunk);
+      }
+
+      if (this.state !== 'active') {
+        return;
+      }
+      this.feedTurnDetector('user', chunk);
+      this.emit('simulated_user_audio', adjustedChunk);
+    });
+
+    // Simulated user finished speaking
+    this.simulatedUserConnection.on('audio_done', () => {
+      logger.debug('[Orchestrator] Simulated user audio done:', {
+        globalPosition: this.globalAudioPositionMs,
+        userCurrentEndMs: this.userCurrentEndMs,
+      });
+      this.markAudioDoneForTurnDetection('user');
+
+      // Update baseline for next user response (where this response ended)
+      this.userBaselineMs = this.userCurrentEndMs;
+
+      // Set the target's offset to start after user's audio ends
+      this.targetAudioOffsetMs = this.globalAudioPositionMs;
+
+      this.isSimulatedUserSpeaking = false;
+      this.userAudioDonePending = true;
+      this.maybeRequestTargetResponse();
+    });
+
+    // Transcript from simulated user
+    this.simulatedUserConnection.on('transcript_delta', (delta: string) => {
+      this.emit('simulated_user_transcript_delta', delta);
+    });
+
+    this.simulatedUserConnection.on('transcript_done', (text: string) => {
+      this.userTranscriptDoneForTurn = true;
+      if (!this.completeTranscriptTurn('user', text)) {
+        this.maybeRequestTargetResponse();
+      }
+    });
+
+    // VAD events
+    this.simulatedUserConnection.on('speech_started', () => {
+      this.isSimulatedUserSpeaking = true;
+      this.turnDetector.onSpeechStart();
+      this.emit('simulated_user_speech_started');
+    });
+
+    this.simulatedUserConnection.on('speech_stopped', () => {
+      this.isSimulatedUserSpeaking = false;
+      this.turnDetector.onSpeechEnd();
+      this.emit('simulated_user_speech_stopped');
+    });
+
+    // Error handling
+    this.simulatedUserConnection.on('error', (error: Error) => {
+      logger.error('[Orchestrator] Simulated user connection error:', { error });
+      void this.completeConversation('error', error);
+      if (this.listenerCount('error') > 0) {
+        this.emit('error', error);
+      }
+    });
+
+    this.simulatedUserConnection.on('close', () => {
+      logger.debug('[Orchestrator] Simulated user connection closed');
+      if (this.state === 'active' || this.state === 'connecting') {
+        void this.completeConversation('error', new Error('Voice connection closed unexpectedly'));
+      }
+    });
+  }
+
+  private setupTurnDetectorHandlers(): void {
+    this.turnDetector.on('turn_start', () => {
+      this.activeTurnDetectorSpeaker =
+        this.pendingTurnDetectorSpeaker ||
+        (this.isTargetSpeaking ? 'target' : this.isSimulatedUserSpeaking ? 'user' : null);
+
+      if (this.activeTurnDetectorSpeaker === 'target') {
+        this.isTargetSpeaking = true;
+      } else if (this.activeTurnDetectorSpeaker === 'user') {
+        this.isSimulatedUserSpeaking = true;
+      }
+
+      this.emit('turn_start');
+    });
+
+    this.turnDetector.on('turn_end', () => {
+      if (this.activeTurnDetectorSpeaker === 'target') {
+        this.isTargetSpeaking = false;
+      } else if (this.activeTurnDetectorSpeaker === 'user') {
+        this.isSimulatedUserSpeaking = false;
+      }
+      this.activeTurnDetectorSpeaker = null;
+      this.emit('turn_end');
+    });
+
+    this.turnDetector.on('turn_timeout', () => {
+      logger.warn('[Orchestrator] Turn timeout detected');
+      // Force end the current turn
+      if (
+        (this.activeTurnDetectorSpeaker === 'target' || this.isTargetSpeaking) &&
+        this.targetConnection
+      ) {
+        this.targetConnection.cancelResponse();
+      } else if (
+        (this.activeTurnDetectorSpeaker === 'user' || this.isSimulatedUserSpeaking) &&
+        this.simulatedUserConnection
+      ) {
+        this.simulatedUserConnection.cancelResponse();
+      }
+    });
+  }
+
+  private setConversationTimeout(): void {
+    if (this.conversationTimeout) {
+      clearTimeout(this.conversationTimeout);
+    }
+
+    this.conversationTimeout = setTimeout(() => {
+      logger.warn('[Orchestrator] Conversation timeout reached');
+      void this.completeConversation('timeout');
+    }, this.config.timeoutMs || DEFAULT_TIMEOUT_MS);
+  }
+
+  private async completeConversation(
+    reason: 'goal_achieved' | 'max_turns' | 'timeout' | 'error' | 'user_hangup',
+    error?: Error,
+  ): Promise<void> {
+    if (this.state === 'completed' || this.state === 'idle') {
+      return;
+    }
+
+    this.state = 'completed';
+    this.emit('state_change', this.state);
+
+    if (this.conversationTimeout) {
+      clearTimeout(this.conversationTimeout);
+      this.conversationTimeout = null;
+    }
+
+    const endTime = Date.now();
+    // Convert TranscriptTurn[] to VoiceTurn[]
+    const turns: VoiceTurn[] = this.transcript.getTurns().map((turn) => ({
+      speaker: turn.speaker,
+      text: turn.text,
+      timestamp: turn.timestamp,
+    }));
+
+    const result: ConversationResult = {
+      success: reason === 'goal_achieved',
+      stopReason: reason,
+      ...(error ? { error: error.message } : {}),
+      transcript: this.transcript.getFullTranscript(),
+      turns,
+      turnCount: this.turnCount,
+      duration: endTime - this.startTime,
+      tokenUsage: { ...this.tokenUsage },
+      metadata: {
+        targetProvider: this.config.targetConfig.provider,
+        simulatedUserProvider: this.config.simulatedUserConfig.provider,
+        maxTurns: this.config.maxTurns || DEFAULT_MAX_TURNS,
+        timeoutMs: this.config.timeoutMs || DEFAULT_TIMEOUT_MS,
+      },
+    };
+
+    try {
+      if (this.config.recordFullAudio !== false) {
+        result.targetAudio = this.targetAudioBuffer.toWav();
+        result.simulatedUserAudio = this.simulatedUserAudioBuffer.toWav();
+        result.combinedAudio = createStereoWav(
+          this.targetAudioBuffer,
+          this.simulatedUserAudioBuffer,
+        );
+      }
+    } catch (encodingError) {
+      result.success = false;
+      result.stopReason = 'error';
+      result.error = `Failed to encode voice recording: ${encodingError instanceof Error ? encodingError.message : String(encodingError)}`;
+    }
+
+    logger.debug('[Orchestrator] Conversation completed:', {
+      reason,
+      turnCount: this.turnCount,
+      duration: result.duration,
+    });
+
+    this.cleanup();
+    this.emit('conversation_complete', result);
+  }
+
+  private cleanup(): void {
+    logger.debug('[Orchestrator] Cleaning up...');
+
+    if (this.conversationTimeout) {
+      clearTimeout(this.conversationTimeout);
+      this.conversationTimeout = null;
+    }
+
+    this.turnDetector.reset();
+    this.pendingTurnDetectorSpeaker = null;
+    this.activeTurnDetectorSpeaker = null;
+    this.targetAudioDonePending = false;
+    this.userAudioDonePending = false;
+    this.targetTranscriptDoneForTurn = false;
+    this.userTranscriptDoneForTurn = false;
+
+    if (this.targetConnection) {
+      this.targetConnection.disconnect();
+      this.targetConnection.removeAllListeners();
+      this.targetConnection = null;
+    }
+
+    if (this.simulatedUserConnection) {
+      this.simulatedUserConnection.disconnect();
+      this.simulatedUserConnection.removeAllListeners();
+      this.simulatedUserConnection = null;
+    }
+
+    this.state = 'idle';
+  }
+
+  private resetRunState(): void {
+    this.turnDetector.reset();
+    this.transcript.reset();
+    this.targetAudioBuffer.clear();
+    this.simulatedUserAudioBuffer.clear();
+    this.isTargetSpeaking = false;
+    this.isSimulatedUserSpeaking = false;
+    this.pendingTurnDetectorSpeaker = null;
+    this.activeTurnDetectorSpeaker = null;
+    this.turnCount = 0;
+    this.tokenUsage = {};
+    this.globalAudioPositionMs = 0;
+    this.targetAudioOffsetMs = 0;
+    this.userAudioOffsetMs = 0;
+    this.targetBaselineMs = 0;
+    this.userBaselineMs = 0;
+    this.targetCurrentEndMs = 0;
+    this.userCurrentEndMs = 0;
+    this.targetAudioDonePending = false;
+    this.userAudioDonePending = false;
+    this.targetTranscriptDoneForTurn = false;
+    this.userTranscriptDoneForTurn = false;
+  }
+}
