@@ -76,6 +76,7 @@ interface IndirectWebPwnResponse extends ProviderResponse {
  * or with the data-exfil plugin to specifically test for data exfiltration.
  */
 export default class IndirectWebPwnProvider implements ApiProvider {
+  readonly usesOriginalProvider = true;
   readonly config: IndirectWebPwnConfig;
 
   id() {

@@ -135,6 +135,8 @@ export interface ApiProvider extends MinimalApiProvider {
    * replacing that behavior can override this with false to use scheduler retries.
    */
   handlesOwnRetries?: boolean;
+  /** Delegates to context.originalProvider and inherits its retry ownership. */
+  usesOriginalProvider?: boolean;
   getSessionId?: () => string;
   /** Native audio input content format accepted by this provider and its configured model. */
   getAudioInputFormat?: () => 'openai' | 'google' | undefined;

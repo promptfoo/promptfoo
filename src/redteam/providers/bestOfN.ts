@@ -40,6 +40,7 @@ interface BestOfNConfig {
 }
 
 export default class BestOfNProvider implements ApiProvider {
+  readonly usesOriginalProvider = true;
   readonly config: BestOfNConfig;
 
   id() {

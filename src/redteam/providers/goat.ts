@@ -140,6 +140,7 @@ interface GoatProviderResponse extends ProviderResponse {
 }
 
 export default class GoatProvider implements ApiProvider {
+  readonly usesOriginalProvider = true;
   readonly config: GoatConfig;
   private readonly nunjucks: any;
   private readonly perTurnLayers: LayerConfig[];

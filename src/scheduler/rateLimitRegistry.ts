@@ -78,7 +78,8 @@ export class RateLimitRegistry extends EventEmitter {
         getHeaders: options?.getHeaders,
         isRateLimited: options?.isRateLimited,
         getRetryAfter: options?.getRetryAfter,
-        maxRetriesOverride: provider.handlesOwnRetries ? 0 : providerMaxRetries,
+        maxRetriesOverride:
+          provider.handlesOwnRetries || options?.handlesOwnRetries ? 0 : providerMaxRetries,
       });
 
     try {

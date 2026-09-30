@@ -31,16 +31,18 @@ import type {
   ProvidersConfig,
 } from '../types/providers';
 
-type ProviderFunctionWithMetadata = ProviderFunction &
-  Pick<ApiProvider, 'label' | 'transform' | 'delay' | 'inputs' | 'config'>;
-
 const FORWARDED_PROVIDER_METADATA_KEYS = [
   'label',
   'transform',
   'delay',
   'inputs',
   'config',
-] as const satisfies ReadonlyArray<keyof ProviderFunctionWithMetadata>;
+  'handlesOwnRetries',
+  'usesOriginalProvider',
+] as const satisfies ReadonlyArray<keyof ApiProvider>;
+
+type ProviderFunctionWithMetadata = ProviderFunction &
+  Pick<ApiProvider, (typeof FORWARDED_PROVIDER_METADATA_KEYS)[number]>;
 
 function createProviderFromFunction(
   provider: ProviderFunctionWithMetadata,
@@ -110,12 +112,12 @@ async function createApiProvider(
   const renderTemplate = <T>(value: T): T =>
     cliState.withEnv(templateEnv, () => renderEnvOnlyInObject(value, templateEnv));
   const renderedProviderPath = renderTemplate(providerPath);
-  let mergedEnv = mergeProviderEnv(
-    renderedProviderPath,
-    ...(originalEnvLayers && /^(?:google|palm):live:/.test(renderedProviderPath)
+  const envLayers =
+    originalEnvLayers &&
+    /^(?:openai:agents(?::|$)|(?:google|palm):live:)/.test(renderedProviderPath)
       ? originalEnvLayers
-      : [env, options.env]),
-  );
+      : [env, options.env];
+  let mergedEnv = mergeProviderEnv(renderedProviderPath, ...envLayers);
 
   // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
   // This allows constructors to access real env values while preserving runtime templates

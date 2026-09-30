@@ -127,6 +127,12 @@ const CODEX_CLI_PROVIDER_PATH = /^openai:(?:codex|codex-sdk|codex-app-server|cod
 
 /** Aliases read together by these providers must keep their original scope priority. */
 function getProviderEnvAliasGroups(providerPath: string): readonly (readonly string[])[] {
+  if (/^openai:agents(?::|$)/.test(providerPath)) {
+    return ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY'].map((key) => [
+      key.toLowerCase(),
+      key,
+    ]);
+  }
   if (CODEX_CLI_PROVIDER_PATH.test(providerPath)) {
     return [['OPENAI_API_KEY', 'CODEX_API_KEY']];
   }
@@ -260,13 +266,15 @@ export function mergeProviderEnv(
     }
     merged ??= {};
     for (const aliases of aliasGroups) {
-      // Ordinary aliases retain their existing empty-value meaning. A scoped
-      // credential field, including an empty mask, must never borrow a lower tuple.
-      const credentialTuple =
-        aliases.includes('AWS_ACCESS_KEY_ID') || aliases.includes('AZURE_CLIENT_ID');
+      // Credential tuples and proxy case aliases select a scope even when empty.
+      // Other aliases preserve their existing per-name empty masks.
+      const selectsScope =
+        aliases.includes('AWS_ACCESS_KEY_ID') ||
+        aliases.includes('AZURE_CLIENT_ID') ||
+        aliases.some((key) => key.endsWith('_PROXY'));
       if (
         aliases.some((key) =>
-          credentialTuple
+          selectsScope
             ? layer[key] !== undefined
             : /^(?:google|palm|vertex):/.test(providerPath) && key.endsWith('API_KEY')
               ? layer[key]?.trim()

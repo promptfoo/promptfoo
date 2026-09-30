@@ -701,6 +701,7 @@ export async function runMetaAgentRedteam({
 }
 
 class RedteamIterativeMetaProvider implements ApiProvider {
+  readonly usesOriginalProvider = true;
   private readonly agentProvider: RedteamFileConfig['provider'];
   private readonly injectVar: string;
   private readonly numIterations: number;

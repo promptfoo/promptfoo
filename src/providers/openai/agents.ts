@@ -2,13 +2,17 @@ import {
   addTraceProcessor,
   BatchTraceProcessor,
   getOrCreateTrace,
+  OpenAIProvider,
   protocol,
-  run,
+  Runner,
   startTraceExportLoop,
 } from '@openai/agents';
 import { SandboxAgent } from '@openai/agents/sandbox';
-import { getEnvString } from '../../envars';
+import OpenAI from 'openai';
+import cliState from '../../cliState';
+import { getEnvOverrides, getEnvString } from '../../envars';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { getConfiguredTracingExport } from '../tracing';
 import {
   loadAgentDefinition,
@@ -23,7 +27,8 @@ import {
 import { resolveModelSettings } from './agents-model-settings';
 import { OTLPTracingExporter } from './agents-tracing';
 import { OpenAiGenericProvider } from './index';
-import type { Agent, AgentInputItem, Session } from '@openai/agents';
+import { hasOpenAiGatewayCredentials } from './util';
+import type { Agent, AgentInputItem, OpenAIProviderOptions, Session } from '@openai/agents';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -31,7 +36,16 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { OpenAiAgentsOptions, OpenAiAgentsSessionFactory } from './agents-types';
+import type { OpenAiAgentsSessionClientFactory } from './agents-loader';
+import type { OpenAiAgentsOptions, OpenAiAgentsSessionConfig } from './agents-types';
+
+const TRANSPORT_ENV_KEYS = [
+  'REQUEST_TIMEOUT_MS',
+  'PROMPTFOO_CA_CERT_PATH',
+  'PROMPTFOO_INSECURE_SSL',
+  'PROMPTFOO_FETCH_CONNECTIONS',
+] as const;
+const PROXY_ENV_KEYS = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY'] as const;
 
 /**
  * OpenAI Agents Provider
@@ -40,10 +54,14 @@ import type { OpenAiAgentsOptions, OpenAiAgentsSessionFactory } from './agents-t
  * Supports multi-turn agent workflows with tools, handoffs, and tracing.
  */
 export class OpenAiAgentsProvider extends OpenAiGenericProvider {
+  readonly handlesOwnRetries = true;
   private agentConfig: OpenAiAgentsOptions;
   private agent?: Agent<any, any>;
-  private session?: Session;
-  private sessionInitialization?: Promise<Session>;
+  private readonly defaultSessionState: { initialization?: Promise<Session> } = {};
+  private readonly scopedSessionStates = new WeakMap<
+    object,
+    { initialization?: Promise<Session> }
+  >();
   private sessionQueues = new WeakMap<Session, Promise<void>>();
 
   constructor(
@@ -183,6 +201,21 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    let modelProvider: OpenAIProvider | undefined;
+    let scopedClient: ReturnType<OpenAiAgentsSessionClientFactory>;
+    const useScopedModel = this.hasScopedConnectionSettings();
+    const getClient: OpenAiAgentsSessionClientFactory = ({
+      apiKey,
+      baseURL,
+      organization,
+      project,
+    } = {}) => {
+      const overrides = { apiKey, baseURL, organization, project };
+      if (Object.values(overrides).some((value) => value !== undefined)) {
+        return this.createScopedClient(overrides);
+      }
+      return useScopedModel ? (scopedClient ??= this.createScopedClient()) : undefined;
+    };
     try {
       const maxTurns = this.agentConfig.maxTurns === undefined ? 10 : this.agentConfig.maxTurns;
 
@@ -192,7 +225,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       });
 
       const runOptions: any = {
-        ...(await this.resolveRunOptions(context)),
+        ...(await this.resolveRunOptions(context, getClient)),
         context: context?.vars,
         maxTurns,
         signal: callApiOptions?.abortSignal,
@@ -213,6 +246,21 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         assertNoMockToolOverrides(runOptions.modelSettings, 'run options');
       }
 
+      const runner = new Runner({
+        ...(useScopedModel && {
+          modelProvider: {
+            getModel: async (name) => {
+              // SDK Model objects bypass this factory and retain their own clients.
+              // The SDK's nested OpenAI dependency has a nominally distinct client type.
+              modelProvider ??= new OpenAIProvider({
+                openAIClient: getClient(),
+              });
+              return modelProvider.getModel(name);
+            },
+          },
+        }),
+      });
+
       const traceContext = parseTraceparent(context?.traceparent);
       const configuredExport = getConfiguredTracingExport();
       const explicitModel = runOptions.model ?? this.agent?.model;
@@ -230,7 +278,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       const executeRun = () =>
         getOrCreateTrace(
           async () => {
-            return await run(this.agent!, this.parsePromptInput(prompt), runOptions);
+            return await runner.run(this.agent!, this.parsePromptInput(prompt), runOptions);
           },
           {
             ...(traceContext ? { traceId: `trace_${traceContext.traceId}` } : {}),
@@ -258,7 +306,139 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     } catch (error) {
       logger.error('[AgentsProvider] Failed to run agent', { error });
       throw error;
+    } finally {
+      await modelProvider?.close();
     }
+  }
+
+  private createScopedClient(
+    overrides: Parameters<OpenAiAgentsSessionClientFactory>[0] = {},
+  ): NonNullable<ReturnType<OpenAiAgentsSessionClientFactory>> {
+    const separateEndpoint = overrides.baseURL !== undefined;
+    const separateCredentials = separateEndpoint || overrides.apiKey !== undefined;
+    const apiKey = overrides.apiKey ?? (separateEndpoint ? undefined : this.getApiKey());
+    const config = {
+      ...this.config,
+      apiHost: undefined,
+      apiBaseUrl: overrides.baseURL ?? this.getApiUrl(),
+      organization: overrides.organization ?? (separateCredentials ? '' : this.config.organization),
+      // New endpoints/credentials are isolated; metadata-only overrides keep gateway headers.
+      headers: separateCredentials
+        ? {}
+        : Object.fromEntries(
+            Object.entries(this.config.headers ?? {}).filter(
+              ([name]) =>
+                (overrides.organization === undefined ||
+                  name.toLowerCase() !== 'openai-organization') &&
+                (overrides.project === undefined || name.toLowerCase() !== 'openai-project'),
+            ),
+          ),
+    };
+    const transportEnv = Object.fromEntries(
+      TRANSPORT_ENV_KEYS.filter((key) => this.env?.[key] !== undefined).map((key) => [
+        key,
+        this.env?.[key],
+      ]),
+    );
+    // Loaded evaluation settings stay bound to the provider. Normalize aliases so
+    // a retained uppercase value also overrides a later lowercase scope value.
+    for (const key of PROXY_ENV_KEYS) {
+      const lower = key.toLowerCase();
+      const value = this.env?.[lower] ?? this.env?.[key];
+      if (value !== undefined) {
+        transportEnv[lower] = value;
+      }
+    }
+    const organization = this.getOrganization(config);
+    const apiUrl = new URL(config.apiBaseUrl);
+    const suppressAmbientKey =
+      overrides.apiKey === undefined &&
+      !this.config.apiKey &&
+      !this.config.apiKeyEnvar &&
+      apiUrl.hostname.toLowerCase() !== 'api.openai.com' &&
+      (!this.requiresApiKey() || hasOpenAiGatewayCredentials(config.headers, apiUrl.href));
+    const keyless = separateEndpoint
+      ? !apiKey && hasOpenAiGatewayCredentials(undefined, apiUrl.href)
+      : suppressAmbientKey || (!apiKey && !this.requiresApiKey());
+    if (
+      !separateEndpoint &&
+      overrides.apiKey !== undefined &&
+      hasOpenAiGatewayCredentials(undefined, apiUrl.href)
+    ) {
+      throw new Error(
+        'Set session.baseURL when overriding apiKey for a model URL containing credentials.',
+      );
+    }
+    const query = apiUrl.search.slice(1);
+    apiUrl.search = '';
+    apiUrl.hash = '';
+    return new OpenAI({
+      // The SDK requires a constructor key; the null header keeps it off the wire.
+      apiKey: keyless ? 'promptfoo-no-auth' : (apiKey ?? null),
+      adminAPIKey: null,
+      maxRetries:
+        this.config.maxRetries === undefined ? undefined : Math.max(0, this.config.maxRetries),
+      baseURL: apiUrl.toString(),
+      organization,
+      project: overrides.project ?? (separateCredentials ? null : undefined),
+      defaultHeaders: {
+        ...(keyless && { Authorization: null }),
+        ...(organization === '' && { 'OpenAI-Organization': null }),
+        ...(overrides.project === '' && { 'OpenAI-Project': null }),
+        ...this.getOpenAiRequestHeaders(config.headers, config),
+      },
+      fetch: (input, options) => {
+        const url = new URL(input instanceof Request ? input.url : String(input));
+        if (query) {
+          url.search = query + (url.search ? `&${url.search.slice(1)}` : '');
+        }
+        const fetch = () =>
+          fetchWithProxy(input instanceof Request ? new Request(url, input) : url.href, {
+            ...options,
+            disableTransientRetries: true,
+          });
+        return Object.keys(transportEnv).length
+          ? cliState.withEnv({ ...getEnvOverrides(), ...transportEnv }, fetch)
+          : fetch();
+      },
+    }) as unknown as NonNullable<OpenAIProviderOptions['openAIClient']>;
+  }
+
+  private hasScopedConnectionSettings(): boolean {
+    const configKeys = [
+      'apiKey',
+      'apiKeyEnvar',
+      'apiKeyRequired',
+      'apiHost',
+      'apiBaseUrl',
+      'organization',
+      'headers',
+      'maxRetries',
+    ] as const;
+    if (
+      configKeys.some((key) => this.config[key] !== undefined) ||
+      this.config.useDefaultApiKey === false
+    ) {
+      return true;
+    }
+    const connectionEnvKeys = [
+      'OPENAI_API_HOST',
+      'OPENAI_API_BASE_URL',
+      'OPENAI_BASE_URL',
+      'OPENAI_ORGANIZATION',
+      ...TRANSPORT_ENV_KEYS,
+    ] as const;
+    const scopedEnvKeys = ['OPENAI_API_KEY', ...connectionEnvKeys] as const;
+    const scopedEnvs = [this.env, getEnvOverrides(), getEnvOverrides('file')];
+    return (
+      scopedEnvs.some(
+        (env) =>
+          scopedEnvKeys.some((key) => env?.[key] !== undefined) ||
+          PROXY_ENV_KEYS.some(
+            (key) => env?.[key] !== undefined || env?.[key.toLowerCase()] !== undefined,
+          ),
+      ) || connectionEnvKeys.some((key) => getEnvString(key) !== undefined)
+    );
   }
 
   /**
@@ -405,6 +585,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 
   private async resolveRunOptions(
     context?: CallApiContextParams,
+    getClient?: OpenAiAgentsSessionClientFactory,
   ): Promise<Record<string, unknown>> {
     const runOptions = { ...(this.agentConfig.runOptions ?? {}) } as Record<string, any>;
     delete runOptions.stream;
@@ -438,9 +619,9 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     }
 
     if (runOptions.session) {
-      runOptions.session = await loadSessionDefinition(runOptions.session, context);
+      runOptions.session = await loadSessionDefinition(runOptions.session, context, getClient);
     } else if (this.agentConfig.session) {
-      runOptions.session = await this.resolveConfiguredSession(context);
+      runOptions.session = await this.resolveConfiguredSession(context, getClient);
     }
 
     if (runOptions.sandbox) {
@@ -452,49 +633,37 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     return runOptions;
   }
 
-  private async resolveConfiguredSession(context?: CallApiContextParams): Promise<Session> {
-    if (typeof this.agentConfig.session === 'function') {
-      const session = await loadSessionDefinition(this.agentConfig.session, context);
+  private async resolveConfiguredSession(
+    context?: CallApiContextParams,
+    getClient?: OpenAiAgentsSessionClientFactory,
+  ): Promise<Session> {
+    let definition = this.agentConfig.session;
+    if (typeof definition === 'string' && definition.startsWith('file://')) {
+      definition = await loadValueFromFile<OpenAiAgentsSessionConfig>(definition, 'session');
+    }
+    const initialize = async () => {
+      const session = await loadSessionDefinition(definition, context, getClient);
       if (!session) {
         throw new Error('Failed to initialize configured session');
       }
       return session;
+    };
+    if (typeof definition === 'function') {
+      return initialize();
     }
 
-    if (
-      typeof this.agentConfig.session === 'string' &&
-      this.agentConfig.session.startsWith('file://')
-    ) {
-      const exportedSession = await loadValueFromFile<unknown>(this.agentConfig.session, 'session');
-      if (typeof exportedSession === 'function') {
-        const session = await loadSessionDefinition(
-          exportedSession as OpenAiAgentsSessionFactory,
-          context,
-        );
-        if (!session) {
-          throw new Error('Failed to initialize configured session');
-        }
-        return session;
-      }
+    const scope = getClient ? cliState.envScope : undefined;
+    let state = scope ? this.scopedSessionStates.get(scope) : this.defaultSessionState;
+    if (!state) {
+      state = {};
+      this.scopedSessionStates.set(scope!, state);
     }
-
-    if (!this.session) {
-      this.sessionInitialization ??= loadSessionDefinition(this.agentConfig.session, context)
-        .then((session) => {
-          if (!session) {
-            throw new Error('Failed to initialize configured session');
-          }
-          this.session = session;
-          return session;
-        })
-        .catch((error) => {
-          this.sessionInitialization = undefined;
-          throw error;
-        });
-      return await this.sessionInitialization;
-    }
-
-    return this.session;
+    const sessionState = state;
+    sessionState.initialization ??= initialize().catch((error) => {
+      sessionState.initialization = undefined;
+      throw error;
+    });
+    return sessionState.initialization;
   }
 
   private async withSessionLock<T>(session: Session, callback: () => Promise<T>): Promise<T> {

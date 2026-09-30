@@ -180,6 +180,7 @@ export class MemorySystem {
 }
 
 export class CrescendoProvider implements ApiProvider {
+  readonly usesOriginalProvider = true;
   readonly config: CrescendoConfig;
   private readonly nunjucks: any;
   private userGoal: string | undefined;

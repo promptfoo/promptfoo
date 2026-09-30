@@ -1325,6 +1325,7 @@ async function runRedteamConversation({
  * Represents a provider for iterative red team attacks.
  */
 class RedteamIterativeTreeProvider implements ApiProvider {
+  readonly usesOriginalProvider = true;
   private readonly injectVar: string;
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   readonly inputs?: Inputs;
