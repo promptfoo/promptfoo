@@ -82,6 +82,8 @@ Prompt-level configuration overrides provider-level configuration. String values
 
 Muse Code can edit files and run commands. Promptfoo inherits its native sandbox and approval policy unless you override them in provider configuration. Review your Muse settings before running an eval. With an explicit `working_dir`, workspace changes persist after the eval. Without one, Promptfoo creates and removes a temporary workspace for each call.
 
+Set `evaluateOptions.maxConcurrency: 1` for calls that can modify the same workspace; overlapping calls are rejected before Muse starts.
+
 For read-only evals, set both `disable_shell: true` and `disable_write: true`. Shell sandbox network settings do not disable web or MCP tools. See Meta's [permissions guide](https://dev.meta.ai/docs/muse-code/permissions) for the boundaries of each option.
 
 Promptfoo always enables `--user-input-auto-resolve`, which cancels clarification questions in headless mode. This does not grant tool approval. A run that still needs human approval may remain pending until `timeout_ms`; configure `approval_mode: never` when you explicitly want unattended tool execution within the native sandbox.

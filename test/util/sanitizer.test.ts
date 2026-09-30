@@ -206,6 +206,70 @@ describe('sanitizeConfigForOutput', () => {
 });
 
 describe('sanitizeConfigForPersistence', () => {
+  it('preserves provider credential selectors and protocol headers', () => {
+    const saved = sanitizeConfigForPersistence({
+      providers: [
+        {
+          id: 'openai:chat:fixture',
+          config: {
+            apiKeyEnvar: 'GATEWAY_API_KEY',
+            apiKey: 'literal-key',
+            headers: {
+              'anthropic-beta': 'structured-outputs-2025-11-13',
+              'anthropic-version': '2023-06-01',
+              Authorization: 'Bearer literal-key',
+              'x-custom-auth': 'custom-key',
+            },
+          },
+        },
+      ],
+    });
+    expect(saved.providers).toEqual([
+      {
+        id: 'openai:chat:fixture',
+        config: {
+          apiKeyEnvar: 'GATEWAY_API_KEY',
+          headers: {
+            'anthropic-beta': 'structured-outputs-2025-11-13',
+            'anthropic-version': '2023-06-01',
+          },
+        },
+      },
+    ]);
+  });
+
+  it('preserves test schemas while removing nested grading credentials', () => {
+    const response_format = {
+      type: 'json_schema',
+      json_schema: {
+        name: 'credential_fields',
+        schema: {
+          type: 'object',
+          properties: { token: { type: 'string' }, password: { type: 'string' } },
+          required: ['token', 'password'],
+        },
+      },
+    };
+    const test = {
+      options: {
+        response_format,
+        provider: { id: 'openai:chat:fixture', config: { apiKey: 'grader-key' } },
+      },
+    };
+    const expected = {
+      options: { response_format, provider: { id: 'openai:chat:fixture', config: {} } },
+    };
+    const saved = sanitizeConfigForPersistence({
+      defaultTest: test,
+      tests: [test],
+      scenarios: [{ config: [test], tests: [test] }],
+    });
+    expect(saved.defaultTest).toEqual(expected);
+    expect(saved.tests).toEqual([expected]);
+    expect(saved.scenarios).toEqual([{ config: [expected], tests: [expected] }]);
+    expect(test.options.provider.config.apiKey).toBe('grader-key');
+  });
+
   it('omits stored credentials while preserving test inputs and credential references', () => {
     const provider = { id: 'muse-code', config: { apiKey: 'fixture-key' } };
     const test = {
@@ -2276,6 +2340,23 @@ describe('sanitizeObject url-keyed fields', () => {
 });
 
 describe('collectEnvCredentials', () => {
+  it.each([
+    ['scalar', 'AbCdEfGhIjKlMnOp'],
+    ['array', ['AbCdEfGhIjKlMnOp', 'QrStUvWxYz']],
+    ['nested array', [['AbCdEfGhIjKlMnOp'], { value: 'QrStUvWxYz' }]],
+  ])(
+    'collects JSON %s values declared as credentials by their environment key',
+    (_label, value) => {
+      const serialized = JSON.stringify(value);
+      const credentials = collectEnvCredentials({ AZURE_CREDENTIALS: serialized });
+      expect(credentials).toContain('AbCdEfGhIjKlMnOp');
+      if (Array.isArray(value)) {
+        expect(credentials).toContain('QrStUvWxYz');
+      }
+      expect(collectEnvCredentials({ SETTINGS: serialized })).toEqual([]);
+    },
+  );
+
   it('collects connection-string credentials without treating plus signs as spaces', () => {
     const connection =
       'DefaultEndpointsProtocol=https;AccountName=fixture;AccountKey=short+key==;EndpointSuffix=core.windows.net';
@@ -2300,9 +2381,9 @@ describe('collectEnvCredentials', () => {
     },
   );
 
-  it('collects credential leaves from structured environment values', () => {
+  it('collects credential leaves without redacting unrelated settings', () => {
     const credentials = collectEnvCredentials({
-      AZURE_CREDENTIALS: JSON.stringify({
+      SETTINGS: JSON.stringify({
         tenant: 'ordinary-tenant',
         nested: [{ clientSecret: 'fixture-secret', clientId: 'ordinary-client' }],
       }),

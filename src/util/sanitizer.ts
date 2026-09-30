@@ -188,7 +188,6 @@ export const SECRET_FIELD_NAMES = new Set([
   'authorization',
   'auth',
   'bearer',
-  'apikeyenvar', // environment variable name for API key
 
   // Header-specific patterns (normalized: hyphens removed)
   'xapikey', // x-api-key
@@ -516,8 +515,12 @@ function collectAuthorizationCredentials(value: string, credentials: Set<string>
   }
 }
 
-function collectStructuredCredentials(value: string, addCredential: (value: string) => void): void {
-  if (!/^\s*[\[{]/.test(value)) {
+function collectStructuredCredentials(
+  value: string,
+  addCredential: (value: string) => void,
+  credential = false,
+): void {
+  if (!/^\s*[\[{"]/.test(value)) {
     return;
   }
   let parsed: unknown;
@@ -526,9 +529,7 @@ function collectStructuredCredentials(value: string, addCredential: (value: stri
   } catch {
     return;
   }
-  const pending: Array<{ value: unknown; credential: boolean }> = [
-    { value: parsed, credential: false },
-  ];
+  const pending: Array<{ value: unknown; credential: boolean }> = [{ value: parsed, credential }];
   while (pending.length) {
     const { value: item, credential } = pending.pop()!;
     if (typeof item === 'string') {
@@ -711,10 +712,14 @@ export function collectEnvCredentials(env: Record<string, unknown>, baseUrl?: st
         credentials.add(value);
         collectAuthorizationCredentials(value, credentials);
       }
-      collectStructuredCredentials(value, (credential) => {
-        credentials.add(credential);
-        collectAuthorizationCredentials(credential, credentials);
-      });
+      collectStructuredCredentials(
+        value,
+        (credential) => {
+          credentials.add(credential);
+          collectAuthorizationCredentials(credential, credentials);
+        },
+        !operational && isCredentialName(key),
+      );
       // Connection strings use literal values, so preserve base64 padding and plus signs.
       if (value.includes(';')) {
         for (const field of value.split(';')) {
@@ -741,6 +746,8 @@ export function collectEnvCredentials(env: Record<string, unknown>, baseUrl?: st
 // Headers with standard non-credential meanings; other custom headers may authenticate a gateway.
 const NON_CREDENTIAL_HEADERS = new Set([
   'accept',
+  'anthropic-beta',
+  'anthropic-version',
   'content-type',
   'openai-beta',
   'openai-organization',
@@ -1030,7 +1037,7 @@ export function sanitizeConfigForPersistence(
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => {
         if (
-          ['env', 'provider', 'providers', 'options'].includes(key) ||
+          ['env', 'provider', 'providers'].includes(key) ||
           (key === 'config' && !Array.isArray(item))
         ) {
           return [
@@ -1053,9 +1060,16 @@ export function sanitizeConfigForPersistence(
         }
         return [
           key,
-          ['defaultTest', 'tests', 'scenarios', 'config', 'assert', 'prompts', 'redteam'].includes(
-            key,
-          )
+          [
+            'defaultTest',
+            'tests',
+            'scenarios',
+            'config',
+            'options',
+            'assert',
+            'prompts',
+            'redteam',
+          ].includes(key)
             ? sanitizeProviders(item)
             : item,
         ];

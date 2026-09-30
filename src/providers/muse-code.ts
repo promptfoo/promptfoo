@@ -320,6 +320,9 @@ function redactCredentials(response: ProviderResponse, credentials: string[]): P
   );
 }
 
+// Canonical paths prevent separate provider instances from writing to the same workspace.
+const activeWorkspaces = new Set<string>();
+
 /** Runs Meta's installed Muse Code CLI. Each call starts a new session unless explicitly resumed. */
 export class MuseCodeProvider implements ApiProvider {
   readonly supportsAgenticGrading = true;
@@ -502,6 +505,7 @@ export class MuseCodeProvider implements ApiProvider {
     signal: AbortSignal,
   ): Promise<ProviderResponse> {
     let tempDir: string | undefined;
+    let lockedWorkspace: string | undefined;
     const env = this.buildEnv(config);
     const currentCredentials = collectEnvCredentials(env, config.base_url);
     const historicalCredentials = config.session_id
@@ -520,6 +524,15 @@ export class MuseCodeProvider implements ApiProvider {
       }
       if (config.session_id && this.sessionWorkspaces.get(config.session_id) !== workspace) {
         throw new Error('session_id requires its original working_dir');
+      }
+      if (workspace && (!config.disable_shell || !config.disable_write)) {
+        if (activeWorkspaces.has(workspace)) {
+          throw new Error(
+            'working_dir is already in use. Set evaluateOptions.maxConcurrency to 1 for calls that can modify the same workspace.',
+          );
+        }
+        activeWorkspaces.add(workspace);
+        lockedWorkspace = workspace;
       }
       tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-muse-code-'));
       if (!workspace) {
@@ -569,6 +582,9 @@ export class MuseCodeProvider implements ApiProvider {
         await fs.rm(tempDir, { recursive: true, force: true }).catch((error) => {
           logger.warn('[MuseCode] Failed to remove temporary workspace', { error });
         });
+      }
+      if (lockedWorkspace) {
+        activeWorkspaces.delete(lockedWorkspace);
       }
     }
   }

@@ -809,6 +809,8 @@ describe('MuseCodeProvider', () => {
   it.each([
     { SERVICE_URL: '//user:fixture-password@gateway.example' },
     { AZURE_CREDENTIALS: JSON.stringify({ clientSecret: 'fixture-password' }) },
+    { AZURE_CREDENTIALS: JSON.stringify('fixture-password') },
+    { AZURE_CREDENTIALS: JSON.stringify(['fixture-password']) },
     { AZURE_STORAGE_CONNECTION_STRING: 'AccountName=fixture;AccountKey=fixture-password;' },
     { DATABASE_CONNECTION: 'Server=localhost;Password=fixture-password;Database=example' },
   ])('redacts extracted environment credentials before returning output: %j', async (env) => {
@@ -1389,6 +1391,108 @@ describe('MuseCodeProvider', () => {
     };
     expect((await instance.callApi(prompt)).error).toBeUndefined();
     expect(spawn).toHaveBeenCalledTimes(3);
+  });
+
+  it.each(['same provider', 'different provider', 'workspace alias'])(
+    'rejects overlapping explicit workspace calls from a %s without a session ID',
+    async (kind) => {
+      const alias = path.join(binDir, 'workspace-alias');
+      if (kind === 'workspace alias') {
+        await fs.symlink(testDir, alias, process.platform === 'win32' ? 'junction' : 'dir');
+      }
+      const instance = provider({
+        config: { muse_path: path.join(binDir, executableName('muse')), working_dir: testDir },
+      });
+      const other =
+        kind === 'same provider'
+          ? instance
+          : provider({
+              config: {
+                muse_path: path.join(binDir, executableName('muse')),
+                working_dir: kind === 'workspace alias' ? alias : testDir,
+              },
+            });
+      onSpawn = (child) => {
+        if (children.length > 1) {
+          child.stdout.write(fixture);
+          child.close();
+        }
+      };
+      const first = instance.callApi(prompt);
+      await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(1));
+      const overlap = await other.callApi('overlap');
+      expect(overlap.error).toContain('working_dir is already in use');
+      expect(spawn).toHaveBeenCalledTimes(1);
+      children[0].stdout.write(fixture);
+      children[0].close();
+      expect((await first).error).toBeUndefined();
+      expect((await other.callApi(prompt)).error).toBeUndefined();
+      expect(spawn).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each(['error', 'abort'])('releases an explicit workspace after %s', async (outcome) => {
+    const instance = provider({
+      config: { muse_path: path.join(binDir, executableName('muse')), working_dir: testDir },
+    });
+    const controller = new AbortController();
+    onSpawn = () => {};
+    const first = instance.callApi(prompt, undefined, { abortSignal: controller.signal });
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(1));
+    if (outcome === 'abort') {
+      controller.abort();
+    } else {
+      children[0].close(1);
+    }
+    expect((await first).error).toBeDefined();
+    onSpawn = (child) => {
+      child.stdout.write(fixture);
+      child.close();
+    };
+    expect((await instance.callApi(prompt)).error).toBeUndefined();
+    expect(spawn).toHaveBeenCalledTimes(2);
+  });
+
+  it('allows simultaneous read-only calls in the same explicit workspace', async () => {
+    const instance = provider({
+      config: {
+        muse_path: path.join(binDir, executableName('muse')),
+        working_dir: testDir,
+        disable_shell: true,
+        disable_write: true,
+      },
+    });
+    onSpawn = () => {};
+    const first = instance.callApi(prompt);
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(1));
+    const second = instance.callApi(prompt);
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2));
+    for (const child of children) {
+      child.stdout.write(fixture);
+      child.close();
+    }
+    expect((await first).error).toBeUndefined();
+    expect((await second).error).toBeUndefined();
+  });
+
+  it('keeps calls with different explicit workspaces independent', async () => {
+    const otherDir = path.join(testDir, 'other');
+    await fs.mkdir(otherDir);
+    onSpawn = () => {};
+    const first = provider({
+      config: { muse_path: path.join(binDir, executableName('muse')), working_dir: testDir },
+    }).callApi(prompt);
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(1));
+    const second = provider({
+      config: { muse_path: path.join(binDir, executableName('muse')), working_dir: otherDir },
+    }).callApi(prompt);
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2));
+    for (const child of children) {
+      child.stdout.write(fixture);
+      child.close();
+    }
+    expect((await first).error).toBeUndefined();
+    expect((await second).error).toBeUndefined();
   });
 
   it('redacts credentials from earlier runs when a session is reused', async () => {
