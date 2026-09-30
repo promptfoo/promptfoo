@@ -11,8 +11,8 @@ import {
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { UserSchemas } from '../../types/api/user';
-import { replyValidationError } from '../utils/errors';
+import { isHostedCloudHost, UserSchemas } from '../../types/api/user';
+import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const userRouter = Router();
@@ -111,6 +111,11 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
   }
 });
 
+function getBrowserSafeHttpUrl(url: string | null): string | null {
+  const result = UserSchemas.CloudConfig.Response.shape.appUrl.safeParse(url?.trim());
+  return result.success ? result.data : null;
+}
+
 // New API key authentication endpoint that mirrors CLI behavior
 userRouter.post('/login', async (req: Request, res: Response): Promise<void> => {
   const bodyResult = UserSchemas.Login.Request.safeParse(req.body);
@@ -197,14 +202,22 @@ userRouter.post('/logout', async (_req: Request, res: Response): Promise<void> =
  */
 userRouter.get('/cloud-config', async (_req: Request, res: Response): Promise<void> => {
   try {
+    cloudConfig.reload();
+    const isEnabled = cloudConfig.isEnabled();
+    const apiHost = getBrowserSafeHttpUrl(cloudConfig.getApiHost());
+    const hasEnterpriseApiHost = apiHost !== null && !isHostedCloudHost(apiHost);
+    const appUrl = getBrowserSafeHttpUrl(
+      cloudConfig.getConfiguredAppUrl() ?? (hasEnterpriseApiHost ? null : cloudConfig.getAppUrl()),
+    );
+
     res.json(
       UserSchemas.CloudConfig.Response.parse({
-        appUrl: cloudConfig.getAppUrl(),
-        isEnabled: cloudConfig.isEnabled(),
+        appUrl,
+        isEnabled,
+        isEnterprise: appUrl ? !isHostedCloudHost(appUrl) : hasEnterpriseApiHost,
       }),
     );
   } catch (error) {
-    logger.error(`Error getting cloud config: ${error}`);
-    res.status(500).json({ error: 'Failed to get cloud config' });
+    sendError(res, 500, 'Failed to get cloud config', error);
   }
 });

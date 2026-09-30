@@ -196,6 +196,20 @@ describe('CloudConfig', () => {
       });
     });
 
+    it('distinguishes the default dashboard from an explicitly saved URL', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id', cloud: {} });
+      const config = new CloudConfig();
+      expect(config.getAppUrl()).toBe('https://www.promptfoo.app');
+      expect(config.getConfiguredAppUrl()).toBeUndefined();
+
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { appUrl: 'https://www.promptfoo.app' },
+      });
+      config.reload();
+      expect(config.getConfiguredAppUrl()).toBe('https://www.promptfoo.app');
+    });
+
     it('should set and get sharing', () => {
       cloudConfigInstance.setSharing(true);
       expect(writeGlobalConfigPartial).toHaveBeenCalledWith({

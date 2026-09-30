@@ -1,12 +1,14 @@
 import useApiConfig from '@app/stores/apiConfig';
 import { useUserStore } from '@app/stores/userStore';
+import {
+  type CloudConfigResponse,
+  CloudConfigResponseSchema,
+  isHostedCloudHost,
+} from '@promptfoo/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { callApi, getApiBaseUrl } from '../utils/api';
 
-export type CloudConfigData = {
-  appUrl: string;
-  isEnabled: boolean;
-};
+export type CloudConfigData = CloudConfigResponse;
 
 /** Loads cloud configuration shared by consumers of the same endpoint and session. */
 export default function useCloudConfig(): {
@@ -27,7 +29,12 @@ export default function useCloudConfig(): {
         if (!response.ok) {
           throw new Error('Failed to fetch cloud config');
         }
-        return await response.json();
+        const data = CloudConfigResponseSchema.parse(await response.json());
+        return {
+          ...data,
+          isEnterprise:
+            data.isEnterprise ?? (data.appUrl !== null && !isHostedCloudHost(data.appUrl)),
+        };
       } catch (error) {
         if (!signal.aborted) {
           console.error('Error fetching cloud config:', error);

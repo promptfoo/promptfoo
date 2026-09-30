@@ -1,25 +1,11 @@
 import logger from '../logger';
+import { isHostedCloudHost } from '../types/api/user';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 export const CLOUD_API_HOST = 'https://api.promptfoo.app';
 
-const CLOUD_HOSTNAMES = new Set([
-  new URL(CLOUD_API_HOST).hostname,
-  new URL('https://www.promptfoo.app').hostname,
-  new URL('https://promptfoo.app').hostname,
-]);
-
 // Free customers created before this date are grandfathered into auto-share.
 export const SHARING_CUTOFF_DATE = new Date('2026-03-09T00:00:00Z');
-
-function isPromptfooCloudHost(url: string): boolean {
-  try {
-    const hostname = new URL(url).hostname.toLowerCase().replace(/\.$/, '');
-    return CLOUD_HOSTNAMES.has(hostname);
-  } catch {
-    return false;
-  }
-}
 
 let hasWarnedAboutLegacyApiHost = false;
 
@@ -71,7 +57,7 @@ interface CloudTokenValidation {
 }
 
 interface CloudConfigState {
-  appUrl: string;
+  appUrl?: string;
   apiHost?: string;
   apiKey?: string;
   authHeaderName?: string;
@@ -112,7 +98,7 @@ export class CloudConfig {
   private readConfig(): CloudConfigState {
     const savedConfig = readGlobalConfig()?.cloud || {};
     return {
-      appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
+      appUrl: savedConfig.appUrl,
       apiHost: savedConfig.apiHost,
       apiKey: savedConfig.apiKey,
       authHeaderName: savedConfig.authHeaderName,
@@ -228,7 +214,11 @@ export class CloudConfig {
   }
 
   getAppUrl(): string {
-    return this.config.appUrl;
+    return this.config.appUrl || 'https://www.promptfoo.app';
+  }
+
+  getConfiguredAppUrl(): string | undefined {
+    return this.config.appUrl || undefined;
   }
 
   getSharing(): boolean | undefined {
@@ -255,7 +245,8 @@ export class CloudConfig {
     this.reload();
   }
 
-  private reload(): void {
+  /** Reload settings changed by a separate CLI authentication command. */
+  reload(): void {
     this.config = this.readConfig();
   }
 
@@ -278,7 +269,7 @@ export class CloudConfig {
     // auto-sharing to the on-prem Report Server when the server omits the field
     // or returns false because it has no licence-check logic. The validated app
     // URL keeps hosted Cloud behind an API proxy on the public-cloud license gate.
-    const isPublicCloud = isPromptfooCloudHost(apiHost) || isPromptfooCloudHost(app.url);
+    const isPublicCloud = isHostedCloudHost(apiHost) || isHostedCloudHost(app.url);
     if (!isPublicCloud) {
       this.setSharing(true);
     } else if (typeof hasActiveLicense === 'boolean') {

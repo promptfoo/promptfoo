@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 
 import {
   NavigationMenu,
@@ -15,6 +15,7 @@ import { cn } from '@app/lib/utils';
 import { Info, Settings } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
 import ApiSettingsModal from './ApiSettingsModal';
+import CloudStatusIndicator from './CloudStatusIndicator';
 import InfoModal from './InfoModal';
 import Logo from './Logo';
 import ThemeSelector from './ThemeSelector';
@@ -195,6 +196,25 @@ const browseMenuItems: MenuItem[] = [
 ];
 
 export default function Navigation() {
+  const headerRef = useRef<HTMLElement>(null);
+
+  useLayoutEffect(() => {
+    const header = headerRef.current;
+    if (!header) {
+      return;
+    }
+    const updateHeight = () => {
+      document.documentElement.style.setProperty('--nav-height', `${header.offsetHeight}px`);
+    };
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(header);
+    return () => {
+      observer.disconnect();
+      document.documentElement.style.removeProperty('--nav-height');
+    };
+  }, []);
+
   const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
   const [showApiSettingsModal, setShowApiSettingsModal] = useState<boolean>(false);
 
@@ -203,10 +223,13 @@ export default function Navigation() {
 
   return (
     <>
-      <header className="sticky top-0 z-(--z-appbar) w-full border-b border-border bg-card shadow-sm">
-        <div className="flex h-14 min-w-0 items-center justify-between gap-2 px-3 sm:px-4">
+      <header
+        ref={headerRef}
+        className="sticky top-0 z-(--z-appbar) w-full border-b border-border bg-card shadow-sm"
+      >
+        <div className="flex min-h-14 flex-wrap items-center justify-between gap-2 px-3 py-1 sm:h-14 sm:flex-nowrap sm:px-4 sm:py-0">
           {/* Left section: Logo and Navigation */}
-          <div className="flex min-w-0 items-center gap-2 sm:gap-6">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-6">
             <Logo />
             <NavigationMenu>
               <NavigationMenuList className="gap-1">
@@ -250,7 +273,7 @@ export default function Navigation() {
           </div>
 
           {/* Right section: Actions */}
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="ml-auto flex shrink-0 items-center gap-1">
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
@@ -266,19 +289,22 @@ export default function Navigation() {
             </Tooltip>
 
             {IS_RUNNING_LOCALLY && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={handleApiSettingsModalToggle}
-                    className="inline-flex size-11 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:size-9"
-                  >
-                    <Settings className="size-5" />
-                    <span className="sr-only">API and Sharing Settings</span>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">API and Sharing Settings</TooltipContent>
-              </Tooltip>
+              <>
+                <CloudStatusIndicator />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={handleApiSettingsModalToggle}
+                      className="inline-flex size-11 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:size-9"
+                    >
+                      <Settings className="size-5" />
+                      <span className="sr-only">API and Sharing Settings</span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">API and Sharing Settings</TooltipContent>
+                </Tooltip>
+              </>
             )}
 
             <ThemeSelector />
