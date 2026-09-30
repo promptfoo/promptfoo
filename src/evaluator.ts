@@ -1470,6 +1470,7 @@ async function gradeRunEvalResponse({
       { abortSignal, providerCallQueue, rateLimitRegistry },
       () =>
         runAssertions({
+          evalId,
           prompt: renderedPrompt,
           provider,
           providerResponse: assertionProviderResponse,
@@ -1490,6 +1491,7 @@ async function gradeRunEvalResponse({
     { abortSignal, rateLimitRegistry },
     () =>
       runAssertions({
+        evalId,
         prompt: renderedPrompt,
         provider,
         providerResponse: assertionProviderResponse,
@@ -4293,7 +4295,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         if (
           rows.some(
             (row) =>
-              (row.response?.audio || row.response?.metadata?.workingDir) &&
+              (row.response?.audio || row.response?.video || row.response?.metadata?.workingDir) &&
               deferredGradingPromises.has(row),
           )
         ) {

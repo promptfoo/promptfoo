@@ -4,7 +4,11 @@ import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
-import { AIStudioEmbeddingProvider, getGoogleAiStudioProviders } from './google/ai.studio';
+import {
+  AIStudioEmbeddingProvider,
+  getGoogleAiStudioJsonProvider,
+  getGoogleAiStudioProviders,
+} from './google/ai.studio';
 import { hasGoogleDefaultCredentials } from './google/util';
 import { getGoogleVertexEmbeddingProvider, getGoogleVertexProviders } from './google/vertex';
 import { MistralEmbeddingProvider as MistralEmbeddingApiProvider } from './mistral';
@@ -160,6 +164,10 @@ export async function setDefaultCompletionProviders(provider: ApiProvider) {
 
 export async function setDefaultEmbeddingProviders(provider: ApiProvider) {
   defaultEmbeddingProvider = provider;
+}
+
+export function getDefaultVideoGradingProvider(env?: EnvOverrides): ApiProvider {
+  return defaultCompletionProvider ?? getGoogleAiStudioJsonProvider(env);
 }
 
 export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {

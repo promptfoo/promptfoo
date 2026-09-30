@@ -5,13 +5,19 @@ import { loadFromJavaScriptFile } from '../assertions/utils';
 import cliState from '../cliState';
 import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
-import { getDefaultProviders } from '../providers/defaults';
+import { DEFAULT_VIDEO_GRADING_PROMPT } from '../prompts/grading';
+import { getDefaultProviders, getDefaultVideoGradingProvider } from '../providers/defaults';
 import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { parseFileUrl } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
 import { extractJsonObjects, safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
+import {
+  resolveVideoBytes,
+  VIDEO_INLINE_LIMIT_BYTES,
+  videoResolutionErrorMessage,
+} from '../util/video';
 import { loadYaml } from '../util/yamlLoad';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { graderFail, normalizeMatcherTokenUsage } from './shared';
@@ -181,14 +187,20 @@ type ChatMessageLike = {
   [key: string]: unknown;
 };
 
-function isChatMessageArray(value: unknown): value is ChatMessageLike[] {
+function isChatMessageArray(
+  value: unknown,
+  format: MultimodalPromptFormat,
+): value is ChatMessageLike[] {
   return (
     Array.isArray(value) &&
     value.every(
       (message) =>
         message !== null &&
         typeof message === 'object' &&
-        typeof (message as ChatMessageLike).role === 'string',
+        (typeof (message as ChatMessageLike).role === 'string' ||
+          (format === 'google' &&
+            (message as ChatMessageLike).role === undefined &&
+            Array.isArray((message as ChatMessageLike).parts))),
     )
   );
 }
@@ -661,11 +673,11 @@ function appendMediaToChatPrompt(
   mediaParts: MultimodalPromptPart[],
   format: MultimodalPromptFormat,
 ): string {
-  let parsed: ChatMessageLike[] | undefined;
+  let parsed: unknown;
   const trimmedPrompt = renderedPrompt.trim();
   if (trimmedPrompt.startsWith('- role:')) {
     try {
-      parsed = loadYaml(renderedPrompt) as ChatMessageLike[] | undefined;
+      parsed = loadYaml(renderedPrompt);
     } catch (err) {
       throw new Error(
         `Chat Completion prompt is not a valid YAML string: ${err}\n\n${renderedPrompt}`,
@@ -678,11 +690,16 @@ function appendMediaToChatPrompt(
       // Non-JSON prompts are still valid text prompts. Wrap them below.
     }
   }
-  if (isChatMessageArray(parsed)) {
-    const messages = parsed.map((message) => ({ ...message }));
+  const request =
+    format === 'google' && parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined;
+  const contents = request?.contents ?? parsed;
+  if (isChatMessageArray(contents, format)) {
+    const messages = contents.map((message) => ({ ...message }));
     let userMessageIndex = -1;
     for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'user') {
+      if (messages[i].role === 'user' || (format === 'google' && messages[i].role === undefined)) {
         userMessageIndex = i;
         break;
       }
@@ -692,13 +709,18 @@ function appendMediaToChatPrompt(
       const userMessage = messages[userMessageIndex];
       messages[userMessageIndex] = {
         ...userMessage,
-        content: appendMediaToContent(userMessage.content, mediaParts, format),
+        ...(format === 'google' && Array.isArray(userMessage.parts)
+          ? { parts: [...userMessage.parts, ...mediaParts] }
+          : { content: appendMediaToContent(userMessage.content, mediaParts, format) }),
       };
     } else {
-      messages.push({ role: 'user', content: mediaParts });
+      messages.push({
+        role: 'user',
+        ...(format === 'google' ? { parts: mediaParts } : { content: mediaParts }),
+      });
     }
 
-    return JSON.stringify(messages);
+    return JSON.stringify(request ? { ...request, contents: messages } : messages);
   }
 
   return JSON.stringify([
@@ -770,11 +792,86 @@ async function buildGradingProviderPrompt(
   };
 }
 
+interface RawVideoRubricResult {
+  pass?: unknown;
+  reason?: unknown;
+  score?: unknown;
+}
+
+function parseVideoRubricResponse(resp: ProviderResponse): RawVideoRubricResult | undefined {
+  let output = resp.output;
+  if (typeof output === 'string') {
+    const text = output.trim();
+    const fenced = text.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i);
+    try {
+      output = JSON.parse(fenced ? fenced[1] : text);
+    } catch {
+      return undefined;
+    }
+  }
+  return output && typeof output === 'object' && !Array.isArray(output)
+    ? (output as RawVideoRubricResult)
+    : undefined;
+}
+
+function normalizeVideoRubricResponse(
+  parsed: RawVideoRubricResult,
+): (Pick<GradingResult, 'pass' | 'score'> & { reason?: string }) | undefined {
+  let pass: boolean | undefined;
+  if (typeof parsed.pass === 'boolean') {
+    pass = parsed.pass;
+  } else if (typeof parsed.pass === 'string') {
+    const normalized = parsed.pass.trim().toLowerCase();
+    if (['true', 'yes', 'pass', 'y'].includes(normalized)) {
+      pass = true;
+    } else if (['false', 'no', 'fail', 'n'].includes(normalized)) {
+      pass = false;
+    }
+  }
+
+  const numericScore =
+    typeof parsed.score === 'number'
+      ? parsed.score
+      : typeof parsed.score === 'string' && parsed.score.trim() !== ''
+        ? Number(parsed.score)
+        : Number.NaN;
+
+  if (
+    pass === undefined ||
+    !Number.isFinite(numericScore) ||
+    numericScore < 0 ||
+    numericScore > 1
+  ) {
+    return undefined;
+  }
+
+  return {
+    pass,
+    score: numericScore,
+    ...(typeof parsed.reason === 'string' && { reason: parsed.reason }),
+  };
+}
+
 function parseJsonGradingResponse(
   label: string,
   resp: ProviderResponse,
+  strictVideo = false,
 ): { parsed?: Partial<GradingResult>; failure?: Omit<GradingResult, 'assertion'> } {
   const failWithTokens = (reason: string) => graderFailureFromResponse(reason, resp);
+  if (strictVideo) {
+    const raw = parseVideoRubricResponse(resp);
+    if (!raw) {
+      return { failure: failWithTokens('video-rubric requires one complete JSON object') };
+    }
+    const parsed = normalizeVideoRubricResponse(raw);
+    return parsed
+      ? { parsed }
+      : {
+          failure: failWithTokens(
+            'video-rubric response must include a boolean pass and a finite score between 0 and 1',
+          ),
+        };
+  }
 
   let jsonObjects: unknown[] = [];
   if (typeof resp.output === 'string') {
@@ -840,6 +937,44 @@ function graderFailureFromResponse(
   return failure;
 }
 
+function gradingOutcome(
+  parsed: Partial<GradingResult>,
+  configuredThreshold: number | string | undefined,
+  video: boolean,
+): Pick<GradingResult, 'pass' | 'score' | 'reason'> {
+  let pass = parsed.pass ?? true;
+  if (typeof pass !== 'boolean') {
+    pass = /^(true|yes|pass|y)$/i.test(String(pass));
+  }
+
+  let score = parsed.score;
+  if (typeof score !== 'number') {
+    score = Number.isFinite(Number(score)) ? Number(score) : Number(pass);
+  }
+
+  const threshold =
+    typeof configuredThreshold === 'string' ? Number(configuredThreshold) : configuredThreshold;
+  if (typeof threshold === 'number' && Number.isFinite(threshold)) {
+    pass = pass && score >= threshold;
+  }
+
+  const thresholdFailed =
+    typeof threshold === 'number' && Number.isFinite(threshold) && score < threshold;
+  const reason =
+    video && thresholdFailed
+      ? `Score ${score} below threshold ${threshold}`
+      : parsed.reason ||
+        (video
+          ? pass
+            ? 'Video grading passed'
+            : 'Video grading failed'
+          : pass
+            ? 'Grading passed'
+            : `Score ${score} below threshold ${threshold}`);
+
+  return { pass, score, reason };
+}
+
 export async function runJsonGradingPrompt({
   assertion,
   checkName,
@@ -852,6 +987,7 @@ export async function runJsonGradingPrompt({
   vars,
   images,
   audio,
+  video,
 }: {
   assertion?: Assertion;
   checkName: string;
@@ -865,13 +1001,17 @@ export async function runJsonGradingPrompt({
   vars: Record<string, VarValue>;
   images?: ImageOutput[];
   audio?: ProviderResponse['audio'];
+  video?: Awaited<ReturnType<typeof resolveVideoBytes>>;
 }): Promise<GradingResult> {
   const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, defaultPrompt);
   const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
 
-  const defaultProviders = await getDefaultProviders();
-  const defaultProvider =
-    defaultProviders.llmRubricProvider || defaultProviders.gradingJsonProvider;
+  const defaultProviders = video ? undefined : await getDefaultProviders();
+  const defaultProvider = video
+    ? grading.provider
+      ? null
+      : getDefaultVideoGradingProvider()
+    : defaultProviders!.llmRubricProvider || defaultProviders!.gradingJsonProvider;
   const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
@@ -879,10 +1019,20 @@ export async function runJsonGradingPrompt({
     checkName,
   );
   const {
-    prompt: providerPrompt,
+    prompt: mediaPrompt,
     imageCount,
     audioAttached,
   } = await buildGradingProviderPrompt(renderedPrompt, images, finalProvider, audio);
+  const providerPrompt = video
+    ? appendMediaToChatPrompt(
+        renderedPrompt,
+        [{ inlineData: { mimeType: video.mimeType, data: video.buffer.toString('base64') } }],
+        'google',
+      )
+    : mediaPrompt;
+  if (video && Buffer.byteLength(providerPrompt, 'utf8') >= VIDEO_INLINE_LIMIT_BYTES) {
+    return graderFail('Video and rubric exceed the 20 MiB video-grading request budget');
+  }
   const resp = await callProviderWithContext(
     finalProvider,
     providerPrompt,
@@ -892,34 +1042,26 @@ export async function runJsonGradingPrompt({
     providerPromptConfig,
   );
   if (resp.error || !resp.output) {
+    if (video) {
+      logger.debug('[VideoRubric] Grading provider returned an error', { error: resp.error });
+      return graderFailureFromResponse(
+        resp.error
+          ? 'Video grading provider returned an error'
+          : 'No output from video grading provider',
+        resp,
+      );
+    }
     if (throwOnError) {
       throw new Error(resp.error || 'No output');
     }
     return graderFailureFromResponse(resp.error || 'No output', resp);
   }
-  const { parsed, failure } = parseJsonGradingResponse(label, resp);
+  const { parsed, failure } = parseJsonGradingResponse(label, resp, Boolean(video));
   if (!parsed) {
     return failure as Omit<GradingResult, 'assertion'>;
   }
 
-  let pass = parsed.pass ?? true;
-  if (typeof pass !== 'boolean') {
-    pass = /^(true|yes|pass|y)$/i.test(String(pass));
-  }
-
-  let score = parsed.score;
-  if (typeof score !== 'number') {
-    score = Number.isFinite(Number(score)) ? Number(score) : Number(pass);
-  }
-
-  const threshold =
-    typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
-  if (typeof threshold === 'number' && Number.isFinite(threshold)) {
-    pass = pass && score >= threshold;
-  }
-
-  const reason =
-    parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`);
+  const { pass, score, reason } = gradingOutcome(parsed, assertion?.threshold, Boolean(video));
 
   let responseMetadata: Record<string, unknown> = {};
   if (resp.metadata && typeof resp.metadata === 'object' && !Array.isArray(resp.metadata)) {
@@ -942,9 +1084,43 @@ export async function runJsonGradingPrompt({
     metadata: {
       ...trustedResponseMetadata,
       renderedGradingPrompt: renderedPrompt,
+      ...(video ? { videoSizeBytes: video.buffer.length, videoMimeType: video.mimeType } : {}),
       ...(imageCount > 0 ? { renderedGradingPromptImages: imageCount } : {}),
       ...(audioAttached ? { renderedGradingPromptAudio: true } : {}),
       ...(resp.cached ? { cachedResponse: true } : {}),
     },
   };
+}
+
+export async function matchesVideoRubric(
+  rubric: string | object,
+  video: NonNullable<ProviderResponse['video']>,
+  grading?: GradingConfig,
+  vars?: Record<string, VarValue>,
+  assertion?: Assertion,
+  providerCallContext?: CallApiContextParams,
+): Promise<GradingResult> {
+  if (!grading) {
+    throw new Error(
+      'Cannot grade video without grading config. Specify --grader option or grading config.',
+    );
+  }
+  let resolved;
+  try {
+    resolved = await resolveVideoBytes(video, providerCallContext?.evaluationId);
+  } catch (error) {
+    logger.debug('[VideoRubric] Failed to resolve managed video', { error });
+    return { ...graderFail(videoResolutionErrorMessage(error)), assertion };
+  }
+  const result = await runJsonGradingPrompt({
+    assertion,
+    grading,
+    providerCallContext,
+    video: resolved,
+    defaultPrompt: DEFAULT_VIDEO_GRADING_PROMPT,
+    label: 'video-rubric',
+    checkName: 'video-rubric check',
+    vars: { ...vars, rubric: typeof rubric === 'object' ? JSON.stringify(rubric) : rubric },
+  });
+  return { ...result, assertion };
 }

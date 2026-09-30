@@ -4,6 +4,7 @@ import { and, eq, isNotNull, or } from 'drizzle-orm';
 import { getDb } from '../database';
 import { blobAssetsTable, blobReferencesTable } from '../database/tables';
 import logger from '../logger';
+import { BoundedReadError } from '../storage/boundedRead';
 import { FilesystemBlobStorageProvider } from './filesystemProvider';
 
 import type { BlobStorageProvider, BlobStoreResult, StoredBlob } from './types';
@@ -119,9 +120,15 @@ export async function storeBlob(
   return { ...result, ref: { ...result.ref, mimeType: registeredMimeType } };
 }
 
-export async function getBlobByHash(hash: string): Promise<StoredBlob> {
+export async function getBlobByHash(hash: string, maxBytes?: number): Promise<StoredBlob> {
   const provider = getBlobStorageProvider();
-  const blob = await provider.getByHash(hash);
+  if (maxBytes !== undefined && !provider.getByHashBounded) {
+    throw new BoundedReadError('unsupported');
+  }
+  const blob =
+    maxBytes === undefined
+      ? await provider.getByHash(hash)
+      : await provider.getByHashBounded!(hash, maxBytes);
   const db = await getDb();
   const asset = await db
     .select({ mimeType: blobAssetsTable.mimeType })

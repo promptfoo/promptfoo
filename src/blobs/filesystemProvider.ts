@@ -4,6 +4,7 @@ import * as fsPromises from 'node:fs/promises';
 import * as path from 'node:path';
 
 import logger from '../logger';
+import { readFileBounded } from '../storage/boundedRead';
 import { getConfigDirectoryPath } from '../util/config/manage';
 import { BLOB_SCHEME, DEFAULT_FILESYSTEM_SUBDIR } from './constants';
 
@@ -122,12 +123,19 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
     };
   }
 
-  async getByHash(hash: string): Promise<StoredBlob> {
+  async getByHashBounded(hash: string, maxBytes: number): Promise<StoredBlob> {
+    return this.getByHash(hash, maxBytes);
+  }
+
+  async getByHash(hash: string, maxBytes?: number): Promise<StoredBlob> {
     const filePath = this.hashToPath(hash);
 
     let data: Buffer;
     try {
-      data = await fsPromises.readFile(filePath);
+      data =
+        maxBytes === undefined
+          ? await fsPromises.readFile(filePath)
+          : await readFileBounded(filePath, maxBytes);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         throw new Error(`Blob not found: ${hash}`);

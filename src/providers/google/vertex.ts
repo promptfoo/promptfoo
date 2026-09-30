@@ -51,6 +51,7 @@ import {
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
   resolveProjectId,
+  serializeGoogleRequest,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -670,6 +671,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
       body.generationConfig.response_mime_type = 'application/json';
     }
 
+    let requestBody: string;
+    try {
+      requestBody = serializeGoogleRequest(body, context?.prompt?.label);
+    } catch (error) {
+      return { error: String(error) };
+    }
+
     const cache = await getCache();
     const apiHost = this.getApiHost();
     const cacheKey = getVertexBodyCacheKey(`vertex:${this.modelName}`, body, apiHost);
@@ -709,7 +717,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           const res = await fetchWithProxy(url, {
             method: 'POST',
             headers: await this.getAuthHeaders(),
-            body: JSON.stringify(body),
+            body: requestBody,
             signal: AbortSignal.timeout(getRequestTimeoutMs()),
           });
 

@@ -113,6 +113,13 @@ After intentionally reducing or otherwise reviewing cross-layer coupling, run
 `npm run architecture:baseline` and include the baseline change in review. Do
 not refresh the baseline merely to make a newly introduced dependency pass.
 
+Video grading uses the existing rubric handler and blob storage adapters. Its four reviewed
+adapter imports are recorded in the baseline: the core rubric calls the Node video
+resolver; that resolver calls the existing blob API; and the blob API and filesystem
+adapter share the Node bounded-read error and reader. Custom blob providers must
+implement the optional bounded-read capability for video grading. Other reads keep
+their existing behavior, and bounded reads never fall back to an unbounded adapter.
+
 ## Browser Import Ratchet
 
 The `app` layer has an additional internal-path allowlist. It pins the existing

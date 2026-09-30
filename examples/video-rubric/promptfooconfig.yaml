@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Grade generated video subjects and actions
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      aspectRatio: '16:9'
+      resolution: '720p'
+      durationSeconds: 6
+
+tests:
+  - vars:
+      prompt: Clouds drift across mountain peaks at sunset
+    assert:
+      - type: video-rubric
+        threshold: 0.7
+        value: |
+          Mountain peaks remain visible while clouds move across them.
+          Score 1 if both are clear, 0.5 if the mountains are visible but the clouds
+          appear stationary, and 0 if no mountains are visible.
+  - vars:
+      prompt: A cat playing with a ball of yarn on a living room floor
+    assert:
+      - type: video-rubric
+        threshold: 0.7
+        value: |
+          A recognizable cat interacts with yarn indoors.
+          Score 1 if the subject and action are clear, 0.5 if the cat is visible
+          but does not interact with yarn, and 0 if no cat is visible.

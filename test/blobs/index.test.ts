@@ -5,6 +5,7 @@ import path from 'node:path';
 import { eq, inArray } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  getBlobByHash,
   getShareAuthorizedBlob,
   isBlobAllowedForShare,
   recordBlobReference,
@@ -463,5 +464,18 @@ describe('storeBlob persistence failures with shared files', () => {
     expect((await getShareAuthorizedBlob(hash, firstEvalId))?.data).toEqual(data);
     await expect(getShareAuthorizedBlob(hash, secondEvalId)).resolves.toBeNull();
     expect(await snapshotFiles()).toEqual(files);
+  });
+});
+
+describe('bounded blob provider capability', () => {
+  afterEach(() => {
+    resetBlobStorageProvider();
+    vi.restoreAllMocks();
+  });
+  it('does not fall back to an unbounded custom reader', async () => {
+    const getByHash = vi.fn();
+    setBlobStorageProvider({ providerId: 'custom', getByHash } as unknown as BlobStorageProvider);
+    await expect(getBlobByHash('a'.repeat(64), 10)).rejects.toMatchObject({ code: 'unsupported' });
+    expect(getByHash).not.toHaveBeenCalled();
   });
 });

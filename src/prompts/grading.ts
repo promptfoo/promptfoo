@@ -186,6 +186,11 @@ export const DEFAULT_WEB_SEARCH_PROMPT = JSON.stringify([
   },
 ]);
 
+export const DEFAULT_VIDEO_GRADING_PROMPT = dedent`Grade the attached video against the rubric below.
+Return one JSON object with a boolean pass, a score from 0 to 1, and a reason describing the visible evidence.
+
+Rubric: {{ rubric }}`;
+
 export const TRAJECTORY_GOAL_SUCCESS_PROMPT = JSON.stringify([
   {
     role: 'system',

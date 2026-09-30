@@ -2021,3 +2021,15 @@ export function createAuthCacheDiscriminator(headers: Record<string, string>): s
   // Create a short hash for cache key (16 hex chars = 64 bits, sufficient for cache differentiation)
   return crypto.createHash('sha256').update(authValues.join('|')).digest('hex').substring(0, 16);
 }
+
+/** Keep the video grader's budget on the final body, including provider config and system text. */
+export function serializeGoogleRequest(
+  body: Record<string, unknown>,
+  promptLabel?: string,
+): string {
+  const serialized = JSON.stringify(body);
+  if (promptLabel === 'video-rubric' && Buffer.byteLength(serialized, 'utf8') >= 20 * 1024 * 1024) {
+    throw new Error('Video grading request exceeds the 20 MiB request budget');
+  }
+  return serialized;
+}

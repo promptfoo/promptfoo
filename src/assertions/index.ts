@@ -72,7 +72,7 @@ import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
 import { handleLevenshtein } from './levenshtein';
-import { handleLlmRubric } from './llmRubric';
+import { handleLlmRubric, handleVideoRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
 import { handleIsValidOpenAiToolsCall } from './openai';
@@ -134,6 +134,7 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'model-graded-factuality',
   'search-rubric',
   'trajectory:goal-success',
+  'video-rubric',
 ]);
 
 const TRACE_AWARE_ASSERTION_TYPES = new Set<AssertionType>([
@@ -314,6 +315,7 @@ const ASSERTION_HANDLERS: Record<
   'trace-error-spans': handleTraceErrorSpans,
   'trace-span-count': handleTraceSpanCount,
   'trace-span-duration': handleTraceSpanDuration,
+  'video-rubric': handleVideoRubric,
   webhook: handleWebhook,
   'word-count': handleWordCount,
 };
@@ -407,6 +409,7 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
  * @see evaluate for full evaluation pipeline
  */
 async function runAssertionInternal({
+  evalId,
   prompt,
   provider,
   assertion,
@@ -418,6 +421,7 @@ async function runAssertionInternal({
   traceData,
   claimStoredGradingUsage,
 }: {
+  evalId?: string;
   prompt?: string;
   provider?: ApiProvider;
   assertion: Assertion;
@@ -615,14 +619,16 @@ async function runAssertionInternal({
       ? activeTraceparent
       : generateTraceparent(traceId, generateSpanId())
     : undefined;
-  const providerCallContext: CallApiContextParams | undefined = provider
-    ? {
-        originalProvider: provider,
-        prompt: { raw: prompt || '', label: '' },
-        vars: resolvedVars,
-        ...(graderTraceparent && { traceparent: graderTraceparent }),
-      }
-    : undefined;
+  const providerCallContext: CallApiContextParams | undefined =
+    provider || evalId
+      ? {
+          originalProvider: provider,
+          ...(evalId && { evaluationId: evalId }),
+          prompt: { raw: prompt || '', label: '' },
+          vars: resolvedVars,
+          ...(graderTraceparent && { traceparent: graderTraceparent }),
+        }
+      : undefined;
 
   const finalTest = getFinalTest(
     vars === undefined ? test : { ...test, vars: resolvedVars },
@@ -752,6 +758,7 @@ export async function runAssertion(
  * @see evaluate for full evaluation pipeline
  */
 export async function runAssertions({
+  evalId,
   assertScoringFunction,
   latencyMs,
   prompt,
@@ -761,6 +768,7 @@ export async function runAssertions({
   vars,
   traceId,
 }: {
+  evalId?: string;
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
   prompt?: string;
@@ -853,6 +861,7 @@ export async function runAssertions({
     }
 
     const result = await runAssertion({
+      evalId,
       prompt,
       provider,
       providerResponse,

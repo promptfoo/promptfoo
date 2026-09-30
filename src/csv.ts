@@ -222,6 +222,7 @@ export function assertionFromString(expected: string): Assertion {
       return {
         type: fullType as AssertionType,
         value: value?.trim?.(),
+        ...(type === 'video-rubric' && threshold !== undefined ? { threshold } : {}),
       };
     }
   }

@@ -25,6 +25,7 @@ const assertTypes: AssertionType[] = [
   // Most common LLM-based assertions
   'similar',
   'llm-rubric',
+  'video-rubric',
   'factuality',
   'model-graded-closedqa',
 
@@ -105,6 +106,7 @@ const ARRAY_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
 const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'similar',
   'llm-rubric',
+  'video-rubric',
   'factuality',
   'model-graded-closedqa',
   'answer-relevance',

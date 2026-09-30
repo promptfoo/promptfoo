@@ -186,6 +186,7 @@ See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [cl
 | [classifier](/docs/configuration/expected-outputs/classifier)                                        | Run LLM output through a classifier                                              |
 | [moderation](/docs/configuration/expected-outputs/moderation)                                        | Check output against safety policies and include provider-reported usage metrics |
 | [llm-rubric](/docs/configuration/expected-outputs/model-graded)                                      | Grade text, images, or audio against a rubric with a compatible model            |
+| [video-rubric](/docs/configuration/expected-outputs/model-graded/video-rubric)                       | Grade a managed video against a rubric with a compatible model                   |
 | [g-eval](/docs/configuration/expected-outputs/model-graded/g-eval)                                   | Chain-of-thought evaluation based on custom criteria using the G-Eval framework  |
 | [answer-relevance](/docs/configuration/expected-outputs/model-graded)                                | Ensure that LLM output is related to original query (default threshold 0.5)      |
 | [context-faithfulness](/docs/configuration/expected-outputs/model-graded)                            | Ensure that LLM output uses the context (default threshold 0.5)                  |

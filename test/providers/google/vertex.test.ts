@@ -197,6 +197,20 @@ describe('VertexChatProvider.callGeminiApi', () => {
     vi.restoreAllMocks();
   });
 
+  it('checks the complete video grading body before cache lookup or OAuth request', async () => {
+    const request = mockVertexRequest({});
+    provider = new VertexChatProvider('gemini-pro', {
+      config: { systemInstruction: 'x'.repeat(20 * 1024 * 1024) },
+    });
+    const response = await provider.callGeminiApi('Small video fixture', {
+      prompt: { raw: 'Small video fixture', label: 'video-rubric' },
+      vars: {},
+    });
+    expect(response.error).toContain('20 MiB request budget');
+    expect(mockCacheGet).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it('should call the Gemini API and return the response', async () => {
     const mockResponse = {
       data: [

@@ -839,6 +839,21 @@ describe('AIStudioChatProvider', () => {
       vi.restoreAllMocks();
     });
 
+    it('checks the complete video grading body before sending a request', async () => {
+      provider.config.systemInstruction = 'x'.repeat(20 * 1024 * 1024);
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'Small video fixture' }] }],
+        coerced: false,
+        systemInstruction: { parts: [{ text: 'x'.repeat(20 * 1024 * 1024) }] },
+      });
+      const response = await provider.callGemini('Small video fixture', {
+        prompt: { raw: 'Small video fixture', label: 'video-rubric' },
+        vars: {},
+      });
+      expect(response.error).toContain('20 MiB request budget');
+      expect(cache.fetchWithCache).not.toHaveBeenCalled();
+    });
+
     it('should pass API key in x-goog-api-key header instead of URL query param', async () => {
       const mockResponse = {
         data: {

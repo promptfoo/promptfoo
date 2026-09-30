@@ -14,6 +14,22 @@ vi.mock('../src/logger', () => ({
 import type { Assertion, CsvRow, TestCase } from '../src/types/index';
 
 describe('testCaseFromCsvRow', () => {
+  it.each(['video-rubric', 'not-video-rubric'])(
+    'preserves explicit compact %s thresholds without introducing a default',
+    (type) => {
+      for (const threshold of [0, 0.8]) {
+        expect(
+          testCaseFromCsvRow({
+            __expected: `${type}(${threshold}): A bicycle stays visible.`,
+          }).assert,
+        ).toEqual([{ type, value: 'A bicycle stays visible.', threshold }]);
+      }
+      expect(
+        testCaseFromCsvRow({ __expected: `${type}: A bicycle stays visible.` }).assert,
+      ).toEqual([{ type, value: 'A bicycle stays visible.' }]);
+    },
+  );
+
   const INVALID_THRESHOLD_VALUES = [
     'not-a-number',
     'abc',
