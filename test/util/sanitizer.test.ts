@@ -206,7 +206,7 @@ describe('sanitizeConfigForOutput', () => {
 });
 
 describe('sanitizeConfigForPersistence', () => {
-  it('redacts provider settings at every config scope without changing replay inputs', () => {
+  it('omits stored credentials while preserving test inputs and credential references', () => {
     const provider = { id: 'muse-code', config: { apiKey: 'fixture-key' } };
     const test = {
       vars: { password: 'test-input' },
@@ -228,17 +228,15 @@ describe('sanitizeConfigForPersistence', () => {
     expect(JSON.stringify(saved)).not.toContain('fixture-password');
     expect(saved.env).toEqual({
       META_API_KEY: '{{ env.META_API_KEY }}',
-      DATABASE_PASSWORD: '[REDACTED]',
     });
     expect(saved.tests).toEqual([expect.objectContaining({ vars: test.vars })]);
-    expect(saved.prompts).toEqual([
-      { raw: 'test-input', label: 'input', config: { apiKey: '[REDACTED]' } },
-    ]);
+    expect(saved.prompts).toEqual([{ raw: 'test-input', label: 'input', config: {} }]);
     expect(saved.defaultTest).toMatchObject({ vars: test.vars });
     expect(saved.redteam).toMatchObject({
-      provider: { config: { apiKey: '[REDACTED]' } },
+      provider: { config: {} },
       purpose: 'test-input',
     });
+    expect(saved.providers).toEqual([{ id: 'muse-code', config: {} }]);
     expect(provider.config.apiKey).toBe('fixture-key');
   });
 });
@@ -2278,6 +2276,30 @@ describe('sanitizeObject url-keyed fields', () => {
 });
 
 describe('collectEnvCredentials', () => {
+  it('collects connection-string credentials without treating plus signs as spaces', () => {
+    const connection =
+      'DefaultEndpointsProtocol=https;AccountName=fixture;AccountKey=short+key==;EndpointSuffix=core.windows.net';
+    const credentials = collectEnvCredentials({
+      AZURE_STORAGE_CONNECTION_STRING: connection,
+      DATABASE_CONNECTION: 'Server=localhost;Password=short-pass;Database=example',
+      SETTINGS: 'AuthType=basic;TokenEndpoint=/token;Timeout=30',
+    });
+    expect(credentials).toEqual(expect.arrayContaining(['short+key==', 'short-pass']));
+    for (const ordinary of ['fixture', 'basic', '/token', '30']) {
+      expect(credentials).not.toContain(ordinary);
+    }
+    expect(credentials).not.toContain('short key==');
+  });
+
+  it.each(['HTTPAuthToken', 'XMLAPIKey', 'APIKey'])(
+    'recognizes acronym boundaries in credential field %s',
+    (key) => {
+      expect(
+        collectEnvCredentials({ SETTINGS: JSON.stringify({ [key]: 'short-secret' }) }),
+      ).toContain('short-secret');
+    },
+  );
+
   it('collects credential leaves from structured environment values', () => {
     const credentials = collectEnvCredentials({
       AZURE_CREDENTIALS: JSON.stringify({

@@ -420,7 +420,7 @@ export function looksLikeSecret(value: string): boolean {
 
 function getFieldNameWords(name: string): string[] {
   return name
-    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+    .replace(/([A-Z])([A-Z][a-z])/g, '$1_$2')
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
     .split(/[^a-zA-Z0-9]+/)
     .map((word) => word.toLowerCase());
@@ -715,6 +715,20 @@ export function collectEnvCredentials(env: Record<string, unknown>, baseUrl?: st
         credentials.add(credential);
         collectAuthorizationCredentials(credential, credentials);
       });
+      // Connection strings use literal values, so preserve base64 padding and plus signs.
+      if (value.includes(';')) {
+        for (const field of value.split(';')) {
+          const separator = field.indexOf('=');
+          if (separator !== -1 && isCredentialName(field.slice(0, separator).trim())) {
+            const credential = field.slice(separator + 1).trim();
+            if (credential) {
+              credentials.add(value);
+              credentials.add(credential);
+              collectAuthorizationCredentials(credential, credentials);
+            }
+          }
+        }
+      }
       addUrlCredentials(value);
     }
   }
@@ -1002,7 +1016,7 @@ export function sanitizeTracingConfigForPersistence(
   };
 }
 
-/** Redact provider settings in saved configs without changing replay inputs. */
+/** Omit stored credentials so replay can use the current environment. */
 export function sanitizeConfigForPersistence(
   config: Partial<UnifiedConfig>,
 ): Partial<UnifiedConfig> {
@@ -1021,14 +1035,19 @@ export function sanitizeConfigForPersistence(
         ) {
           return [
             key,
-            sanitizeObject(
-              { [key]: item },
-              {
-                context: 'stored provider config',
-                sanitizeUrls: true,
-                throwOnError: true,
-                maxDepth: Number.POSITIVE_INFINITY,
-              },
+            JSON.parse(
+              JSON.stringify(
+                sanitizeObject(
+                  { [key]: item },
+                  {
+                    context: 'stored provider config',
+                    sanitizeUrls: true,
+                    throwOnError: true,
+                    maxDepth: Number.POSITIVE_INFINITY,
+                  },
+                ),
+                (_key, value) => (value === REDACTED ? undefined : value),
+              ),
             )[key],
           ];
         }

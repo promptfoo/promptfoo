@@ -90,7 +90,7 @@ describe('MuseCodeProvider', () => {
   beforeEach(async () => {
     vi.resetAllMocks();
     vi.mocked(withGenAISpan).mockImplementation(async (_context, fn) => fn({} as Span));
-    testDir = await fs.mkdtemp(path.join(os.tmpdir(), 'muse-provider-test-'));
+    testDir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'muse-provider-test-')));
     binDir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'muse-test-bin-')));
     await Promise.all(
       ['muse', 'custom-muse'].map((name) =>
@@ -809,6 +809,8 @@ describe('MuseCodeProvider', () => {
   it.each([
     { SERVICE_URL: '//user:fixture-password@gateway.example' },
     { AZURE_CREDENTIALS: JSON.stringify({ clientSecret: 'fixture-password' }) },
+    { AZURE_STORAGE_CONNECTION_STRING: 'AccountName=fixture;AccountKey=fixture-password;' },
+    { DATABASE_CONNECTION: 'Server=localhost;Password=fixture-password;Database=example' },
   ])('redacts extracted environment credentials before returning output: %j', async (env) => {
     const events = structuredClone(fixtureEvents);
     events.at(-1)!.payload.text = 'fixture-password';
