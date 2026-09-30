@@ -1,5 +1,6 @@
 import { APIError } from '@anthropic-ai/sdk';
 import dedent from 'dedent';
+import { satisfies } from 'semver';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearCache,
@@ -9,7 +10,6 @@ import {
   withCacheNamespace,
 } from '../../../src/cache';
 import logger from '../../../src/logger';
-import { CLAUDE_CODE_USER_AGENT } from '../../../src/providers/anthropic/claudeCodeAuth';
 import { hashAnthropicCacheValue } from '../../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { MCPClient } from '../../../src/providers/mcp/client';
@@ -5341,17 +5341,41 @@ describe('AnthropicMessagesProvider', () => {
       expect(headers['x-app']).toBe('cli');
     });
 
-    it('keeps the Claude Code user-agent version at the minimum required by newer models', () => {
-      const match = /claude-cli\/(\d+)\.(\d+)\.(\d+)/.exec(CLAUDE_CODE_USER_AGENT);
-      expect(match).toBeTruthy();
-      const [major, minor, patch] = match!.slice(1).map(Number);
-      // Anthropic rejects OAuth requests to newer models from older clients:
-      // claude-opus-5-5 answers with 400 invalid_request_error below 2.1.280.
-      // See https://github.com/promptfoo/promptfoo/issues/11322.
-      expect(major * 10_000 + minor * 100 + patch).toBeGreaterThanOrEqual(
-        2 * 10_000 + 1 * 100 + 280,
-      );
-    });
+    it.each([false, true])(
+      'sends a supported OAuth client version to newer models (stream: %s)',
+      async (stream) => {
+        mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+        claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
+        const model = 'claude-opus-5-5';
+        const oauthProvider = createProvider(model, {
+          config: { apiKeyRequired: false, stream },
+        });
+        const message = mockMessageResponse(model);
+        const createSpy = vi
+          .spyOn(oauthProvider.anthropic.messages, 'create')
+          .mockResolvedValue(message);
+        const streamSpy = vi.spyOn(oauthProvider.anthropic.messages, 'stream').mockReturnValue({
+          finalMessage: async () => message,
+        } as ReturnType<typeof oauthProvider.anthropic.messages.stream>);
+
+        const response = await oauthProvider.callApi('hello');
+
+        expect(response.error).toBeUndefined();
+        expect(response.output).toBe('ok');
+        const requestSpy = stream ? streamSpy : createSpy;
+        expect(requestSpy).toHaveBeenCalledTimes(1);
+        const [params, requestOptions] = requestSpy.mock.calls[0];
+        expect(params.model).toBe(model);
+        const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
+        const match = /^claude-cli\/(\d+\.\d+\.\d+) \(external, promptfoo\)$/.exec(
+          headers['user-agent'],
+        );
+        expect(match).not.toBeNull();
+        // The API rejects this model below 2.1.280; compare semver components
+        // correctly across minor/major releases. See issue #11322.
+        expect(satisfies(match?.[1] ?? '', '>=2.1.280')).toBe(true);
+      },
+    );
 
     it('isolates response-cache namespaces for distinct Claude Code OAuth tenants', async () => {
       mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
