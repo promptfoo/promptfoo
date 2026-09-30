@@ -24,8 +24,11 @@ reject_state_overrides() {
   reject_state_file() {
     local file="$1"
     [[ "$file" = /* ]] || file="$EXAMPLE_DIR/$file"
-    if [[ -f "$file" ]] &&
-      grep -Eq '(PROMPTFOO_(CONFIG_DIR|LOG_DIR|CACHE_PATH|MEDIA_PATH|DISABLE_REDTEAM_REMOTE_GENERATION|DISABLE_TELEMETRY|DISABLE_UPDATE)|CODEX_HOME(_OVERRIDE)?|COMPUTER_USE_(WORKING_DIR|TARGET_APP)|working_dir)' "$file"; then
+    if [[ ! -f "$file" ]]; then
+      echo "Refusing non-regular state file: $file" >&2
+      exit 1
+    fi
+    if grep -Eq '(PROMPTFOO_(CONFIG_DIR|LOG_DIR|CACHE_PATH|MEDIA_PATH|DISABLE_REDTEAM_REMOTE_GENERATION|DISABLE_TELEMETRY|DISABLE_UPDATE)|CODEX_HOME(_OVERRIDE)?|COMPUTER_USE_(WORKING_DIR|TARGET_APP)|working_dir)' "$file"; then
       echo "Refusing config that overrides runner-owned Promptfoo state: $file" >&2
       exit 1
     fi
@@ -84,8 +87,6 @@ reject_state_overrides() {
   done
 }
 
-# Register target-process cleanup before the first fallible Codex command so a failed
-# preflight cannot leave a stale, intentionally vulnerable target running.
 terminate_process() {
   local pid="${1:-}"
   if [[ -z "$pid" ]] || [[ "$(ps -p "$pid" -o command= 2>/dev/null)" != "$TARGET_APP_BINARY" ]]; then
@@ -119,8 +120,6 @@ cleanup() {
   terminate_process "${TARGET_PID:-}"
   terminate_target_processes
 }
-trap cleanup EXIT
-
 if [[ -L "$TMP_DIR" || (-e "$TMP_DIR" && ! -d "$TMP_DIR") ]]; then
   echo "Refusing unsafe generated-artifact path: $TMP_DIR" >&2
   exit 1
@@ -131,6 +130,8 @@ if [[ "$(cd -- "$TMP_DIR" && pwd -P)" != "$TMP_DIR" ]]; then
   exit 1
 fi
 chmod 700 "$TMP_DIR"
+# Only inspect or stop target processes after validating their artifact directory.
+trap cleanup EXIT
 terminate_target_processes
 
 for command in codex node ps xcrun; do

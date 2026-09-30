@@ -1,4 +1,4 @@
-import { execFile, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -124,6 +124,47 @@ describe.runIf(process.platform !== 'win32')('Computer Use runner recovery', () 
     expect(result.code, result.stderr).toBe(0);
     expect(fs.readFileSync(victim, 'utf8')).toBe('keep this file');
   });
+
+  it.each(['symlink', 'file'])(
+    'does not signal processes when the artifact root is a %s',
+    async (kind) => {
+      const fixture = createFixture();
+      const artifacts = path.join(fixture.example, '.tmp');
+      if (kind === 'symlink') {
+        const outside = path.join(fixture.root, 'outside');
+        fs.mkdirSync(outside);
+        fs.symlinkSync(outside, artifacts);
+      } else {
+        fs.writeFileSync(artifacts, 'not a directory');
+      }
+      const unrelated = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)']);
+      const exited = once(unrelated, 'exit');
+      try {
+        const result = await fixture.run({ FIXTURE_STALE_PID: String(unrelated.pid) });
+        expect(result.code).not.toBe(0);
+        expect(result.stderr).toContain('Refusing unsafe generated-artifact path');
+        expect(unrelated.exitCode).toBeNull();
+        expect(unrelated.signalCode).toBeNull();
+      } finally {
+        unrelated.kill('SIGTERM');
+        await exited;
+      }
+    },
+  );
+
+  it.each(['device', 'fifo'])(
+    'rejects non-regular %s env sources before reading them',
+    async (kind) => {
+      const fixture = createFixture();
+      const envPath = kind === 'device' ? '/dev/null' : path.join(fixture.example, 'input.env');
+      if (kind === 'fifo') {
+        execFileSync('mkfifo', [envPath]);
+      }
+      const result = await fixture.run({}, ['eval', '--env-file', envPath]);
+      expect(result.code).not.toBe(0);
+      expect(result.stderr).toContain('Refusing non-regular state file');
+    },
+  );
 
   it.each(['missing', 'malformed'])('stops the old target when the plugin is %s', async (state) => {
     const fixture = createFixture();

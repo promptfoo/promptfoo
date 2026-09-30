@@ -71,10 +71,10 @@ desktop or missing Accessibility permission should produce a failed eval, not
 a passing result.
 
 The runner forwards additional arguments as the Promptfoo command and resolves
-relative paths from this example directory. Promptfoo's own state (database,
-logs, cache, and media) is redirected to the owner-only `.tmp/promptfoo-home`,
-so custom commands write only that contained state plus the output path that
-you explicitly pass.
+relative paths from this example directory. With the bundled config, Promptfoo's
+database, logs, cache, and media use the owner-only `.tmp/promptfoo-home`.
+Custom config files are checked as text, so the runner does not guarantee state
+isolation for them. Non-regular env files are rejected before they are read.
 
 ## Run a bounded red team
 
