@@ -91,11 +91,7 @@ export function evalCommand(
     )
     .option('--repeat <number>', 'Number of times to run each test (default: 1)')
     .option('--delay <number>', 'Delay between each test (in milliseconds) (default: 0)')
-    .option(
-      '--no-cache',
-      'Do not read or write results to disk cache',
-      defaultConfig?.commandLineOptions?.cache ?? defaultConfig?.evaluateOptions?.cache,
-    )
+    .option('--no-cache', 'Do not read or write results to disk cache')
     .option('--remote', 'Force remote inference wherever possible (used for red teams)', false)
 
     // Filtering and subset selection
@@ -184,6 +180,11 @@ export function evalCommand(
         const optsWithAliases = normalizeTagOption(
           opts as EvalCommandOptions & { tag?: Record<string, string> },
         );
+        // Commander defaults a lone `--no-cache` to `true`. Only an explicit flag should
+        // override the loaded config's `commandLineOptions.cache` / `evaluateOptions.cache`.
+        if (command.getOptionValueSource('cache') !== 'cli') {
+          delete optsWithAliases.cache;
+        }
         validatedOpts = EvalCommandSchema.parse(optsWithAliases);
       } catch (err) {
         logger.error(dedent`
