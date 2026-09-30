@@ -55,6 +55,8 @@ export interface TypeSafeConfig {
   apiKey?: string;
   /** Defaults to https://api.typesafe.ai */
   apiBaseUrl?: string;
+  /** Non-secret account-specific namespace. Response caching is disabled when omitted. */
+  cacheNamespace?: string;
   /** Maximum additional attempts for retryable failures. Defaults to 4. */
   maxRetries?: number;
   /** `callApi` passes when the derived 0–1 score is >= threshold. Defaults to 0.5. */
@@ -148,38 +150,21 @@ function hasEntry(value: unknown): value is TypeSafeEntry {
   return isEntry(value) && !(typeof value === 'string' && value.trim() === '');
 }
 
-function getOrderedLabels(question: TypeSafeQuestion): TypeSafeEntry[] {
-  if (question.type === 'choice') {
-    return Object.keys(question.criteria);
-  }
-  if (question.type === 'score') {
-    return question.criteria;
-  }
-  return [];
-}
-
 /**
- * Build the cache key for a Jev request.
+ * Scope the exact Jev request to a non-secret account namespace.
  *
- * The key covers the model, the state, the full question schema, the ordered labels (Choice
- * options or Score levels), so a changed candidate set never reuses a cached probability.
  * The pass threshold only changes local interpretation and is deliberately excluded.
  * The request is hashed exactly as sent rather than with sorted keys:
- * key order inside `state` and Choice `criteria` is model input. The API key is not part of
- * the key.
+ * key order inside `state` and Choice `criteria` is model input. API keys never enter
+ * the cache key, even as a hash.
  */
-export function getTypeSafeCacheKey(apiBaseUrl: string, request: TypeSafeRequest): string {
-  const orderedLabels = Object.fromEntries(
-    Object.entries(request.questions).map(([id, question]) => [id, getOrderedLabels(question)]),
-  );
-  return `typesafe:v2:${request.model}:${sha256(
-    JSON.stringify({
-      apiBaseUrl,
-      model: request.model,
-      state: request.state,
-      questions: request.questions,
-      orderedLabels,
-    }),
+export function getTypeSafeCacheKey(
+  apiBaseUrl: string,
+  request: TypeSafeRequest,
+  cacheNamespace: string,
+): string {
+  return `typesafe:v3:${request.model}:${sha256(
+    JSON.stringify({ apiBaseUrl, cacheNamespace, request }),
   )}`;
 }
 
@@ -444,7 +429,6 @@ export class TypeSafeProvider implements ApiClassificationProvider {
 
   private async sendRequest(
     request: TypeSafeRequest,
-    cacheKey: string,
     bust?: boolean,
     abortSignal?: AbortSignal,
   ): Promise<TypeSafeResult> {
@@ -462,6 +446,21 @@ export class TypeSafeProvider implements ApiClassificationProvider {
 
     try {
       const maxRetries = getMaxRetries(this.config.maxRetries);
+      const { cacheNamespace } = this.config;
+      if (
+        cacheNamespace !== undefined &&
+        (typeof cacheNamespace !== 'string' || cacheNamespace.trim() === '')
+      ) {
+        throw new Error(
+          'TypeSafe `cacheNamespace` must be a non-empty, non-secret account identifier',
+        );
+      }
+      const apiBaseUrl = this.getApiBaseUrl();
+      // Without an explicit account namespace, bypass both caching and coalescing.
+      const cacheOptions =
+        cacheNamespace === undefined
+          ? { bust: true }
+          : { bust, cacheKey: getTypeSafeCacheKey(apiBaseUrl, request, cacheNamespace) };
       if (abortSignal?.aborted) {
         throw new DOMException('TypeSafe request aborted', 'AbortError');
       }
@@ -478,11 +477,11 @@ export class TypeSafeProvider implements ApiClassificationProvider {
       // The shared transport owns one retry budget for 429, 529, and network errors.
       // Read text so non-JSON failures retain their HTTP status and request id.
       const response = await fetchWithCache<string>(
-        `${this.getApiBaseUrl()}/v1/systemone`,
+        `${apiBaseUrl}/v1/systemone`,
         requestOptions,
         getRequestTimeoutMs(),
         'text',
-        { bust, cacheKey },
+        cacheOptions,
         maxRetries,
       );
       if (abortSignal?.aborted) {
@@ -556,7 +555,6 @@ export class TypeSafeProvider implements ApiClassificationProvider {
 
     const result = await this.sendRequest(
       request,
-      getTypeSafeCacheKey(this.getApiBaseUrl(), request),
       context?.bustCache ?? context?.debug,
       options?.abortSignal,
     );
@@ -602,7 +600,11 @@ export class TypeSafeProvider implements ApiClassificationProvider {
     }
   }
 
-  async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
+  async callClassificationApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderClassificationResponse> {
     let request: TypeSafeRequest;
     try {
       const { instructions } = this.config;
@@ -628,7 +630,8 @@ export class TypeSafeProvider implements ApiClassificationProvider {
 
     const result = await this.sendRequest(
       request,
-      getTypeSafeCacheKey(this.getApiBaseUrl(), request),
+      context?.bustCache ?? context?.debug,
+      options?.abortSignal,
     );
     if ('error' in result) {
       return { error: result.error };
@@ -639,13 +642,14 @@ export class TypeSafeProvider implements ApiClassificationProvider {
       const { probabilities, choice, confidence } = answer as unknown as TypeSafeChoiceAnswer;
       const question = request.questions[CLASSIFICATION_QUESTION_ID];
       const labels = question.type === 'choice' ? Object.keys(question.criteria) : [];
+      // Allow cumulative rounding to six decimal places across the supported label count.
+      const sumTolerance = Math.max(PROBABILITY_SUM_TOLERANCE, labels.length * 0.0000005);
       if (
         !isPlainObject(probabilities) ||
         Object.keys(probabilities).length !== labels.length ||
         labels.some((label) => !Object.prototype.hasOwnProperty.call(probabilities, label)) ||
         Object.values(probabilities).some((p) => !isFiniteNumber(p) || p < 0 || p > 1) ||
-        Math.abs(Object.values(probabilities).reduce((sum, p) => sum + p, 0) - 1) >
-          PROBABILITY_SUM_TOLERANCE
+        Math.abs(Object.values(probabilities).reduce((sum, p) => sum + p, 0) - 1) > sumTolerance
       ) {
         throw new Error(
           `TypeSafe Choice answer has invalid probabilities: ${JSON.stringify(answer)}`,

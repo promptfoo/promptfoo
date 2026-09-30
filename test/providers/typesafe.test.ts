@@ -62,7 +62,9 @@ function rubricContext(rubric: unknown, output: unknown): CallApiContextParams {
 }
 
 function createProvider(config: TypeSafeConfig = {}) {
-  return new TypeSafeProvider('jev-latest', { config: { apiKey: API_KEY, ...config } });
+  return new TypeSafeProvider('jev-latest', {
+    config: { apiKey: API_KEY, cacheNamespace: 'fixture-account', ...config },
+  });
 }
 
 function lastRequest() {
@@ -121,7 +123,7 @@ describe('TypeSafeProvider', () => {
 
     it('keeps the API key out of the stored config', () => {
       const provider = createProvider({ threshold: 0.7 });
-      expect(provider.config).toEqual({ threshold: 0.7 });
+      expect(provider.config).toEqual({ cacheNamespace: 'fixture-account', threshold: 0.7 });
       expect(JSON.stringify(provider.config)).not.toContain(API_KEY);
       expect(provider.requiresApiKey()).toBe(true);
     });
@@ -150,7 +152,7 @@ describe('TypeSafeProvider', () => {
         model: 'jev-latest',
         questions: { grade: { type: 'noul', instructions: 'Content contains a greeting' } },
       });
-      expect(request.cacheOptions.cacheKey).toMatch(/^typesafe:v2:jev-latest:[0-9a-f]{64}$/);
+      expect(request.cacheOptions.cacheKey).toMatch(/^typesafe:v3:jev-latest:[0-9a-f]{64}$/);
       expect(request.cacheOptions.cacheKey).not.toContain(API_KEY);
     });
 
@@ -502,7 +504,7 @@ describe('TypeSafeProvider', () => {
       },
     };
     const key = (request: typeof base | Record<string, any>) =>
-      getTypeSafeCacheKey('https://api.typesafe.ai', request as typeof base);
+      getTypeSafeCacheKey('https://api.typesafe.ai', request as typeof base, 'fixture-account');
 
     it('is stable for identical requests', () => {
       expect(key(base)).toBe(key(structuredClone(base)));
@@ -518,6 +520,12 @@ describe('TypeSafeProvider', () => {
       const reordered = structuredClone(base) as Record<string, any>;
       reordered.questions.department.criteria = { sales: null, billing: null, technical: null };
       expect(key(reordered)).not.toBe(key(base));
+    });
+
+    it('preserves the serialized order of structured state entries', () => {
+      expect(key({ ...base, state: { question: 'Refund?', answer: 'Yes' } })).not.toBe(
+        key({ ...base, state: { answer: 'Yes', question: 'Refund?' } }),
+      );
     });
 
     it('changes when a label description changes', () => {
@@ -548,7 +556,8 @@ describe('TypeSafeProvider', () => {
         }),
         key({ ...base, state: 'Different state' }),
         key({ ...base, model: 'jev-1.13.0' }),
-        getTypeSafeCacheKey('https://proxy.example.com', base),
+        getTypeSafeCacheKey('https://proxy.example.com', base, 'fixture-account'),
+        getTypeSafeCacheKey('https://api.typesafe.ai', base, 'different-account'),
       ];
       expect(new Set(variants).size).toBe(variants.length);
     });
@@ -572,6 +581,38 @@ describe('TypeSafeProvider', () => {
       expect(first).not.toBe(second);
       expect(third).toBe(first);
     });
+
+    it.each(['callApi', 'callClassificationApi'] as const)(
+      'bypasses response caching and coalescing for %s without a namespace',
+      async (method) => {
+        mockedFetchWithCache.mockResolvedValue(
+          mockResponse(jevResponse({ type: 'noul', noul: 1 })),
+        );
+        await createProvider({
+          cacheNamespace: undefined,
+          instructions: 'Is polite?',
+          labels: ['polite', 'rude'],
+        })[method]('text');
+
+        expect(lastRequest().cacheOptions).toEqual({ bust: true });
+      },
+    );
+
+    it.each(['', '  ', null, 3])(
+      'rejects an invalid cache namespace: %j',
+      async (cacheNamespace) => {
+        const provider = createProvider({
+          cacheNamespace,
+          instructions: 'Is polite?',
+        } as TypeSafeConfig);
+        const result = await provider.callApi('text');
+
+        expect(result.error).toContain(
+          '`cacheNamespace` must be a non-empty, non-secret account identifier',
+        );
+        expect(mockedFetchWithCache).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('errors', () => {
@@ -860,6 +901,42 @@ describe('TypeSafeProvider', () => {
       expect(Object.keys(criteria)).toEqual(['refund', 'other']);
     });
 
+    it('uses JavaScript property order for numeric labels in both the request and cache key', async () => {
+      mockedFetchWithCache.mockResolvedValue(
+        mockResponse(
+          jevResponse(
+            { type: 'choice', choice: '1', confidence: 0, probabilities: { '1': 0.5, '2': 0.5 } },
+            'classification',
+          ),
+        ),
+      );
+
+      const first = await classifier({ labels: ['2', '1'] }).callClassificationApi('text');
+      const firstRequest = lastRequest();
+      const second = await classifier({ labels: ['1', '2'] }).callClassificationApi('text');
+      const secondRequest = lastRequest();
+
+      expect(first.error).toBeUndefined();
+      expect(second).toEqual(first);
+      expect(Object.keys(firstRequest.body.questions.classification.criteria)).toEqual(['1', '2']);
+      expect(firstRequest.options?.body).toBe(secondRequest.options?.body);
+      expect(firstRequest.cacheOptions.cacheKey).toBe(secondRequest.cacheOptions.cacheKey);
+    });
+
+    it('passes an explicit cache bypass through for classification', async () => {
+      mockedFetchWithCache.mockResolvedValue(
+        mockResponse(jevResponse({ type: 'choice' }, 'classification')),
+      );
+
+      await classifier().callClassificationApi('text', {
+        prompt: { raw: 'text', label: 'classifier' },
+        vars: {},
+        bustCache: true,
+      });
+
+      expect(lastRequest().cacheOptions.bust).toBe(true);
+    });
+
     it('works end to end through matchesClassification', async () => {
       mockedFetchWithCache.mockResolvedValue(
         mockResponse(
@@ -958,6 +1035,33 @@ describe('TypeSafeProvider', () => {
         technical: 0.333333,
         sales: 0.333333,
       });
+    });
+
+    it.each([
+      { probability: 0.003922, valid: true },
+      { probability: 0.00393, valid: false },
+      { probability: 0.0039, valid: false },
+    ])('checks cumulative rounding across 255 labels: %j', async ({ probability, valid }) => {
+      const labels = Array.from({ length: 255 }, (_, index) => `label-${index}`);
+      const probabilities = Object.fromEntries(labels.map((label) => [label, probability]));
+      const response = mockResponse(
+        jevResponse(
+          { type: 'choice', choice: labels[0], confidence: 0, probabilities },
+          'classification',
+        ),
+      );
+      mockedFetchWithCache.mockResolvedValue(response);
+
+      const result = await classifier({ labels }).callClassificationApi('text');
+
+      if (valid) {
+        expect(result).toEqual({ classification: probabilities });
+        expect(response.deleteFromCache).not.toHaveBeenCalled();
+      } else {
+        expect(result.error).toMatch(/invalid probabilities/);
+        expect(result.classification).toBeUndefined();
+        expect(response.deleteFromCache).toHaveBeenCalledOnce();
+      }
     });
 
     it.each([null, 3, false])(

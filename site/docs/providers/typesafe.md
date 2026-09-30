@@ -37,15 +37,16 @@ An alias such as `jev-latest` moves when TypeSafe ships a new release. If you tu
 
 ## Configuration
 
-| Option         | Type                | Default                   | Description                                                                                                   |
-| -------------- | ------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `apiKey`       | string              | `TYPESAFE_API_KEY`        | TypeSafe API key                                                                                              |
-| `apiBaseUrl`   | string              | `https://api.typesafe.ai` | API base URL                                                                                                  |
-| `threshold`    | number              | `0.5`                     | Minimum derived score (0–1) for `llm-rubric` to pass; does not apply to `classifier`                          |
-| `levels`       | array               | -                         | Ordered Score levels, low to high (2–10). When set, grading uses a Score question instead of a Noul question. |
-| `instructions` | string/object/array | -                         | The question for `classifier`, and for direct `callApi` use outside `llm-rubric`                              |
-| `labels`       | array/object        | -                         | 2–255 Choice options for `classifier`: a list of unique, nonempty labels, or a map of label to description    |
-| `maxRetries`   | integer             | `4`                       | Additional attempts for transient failures, including `429` and `529`; set to `0` to disable retries          |
+| Option           | Type                | Default                   | Description                                                                                                   |
+| ---------------- | ------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `apiKey`         | string              | `TYPESAFE_API_KEY`        | TypeSafe API key                                                                                              |
+| `apiBaseUrl`     | string              | `https://api.typesafe.ai` | API base URL                                                                                                  |
+| `cacheNamespace` | string              | -                         | Nonempty, nonsecret account-specific name that enables caching; omit to disable caching                       |
+| `threshold`      | number              | `0.5`                     | Minimum derived score (0–1) for `llm-rubric` to pass; does not apply to `classifier`                          |
+| `levels`         | array               | -                         | Ordered Score levels, low to high (2–10). When set, grading uses a Score question instead of a Noul question. |
+| `instructions`   | string/object/array | -                         | The question for `classifier`, and for direct `callApi` use outside `llm-rubric`                              |
+| `labels`         | array/object        | -                         | 2–255 Choice options for `classifier`: a list of unique, nonempty labels, or a map of label to description    |
+| `maxRetries`     | integer             | `4`                       | Additional attempts for transient failures, including `429` and `529`; set to `0` to disable retries          |
 
 Level descriptions, label descriptions, and `instructions` can be strings, JSON objects, or arrays, as in the [TypeSafe API](https://docs.typesafe.ai/primitives/advanced). Label descriptions can also be `null` when the label needs no extra detail. Label names must contain non-whitespace characters.
 
@@ -96,7 +97,13 @@ defaultTest:
           - Acknowledges the problem and offers a concrete fix
 ```
 
-Both the provider's `config.threshold` and the `llm-rubric` assertion's own `threshold` must pass: the effective cutoff is the higher of the two. For example, an assertion threshold of `0.3` still requires a score of `0.5` with the provider's default threshold. To lower the cutoff, lower both thresholds. `not-llm-rubric` inverts this combined pass/fail result.
+For `llm-rubric`, set the cutoff with the provider's `config.threshold`; an assertion threshold is usually unnecessary.
+
+:::note
+
+If you also set the `llm-rubric` assertion's own `threshold`, both thresholds must pass: the effective cutoff is the higher of the two. For example, an assertion threshold of `0.3` still requires a score of `0.5` with the provider's default threshold. `not-llm-rubric` inverts this combined pass/fail result.
+
+:::
 
 ### Reasons are derived, not generated
 
@@ -132,9 +139,22 @@ assert:
 
 `labels` can also be a plain list, such as `[billing, technical, sales]`. Set the assertion's `threshold` explicitly: `classifier` defaults to 1 and ignores the provider's `config.threshold`. The assertion reports the selected label's probability as its score; it does not expose the full distribution, `metadata.typesafe`, or token usage.
 
+Choice labels become JSON object keys. JavaScript serializes integer-index keys in ascending numeric order, so `['2', '1']` is sent in the same order as `['1', '2']`. Use descriptive labels such as `option-2` and `option-1` when the configured order matters. Score levels retain their array order.
+
 ## Caching
 
-Responses are stored in Promptfoo's cache. The cache key covers the API base URL, model, state, full question schema, and ordered labels or levels. Changing, adding, or reordering labels therefore never reuses a cached probability. Thresholds are applied locally, so changing a threshold can reuse the same response. Invalid responses are evicted. Use `--no-cache` to force fresh calls.
+Caching is disabled unless you set `config.cacheNamespace` to a nonempty, nonsecret name for your TypeSafe account:
+
+```yaml
+provider:
+  id: typesafe:jev-latest
+  config:
+    cacheNamespace: support-team-typesafe
+```
+
+Use a different namespace for each account. Never put an API key or another secret in the namespace. Providers using the same namespace, API base URL, and serialized request intentionally share cached responses; the namespace does not verify credentials.
+
+The cache key includes the namespace, API base URL, and exact serialized request, including model, state, questions, and their serialized order. Thresholds are applied locally, so changing a threshold can reuse the same response. Invalid responses are evicted. Use `--no-cache` to force fresh calls even when a namespace is set.
 
 ## Limitations
 
@@ -144,7 +164,7 @@ Responses are stored in Promptfoo's cache. The cache key covers the API base URL
 - Each request allows 64k tokens in total and 32k for the state plus the longest question. See the [models page](https://docs.typesafe.ai/models) for rate limits.
 - Jev 1.13 has documented limitations with arithmetic, counting, date comparisons, and adversarial content in the state. Use code for exact calculations and test grading quality on representative outputs. See TypeSafe's [known model limitations](https://docs.typesafe.ai/model-jaggedness/jev-1.13).
 
-Transient failures, including `429 Too Many Requests` and `529 Overloaded`, are retried with backoff, honoring `Retry-After` when provided. Set `maxRetries` to bound retries or `0` to disable them.
+Transient failures, including `429 Too Many Requests` and `529 Overloaded`, are retried with backoff, honoring `Retry-After` when provided. Set `maxRetries` to bound retries or `0` to disable them. Cancelling an eval cancels active rubric and classifier requests and pending retry delays.
 
 ## Data handling
 

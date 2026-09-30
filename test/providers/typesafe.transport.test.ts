@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, enableCache } from '../../src/cache';
 import { runEval } from '../../src/evaluator';
+import { matchesClassification } from '../../src/matchers/classification';
 import { TypeSafeProvider } from '../../src/providers/typesafe';
+import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions } from '../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { ResultFailureReason } from '../../src/types/index';
@@ -19,6 +21,7 @@ function createProvider(config: TypeSafeConfig = {}) {
     config: {
       apiKey: 'fixture-typesafe-key',
       apiBaseUrl: 'https://typesafe.example',
+      cacheNamespace: 'fixture-account',
       instructions: 'Is this a polite response?',
       ...config,
     },
@@ -80,6 +83,75 @@ describe('TypeSafe HTTP transport integration', () => {
     vi.restoreAllMocks();
     vi.useRealTimers();
     restoreEnv();
+  });
+
+  it.each(['callApi', 'callClassificationApi'] as const)(
+    'does not reuse cached responses across unscoped credentials for %s',
+    async (method) => {
+      mockFetch
+        .mockResolvedValueOnce(method === 'callApi' ? gradeResponse() : choiceResponse())
+        .mockResolvedValueOnce(jsonResponse({ error: 'Invalid key' }, { status: 401 }));
+      const first = createProvider({ cacheNamespace: undefined, labels: ['polite', 'rude'] });
+      const second = createProvider({
+        cacheNamespace: undefined,
+        apiKey: 'different-fixture-key',
+        labels: ['polite', 'rude'],
+      });
+
+      expect((await first[method]('Thank you')).error).toBeUndefined();
+      expect((await second[method]('Thank you')).error).toContain('401');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each(['callApi', 'callClassificationApi'] as const)(
+    'does not coalesce concurrent unscoped calls for %s',
+    async (method) => {
+      mockFetch.mockImplementation(async () =>
+        method === 'callApi' ? gradeResponse() : choiceResponse(),
+      );
+
+      const results = await Promise.all([
+        createProvider({ cacheNamespace: undefined, labels: ['polite', 'rude'] })[method](
+          'Thank you',
+        ),
+        createProvider({
+          cacheNamespace: undefined,
+          apiKey: 'different-fixture-key',
+          labels: ['polite', 'rude'],
+        })[method]('Thank you'),
+      ]);
+
+      expect(results.every((result) => result.error === undefined)).toBe(true);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it('isolates account namespaces and reuses answers within the same namespace', async () => {
+    mockFetch
+      .mockResolvedValueOnce(gradeResponse())
+      .mockResolvedValueOnce(jsonResponse({ answers: { grade: { type: 'noul', noul: 0.25 } } }));
+    const first = createProvider({ cacheNamespace: 'account-one' });
+    const second = createProvider({
+      cacheNamespace: 'account-two',
+      apiKey: 'different-fixture-key',
+    });
+
+    const firstResult = await first.callApi('Thank you');
+    const secondResult = await second.callApi('Thank you');
+    const firstCached = await createProvider({
+      cacheNamespace: 'account-one',
+      apiKey: 'rotated-fixture-key',
+    }).callApi('Thank you');
+    const secondCached = await second.callApi('Thank you');
+
+    expect(JSON.parse(firstResult.output as string).score).toBe(0.75);
+    expect(JSON.parse(secondResult.output as string).score).toBe(0.25);
+    expect(firstResult.cached).toBe(false);
+    expect(secondResult.cached).toBe(false);
+    expect(firstCached).toMatchObject({ output: firstResult.output, cached: true });
+    expect(secondCached).toMatchObject({ output: secondResult.output, cached: true });
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
   it.each([
@@ -327,26 +399,33 @@ describe('TypeSafe HTTP transport integration', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
-  it('cancels an overload retry delay without sending the next request', async () => {
-    vi.useFakeTimers();
-    const controller = new AbortController();
-    mockFetch.mockResolvedValueOnce(
-      jsonResponse(
-        { error: 'Overloaded' },
-        { status: 529, statusText: 'Overloaded', headers: { 'Retry-After': '60' } },
-      ),
-    );
-    const pending = createProvider().callApi('Thank you', undefined, {
-      abortSignal: controller.signal,
-    });
-    const cancelled = pending.catch((error: unknown) => error);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    controller.abort();
-    expect(await cancelled).toMatchObject({ name: 'AbortError' });
-    await vi.runAllTimersAsync();
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-  });
+  it.each(['llm-rubric', 'classifier'] as const)(
+    'cancels an overload retry delay for %s without sending the next request',
+    async (assertionType) => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse(
+          { error: 'Overloaded' },
+          { status: 529, statusText: 'Overloaded', headers: { 'Retry-After': '60' } },
+        ),
+      );
+      const provider = createProvider({ labels: ['polite', 'rude'] });
+      const pending =
+        assertionType === 'classifier'
+          ? withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
+              matchesClassification('polite', 'Thank you', 0.5, { provider }),
+            )
+          : provider.callApi('Thank you', undefined, { abortSignal: controller.signal });
+      const cancelled = pending.catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      controller.abort();
+      expect(await cancelled).toMatchObject({ name: 'AbortError' });
+      await vi.runAllTimersAsync();
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('does not multiply overload retries when global 5xx retries are enabled', async () => {
     vi.useFakeTimers();
@@ -384,9 +463,14 @@ describe('TypeSafe HTTP transport integration', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
-  it.each(['before grading', 'during the request'])(
-    'records cancellation %s as an evaluation error',
-    async (when) => {
+  it.each([
+    { assertionType: 'llm-rubric', when: 'before grading' },
+    { assertionType: 'llm-rubric', when: 'during the request' },
+    { assertionType: 'classifier', when: 'before grading' },
+    { assertionType: 'classifier', when: 'during the request' },
+  ] as const)(
+    'records $assertionType cancellation $when as an evaluation error',
+    async ({ assertionType, when }) => {
       const controller = new AbortController();
       const started = createDeferred<void>();
       mockFetch.mockImplementation(async (_, options) => {
@@ -417,7 +501,13 @@ describe('TypeSafe HTTP transport integration', () => {
         },
         prompt: { raw: 'Thank you', label: 'local' },
         test: {
-          assert: [{ type: 'llm-rubric', value: 'Is polite', provider: createProvider() }],
+          assert: [
+            {
+              type: assertionType,
+              value: assertionType === 'classifier' ? 'polite' : 'Is polite',
+              provider: createProvider({ labels: ['polite', 'rude'] }),
+            },
+          ],
         },
         conversations: {},
         registers: {},
