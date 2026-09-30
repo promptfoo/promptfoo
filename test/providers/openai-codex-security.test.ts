@@ -322,6 +322,7 @@ describe('OpenAICodexSecurityProvider', () => {
         )?.[1];
         expect(suggestedRange).toBeDefined();
         expect(validRange(suggestedRange)).not.toBeNull();
+        expect(satisfies(version, suggestedRange!)).toBe(false);
         expect(satisfies(mockModule.VERSION, suggestedRange!)).toBe(true);
         for (const incompatibleVersion of incompatibleSdkVersions) {
           expect(satisfies(incompatibleVersion, suggestedRange!)).toBe(false);
