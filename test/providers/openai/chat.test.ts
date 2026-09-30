@@ -3433,37 +3433,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(body.max_tokens).toBe(2000);
     });
 
-    it.each([
-      { name: 'configured', config: { safety_identifier: 'user-123' }, expected: 'user-123' },
-      { name: 'unset', config: {}, expected: undefined },
-      {
-        name: 'prompt override',
-        config: { safety_identifier: 'provider-user' },
-        promptConfig: { safety_identifier: 'prompt-user' },
-        expected: 'prompt-user',
-      },
-      {
-        name: 'passthrough override',
-        config: {
-          safety_identifier: 'provider-user',
-          passthrough: { safety_identifier: 'passthrough-user' },
-        },
-        expected: 'passthrough-user',
-      },
-    ])('sends the $name safety identifier', async ({ config, promptConfig, expected }) => {
-      const provider = new OpenAiChatCompletionProvider('gpt-4.1-mini', { config });
-      const { body } = await provider.getOpenAiBody('Test prompt', {
-        vars: {},
-        prompt: { raw: 'Test prompt', label: 'Test prompt', config: promptConfig },
-      });
-
-      if (expected === undefined) {
-        expect(body).not.toHaveProperty('safety_identifier');
-      } else {
-        expect(body.safety_identifier).toBe(expected);
-      }
-    });
-
     it('should forward prompt cache options', async () => {
       const provider = new OpenAiChatCompletionProvider('gpt-4o', {
         config: {

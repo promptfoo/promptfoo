@@ -641,22 +641,21 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     );
   }
 
-  private getRealtimeRequestHeaders(config = this.config): Record<string, string> {
-    const headers = this.getOpenAiRequestHeaders({
-      ...Object.fromEntries(
-        Object.entries(this.config.headers ?? {}).filter(
-          ([name]) => !hasHeaderOverride(config.headers, name),
-        ),
-      ),
-      ...config.headers,
-    });
+  private getRealtimeRequestHeaders(overrides?: OpenAiRealtimeOptions): Record<string, string> {
+    const config = { ...this.config, ...overrides };
+    const headers = { ...config.headers };
+    for (const [name, value] of Object.entries(this.config.headers ?? {})) {
+      if (!hasHeaderOverride(headers, name)) {
+        headers[name] = value;
+      }
+    }
     if (
       config.safety_identifier !== undefined &&
       !hasHeaderOverride(headers, 'OpenAI-Safety-Identifier')
     ) {
       headers['OpenAI-Safety-Identifier'] = config.safety_identifier;
     }
-    return headers;
+    return this.getOpenAiRequestHeaders(headers);
   }
 
   // Build the WebSocket handshake headers. When bearer auth is suppressed (Azure
@@ -664,7 +663,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   // config.headers so it can't re-introduce bearer credentials alongside api-key.
   private buildRealtimeWsHeaders(
     wsUrl: string,
-    headers = this.getRealtimeRequestHeaders(),
+    headers: Record<string, string>,
   ): Record<string, string> {
     const omitBearer = this.shouldOmitBearerAuth(wsUrl, headers);
     const requestHeaders = { ...headers };
@@ -1250,10 +1249,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
     try {
       const promptContent = this.getRealtimeUserContent(prompt);
-      const requestHeaders = this.getRealtimeRequestHeaders({
-        ...this.config,
-        ...context?.prompt?.config,
-      });
+      const requestHeaders = this.getRealtimeRequestHeaders(context?.prompt?.config);
 
       // Use a persistent connection if we should maintain conversation context
       let result;

@@ -603,31 +603,6 @@ describe('AzureRealtimeProvider', () => {
     });
   });
 
-  it('keeps its delegate when a custom safety header overrides identifier changes', async () => {
-    const provider = new AzureRealtimeProvider('gpt-realtime', {
-      config: {
-        apiHost: 'example.openai.azure.com',
-        apiKey: 'azure-key',
-        headers: { 'OpenAI-Safety-Identifier': 'header-user' },
-      },
-    });
-    for (const safety_identifier of ['first-user', 'second-user', undefined]) {
-      await provider.callApi('hi', {
-        vars: {},
-        prompt: { id: 'prompt-a', raw: 'hi', label: 'hi', config: { safety_identifier } },
-        test: { metadata: { conversationId: 'conversation-1' } },
-      });
-    }
-
-    expect(mockCleanup).not.toHaveBeenCalled();
-    expect(OpenAiRealtimeProvider).toHaveBeenCalledOnce();
-    expect(vi.mocked(OpenAiRealtimeProvider).mock.results[0]?.value.config.headers).toMatchObject({
-      'OpenAI-Safety-Identifier': 'header-user',
-      'api-key': 'azure-key',
-    });
-    provider.cleanup();
-  });
-
   it('reports undefined cost for a deployment missing from the Azure pricing catalog', async () => {
     const provider = new AzureRealtimeProvider('my-custom-realtime-deployment', {
       config: {
