@@ -51,6 +51,22 @@ async function writeLegacy() {
 }
 
 describe('local media blob adapter', () => {
+  it('returns usable file URLs for blob and legacy media in paths with reserved characters', async () => {
+    const configuredPath = path.join(directory, 'media with spaces #100%');
+    const configuredProvider = new LocalFileSystemProvider({ basePath: configuredPath });
+    const { ref } = await configuredProvider.store(payload, metadata);
+    const legacyKey = `image/${hash.slice(0, 12)}.jpg`;
+    await fs.mkdir(path.join(configuredPath, 'image'));
+    await fs.writeFile(path.join(configuredPath, legacyKey), payload);
+
+    for (const storageKey of [ref.key, legacyKey]) {
+      const url = await configuredProvider.getUrl(storageKey);
+      expect(url).not.toBeNull();
+      expect(url).toContain('media%20with%20spaces%20%23100%25/');
+      expect(await fs.readFile(fileURLToPath(url!))).toEqual(payload);
+    }
+  });
+
   it('serves uppercase blob hashes through media and info routes', async () => {
     await provider.store(payload, metadata);
     const uppercaseKey = `blob/${hash.toUpperCase()}`;

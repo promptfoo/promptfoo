@@ -9,6 +9,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
+import { pathToFileURL } from 'url';
 
 import { FilesystemBlobStorageProvider } from '../blobs/filesystemProvider';
 import logger from '../logger';
@@ -240,7 +241,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
         ? this.blobs.getFilePath(this.blobHash(key))
         : this.getFilePath(key);
       await fsPromises.access(filePath);
-      return `file://${filePath}`;
+      return pathToFileURL(filePath).href;
     } catch {
       return null;
     }
