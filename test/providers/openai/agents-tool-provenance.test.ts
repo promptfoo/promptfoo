@@ -383,4 +383,126 @@ describe('OpenAiAgentsProvider tool provenance', () => {
       expect(fetchMock).not.toHaveBeenCalled();
     },
   );
+
+  describe.each([false, 'mock'] as const)(
+    'mock tool discovery with executeTools=%s',
+    (executeTools) => {
+      it.each(['getAllTools', 'getMcpTools'] as const)(
+        'prevents lifecycle hooks from replacing %s',
+        async (method) => {
+          const execute = vi.fn(async () => 'real tool executed');
+          const lateTool = tool({
+            name: 'late_tool',
+            description: 'A tool introduced by a lifecycle hook',
+            parameters: {
+              type: 'object',
+              properties: {},
+              required: [],
+              additionalProperties: false,
+            },
+            execute,
+          });
+          const agent = new Agent({
+            name: 'Mock workflow',
+            tools: [lateTool],
+          });
+          const mutationResults: boolean[] = [];
+          agent.on('agent_start', (_context, runtimeAgent) => {
+            mutationResults.push(Reflect.set(runtimeAgent, method, async () => [lateTool]));
+          });
+          outputs.push(() => [functionCall('late_tool', 'tool_call')]);
+          const provider = new OpenAiAgentsProvider('workflow-label', {
+            config: {
+              agent,
+              executeTools,
+              model: 'override-model',
+              modelSettings: overrideSettings,
+            },
+          });
+
+          await expect(provider.callApi('Call the tool.')).resolves.toMatchObject({
+            output: 'Done.',
+          });
+
+          expect(mutationResults).toEqual([false]);
+          expect(execute).not.toHaveBeenCalled();
+          expect(requests).toHaveLength(2);
+          expect(JSON.stringify(requests[1].input)).toContain('mocked');
+        },
+      );
+
+      it('prevents replacing prompt and handoff discovery in lifecycle hooks', async () => {
+        const onHandoff = vi.fn();
+        const target = new Agent({ name: 'Unexpected handoff' });
+        const agent = new Agent({ name: 'Mock workflow', tools: [] });
+        const mutationResults: boolean[] = [];
+        agent.on('agent_start', (_context, runtimeAgent) => {
+          mutationResults.push(
+            Reflect.set(runtimeAgent, 'getPrompt', async () => reusablePrompt),
+            Reflect.set(runtimeAgent, 'getEnabledHandoffs', async () => [
+              handoff(target, { onHandoff }),
+            ]),
+          );
+        });
+        const provider = new OpenAiAgentsProvider('workflow-label', {
+          config: { agent, executeTools, model: 'override-model' },
+        });
+
+        await expect(provider.callApi('Keep the mock graph.')).resolves.toMatchObject({
+          output: 'Done.',
+        });
+
+        expect(mutationResults).toEqual([false, false]);
+        expect(requests[0].tools).toEqual([]);
+        expect(requests[0]).not.toHaveProperty('prompt');
+        expect(onHandoff).not.toHaveBeenCalled();
+      });
+
+      it.each(['settings', 'providerData', 'extraBody', 'extra_body'] as const)(
+        'prevents lifecycle hooks from injecting hosted tools through %s',
+        async (path) => {
+          const extraBody = {};
+          const providerData = {
+            metadata: { purpose: 'mock test' },
+            ...(path === 'extra_body' ? { extra_body: extraBody } : { extraBody }),
+          };
+          const modelSettings = { temperature: 0.25, providerData };
+          const agent = new Agent({ name: 'Mock workflow', modelSettings, tools: [] });
+          const mutationResults: boolean[] = [];
+          agent.on('agent_start', (_context, runtimeAgent) => {
+            const hostedTools = [{ type: 'web_search' }];
+            if (path === 'settings') {
+              mutationResults.push(
+                Reflect.set(runtimeAgent, 'modelSettings', {
+                  providerData: { tools: hostedTools },
+                }),
+              );
+            } else {
+              const runtimeData = runtimeAgent.modelSettings.providerData!;
+              const destination = path === 'providerData' ? runtimeData : runtimeData[path];
+              mutationResults.push(Reflect.set(destination, 'tools', hostedTools));
+            }
+            // The caller retains these objects. Mutating them must not change this run's policy.
+            Reflect.set(providerData, 'tools', hostedTools);
+            Reflect.set(extraBody, 'prompt', wirePrompt);
+          });
+          const provider = new OpenAiAgentsProvider('workflow-label', {
+            config: { agent, executeTools, model: 'override-model', modelSettings },
+          });
+
+          await expect(provider.callApi('Keep tools mocked.')).resolves.toMatchObject({
+            output: 'Done.',
+          });
+
+          expect(mutationResults).toEqual([false]);
+          expect(requests[0].tools).toEqual([]);
+          expect(requests[0]).not.toHaveProperty('prompt');
+          expect(requests[0].temperature).toBe(0.25);
+          expect(Object.isFrozen(modelSettings)).toBe(false);
+          expect(Object.isFrozen(providerData)).toBe(false);
+          expect(Object.isFrozen(extraBody)).toBe(false);
+        },
+      );
+    },
+  );
 });

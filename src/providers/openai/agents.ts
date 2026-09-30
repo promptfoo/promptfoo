@@ -206,14 +206,21 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         signal: callApiOptions?.abortSignal,
       };
 
+      const mockTools =
+        this.agentConfig.executeTools === false || this.agentConfig.executeTools === 'mock';
+      const runnerModelSettings =
+        mockTools && this.executionModelSettings
+          ? snapshotMockModelSettings(this.executionModelSettings)
+          : this.executionModelSettings;
+
       // Keep Runner defaults for SDK-created agents while the per-run graph below enforces the
       // provider overrides on explicit initial and handoff agents.
       const runner = new Runner({
         ...(this.agentConfig.model ? { model: this.agentConfig.model } : {}),
-        ...(this.executionModelSettings ? { modelSettings: this.executionModelSettings } : {}),
+        ...(runnerModelSettings ? { modelSettings: runnerModelSettings } : {}),
       });
 
-      if (this.agentConfig.executeTools === false || this.agentConfig.executeTools === 'mock') {
+      if (mockTools) {
         assertNoMockToolOverrides(runOptions.modelSettings, 'run options');
       }
 
@@ -401,12 +408,20 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       throw new Error("executeTools: false/'mock' cannot safely wrap an unknown handoff shape");
     });
 
-    // Lifecycle hooks may observe this graph, but cannot replace its mocks or tool lists.
+    // The SDK discovers capabilities after lifecycle hooks, so pin both the graph and its
+    // discovery methods. Hooks can still observe the agents without exposing real tools.
+    const mockTools = Object.freeze(tools);
+    const noMcpTools = Object.freeze([]);
     for (const [key, value] of Object.entries({
-      tools: Object.freeze(tools),
+      tools: mockTools,
       handoffs: Object.freeze(wrappedAgent.handoffs),
-      mcpServers: Object.freeze([]),
+      mcpServers: noMcpTools,
       prompt: undefined,
+      modelSettings: snapshotMockModelSettings(wrappedAgent.modelSettings),
+      getAllTools: async (): Promise<typeof mockTools> => mockTools,
+      getMcpTools: async (): Promise<typeof noMcpTools> => noMcpTools,
+      getEnabledHandoffs: Agent.prototype.getEnabledHandoffs.bind(wrappedAgent),
+      getPrompt: async (): Promise<undefined> => undefined,
     })) {
       Object.defineProperty(wrappedAgent, key, { value, writable: false, configurable: false });
     }
@@ -772,13 +787,33 @@ function validateExecuteTools(value: unknown): void {
   }
 }
 
+function snapshotMockModelSettings(modelSettings: ModelSettings): ModelSettings {
+  const snapshot = { ...modelSettings };
+  if (modelSettings.providerData) {
+    const providerData = { ...modelSettings.providerData };
+    // These request-body escape hatches can introduce hosted tools or prompts after the
+    // initial validation. Copy before freezing so caller-owned settings stay mutable.
+    for (const key of ['extraBody', 'extra_body']) {
+      const body = providerData[key];
+      if (body && typeof body === 'object' && !Array.isArray(body)) {
+        providerData[key] = Object.freeze({ ...body });
+      }
+    }
+    snapshot.providerData = Object.freeze(providerData);
+  }
+  return Object.freeze(snapshot);
+}
+
 function assertNoMockToolOverrides(modelSettings: unknown, source: string): void {
-  if (!modelSettings || typeof modelSettings !== 'object' || Array.isArray(modelSettings)) {
+  if (
+    !modelSettings ||
+    (typeof modelSettings !== 'object' && typeof modelSettings !== 'function')
+  ) {
     return;
   }
 
   const providerData = (modelSettings as { providerData?: unknown }).providerData;
-  if (!providerData || typeof providerData !== 'object' || Array.isArray(providerData)) {
+  if (!providerData || (typeof providerData !== 'object' && typeof providerData !== 'function')) {
     return;
   }
 
@@ -787,20 +822,12 @@ function assertNoMockToolOverrides(modelSettings: unknown, source: string): void
   const overridesPrompt =
     Object.prototype.hasOwnProperty.call(providerDataRecord, 'prompt') ||
     extraBodies.some(
-      (extraBody) =>
-        !!extraBody &&
-        typeof extraBody === 'object' &&
-        !Array.isArray(extraBody) &&
-        Object.prototype.hasOwnProperty.call(extraBody, 'prompt'),
+      (extraBody) => extraBody != null && Object.prototype.hasOwnProperty.call(extraBody, 'prompt'),
     );
   const overridesTools =
     Object.prototype.hasOwnProperty.call(providerDataRecord, 'tools') ||
     extraBodies.some(
-      (extraBody) =>
-        !!extraBody &&
-        typeof extraBody === 'object' &&
-        !Array.isArray(extraBody) &&
-        Object.prototype.hasOwnProperty.call(extraBody, 'tools'),
+      (extraBody) => extraBody != null && Object.prototype.hasOwnProperty.call(extraBody, 'tools'),
     );
 
   if (overridesPrompt || overridesTools) {
