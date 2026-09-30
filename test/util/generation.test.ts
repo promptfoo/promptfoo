@@ -71,6 +71,22 @@ describe('retryWithDeduplication', () => {
 });
 
 describe('sampleArray', () => {
+  it('gives each three-item permutation an equal share of the random input space', () => {
+    const permutations: string[] = [];
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    try {
+      for (const first of [1 / 6, 1 / 2, 5 / 6]) {
+        for (const second of [1 / 4, 3 / 4]) {
+          random.mockReturnValueOnce(first).mockReturnValueOnce(second);
+          permutations.push(sampleArray(['a', 'b', 'c'], 3).join(''));
+        }
+      }
+      expect(permutations.sort()).toEqual(['abc', 'acb', 'bac', 'bca', 'cab', 'cba']);
+    } finally {
+      random.mockRestore();
+    }
+  });
+
   it('should return n random items when n is less than array length', () => {
     const array = [1, 2, 3, 4, 5];
     const result = sampleArray(array, 3);
