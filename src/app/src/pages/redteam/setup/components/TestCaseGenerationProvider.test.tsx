@@ -36,7 +36,8 @@ const MOCK_CONFIG = {
   entities: [],
 };
 
-vi.mock('@app/utils/api', () => ({
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
   callApi: vi.fn(),
 }));
 

@@ -1,11 +1,11 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Test state-of-the-art image generation models on Replicate
+description: Compare image generation models on Replicate
 
 prompts:
   - 'Generate an image: {{imagePrompt}}'
 
 providers:
-  # FLUX 1.1 Pro Ultra - Highest quality, up to 4MP images
+  # FLUX 1.1 Pro Ultra
   - id: replicate:image:black-forest-labs/flux-1.1-pro-ultra
     config:
       width: 1024
@@ -21,7 +21,7 @@ providers:
       height: 1024
       aspect_ratio: '1:1'
       output_format: 'webp'
-      raw: true # Enable raw mode for more authentic photography
+      raw: true
 
   # FLUX Dev - Open source version
   - id: replicate:image:black-forest-labs/flux-dev

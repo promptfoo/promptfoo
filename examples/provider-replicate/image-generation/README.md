@@ -50,13 +50,9 @@ providers:
       seed: 42
 ```
 
-## Important: Image URL Expiration
+## Saving Generated Images
 
-Replicate image URLs are temporary. Promptfoo downloads generated images before saving results, so saved evaluations do not depend on those URLs.
-
-## Automatic Image Downloads
-
-Image downloads and blob storage are built in. No download hook is needed. Assertions can inspect `context.providerResponse.images`.
+Replicate image URLs are temporary. Promptfoo downloads generated images and stores them through its blob storage before saving results. No download hook is needed. Assertions can inspect `context.providerResponse.images`.
 
 ## Viewing Results
 
