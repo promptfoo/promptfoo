@@ -143,7 +143,7 @@ describe('getTargetForExecution', () => {
 
   it('preserves provider options while removing TLS form fields', () => {
     const provider = {
-      id: 'openai:chatkit',
+      id: 'http',
       config: {
         stateful: true,
         sessionSource: 'provider-owned',
@@ -157,6 +157,51 @@ describe('getTargetForExecution', () => {
     });
     expect(provider.config.tls.caInputType).toBe('upload');
   });
+  it.each(['http', 'https', 'http://example.test', 'https://example.test'])(
+    'removes cleared certificate arrays for %s without changing the saved form',
+    (id) => {
+      const tls = { ca: ['', '  '], cert: [], key: [''], caInputType: 'inline' };
+      const provider = { id, config: { tls } };
+
+      expect(getTargetForExecution(provider)).toEqual({ id, config: {} });
+      expect(tls.ca).toEqual(['', '  ']);
+      expect(tls.key).toEqual(['']);
+    },
+  );
+
+  it('preserves nonblank certificate array entries without trimming their contents', () => {
+    const tls = { ca: ['', ' CA ', ''], cert: ['CERT', ''], key: [' ', 'KEY'] };
+    expect(getTargetForExecution({ id: 'http', config: { tls } }).config.tls).toEqual({
+      ca: [' CA '],
+      cert: ['CERT'],
+      key: ['KEY'],
+    });
+    expect(tls.cert).toEqual(['CERT', '']);
+  });
+
+  it.each([true, 'custom-policy', { enabled: true, ca: [''], certificateType: 'custom' }, null])(
+    'preserves custom provider TLS options: %j',
+    (tls) => {
+      const provider = { id: 'file://provider.js', config: { tls } };
+      expect(getTargetForExecution(provider)).toEqual(provider);
+    },
+  );
+
+  it.each(['openai:chatkit', 'http-custom', undefined])(
+    'leaves TLS object fields opaque for provider %s',
+    (id) => {
+      const provider = { id, config: { tls: { enabled: true, ca: '', certificateType: 'none' } } };
+      expect(getTargetForExecution(provider)).toEqual(provider);
+    },
+  );
+
+  it.each([true, 'custom-policy', ['CA']])(
+    'leaves invalid HTTP TLS shapes for validation: %j',
+    (tls) => {
+      const provider = { id: 'http', config: { tls } };
+      expect(getTargetForExecution(provider)).toEqual(provider);
+    },
+  );
 });
 
 describe('getUnifiedConfig', () => {
@@ -408,6 +453,7 @@ describe('getUnifiedConfig', () => {
         ...baseConfig,
         target: {
           ...baseConfig.target,
+          id: 'http',
           config: {
             ...baseConfig.target.config,
             tls: {
@@ -450,29 +496,61 @@ describe('getUnifiedConfig', () => {
       expect(tls.certificateType).toBeUndefined();
     });
 
-    it.each(['none', 'pem', 'pfx', 'pkcs12'])(
-      'removes stale JKS credentials when the saved certificate selection is %s',
-      (certificateType) => {
+    it.each([
+      ['none', {}],
+      [
+        'pem',
+        {
+          cert: 'pem-cert',
+          certPath: '/client.crt',
+          key: 'pem-key',
+          keyPath: '/client.key',
+          passphrase: 'password',
+        },
+      ],
+      ['pfx', { pfx: 'pfx-content', pfxPath: '/client.pfx', passphrase: 'password' }],
+      ['pkcs12', { pfx: 'pfx-content', pfxPath: '/client.pfx', passphrase: 'password' }],
+      [
+        'jks',
+        {
+          jksContent: 'jks-content',
+          jksPath: '/client.jks',
+          keyAlias: 'client',
+          passphrase: 'password',
+        },
+      ],
+    ])(
+      'exports only selected %s credentials from an imported form',
+      (certificateType, credentials) => {
         const tls = {
           certificateType,
           rejectUnauthorized: true,
-          jksContent: 'old-upload',
-          jksPath: '/old/client.jks',
-          keyAlias: 'old-client',
-          cert: 'active-pem-cert',
-          pfx: 'active-pfx',
+          ca: ['CA'],
+          servername: 'example.test',
+          jksContent: 'jks-content',
+          jksPath: '/client.jks',
+          keyAlias: 'client',
+          cert: 'pem-cert',
+          certPath: '/client.crt',
+          key: 'pem-key',
+          keyPath: '/client.key',
+          pfx: 'pfx-content',
+          pfxPath: '/client.pfx',
+          passphrase: 'password',
         };
         const result = getUnifiedConfig({
           ...baseConfig,
-          target: { ...baseConfig.target, config: { tls } },
+          target: { id: 'http', config: { tls } },
         });
 
         expect(getFirstTargetConfig(result).tls).toEqual({
           rejectUnauthorized: true,
-          cert: 'active-pem-cert',
-          pfx: 'active-pfx',
+          ca: ['CA'],
+          servername: 'example.test',
+          ...credentials,
         });
-        expect(tls.jksContent).toBe('old-upload');
+        expect(tls.jksContent).toBe('jks-content');
+        expect(tls.key).toBe('pem-key');
       },
     );
 
@@ -481,6 +559,7 @@ describe('getUnifiedConfig', () => {
         ...baseConfig,
         target: {
           ...baseConfig.target,
+          id: 'http',
           config: {
             ...baseConfig.target.config,
             tls: {
@@ -504,6 +583,7 @@ describe('getUnifiedConfig', () => {
         ...baseConfig,
         target: {
           ...baseConfig.target,
+          id: 'http',
           config: {
             ...baseConfig.target.config,
             tls: {
@@ -523,7 +603,7 @@ describe('getUnifiedConfig', () => {
     it('omits an empty TLS block before visiting the form', () => {
       const result = getUnifiedConfig({
         ...baseConfig,
-        target: { ...baseConfig.target, config: { tls: {} } },
+        target: { ...baseConfig.target, id: 'http', config: { tls: {} } },
       });
 
       expect(getFirstTargetConfig(result).tls).toBeUndefined();
@@ -534,6 +614,7 @@ describe('getUnifiedConfig', () => {
         ...baseConfig,
         target: {
           ...baseConfig.target,
+          id: 'http',
           config: {
             ...baseConfig.target.config,
             tls: {
@@ -555,6 +636,7 @@ describe('getUnifiedConfig', () => {
         ...baseConfig,
         target: {
           ...baseConfig.target,
+          id: 'http',
           config: {
             ...baseConfig.target.config,
             tls: {
@@ -574,6 +656,7 @@ describe('getUnifiedConfig', () => {
         ...baseConfig,
         target: {
           ...baseConfig.target,
+          id: 'http',
           config: {
             ...baseConfig.target.config,
             tls: {
