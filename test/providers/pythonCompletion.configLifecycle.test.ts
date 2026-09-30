@@ -1,3 +1,4 @@
+import { watch } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -120,11 +121,36 @@ describe('Python provider configuration lifetime', () => {
 from pathlib import Path
 def get_config():
  ${ignoreTerm ? 'signal.signal(signal.SIGTERM, signal.SIG_IGN)' : 'pass'}
- Path(__file__).with_suffix('.pid').write_text(str(os.getpid()))
+ pid_file = Path(__file__).with_suffix('.pid')
+ pending = pid_file.with_suffix('.tmp')
+ pending.write_text(str(os.getpid()))
+ pending.replace(pid_file)
  while True: time.sleep(1)
 `,
       );
       const provider = createProvider(`file://${filename}`);
+      let watcher: ReturnType<typeof watch> | undefined;
+      const ready = new Promise<number>((resolve, reject) => {
+        const readPid = async () => {
+          try {
+            const pid = Number(await readFile(pidFile, 'utf8'));
+            if (pid > 0) {
+              resolve(pid);
+            }
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+              reject(error);
+            }
+          }
+        };
+        watcher = watch(directory, (_event, changedFile) => {
+          if (changedFile === 'blocking.pid' || changedFile === null) {
+            void readPid();
+          }
+        });
+        watcher.on('error', reject);
+        void readPid();
+      });
       const initializing = provider.initialize().catch((error: Error) => error);
       let pid: number | undefined;
       const alive = () => {
@@ -142,10 +168,12 @@ def get_config():
         }
       };
       try {
-        await vi.waitFor(async () => {
-          pid = Number(await readFile(pidFile, 'utf8'));
-          expect(pid).toBeGreaterThan(0);
-        });
+        pid = await Promise.race([
+          ready,
+          initializing.then((error) => {
+            throw error ?? new Error('Configuration returned before publishing its PID');
+          }),
+        ]);
         expect(alive()).toBe(true);
         await providerRegistry.shutdownAll();
         expect(await initializing).toMatchObject({ name: 'AbortError' });
@@ -155,6 +183,7 @@ def get_config():
         expect(await provider.callApi('retry')).toMatchObject({ output: 'retry-ok' });
         expect(mocks.initialize).toHaveBeenCalledOnce();
       } finally {
+        watcher?.close();
         if (pid && alive()) {
           process.kill(pid, 'SIGKILL');
         }
