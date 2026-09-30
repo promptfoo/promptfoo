@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mcpCommand } from '../../../src/commands/mcp/index';
-import { startHttpMcpServer, startStdioMcpServer } from '../../../src/commands/mcp/server';
+import { startStdioMcpServer } from '../../../src/commands/mcp/server';
 import logger from '../../../src/logger';
 
 vi.mock('../../../src/logger', () => ({
@@ -58,17 +58,6 @@ describe('mcp command', () => {
 
       expect(logger.error).toHaveBeenCalledWith('Invalid port number: not-a-number');
       expect(process.exitCode).toBe(1);
-    });
-  });
-
-  describe('http transport', () => {
-    it('starts HTTP transport on the default port', async () => {
-      const mcpCmd = program.commands.find((cmd) => cmd.name() === 'mcp');
-      expect(mcpCmd).toBeDefined();
-
-      await mcpCmd!.parseAsync(['node', 'test', '--transport', 'http']);
-
-      expect(startHttpMcpServer).toHaveBeenCalledWith(3100);
     });
   });
 

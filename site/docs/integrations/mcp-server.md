@@ -1,13 +1,13 @@
 ---
 title: Promptfoo MCP Server
-description: Connect local AI agents to promptfoo through Model Context Protocol using STDIO or loopback HTTP, with setup instructions, tool examples, and trust boundaries.
+description: Deploy promptfoo as Model Context Protocol server enabling external AI agents to access evaluation and red teaming capabilities
 sidebar_label: MCP Server
 sidebar_position: 21
 ---
 
 # Promptfoo MCP Server
 
-Expose promptfoo's eval tools to local AI agents via Model Context Protocol (MCP).
+Expose promptfoo's eval tools to AI agents via Model Context Protocol (MCP).
 
 :::info Prerequisites
 
@@ -36,7 +36,7 @@ instead of `npx promptfoo@latest ...` so both packages resolve from the same pro
 # For Cursor, Claude Desktop (STDIO transport)
 npx promptfoo@latest mcp --transport stdio
 
-# For local web tools (HTTP transport)
+# For web tools (HTTP transport)
 npx promptfoo@latest mcp --transport http --port 3100
 ```
 
@@ -167,13 +167,7 @@ The AI will:
 Choose the appropriate transport based on your use case:
 
 - **STDIO (`--transport stdio`)**: For desktop AI tools (Cursor, Claude Desktop) that communicate via stdin/stdout
-- **HTTP (`--transport http`)**: For local web applications, APIs, and integrations that need HTTP endpoints. HTTP binds to `127.0.0.1`.
-
-### HTTP Security
-
-The HTTP transport exposes tools that can run evals, read local promptfoo configs, and write generated outputs. It only listens on `127.0.0.1`, rejects non-local `Host` headers, and rejects remote browser origins on every route, including health and SSE.
-
-Local MCP clients are trusted. Tools run with the server process's permissions, including access to local files and executable configs. The HTTP listener has no authentication; do not expose it through a reverse proxy or port forwarding. Use STDIO when the client should manage the server process.
+- **HTTP (`--transport http`)**: For web applications, APIs, and remote integrations that need HTTP endpoints
 
 ## Best Practices
 
