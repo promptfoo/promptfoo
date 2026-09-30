@@ -215,8 +215,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'providers/huggingface.test.ts',
   'providers/index.test.ts',
   'providers/openai-codex-sdk.test.ts',
-  'providers/openai/chatkit-pool.test.ts',
-  'providers/openai/chatkit.test.ts',
   'providers/pythonCompletion.cliState.test.ts',
   'providers/registry.test.ts',
   'providers/responses/processor.test.ts',
