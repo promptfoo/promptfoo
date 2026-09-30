@@ -162,7 +162,7 @@ The cache key includes the namespace, API base URL, and exact serialized request
 
 - Only `llm-rubric` and `classifier` are supported. Graders that expect other output formats, such as `factuality`, `model-graded-closedqa`, `g-eval`, or the RAG metrics, are not.
 - In `llm-rubric` mode the provider reads the rubric and output directly and ignores `rubricPrompt`.
-- Jev accepts text only. Image and audio outputs aren't sent.
+- Jev inputs can be strings, JSON objects, or arrays. Native image and audio grading is unsupported.
 - Each request allows 64k tokens in total and 32k for the state plus the longest question. See the [models page](https://docs.typesafe.ai/models) for rate limits.
 - Jev 1.13 has documented limitations with arithmetic, counting, date comparisons, and adversarial content in the state. Use code for exact calculations and test grading quality on representative outputs. See TypeSafe's [known model limitations](https://docs.typesafe.ai/model-jaggedness/jev-1.13).
 
