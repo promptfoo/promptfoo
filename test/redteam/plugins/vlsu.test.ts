@@ -76,6 +76,23 @@ describe('VLSUPlugin', () => {
       expect(plugin.id).toBe('promptfoo:redteam:vlsu');
     });
 
+    it.each([0, -1, 0.5, Number.NaN, Number.POSITIVE_INFINITY, '2', 'invalid', false])(
+      'should reject invalid maxConcurrency %s before generating tests',
+      (maxConcurrency) => {
+        const config: Record<string, unknown> = { maxConcurrency };
+        expect(() => new VLSUPlugin(mockProvider, 'test purpose', 'image', config)).toThrow(
+          '[vlsu] maxConcurrency must be a positive integer',
+        );
+        expect(mockFetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([1, 5, 32, undefined])('should accept maxConcurrency %s', (maxConcurrency) => {
+      expect(
+        () => new VLSUPlugin(mockProvider, 'test purpose', 'image', { maxConcurrency }),
+      ).not.toThrow();
+    });
+
     it('should validate categories in config', () => {
       const config = {
         categories: ['C1', 'invalid-category'] as string[],
