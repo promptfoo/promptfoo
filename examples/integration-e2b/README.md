@@ -69,10 +69,13 @@ promptfoo view
 ## Sandbox settings and results
 
 The validator creates each E2B sandbox with outbound internet access disabled and a
-60-second lifetime, then requests a 5-second code-execution timeout. CPU and memory
-allocation come from the E2B template; this example does not claim per-execution
-CPU or memory limits. SDK or sandbox errors fail the assertion without retrying
-with weaker settings. Generated code runs only inside E2B.
+60-second lifetime, then requests a 5-second code-execution timeout. The execution
+timeout is an SDK transport setting, not a strict wall-clock limit: transports can
+combine timeout phases into a longer request deadline. The sandbox lifetime is a
+separate limit. CPU and memory allocation come from the E2B template; this example
+does not claim per-execution CPU or memory limits. SDK or sandbox errors fail the
+assertion without retrying with weaker settings. Generated code runs only inside
+E2B.
 
 The static pattern check is illustrative, not a complete Python security filter.
 The protected-file probe intentionally fails when the precheck rejects its code.
