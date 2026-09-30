@@ -133,7 +133,8 @@ Architecture checks scan `src/`, `packages/`, and every configured layer root.
 Assign new package source to a layer in `architecture/layers.json`. The same
 import, dependency, and edge-count rules apply to all classified files.
 Nested `node_modules`, declaration files, and `packages/**/dist` output are
-excluded. Add other generated files or directories to `ignoredRoots`.
+excluded. Add other generated files or directories to `ignoredRoots`. Layer roots
+and ignored roots are literal paths, not glob patterns.
 
 When moving a layer into a private workspace, include its implementation root
 and compatibility shims in that layer. An exact source alias such as
