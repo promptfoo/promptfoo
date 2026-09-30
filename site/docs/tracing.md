@@ -442,6 +442,8 @@ Here's how it works:
 
 To pull traces from your tracing service, add it under `tracing.provider` in your configuration. The provider ID identifies the service, and its settings tell Promptfoo how to connect.
 
+External trace polling compares the selected spans' contents, including updated attributes and status, before stopping early. It still stops at the configured retry limit; an unchanged snapshot does not prove the trace is complete.
+
 #### Grafana Tempo
 
 Use the `tempo` trace provider to pull traces from Grafana Tempo:
