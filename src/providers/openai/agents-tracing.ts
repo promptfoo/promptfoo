@@ -694,7 +694,6 @@ function sanitizeCredentialText(value: string): string {
   }
   value = sanitized + value.slice(copied);
 
-  // Preserve escapes before the generic masker can shorten quoted credentials.
   return redactQuotedCredentials(value)
     .replace(/\b(?:sk|pk)-[a-zA-Z0-9_-]{20,}\b/g, '<REDACTED_API_KEY>')
     .replace(/\bAKIA[A-Z0-9]{16}\b/g, '<REDACTED_AWS_KEY>')
