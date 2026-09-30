@@ -2,7 +2,7 @@ import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import ProviderTypeSelector from './ProviderTypeSelector';
@@ -34,8 +34,8 @@ describe('ProviderTypeSelector', () => {
 
     const providerCard = screen.getByText('Anthropic', { exact: true }).closest('[role="button"]')!;
     await user.click(providerCard);
-    fireEvent.keyDown(providerCard, { key: 'Enter' });
-    fireEvent.keyDown(providerCard, { key: ' ' });
+    expect(providerCard).toHaveFocus();
+    await user.keyboard('{Enter} ');
 
     expect(setProvider).not.toHaveBeenCalled();
     expect(providerCard).toHaveAttribute('aria-disabled', 'true');
