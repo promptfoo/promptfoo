@@ -156,10 +156,12 @@ app.post('/chat', async (req, res) => {
 
     const { api_provider, chat_history } = req.body || {};
 
-    // Example of a required field. We don't do any actual validation here.
     if (!api_provider) {
       console.warn('Request rejected: Missing api_provider field');
       return res.status(400).json({ error: 'Missing required field: api_provider' });
+    }
+    if (api_provider !== 'openai') {
+      return res.status(400).json({ error: 'Unsupported api_provider. Use openai.' });
     }
     if (!chat_history || !Array.isArray(chat_history)) {
       console.warn('Request rejected: chat_history must be an array');
@@ -171,7 +173,7 @@ app.post('/chat', async (req, res) => {
     );
     const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...chat_history];
 
-    const client = await loadApiProvider(api_provider);
+    const client = await loadApiProvider('openai');
     const result = await client.callApi(JSON.stringify(messages));
 
     const { output: response } = result;

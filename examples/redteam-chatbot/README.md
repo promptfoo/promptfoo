@@ -50,6 +50,8 @@ promptfoo view
 
 ## Node.js Webserver Example Usage
 
+The server accepts only `api_provider: "openai"`. To change providers, edit the server configuration; request bodies cannot select arbitrary providers or URLs.
+
 ### Single Message Request
 
 ```bash
