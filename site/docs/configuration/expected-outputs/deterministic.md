@@ -337,6 +337,8 @@ assert:
     value: 'file://path/to/expected.json'
 ```
 
+When a JSON `equals` assertion fails, open the result’s **Evaluation** tab to see changed paths and an expandable diff of the values the assertion graded, including assertion transforms. Diffs are saved with new results; large or unsupported values keep the ordinary failure message.
+
 ### Is-JSON
 
 The `is-json` assertion checks if the LLM output is a valid JSON string.

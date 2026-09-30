@@ -25,6 +25,48 @@ const defaultParams = {
 };
 
 describe('handleEquals', () => {
+  it('records the exact rendered pair with canonical keys and signed zero', async () => {
+    const result = await handleEquals({
+      assertion: { type: 'equals', value: 'file://expected.json' },
+      renderedValue: { z: -0, a: 'expected' },
+      outputString: '{"z":0,"a":"actual"}',
+      inverse: false,
+    });
+    expect(result.pass).toBe(false);
+    expect(result.metadata?.jsonComparison).toEqual({
+      expected: '{\n  "a": "expected",\n  "z": -0\n}',
+      actual: '{\n  "a": "actual",\n  "z": 0\n}',
+    });
+    const saved = JSON.parse(JSON.stringify(result));
+    expect(Object.is(JSON.parse(saved.metadata.jsonComparison.expected).z, -0)).toBe(true);
+  });
+
+  it.each([
+    { expected: { a: 1 }, actual: '{"a":1}', inverse: false },
+    { expected: { a: 1 }, actual: '{"a":1}', inverse: true },
+    { expected: { a: 1 }, actual: 'not JSON', inverse: false },
+    { expected: { a: 'x'.repeat(20_001) }, actual: '{}', inverse: false },
+    { expected: { a: Infinity }, actual: '{}', inverse: false },
+    { expected: Object.assign(Object.create(null), { a: 1 }), actual: '{"a":1}', inverse: false },
+    { expected: Array.from({ length: 600 }, (_, i) => i), actual: '[]', inverse: false },
+    {
+      expected: Array.from({ length: 30 }).reduce<unknown>((value) => ({ value }), 1),
+      actual: '{}',
+      inverse: false,
+    },
+  ])(
+    'omits comparison metadata outside bounded failed positive equality: %#',
+    async ({ expected, actual, inverse }) => {
+      const result = await handleEquals({
+        assertion: { type: inverse ? 'not-equals' : 'equals' },
+        renderedValue: expected as AssertionValue,
+        outputString: actual,
+        inverse,
+      });
+      expect(result.metadata?.jsonComparison).toBeUndefined();
+    },
+  );
+
   it('passes not-equals when an object value cannot equal non-JSON output', async () => {
     // The output is plain text (not JSON), so it plainly does NOT equal the object value;
     // a `not-equals` assertion should therefore pass. The catch path used to ignore `inverse`.

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { JsonDiffView } from '@app/components/JsonDiffView';
 import { Button } from '@app/components/ui/button';
 import {
   Collapsible,
@@ -417,6 +418,11 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                           <Copy className="size-3.5" />
                         )}
                       </Button>
+                    )}
+                  {!result.pass &&
+                    result.assertion?.type === 'equals' &&
+                    result.metadata?.jsonComparison && (
+                      <JsonDiffView comparison={result.metadata.jsonComparison} className="mt-2" />
                     )}
                 </td>
               </tr>

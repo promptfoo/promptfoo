@@ -687,6 +687,24 @@ function redactSensitiveResultFieldsForDb<
   };
 }
 
+function omitJsonComparisons<T>(value: T): T {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+  const result = value as T & Partial<GradingResult>;
+  const metadata = result.metadata ? { ...result.metadata } : undefined;
+  if (metadata) {
+    delete metadata.jsonComparison;
+  }
+  return {
+    ...result,
+    ...(metadata && { metadata }),
+    ...(Array.isArray(result.componentResults) && {
+      componentResults: result.componentResults.map(omitJsonComparisons),
+    }),
+  } as T;
+}
+
 // Shared by configuration and result-row output projections.
 export function getStripFlags(env?: EnvOverrides) {
   const getFlag = (key: EnvVarKey) => {
@@ -768,7 +786,11 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
         }
       : {}),
     response,
-    gradingResult: shouldStripGradingResult ? null : redacted.gradingResult,
+    gradingResult: shouldStripGradingResult
+      ? null
+      : shouldStripResponseOutput || shouldStripMetadata
+        ? omitJsonComparisons(redacted.gradingResult)
+        : redacted.gradingResult,
     namedScores: sanitizeForDb(artifactResult.namedScores),
     metadata: shouldStripMetadata
       ? {}
@@ -1178,7 +1200,11 @@ export default class EvalResult {
       }),
       description: this.description || undefined,
       error: this.error || undefined,
-      gradingResult: shouldStripGradingResult ? null : this.gradingResult,
+      gradingResult: shouldStripGradingResult
+        ? null
+        : shouldStripResponseOutput || shouldStripMetadata
+          ? omitJsonComparisons(this.gradingResult)
+          : this.gradingResult,
       id: this.id,
       latencyMs: this.latencyMs,
       namedScores: this.namedScores,

@@ -5,6 +5,50 @@ import { EvaluationPanel } from './EvaluationPanel';
 import type { GradingResult } from '@promptfoo/types';
 
 describe('EvaluationPanel', () => {
+  it('displays the exact graded JSON pair, independent of the assertion template', () => {
+    render(
+      <EvaluationPanel
+        gradingResults={[
+          {
+            pass: false,
+            score: 0,
+            reason: 'Different names',
+            assertion: {
+              type: 'equals',
+              value: 'file://expected.json',
+              transform: 'output.record',
+            },
+            metadata: {
+              jsonComparison: { expected: '{"name":"Jane"}', actual: '{"name":"John"}' },
+            },
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText('expected: "Jane"')).toBeInTheDocument();
+    expect(screen.getByText('actual: "John"')).toBeInTheDocument();
+  });
+
+  it.each(['equals', 'not-equals', 'is-json'] as const)(
+    'keeps ordinary %s results readable without comparison metadata',
+    (type) => {
+      render(
+        <EvaluationPanel
+          gradingResults={[
+            {
+              pass: false,
+              score: 0,
+              reason: 'Mismatch',
+              assertion: { type, value: { name: 'Jane' } },
+            },
+          ]}
+        />,
+      );
+      expect(screen.getByText('Mismatch')).toBeInTheDocument();
+      expect(screen.queryByText(/difference.*found/)).not.toBeInTheDocument();
+    },
+  );
+
   it('renders nothing when gradingResults is undefined', () => {
     const { container } = render(<EvaluationPanel gradingResults={undefined} />);
     expect(container.querySelector('table')).toBeNull();

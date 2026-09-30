@@ -9,6 +9,7 @@ import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
+import { sanitizeResultForJsonlArtifact } from '../../src/models/evalResult';
 import { getTraceStore } from '../../src/tracing/store';
 import { type EvaluateResult, ResultFailureReason } from '../../src/types/index';
 import { createJunitXml } from '../../src/util/junit';
@@ -356,6 +357,49 @@ describe('writeOutput', () => {
     expect(written).not.toContain('short-secret');
     expect(eval_.config.env).toEqual({ ENVOY_API_BASE_URL: url });
   });
+
+  it.each(['PROMPTFOO_STRIP_RESPONSE_OUTPUT', 'PROMPTFOO_STRIP_METADATA'] as const)(
+    'omits JSON comparisons from output projections when %s is enabled',
+    async (flag) => {
+      const gradingResult = {
+        pass: false,
+        score: 0,
+        reason: 'Mismatch',
+        metadata: { jsonComparison: { expected: '{}', actual: '{"value":"comparison-private"}' } },
+      };
+      const eval_ = new Eval({ env: { [flag]: 'true' } });
+      await eval_.addResult(
+        createEvaluateResult({
+          gradingResult: { ...gradingResult, componentResults: [gradingResult] },
+        }),
+      );
+      expect(JSON.stringify(await createOutputData(eval_, null))).not.toContain(
+        'comparison-private',
+      );
+      const projected = eval_.results[0].toEvaluateResult({
+        shouldStripPromptText: false,
+        shouldStripResponseOutput: flag === 'PROMPTFOO_STRIP_RESPONSE_OUTPUT',
+        shouldStripTestVars: false,
+        shouldStripGradingResult: false,
+        shouldStripMetadata: flag === 'PROMPTFOO_STRIP_METADATA',
+      });
+      expect(projected.gradingResult?.reason).toBe('Mismatch');
+      expect(
+        projected.gradingResult?.componentResults?.[0].metadata?.jsonComparison,
+      ).toBeUndefined();
+      const jsonl = sanitizeResultForJsonlArtifact(eval_.results[0], {
+        shouldStripPromptText: false,
+        shouldStripResponseOutput: flag === 'PROMPTFOO_STRIP_RESPONSE_OUTPUT',
+        shouldStripTestVars: false,
+        shouldStripGradingResult: false,
+        shouldStripMetadata: flag === 'PROMPTFOO_STRIP_METADATA',
+      });
+      expect(JSON.stringify(jsonl)).not.toContain('comparison-private');
+      expect(eval_.results[0].gradingResult?.metadata?.jsonComparison).toEqual(
+        gradingResult.metadata.jsonComparison,
+      );
+    },
+  );
 
   it.each([true, false])(
     'uses saved strip flags (%s) for exports outside the evaluation scope',

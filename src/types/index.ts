@@ -550,6 +550,8 @@ export interface GradingResult {
     graderOutputs?: Record<string, string>;
     // Rendered assertion value with substituted variables (for display in UI)
     renderedAssertionValue?: string;
+    // Bounded values used by a failed JSON equals assertion, after transforms.
+    jsonComparison?: { expected: string; actual: string };
     // Full grading prompt sent to the grading LLM (for debugging)
     renderedGradingPrompt?: string;
     // True when the complete grading response was reused without running a new task.
