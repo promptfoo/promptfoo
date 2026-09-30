@@ -4,19 +4,18 @@ import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import {
-  type ApiProvider,
-  type CallApiContextParams,
-  inheritProviderCapabilities,
-  type ProviderEmbeddingResponse,
-  type ProviderResponse,
-  type TokenUsage,
-} from '../types/providers';
 import { maybeLoadToolsFromExternalFile } from '../util';
 import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+  TokenUsage,
+} from '../types/index';
 
 const MISTRAL_CHAT_MODELS = [
   ...['open-mistral-7b', 'mistral-tiny', 'mistral-tiny-2312'].map((id) => ({
@@ -746,11 +745,6 @@ export class MistralChatCompletionProvider implements ApiProvider {
 }
 
 export class MistralEmbeddingProvider implements ApiProvider {
-  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
-  readonly promptfooCapabilities = inheritProviderCapabilities(
-    MistralEmbeddingProvider.declaredProviderCapabilities,
-  );
-
   modelName: string;
   config: MistralChatCompletionOptions;
   env?: EnvOverrides;

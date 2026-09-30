@@ -1,11 +1,7 @@
 import logger from '../logger';
-import {
-  type ApiProvider,
-  inheritProviderCapabilities,
-  type ProviderEmbeddingResponse,
-  type ProviderResponse,
-} from '../types/providers';
 import { providerRegistry } from './providerRegistry';
+
+import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types/index';
 
 /**
  * Common options for all Transformers.js providers
@@ -325,11 +321,6 @@ function ensureCleanupRegistered(): void {
  * ```
  */
 export class TransformersEmbeddingProvider implements ApiProvider {
-  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
-  readonly promptfooCapabilities = inheritProviderCapabilities(
-    TransformersEmbeddingProvider.declaredProviderCapabilities,
-  );
-
   modelName: string;
   config: TransformersEmbeddingOptions;
 

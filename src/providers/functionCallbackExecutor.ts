@@ -50,7 +50,7 @@ export async function executeCallback({
         states.set(name, state);
       }
       const invocationId = ++state.nextId;
-      let callback = Object.hasOwn(cache, name) ? cache[name] : undefined;
+      let callback = Object.prototype.hasOwnProperty.call(cache, name) ? cache[name] : undefined;
       if (!callback || state.resolvedId === 0 || state.reference !== reference) {
         if (typeof reference === 'function') {
           callback = reference;

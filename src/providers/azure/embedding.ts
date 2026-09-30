@@ -1,16 +1,12 @@
 import { fetchWithCache } from '../../cache';
-import { inheritProviderCapabilities, type ProviderEmbeddingResponse } from '../../types/providers';
 import invariant from '../../util/invariant';
 import { getRequestTimeoutMs } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 
-export class AzureEmbeddingProvider extends AzureGenericProvider {
-  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
-  readonly promptfooCapabilities = inheritProviderCapabilities(
-    AzureEmbeddingProvider.declaredProviderCapabilities,
-  );
+import type { ProviderEmbeddingResponse } from '../../types/index';
 
+export class AzureEmbeddingProvider extends AzureGenericProvider {
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
     await this.ensureInitialized();
     invariant(this.authHeaders, 'auth headers are not initialized');

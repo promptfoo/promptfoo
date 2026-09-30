@@ -8,7 +8,6 @@ import {
   getProviderCallTracingContext,
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
-import { hasProviderCapability } from '../types/providers';
 import invariant from '../util/invariant';
 
 import type {
@@ -249,33 +248,38 @@ export async function getAndCheckProvider(
         checkName,
         type,
       });
-      return getAndCheckProvider(type, defaultProvider, null, checkName);
+      return defaultProvider;
+    } else {
+      throw new Error(`No provider of type ${type} found for '${checkName}'`);
     }
-    throw new Error(`No provider of type ${type} found for '${checkName}'`);
   }
 
-  let isValidProviderType = hasProviderCapability(matchedProvider, 'callApi');
+  let isValidProviderType = true;
   if (type === 'embedding') {
     isValidProviderType =
-      hasProviderCapability(matchedProvider, 'callEmbeddingApi') ||
-      hasProviderCapability(matchedProvider, 'callSimilarityApi');
+      'callEmbeddingApi' in matchedProvider || 'callSimilarityApi' in matchedProvider;
   } else if (type === 'classification') {
-    isValidProviderType = hasProviderCapability(matchedProvider, 'callClassificationApi');
+    isValidProviderType = 'callClassificationApi' in matchedProvider;
   } else if (type === 'moderation') {
-    isValidProviderType = hasProviderCapability(matchedProvider, 'callModerationApi');
+    isValidProviderType = 'callModerationApi' in matchedProvider;
   }
 
   if (!isValidProviderType) {
     // If the user explicitly configured a provider that doesn't match the
     // required type, throw rather than silently falling back to a different
     // provider, which could produce results from an unintended model.
-    if (!provider && defaultProvider && defaultProvider !== matchedProvider) {
+    if (provider) {
+      throw new Error(
+        `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}'`,
+      );
+    }
+    if (defaultProvider) {
       logger.warn('[Grading] Falling back to default provider after type check failed', {
         checkName,
         providerId: matchedProvider.id(),
         type,
       });
-      return getAndCheckProvider(type, defaultProvider, null, checkName);
+      return defaultProvider;
     }
     throw new Error(
       `Provider ${matchedProvider.id()} is not a valid ${type} provider for '${checkName}'`,

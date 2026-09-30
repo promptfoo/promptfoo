@@ -11,16 +11,6 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import {
-  type ApiModerationProvider,
-  type ApiProvider,
-  type CallApiContextParams,
-  type CallApiOptionsParams,
-  inheritProviderCapabilities,
-  type ModerationFlag,
-  type ProviderModerationResponse,
-  type ProviderResponse,
-} from '../types/providers';
 import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
 import { sleep, sleepWithAbort } from '../util/time';
@@ -28,6 +18,15 @@ import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { parseChatPrompt } from './shared';
 
 import type { EnvOverrides } from '../types/env';
+import type {
+  ApiModerationProvider,
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ModerationFlag,
+  ProviderModerationResponse,
+  ProviderResponse,
+} from '../types/index';
 
 interface ReplicateCompletionOptions {
   apiKey?: string;
@@ -545,11 +544,6 @@ export class ReplicateModerationProvider
   extends ReplicateProvider
   implements ApiModerationProvider
 {
-  static readonly declaredProviderCapabilities = ['callModerationApi'] as const;
-  readonly promptfooCapabilities = inheritProviderCapabilities(
-    ReplicateModerationProvider.declaredProviderCapabilities,
-  );
-
   async callModerationApi(
     prompt: string,
     assistant: string,
