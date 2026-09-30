@@ -68,7 +68,7 @@ Multi-turn strategies use an attacker agent to coerce the target over multiple c
 
 Multi-turn scans track target, attacker, and grading tokens separately. Probe counts include only requests to the target; grading request counts include one request per grading task, while cached responses do not create additional requests.
 
-For MCP targets, inferring tool arguments counts as attacker usage. If that step fails after consuming tokens, those tokens remain in the result and no target probe is counted. Failed responses read from cache retain their reported usage without adding incurred tokens or requests.
+For MCP targets, inferring tool arguments counts as attacker usage. If that step fails after consuming tokens, those tokens remain in the result and no target probe is counted.
 
 ### Indirect Prompt Injection Strategies
 
