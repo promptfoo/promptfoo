@@ -207,7 +207,7 @@ function parseRawMcpCall(entry: unknown): StructuredMcpToolCalls {
   if (value.status === 'failed') {
     return { calls: [{ name: value.name, error: 'tool call status was failed' }] };
   }
-  const hasOutput = Object.hasOwn(value, 'output');
+  const hasOutput = Object.prototype.hasOwnProperty.call(value, 'output');
   if (
     (value.status !== undefined && value.status !== 'completed') ||
     (hasOutput && value.output !== null && typeof value.output !== 'string') ||
