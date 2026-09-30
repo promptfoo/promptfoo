@@ -2184,6 +2184,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
       let releaseCreation: (() => void) | undefined;
       if (processSignal) {
         const discard = async () => {
+          this.sessionsForCleanup.add(session);
           if (await this.deleteCancelledSession(session, client)) {
             this.sessionsForCleanup.delete(session);
             if (this.sessions.get(sessionCacheKey) === session) {

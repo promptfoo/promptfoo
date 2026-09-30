@@ -2913,6 +2913,44 @@ describe('OpenCodeSDKProvider', () => {
       },
     );
 
+    it.each([
+      ['v1', false],
+      ['v1', true],
+      ['v2', false],
+      ['v2', true],
+    ] as const)(
+      'retries deletion of a late-created %s session after shutdown (persistent: %s)',
+      async (apiVersion, persistSessions) => {
+        const registry = isolateProcessRegistry();
+        await useApiVersion(apiVersion);
+        const started = createDeferred<void>();
+        const created = createDeferred<ReturnType<typeof createMockSessionResponse>>();
+        mockSessionCreate.mockImplementationOnce(() => {
+          started.resolve();
+          return created.promise;
+        });
+        mockSessionDelete.mockRejectedValueOnce(new Error('Temporary deletion failure'));
+        const provider = new OpenCodeSDKProvider({
+          config: { baseUrl: 'http://remote.test', persist_sessions: persistSessions },
+        });
+        const call = provider.callApi('pending creation');
+        await started.promise;
+        const shutdown = registry.shutdownForProcess();
+        await expect(call).resolves.toEqual({ error: 'OpenCode SDK call aborted' });
+        created.resolve(createMockSessionResponse('late-session'));
+        await shutdown;
+        expect(mockSessionDelete).toHaveBeenCalledOnce();
+        expect(mockSessionPrompt).not.toHaveBeenCalled();
+
+        await provider.cleanup();
+        expect(mockSessionDelete).toHaveBeenCalledTimes(2);
+        const [parameters] = mockSessionDelete.mock.calls[1];
+        expect(parameters.sessionID ?? parameters.path?.id).toBe('late-session');
+        await provider.cleanup();
+        expect(mockSessionDelete).toHaveBeenCalledTimes(2);
+      },
+    );
+
     it.each(['creation', 'deletion'] as const)(
       'bounds process shutdown when remote session %s never settles',
       async (stage) => {
@@ -2946,6 +2984,10 @@ describe('OpenCodeSDKProvider', () => {
           await shutdown;
           expect(completed).toHaveBeenCalledOnce();
           expect(mockSessionDelete).toHaveBeenCalledTimes(stage === 'deletion' ? 1 : 0);
+          if (stage === 'deletion') {
+            await provider.cleanup();
+            expect(mockSessionDelete).toHaveBeenCalledTimes(2);
+          }
         } finally {
           vi.useRealTimers();
         }
