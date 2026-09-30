@@ -96,6 +96,9 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      sha512: ${{ steps.package-artifact.outputs.sha512 }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -118,14 +121,9 @@ jobs:
         run: |
           tarball="$(npm run --silent package:pack -- --destination "$RUNNER_TEMP/promptfoo-package")"
           echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
-      - name: Validate npm package
-        env:
-          PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
-          PROMPTFOO_DISABLE_TELEMETRY: 1
-        run: |
-          npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL"
-          npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL" --profile omit-optional
-      - name: Upload verified npm package
+          echo "sha512=$(sha512sum "$tarball" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+      - name: Upload npm package
+        id: upload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: promptfoo-npm-package
@@ -138,9 +136,10 @@ jobs:
     if: >-
       ${{
         always() && !cancelled() &&
+        needs.validate-npm.result == 'success' &&
         (needs.build-npm.result == 'success' || needs.build-npm-backfill.result == 'success')
       }}
-    needs: [build-npm, build-npm-backfill, release-please]
+    needs: [build-npm, build-npm-backfill, validate-npm, release-please]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -155,7 +154,7 @@ jobs:
       - name: Download verified npm package
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: promptfoo-npm-package
+          artifact-ids: ${{ needs.build-npm.outputs.artifact-id || needs.build-npm-backfill.outputs.artifact-id }}
           path: ${{ runner.temp }}/promptfoo-package
       - name: Publish verified npm package
         env:
@@ -163,6 +162,7 @@ jobs:
           # Neutralize setup-node's token placeholder so npm uses OIDC.
           NODE_AUTH_TOKEN: ''
           PACKAGE_DIR: ${{ runner.temp }}/promptfoo-package
+          EXPECTED_SHA512: ${{ needs.build-npm.outputs.sha512 || needs.build-npm-backfill.outputs.sha512 }}
           REGISTRY_URL: https://registry.npmjs.org/
         run: |
           shopt -s nullglob
@@ -171,6 +171,12 @@ jobs:
             echo "::error::Expected exactly one verified npm tarball"
             exit 1
           fi
+          node - "${tarballs[0]}" "$EXPECTED_SHA512" <<'NODE'
+          const { createHash } = require('node:crypto');
+          const { readFileSync } = require('node:fs');
+          const actual = createHash('sha512').update(readFileSync(process.argv[2])).digest('hex');
+          require('node:assert/strict').equal(actual, process.argv[3], 'Npm artifact checksum mismatch');
+          NODE
           manifest_path="$RUNNER_TEMP/promptfoo-publish-manifest.json"
           tar -xOf "${tarballs[0]}" package/package.json > "$manifest_path"
           node - "$manifest_path" "$EXPECTED_VERSION" <<'NODE'
@@ -189,6 +195,9 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      sha512: ${{ steps.package-artifact.outputs.sha512 }}
     env:
       TAG_NAME: ${{ inputs.tag_name }}
     steps:
@@ -233,13 +242,69 @@ jobs:
             tarball="$artifact_dir/$filename"
           fi
           echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
-      - name: Validate historical npm package
+          echo "sha512=$(sha512sum "$tarball" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+      - name: Upload npm package
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: promptfoo-npm-package
+          path: ${{ steps.package-artifact.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 7
+
+  validate-npm:
+    # Consumer dependencies can modify this runner, but not the builder's uploaded bytes.
+    if: >-
+      ${{
+        always() && !cancelled() &&
+        (needs.build-npm.result == 'success' || needs.build-npm-backfill.result == 'success')
+      }}
+    needs: [build-npm, build-npm-backfill]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: ${{ inputs.tag_name && format('refs/tags/{0}', inputs.tag_name) || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version-file: '.nvmrc'
+          package-manager-cache: false
+      - run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
+      - run: npm ci --registry=https://registry.npmjs.org/
+      - name: Download npm package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          artifact-ids: ${{ needs.build-npm.outputs.artifact-id || needs.build-npm-backfill.outputs.artifact-id }}
+          path: ${{ runner.temp }}/promptfoo-package
+      - name: Validate npm package
         env:
-          PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
+          PACKAGE_DIR: ${{ runner.temp }}/promptfoo-package
+          EXPECTED_SHA512: ${{ needs.build-npm.outputs.sha512 || needs.build-npm-backfill.outputs.sha512 }}
+          TAG_NAME: ${{ inputs.tag_name }}
           PROMPTFOO_DISABLE_TELEMETRY: 1
         run: |
+          shopt -s nullglob
+          tarballs=("$PACKAGE_DIR"/*.tgz)
+          if [[ "${#tarballs[@]}" -ne 1 ]]; then
+            echo "::error::Expected exactly one npm tarball"
+            exit 1
+          fi
+          node - "${tarballs[0]}" "$EXPECTED_SHA512" <<'NODE'
+          const { createHash } = require('node:crypto');
+          const { readFileSync } = require('node:fs');
+          const actual = createHash('sha512').update(readFileSync(process.argv[2])).digest('hex');
+          require('node:assert/strict').equal(actual, process.argv[3], 'Npm artifact checksum mismatch');
+          NODE
+          export PACKAGE_TARBALL="${tarballs[0]}"
           if [[ -f scripts/testPackageArtifact.ts ]] && grep -q -- '--tarball' scripts/testPackageArtifact.ts; then
             npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL"
+            if [[ -z "$TAG_NAME" ]]; then
+              npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL" --profile omit-optional
+            fi
           else
             # Compatibility gate for tags predating exact-artifact acceptance. This tests
             # the selected archive's CLI and JSON output, without rebuilding or repacking it.
@@ -261,7 +326,8 @@ jobs:
               npm rebuild --prefix "$consumer_dir" --ignore-scripts=false --registry=https://registry.npmjs.org/ better-sqlite3
             fi
             printf '{"prompts":["artifact"],"providers":["echo"],"tests":[{"assert":[{"type":"equals","value":"artifact"}]}]}' > "$consumer_dir/config.json"
-            "$consumer_dir/node_modules/.bin/promptfoo" --version
+            cli_version="$("$consumer_dir/node_modules/.bin/promptfoo" --version)"
+            node -e "require('node:assert/strict').equal(process.argv[1].trim(), process.argv[2], 'Installed CLI version does not match tag')" "$cli_version" "$TAG_NAME"
             "$consumer_dir/node_modules/.bin/promptfoo" eval --config "$consumer_dir/config.json" --output "$consumer_dir/results.json" --no-cache
             node - "$consumer_dir/results.json" <<'NODE'
           const assert = require('node:assert/strict');
@@ -276,13 +342,6 @@ jobs:
           assert.equal(results[0].response.output, 'artifact');
           NODE
           fi
-      - name: Upload verified npm package
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: promptfoo-npm-package
-          path: ${{ steps.package-artifact.outputs.tarball }}
-          if-no-files-found: error
-          retention-days: 7
 
   docker:
     if: >-
