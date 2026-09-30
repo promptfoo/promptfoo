@@ -34,7 +34,7 @@ describe('artifact projection compatibility', () => {
           },
         },
       };
-      expect(sanitizePromptForArtifact(prompt, strip)).toEqual({
+      expect(sanitizePromptForArtifact(prompt, flags({ shouldStripPromptText: strip }))).toEqual({
         id: prompt.id,
         raw: strip ? '[prompt stripped]' : '[REDACTED]',
         label: strip ? '[prompt stripped]' : '[REDACTED]',

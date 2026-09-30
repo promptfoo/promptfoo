@@ -38,6 +38,7 @@ import {
   isSecretField,
   OUTPUT_SANITIZE_MAX_DEPTH,
   REDACTED,
+  sanitizeConfigForOutput,
   sanitizeObject,
   stripAssertionPrompts,
 } from '../util/sanitizer';
@@ -363,8 +364,9 @@ export function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: bool
 
 export function sanitizePromptForArtifact<T extends Prompt>(
   prompt: T,
-  stripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false),
+  stripFlags = getStripFlags(),
 ): T {
+  const stripPromptText = stripFlags.shouldStripPromptText;
   if (!asRecord(prompt)) {
     return (typeof prompt === 'string' && stripPromptText ? '[prompt stripped]' : prompt) as T;
   }
@@ -376,6 +378,11 @@ export function sanitizePromptForArtifact<T extends Prompt>(
       { raw: REDACTED, label: REDACTED, ...(generatedId && { id: generatedId }) } as T,
       stripPromptText,
     );
+  }
+  if ('config' in sanitized) {
+    const descriptor = Object.getOwnPropertyDescriptor(prompt, 'config');
+    const config = descriptor && 'value' in descriptor ? descriptor.value : sanitized.config;
+    sanitized.config = sanitizeConfigForOutput(config, stripFlags);
   }
   const metrics = asRecord(asRecord(prompt)?.metrics);
   const sanitizedMetrics = asRecord(asRecord(sanitized)?.metrics);
@@ -1069,9 +1076,7 @@ export function sanitizeSummaryForArtifact<T extends EvaluateSummaryV2 | Evaluat
     }),
     ...('prompts' in summary &&
       Array.isArray(summary.prompts) && {
-        prompts: summary.prompts.map((prompt) =>
-          sanitizePromptForArtifact(prompt, stripFlags.shouldStripPromptText),
-        ),
+        prompts: summary.prompts.map((prompt) => sanitizePromptForArtifact(prompt, stripFlags)),
       }),
     ...('table' in summary &&
       summary.table && {
@@ -1142,7 +1147,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
         }),
     ...(artifactResult.prompt
       ? {
-          prompt: sanitizePromptForArtifact(artifactResult.prompt as Prompt, shouldStripPromptText),
+          prompt: sanitizePromptForArtifact(artifactResult.prompt as Prompt, stripFlags),
         }
       : {}),
     ...(artifactResult.provider
@@ -1313,7 +1318,7 @@ export function sanitizeTableForArtifact(
             ...(headPrompts
               ? {
                   prompts: headPrompts.map((prompt) =>
-                    sanitizePromptForArtifact(prompt, shouldStripPromptText),
+                    sanitizePromptForArtifact(prompt, stripFlags),
                   ),
                 }
               : {}),

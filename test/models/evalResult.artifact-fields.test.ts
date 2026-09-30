@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeResultForJsonlArtifact } from '../../src/models/evalResult';
+import {
+  sanitizePromptForArtifact,
+  sanitizeResultForJsonlArtifact,
+} from '../../src/models/evalResult';
 import { sanitizeConfigForOutput } from '../../src/util/sanitizer';
 
 import type { OutputStripFlags } from '../../src/models/evalResult';
@@ -30,6 +33,48 @@ function createTestCase(): AtomicTestCase {
 }
 
 describe('artifact field projections', () => {
+  it.each([false, true])(
+    'sanitizes prompt config URLs with the export flags (strip=%s)',
+    (strip) => {
+      const prompt = {
+        id: 'a'.repeat(64),
+        raw: 'Use the public documentation at https://example.test/guide.',
+        label: 'Greeting',
+        config: {
+          baseUrl: 'https://user:fixture-password@gateway.example/v1',
+          apiEndpoint: 'https://gateway.example/infer?api_key=fixture-key',
+          tracing: {
+            enabled: true,
+            provider: {
+              id: 'langfuse' as const,
+              endpoint: 'https://cloud.langfuse.com',
+              auth: { username: 'public-key', password: '{{ env.LANGFUSE_SECRET_KEY }}' },
+            },
+          },
+          tests: [{ vars: { greeting: 'Hello' }, providerOutput: 'Hello', ...createTestCase() }],
+        },
+      };
+      const original = structuredClone(prompt);
+      const stripFlags = flags({
+        shouldStripPromptText: strip,
+        shouldStripTestVars: strip,
+        shouldStripResponseOutput: strip,
+        shouldStripMetadata: strip,
+      });
+
+      const artifact = sanitizePromptForArtifact(prompt, stripFlags);
+
+      expect(artifact.config).toEqual(sanitizeConfigForOutput(prompt.config, stripFlags));
+      expect(JSON.stringify(artifact)).not.toContain('fixture-password');
+      expect(JSON.stringify(artifact)).not.toContain('fixture-key');
+      expect(artifact.config.tracing.provider.auth.password).toBe('{{ env.LANGFUSE_SECRET_KEY }}');
+      expect(artifact.id).toBe(prompt.id);
+      expect(artifact.raw).toBe(strip ? '[prompt stripped]' : prompt.raw);
+      expect(artifact.label).toBe(strip ? '[prompt stripped]' : prompt.label);
+      expect(prompt).toEqual(original);
+    },
+  );
+
   it.each([false, true])('projects rubric prompts in result schema slots (strip=%s)', (strip) => {
     const testCase = createTestCase();
     const assertion = testCase.assert![0];

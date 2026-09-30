@@ -595,7 +595,12 @@ describe('writeOutput', () => {
         raw: 'Summarize',
         label: 'gateway',
         provider: 'openai:agents-api',
-        config: { apiHost: 'gateway.example', headers: { 'X-Gateway-Auth': 'legacy-header-7294' } },
+        config: {
+          apiHost: 'gateway.example',
+          baseUrl: 'https://user:fixture-password@gateway.example/v1',
+          apiEndpoint: 'https://gateway.example/infer?api_key=fixture-key',
+          headers: { 'X-Gateway-Auth': 'legacy-header-7294' },
+        },
       };
       const eval_ = new Eval({}, { prompts: [prompt] });
       const summary = await eval_.toEvaluateSummary();
@@ -612,6 +617,8 @@ describe('writeOutput', () => {
       await writeOutput(`output.${extension}`, eval_, null);
       const output = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
       expect(output).not.toContain('legacy-header-7294');
+      expect(output).not.toContain('fixture-password');
+      expect(output).not.toContain('fixture-key');
       if (extension === 'html') {
         expect(output).toContain(prompt.label);
       } else {

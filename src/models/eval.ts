@@ -1453,9 +1453,7 @@ export default class Eval {
     }
 
     const stats = await this.getStats();
-    const prompts = this.prompts.map((prompt) =>
-      sanitizePromptForArtifact(prompt, stripFlags.shouldStripPromptText),
-    );
+    const prompts = this.prompts.map((prompt) => sanitizePromptForArtifact(prompt, stripFlags));
 
     return {
       version: 3,
@@ -1522,9 +1520,7 @@ export default class Eval {
       config: sanitizeConfigForOutput(this.config, stripFlags),
       author: this.author || null,
       prompts: Array.isArray(prompts)
-        ? prompts.map((prompt) =>
-            sanitizePromptForArtifact(prompt, stripFlags.shouldStripPromptText),
-          )
+        ? prompts.map((prompt) => sanitizePromptForArtifact(prompt, stripFlags))
         : prompts,
       ...(this.vars.length > 0 && { vars: [...this.vars] }),
       datasetId: this.datasetId || null,
