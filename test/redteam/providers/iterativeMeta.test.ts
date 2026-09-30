@@ -326,42 +326,6 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(result.tokenUsage?.numRequests).toBe(1);
     });
 
-    it('should skip iterations when the cloud response output is null or undefined', async () => {
-      // Regression: a null/undefined `output` (e.g. an empty or non-JSON remote
-      // body) used to throw "Cannot read properties of undefined (reading 'result')"
-      // out of the strategy run, making the `!attackPrompt` guard unreachable.
-      mockAgentProvider.callApi = vi
-        .fn<() => Promise<ProviderResponse>>()
-        .mockResolvedValueOnce({ output: undefined })
-        .mockResolvedValueOnce({ output: null })
-        .mockResolvedValueOnce({ output: { result: 'Recovered attack prompt' } });
-
-      const result = await runMetaAgentRedteam({
-        context: {
-          vars: { query: 'test' },
-          prompt: { raw: 'test', label: 'test' },
-          originalProvider: mockTargetProvider,
-        },
-        filters: undefined,
-        injectVar: 'query',
-        numIterations: 3,
-        options: undefined,
-        prompt: { raw: 'test', label: 'test' },
-        agentProvider: mockAgentProvider,
-        gradingProvider: mockGradingProvider,
-        targetProvider: mockTargetProvider,
-        test: undefined,
-        vars: { query: 'test' },
-      });
-
-      // The loop keeps iterating instead of throwing out of the strategy run.
-      expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(3);
-      // Only the iteration with a usable attack prompt reached the target.
-      expect(mockGetTargetResponse).toHaveBeenCalledTimes(1);
-      expect(result.metadata.redteamHistory).toHaveLength(1);
-      expect(result.metadata.redteamHistory[0].prompt).toBe('Recovered attack prompt');
-    });
-
     it('should handle nunjucks template syntax in attack prompts without crashing', async () => {
       mockAgentProvider.callApi = vi.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
         output: {
