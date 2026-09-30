@@ -467,6 +467,29 @@ describe('StrategyConfigDialog', () => {
     expect(mockOnSave).toHaveBeenCalledWith('best-of-n', { maxConcurrency: undefined });
   });
 
+  it('keeps pasted max concurrency values integral', async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <StrategyConfigDialog
+        open={true}
+        strategy="best-of-n"
+        config={{ maxConcurrency: 5 }}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{ id: 'best-of-n', name: 'Best-of-N', description: 'Best-of-N strategy' }}
+      />,
+    );
+
+    const maxConcurrencyInput = screen.getByLabelText('Max Concurrency');
+    await user.clear(maxConcurrencyInput);
+    await user.paste('1.5');
+    expect(maxConcurrencyInput).toHaveValue(1);
+
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(mockOnSave).toHaveBeenCalledWith('best-of-n', { maxConcurrency: 1 });
+  });
+
   it('should render and handle gcg strategy configuration correctly', async () => {
     const user = userEvent.setup();
     const initialConfig = { n: 5 };

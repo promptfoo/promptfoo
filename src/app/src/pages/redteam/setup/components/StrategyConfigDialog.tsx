@@ -569,7 +569,12 @@ export default function StrategyConfigDialog({
               ? undefined
               : Number(localConfig.maxConcurrency)
           }
-          onChange={(maxConcurrency) => setLocalConfig({ ...localConfig, maxConcurrency })}
+          onChange={(maxConcurrency) =>
+            setLocalConfig({
+              ...localConfig,
+              maxConcurrency: maxConcurrency === undefined ? undefined : Math.trunc(maxConcurrency),
+            })
+          }
           placeholder="Maximum number of concurrent requests (default: 3)"
           min={1}
         />
