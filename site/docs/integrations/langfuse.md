@@ -139,7 +139,9 @@ providers:
 defaultTest:
   assert:
     - type: javascript
-      value: typeof output === 'string' && output.length > 0
+      value: >-
+        output != null &&
+        (typeof output === 'string' ? output.length > 0 : Object.keys(output).length > 0)
 tests: langfuse://traces?tags=production&limit=50
 ```
 
@@ -176,4 +178,4 @@ Imported variables and values returned by `transformVars` are treated as literal
 | `__langfuse_latency`, `__langfuse_cost`                          | Latency in seconds and cost in USD, when available |
 | `__langfuse_url`                                                 | Trace link, when supplied by Langfuse              |
 
-Imported values remain literal data. Local `defaultTest.vars` entries still render normally. To evaluate a new prompt or response provider against historical inputs, create ordinary test cases instead of using this stored-output source.
+Local `defaultTest.vars` entries still render normally. To evaluate a new prompt or response provider against historical inputs, create ordinary test cases instead of using this stored-output source.
