@@ -6,7 +6,7 @@ import type { MockInstance } from 'vitest';
 
 import type { EvalJobService } from '../../../src/server/services/evalJobService';
 
-describe('eval job result snapshots', () => {
+describe.runIf(process.platform !== 'win32')('POSIX eval job result snapshots', () => {
   let Service: typeof EvalJobService;
   let service: EvalJobService;
   let directorySpy: MockInstance<typeof fs.mkdtempSync>;
@@ -518,5 +518,91 @@ describe('eval job result snapshots', () => {
     ).toThrow('serialization failed');
     expect(service.get('job')).toEqual(before);
     expect(files()).toEqual(existingFiles);
+  });
+});
+
+describe('Windows eval job result snapshots', () => {
+  let service: EvalJobService;
+  let platform: PropertyDescriptor;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    const { EvalJobService } = await import('../../../src/server/services/evalJobService');
+    service = new EvalJobService();
+    platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    Object.defineProperty(process, 'platform', { ...platform, value: 'win32' });
+    vi.spyOn(fs, 'mkdtempSync').mockImplementation(() => {
+      throw new Error('Windows snapshots must not use temporary files');
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', platform);
+    vi.restoreAllMocks();
+  });
+
+  const snapshot = (output: unknown) => ({ results: [{ output }] }) as never;
+
+  it('keeps immutable JSON results without temporary-file access', () => {
+    service.create('job');
+    const output = { text: 'original', count: 42n };
+    service.complete('job', snapshot(output), 'eval');
+    output.text = 'changed';
+    const returned = service.get('job')!;
+    (returned.result as any).results[0].output.text = 'also changed';
+    expect(service.get('job')).toMatchObject({
+      status: 'complete',
+      evalId: 'eval',
+      result: snapshot({ text: 'original', count: '42' }),
+    });
+    expect(fs.mkdtempSync).not.toHaveBeenCalled();
+  });
+
+  it('replaces and clears memory snapshots through the existing job lifecycle', () => {
+    service.create('job');
+    service.complete('job', snapshot('first'), 'first-eval');
+    service.complete('job', snapshot('second'), 'second-eval');
+    service.fail('job', ['retained'], { resetResult: false });
+    expect(service.get('job')).toMatchObject({
+      status: 'error',
+      result: snapshot('second'),
+      evalId: 'second-eval',
+    });
+    service.fail('job', ['cleared']);
+    expect(service.get('job')).toMatchObject({ result: null, evalId: null });
+    service.complete('job', snapshot('third'), 'third-eval');
+    service.create('job');
+    expect(service.get('job')).toMatchObject({ status: 'in-progress', result: null, evalId: null });
+    service.complete('job', snapshot('fourth'), 'fourth-eval');
+    service.complete('job', null, null);
+    expect(service.get('job')?.result).toBeNull();
+    expect(fs.mkdtempSync).not.toHaveBeenCalled();
+  });
+
+  it('rejects a result that serializes to no JSON without replacing the snapshot', () => {
+    service.create('job');
+    service.complete('job', snapshot('original'), 'eval');
+    const before = service.get('job');
+    expect(() =>
+      service.complete('job', { toJSON: () => undefined } as never, 'replacement'),
+    ).toThrow('Failed to store eval job result snapshot');
+    expect(service.get('job')).toEqual(before);
+    expect(fs.mkdtempSync).not.toHaveBeenCalled();
+  });
+
+  it('preserves the previous memory snapshot when serialization fails', () => {
+    service.create('job');
+    service.complete('job', snapshot('original'), 'eval');
+    const before = service.get('job');
+    const unreadable = {
+      toJSON() {
+        throw new Error('Unserializable fixture');
+      },
+    };
+    expect(() => service.complete('job', snapshot(unreadable), 'replacement')).toThrow(
+      'Unserializable fixture',
+    );
+    expect(service.get('job')).toEqual(before);
+    expect(fs.mkdtempSync).not.toHaveBeenCalled();
   });
 });

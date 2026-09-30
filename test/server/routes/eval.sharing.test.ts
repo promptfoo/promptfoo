@@ -247,7 +247,7 @@ describe('Eval Routes - Sharing behavior', () => {
     });
   });
 
-  it.each([
+  it.runIf(process.platform !== 'win32').each([
     ['missing', 'unavailable'],
     ['invalid JSON', 'invalid-json'],
     ['array', 'invalid-result'],
@@ -312,30 +312,33 @@ describe('Eval Routes - Sharing behavior', () => {
     }
   });
 
-  it('publishes a job failure without storage paths when saving its snapshot fails', async () => {
-    const streamed = captureStreamedLogs();
-    const write = vi.spyOn(fs, 'writeFileSync').mockImplementationOnce(() => {
-      throw Object.assign(new Error('ENOSPC /private/snapshot/path'), {
-        code: 'ENOSPC',
-        path: '/private/snapshot/path',
-      });
-    });
-    try {
-      const created = await postJob(minimalTestSuite);
-      await vi.waitFor(async () => {
-        const response = await api.get(`/api/eval/job/${created.body.id}`).expect(200);
-        expect(response.body).toMatchObject({
-          status: 'error',
-          logs: ['Error: Failed to store eval job result snapshot'],
+  it.runIf(process.platform !== 'win32')(
+    'publishes a job failure without storage paths when saving its snapshot fails',
+    async () => {
+      const streamed = captureStreamedLogs();
+      const write = vi.spyOn(fs, 'writeFileSync').mockImplementationOnce(() => {
+        throw Object.assign(new Error('ENOSPC /private/snapshot/path'), {
+          code: 'ENOSPC',
+          path: '/private/snapshot/path',
         });
-        expect(response.text).not.toContain('/private/snapshot/path');
       });
-      expect(streamed.messages.join('\n')).not.toContain('/private/snapshot/path');
-    } finally {
-      streamed.restore();
-      write.mockRestore();
-    }
-  });
+      try {
+        const created = await postJob(minimalTestSuite);
+        await vi.waitFor(async () => {
+          const response = await api.get(`/api/eval/job/${created.body.id}`).expect(200);
+          expect(response.body).toMatchObject({
+            status: 'error',
+            logs: ['Error: Failed to store eval job result snapshot'],
+          });
+          expect(response.text).not.toContain('/private/snapshot/path');
+        });
+        expect(streamed.messages.join('\n')).not.toContain('/private/snapshot/path');
+      } finally {
+        streamed.restore();
+        write.mockRestore();
+      }
+    },
+  );
 
   it('should not log the raw job body on evaluation failure', async () => {
     mockedEvaluateWithSource.mockRejectedValueOnce(new Error('boom'));

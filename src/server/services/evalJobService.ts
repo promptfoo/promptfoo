@@ -6,17 +6,15 @@ import path from 'node:path';
 import type { Job } from '../../types/index';
 
 type ResultDirectory = { path: string; dev: number; ino: number };
-type ResultSnapshot = { path: string; directory: ResultDirectory };
+type DiskResultSnapshot = { path: string; directory: ResultDirectory };
+type ResultSnapshot = DiskResultSnapshot | string;
 type StoredJob = Omit<Job, 'result'> & { resultSnapshot: ResultSnapshot | null };
 
 let resultDirectory: ResultDirectory | undefined;
 let cleanupRegistered = false;
 
 function hasPrivatePermissions(stats: fs.Stats, mode: number): boolean {
-  return (
-    process.platform === 'win32' ||
-    (stats.uid === process.geteuid!() && (stats.mode & 0o777) === mode)
-  );
+  return stats.uid === process.geteuid!() && (stats.mode & 0o777) === mode;
 }
 
 function ownsDirectory(directory: ResultDirectory): boolean {
@@ -38,7 +36,14 @@ function removeDirectory(directory: ResultDirectory): void {
 
 function storeResult(result: NonNullable<Job['result']>): ResultSnapshot {
   const serialized = serializeResult(result);
-  let snapshot: ResultSnapshot | undefined;
+  if (serialized === undefined) {
+    throw new Error('Failed to store eval job result snapshot');
+  }
+  // Node's mode bits do not establish private Windows ACLs. Keep data off disk there.
+  if (process.platform === 'win32') {
+    return serialized;
+  }
+  let snapshot: DiskResultSnapshot | undefined;
   let descriptor: number | undefined;
   try {
     if (!resultDirectory || !ownsDirectory(resultDirectory)) {
@@ -46,9 +51,7 @@ function storeResult(result: NonNullable<Job['result']>): ResultSnapshot {
       const { dev, ino } = fs.lstatSync(directoryPath);
       const directory = { path: directoryPath, dev, ino };
       try {
-        if (process.platform !== 'win32') {
-          fs.chmodSync(directoryPath, 0o700);
-        }
+        fs.chmodSync(directoryPath, 0o700);
         if (!ownsDirectory(directory)) {
           throw new Error('Snapshot directory is not private');
         }
@@ -81,12 +84,10 @@ function storeResult(result: NonNullable<Job['result']>): ResultSnapshot {
       if (!ownsDirectory(snapshot.directory)) {
         throw new Error('Snapshot directory was replaced');
       }
-      if (process.platform !== 'win32') {
-        const mode = fs.fstatSync(descriptor).mode & 0o600;
-        if ((mode & 0o400) === 0) {
-          // A restrictive umask can remove owner-read from the new snapshot.
-          fs.fchmodSync(descriptor, mode | 0o400);
-        }
+      const mode = fs.fstatSync(descriptor).mode & 0o600;
+      if ((mode & 0o400) === 0) {
+        // A restrictive umask can remove owner-read from the new snapshot.
+        fs.fchmodSync(descriptor, mode | 0o400);
       }
       fs.writeFileSync(descriptor, serialized, 'utf8');
     } finally {
@@ -103,7 +104,7 @@ function storeResult(result: NonNullable<Job['result']>): ResultSnapshot {
 }
 
 function removeResult(snapshot: ResultSnapshot | null | undefined): void {
-  if (snapshot) {
+  if (snapshot && typeof snapshot !== 'string') {
     try {
       if (ownsDirectory(snapshot.directory)) {
         fs.rmSync(snapshot.path, { force: true });
@@ -115,6 +116,9 @@ function removeResult(snapshot: ResultSnapshot | null | undefined): void {
 }
 
 function readResult(snapshot: ResultSnapshot): Job['result'] {
+  if (typeof snapshot === 'string') {
+    return JSON.parse(snapshot);
+  }
   if (!ownsDirectory(snapshot.directory) || !fs.lstatSync(snapshot.path).isFile()) {
     throw new Error('Snapshot path was replaced');
   }
