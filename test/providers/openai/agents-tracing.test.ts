@@ -125,6 +125,33 @@ describe('OTLPTracingExporter', () => {
   );
 
   it.each(['json', 'protobuf'] as const)(
+    'preserves exact numbers and command text through repeated redaction in %s',
+    async (format) => {
+      const decimal = '{"amount":1.0000000000000001,"password":"fixture"}';
+      const { attributes } = await exportCustomData(
+        {
+          decimal,
+          command: ['bash', '-c', 'echo sk-abcdefghijklmnopqrstuvwxyz; echo done'],
+          ordinaryCommand: 'pwd && echo done',
+          nestedCommand: JSON.stringify({ command: 'pwd && echo done', password: 'fixture' }),
+          encoded: String.raw`prefix \"password\": \"fixture\"`,
+          unfinished: String.raw`prefix \"public\\`,
+        },
+        format,
+      );
+      expect(attributes.decimal).toBe('{"amount":1.0000000000000001,"password":"<redacted>"}');
+      expect(attributes.command).toBe('bash -c echo <REDACTED_API_KEY>; echo done');
+      expect(attributes.ordinaryCommand).toBe('pwd && echo done');
+      expect(JSON.parse(attributes.nestedCommand as string)).toEqual({
+        command: 'pwd && echo done',
+        password: '<redacted>',
+      });
+      expect(attributes.encoded).toBe('<redacted>');
+      expect(attributes.unfinished).toBe(String.raw`prefix \"public\\`);
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
     'masks whitespace-delimited properties and retains ordinary lines in %s',
     async (format) => {
       const { attributes } = await exportCustomData(

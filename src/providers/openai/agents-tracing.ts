@@ -598,13 +598,7 @@ function parseStructuredJson(value: string): unknown {
   }
 
   return JSON.parse(value, (_key, parsed: unknown, context?: { source?: string }) => {
-    if (
-      typeof parsed === 'number' &&
-      (!Number.isSafeInteger(parsed) ||
-        Object.is(parsed, -0) ||
-        (parsed === 0 && !/^-?0+(?:\.0+)?(?:[eE][+-]?\d+)?$/.test(context?.source ?? ''))) &&
-      typeof context?.source === 'string'
-    ) {
+    if (typeof parsed === 'number' && typeof context?.source === 'string') {
       return losslessJson.rawJSON!(context.source);
     }
     return parsed;
@@ -662,8 +656,11 @@ function sanitizeCredentialText(value: string): string {
     return '<redacted>';
   }
 
-  // Embedded encoded JSON cannot be traversed safely as an ordinary text value.
-  for (const [, encodedKey] of value.matchAll(/(?<!\\)\\+"((?:\\.|[^"\\]){0,4096})\\+"\s*:/g)) {
+  // Backslash runs inside keys must end in a non-quote character. A run before
+  // a quote belongs only to the closing delimiter, avoiding overlapping matches.
+  for (const [, encodedKey] of value.matchAll(
+    /(?<!\\)\\+"((?:[^"\\]|\\+[^"\\]){0,4096})\\+"\s*:/g,
+  )) {
     let key = encodedKey;
     try {
       key = JSON.parse(`"${encodedKey}"`);
@@ -701,7 +698,9 @@ function sanitizeCredentialText(value: string): string {
     .replace(
       /^([ \t]*)([A-Za-z_][A-Za-z\d_.-]*)([ \t]+)(?![ \t:=])([^\r\n]+)/gm,
       (match, prefix: string, key: string, separator: string) =>
-        isCredentialAttributeKey(key) ? `${prefix}${key}${separator}<redacted>` : match,
+        key.toLowerCase() !== 'pwd' && isCredentialAttributeKey(key)
+          ? `${prefix}${key}${separator}<redacted>`
+          : match,
     )
     .replace(
       /(?<![A-Za-z0-9_-])([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*)?/g,
@@ -770,6 +769,9 @@ function hasCredentialNamedPayload(value: string): boolean {
   }
   // Excluding nested delimiters keeps malformed markup scans linear.
   for (const [, tag] of value.matchAll(/<([^<>\r\n]*)>/g)) {
+    if (['redacted', 'REDACTED_API_KEY', 'REDACTED_AWS_KEY'].includes(tag)) {
+      continue;
+    }
     const name = tag.match(/^(?:[\w.-]+:)?([A-Za-z_][A-Za-z\d_.-]*)\b/)?.[1];
     if (name && isCredentialAttributeKey(name)) {
       return true;
