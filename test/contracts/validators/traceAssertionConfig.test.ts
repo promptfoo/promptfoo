@@ -3,7 +3,7 @@ import {
   traceErrorSpansConfigError,
   traceSpanCountBoundsError,
   traceSpanDurationConfigError,
-} from '../../../src/contracts/validators/traceAssertionConfig';
+} from '../../../src/contracts/index';
 
 describe('traceAssertionConfig shared validators', () => {
   describe('traceSpanCountBoundsError', () => {

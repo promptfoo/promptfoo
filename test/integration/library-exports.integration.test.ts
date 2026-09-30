@@ -143,6 +143,27 @@ describeIfBuildExists('Library Exports', () => {
     });
   });
 
+  it.each(['esm', 'cjs'])(
+    'exports trace assertion validators through %s contracts',
+    async (format) => {
+      const contractsModule =
+        format === 'esm'
+          ? await import(`file://${path.join(distDir, 'contracts.js')}`)
+          : require(path.join(distDir, 'contracts.cjs'));
+
+      expect(contractsModule.traceSpanCountBoundsError({ min: 0, max: 0 })).toBeUndefined();
+      expect(contractsModule.traceSpanCountBoundsError({ min: 2, max: 1 })).toContain(
+        'greater than or equal to min',
+      );
+      expect(contractsModule.traceSpanDurationConfigError({ max: 0 })).toBeUndefined();
+      expect(contractsModule.traceSpanDurationConfigError({ max: -1 })).toContain('non-negative');
+      expect(contractsModule.traceErrorSpansConfigError({ max_count: 0 })).toBeUndefined();
+      expect(contractsModule.traceErrorSpansConfigError({ max_percentage: 101 })).toContain(
+        'between 0 and 100',
+      );
+    },
+  );
+
   describe('CJS contracts import', () => {
     it('should export portable contract schemas', () => {
       const contractsModule = require(path.join(distDir, 'contracts.cjs'));
