@@ -721,7 +721,10 @@ export function getAudioGradingFallback<T>(
   if (
     evidence == null ||
     (typeof evidence === 'string' &&
-      (!evidence.trim() || evidence.trim() === ATTACHED_AUDIO_OUTPUT_PLACEHOLDER))
+      (!evidence.trim() ||
+        evidence.trim() === ATTACHED_AUDIO_OUTPUT_PLACEHOLDER ||
+        (!audio.transcript?.trim() &&
+          /^Generated \d+ characters of speech(?: \(streaming\))?$/.test(evidence.trim()))))
   ) {
     throw new Error(
       `${grader} cannot listen to audio output and the output has no transcript or usable text. Grade with an audio-capable provider such as openai:chat:gpt-audio-1.5.`,
@@ -900,7 +903,7 @@ export async function runJsonGradingPrompt({
     defaultProvider,
     checkName,
   );
-  if (audio?.data && finalProvider.getAudioInputFormat?.() !== 'openai') {
+  if (audio && finalProvider.getAudioInputFormat?.() !== 'openai') {
     vars = {
       ...vars,
       output: getAudioGradingFallback(vars.output, audio, `Grading provider ${finalProvider.id()}`),

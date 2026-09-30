@@ -2484,13 +2484,31 @@ Evaluate the response
     });
   });
 
-  it.each(['status: complete', ''])(
-    'sends the audio transcript to the remote grader for output %j',
-    async (output) => {
+  it.each([
+    { output: 'status: complete', blobBacked: false },
+    { output: '', blobBacked: false },
+    { output: 'status: complete', blobBacked: true },
+  ])(
+    'sends the audio transcript to the remote grader for $output (blob: $blobBacked)',
+    async ({ output, blobBacked }) => {
       const remoteGeneration = await import('../../src/redteam/remoteGeneration');
       vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
       cliState.config = { redteam: {} };
-      const audio = { data: 'UklGRgAAAABXQVZF', format: 'wav', transcript: 'Hello.' };
+      const audio = {
+        ...(blobBacked
+          ? {
+              blobRef: {
+                hash: 'a'.repeat(64),
+                uri: `promptfoo://blob/${'a'.repeat(64)}`,
+                provider: 'filesystem',
+                mimeType: 'audio/wav',
+                sizeBytes: 12,
+              },
+            }
+          : { data: 'UklGRgAAAABXQVZF' }),
+        format: 'wav',
+        transcript: 'Hello.',
+      };
 
       await matchesLlmRubric('Contains hello', output, {}, {}, undefined, {
         providerResponse: { output, audio },
@@ -2502,13 +2520,34 @@ Evaluate the response
     },
   );
 
-  it.each(['', '   ', '[Audio output]'])(
-    'rejects output %j without evidence before remote grading',
-    async (output) => {
+  it.each([
+    { output: '', blobBacked: false },
+    { output: '   ', blobBacked: false },
+    { output: '[Audio output]', blobBacked: false },
+    { output: '', blobBacked: true },
+    { output: 'Generated 42 characters of speech', blobBacked: true },
+    { output: 'Generated 42 characters of speech (streaming)', blobBacked: false },
+  ])(
+    'rejects output $output without evidence before remote grading (blob: $blobBacked)',
+    async ({ output, blobBacked }) => {
       const remoteGeneration = await import('../../src/redteam/remoteGeneration');
       vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
       cliState.config = { redteam: {} };
-      const audio = { data: 'UklGRgAAAABXQVZF', format: 'wav', transcript: '   ' };
+      const audio = {
+        ...(blobBacked
+          ? {
+              blobRef: {
+                hash: 'a'.repeat(64),
+                uri: `promptfoo://blob/${'a'.repeat(64)}`,
+                provider: 'filesystem',
+                mimeType: 'audio/wav',
+                sizeBytes: 12,
+              },
+            }
+          : { data: 'UklGRgAAAABXQVZF' }),
+        format: 'wav',
+        transcript: '   ',
+      };
 
       await expect(
         matchesLlmRubric('Contains hello', output, {}, {}, undefined, {

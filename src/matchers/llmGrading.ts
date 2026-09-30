@@ -218,7 +218,7 @@ export async function matchesLlmRubric(
     cliState.config?.redteam &&
     shouldUseRemoteGrading({ canUseCodexDefaultProvider: true })
   ) {
-    const remoteOutput = audio?.data
+    const remoteOutput = audio
       ? getAudioGradingFallback(gradingOutput, audio, 'Remote grading')
       : gradingOutput;
     try {

@@ -209,8 +209,6 @@ describe('llm-rubric audio grading', () => {
       const call = vi
         .spyOn(provider, 'callApi')
         .mockResolvedValue({ output: '{"pass":true,"score":1}' });
-      // Text-to-speech targets attach audio with no transcript and a separate
-      // text output; that text is real evidence, so grade it rather than error.
       expect(await grade(provider, { data: audio.data, format: 'wav' })).toMatchObject({
         pass: true,
       });
@@ -264,6 +262,63 @@ describe('llm-rubric audio grading', () => {
     const call = vi.spyOn(provider, 'callApi');
     await expect(
       grade(provider, { ...audio, transcript }, { output, outputString: output }),
+    ).rejects.toThrow('no transcript or usable text');
+    expect(call).not.toHaveBeenCalled();
+  });
+
+  it('accepts a transcript that quotes a text-to-speech status message', async () => {
+    const provider = new OpenAiChatCompletionProvider('gpt-4.1');
+    const call = vi
+      .spyOn(provider, 'callApi')
+      .mockResolvedValue({ output: '{"pass":true,"score":1}' });
+    const transcript = 'Generated 42 characters of speech';
+    await grade(provider, { ...audio, transcript });
+    expect(call.mock.calls[0][1]?.vars.output).toBe(transcript);
+  });
+
+  it('uses a blob-backed transcript as text evidence', async () => {
+    const provider = new OpenAiChatCompletionProvider('gpt-4.1');
+    const call = vi
+      .spyOn(provider, 'callApi')
+      .mockResolvedValue({ output: '{"pass":true,"score":1}' });
+    await grade(
+      provider,
+      {
+        transcript: 'Hello.',
+        blobRef: {
+          hash: 'a'.repeat(64),
+          uri: `promptfoo://blob/${'a'.repeat(64)}`,
+          provider: 'filesystem',
+          mimeType: 'audio/wav',
+          sizeBytes: 12,
+        },
+      },
+      { output: 'status: complete', outputString: 'status: complete' },
+    );
+    expect(call.mock.calls[0][1]?.vars.output).toBe('Hello.');
+  });
+
+  it.each([
+    '',
+    'Generated 42 characters of speech',
+    'Generated 42 characters of speech (streaming)',
+  ])('rejects non-content audio output %j with a text grader', async (output) => {
+    const provider = new OpenAiChatCompletionProvider('gpt-4.1');
+    const call = vi.spyOn(provider, 'callApi');
+    await expect(
+      grade(
+        provider,
+        {
+          blobRef: {
+            hash: 'a'.repeat(64),
+            uri: `promptfoo://blob/${'a'.repeat(64)}`,
+            provider: 'filesystem',
+            mimeType: 'audio/wav',
+            sizeBytes: 12,
+          },
+        },
+        { output, outputString: output },
+      ),
     ).rejects.toThrow('no transcript or usable text');
     expect(call).not.toHaveBeenCalled();
   });
