@@ -1527,6 +1527,55 @@ describe('fetchWithRetries', () => {
   });
 
   describe('opt-in HTTP response retries', () => {
+    it('preserves the exhausted global 5xx error for callers without a predicate', async () => {
+      await vi.mocked(getEnvBool).withImplementation(
+        (key) => key === 'PROMPTFOO_RETRY_5XX',
+        async () => {
+          vi.mocked(global.fetch).mockImplementation(
+            async () => new Response('internal error details', { status: 500 }),
+          );
+
+          await expect(fetchWithRetries('https://example.com', {}, 1000, 1)).rejects.toThrow(
+            'Request failed after 1 retries: Error: Internal Server Error: 500',
+          );
+          expect(global.fetch).toHaveBeenCalledTimes(2);
+        },
+      );
+    });
+
+    it.each([0, 1])(
+      'preserves final global 5xx diagnostics with a %s retry budget',
+      async (maxRetries) => {
+        await vi.mocked(getEnvBool).withImplementation(
+          (key) => key === 'PROMPTFOO_RETRY_5XX',
+          async () => {
+            const responses: Response[] = [];
+            vi.mocked(global.fetch).mockImplementation(async () => {
+              const response = new Response('internal error details', {
+                status: 500,
+                headers: { 'Retry-After': '0', 'x-request-id': 'last-request' },
+              });
+              responses.push(response);
+              return response;
+            });
+
+            const result = await fetchWithRetries(
+              'https://example.com',
+              { retryableResponse: () => false },
+              1000,
+              maxRetries,
+            );
+
+            expect(result.status).toBe(500);
+            expect(result.headers.get('x-request-id')).toBe('last-request');
+            expect(await result.text()).toBe('internal error details');
+            expect(global.fetch).toHaveBeenCalledTimes(maxRetries + 1);
+            expect(responses.every((response) => response.bodyUsed)).toBe(true);
+          },
+        );
+      },
+    );
+
     it('preserves the global 5xx opt-in when the predicate does not match', async () => {
       await vi.mocked(getEnvBool).withImplementation(
         (key) => key === 'PROMPTFOO_RETRY_5XX',

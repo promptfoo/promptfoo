@@ -762,13 +762,13 @@ export async function fetchWithRetries(
         timeout,
       );
 
-      const shouldRetryResponse = retryableResponse?.(response) ?? false;
-      if (
-        getEnvBool('PROMPTFOO_RETRY_5XX') &&
-        response.status >= 500 &&
-        response.status < 600 &&
-        !shouldRetryResponse
-      ) {
+      const retry5xx =
+        getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600;
+      // Opt-in callers consume the final response, including globally retried 5xxs.
+      // Preserve the legacy thrown error for callers without a response predicate.
+      const shouldRetryResponse =
+        retryableResponse?.(response) || (retryableResponse !== undefined && retry5xx);
+      if (retry5xx && !retryableResponse) {
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
       }
 

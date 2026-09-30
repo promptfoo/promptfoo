@@ -400,7 +400,24 @@ export class TypeSafeProvider implements ApiClassificationProvider {
   }
 
   private getApiBaseUrl(): string {
-    return (this.config.apiBaseUrl || DEFAULT_API_BASE_URL).replace(/\/+$/, '');
+    try {
+      const url = new URL(this.config.apiBaseUrl || DEFAULT_API_BASE_URL);
+      if (
+        !['http:', 'https:'].includes(url.protocol) ||
+        url.username ||
+        url.password ||
+        url.href.includes('?') ||
+        url.href.includes('#')
+      ) {
+        throw new Error('Invalid TypeSafe API base URL');
+      }
+      return url.href.replace(/\/+$/, '');
+    } catch {
+      // Do not expose credentials from a rejected URL in diagnostics or cache keys.
+      throw new Error(
+        'TypeSafe `apiBaseUrl` must be an HTTP(S) URL without credentials, query parameters, or a fragment',
+      );
+    }
   }
 
   /**

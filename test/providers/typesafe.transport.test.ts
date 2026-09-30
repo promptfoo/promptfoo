@@ -488,6 +488,33 @@ describe('TypeSafe HTTP transport integration', () => {
     },
   );
 
+  it('preserves diagnostics and redacts secrets after exhausting globally enabled HTTP 500 retries', async () => {
+    vi.useFakeTimers();
+    const restoreRetryEnv = mockProcessEnv({ PROMPTFOO_RETRY_5XX: 'true' });
+    try {
+      mockFetch.mockImplementation(
+        async () =>
+          new Response('Service failed for fixture-typesafe-key', {
+            status: 500,
+            statusText: 'Internal Server Error',
+            headers: { 'Retry-After': '1', 'x-typesafe-request-id': 'fixture-exhausted' },
+          }),
+      );
+
+      const pending = createProvider({ maxRetries: 1 }).callApi('Thank you');
+      await vi.runAllTimersAsync();
+      const response = await pending;
+
+      expect(response.error).toContain('500 Internal Server Error');
+      expect(response.error).toContain('fixture-exhausted');
+      expect(response.error).toContain('Service failed for [REDACTED]');
+      expect(response.error).not.toContain('fixture-typesafe-key');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    } finally {
+      restoreRetryEnv();
+    }
+  });
+
   it('preserves the status, request id, and body of non-JSON HTTP errors', async () => {
     mockFetch.mockResolvedValueOnce(
       new Response('<html>Service unavailable</html>', {

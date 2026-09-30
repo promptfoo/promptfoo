@@ -129,6 +129,68 @@ describe('TypeSafeProvider', () => {
     });
   });
 
+  describe.each(['callApi', 'callClassificationApi'] as const)('%s base URL', (method) => {
+    it.each([
+      [undefined, API_URL],
+      ['https://proxy.example/custom/path///', 'https://proxy.example/custom/path/v1/systemone'],
+      ['http://localhost:3001/jev/', 'http://localhost:3001/jev/v1/systemone'],
+    ])('supports HTTP(S) URLs with optional path prefixes: %s', async (apiBaseUrl, expectedUrl) => {
+      mockedFetchWithCache.mockResolvedValue(
+        mockResponse(
+          method === 'callApi'
+            ? jevResponse({ type: 'noul', noul: 0.8 })
+            : jevResponse(
+                {
+                  type: 'choice',
+                  choice: 'polite',
+                  confidence: 0.6,
+                  probabilities: { polite: 0.8, rude: 0.2 },
+                },
+                'classification',
+              ),
+        ),
+      );
+      const provider = createProvider({
+        apiBaseUrl,
+        instructions: 'Is polite?',
+        labels: ['polite', 'rude'],
+      });
+
+      const result = await provider[method]('text', rubricContext('Is polite?', 'text'));
+
+      expect(result.error).toBeUndefined();
+      expect(lastRequest().url).toBe(expectedUrl);
+    });
+
+    it.each([
+      'https://fixture-user:fixture-secret@typesafe.example',
+      'https://fixture-secret@typesafe.example',
+      'https://:fixture-secret@typesafe.example',
+      'https://fixture%2Dsecret@typesafe.example',
+      'https://typesafe.example?api_key=fixture-secret',
+      'https://typesafe.example#fixture-secret',
+      'https://typesafe.example?',
+      'https://typesafe.example#',
+      'ftp://typesafe.example',
+      'file:///fixture-secret',
+      'fixture-secret is not a URL',
+    ])('rejects unsafe base URLs before cache or transport access: %s', async (apiBaseUrl) => {
+      const provider = createProvider({
+        apiBaseUrl,
+        instructions: 'Is polite?',
+        labels: ['polite', 'rude'],
+      });
+
+      const result = await provider[method]('text', rubricContext('Is polite?', 'text'));
+
+      expect(result).toEqual({
+        error:
+          'TypeSafe API call error: Error: TypeSafe `apiBaseUrl` must be an HTTP(S) URL without credentials, query parameters, or a fragment',
+      });
+      expect(mockedFetchWithCache).not.toHaveBeenCalled();
+    });
+  });
+
   describe('callApi as an llm-rubric grader', () => {
     it('sends the rubric as a Noul question about the graded output', async () => {
       mockedFetchWithCache.mockResolvedValue(
