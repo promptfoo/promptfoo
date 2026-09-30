@@ -235,12 +235,18 @@ describe('envars', () => {
       }
     }
 
-    it('does not load a .env file into a test process', async () => {
-      await withDotenvFixture(async () => {
-        await import('../src/envars');
-        expect(process.env.PROMPTFOO_DOTENV_PROBE).toBeUndefined();
-      });
-    });
+    it.each([undefined, 'DOTENV_PATH', 'DOTENV_CONFIG_PATH'])(
+      'does not load implicit files during imports (%s)',
+      async (pathVariable) => {
+        await withDotenvFixture(async (file) => {
+          if (pathVariable) {
+            mockProcessEnv({ [pathVariable]: file });
+          }
+          await import('../src/envars');
+          expect(process.env.PROMPTFOO_DOTENV_PROBE).toBeUndefined();
+        });
+      },
+    );
 
     it('does not load a .env file after a test clears process.env', async () => {
       const restoreEnv = mockProcessEnv({}, { clear: true });
