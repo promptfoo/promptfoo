@@ -424,7 +424,9 @@ Earlier models use `prompt_cache_retention` where supported. GPT-5.5 Responses r
 
 Authenticated background jobs are persisted for resumption only when a non-secret project or tenant header, such as `OpenAI-Project` or `X-Tenant-Id`, isolates the request. `OpenAI-Organization` alone does not isolate projects. A persisted job may be shared by eval processes, so stopping one subscriber does not cancel it for the others. Use `--no-cache` for a run whose upstream background job should be cancelled when the eval stops.
 
-Background usage claims are stored in a compact index and remain valid after the response cache expires. A claim-storage failure returns an error instead of risking duplicate usage attribution. Upgrading from file-based claims starts a new background cache: the first matching request sends a fresh creation request. Existing claim files remain until you explicitly clear the cache. Cache separation does not cover intentionally sharing an upstream idempotency key between old and new CLI versions.
+Background usage claims use a compact index and remain after response-cache expiry, because another process may still be polling the response. Claims are removed only when you explicitly clear the cache. Storage failures return an error; lock retries respect the call deadline and cancellation.
+
+Upgrading from file-based claims starts a separate background cache, so the first matching request creates a new response. Existing claim files remain valid until you clear the cache. This separation does not cover old and new CLI versions that intentionally share an upstream idempotency key.
 
 </details>
 
