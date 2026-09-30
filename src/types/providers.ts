@@ -139,6 +139,8 @@ export interface ApiProvider extends MinimalApiProvider {
    * replacing that behavior can override this with false to use scheduler retries.
    */
   handlesOwnRetries?: boolean;
+  /** Non-secret scheduler key, stable for the same provider/model/account within a process. */
+  getRateLimitKey?: () => string;
   getSessionId?: () => string;
   /** Native audio input content format accepted by this provider and its configured model. */
   getAudioInputFormat?: () => 'openai' | 'google' | undefined;

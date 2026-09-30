@@ -307,6 +307,131 @@ describe('TypeSafe HTTP transport integration', () => {
     },
   );
 
+  it('keeps one account’s exhausted rate limit from pausing another account', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const restoreSchedulerEnv = mockProcessEnv({ PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: 'false' });
+    const registry = new RateLimitRegistry({ maxConcurrency: 4 });
+    const limited = createProvider({ apiKey: 'limited-account-same', maxRetries: 1 });
+    const available = createProvider({ apiKey: 'available-account-same', maxRetries: 1 });
+    const completed = vi.fn();
+    const rateLimitResponse = () =>
+      jsonResponse(
+        { error: 'Too many requests' },
+        { status: 429, statusText: 'Too Many Requests', headers: { 'Retry-After': '1' } },
+      );
+    mockFetch
+      .mockImplementationOnce(async () => rateLimitResponse())
+      .mockImplementationOnce(async () => rateLimitResponse())
+      .mockResolvedValueOnce(gradeResponse());
+    let subsequent: Promise<unknown> | undefined;
+    try {
+      const pending = registry.execute(
+        limited,
+        () => limited.callApi('Thank you'),
+        createProviderRateLimitOptions(),
+      );
+      await vi.advanceTimersByTimeAsync(1000);
+      expect((await pending).error).toContain('429 Too Many Requests');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(registry.getMetrics()[limited.getRateLimitKey()]).toMatchObject({
+        rateLimitHits: 1,
+        retriedRequests: 0,
+      });
+
+      subsequent = registry
+        .execute(available, () => available.callApi('Thank you'), createProviderRateLimitOptions())
+        .then(completed, (error: unknown) => error);
+      // Flush work without advancing the first account's cooldown.
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(completed).toHaveBeenCalledOnce();
+      expect(completed.mock.calls[0][0].error).toBeUndefined();
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+      expect(registry.getMetrics()[available.getRateLimitKey()]).toMatchObject({
+        rateLimitHits: 0,
+        maxConcurrency: 4,
+        completedRequests: 1,
+      });
+    } finally {
+      registry.dispose();
+      await subsequent;
+      restoreSchedulerEnv();
+    }
+  });
+
+  it('preserves the missing-key error when scheduled', async () => {
+    const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+    const provider = createProvider({ apiKey: undefined });
+    try {
+      const result = await registry.execute(
+        provider,
+        () => provider.callApi('Thank you'),
+        createProviderRateLimitOptions(),
+      );
+
+      expect(result.error).toContain('TypeSafe API key is not set');
+      expect(mockFetch).not.toHaveBeenCalled();
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it.each(['target', 'llm-rubric', 'classifier'] as const)(
+    'records invalid %s endpoint configuration as an evaluation error without a TypeSafe request',
+    async (usage) => {
+      const restoreSchedulerEnv = mockProcessEnv({ PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: 'false' });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const provider = createProvider({
+        apiBaseUrl: 'https://fixture-user:fixture-url-secret@typesafe.example',
+        labels: ['polite', 'rude'],
+      });
+      try {
+        const rows = await runEval({
+          delay: 0,
+          testIdx: 0,
+          promptIdx: 0,
+          repeatIndex: 0,
+          isRedteam: false,
+          provider:
+            usage === 'target'
+              ? provider
+              : { id: () => 'local:fixed-output', callApi: async () => ({ output: 'Thank you' }) },
+          prompt: { raw: 'Thank you', label: 'local' },
+          test:
+            usage === 'target'
+              ? {}
+              : {
+                  assert: [
+                    {
+                      type: usage,
+                      value: usage === 'classifier' ? 'polite' : 'Is polite?',
+                      provider,
+                    },
+                  ],
+                },
+          conversations: {},
+          registers: {},
+          rateLimitRegistry: registry,
+        });
+
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+        });
+        expect(rows[0].error).toContain('`apiBaseUrl` must be an HTTP(S) URL');
+        expect(rows[0].error).not.toContain('fixture-user');
+        expect(rows[0].error).not.toContain('fixture-url-secret');
+        expect(mockFetch).not.toHaveBeenCalled();
+      } finally {
+        registry.dispose();
+        restoreSchedulerEnv();
+      }
+    },
+  );
+
   it('retries HTTP 429 with Retry-After and caches the recovered response', async () => {
     vi.useFakeTimers();
     vi.spyOn(Math, 'random').mockReturnValue(0);

@@ -15,6 +15,8 @@
  * API docs: https://docs.typesafe.ai/api
  */
 
+import { createHmac, randomBytes } from 'crypto';
+
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
@@ -38,6 +40,8 @@ import type {
 import type { FetchOptions } from '../util/fetch/types';
 
 const DEFAULT_API_BASE_URL = 'https://api.typesafe.ai';
+// Process-local scheduler identity only; never use this credential digest for response caching.
+const RATE_LIMIT_IDENTITY_HMAC_KEY = randomBytes(32);
 const DEFAULT_THRESHOLD = 0.5;
 const GRADE_QUESTION_ID = 'grade';
 const CLASSIFICATION_QUESTION_ID = 'classification';
@@ -398,6 +402,14 @@ export class TypeSafeProvider implements ApiClassificationProvider {
   getApiKey(): string | undefined {
     return this.apiKey;
   }
+
+  // Own property so wrappers that spread this provider retain its account identity.
+  getRateLimitKey = (): string => {
+    const identity = createHmac('sha256', RATE_LIMIT_IDENTITY_HMAC_KEY)
+      .update(JSON.stringify({ apiBaseUrl: this.getApiBaseUrl(), apiKey: this.apiKey }))
+      .digest('hex');
+    return `${this.id()}[${identity}]`;
+  };
 
   private getApiBaseUrl(): string {
     try {

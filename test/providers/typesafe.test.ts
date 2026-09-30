@@ -129,6 +129,82 @@ describe('TypeSafeProvider', () => {
     });
   });
 
+  describe('scheduler identity', () => {
+    it('shares the resolved credential across config, environment overrides, and the environment', () => {
+      restoreEnv();
+      restoreEnv = mockProcessEnv({ TYPESAFE_API_KEY: API_KEY });
+      const configured = createProvider();
+      const overridden = new TypeSafeProvider('jev-latest', { env: { TYPESAFE_API_KEY: API_KEY } });
+      const inherited = new TypeSafeProvider('jev-latest');
+
+      expect(configured.getRateLimitKey()).toBe(overridden.getRateLimitKey());
+      expect(configured.getRateLimitKey()).toBe(inherited.getRateLimitKey());
+      expect(configured.getRateLimitKey()).toMatch(/^typesafe:jev-latest\[[0-9a-f]{64}\]$/);
+      expect(configured.getRateLimitKey()).not.toContain(API_KEY);
+      expect(JSON.stringify(configured.config)).not.toContain(API_KEY);
+      expect(JSON.stringify(overridden.config)).not.toContain(API_KEY);
+      expect(JSON.stringify(inherited.config)).not.toContain(API_KEY);
+    });
+
+    it('separates full credentials even when their final four characters match', () => {
+      const first = createProvider({ apiKey: 'first-account-same' });
+      const second = createProvider({ apiKey: 'second-account-same' });
+
+      expect(first.getRateLimitKey()).not.toBe(second.getRateLimitKey());
+      expect(first.getRateLimitKey()).not.toContain('first-account-same');
+      expect(second.getRateLimitKey()).not.toContain('second-account-same');
+    });
+
+    it('shares API cooldowns regardless of response-cache namespace', () => {
+      const uncached = createProvider({ cacheNamespace: undefined });
+      const first = createProvider({ cacheNamespace: 'first-cache' });
+      const second = createProvider({ cacheNamespace: 'second-cache' });
+
+      expect(first.getRateLimitKey()).toBe(second.getRateLimitKey());
+      expect(first.getRateLimitKey()).toBe(uncached.getRateLimitKey());
+    });
+
+    it('canonicalizes equivalent base URLs and separates different endpoints', () => {
+      const defaultUrl = createProvider();
+      const explicitDefault = createProvider({ apiBaseUrl: 'https://API.TYPESAFE.AI:443///' });
+      const proxy = createProvider({ apiBaseUrl: 'https://proxy.example/typesafe/' });
+      const otherPath = createProvider({ apiBaseUrl: 'https://proxy.example/other/' });
+
+      expect(defaultUrl.getRateLimitKey()).toBe(explicitDefault.getRateLimitKey());
+      expect(proxy.getRateLimitKey()).not.toBe(defaultUrl.getRateLimitKey());
+      expect(proxy.getRateLimitKey()).not.toBe(otherPath.getRateLimitKey());
+    });
+
+    it('retains an own-property identity hook when wrappers spread the provider', () => {
+      const provider = createProvider();
+      const wrapped = { ...provider, id: () => provider.id() };
+
+      expect(Object.prototype.hasOwnProperty.call(provider, 'getRateLimitKey')).toBe(true);
+      expect(wrapped.getRateLimitKey).toBe(provider.getRateLimitKey);
+      expect(wrapped.getRateLimitKey()).toBe(provider.getRateLimitKey());
+    });
+
+    it('uses the current model and effective provider id', () => {
+      const provider = createProvider();
+      const original = provider.getRateLimitKey();
+      provider.modelName = 'jev-1.13.0';
+      expect(provider.getRateLimitKey()).toMatch(/^typesafe:jev-1\.13\.0\[/);
+      expect(provider.getRateLimitKey()).not.toBe(original);
+
+      provider.id = () => 'custom-judge';
+      expect(provider.getRateLimitKey()).toMatch(/^custom-judge\[/);
+    });
+
+    it('supports an unset API key without exposing or inventing a credential', () => {
+      const missing = new TypeSafeProvider('jev-latest');
+
+      expect(missing.getRateLimitKey()).toMatch(/^typesafe:jev-latest\[[0-9a-f]{64}\]$/);
+      expect(missing.getRateLimitKey()).not.toBe(createProvider().getRateLimitKey());
+      expect(missing.config).toEqual({});
+      expect(missing.getApiKey()).toBeUndefined();
+    });
+  });
+
   describe.each(['callApi', 'callClassificationApi'] as const)('%s base URL', (method) => {
     it.each([
       [undefined, API_URL],

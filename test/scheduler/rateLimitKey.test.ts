@@ -12,6 +12,21 @@ function createMockProvider(id: string, config: Record<string, any> = {}): ApiPr
 }
 
 describe('getRateLimitKey', () => {
+  it('uses a complete provider-owned key without inspecting public credentials', () => {
+    const provider: ApiProvider = {
+      id: () => 'custom:model',
+      callApi: async () => ({ output: 'mock' }),
+      get config() {
+        throw new Error('The provider-owned key must not read legacy config');
+      },
+      getRateLimitKey() {
+        return `${this.id()}[opaque-account]`;
+      },
+    };
+
+    expect(getRateLimitKey(provider)).toBe('custom:model[opaque-account]');
+  });
+
   describe('Basic provider ID', () => {
     it('should return provider ID when no config', () => {
       const provider = createMockProvider('openai:gpt-4');
