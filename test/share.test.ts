@@ -6,6 +6,7 @@ import * as constants from '../src/constants';
 import * as envars from '../src/envars';
 import { getUserEmail } from '../src/globalConfig/accounts';
 import { cloudConfig } from '../src/globalConfig/cloud';
+import { hashPrompt } from '../src/prompts/utils';
 import {
   createShareableModelAuditUrl,
   createShareableUrl,
@@ -21,6 +22,7 @@ import { inlineBlobRefsForShare } from '../src/util/inlineBlobsForShare';
 import type Eval from '../src/models/eval';
 import type EvalResult from '../src/models/evalResult';
 import type ModelAudit from '../src/models/modelAudit';
+import type { Prompt } from '../src/types';
 
 function buildMockEval(): Partial<Eval> {
   return {
@@ -1114,6 +1116,52 @@ describe('createShareableUrl', () => {
       }
       expect(prompt.id).toBe('file:///home/alice/project/prompt.txt');
     });
+
+    it.each([false, true])(
+      'preserves imported prompt associations when sharing (strip prompts: %s)',
+      async (stripPrompts) => {
+        vi.mocked(envars.getEnvBool).mockImplementation(
+          (key) => key === 'PROMPTFOO_STRIP_PROMPT_TEXT' && stripPrompts,
+        );
+        const prompts = mockEval.prompts!;
+        const rows = prompts.map((prompt, promptIdx) => ({
+          id: `row-${promptIdx}`,
+          prompt,
+          promptIdx,
+          promptId: hashPrompt(prompt),
+          response: { output: 'hello', tokenUsage: { total: 3, numRequests: 1 } },
+          success: true,
+          score: 1,
+        }));
+        const original = structuredClone({ prompts, rows });
+        mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+          yield rows;
+        });
+        mockFetch
+          .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+          .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+        await createShareableUrl(mockEval as Eval);
+
+        const uploaded = JSON.parse(mockFetch.mock.calls[0][1].body);
+        const uploadedRows = JSON.parse(mockFetch.mock.calls[1][1].body);
+        const expectedIds = rows.map((row) => row.promptId);
+        expect(uploaded.prompts.map((prompt: Prompt) => prompt.id ?? hashPrompt(prompt))).toEqual(
+          expectedIds,
+        );
+        expect(uploadedRows.map((row: { promptId: string }) => row.promptId)).toEqual(expectedIds);
+        if (stripPrompts) {
+          expect(uploaded.prompts.map((prompt: { label: string }) => prompt.label)).toEqual([
+            '[prompt stripped]',
+            '[prompt stripped]',
+          ]);
+        }
+        expect(uploadedRows.map((row: { response: unknown }) => row.response)).toEqual(
+          rows.map((row) => row.response),
+        );
+        expect({ prompts, rows }).toEqual(original);
+      },
+    );
 
     it('honors saved strip flags when sharing outside the evaluation scope', async () => {
       const { getEnvBool } = await vi.importActual<typeof import('../src/envars')>('../src/envars');
