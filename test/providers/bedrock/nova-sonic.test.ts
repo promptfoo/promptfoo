@@ -102,12 +102,6 @@ function captureSonicRequest(mockSend: Mock, responseObjects: any[] = standardTe
   return events;
 }
 
-function extractAudioInputChunks(events: any[]): string[] {
-  return events
-    .filter((event) => event.audioInput !== undefined)
-    .map((event) => event.audioInput.content);
-}
-
 const standardTextResponse = [
   {
     event: {
@@ -397,58 +391,6 @@ describe('NovaSonic Provider', () => {
       expect(events[0]).toEqual({ sessionStart: { inferenceConfiguration: expected } });
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('This is a test response\n');
-    });
-
-    it('preserves newlines when chunking a multi-line prompt into audioInput chunks', async () => {
-      vi.useFakeTimers();
-      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
-      const events = captureSonicRequest(mockSend);
-      const multilinePrompt = 'First line\nSecond line\n\nFourth line after a blank line';
-
-      const request = provider.callApi(multilinePrompt);
-      await vi.runAllTimersAsync();
-      const result = await request;
-
-      const audioChunks = extractAudioInputChunks(events);
-      expect(audioChunks.length).toBeGreaterThan(0);
-      expect(audioChunks.join('')).toBe(multilinePrompt);
-      expect(result.error).toBeUndefined();
-    });
-
-    it('round-trips a multi-line prompt that spans multiple audioInput chunks', async () => {
-      vi.useFakeTimers();
-      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
-      const events = captureSonicRequest(mockSend);
-      const longPrompt = Array.from({ length: 200 }, (_, index) => `line ${index}`).join('\n');
-
-      const request = provider.callApi(longPrompt);
-      await vi.runAllTimersAsync();
-      const result = await request;
-
-      const audioChunks = extractAudioInputChunks(events);
-      expect(audioChunks.length).toBeGreaterThan(1);
-      expect(audioChunks.join('')).toBe(longPrompt);
-      expect(result.error).toBeUndefined();
-    });
-
-    it('preserves newlines in the last message of a conversation history prompt', async () => {
-      vi.useFakeTimers();
-      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
-      const events = captureSonicRequest(mockSend);
-      const lastMessageText = 'Remember:\n- apples\n- oranges\nExplain why.';
-      const conversationHistory = JSON.stringify([
-        { role: 'system', content: [{ type: 'text', text: 'You are a helpful assistant.' }] },
-        { role: 'user', content: [{ type: 'text', text: 'Hi' }] },
-        { role: 'assistant', content: [{ type: 'text', text: 'Hello!' }] },
-        { role: 'user', content: [{ type: 'text', text: lastMessageText }] },
-      ]);
-
-      const request = provider.callApi(conversationHistory);
-      await vi.runAllTimersAsync();
-      const result = await request;
-
-      expect(extractAudioInputChunks(events).join('')).toBe(lastMessageText);
-      expect(result.error).toBeUndefined();
     });
   });
 

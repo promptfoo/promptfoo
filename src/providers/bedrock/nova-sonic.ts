@@ -450,9 +450,8 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
 
       logger.debug('Sending audioInput chunks');
 
-      // Send the actual prompt. `[\s\S]` matches newlines too, so line structure in
-      // multi-line prompts survives chunking.
-      const chunks = promptText?.match(/[\s\S]{1,1024}/g)?.map((chunk) => Buffer.from(chunk)) || [];
+      // Send the actual prompt
+      const chunks = promptText?.match(/.{1,1024}/g)?.map((chunk) => Buffer.from(chunk)) || [];
       logger.debug('audioInput in chunks: ' + chunks.length);
       for (const chunk of chunks) {
         await this.sendEvent(sessionId, {
