@@ -642,7 +642,7 @@ export class TypeSafeProvider implements ApiClassificationProvider {
       if (
         !isPlainObject(probabilities) ||
         Object.keys(probabilities).length !== labels.length ||
-        labels.some((label) => !Object.hasOwn(probabilities, label)) ||
+        labels.some((label) => !Object.prototype.hasOwnProperty.call(probabilities, label)) ||
         Object.values(probabilities).some((p) => !isFiniteNumber(p) || p < 0 || p > 1) ||
         Math.abs(Object.values(probabilities).reduce((sum, p) => sum + p, 0) - 1) >
           PROBABILITY_SUM_TOLERANCE
@@ -653,7 +653,7 @@ export class TypeSafeProvider implements ApiClassificationProvider {
       }
       if (
         typeof choice !== 'string' ||
-        !Object.hasOwn(probabilities, choice) ||
+        !Object.prototype.hasOwnProperty.call(probabilities, choice) ||
         probabilities[choice] < Math.max(...Object.values(probabilities))
       ) {
         throw new Error('TypeSafe Choice answer has an invalid chosen option');
