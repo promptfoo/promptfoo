@@ -1,7 +1,9 @@
-import { EventEmitter } from 'node:events';
+import { EventEmitter, once } from 'node:events';
+import { connect, type Socket } from 'node:net';
+import * as http from 'http';
 import type { IncomingMessage, ServerResponse } from 'http';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import {
   ChatKitBrowserPool,
   isLocalChatKitRequest,
@@ -33,6 +35,9 @@ const mockChromium = vi.hoisted(() => ({
 }));
 const mockServerRequestHandler = vi.hoisted(() => vi.fn());
 
+const playwrightMetadata = vi.hoisted(() => ({ version: '1.63.0' }));
+vi.mock('playwright/package.json', () => ({ default: playwrightMetadata }));
+
 // Mock playwright
 vi.mock('playwright', () => ({
   chromium: mockChromium,
@@ -40,16 +45,7 @@ vi.mock('playwright', () => ({
 
 // Mock http server
 vi.mock('http', () => ({
-  createServer: vi.fn((handler: (...args: any[]) => void) => {
-    mockServerRequestHandler.mockImplementation(handler);
-    return {
-      listen: vi.fn((_port: number, _host: string, callback: () => void) => callback()),
-      address: vi.fn().mockReturnValue({ port: 3000 }),
-      close: vi.fn(),
-      closeAllConnections: vi.fn(),
-      once: vi.fn(), // Error handler registration
-    };
-  }),
+  createServer: vi.fn(),
 }));
 
 // Test constants
@@ -72,6 +68,23 @@ describe('ChatKitBrowserPool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetPlaywrightMocks();
+    mockServerRequestHandler.mockReset();
+    const server = {
+      listen: vi.fn((_port: number, _host: string, callback: () => void) => callback()),
+      address: vi.fn().mockReturnValue({ port: 3000 }),
+      close: vi.fn((callback?: (error?: Error) => void) => callback?.()),
+      closeAllConnections: vi.fn(),
+      once: vi.fn(),
+    } as unknown as http.Server;
+    vi.mocked(http.createServer)
+      .mockReset()
+      .mockImplementation((handler) => {
+        if (typeof handler === 'function') {
+          mockServerRequestHandler.mockImplementation(handler);
+        }
+        return server;
+      });
+    playwrightMetadata.version = '1.63.0';
     // Reset the singleton between tests
     ChatKitBrowserPool.resetInstance();
   });
@@ -291,6 +304,121 @@ describe('ChatKitBrowserPool', () => {
   });
 
   describe('initialize', () => {
+    it('does not allocate a server for an incompatible SDK and can retry', async () => {
+      const instance = ChatKitBrowserPool.getInstance();
+      playwrightMetadata.version = '1.62.0';
+      await expect(instance.initialize()).rejects.toThrow(
+        'installed playwright package (1.62.0) is incompatible',
+      );
+      expect(http.createServer).not.toHaveBeenCalled();
+      expect(mockChromium.launch).not.toHaveBeenCalled();
+      playwrightMetadata.version = '1.63.0';
+      await instance.initialize();
+      expect(mockChromium.launch).toHaveBeenCalledOnce();
+    });
+
+    it('closes its server when the browser binary is absent and can retry', async () => {
+      const instance = ChatKitBrowserPool.getInstance();
+      mockChromium.launch.mockRejectedValueOnce(new Error("Executable doesn't exist"));
+      await expect(instance.initialize()).rejects.toThrow('npx playwright install chromium');
+      const server = vi.mocked(http.createServer).mock.results[0].value;
+      expect(server.close).toHaveBeenCalledOnce();
+      await instance.initialize();
+      expect(mockChromium.launch).toHaveBeenCalledTimes(2);
+    });
+
+    it('closes unfinished HTTP requests after launch failure before retrying on the same port', async () => {
+      const { createServer } = await vi.importActual<typeof http>('http');
+      const server = createServer((_request, response) => response.end('ChatKit fixture'));
+      const retryServer = createServer((_request, response) => response.end('ChatKit fixture'));
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const { port } = server.address() as { port: number };
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      const instance = ChatKitBrowserPool.getInstance({ serverPort: port });
+      vi.mocked(http.createServer).mockReturnValueOnce(server).mockReturnValueOnce(retryServer);
+      let serverClosed = false;
+      server.once('close', () => {
+        serverClosed = true;
+      });
+      let connection: Socket | undefined;
+      let socket: Socket | undefined;
+      let socketClosed: Promise<unknown> | undefined;
+      onTestFinished(() => {
+        socket?.destroy();
+        for (const ownedServer of [server, retryServer]) {
+          ownedServer.closeAllConnections();
+          ownedServer.close(() => {});
+        }
+      });
+      mockChromium.launch.mockImplementationOnce(async () => {
+        const connected = once(server, 'connection');
+        socket = connect(port, '127.0.0.1');
+        socketClosed = once(socket, 'close');
+        const [acceptedConnection] = await connected;
+        connection = acceptedConnection;
+        const received = once(acceptedConnection, 'data');
+        socket.write('GET / HTTP/1.1\r\nHost: localhost\r\n');
+        await received;
+        throw new Error('Browser launch failed after binding');
+      });
+
+      await expect(instance.initialize()).rejects.toThrow('Browser launch failed after binding');
+      expect(connection?.destroyed).toBe(true);
+      expect(serverClosed).toBe(true);
+      await socketClosed;
+      expect((instance as any).server).toBeNull();
+      expect((instance as any).serverPort).toBe(0);
+
+      await instance.initialize();
+      expect((retryServer.address() as { port: number }).port).toBe(port);
+      expect(mockChromium.launch).toHaveBeenCalledTimes(2);
+      await instance.shutdown();
+    });
+
+    it('keeps initialization pending until its failed-launch server finishes closing', async () => {
+      const instance = ChatKitBrowserPool.getInstance();
+      const server = http.createServer();
+      let closeCallback: ((error?: Error) => void) | undefined;
+      vi.mocked(server.close).mockImplementation((callback) => {
+        closeCallback = callback;
+        return server;
+      });
+      mockChromium.launch.mockRejectedValueOnce(new Error('Browser launch failed'));
+      let settled = false;
+      const initialization = instance.initialize().catch((error) => {
+        settled = true;
+        return error;
+      });
+      await vi.waitFor(() => expect(server.close).toHaveBeenCalledOnce());
+      expect(settled).toBe(false);
+      expect(server.closeAllConnections).toHaveBeenCalledOnce();
+      closeCallback?.();
+      expect(await initialization).toEqual(new Error('Browser launch failed'));
+    });
+
+    it.each(['callback', 'throw'])(
+      'preserves launch errors when server close fails via %s',
+      async (failure) => {
+        const instance = ChatKitBrowserPool.getInstance();
+        const server = http.createServer();
+        vi.mocked(server.close).mockImplementationOnce((callback) => {
+          const error = new Error('Server is not running');
+          if (failure === 'throw') {
+            throw error;
+          }
+          callback?.(error);
+          return server;
+        });
+        mockChromium.launch.mockRejectedValueOnce(new Error('Original launch failure'));
+
+        await expect(instance.initialize()).rejects.toThrow('Original launch failure');
+        expect((instance as any).server).toBeNull();
+        expect((instance as any).serverPort).toBe(0);
+        await instance.initialize();
+        expect(mockChromium.launch).toHaveBeenCalledTimes(2);
+      },
+    );
+
     it('should start HTTP server and launch browser', async () => {
       const instance = ChatKitBrowserPool.getInstance();
 
