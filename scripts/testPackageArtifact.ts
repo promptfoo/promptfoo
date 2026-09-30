@@ -697,6 +697,66 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
   }
 }
 
+async function runInstalledMeteorEval(
+  consumerDir: string,
+  configDir: string,
+  naturalState: 'missing' | 'incompatible' | 'installed',
+): Promise<void> {
+  for (const format of ['mjs', 'cjs']) {
+    const scriptPath = path.join(consumerDir, `meteor.${format}`);
+    const imports =
+      format === 'mjs'
+        ? `import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { evaluate } from 'promptfoo';
+const require = createRequire(import.meta.url);`
+        : `const assert = require('node:assert/strict');
+const { evaluate } = require('promptfoo');`;
+    fs.writeFileSync(
+      scriptPath,
+      `${imports}
+(async () => {
+const installed = process.argv[2] === 'installed';
+if (process.argv[2] === 'missing') {
+  assert.throws(() => require.resolve('natural'), { code: 'MODULE_NOT_FOUND' });
+}
+const record = await evaluate({
+  prompts: ['{{candidate}}'],
+  providers: [{ id: () => 'echo', callApi: async (prompt) => ({ output: prompt }) }],
+  tests: [
+    { vars: { candidate: 'ordinary eval' }, assert: [{ type: 'equals', value: 'ordinary eval' }] },
+    { vars: { candidate: 'running jumped tests' }, assert: [{ type: 'meteor', value: 'runs jumping test' }] },
+    { vars: { candidate: 'the fast car crossed the rug' }, assert: [{ type: 'meteor', value: 'the quick motorcar crossed the carpet' }] },
+  ],
+}, { cache: false, maxConcurrency: 1 });
+const { results } = await record.toEvaluateSummary();
+assert.equal(results.length, 3);
+assert.equal(results[0].success, true);
+for (const [index, score] of [[1, 0.9814814814814815], [2, 0.9976851851851852]]) {
+  assert.equal(results[index].success, installed);
+  if (installed) {
+    assert.equal(results[index].score, score);
+  } else {
+    assert.match(results[index].gradingResult.reason, /npm install promptfoo natural/);
+    assert.match(results[index].gradingResult.reason, /npm install -g promptfoo natural/);
+    if (process.argv[2] === 'incompatible') {
+      assert.match(results[index].gradingResult.reason, /found 7.1.0/);
+    }
+    assert.equal(results[index].score, 0);
+  }
+}
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+`,
+    );
+    await runAsync(process.execPath, [scriptPath, naturalState], consumerDir, {
+      PROMPTFOO_CONFIG_DIR: configDir,
+      PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+      PROMPTFOO_DISABLE_TELEMETRY: '1',
+      PROMPTFOO_DISABLE_UPDATE: 'true',
+    });
+  }
+}
+
 async function runInstalledTransformersProvider(
   consumerDir: string,
   configDir: string,
@@ -878,6 +938,15 @@ async function main(): Promise<void> {
       );
     }
     await runInstalledCompressionEval(consumerDir, configDir);
+    await runInstalledMeteorEval(consumerDir, configDir, 'missing');
+    runNpm(['install', '--ignore-scripts', '--no-package-lock', 'natural@7.1.0'], consumerDir, {
+      npm_config_userconfig: consumerNpmrc,
+    });
+    await runInstalledMeteorEval(consumerDir, configDir, 'incompatible');
+    runNpm(['install', '--ignore-scripts', '--no-package-lock', 'natural@^8.1.1'], consumerDir, {
+      npm_config_userconfig: consumerNpmrc,
+    });
+    await runInstalledMeteorEval(consumerDir, configDir, 'installed');
     await runInstalledTransformersProvider(consumerDir, configDir);
 
     console.log(`Verified installed package artifact: ${packResult.filename}`);

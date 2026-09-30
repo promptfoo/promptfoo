@@ -1,35 +1,57 @@
+import semverSatisfies from 'semver/functions/satisfies.js';
 import invariant from '../util/invariant';
+import { isMissingPackageImportError } from '../util/packageImportErrors';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
-// Type definitions for natural package (since it's optional)
 type Stemmer = {
   stem(token: string): string;
 };
 type DataRecord = {
   synonyms: string[];
 };
+type WordNetInstance = {
+  lookup(word: string, callback: (results: DataRecord[]) => void): void;
+};
 
-// Lazy load natural package to handle optional dependency
+const NATURAL_INSTALL_HELP =
+  'Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1. ' +
+  'For a global installation, use npm install -g promptfoo natural@^8.1.1.';
+
 let PorterStemmer: Stemmer | undefined;
-// biome-ignore lint/suspicious/noExplicitAny: FIXME
-let WordNet: (new () => any) | undefined;
+let WordNet: (new () => WordNetInstance) | undefined;
 
 async function ensureNaturalPackage(): Promise<void> {
   if (PorterStemmer && WordNet) {
     return;
   }
 
+  let metadata;
   try {
-    // Dynamic import for ESM compatibility
-    const natural = await import('natural');
-    PorterStemmer = natural.PorterStemmer;
-    WordNet = natural.WordNet;
-  } catch (_err) {
-    throw new Error(
-      'The "natural" package is required for METEOR assertions. Install it with: npm install natural@^8.1.0',
+    ({ default: metadata } = await import('natural/package.json', { with: { type: 'json' } }));
+  } catch (error) {
+    if (!isMissingPackageImportError(error, 'natural')) {
+      throw error;
+    }
+    throw Object.assign(
+      new Error(`The "natural" package is required for METEOR assertions. ${NATURAL_INSTALL_HELP}`),
+      { cause: error },
     );
   }
+
+  if (!semverSatisfies(metadata.version, '^8.1.1')) {
+    throw new Error(
+      `METEOR requires natural@^8.1.1; found ${metadata.version}. ${NATURAL_INSTALL_HELP}`,
+    );
+  }
+  // Natural's top-level CommonJS export does not expose named ESM exports.
+  // Load only the components METEOR needs, without unrelated database clients.
+  const [{ PorterStemmer: stemmer }, { WordNet: wordnet }] = await Promise.all([
+    import('natural/lib/natural/stemmers/index.js'),
+    import('natural/lib/natural/wordnet/index.js'),
+  ]);
+  PorterStemmer = stemmer;
+  WordNet = wordnet;
 }
 
 type WordPair = [number, string];
@@ -120,7 +142,7 @@ async function matchStemEnums(
 async function matchSynonymEnums(
   enumCandidateList: WordPair[],
   enumReferenceList: WordPair[],
-  wordnet?: unknown,
+  wordnet?: WordNetInstance,
 ): Promise<[MatchPair[], WordPair[], WordPair[]]> {
   await ensureNaturalPackage();
   invariant(WordNet, 'WordNet should be loaded');
