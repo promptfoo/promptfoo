@@ -200,6 +200,49 @@ describe('filterTests', () => {
         expect(result[0]?.vars?.var1).toBe('test1');
       });
 
+      it('should match any of comma-separated values for one key (OR logic)', async () => {
+        const result = await filterTests(multiMetadataTestSuite, {
+          metadata: 'priority=high,medium',
+        });
+        expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test3', 'test4']);
+      });
+
+      it('should combine OR values with AND across repeated filters', async () => {
+        const result = await filterTests(multiMetadataTestSuite, {
+          metadata: ['priority=high,medium', 'env=prod'],
+        });
+        expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test4']);
+      });
+
+      it('should trim whitespace and ignore empty comma-separated values', async () => {
+        const result = await filterTests(multiMetadataTestSuite, {
+          metadata: 'priority=low, medium,',
+        });
+        expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test2', 'test4']);
+      });
+
+      it('should match OR values against array metadata', async () => {
+        const result = await filterTests(
+          {
+            prompts: [],
+            providers: [],
+            tests: [
+              { vars: { var1: 'a' }, assert: [], metadata: { tags: ['x', 'y'] } },
+              { vars: { var1: 'b' }, assert: [], metadata: { tags: ['z'] } },
+              { vars: { var1: 'c' }, assert: [], metadata: { tags: ['w'] } },
+            ],
+          },
+          { metadata: 'tags=y,z' },
+        );
+        expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['a', 'b']);
+      });
+
+      it('should throw when the value list is only commas', async () => {
+        await expect(filterTests(multiMetadataTestSuite, { metadata: 'type=,,' })).rejects.toThrow(
+          '--filter-metadata must be specified in key=value format',
+        );
+      });
+
       it('should handle values containing equals sign', async () => {
         const testSuiteWithEquals: TestSuite = {
           prompts: [],

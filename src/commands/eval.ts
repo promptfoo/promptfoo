@@ -132,7 +132,7 @@ export function evalCommand(
     )
     .option(
       '--filter-metadata <key=value>',
-      'Only run tests whose metadata matches the key=value pair. Can be specified multiple times for AND logic (e.g. --filter-metadata type=unit --filter-metadata env=prod)',
+      'Only run tests whose metadata matches the key=value pair. Use commas for OR across values (e.g. id=1,3,7). Can be specified multiple times for AND logic (e.g. --filter-metadata type=unit --filter-metadata env=prod)',
       (value: string, previous: string[] | undefined) => {
         return previous ? [...previous, value] : [value];
       },
