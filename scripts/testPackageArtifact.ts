@@ -697,6 +697,68 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
   }
 }
 
+async function assertOptionalVercelSdk(consumerDir: string, configDir: string): Promise<void> {
+  const assertions = `
+    const incompatible = process.argv[2] === 'incompatible';
+    if (incompatible) {
+      assert.equal(require('ai/package.json').version, '5.0.0');
+    } else {
+      assert.throws(() => require.resolve('ai'), { code: 'MODULE_NOT_FOUND' });
+    }
+    const errorPattern = incompatible
+      ? /installed ai package [(]5[.]0[.]0[)] is incompatible/
+      : /requires the optional ai package/;
+    for (const config of [{}, { streaming: true }, { responseSchema: { type: 'object' } }]) {
+      const provider = await loadApiProvider('vercel:fixture/model', { options: { config } });
+      const response = await provider.callApi('optional SDK fixture');
+      assert.match(response.error, errorPattern);
+      assert.match(response.error, /npm install promptfoo/);
+    }
+    const provider = await loadApiProvider('vercel:embedding:fixture/model');
+    const response = await provider.callEmbeddingApi('optional SDK fixture');
+    assert.match(response.error, errorPattern);
+  `;
+  for (const format of ['mjs', 'cjs']) {
+    const imports =
+      format === 'mjs'
+        ? `import assert from 'node:assert/strict';
+           import { createRequire } from 'node:module';
+           import { loadApiProvider } from 'promptfoo';
+           const require = createRequire(import.meta.url);`
+        : `const assert = require('node:assert/strict');
+           const { loadApiProvider } = require('promptfoo');`;
+    const script = `optional-vercel.${format}`;
+    fs.writeFileSync(
+      path.join(consumerDir, script),
+      `${imports}\n(async () => {${assertions}})().catch(error => {
+        console.error(error);
+        process.exitCode = 1;
+      });`,
+    );
+    await runAsync(process.execPath, [script], consumerDir, {
+      PROMPTFOO_CONFIG_DIR: configDir,
+      PROMPTFOO_CACHE_ENABLED: 'false',
+      PROMPTFOO_DISABLE_TELEMETRY: '1',
+      PROMPTFOO_DISABLE_UPDATE: 'true',
+    });
+  }
+
+  // An unrelated application's SDK must not prevent installing or using Promptfoo.
+  runNpm(
+    ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--no-package-lock', 'ai@5.0.0'],
+    consumerDir,
+  );
+  for (const format of ['mjs', 'cjs']) {
+    await runAsync(process.execPath, ['optional-vercel.' + format, 'incompatible'], consumerDir, {
+      PROMPTFOO_CONFIG_DIR: configDir,
+      PROMPTFOO_CACHE_ENABLED: 'false',
+      PROMPTFOO_DISABLE_TELEMETRY: '1',
+      PROMPTFOO_DISABLE_UPDATE: 'true',
+    });
+  }
+  await runInstalledCompressionEval(consumerDir, configDir);
+}
+
 async function runInstalledTransformersProvider(
   consumerDir: string,
   configDir: string,
@@ -879,6 +941,7 @@ async function main(): Promise<void> {
     }
     await runInstalledCompressionEval(consumerDir, configDir);
     await runInstalledTransformersProvider(consumerDir, configDir);
+    await assertOptionalVercelSdk(consumerDir, configDir);
 
     console.log(`Verified installed package artifact: ${packResult.filename}`);
   } finally {

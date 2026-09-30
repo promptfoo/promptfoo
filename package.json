@@ -255,6 +255,7 @@
     "@types/supertest": "^7.0.0",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^5.0.0",
+    "ai": "^6.0.264",
     "block-no-verify": "^1.2.0",
     "concurrently": "^9.2.3",
     "drizzle-kit": "^0.31.10",
@@ -333,7 +334,6 @@
     "@opentelemetry/resources": "^2.6.0",
     "@opentelemetry/sdk-trace-node": "^2.6.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
-    "ai": "^6.0.264",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
@@ -417,10 +417,14 @@
   },
   "homepage": "https://promptfoo.dev",
   "peerDependencies": {
-    "@huggingface/transformers": "*"
+    "@huggingface/transformers": "*",
+    "ai": "*"
   },
   "peerDependenciesMeta": {
     "@huggingface/transformers": {
+      "optional": true
+    },
+    "ai": {
       "optional": true
     }
   }
