@@ -20,7 +20,7 @@ it('finishes cleanup when the validated interpreter is no longer available', asy
   expect(worker.isReady()).toBe(false);
 });
 
-it('terminates a timed-out child, removes its files, and serves queued work in a replacement', async () => {
+it('replaces repeated timed-out children without exhausting the crash budget', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-worker-lifecycle-'));
   const script = path.join(directory, 'provider.py');
   const marker = path.join(directory, 'pid.txt');
@@ -52,17 +52,20 @@ def call_api(mode, marker):
   const pool = new PythonWorkerPool(script, 'call_api', 1, undefined, 1000);
   try {
     await pool.initialize();
-    const timedOut = pool.execute('call_api', ['hang', marker]);
-    const rejected = expect(timedOut).rejects.toThrow('Python worker timed out after 1000ms');
-    const recovered = pool.execute('call_api', ['recover', marker]);
-    await rejected;
-    const originalPid = Number(await fs.readFile(marker, 'utf-8'));
-    expect(originalPid).toBeGreaterThan(0);
-    expect(() => process.kill(originalPid, 0)).toThrow();
-    const replacementPid = await recovered;
-    expect(replacementPid).toBeGreaterThan(0);
-    expect(replacementPid).not.toBe(originalPid);
-    expect(directories).toHaveLength(2);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const timedOut = pool.execute('call_api', ['hang', marker]);
+      const rejected = expect(timedOut).rejects.toThrow('Python worker timed out after 1000ms');
+      const recovered = pool.execute('call_api', ['recover', marker]).catch((error) => error);
+      await rejected;
+      const originalPid = Number(await fs.readFile(marker, 'utf-8'));
+      expect(originalPid).toBeGreaterThan(0);
+      expect(() => process.kill(originalPid, 0)).toThrow();
+      const replacementPid = await recovered;
+      expect(replacementPid).toBeTypeOf('number');
+      expect(replacementPid).toBeGreaterThan(0);
+      expect(replacementPid).not.toBe(originalPid);
+    }
+    expect(directories).toHaveLength(8);
     for (const created of directories) {
       await expect(fs.stat(created)).rejects.toMatchObject({ code: 'ENOENT' });
     }

@@ -20,6 +20,7 @@ export { MAX_STDERR_BUFFER_LENGTH } from './stderr';
 
 export class PythonWorker {
   private process: PythonShell | null = null;
+  private timedOutProcess: PythonShell | null = null;
   private ready: boolean = false;
   private busy: boolean = false;
   private failed: boolean = false;
@@ -117,12 +118,14 @@ export class PythonWorker {
           return;
         }
         this.process = null;
+        const timedOut = this.timedOutProcess === workerProcess;
+        this.timedOutProcess = null;
         if (startupError) {
           reject(startupError);
         } else if (this.shuttingDown) {
           reject(new Error('Worker shutting down'));
         } else if (becameReady) {
-          this.handleCrash();
+          this.handleExit(timedOut);
         } else {
           reject(new Error('Worker exited before becoming ready'));
         }
@@ -165,6 +168,7 @@ export class PythonWorker {
         // A timed-out call still owns its child and temp files until close.
         this.pendingRequest = null;
         this.ready = false;
+        this.timedOutProcess = workerProcess;
         const closed = new Promise<void>((resolve) =>
           workerProcess.childProcess.once('close', resolve),
         );
@@ -300,17 +304,23 @@ export class PythonWorker {
     });
   }
 
-  private handleCrash(): void {
+  private handleExit(timedOut: boolean): void {
     this.ready = false;
-    this.crashCount++;
+    if (!timedOut) {
+      this.crashCount++;
+    }
 
     if (this.pendingRequest) {
       this.pendingRequest.reject(new Error('Worker crashed'));
       this.pendingRequest = null;
     }
 
-    if (this.crashCount < this.maxCrashes) {
-      logger.warn(`Python worker crashed (${this.crashCount}/${this.maxCrashes}), restarting...`);
+    if (timedOut || this.crashCount < this.maxCrashes) {
+      logger.warn(
+        timedOut
+          ? 'Python worker timed out, replacing worker...'
+          : `Python worker crashed (${this.crashCount}/${this.maxCrashes}), restarting...`,
+      );
       this.startWorker().catch((err) => {
         if (!this.shuttingDown) {
           this.markFailed(err);
