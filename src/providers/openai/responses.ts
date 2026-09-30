@@ -552,7 +552,7 @@ async function resolveBackgroundResponse(
   cancelOnStop: boolean,
   deadline = Date.now() + timeout,
 ): Promise<BackgroundResponseResult> {
-  const polled = await pollBackgroundResponse(
+  let polled = await pollBackgroundResponse(
     initial,
     url,
     request,
@@ -562,52 +562,76 @@ async function resolveBackgroundResponse(
     deadline,
     cancelOnStop,
   );
-  if (!cached || !polled.error || (polled.status !== 404 && polled.status !== 410)) {
-    return polled;
+  if (cached && polled.error && (polled.status === 404 || polled.status === 410)) {
+    await deleteFromCache?.();
+    const retried = await createBackgroundResponseWithCancellation(
+      url,
+      request,
+      Math.max(1, deadline - Date.now()),
+      cancelOnStop,
+      maxRetries,
+    );
+    if (retried.status < 200 || retried.status >= 300) {
+      return {
+        data: retried.data,
+        status: retried.status,
+        statusText: retried.statusText,
+        headers: retried.headers,
+        error: `API error: ${retried.status} ${retried.statusText}\n${JSON.stringify(retried.data)}`,
+        retried: true,
+      };
+    }
+
+    polled =
+      retried.data.status === 'queued' || retried.data.status === 'in_progress'
+        ? await pollBackgroundResponse(
+            retried.data,
+            url,
+            request,
+            timeout,
+            maxRetries,
+            request.signal,
+            deadline,
+            cancelOnStop,
+          )
+        : {
+            data: retried.data,
+            status: retried.status,
+            statusText: retried.statusText,
+            headers: retried.headers,
+          };
+    polled.retried = true;
   }
 
-  await deleteFromCache?.();
-  const retried = await createBackgroundResponseWithCancellation(
-    url,
-    request,
-    Math.max(1, deadline - Date.now()),
-    cancelOnStop,
-    maxRetries,
-  );
-  if (retried.status < 200 || retried.status >= 300) {
-    return {
-      data: retried.data,
-      status: retried.status,
-      statusText: retried.statusText,
-      headers: retried.headers,
-      error: `API error: ${retried.status} ${retried.statusText}\n${JSON.stringify(retried.data)}`,
-      retried: true,
-    };
+  if (
+    !polled.error &&
+    (polled.data.status === 'completed' || polled.data.status === 'incomplete') &&
+    !cancelOnStop &&
+    isCacheEnabled()
+  ) {
+    const billingIdentity = getBackgroundCacheIdentity(url, request, polled.data.id);
+    if (billingIdentity.cacheable) {
+      // Finish attribution before releasing any subscriber of the shared operation.
+      try {
+        polled.shared = !(await claimBackgroundUsageOnce(
+          `openai:background-billing:${billingIdentity.key}`,
+          { signal: request.signal, deadline },
+        ));
+      } catch (error) {
+        if (!request.signal?.aborted && Date.now() >= deadline) {
+          return {
+            ...polled,
+            status: 0,
+            statusText: 'Error',
+            error: `Background response ${polled.data.id} timed out after ${timeout}ms.`,
+            timedOut: true,
+          };
+        }
+        throw error;
+      }
+    }
   }
-
-  if (retried.data.status === 'queued' || retried.data.status === 'in_progress') {
-    return {
-      ...(await pollBackgroundResponse(
-        retried.data,
-        url,
-        request,
-        timeout,
-        maxRetries,
-        request.signal,
-        deadline,
-        cancelOnStop,
-      )),
-      retried: true,
-    };
-  }
-
-  return {
-    data: retried.data,
-    status: retried.status,
-    statusText: retried.statusText,
-    headers: retried.headers,
-    retried: true,
-  };
+  return polled;
 }
 
 async function coalesceBackgroundResponse(
@@ -1643,21 +1667,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           cancelOnStop,
           backgroundDeadline,
         );
-        if (polled.shared) {
-          cached = true;
-        } else if (
+        if (
           !polled.error &&
           (polled.data.status === 'completed' || polled.data.status === 'incomplete')
         ) {
-          const billingIdentity = getBackgroundCacheIdentity(url, request, polled.data.id);
-          cached =
-            billingIdentity.cacheable &&
-            isCacheEnabled() &&
-            !this.shouldBustCache(context) &&
-            !(await claimBackgroundUsageOnce(`openai:background-billing:${billingIdentity.key}`, {
-              signal: abortSignal,
-              deadline: backgroundDeadline,
-            }));
+          cached = Boolean(polled.shared);
         }
         data = polled.data;
         status = polled.status;

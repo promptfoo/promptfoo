@@ -36,9 +36,14 @@ describe('persistent cache claims', () => {
     cache = await import('../src/cache');
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.useRealTimers();
-    fs.rmSync(cachePath, { recursive: true, force: true });
+    await fs.promises.rm(cachePath, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 50,
+    });
   });
 
   it('keeps claims after the response TTL without creating per-response files', async () => {
@@ -147,14 +152,21 @@ describe('persistent cache claims', () => {
 
   it('retries a lock that is released within the deadline', async () => {
     const release = await holdClaimLock();
-    const pending = cache.claimBackgroundUsageOnce('contended', { deadline: Date.now() + 2000 });
+    let releasePromise: Promise<void> | undefined;
+    const retry = vi.spyOn(await import('../src/util/time'), 'sleep').mockImplementationOnce(() => {
+      releasePromise = release();
+      return releasePromise;
+    });
     try {
-      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(
+        await cache.claimBackgroundUsageOnce('contended', { deadline: Date.now() + 2000 }),
+      ).toBe(true);
+      expect(retry).toHaveBeenCalled();
+      expect(await cache.claimBackgroundUsageOnce('contended')).toBe(false);
     } finally {
-      await release();
+      retry.mockRestore();
+      await (releasePromise ?? release());
     }
-    expect(await pending).toBe(true);
-    expect(await cache.claimBackgroundUsageOnce('contended')).toBe(false);
   });
 
   it('allows exactly one claimant across independent processes', async () => {
