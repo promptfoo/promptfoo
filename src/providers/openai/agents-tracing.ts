@@ -683,7 +683,7 @@ function sanitizeCredentialText(value: string): string {
   let copied = 0;
   while ((match = options.exec(value))) {
     const [, prefix, option, separator] = match;
-    if (isCredentialAttributeKey(option) || ['-u', '--user', '--proxy-user'].includes(option)) {
+    if (isCredentialOption(option, value)) {
       sanitized += value.slice(copied, match.index) + prefix + option + separator + '<redacted>';
       copied = options.lastIndex;
     } else {
@@ -692,6 +692,12 @@ function sanitizeCredentialText(value: string): string {
     }
   }
   value = sanitized + value.slice(copied);
+
+  value = value.replace(
+    /(^|[\r\n])([ \t]*[A-Za-z_][A-Za-z\d_.-]*)([ \t]+)([^\s:=][^\r\n]*)/g,
+    (match, prefix: string, key: string, separator: string) =>
+      isCredentialAttributeKey(key) ? `${prefix}${key}${separator}<redacted>` : match,
+  );
 
   // Preserve escapes before the generic masker can shorten quoted credentials.
   return redactQuotedCredentials(sanitizeBody(redactQuotedCredentials(value)))
@@ -914,6 +920,16 @@ function sanitizeAttributeByKey(key: string, value: unknown): unknown {
   }
 }
 
+function isCredentialOption(option: string, command: unknown): boolean {
+  return (
+    isCredentialAttributeKey(option) ||
+    ['--user', '--proxy-user'].includes(option) ||
+    (option === '-u' &&
+      typeof command === 'string' &&
+      /^(?:[^\s]*[/\\])?curl(?:\.exe)?(?:\s|$)/i.test(command.trimStart()))
+  );
+}
+
 function isCredentialPairValue(source: Record<string, unknown> | unknown[], key: string) {
   if (Array.isArray(source)) {
     const option = source[Number(key) - 1];
@@ -926,8 +942,8 @@ function isCredentialPairValue(source: Record<string, unknown> | unknown[], key:
     }
     return (
       !(typeof value === 'string' && /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(value)) &&
-      (['-u', '--user', '--proxy-user'].includes(option) ||
-        (isCredentialAttributeKey(option) && /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(option)))
+      /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(option) &&
+      isCredentialOption(option, source[0])
     );
   }
   return (
@@ -1016,6 +1032,14 @@ function sanitizeStructuredAttributeValue(
 
   while (stack.length > 0) {
     const { source, target, depth } = stack.pop()!;
+    // Array holes also consume work when JSON.stringify serializes the copy.
+    if (Array.isArray(source)) {
+      budget.remaining -= source.length;
+      if (budget.remaining < 0) {
+        state.changed = true;
+        return '<redacted>';
+      }
+    }
     for (const [key, entry] of structuredAttributeEntries(source)) {
       if (--budget.remaining < 0) {
         state.changed = true;

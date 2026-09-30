@@ -79,6 +79,77 @@ describe('OTLPTracingExporter', () => {
   }
 
   it.each(['json', 'protobuf'] as const)(
+    'bounds sparse native arrays before serialization in %s',
+    async (format) => {
+      const sparse = [];
+      sparse[10_000] = 'last';
+      const { attributes } = await exportCustomData(
+        {
+          sparse,
+          nested: { sparse },
+          aggregate: Array.from({ length: 6 }, () => {
+            const item = [];
+            item[1_999] = 'last';
+            return item;
+          }),
+          ordinary: ['first', 'last'],
+        },
+        format,
+      );
+      expect(attributes.sparse).toBe('<redacted>');
+      expect(attributes.nested).toBe('<redacted>');
+      expect(attributes.aggregate).toBe('<redacted>');
+      expect(attributes.ordinary).toEqual({
+        arrayValue: { values: [{ stringValue: 'first' }, { stringValue: 'last' }] },
+      });
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'preserves non-authentication short options in %s',
+    async (format) => {
+      const { attributes } = await exportCustomData(
+        {
+          cmd: ['git', 'push', '-u', 'origin', 'main'],
+          python: 'python -u script.py',
+          request: ['curl', '-u', 'fixture-user:fixture-password', 'https://example.test'],
+          requestText: '/usr/bin/curl -u fixture-user:fixture-password https://example.test',
+        },
+        format,
+      );
+      expect(attributes.cmd).toEqual({
+        arrayValue: {
+          values: ['git', 'push', '-u', 'origin', 'main'].map((stringValue) => ({ stringValue })),
+        },
+      });
+      expect(attributes.command).toBe('git push -u origin main');
+      expect(attributes.python).toBe('python -u script.py');
+      expect(attributes.request).toEqual({
+        arrayValue: {
+          values: ['curl', '-u', '<redacted>', 'https://example.test'].map((stringValue) => ({
+            stringValue,
+          })),
+        },
+      });
+      expect(attributes.requestText).toBe('/usr/bin/curl -u <redacted> https://example.test');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'redacts whitespace-delimited properties credentials in %s',
+    async (format) => {
+      const { attributes, payload } = await exportCustomData(
+        { properties: 'password opaque/value\n  api_key\topaque key with spaces\r\nregion west' },
+        format,
+      );
+      expect(attributes.properties).toBe(
+        'password <redacted>\n  api_key\t<redacted>\r\nregion west',
+      );
+      expect(JSON.stringify(payload)).not.toContain('opaque');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
     'redacts credential text formats without changing ordinary metadata in %s',
     async (format) => {
       const { attributes } = await exportCustomData(
