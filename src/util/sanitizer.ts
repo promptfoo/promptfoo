@@ -1459,9 +1459,7 @@ export function sanitizeObject(
         },
         undefined,
         {
-          depthLimit: Number.isFinite(maxDepth)
-            ? Math.max(0, maxDepth + 2)
-            : Number.MAX_SAFE_INTEGER,
+          depthLimit: Number.MAX_SAFE_INTEGER,
           edgesLimit: Number.MAX_SAFE_INTEGER,
         },
       ),

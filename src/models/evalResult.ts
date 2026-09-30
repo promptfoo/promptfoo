@@ -326,17 +326,14 @@ function projectGradingResult<T>(
     projected.assertion = stripAssertionPrompts(projected.assertion);
   }
   const tokensUsed = record.tokensUsed as GradingResult['tokensUsed'];
-  if (
-    stripMetadata &&
-    asRecord(record.metadata)?.cachedResponse === true &&
-    !tokensUsed?.incurredTokenUsage
-  ) {
+  const cachedResponse = asRecord(record.metadata)?.cachedResponse;
+  if (stripMetadata && typeof cachedResponse === 'boolean' && !tokensUsed?.incurredTokenUsage) {
     const usage = createEmptyTokenUsage();
-    accumulateGradingTokenUsage(usage, tokensUsed, { cached: true });
+    accumulateGradingTokenUsage(usage, tokensUsed, { cached: cachedResponse });
     projected.tokensUsed = {
       ...tokensUsed,
       ...usage.assertions,
-      incurredTokenUsage: usage.incurredTokenUsage?.assertions,
+      incurredTokenUsage: usage.incurredTokenUsage?.assertions ?? usage.assertions,
     };
   }
   if (Array.isArray(record.componentResults)) {

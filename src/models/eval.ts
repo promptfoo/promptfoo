@@ -521,7 +521,8 @@ export default class Eval {
 
       for (const prompt of renderedPrompts) {
         const label = prompt.label || prompt.display || prompt.raw;
-        const promptId = hashPrompt(prompt);
+        // Imported completed prompts already have IDs referenced by their result rows.
+        const promptId = (opts?.completedPrompts && prompt.id) || hashPrompt(prompt);
 
         await tx
           .insert(promptsTable)

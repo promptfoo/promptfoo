@@ -330,6 +330,52 @@ describe('importCommand', () => {
     );
 
     it.each([false, true])(
+      'preserves imported prompt associations with prompt stripping %s',
+      async (stripPrompt) => {
+        const dir = createTempDir();
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: String(stripPrompt) });
+        const prompts = ['First greeting', 'Second greeting'].map((text) =>
+          createCompletedPrompt(text, { id: sha256(text), label: text }),
+        );
+        const original = structuredClone(prompts);
+        try {
+          const eval_ = new Eval({}, { prompts });
+          for (const [promptIdx, prompt] of prompts.entries()) {
+            await eval_.addResult(createEvaluateResult({ prompt, promptId: prompt.id, promptIdx }));
+          }
+          const output = path.join(dir, 'prompts.json');
+          await writeOutput(output, eval_, null);
+          const exported = JSON.parse(fs.readFileSync(output, 'utf8'));
+          expect(exported.results.prompts.map((prompt: Prompt) => prompt.label)).toEqual(
+            stripPrompt ? ['[prompt stripped]', '[prompt stripped]'] : prompts.map((p) => p.label),
+          );
+          importCommand(program);
+          await program.parseAsync(['node', 'test', 'import', output]);
+          expect(process.exitCode).toBeUndefined();
+
+          const reopened = await Eval.findById(exported.evalId);
+          expect(reopened).toBeDefined();
+          const ids = prompts.map((prompt) => prompt.id).sort();
+          const rows = await EvalResult.findManyByEvalId(exported.evalId);
+          const db = await getDb();
+          const links = await db.select().from(evalsToPromptsTable).all();
+          expect(rows.map((row) => row.promptId).sort()).toEqual(ids);
+          expect(
+            links
+              .filter((link) => link.evalId === exported.evalId)
+              .map((link) => link.promptId)
+              .sort(),
+          ).toEqual(ids);
+          expect(reopened!.prompts.map((prompt) => prompt.id).sort()).toEqual(ids);
+          expect(prompts).toEqual(original);
+        } finally {
+          restoreEnv();
+          removeTempDir(dir);
+        }
+      },
+    );
+
+    it.each([false, true])(
       'exports imported primitive row prompts with prompt stripping %s',
       async (stripPrompt) => {
         const dir = createTempDir();
