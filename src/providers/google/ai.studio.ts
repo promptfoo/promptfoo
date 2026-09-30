@@ -5,7 +5,7 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
-import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
+import { GoogleGenericProvider, type GoogleProviderOptions, getCallbackErrorOutput } from './base';
 import { CHAT_MODELS } from './shared';
 import {
   calculateGoogleCost,
@@ -34,6 +34,7 @@ import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   GuardrailResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
@@ -172,9 +173,14 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
   /**
    * Call the Google AI Studio API.
    */
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     // Wait for MCP initialization if pending
-    await this.initializeMCP();
+    await this.initializeMCP(options?.abortSignal);
 
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -184,7 +190,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     }
 
     if (usesGenerateContentApi(this.modelName)) {
-      return this.callGemini(prompt, context);
+      return this.callGemini(prompt, context, options);
     }
 
     // Legacy PaLM API path
@@ -216,6 +222,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         `${baseUrl}/v1beta3/models/${this.modelName}:generateMessage`,
         {
           method: 'POST',
+          signal: options?.abortSignal,
           headers,
           body: JSON.stringify(body),
           ...(authDiscriminator && { _authHash: authDiscriminator }),
@@ -306,7 +313,12 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
   /**
    * Call the Gemini API specifically.
    */
-  async callGemini(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callGemini(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error(
@@ -331,6 +343,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     // Get all tools (MCP + config tools) using base class method
     const allTools = await this.getAllTools(context, {
       skipExecutableToolFiles: toolsDisabled,
+      abortSignal: options?.abortSignal,
     });
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
     const {
@@ -415,6 +428,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         endpoint,
         {
           method: 'POST',
+          signal: options?.abortSignal,
           headers,
           body: JSON.stringify(body),
           ...(authDiscriminator && { _authHash: authDiscriminator }),
@@ -560,9 +574,18 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         },
       };
       try {
-        response.output = await this.executeFunctionToolCallbacks(output, config, toolsDisabled);
+        response.output = await this.executeFunctionToolCallbacks(
+          output,
+          config,
+          toolsDisabled,
+          options?.abortSignal,
+        );
       } catch (error) {
-        return { ...response, output: undefined, error: String(error) };
+        return {
+          ...response,
+          output: getCallbackErrorOutput(error, response.output, options?.abortSignal?.aborted),
+          error: String(error),
+        };
       }
       return response;
     } catch (err) {
@@ -607,7 +630,12 @@ export class AIStudioEmbeddingProvider
     };
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
+    options?.abortSignal?.throwIfAborted();
     const apiKey = this.getApiKey();
     if (!apiKey) {
       return {
@@ -647,6 +675,7 @@ export class AIStudioEmbeddingProvider
         endpoint,
         {
           method: 'POST',
+          signal: options?.abortSignal,
           headers,
           body: JSON.stringify(body),
           ...(authDiscriminator && { _authHash: authDiscriminator }),

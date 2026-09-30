@@ -12,7 +12,12 @@ import {
 import { getDefaultProviders } from '../providers/defaults';
 import invariant from '../util/invariant';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
-import { callGradingProvider, callProviderWithContext, getAndCheckProvider } from './providers';
+import {
+  callGradingProvider,
+  callProviderWithContext,
+  getAndCheckProvider,
+  isGradingCancellation,
+} from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import {
   cosineSimilarity,
@@ -47,100 +52,110 @@ export async function matchesAnswerRelevance(
   );
 
   const tokensUsed = normalizeMatcherTokenUsage(undefined);
+  try {
+    // Hoist rubric loading and output parsing out of the loop
+    const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, ANSWER_RELEVANCY_GENERATE);
+    const parsedOutput = tryParse(output);
+    const promptText = await renderLlmRubricPrompt(rubricPrompt, { answer: parsedOutput });
 
-  // Hoist rubric loading and output parsing out of the loop
-  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, ANSWER_RELEVANCY_GENERATE);
-  const parsedOutput = tryParse(output);
-  const promptText = await renderLlmRubricPrompt(rubricPrompt, { answer: parsedOutput });
+    const candidateQuestions: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      // TODO(ian): Parallelize
+      const resp = await callProviderWithContext(
+        textProvider,
+        promptText,
+        'answer-relevance',
+        { answer: parsedOutput },
+        providerCallContext,
+      );
+      accumulateTokenUsage(tokensUsed, resp.tokenUsage);
+      if (resp.error || !resp.output) {
+        return graderFail(resp.error || 'No output', tokensUsed);
+      }
 
-  const candidateQuestions: string[] = [];
-  for (let i = 0; i < 3; i++) {
-    // TODO(ian): Parallelize
-    const resp = await callProviderWithContext(
-      textProvider,
-      promptText,
-      'answer-relevance',
-      { answer: parsedOutput },
-      providerCallContext,
-    );
-    accumulateTokenUsage(tokensUsed, resp.tokenUsage);
-    if (resp.error || !resp.output) {
-      return graderFail(resp.error || 'No output', tokensUsed);
+      invariant(
+        typeof resp.output === 'string',
+        'answer relevancy check produced malformed response',
+      );
+      candidateQuestions.push(resp.output);
     }
 
     invariant(
-      typeof resp.output === 'string',
-      'answer relevancy check produced malformed response',
+      typeof embeddingProvider.callEmbeddingApi === 'function',
+      `Provider ${embeddingProvider.id()} must implement callEmbeddingApi for similarity check`,
     );
-    candidateQuestions.push(resp.output);
-  }
 
-  invariant(
-    typeof embeddingProvider.callEmbeddingApi === 'function',
-    `Provider ${embeddingProvider.id()} must implement callEmbeddingApi for similarity check`,
-  );
-
-  const callEmbeddingApi = embeddingProvider.callEmbeddingApi.bind(embeddingProvider);
-  const inputEmbeddingResp = await callGradingProvider(
-    embeddingProvider,
-    'answer-relevance.embedding',
-    () => callEmbeddingApi(input),
-    { callContext: providerCallContext, operationName: 'embeddings' },
-  );
-  accumulateTokenUsage(tokensUsed, inputEmbeddingResp.tokenUsage);
-  if (inputEmbeddingResp.error || !inputEmbeddingResp.embedding) {
-    return graderFail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
-  }
-  const inputEmbedding = inputEmbeddingResp.embedding;
-
-  const similarities: number[] = [];
-  const questionsWithScores: { question: string; similarity: number }[] = [];
-
-  for (const question of candidateQuestions) {
-    const resp = await callGradingProvider(
+    const callEmbeddingApi = embeddingProvider.callEmbeddingApi.bind(embeddingProvider);
+    const inputEmbeddingResp = await callGradingProvider(
       embeddingProvider,
       'answer-relevance.embedding',
-      () => callEmbeddingApi(question),
+      (context, options) =>
+        options || context ? callEmbeddingApi(input, context, options) : callEmbeddingApi(input),
       { callContext: providerCallContext, operationName: 'embeddings' },
     );
-    accumulateTokenUsage(tokensUsed, resp.tokenUsage);
-    if (resp.error || !resp.embedding) {
-      return graderFail(resp.error || 'No embedding', tokensUsed);
+    accumulateTokenUsage(tokensUsed, inputEmbeddingResp.tokenUsage);
+    if (inputEmbeddingResp.error || !inputEmbeddingResp.embedding) {
+      return graderFail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
     }
-    const questionSimilarity = cosineSimilarity(inputEmbedding, resp.embedding);
-    similarities.push(questionSimilarity);
-    questionsWithScores.push({ question, similarity: questionSimilarity });
-  }
+    const inputEmbedding = inputEmbeddingResp.embedding;
 
-  const similarity = similarities.reduce((a, b) => a + b, 0) / similarities.length;
-  const pass = similarity >= threshold - Number.EPSILON;
-  const greaterThanReason = `Relevance ${similarity.toFixed(
-    2,
-  )} is greater than threshold ${threshold}`;
-  const lessThanReason = `Relevance ${similarity.toFixed(2)} is less than threshold ${threshold}`;
+    const similarities: number[] = [];
+    const questionsWithScores: { question: string; similarity: number }[] = [];
 
-  const metadata = {
-    generatedQuestions: questionsWithScores,
-    averageSimilarity: similarity,
-    threshold,
-  };
+    for (const question of candidateQuestions) {
+      const resp = await callGradingProvider(
+        embeddingProvider,
+        'answer-relevance.embedding',
+        (context, options) =>
+          options || context
+            ? callEmbeddingApi(question, context, options)
+            : callEmbeddingApi(question),
+        { callContext: providerCallContext, operationName: 'embeddings' },
+      );
+      accumulateTokenUsage(tokensUsed, resp.tokenUsage);
+      if (resp.error || !resp.embedding) {
+        return graderFail(resp.error || 'No embedding', tokensUsed);
+      }
+      const questionSimilarity = cosineSimilarity(inputEmbedding, resp.embedding);
+      similarities.push(questionSimilarity);
+      questionsWithScores.push({ question, similarity: questionSimilarity });
+    }
 
-  if (pass) {
+    const similarity = similarities.reduce((a, b) => a + b, 0) / similarities.length;
+    const pass = similarity >= threshold - Number.EPSILON;
+    const greaterThanReason = `Relevance ${similarity.toFixed(
+      2,
+    )} is greater than threshold ${threshold}`;
+    const lessThanReason = `Relevance ${similarity.toFixed(2)} is less than threshold ${threshold}`;
+
+    const metadata = {
+      generatedQuestions: questionsWithScores,
+      averageSimilarity: similarity,
+      threshold,
+    };
+
+    if (pass) {
+      return {
+        pass: true,
+        score: similarity,
+        reason: greaterThanReason,
+        tokensUsed,
+        metadata,
+      };
+    }
     return {
-      pass: true,
+      pass: false,
       score: similarity,
-      reason: greaterThanReason,
+      reason: lessThanReason,
       tokensUsed,
       metadata,
     };
+  } catch (error) {
+    if (!isGradingCancellation(error)) {
+      throw error;
+    }
+    return graderFail(error instanceof Error ? error.message : String(error), tokensUsed);
   }
-  return {
-    pass: false,
-    score: similarity,
-    reason: lessThanReason,
-    tokensUsed,
-    metadata,
-  };
 }
 
 export async function matchesContextRecall(
@@ -406,113 +421,121 @@ export async function matchesContextFaithfulness(
   );
 
   const tokensUsed = normalizeMatcherTokenUsage(undefined);
+  try {
+    if (grading?.rubricPrompt) {
+      invariant(Array.isArray(grading.rubricPrompt), 'rubricPrompt must be an array');
+    }
+    // Load rubric prompts using loadRubricPrompt to support file:// references with templates
+    const rawLongformPrompt =
+      typeof grading?.rubricPrompt?.[0] === 'string'
+        ? grading?.rubricPrompt?.[0]
+        : grading?.rubricPrompt?.[0]?.content;
+    const rawNliPrompt =
+      typeof grading?.rubricPrompt?.[1] === 'string'
+        ? grading?.rubricPrompt?.[1]
+        : grading?.rubricPrompt?.[1]?.content;
+    const longformPrompt = await loadRubricPrompt(rawLongformPrompt, CONTEXT_FAITHFULNESS_LONGFORM);
+    const nliPrompt = await loadRubricPrompt(rawNliPrompt, CONTEXT_FAITHFULNESS_NLI_STATEMENTS);
 
-  if (grading?.rubricPrompt) {
-    invariant(Array.isArray(grading.rubricPrompt), 'rubricPrompt must be an array');
-  }
-  // Load rubric prompts using loadRubricPrompt to support file:// references with templates
-  const rawLongformPrompt =
-    typeof grading?.rubricPrompt?.[0] === 'string'
-      ? grading?.rubricPrompt?.[0]
-      : grading?.rubricPrompt?.[0]?.content;
-  const rawNliPrompt =
-    typeof grading?.rubricPrompt?.[1] === 'string'
-      ? grading?.rubricPrompt?.[1]
-      : grading?.rubricPrompt?.[1]?.content;
-  const longformPrompt = await loadRubricPrompt(rawLongformPrompt, CONTEXT_FAITHFULNESS_LONGFORM);
-  const nliPrompt = await loadRubricPrompt(rawNliPrompt, CONTEXT_FAITHFULNESS_NLI_STATEMENTS);
-
-  let promptText = await renderLlmRubricPrompt(longformPrompt, {
-    ...(vars || {}),
-    question: query,
-    answer: tryParse(output),
-  });
-
-  let resp = await callProviderWithContext(
-    textProvider,
-    promptText,
-    'context-faithfulness-longform',
-    {
+    let promptText = await renderLlmRubricPrompt(longformPrompt, {
       ...(vars || {}),
       question: query,
       answer: tryParse(output),
-    },
-    providerCallContext,
-  );
-  accumulateTokenUsage(tokensUsed, resp.tokenUsage);
-  if (resp.error || !resp.output) {
-    return graderFail(resp.error || 'No output', tokensUsed);
-  }
+    });
 
-  invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
+    let resp = await callProviderWithContext(
+      textProvider,
+      promptText,
+      'context-faithfulness-longform',
+      {
+        ...(vars || {}),
+        question: query,
+        answer: tryParse(output),
+      },
+      providerCallContext,
+    );
+    accumulateTokenUsage(tokensUsed, resp.tokenUsage);
+    if (resp.error || !resp.output) {
+      return graderFail(resp.error || 'No output', tokensUsed);
+    }
 
-  const contextString = serializeContext(context);
+    invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
 
-  const statements = splitIntoSentences(resp.output);
-  if (statements.length === 0) {
-    return graderFail('Could not extract context-faithfulness statements', tokensUsed);
-  }
-  promptText = await renderLlmRubricPrompt(nliPrompt, {
-    ...(vars || {}),
-    context: contextString,
-    statements,
-  });
+    const contextString = serializeContext(context);
 
-  resp = await callProviderWithContext(
-    textProvider,
-    promptText,
-    'context-faithfulness-nli',
-    {
+    const statements = splitIntoSentences(resp.output);
+    if (statements.length === 0) {
+      return graderFail('Could not extract context-faithfulness statements', tokensUsed);
+    }
+    promptText = await renderLlmRubricPrompt(nliPrompt, {
       ...(vars || {}),
       context: contextString,
       statements,
-    },
-    providerCallContext,
-  );
-  accumulateTokenUsage(tokensUsed, resp.tokenUsage);
-  if (resp.error || !resp.output) {
-    return graderFail(resp.error || 'No output', tokensUsed);
-  }
+    });
 
-  invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
+    resp = await callProviderWithContext(
+      textProvider,
+      promptText,
+      'context-faithfulness-nli',
+      {
+        ...(vars || {}),
+        context: contextString,
+        statements,
+      },
+      providerCallContext,
+    );
+    accumulateTokenUsage(tokensUsed, resp.tokenUsage);
+    if (resp.error || !resp.output) {
+      return graderFail(resp.error || 'No output', tokensUsed);
+    }
 
-  let finalAnswer = 'Final verdict for each statement in order:';
-  finalAnswer = finalAnswer.toLowerCase();
-  let verdicts = resp.output.toLowerCase().trim();
-  let score = 0;
-  let parsedVerdict = false;
-  if (verdicts.includes(finalAnswer)) {
-    verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
-    const parsedVerdicts = verdicts.split('.').filter((answer) => answer.trim() !== '');
-    if (
-      parsedVerdicts.length > 0 &&
-      parsedVerdicts.every((answer) => /\b(?:yes|no)\b/.test(answer))
-    ) {
-      parsedVerdict = true;
-      const unsupportedVerdicts = parsedVerdicts.filter((answer) => !answer.includes('yes')).length;
-      const missingVerdicts = Math.max(0, statements.length - parsedVerdicts.length);
-      score = 1 - (unsupportedVerdicts + missingVerdicts) / statements.length;
+    invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
+
+    let finalAnswer = 'Final verdict for each statement in order:';
+    finalAnswer = finalAnswer.toLowerCase();
+    let verdicts = resp.output.toLowerCase().trim();
+    let score = 0;
+    let parsedVerdict = false;
+    if (verdicts.includes(finalAnswer)) {
+      verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
+      const parsedVerdicts = verdicts.split('.').filter((answer) => answer.trim() !== '');
+      if (
+        parsedVerdicts.length > 0 &&
+        parsedVerdicts.every((answer) => /\b(?:yes|no)\b/.test(answer))
+      ) {
+        parsedVerdict = true;
+        const unsupportedVerdicts = parsedVerdicts.filter(
+          (answer) => !answer.includes('yes'),
+        ).length;
+        const missingVerdicts = Math.max(0, statements.length - parsedVerdicts.length);
+        score = 1 - (unsupportedVerdicts + missingVerdicts) / statements.length;
+      }
+    } else {
+      const noVerdictCount = verdicts.split('verdict: no').length - 1;
+      const yesVerdictCount = verdicts.split('verdict: yes').length - 1;
+      if (noVerdictCount + yesVerdictCount > 0) {
+        parsedVerdict = true;
+        const missingVerdicts = Math.max(0, statements.length - noVerdictCount - yesVerdictCount);
+        score = 1 - (noVerdictCount + missingVerdicts) / statements.length;
+      }
     }
-  } else {
-    const noVerdictCount = verdicts.split('verdict: no').length - 1;
-    const yesVerdictCount = verdicts.split('verdict: yes').length - 1;
-    if (noVerdictCount + yesVerdictCount > 0) {
-      parsedVerdict = true;
-      const missingVerdicts = Math.max(0, statements.length - noVerdictCount - yesVerdictCount);
-      score = 1 - (noVerdictCount + missingVerdicts) / statements.length;
+    if (!parsedVerdict) {
+      return graderFail('Could not parse context-faithfulness verdicts', tokensUsed);
     }
+    score = Math.min(1, Math.max(0, score));
+    const pass = score >= threshold - Number.EPSILON;
+    return {
+      pass,
+      score,
+      reason: pass
+        ? `Faithfulness ${score.toFixed(2)} is >= ${threshold}`
+        : `Faithfulness ${score.toFixed(2)} is < ${threshold}`,
+      tokensUsed,
+    };
+  } catch (error) {
+    if (!isGradingCancellation(error)) {
+      throw error;
+    }
+    return graderFail(error instanceof Error ? error.message : String(error), tokensUsed);
   }
-  if (!parsedVerdict) {
-    return graderFail('Could not parse context-faithfulness verdicts', tokensUsed);
-  }
-  score = Math.min(1, Math.max(0, score));
-  const pass = score >= threshold - Number.EPSILON;
-  return {
-    pass,
-    score,
-    reason: pass
-      ? `Faithfulness ${score.toFixed(2)} is >= ${threshold}`
-      : `Faithfulness ${score.toFixed(2)} is < ${threshold}`,
-    tokensUsed,
-  };
 }

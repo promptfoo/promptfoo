@@ -1,11 +1,13 @@
 import cliState from '../cliState';
 import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
+import { awaitWithAbort } from '../util/abort';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
   callGradingProvider,
   getAndCheckProvider,
   getRemoteGradingContext,
+  isGradingCancellation,
   shouldUseRemoteGrading,
 } from './providers';
 import {
@@ -109,8 +111,13 @@ async function calculateProviderSimilarity(
   tokensUsed: TokenUsage,
 ): Promise<number | Omit<GradingResult, 'assertion'>> {
   if (metric === 'cosine' && 'callSimilarityApi' in finalProvider) {
-    const similarityResp = await callGradingProvider(finalProvider, 'similarity', () =>
-      finalProvider.callSimilarityApi(expected, output),
+    const similarityResp = await callGradingProvider(
+      finalProvider,
+      'similarity',
+      (context, options) =>
+        options || context
+          ? finalProvider.callSimilarityApi(expected, output, context, options)
+          : finalProvider.callSimilarityApi(expected, output),
     );
     accumulateTokenUsage(tokensUsed, similarityResp.tokenUsage);
     if (similarityResp.error) {
@@ -137,25 +144,40 @@ async function calculateProviderSimilarity(
     throw new Error('Provider must implement callSimilarityApi or callEmbeddingApi');
   }
 
-  const [expectedEmbedding, outputEmbedding] = await Promise.all([
-    callGradingProvider(
-      finalProvider,
-      'similarity.embedding',
-      () => callEmbeddingApi.call(finalProvider, expected),
-      { operationName: 'embeddings' },
+  const results = await Promise.allSettled(
+    [expected, output].map((input) =>
+      callGradingProvider(
+        finalProvider,
+        'similarity.embedding',
+        (context, options) =>
+          awaitWithAbort(
+            options || context
+              ? callEmbeddingApi.call(finalProvider, input, context, options)
+              : callEmbeddingApi.call(finalProvider, input),
+            options?.abortSignal,
+          ),
+        { operationName: 'embeddings' },
+      ),
     ),
-    callGradingProvider(
-      finalProvider,
-      'similarity.embedding',
-      () => callEmbeddingApi.call(finalProvider, output),
-      { operationName: 'embeddings' },
-    ),
-  ]);
-
-  const mergedUsage = normalizeMatcherTokenUsage(undefined);
-  accumulateTokenUsage(mergedUsage, expectedEmbedding.tokenUsage);
-  accumulateTokenUsage(mergedUsage, outputEmbedding.tokenUsage);
-  accumulateTokenUsage(tokensUsed, mergedUsage);
+  );
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      accumulateTokenUsage(tokensUsed, result.value.tokenUsage);
+    }
+  }
+  const [expectedResult, outputResult] = results;
+  if (expectedResult.status === 'rejected' || outputResult.status === 'rejected') {
+    const reasons = [expectedResult, outputResult]
+      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+      .map((result) => result.reason);
+    const reason = reasons.find((error) => !isGradingCancellation(error)) ?? reasons[0];
+    if (!isGradingCancellation(reason)) {
+      throw reason;
+    }
+    return fail(reason instanceof Error ? reason.message : String(reason), tokensUsed);
+  }
+  const expectedEmbedding = expectedResult.value;
+  const outputEmbedding = outputResult.value;
 
   if (expectedEmbedding.error || outputEmbedding.error) {
     return fail(

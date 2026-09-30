@@ -1,6 +1,12 @@
-import { sleep } from '../util/time';
+import { sleep, sleepWithAbort } from '../util/time';
 
-import type { ApiProvider, ProviderOptions, ProviderResponse } from '../types/providers';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderOptions,
+  ProviderResponse,
+} from '../types/providers';
 
 export class EchoProvider implements ApiProvider {
   private options: ProviderOptions;
@@ -28,11 +34,13 @@ export class EchoProvider implements ApiProvider {
 
   async callApi(
     input: string,
-    _options?: Record<string, any>,
-    context?: any,
+    context?: Partial<CallApiContextParams> & { metadata?: Record<string, unknown> },
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const signal = options?.abortSignal;
+    signal?.throwIfAborted();
     if (this.delay && this.delay > 0) {
-      await sleep(this.delay);
+      await (signal ? sleepWithAbort(this.delay, signal) : sleep(this.delay));
     }
 
     // Create a complete ProviderResponse object

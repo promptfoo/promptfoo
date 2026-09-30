@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import crypto from 'node:crypto';
+import { setTimeout as sleepWithSignal } from 'node:timers/promises';
 import fs from 'fs';
 import path from 'path';
 
@@ -9,6 +10,7 @@ import { KeyvFile } from 'keyv-file';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
 import { getRequestTimeoutMs } from './providers/shared';
+import { awaitWithAbort } from './util/abort';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
 import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
@@ -597,7 +599,8 @@ function getAbortSignalId(signal: AbortSignal) {
 }
 
 function getInflightFetchCacheKey(cacheKey: string, url: RequestInfo, options: RequestInit) {
-  const signal = options.signal ?? (url instanceof Request ? url.signal : undefined);
+  const signal =
+    options.signal === undefined && url instanceof Request ? url.signal : options.signal;
   return signal ? `${cacheKey}:signal:${getAbortSignalId(signal)}` : cacheKey;
 }
 
@@ -691,6 +694,8 @@ async function fetchAndReadBody(
   maxRetries: number | undefined,
   isIdempotent: boolean,
 ): Promise<{ respText: string; resp: Response; fetchLatencyMs: number }> {
+  const signal =
+    options.signal === undefined && url instanceof Request ? url.signal : options.signal;
   const maxBodyRetries = isIdempotent ? 2 : 0;
   for (let bodyAttempt = 0; bodyAttempt <= maxBodyRetries; bodyAttempt++) {
     const fetchStart = Date.now();
@@ -710,7 +715,11 @@ async function fetchAndReadBody(
           backoffMs,
           error: (err as Error)?.message?.slice(0, 200),
         });
-        await sleep(backoffMs);
+        if (signal) {
+          await sleepWithSignal(backoffMs, undefined, { signal });
+        } else {
+          await sleep(backoffMs);
+        }
         continue;
       }
       // Preserve cancellation: an aborted body read rejects with an AbortError, and
@@ -846,6 +855,10 @@ export async function fetchWithCache<T = unknown>(
   bustOrOptions: boolean | CacheOptions | undefined = false,
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
+  const signal =
+    options.signal === undefined && url instanceof Request ? url.signal : options.signal;
+  signal?.throwIfAborted();
+  const awaitCache = <V>(work: Promise<V>): Promise<V> => awaitWithAbort(work, signal ?? undefined);
   const fetchOptions = preserveCloudAuthRedirects(url, options);
   const cacheOptions: CacheOptions =
     typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
@@ -908,7 +921,8 @@ export async function fetchWithCache<T = unknown>(
 
   const cache = getCacheInstance();
 
-  const cachedResponse = await cache.get<SerializedFetchResponse>(cacheKey);
+  const cachedResponse = await awaitCache(cache.get<SerializedFetchResponse>(cacheKey));
+  signal?.throwIfAborted();
   if (cachedResponse != null) {
     logger.debug(
       `Returning cached response for ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${cachedResponse}`,
@@ -918,6 +932,7 @@ export async function fetchWithCache<T = unknown>(
 
   const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, fetchOptions);
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
+  let responsePrepared = false;
   const coalesced = inflightResponse !== undefined;
   if (!inflightResponse) {
     inflightResponse = (async () => {
@@ -929,8 +944,16 @@ export async function fetchWithCache<T = unknown>(
         isIdempotent,
         format,
       );
+      responsePrepared = true;
       if (preparedResponse.cacheable) {
-        await cache.set(cacheKey, preparedResponse.response);
+        try {
+          signal?.throwIfAborted();
+          await awaitCache(cache.set(cacheKey, preparedResponse.response));
+        } catch (error) {
+          if (!signal?.aborted) {
+            throw error;
+          }
+        }
       }
       return preparedResponse.response;
     })().finally(() => {
@@ -939,7 +962,18 @@ export async function fetchWithCache<T = unknown>(
     inflightFetchResponses.set(inflightCacheKey, inflightResponse);
   }
 
-  const response = await inflightResponse;
+  let response: SerializedFetchResponse;
+  try {
+    response = await awaitCache(inflightResponse);
+  } catch (error) {
+    if (coalesced || !signal?.aborted || !responsePrepared) {
+      throw error;
+    }
+    response = await inflightResponse;
+  }
+  if (coalesced) {
+    signal?.throwIfAborted();
+  }
   const result = deserializeFetchResponse<T>(response, false, cache, cacheKey);
   return coalesced ? { ...result, coalesced: true } : result;
 }

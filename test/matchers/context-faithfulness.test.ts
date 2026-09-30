@@ -167,6 +167,27 @@ describe('matchesContextFaithfulness', () => {
     });
   });
 
+  it('retains statement-extraction usage when the verdict call aborts', async () => {
+    const callApi = vi
+      .spyOn(DefaultGradingProvider, 'callApi')
+      .mockReset()
+      .mockResolvedValueOnce({
+        output: 'Statement from answer.',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      })
+      .mockRejectedValueOnce(new DOMException('verdict cancelled', 'AbortError'));
+
+    await expect(
+      matchesContextFaithfulness('Question', 'Answer', 'Context', 0.5),
+    ).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'verdict cancelled',
+      tokensUsed: { total: 10, prompt: 5, completion: 5 },
+    });
+    expect(callApi).toHaveBeenCalledTimes(2);
+  });
+
   it('should keep reserved faithfulness vars ahead of user vars', async () => {
     const mockCallApi = vi
       .fn()

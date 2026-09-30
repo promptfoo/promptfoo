@@ -3,6 +3,7 @@ import dedent from 'dedent';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
+import { awaitWithAbort } from '../../util/abort';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
@@ -27,6 +28,7 @@ import type {
   ApiEmbeddingProvider,
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../../types/providers';
@@ -3034,7 +3036,12 @@ export class AwsBedrockEmbeddingProvider
     throw new Error('callApi is not implemented for embedding provider');
   }
 
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
+    options?.abortSignal?.throwIfAborted();
     const params = this.modelName.includes('cohere.embed')
       ? {
           texts: [text],
@@ -3047,13 +3054,17 @@ export class AwsBedrockEmbeddingProvider
     logger.debug('Calling AWS Bedrock API for embeddings', { params });
     let response;
     try {
-      const bedrockInstance = await this.getBedrockInstance();
-      response = await bedrockInstance.invokeModel({
-        modelId: this.modelName,
-        accept: 'application/json',
-        contentType: 'application/json',
-        body: JSON.stringify(params),
-      });
+      const bedrockInstance = await awaitWithAbort(this.getBedrockInstance(), options?.abortSignal);
+      options?.abortSignal?.throwIfAborted();
+      response = await bedrockInstance.invokeModel(
+        {
+          modelId: this.modelName,
+          accept: 'application/json',
+          contentType: 'application/json',
+          body: JSON.stringify(params),
+        },
+        options?.abortSignal ? { abortSignal: options.abortSignal } : undefined,
+      );
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,

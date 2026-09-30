@@ -224,6 +224,85 @@ describe('matchesAnswerRelevance', () => {
     expect(result.tokensUsed?.completionDetails).toBeDefined();
   });
 
+  it('retains completed usage when a later candidate embedding fails', async () => {
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi')
+      .mockResolvedValueOnce({
+        embedding: [1, 0, 0],
+        tokenUsage: { total: 5, prompt: 2, completion: 3 },
+      })
+      .mockResolvedValueOnce({
+        embedding: [1, 0, 0],
+        tokenUsage: { total: 5, prompt: 2, completion: 3 },
+      })
+      .mockRejectedValueOnce(new DOMException('cancelled later embedding', 'AbortError'));
+
+    const result = await matchesAnswerRelevance('Input text', 'Sample output', 0.5);
+
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'cancelled later embedding',
+      tokensUsed: { total: 40, prompt: 19, completion: 21 },
+    });
+  });
+
+  it('retains generated-question usage when the input embedding aborts', async () => {
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockRejectedValueOnce(
+      new DOMException('cancelled input embedding', 'AbortError'),
+    );
+
+    const result = await matchesAnswerRelevance('Input text', 'Sample output', 0.5);
+
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'cancelled input embedding',
+      tokensUsed: { total: 30, prompt: 15, completion: 15 },
+    });
+  });
+
+  it.each([1, 2])(
+    'retains usage from %i generated questions when the next text call aborts',
+    async (completedCalls) => {
+      let calls = 0;
+      const callApi = vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(async () => {
+        if (calls++ === completedCalls) {
+          throw new DOMException('question generation cancelled', 'AbortError');
+        }
+        return {
+          output: 'Generated question',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        };
+      });
+
+      await expect(
+        matchesAnswerRelevance('Input text', 'Sample output', 0.5),
+      ).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'question generation cancelled',
+        tokensUsed: {
+          total: completedCalls * 10,
+          prompt: completedCalls * 5,
+          completion: completedCalls * 5,
+        },
+      });
+      expect(callApi).toHaveBeenCalledTimes(completedCalls + 1);
+      expect(DefaultEmbeddingProvider.callEmbeddingApi).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rethrows ordinary candidate embedding failures', async () => {
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi')
+      .mockResolvedValueOnce({
+        embedding: [1, 0, 0],
+        tokenUsage: { total: 5, prompt: 2, completion: 3 },
+      })
+      .mockRejectedValueOnce(new Error('candidate transport failed'));
+
+    await expect(matchesAnswerRelevance('Input text', 'Sample output', 0.5)).rejects.toThrow(
+      'candidate transport failed',
+    );
+  });
+
   it('should return metadata with generated questions and similarities', async () => {
     const input = 'What is the capital of France?';
     const output = 'The capital of France is Paris.';

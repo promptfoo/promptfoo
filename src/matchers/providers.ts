@@ -9,6 +9,7 @@ import {
   getProviderCallTracingContext,
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
+import { isAbortError } from '../util/fetch/errors';
 import invariant from '../util/invariant';
 
 import type {
@@ -46,13 +47,19 @@ export function getGradingProviderCallOptions(): CallApiOptionsParams | undefine
   return abortSignal ? { abortSignal } : undefined;
 }
 
+/** Recognize custom abort reasons without hiding unrelated provider failures. */
+export function isGradingCancellation(error: unknown): boolean {
+  const signal = getProviderCallExecutionContext()?.abortSignal;
+  return isAbortError(error) || (signal?.aborted === true && error === signal.reason);
+}
+
 /**
  * Apply tracing, rate limits, and grouped scheduling to every grading-provider modality.
  */
 export function callGradingProvider<T extends ProviderResponse>(
   provider: ApiProvider,
   label: string,
-  invoke: (context: CallApiContextParams | undefined) => Promise<T>,
+  invoke: (context: CallApiContextParams | undefined, options?: CallApiOptionsParams) => Promise<T>,
   options: {
     callContext?: CallApiContextParams;
     operationName?: 'embeddings';
@@ -61,28 +68,54 @@ export function callGradingProvider<T extends ProviderResponse>(
   const { callContext, operationName } = options;
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
+  const callOptions = executionContext?.abortSignal
+    ? { abortSignal: executionContext.abortSignal }
+    : undefined;
+  const invokeWithOptions = (context: CallApiContextParams | undefined): Promise<T> => {
+    callOptions?.abortSignal?.throwIfAborted();
+    return invoke(context, callOptions);
+  };
   const callProvider = (): Promise<T> =>
     tracingContext
       ? (tracingContext.withProviderSpan(
           { provider, callContext, operationName, role: 'grader', promptLabel: label },
-          invoke,
+          invokeWithOptions,
         ) as Promise<T>)
-      : invoke(callContext);
+      : invokeWithOptions(callContext);
 
-  const executeCall = () => {
-    if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
-      return executionContext.rateLimitRegistry.execute(
-        provider,
-        callProvider,
-        createProviderRateLimitOptions(),
-      );
+  const executeCall = async () => {
+    try {
+      if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
+        return await executionContext.rateLimitRegistry.execute(
+          provider,
+          callProvider,
+          createProviderRateLimitOptions(callOptions?.abortSignal),
+        );
+      }
+
+      return await callProvider();
+    } catch (error) {
+      // The grouped queue can stop waiting before an unrelated provider failure arrives.
+      if (
+        executionContext?.providerCallQueue &&
+        callOptions?.abortSignal?.aborted &&
+        !isGradingCancellation(error)
+      ) {
+        logger.error('Assertion grading failed after cancellation', {
+          provider: provider.id(),
+          error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+        });
+      }
+      throw error;
     }
-
-    return callProvider();
   };
 
   if (executionContext?.providerCallQueue) {
-    return executionContext.providerCallQueue.enqueue(provider.id(), executeCall);
+    return executionContext.providerCallQueue.enqueue(
+      provider.id(),
+      executeCall,
+      callOptions?.abortSignal,
+    );
   }
 
   return executeCall();

@@ -3,7 +3,13 @@ import { getEnvFloat, getEnvString } from '../envars';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderEmbeddingResponse,
+  ProviderResponse,
+} from '../types/index';
 
 function parseEnvFloat(value: string | undefined): number | undefined {
   if (value === undefined) {
@@ -99,7 +105,12 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
 }
 
 export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
+    options?.abortSignal?.throwIfAborted();
     const body = {
       input: text,
       model: this.modelName,
@@ -110,6 +121,7 @@ export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
         `${this.apiBaseUrl}/embeddings`,
         {
           method: 'POST',
+          signal: options?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
           },

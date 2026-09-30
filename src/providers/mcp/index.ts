@@ -1,5 +1,6 @@
 import { type McpConfigParsed, McpConfigSchema } from '../../contracts/providerConfig/mcp';
 import logger from '../../logger';
+import { awaitWithAbort } from '../../util/abort';
 import { loadTransformModule } from '../transformUtils';
 import { McpClientSession } from './session';
 import { createTransformResponse, type MCPTransformResponseContext } from './transforms';
@@ -59,8 +60,8 @@ export class MCPProvider implements ApiProvider {
     return `[MCP Provider]`;
   }
 
-  private async initialize(): Promise<void> {
-    const client = await this.mcpSession.initialize();
+  private async initialize(signal?: AbortSignal): Promise<void> {
+    const client = await this.mcpSession.initialize(signal);
     const changed = this.mcpClient !== client;
     this.mcpClient = client;
 
@@ -76,11 +77,11 @@ export class MCPProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _options?: CallApiOptionsParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     try {
       // Ensure initialization is complete
-      await this.initialize();
+      await this.initialize(options?.abortSignal);
 
       // Parse the prompt as JSON to extract tool call information
       let toolCallData: any;
@@ -134,7 +135,7 @@ export class MCPProvider implements ApiProvider {
       });
 
       // Call the MCP tool
-      const result = await this.mcpClient!.callTool(toolName, finalArgs);
+      const result = await this.mcpClient!.callTool(toolName, finalArgs, options?.abortSignal);
 
       if (result.error) {
         return {
@@ -143,11 +144,23 @@ export class MCPProvider implements ApiProvider {
         };
       }
 
-      return this.transformToolResult(result, {
+      const transformContext = {
         toolName,
         toolArgs: finalArgs,
         originalPayload: toolCallData,
-      });
+      };
+      try {
+        return await this.transformToolResult(result, transformContext, options?.abortSignal);
+      } catch (error) {
+        if (!options?.abortSignal?.aborted) {
+          throw error;
+        }
+        return {
+          error: 'MCP Provider error: ' + (error instanceof Error ? error.message : String(error)),
+          raw: result.raw ?? result,
+          metadata: transformContext,
+        };
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('MCP Provider error', { error: errorMessage });
@@ -203,11 +216,13 @@ export class MCPProvider implements ApiProvider {
   private async transformToolResult(
     result: Awaited<ReturnType<MCPClient['callTool']>>,
     context: MCPTransformResponseContext,
+    signal?: AbortSignal,
   ): Promise<ProviderResponse> {
-    const transformedResponse = await (await this.transformResponse)(
-      result.raw ?? result,
-      result.content,
-      context,
+    const transform = await awaitWithAbort(this.transformResponse, signal);
+    signal?.throwIfAborted();
+    const transformedResponse = await awaitWithAbort(
+      transform(result.raw ?? result, result.content, context),
+      signal,
     );
 
     return {

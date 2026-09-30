@@ -1,5 +1,6 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { awaitWithAbort } from '../../util/abort';
 import { resolveProviderApiKey } from '../credentials';
 import { throwConfigurationError } from './util';
 import type { TokenCredential } from '@azure/identity';
@@ -85,15 +86,17 @@ export class AzureGenericProvider implements ApiProvider {
     return this.authenticationPromise;
   }
 
-  async ensureInitialized() {
+  async ensureInitialized(signal?: AbortSignal) {
+    signal?.throwIfAborted();
     if (this.authInitializationPromise != null) {
-      await this.authInitializationPromise;
+      await awaitWithAbort(this.authInitializationPromise, signal);
     }
     // Retry authentication if its eager initialization failed.
     if (!this.authHeaders) {
-      await this.initialize();
+      await awaitWithAbort(this.initialize(), signal);
     }
-    await this.refreshAuthTokenIfNeeded();
+    await awaitWithAbort(this.refreshAuthTokenIfNeeded(), signal);
+    signal?.throwIfAborted();
   }
 
   /**

@@ -24,8 +24,10 @@ export async function matchesClassification(
     'classification check',
   )) as ApiClassificationProvider;
 
-  const resp = await callGradingProvider(finalProvider, 'classification', () =>
-    finalProvider.callClassificationApi(output),
+  const resp = await callGradingProvider(finalProvider, 'classification', (context, options) =>
+    options || context
+      ? finalProvider.callClassificationApi(output, context, options)
+      : finalProvider.callClassificationApi(output),
   );
 
   if (!resp.classification) {

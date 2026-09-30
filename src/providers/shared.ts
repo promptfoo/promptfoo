@@ -15,6 +15,12 @@ export function getRequestTimeoutMs(): number {
   return getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
 }
 
+/** Preserve the transport deadline while also honoring caller cancellation. */
+export function getRequestSignal(abortSignal?: AbortSignal): AbortSignal {
+  const timeoutSignal = AbortSignal.timeout(getRequestTimeoutMs());
+  return abortSignal ? AbortSignal.any([abortSignal, timeoutSignal]) : timeoutSignal;
+}
+
 /** Read a simple eval variable without evaluating template expressions. */
 export function resolveDirectTestVariable(value: unknown, vars?: Record<string, unknown>): unknown {
   if (typeof value !== 'string' || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {

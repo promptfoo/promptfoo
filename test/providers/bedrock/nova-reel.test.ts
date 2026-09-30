@@ -107,6 +107,23 @@ vi.mock('../../../src/util/time', () => ({
 }));
 
 describe('NovaReelVideoProvider', () => {
+  it('cancels a pending credential lookup before starting a video job', async () => {
+    const provider = new NovaReelVideoProvider('amazon.nova-reel-v1:1', {
+      config: { s3OutputUri: 's3://bucket/prefix' } as NovaReelVideoOptions,
+    });
+    const credentials = vi
+      .spyOn(provider, 'getCredentials')
+      .mockImplementation(() => new Promise(() => {}));
+    const controller = new AbortController();
+    const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });
+    await vi.waitFor(() => expect(credentials).toHaveBeenCalledOnce());
+    controller.abort(new Error('cancelled credentials'));
+    await expect(call).resolves.toMatchObject({
+      error: expect.stringContaining('cancelled credentials'),
+    });
+    expect(mockBedrockSend).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockBedrockSend.mockReset();
@@ -243,6 +260,99 @@ describe('NovaReelVideoProvider', () => {
   });
 
   describe('callApi - success flow', () => {
+    it('retains the accepted job when polling is cancelled', async () => {
+      const controller = new AbortController();
+      let notifyStarted!: () => void;
+      const polling = new Promise<void>((resolve) => {
+        notifyStarted = resolve;
+      });
+      mockBedrockSend.mockReset();
+      mockBedrockSend.mockResolvedValueOnce({ invocationArn: 'accepted-job' });
+      mockBedrockSend.mockImplementationOnce((_command, options) => {
+        notifyStarted();
+        return new Promise((_resolve, reject) => {
+          options.abortSignal.addEventListener('abort', () => reject(options.abortSignal.reason), {
+            once: true,
+          });
+        });
+      });
+      const provider = new NovaReelVideoProvider('amazon.nova-reel-v1:1', {
+        config: { s3OutputUri: 's3://bucket/prefix' },
+      });
+      const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });
+      await polling;
+      controller.abort(new Error('cancelled polling'));
+      await expect(call).resolves.toMatchObject({
+        error: expect.stringContaining('cancelled polling'),
+        metadata: { invocationArn: 'accepted-job', s3OutputUri: 's3://bucket/prefix' },
+      });
+      expect(mockS3Send).not.toHaveBeenCalled();
+    });
+
+    it('stops waiting for an S3 response body after cancellation', async () => {
+      const controller = new AbortController();
+      let started!: () => void;
+      const reading = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      mockBedrockSend.mockResolvedValueOnce({ invocationArn: 'job-1' }).mockResolvedValueOnce({
+        invocationArn: 'job-1',
+        status: 'Completed',
+        outputDataConfig: { s3OutputDataConfig: { s3Uri: 's3://bucket/prefix' } },
+      });
+      mockS3Send.mockResolvedValueOnce({
+        Body: {
+          transformToByteArray: () => {
+            started();
+            return new Promise(() => {});
+          },
+        },
+      });
+      const provider = new NovaReelVideoProvider('amazon.nova-reel-v1:1', {
+        config: { s3OutputUri: 's3://bucket/prefix' },
+      });
+      const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });
+      await reading;
+      controller.abort(new Error('cancelled S3 body'));
+      await expect(call).resolves.toMatchObject({
+        error: expect.stringContaining('cancelled S3 body'),
+        metadata: { invocationArn: 'job-1', s3OutputUri: 's3://bucket/prefix' },
+      });
+      const { storeBlob } = await import('../../../src/blobs');
+      expect(storeBlob).not.toHaveBeenCalled();
+    });
+
+    it('stops waiting for a blob write after cancellation', async () => {
+      const controller = new AbortController();
+      const { storeBlob } = await import('../../../src/blobs');
+      let started!: () => void;
+      const writing = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      vi.mocked(storeBlob).mockImplementationOnce(() => {
+        started();
+        return new Promise(() => {});
+      });
+      mockBedrockSend.mockResolvedValueOnce({ invocationArn: 'job-1' }).mockResolvedValueOnce({
+        invocationArn: 'job-1',
+        status: 'Completed',
+        outputDataConfig: { s3OutputDataConfig: { s3Uri: 's3://bucket/prefix' } },
+      });
+      mockS3Send.mockResolvedValueOnce({
+        Body: { transformToByteArray: async () => new Uint8Array([1]) },
+      });
+      const provider = new NovaReelVideoProvider('amazon.nova-reel-v1:1', {
+        config: { s3OutputUri: 's3://bucket/prefix' },
+      });
+      const call = provider.callApi('A video', undefined, { abortSignal: controller.signal });
+      await writing;
+      controller.abort(new Error('cancelled blob write'));
+      await expect(call).resolves.toMatchObject({
+        error: expect.stringContaining('cancelled blob write'),
+        metadata: { invocationArn: 'job-1', s3OutputUri: 's3://bucket/prefix' },
+      });
+    });
+
     it('should complete video generation successfully', async () => {
       const mockVideoData = Buffer.from('mock video content');
 

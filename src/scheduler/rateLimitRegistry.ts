@@ -52,6 +52,7 @@ export class RateLimitRegistry extends EventEmitter {
     callFn: () => Promise<T>,
     options?: RateLimitExecuteOptions<T>,
   ): Promise<T> {
+    options?.abortSignal?.throwIfAborted();
     const providerMaxRetries = getProviderMaxRetries(provider);
 
     // Even when the scheduler is disabled, propagate the retry context so
@@ -75,6 +76,7 @@ export class RateLimitRegistry extends EventEmitter {
 
     const run = () =>
       state.executeWithRetry(requestId, callFn, {
+        ...(options?.abortSignal && { abortSignal: options.abortSignal }),
         getHeaders: options?.getHeaders,
         isRateLimited: options?.isRateLimited,
         getRetryAfter: options?.getRetryAfter,

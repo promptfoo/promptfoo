@@ -5,9 +5,12 @@ import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import * as remoteGeneration from '../../src/redteam/remoteGeneration';
 import * as remoteGrading from '../../src/remoteGrading';
-import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
+import {
+  withProviderCallExecutionContext,
+  withProviderCallTracingContext,
+} from '../../src/scheduler/providerCallExecutionContext';
 import { createMockProvider } from '../factories/provider';
-import { mockProcessEnv } from '../util/utils';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 
 import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
@@ -279,6 +282,116 @@ describe('matchesSimilarity', () => {
     await expect(async () => {
       await matchesSimilarity(expected, output, threshold, false, grading);
     }).rejects.toThrow('API call failed');
+  });
+
+  it('retains fulfilled embedding usage when the other embedding aborts', async () => {
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi')
+      .mockResolvedValueOnce({
+        embedding: [1, 0, 0],
+        tokenUsage: { total: 5, prompt: 2, completion: 3 },
+      })
+      .mockRejectedValueOnce(new DOMException('cancelled output embedding', 'AbortError'));
+
+    await expect(matchesSimilarity('Expected output', 'Sample output', 0.5)).resolves.toMatchObject(
+      {
+        pass: false,
+        reason: 'cancelled output embedding',
+        tokensUsed: { total: 5, prompt: 2, completion: 3 },
+      },
+    );
+  });
+
+  it('stops waiting for a legacy embedding while retaining completed sibling usage', async () => {
+    const controller = new AbortController();
+    const started = createDeferred<void>();
+    const finish = createDeferred<{ embedding: number[]; tokenUsage: { total: number } }>();
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi')
+      .mockResolvedValueOnce({ embedding: [1, 0, 0], tokenUsage: { total: 5, prompt: 5 } })
+      .mockImplementationOnce(() => {
+        started.resolve();
+        return finish.promise;
+      });
+    const pending = withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
+      matchesSimilarity('Expected output', 'Sample output', 0.5),
+    );
+    let result: Awaited<typeof pending> | undefined;
+    void pending.then((value) => {
+      result = value;
+    });
+    try {
+      await started.promise;
+      controller.abort(new Error('stop legacy embedding'));
+      await vi.waitFor(() => {
+        expect(result).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'stop legacy embedding',
+          tokensUsed: { total: 5, prompt: 5 },
+        });
+      });
+    } finally {
+      finish.resolve({ embedding: [1, 0, 0], tokenUsage: { total: 100 } });
+      await pending;
+    }
+    expect(result?.tokensUsed?.total).toBe(5);
+  });
+
+  it('does not hide an embedding failure behind a concurrent abort', async () => {
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi')
+      .mockRejectedValueOnce(new DOMException('cancelled expected embedding', 'AbortError'))
+      .mockRejectedValueOnce(new Error('output embedding failed'));
+
+    await expect(matchesSimilarity('Expected output', 'Sample output', 0.5)).rejects.toThrow(
+      'output embedding failed',
+    );
+  });
+
+  it.each([new Error('custom cancellation'), 'custom cancellation'])(
+    'retains fulfilled usage when an embedding rejects with the custom abort reason %s',
+    async (reason) => {
+      const controller = new AbortController();
+      const callEmbeddingApi = vi
+        .spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi')
+        .mockResolvedValueOnce({
+          embedding: [1, 0, 0],
+          tokenUsage: { total: 5, prompt: 2, completion: 3 },
+        })
+        .mockImplementationOnce(async () => {
+          controller.abort(reason);
+          throw reason;
+        });
+
+      await expect(
+        withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
+          matchesSimilarity('Expected output', 'Sample output', 0.5),
+        ),
+      ).resolves.toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'custom cancellation',
+        tokensUsed: { total: 5, prompt: 2, completion: 3 },
+      });
+      expect(callEmbeddingApi).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it('preserves an unrelated error with the same message as a concurrent custom abort', async () => {
+    const controller = new AbortController();
+    const reason = new Error('embedding stopped');
+    const providerError = new Error('embedding stopped');
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi')
+      .mockImplementationOnce(async () => {
+        await Promise.resolve();
+        controller.abort(reason);
+        throw reason;
+      })
+      .mockRejectedValueOnce(providerError);
+
+    await expect(
+      withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
+        matchesSimilarity('Expected output', 'Sample output', 0.5),
+      ),
+    ).rejects.toBe(providerError);
   });
 
   it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {

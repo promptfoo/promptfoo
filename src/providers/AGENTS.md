@@ -147,3 +147,11 @@ ls examples/myprovider/promptfooconfig.yaml
 ```
 
 **Reference existing providers** - 50+ implementations to learn from.
+
+## Request cancellation
+
+Scheduler slots, grouped grading, and retry waits receive the request signal. Cancelling queued work leaves active calls' slots unchanged. A callback that ignores the signal can continue running after its caller stops waiting.
+
+All operation interfaces accept optional request options with `abortSignal`. Implementations should check it before dispatch and pass it to their fetch or SDK transport, retry waits, and polling. Authentication and callback waits can use `awaitWithAbort` from `src/util/abort.ts`; this stops waiting but cannot undo a callback already started or cancel a vendor job already accepted.
+
+The optional interface preserves compatibility: third-party providers and legacy implementations can ignore it. Do not claim universal transport cancellation from the method signature alone. Native cancellation is covered for the migrated OpenAI, Anthropic Messages, MCP tools, Azure chat/embedding/moderation, Google, Ollama, Hugging Face, Cohere/Voyage/LocalAI embedding, and Bedrock embedding/video paths. Other implementations require their own transport-level tests before claiming support.

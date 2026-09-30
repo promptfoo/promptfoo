@@ -466,6 +466,42 @@ describe('OpenAiModerationProvider', () => {
       );
     });
 
+    it.each(['get', 'set'] as const)('cancels a stalled manual cache %s', async (method) => {
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      const controller = new AbortController();
+      let started!: () => void;
+      const waiting = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const stalled = vi.fn(() => {
+        started();
+        return new Promise(() => {});
+      });
+      vi.mocked(getCache).mockReturnValue({
+        get: method === 'get' ? stalled : vi.fn().mockResolvedValue(null),
+        set: method === 'set' ? stalled : vi.fn().mockResolvedValue(undefined),
+      } as any);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { results: [{ flagged: false, categories: {}, category_scores: {} }] },
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+      const pending = createProvider().callModerationApi('user', 'assistant', undefined, {
+        abortSignal: controller.signal,
+      });
+      await waiting;
+      controller.abort(new Error(`cancelled moderation cache ${method}`));
+      if (method === 'get') {
+        await expect(pending).rejects.toThrow('cancelled moderation cache get');
+      } else {
+        await expect(pending).resolves.toMatchObject({
+          flags: [],
+          error: expect.stringContaining('cancelled moderation cache set'),
+        });
+      }
+    });
+
     it('should build cache keys from normalized moderation inputs', async () => {
       vi.mocked(isCacheEnabled).mockImplementation(function () {
         return true;

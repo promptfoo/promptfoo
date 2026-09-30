@@ -25,6 +25,30 @@ describe('ResponsesProcessor', () => {
   });
 
   describe('processResponseOutput', () => {
+    it.each([
+      { type: 'function_call', name: 'wait', arguments: '{"id":1}' },
+      {
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'function_call', name: 'wait', arguments: '{"id":1}' }],
+      },
+    ])('passes cancellation to callback processing for %j', async (item) => {
+      const controller = new AbortController();
+      mockFunctionCallbackHandler.processCalls.mockResolvedValue('done');
+      await processor.processResponseOutput(
+        { output: [item] },
+        { functionToolCallbacks: { wait: vi.fn() } },
+        false,
+        { abortSignal: controller.signal },
+      );
+      expect(mockFunctionCallbackHandler.processCalls).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        undefined,
+        { abortSignal: controller.signal },
+      );
+    });
+
     it('should process simple text output', async () => {
       const mockData = {
         id: 'resp_test123',
@@ -115,7 +139,36 @@ describe('ResponsesProcessor', () => {
       expect(mockFunctionCallbackHandler.processCalls).toHaveBeenCalledWith(
         mockData.output[0],
         undefined,
+        undefined,
+        { abortSignal: undefined },
       );
+    });
+
+    it('retains earlier callback output when a later item is cancelled', async () => {
+      const controller = new AbortController();
+      mockFunctionCallbackHandler.processCalls
+        .mockResolvedValueOnce('first result')
+        .mockImplementationOnce(() => {
+          controller.abort(new Error('cancelled later callback'));
+          throw controller.signal.reason;
+        });
+
+      const result = await processor.processResponseOutput(
+        {
+          output: [
+            { type: 'function_call', name: 'first', arguments: '{"id":1}' },
+            { type: 'function_call', name: 'second', arguments: '{"id":2}' },
+          ],
+        },
+        {},
+        false,
+        { abortSignal: controller.signal },
+      );
+
+      expect(result).toMatchObject({
+        output: 'first result',
+        error: 'cancelled later callback',
+      });
     });
 
     it('should handle empty function arguments correctly', async () => {
