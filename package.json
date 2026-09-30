@@ -265,7 +265,10 @@
     "node-sql-parser": "^5.4.0",
     "oxc-parser": "^0.150.0",
     "pdf-parse": "^2.4.5",
+    "playwright": "^1.63.0",
+    "playwright-extra": "^4.3.6",
     "prettier": "^3.8.1",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "read-excel-file": "^9.3.9",
     "shx": "^0.4.0",
     "source-map-support": "^0.5.21",
@@ -291,7 +294,6 @@
     "@azure/storage-blob": "^12.31.0",
     "@fal-ai/client": "~1.10.1",
     "@googleapis/sheets": "^18.0.0",
-    "@huggingface/transformers": "^4.0.0",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.11.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
@@ -299,7 +301,6 @@
     "@openai/codex-sdk": "^0.156.1",
     "@openai/codex-security": "^0.1.31",
     "@opencode-ai/sdk": "^1.18.31",
-    "@playwright/browser-chromium": "^1.63.0",
     "@slack/web-api": "^8.1.1",
     "@smithy/node-http-handler": "^4.4.14",
     "google-auth-library": "^11.1.0",
@@ -310,9 +311,6 @@
     "node-sql-parser": "^5.4.0",
     "pdf-parse": "^2.4.5",
     "pem": "~1.14.8",
-    "playwright": "^1.63.0",
-    "playwright-extra": "^4.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "read-excel-file": "^9.3.9",
     "sharp": "^0.35.4"
   },
@@ -407,7 +405,6 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "@huggingface/transformers",
-      "@playwright/browser-chromium",
       "core-js",
       "core-js-pure",
       "esbuild",
@@ -416,5 +413,25 @@
     ],
     "ignoredBuiltDependencies": []
   },
-  "homepage": "https://promptfoo.dev"
+  "homepage": "https://promptfoo.dev",
+  "peerDependencies": {
+    "@huggingface/transformers": "*",
+    "playwright": "*",
+    "playwright-extra": "*",
+    "puppeteer-extra-plugin-stealth": "*"
+  },
+  "peerDependenciesMeta": {
+    "@huggingface/transformers": {
+      "optional": true
+    },
+    "playwright": {
+      "optional": true
+    },
+    "playwright-extra": {
+      "optional": true
+    },
+    "puppeteer-extra-plugin-stealth": {
+      "optional": true
+    }
+  }
 }
