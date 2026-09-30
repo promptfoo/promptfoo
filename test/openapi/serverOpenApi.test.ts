@@ -97,6 +97,11 @@ describe('server OpenAPI generation', () => {
       expect(validate(valid)).toBe(true);
       expect(validate(valid.toUpperCase())).toBe(true);
       expect(validate(isFilename ? 'file.png' : 'not-a-hash')).toBe(false);
+      if (isFilename) {
+        expect(validate('a'.repeat(64))).toBe(true);
+        expect(validate('A'.repeat(64))).toBe(true);
+        expect(validate('a'.repeat(63))).toBe(false);
+      }
     }
   });
 

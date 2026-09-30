@@ -27,6 +27,16 @@ const APPLICATION_JSON = 'application/json';
 const TEXT_CSV = 'text/csv';
 const SERVER_OPENAPI_VERSION = '3.1.0';
 
+// OpenAPI path parameters are independent fields; runtime media schemas also
+// enforce that blob uses a full hash while legacy types use short filenames.
+const OpenApiMediaParamsSchema = z.object({
+  type: z.enum(['audio', 'image', 'video', 'blob']),
+  filename: z
+    .string()
+    .regex(/^(?:[A-Fa-f0-9]{12}\.[A-Za-z0-9]+|[A-Fa-f0-9]{64})$/)
+    .describe('Full SHA256 for blob; 12-character hash plus extension for legacy media'),
+});
+
 const OpenApiLooseObjectSchema = z.record(z.string(), z.unknown());
 const OpenApiProvidersSchema = z.union([
   z.string(),
@@ -731,7 +741,7 @@ export function createServerOpenApiRegistry() {
     tags: ['Media'],
     summary: 'Get media file metadata',
     request: {
-      params: params('MediaInfoParams', MediaSchemas.Info.Params),
+      params: params('MediaInfoParams', OpenApiMediaParamsSchema),
     },
     responses: {
       200: jsonResponse('MediaInfoResponse', MediaSchemas.Info.Response),
@@ -748,7 +758,7 @@ export function createServerOpenApiRegistry() {
     tags: ['Media'],
     summary: 'Fetch media file bytes',
     request: {
-      params: params('MediaParams', MediaSchemas.Get.Params),
+      params: params('MediaParams', OpenApiMediaParamsSchema),
     },
     responses: {
       200: binaryResponse('Media bytes'),

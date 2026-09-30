@@ -3444,7 +3444,7 @@
           {
             "schema": {
               "type": "string",
-              "enum": ["audio", "image", "video"]
+              "enum": ["audio", "image", "video", "blob"]
             },
             "required": true,
             "name": "type",
@@ -3453,9 +3453,11 @@
           {
             "schema": {
               "type": "string",
-              "pattern": "^[A-Fa-f0-9]{12}\\.[A-Za-z0-9]+$"
+              "pattern": "^(?:[A-Fa-f0-9]{12}\\.[A-Za-z0-9]+|[A-Fa-f0-9]{64})$",
+              "description": "Full SHA256 for blob; 12-character hash plus extension for legacy media"
             },
             "required": true,
+            "description": "Full SHA256 for blob; 12-character hash plus extension for legacy media",
             "name": "filename",
             "in": "path"
           }
@@ -3581,7 +3583,7 @@
           {
             "schema": {
               "type": "string",
-              "enum": ["audio", "image", "video"]
+              "enum": ["audio", "image", "video", "blob"]
             },
             "required": true,
             "name": "type",
@@ -3590,9 +3592,11 @@
           {
             "schema": {
               "type": "string",
-              "pattern": "^[A-Fa-f0-9]{12}\\.[A-Za-z0-9]+$"
+              "pattern": "^(?:[A-Fa-f0-9]{12}\\.[A-Za-z0-9]+|[A-Fa-f0-9]{64})$",
+              "description": "Full SHA256 for blob; 12-character hash plus extension for legacy media"
             },
             "required": true,
+            "description": "Full SHA256 for blob; 12-character hash plus extension for legacy media",
             "name": "filename",
             "in": "path"
           }
