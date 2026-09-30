@@ -74,6 +74,8 @@ const App = ({ evalId: requestedEvalId, embedded, onActionsReady }: ReportProps)
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [selectedPromptIndex, setSelectedPromptIndex] = useState(0);
   const [isToolsDialogOpen, setIsToolsDialogOpen] = useState(false);
+  const [fullTools, setFullTools] = useState<Tool[] | null>(null);
+  const [toolsLoadError, setToolsLoadError] = useState<string | null>(null);
   const { recordEvent } = useTelemetry();
   const recordEventRef = useRef(recordEvent);
 
@@ -94,6 +96,38 @@ const App = ({ evalId: requestedEvalId, embedded, onActionsReady }: ReportProps)
     recordEventRef.current = recordEvent;
   }, [recordEvent]);
 
+  useEffect(() => {
+    setFullTools(null);
+    if (!isToolsDialogOpen) {
+      return;
+    }
+    const controller = new AbortController();
+    setToolsLoadError(null);
+    const loadTools = async () => {
+      try {
+        const response = await callApi(`/results/${encodeURIComponent(requestedEvalId)}/tools`, {
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`Failed to load tool definitions (${response.status})`);
+        }
+        const body = (await response.json()) as { data: Tool[] };
+        if (!controller.signal.aborted) {
+          setFullTools(body.data);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          console.error('[Report] Failed to load tool definitions', error);
+          setToolsLoadError('Tool definitions could not be loaded. Select Tools to retry.');
+          setIsToolsDialogOpen(false);
+        }
+      }
+    };
+    void loadTools();
+    return () => controller.abort();
+  }, [isToolsDialogOpen, requestedEvalId]);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: loadAttempt intentionally retriggers the request after an explicit retry.
   useEffect(() => {
     const controller = new AbortController();
@@ -103,6 +137,8 @@ const App = ({ evalId: requestedEvalId, embedded, onActionsReady }: ReportProps)
       setEvalData(null);
       setLoadError(null);
       setSelectedPromptIndex(0);
+      setIsToolsDialogOpen(false);
+      setToolsLoadError(null);
 
       try {
         const resp = await callApi(
@@ -643,6 +679,7 @@ const App = ({ evalId: requestedEvalId, embedded, onActionsReady }: ReportProps)
         </DropdownMenuItem>
       </>,
     );
+    return () => onActionsReady(null);
   }, [embedded, onActionsReady, evalData, evalId, isFiltersVisible]);
 
   usePageMeta({
@@ -930,13 +967,17 @@ const App = ({ evalId: requestedEvalId, embedded, onActionsReady }: ReportProps)
                     </Badge>
                   )}
                   {tools.length > 0 && (
-                    <Badge
+                    <Button
                       variant="secondary"
                       className="cursor-pointer"
                       onClick={() => setIsToolsDialogOpen(true)}
+                      disabled={isToolsDialogOpen && fullTools === null}
                     >
-                      <strong>Tools:</strong> {tools.length} available
-                    </Badge>
+                      <strong>Tools:</strong>{' '}
+                      {isToolsDialogOpen && fullTools === null
+                        ? 'Loading…'
+                        : `${tools.length} available`}
+                    </Button>
                   )}
                 </div>
               </Card>
@@ -1071,10 +1112,15 @@ const App = ({ evalId: requestedEvalId, embedded, onActionsReady }: ReportProps)
             config={evalData.config}
           />
         </div>
+        {toolsLoadError && (
+          <p role="alert" className="text-sm text-destructive">
+            {toolsLoadError}
+          </p>
+        )}
         <ToolsDialog
-          open={isToolsDialogOpen}
+          open={isToolsDialogOpen && fullTools !== null}
           onClose={() => setIsToolsDialogOpen(false)}
-          tools={tools}
+          tools={fullTools ?? []}
         />
       </div>
       {embedded && (

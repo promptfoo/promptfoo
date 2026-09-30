@@ -50,6 +50,7 @@ const ResultRowParamsSchema = ResultParamsSchema.extend({
 
 const ResultRowQuerySchema = z.object({
   resultId: z.string().min(1).optional(),
+  legacyResultIndex: z.coerce.number().int().nonnegative().optional(),
 });
 
 const ResultQuerySchema = z.object({
@@ -138,6 +139,10 @@ export const ServerSchemas = {
     Params: ResultParamsSchema,
     Query: ResultQuerySchema,
     Response: ResultResponseSchema,
+  },
+  ResultTools: {
+    Params: ResultParamsSchema,
+    Response: z.object({ data: UnknownArraySchema }),
   },
   ResultRow: {
     Params: ResultRowParamsSchema,

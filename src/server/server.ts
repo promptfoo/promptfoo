@@ -179,6 +179,24 @@ export function createApp() {
     },
   );
 
+  app.get('/api/results/:id/tools', async (req: Request, res: Response) => {
+    const paramsResult = ServerSchemas.ResultTools.Params.safeParse(req.params);
+    if (!paramsResult.success) {
+      replyValidationError(res, paramsResult.error);
+      return;
+    }
+    try {
+      const tools = await Eval.getReportTools(paramsResult.data.id);
+      if (!tools) {
+        res.status(404).json({ error: 'Result not found' });
+        return;
+      }
+      res.json(ServerSchemas.ResultTools.Response.parse({ data: tools }));
+    } catch (error) {
+      sendError(res, 500, 'Failed to load report tools', error);
+    }
+  });
+
   app.get('/api/results/:id/rows/:testIdx/:promptIdx', async (req: Request, res: Response) => {
     const paramsResult = ServerSchemas.ResultRow.Params.safeParse(req.params);
     if (!paramsResult.success) {
@@ -191,14 +209,20 @@ export function createApp() {
       return;
     }
     const { id, testIdx, promptIdx } = paramsResult.data;
-    const { resultId } = queryResult.data;
+    const { resultId, legacyResultIndex } = queryResult.data;
 
     try {
       if (!(await Eval.exists(id))) {
         res.status(404).json({ error: 'Result not found' });
         return;
       }
-      const result = await Eval.getResultByIdAndIndices(id, testIdx, promptIdx, resultId);
+      const result = await Eval.getResultByIdAndIndices(
+        id,
+        testIdx,
+        promptIdx,
+        resultId,
+        legacyResultIndex,
+      );
       if (!result) {
         res.status(404).json({ error: 'Result row not found' });
         return;

@@ -90,7 +90,7 @@ const OpenApiResultRowParamsSchema = z.object({
   promptIdx: z.number().int().nonnegative(),
 });
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 68;
+export const SERVER_OPENAPI_ROUTE_COUNT = 69;
 
 type OpenApiSchema = NonNullable<ZodMediaTypeObject['schema']>;
 type OpenApiResponse = ResponseConfig & { description: string };
@@ -259,6 +259,21 @@ export function createServerOpenApiRegistry() {
     responses: {
       200: jsonResponse('ListResultsResponse', ServerSchemas.ResultList.Response),
       400: validationError(),
+    },
+  });
+
+  register({
+    method: 'get',
+    path: '/api/results/{id}/tools',
+    operationId: 'getResultTools',
+    tags: ['Results'],
+    summary: 'Get saved tool definitions for an evaluation',
+    request: { params: params('ResultToolsParams', ServerSchemas.ResultTools.Params) },
+    responses: {
+      200: jsonResponse('ResultToolsResponse', ServerSchemas.ResultTools.Response),
+      400: validationError(),
+      404: notFound('Result not found'),
+      500: serverError(),
     },
   });
 

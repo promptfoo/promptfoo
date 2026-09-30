@@ -91,7 +91,15 @@ vi.mock('./FrameworkCompliance', () => ({
 }));
 vi.mock('./ReportDownloadButton', () => ({ default: () => null }));
 vi.mock('./ReportSettingsDialogButton', () => ({ default: () => null }));
-vi.mock('./ToolsDialog', () => ({ default: () => null }));
+vi.mock('./ToolsDialog', () => ({
+  default: ({ open, tools, onClose }: { open: boolean; tools: unknown[]; onClose: () => void }) =>
+    open ? (
+      <div data-testid="full-tools">
+        {JSON.stringify(tools)}
+        <button onClick={onClose}>Close tools</button>
+      </div>
+    ) : null,
+}));
 
 describe('Report filtering logic', () => {
   const createMockResult = (promptIdx: number, pluginId: string, pass: boolean): EvaluateResult =>
@@ -629,7 +637,80 @@ describe('App component target selection', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCallApi.mockReset();
     mockWindowLocation({ search: '?evalId=test-eval-id' });
+  });
+
+  it('clears embedded actions when switching reports and unmounting', async () => {
+    const evalData = createComponentMockEvalData(1, []);
+    mockCallApi.mockResolvedValueOnce({ ok: true, json: async () => ({ data: evalData }) });
+    const onActionsReady = vi.fn();
+    const wrap = (id: string) => (
+      <TooltipProvider>
+        <MemoryRouter>
+          <App evalId={id} embedded onActionsReady={onActionsReady} />
+        </MemoryRouter>
+      </TooltipProvider>
+    );
+    const { rerender, unmount } = render(wrap('old'));
+    await screen.findByTestId('overview-total');
+    expect(onActionsReady).not.toHaveBeenLastCalledWith(null);
+    mockCallApi.mockReturnValueOnce(new Promise(() => {}));
+    rerender(wrap('new'));
+    expect(onActionsReady).toHaveBeenLastCalledWith(null);
+    unmount();
+    expect(onActionsReady).toHaveBeenLastCalledWith(null);
+  });
+
+  it('loads complete tool schemas only when opened and reloads after closing', async () => {
+    const evalData = createComponentMockEvalData(1, []);
+    evalData.config.providers = [
+      { id: 'echo', config: { tools: [{ type: 'function', function: { name: 'example' } }] } },
+    ];
+    const fullTools = [
+      {
+        type: 'function',
+        function: {
+          name: 'example',
+          parameters: { type: 'object', properties: { value: { type: 'string' } } },
+        },
+      },
+    ];
+    mockCallApi.mockReset();
+    mockCallApi.mockResolvedValueOnce({ ok: true, json: async () => ({ data: evalData }) });
+    mockCallApi.mockResolvedValue({ ok: true, json: async () => ({ data: fullTools }) });
+    renderWithProviders(<App evalId="test-eval-id" />);
+    const button = await screen.findByText('Tools:');
+    expect(mockCallApi).toHaveBeenCalledTimes(1);
+    await userEvent.click(button);
+    expect(await screen.findByTestId('full-tools')).toHaveTextContent('parameters');
+    expect(mockCallApi).toHaveBeenLastCalledWith(
+      '/results/test-eval-id/tools',
+      expect.objectContaining({ cache: 'no-store', signal: expect.any(AbortSignal) }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Close tools' }));
+    expect(screen.queryByTestId('full-tools')).not.toBeInTheDocument();
+    await userEvent.click(button);
+    await screen.findByTestId('full-tools');
+    expect(mockCallApi).toHaveBeenCalledTimes(3);
+  });
+
+  it('shows a retryable error when saved tool definitions cannot be loaded', async () => {
+    const evalData = createComponentMockEvalData(1, []);
+    evalData.config.providers = [
+      { id: 'echo', config: { tools: [{ type: 'function', function: { name: 'example' } }] } },
+    ];
+    mockCallApi.mockReset();
+    mockCallApi.mockResolvedValueOnce({ ok: true, json: async () => ({ data: evalData }) });
+    mockCallApi.mockResolvedValueOnce({ ok: false, status: 503 });
+    renderWithProviders(<App evalId="test-eval-id" />);
+    const button = await screen.findByText('Tools:');
+    await userEvent.click(button);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Select Tools to retry');
+    mockCallApi.mockResolvedValueOnce({ ok: true, json: async () => ({ data: [] }) });
+    await userEvent.click(button);
+    await screen.findByTestId('full-tools');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('should handle evalData with empty prompts array and non-zero selectedPromptIndex gracefully', async () => {
