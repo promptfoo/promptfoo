@@ -167,6 +167,11 @@ describe('JavaScript/TypeScript Provider Smoke Tests', () => {
           name: 'smoke-skill',
           source: 'tool',
         },
+        {
+          name: 'errored-smoke-skill',
+          source: 'tool',
+          is_error: true,
+        },
       ]);
       expect(result.gradingResult.componentResults).toEqual(
         expect.arrayContaining([
@@ -181,6 +186,41 @@ describe('JavaScript/TypeScript Provider Smoke Tests', () => {
         ]),
       );
     });
+
+    it.each([
+      { number: '3.2.6', kind: 'errored', field: 'skillCalls', other: 'attemptedSkillCalls' },
+      { number: '3.2.7', kind: 'attempted', field: 'attemptedSkillCalls', other: 'skillCalls' },
+    ])(
+      '$number - not-skill-used rejects $kind local ESM skill metadata',
+      ({ kind, field, other }) => {
+        const configPath = path.join(CONFIGS_DIR, `not-skill-used-${kind}-provider-esm.yaml`);
+        const outputPath = path.join(OUTPUT_DIR, `not-skill-used-${kind}-provider-esm-output.json`);
+        const skillName = `${kind}-smoke-skill`;
+
+        const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+          cwd: CONFIGS_DIR,
+        });
+        expect(exitCode).toBe(100);
+
+        const parsed = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
+        const result = parsed.results.results[0];
+        const expectedCall = expect.objectContaining({ name: skillName });
+        expect(result.response.metadata[field]).toContainEqual(expectedCall);
+        expect(result.response.metadata[other]).not.toContainEqual(expectedCall);
+        expect(result.success).toBe(false);
+        expect(result.gradingResult.componentResults).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              pass: false,
+              reason: expect.stringContaining(
+                `Forbidden skill(s) were used or attempted: ${skillName}`,
+              ),
+              assertion: expect.objectContaining({ type: 'not-skill-used' }),
+            }),
+          ]),
+        );
+      },
+    );
   });
 
   describe('3.3 TypeScript Providers', () => {

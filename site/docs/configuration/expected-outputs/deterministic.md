@@ -52,7 +52,7 @@ These assertions can check LLM output or provider metadata directly. Configured 
 | [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
 | [tool-call-f1](#tool-call-f1)                                   | F1 score comparing actual vs expected tool calls                   |
-| [skill-used](#skill-used)                                       | Ensure normalized provider skill metadata contains expected skills |
+| [skill-used](#skill-used)                                       | Check expected or forbidden skills in normalized provider metadata |
 | [trajectory:tool-used](#trajectorytool-used)                    | Ensure traced tool usage contains expected tools                   |
 | [trajectory:tool-args-match](#trajectorytool-args-match)        | Ensure traced tool calls include expected argument payloads        |
 | [trajectory:tool-sequence](#trajectorytool-sequence)            | Ensure traced tool usage appears in the expected order             |
@@ -697,7 +697,7 @@ The `threshold` defaults to `1.0` (exact match required). Lower thresholds allow
 
 ### skill-used {#skill-used}
 
-The `skill-used` assertion checks normalized provider skill metadata rather than the model's final output. It works well for agent evals where the important question is "did the agent route through the right skill?". Errored skill tool attempts can still appear in provider metadata for diagnostics, but they do not satisfy `skill-used`.
+`skill-used` checks successful invocations in `metadata.skillCalls`. Errored calls and entries in `metadata.attemptedSkillCalls` do not satisfy it. `not-skill-used` checks both fields and fails when a forbidden skill was used or attempted, even if the call errored.
 
 Promptfoo currently populates `metadata.skillCalls` for:
 

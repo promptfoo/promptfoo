@@ -10,17 +10,25 @@ interface SkillCountValue {
 }
 
 function getSkillCalls(params: AssertionParams): SkillCallEntry[] {
-  const rawSkillCalls = params.providerResponse?.metadata?.skillCalls;
+  const metadata = params.providerResponse?.metadata;
+  const skillCalls = normalizeSkillCalls(metadata?.skillCalls);
+
+  if (params.inverse === true) {
+    return [...skillCalls, ...normalizeSkillCalls(metadata?.attemptedSkillCalls)];
+  }
+
+  // skill-used counts only confirmed successful invocations.
+  return skillCalls.filter((entry) => entry.is_error !== true);
+}
+
+function normalizeSkillCalls(rawSkillCalls: unknown): SkillCallEntry[] {
   if (!Array.isArray(rawSkillCalls)) {
     return [];
   }
 
   return rawSkillCalls.filter(
     (entry): entry is SkillCallEntry =>
-      Boolean(entry) &&
-      typeof entry === 'object' &&
-      typeof entry.name === 'string' &&
-      entry.is_error !== true,
+      Boolean(entry) && typeof entry === 'object' && typeof entry.name === 'string',
   );
 }
 
@@ -127,7 +135,7 @@ function handleListSkillAssertion(
   if (params.inverse) {
     reason = pass
       ? `Forbidden skill(s) were not used: ${expectedSkills.join(', ')}`
-      : `Forbidden skill(s) were used: ${matched.map((matcher) => matcher.name).join(', ')}. Actual skills: ${actualSummary}`;
+      : `Forbidden skill(s) were used or attempted: ${matched.map((matcher) => matcher.name).join(', ')}. Actual skills: ${actualSummary}`;
   } else if (pass) {
     reason = `Observed required skill(s): ${expectedSkills.join(', ')}. Actual skills: ${actualSummary}`;
   } else {
@@ -171,7 +179,7 @@ function handleCountSkillAssertion(
       score: pass ? 1 : 0,
       reason: pass
         ? `Forbidden skill "${matcherLabel}" was not used. Actual skills: ${actualSummary}`
-        : `Forbidden skill "${matcherLabel}" was used ${count} time(s). Matches: ${matchingSkillCalls.map(formatSkillCall).join(', ')}`,
+        : `Forbidden skill "${matcherLabel}" was used or attempted. Matches: ${[...new Set(matchingSkillCalls.map(formatSkillCall))].join(', ')}`,
       assertion: params.assertion,
     };
   }

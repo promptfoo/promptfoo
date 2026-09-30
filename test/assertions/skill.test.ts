@@ -131,7 +131,109 @@ describe('skill-used assertion', () => {
     });
 
     expect(result.pass).toBe(false);
-    expect(result.reason).toContain('Forbidden skill(s) were used: token-skill');
+    expect(result.reason).toContain('Forbidden skill(s) were used or attempted: token-skill');
+  });
+
+  it('flags a forbidden skill in not-skill-used assertions even when the invocation errored', async () => {
+    const result = await runAssertion({
+      assertion: {
+        type: 'not-skill-used',
+        value: 'forbidden-skill',
+      },
+      test: testCase,
+      providerResponse: {
+        output: 'Done',
+        metadata: {
+          skillCalls: [{ name: 'forbidden-skill', source: 'tool', is_error: true }],
+        },
+      },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Forbidden skill(s) were used or attempted: forbidden-skill');
+  });
+
+  it.each(['skillCalls', 'attemptedSkillCalls'])(
+    'flags an errored forbidden skill from %s in not-skill-used object assertions',
+    async (field) => {
+      const result = await runAssertion({
+        assertion: {
+          type: 'not-skill-used',
+          value: { name: 'forbidden-skill', max: 0 },
+        },
+        test: testCase,
+        providerResponse: {
+          output: 'Done',
+          metadata: {
+            [field]: [{ name: 'forbidden-skill', source: 'tool', is_error: true }],
+          },
+        },
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('Forbidden skill "forbidden-skill" was used');
+    },
+  );
+
+  it.each([{ value: 'forbidden-skill' }, { value: ['forbidden-skill'] }])(
+    'flags an attempted-only forbidden skill for $value',
+    async ({ value }) => {
+      const result = await runAssertion({
+        assertion: {
+          type: 'not-skill-used',
+          value,
+        },
+        test: testCase,
+        providerResponse: {
+          output: 'Done',
+          metadata: {
+            attemptedSkillCalls: [{ name: 'forbidden-skill', source: 'heuristic' }],
+          },
+        },
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('Forbidden skill(s) were used or attempted: forbidden-skill');
+    },
+  );
+
+  it('preserves confirmed skill calls when attempted skill metadata is also present', async () => {
+    const result = await runAssertion({
+      assertion: {
+        type: 'not-skill-used',
+        value: 'forbidden-skill',
+      },
+      test: testCase,
+      providerResponse: {
+        output: 'Done',
+        metadata: {
+          skillCalls: [{ name: 'forbidden-skill', source: 'tool' }],
+          attemptedSkillCalls: [{ name: 'other-skill', source: 'heuristic', is_error: true }],
+        },
+      },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Forbidden skill(s) were used or attempted: forbidden-skill');
+  });
+
+  it('does not count attempted-only skill metadata as satisfying skill-used assertions', async () => {
+    const result = await runAssertion({
+      assertion: {
+        type: 'skill-used',
+        value: 'attempted-skill',
+      },
+      test: testCase,
+      providerResponse: {
+        output: 'Done',
+        metadata: {
+          attemptedSkillCalls: [{ name: 'attempted-skill', source: 'heuristic' }],
+        },
+      },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Missing required skill(s): attempted-skill');
   });
 
   it('treats not-skill-used object assertions with no count bounds as forbidding any match', async () => {
@@ -143,7 +245,7 @@ describe('skill-used assertion', () => {
     });
 
     expect(result.pass).toBe(false);
-    expect(result.reason).toContain('Forbidden skill "token-*" was used 1 time(s)');
+    expect(result.reason).toContain('Forbidden skill "token-*" was used or attempted.');
   });
 
   it('fails not-skill-used object assertions with max: 0 when a matching skill is present', async () => {
@@ -156,7 +258,7 @@ describe('skill-used assertion', () => {
     });
 
     expect(result.pass).toBe(false);
-    expect(result.reason).toContain('Forbidden skill "token-*" was used 1 time(s)');
+    expect(result.reason).toContain('Forbidden skill "token-*" was used or attempted.');
   });
 
   it('passes not-skill-used object assertions with max: 0 when no matching skill is present', async () => {
