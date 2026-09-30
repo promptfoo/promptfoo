@@ -49,7 +49,7 @@ export interface FilterOptions {
   failingOnly?: string;
   /** Number of tests to take from the beginning */
   firstN?: number | string;
-  /** Key-value pair(s) (format: "key=value") to filter tests by metadata. Multiple values use AND logic. */
+  /** Metadata filters: comma-separated values use OR; separate filters use AND, even for the same key. */
   metadata?: string | string[];
   /** Regular expression pattern to filter tests by description */
   pattern?: string;
@@ -176,22 +176,19 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     for (const filter of metadataFilters) {
       const [key, ...valueParts] = filter.split('=');
       const value = valueParts.join('='); // Rejoin in case value contains '='
-      if (!key || value === undefined || value === '') {
+      if (!key || value === '') {
         throw new Error('--filter-metadata must be specified in key=value format');
       }
-      // Comma-separated values for one key combine with OR logic; repeated
-      // flags across different keys still combine with AND below.
+      // Values within each filter use OR; separate filters use AND below.
       const values = value.split(',');
-      if (values.some((v) => v === '')) {
-        throw new Error(
-          `--filter-metadata has an empty value in "${filter}" (trailing or doubled comma)`,
-        );
+      if (values.includes('')) {
+        throw new Error(`--filter-metadata has an empty value in "${filter}"`);
       }
       parsedFilters.push({ key, values });
     }
 
     logger.debug(
-      `Filtering for metadata conditions (AND across keys, OR within a key's values): ${parsedFilters.map((f) => `${f.key}=${f.values.join(',')}`).join(', ')}`,
+      `Filtering for metadata conditions (AND across filters, OR within each filter): ${metadataFilters.join('; ')}`,
     );
     logger.debug(`Before metadata filter: ${tests.length} tests`);
 
@@ -201,8 +198,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
         return false;
       }
 
-      // ALL keys must match (AND logic); a key matches when ANY of its
-      // comma-separated values matches (OR logic).
+      // Every filter must match, including separate filters for the same key.
       for (const { key, values } of parsedFilters) {
         const testValue = test.metadata[key];
         const matches = values.some((value) => {
