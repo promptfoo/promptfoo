@@ -42,23 +42,23 @@ tests:
 
 ## Configuration Options
 
-| Option                  | Type    | Default          | Description                                                          |
-| ----------------------- | ------- | ---------------- | -------------------------------------------------------------------- |
-| `instructions`          | string  | -                | Caller persona and goals. Supports `{{variables}}`.                  |
-| `maxTurns`              | number  | `10`             | Maximum completed individual speaker utterances before stopping.     |
-| `timeoutMs`             | number  | `120000`         | Conversation timeout, including connection setup (ms).               |
-| `targetProvider`        | string  | `openai`         | Target voice endpoint. Only `openai` is supported.                   |
-| `simulatedUserProvider` | string  | `openai`         | Caller voice endpoint. Only `openai` is supported.                   |
-| `targetModel`           | string  | Provider default | OpenAI Realtime model for the target.                                |
-| `targetVoice`           | string  | Provider default | Voice for the target voice endpoint.                                 |
-| `simulatedUserModel`    | string  | Provider default | OpenAI Realtime model for the caller.                                |
-| `simulatedUserVoice`    | string  | Provider default | Voice for the simulated caller endpoint.                             |
-| `targetSpeaksFirst`     | boolean | `true`           | Whether the target speaks first.                                     |
-| `audioFormat`           | string  | `pcm16`          | `pcm16`, `g711_ulaw`, or `g711_alaw`.                                |
-| `sampleRate`            | number  | `24000`          | PCM recording sample rate; G.711 recordings use 8 kHz.               |
-| `turnDetectionMode`     | string  | `server_vad`     | Turn detection mode: `server_vad`, `silence`, or `hybrid`.           |
-| `vadThreshold`          | number  | `0.02`           | Local voice activity threshold for `silence` and `hybrid` modes.     |
-| `recordConversation`    | boolean | `true`           | Include the stereo WAV recording and audio-track metadata in output. |
+| Option                  | Type    | Default          | Description                                                                        |
+| ----------------------- | ------- | ---------------- | ---------------------------------------------------------------------------------- |
+| `instructions`          | string  | -                | Caller persona and goals. Supports `{{variables}}`.                                |
+| `maxTurns`              | number  | `10`             | Maximum completed individual speaker utterances. Must be a positive integer.       |
+| `timeoutMs`             | number  | `120000`         | Conversation timeout, including connection setup (ms). Must be a positive integer. |
+| `targetProvider`        | string  | `openai`         | Target voice endpoint. Only `openai` is supported.                                 |
+| `simulatedUserProvider` | string  | `openai`         | Caller voice endpoint. Only `openai` is supported.                                 |
+| `targetModel`           | string  | Provider default | OpenAI Realtime model for the target.                                              |
+| `targetVoice`           | string  | `alloy`          | Voice for the target voice endpoint.                                               |
+| `simulatedUserModel`    | string  | Provider default | OpenAI Realtime model for the caller.                                              |
+| `simulatedUserVoice`    | string  | `echo`           | Voice for the simulated caller endpoint.                                           |
+| `targetSpeaksFirst`     | boolean | `true`           | Whether the target speaks first.                                                   |
+| `audioFormat`           | string  | `pcm16`          | `pcm16`, `g711_ulaw`, or `g711_alaw`.                                              |
+| `sampleRate`            | number  | `24000`          | PCM recording sample rate; G.711 recordings use 8 kHz.                             |
+| `turnDetectionMode`     | string  | `server_vad`     | Turn detection mode: `server_vad`, `silence`, or `hybrid`.                         |
+| `vadThreshold`          | number  | `0.02`           | Local voice activity threshold for `silence` and `hybrid` modes.                   |
+| `recordConversation`    | boolean | `true`           | Include the stereo WAV recording and audio-track metadata in output.               |
 
 The `instructions` field tells the simulated caller who they are and what they're trying to accomplish. Use Nunjucks templating to vary caller personas per test.
 

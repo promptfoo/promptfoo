@@ -1,3 +1,4 @@
+import { ProxyAgent } from 'proxy-agent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 
@@ -20,7 +21,10 @@ const { MockWebSocket, mockWsInstances } = vi.hoisted(() => {
     // Simple event emitter implementation
     private listeners: Map<string, Array<(...args: any[]) => void>> = new Map();
 
-    constructor(_url: string, _options?: object) {
+    constructor(
+      public url: string,
+      public options?: { agent?: ProxyAgent },
+    ) {
       instances.push(this);
     }
 
@@ -78,6 +82,21 @@ describe('OpenAIRealtimeConnection', () => {
     vi.resetAllMocks();
     mockWsInstances.length = 0;
     vi.stubEnv('OPENAI_API_KEY', 'test-api-key');
+    for (const name of [
+      'HTTP_PROXY',
+      'HTTPS_PROXY',
+      'ALL_PROXY',
+      'NO_PROXY',
+      'http_proxy',
+      'https_proxy',
+      'all_proxy',
+      'no_proxy',
+      'npm_config_proxy',
+      'npm_config_https_proxy',
+      'npm_config_no_proxy',
+    ]) {
+      vi.stubEnv(name, '');
+    }
 
     config = {
       provider: 'openai',
@@ -141,6 +160,42 @@ describe('OpenAIRealtimeConnection', () => {
 
       await expect(connectPromise).resolves.toBeUndefined();
       expect(connection.isConnected()).toBe(true);
+    });
+
+    it.each(['disconnect', 'server close', 'timeout'])(
+      'routes through HTTPS_PROXY and releases the agent on %s',
+      async (ending) => {
+        vi.useFakeTimers();
+        vi.stubEnv('HTTPS_PROXY', 'http://127.0.0.1:3128');
+        const pending = connection.connect();
+        const ws = mockWsInstances.at(-1);
+        expect(ws.options.agent).toBeInstanceOf(ProxyAgent);
+        const destroy = vi.spyOn(ws.options.agent, 'destroy');
+        if (ending === 'timeout') {
+          const rejected = expect(pending).rejects.toThrow('Connection timeout');
+          await vi.advanceTimersByTimeAsync(15000);
+          await rejected;
+        } else {
+          ws.simulateOpen();
+          await pending;
+          if (ending === 'disconnect') {
+            connection.disconnect();
+          } else {
+            ws.simulateClose(1000, 'finished');
+          }
+        }
+        expect(destroy).toHaveBeenCalledOnce();
+      },
+    );
+
+    it('honors NO_PROXY for the realtime endpoint', async () => {
+      vi.stubEnv('HTTPS_PROXY', 'http://127.0.0.1:3128');
+      vi.stubEnv('NO_PROXY', 'api.openai.com');
+      const pending = connection.connect();
+      const ws = mockWsInstances.at(-1);
+      expect(ws.options.agent).toBeUndefined();
+      ws.simulateOpen();
+      await pending;
     });
 
     it('should handle connection error', async () => {
@@ -372,16 +427,54 @@ describe('OpenAIRealtimeConnection', () => {
     expect(events).toEqual(['usage', 'transcript']);
   });
 
-  it('allows a requested response cancellation', () => {
-    const error = vi.fn();
-    connection.on('error', error);
+  it.each([false, true])(
+    'completes requested cancellation with partial transcript and audio already done=%s',
+    (audioAlreadyDone) => {
+      const error = vi.fn();
+      const audioDone = vi.fn();
+      const transcriptDone = vi.fn();
+      const usage = vi.fn();
+      connection.on('error', error);
+      connection.on('audio_done', audioDone);
+      connection.on('transcript_done', transcriptDone);
+      connection.on('usage', usage);
+      (connection as any).setReady();
+      vi.spyOn(connection as any, 'send').mockReturnValue(true);
+      const receive = (message: object) =>
+        (connection as any).handleMessage(JSON.stringify(message));
+      for (let turn = 0; turn < 2; turn++) {
+        receive({ type: 'response.created' });
+        receive({ type: 'response.output_audio_transcript.delta', delta: `Partial ${turn}` });
+        if (audioAlreadyDone) {
+          receive({ type: 'response.output_audio.done' });
+        }
+        connection.cancelResponse();
+        receive({
+          type: 'response.done',
+          response: { status: 'cancelled', usage: { input_tokens: 2, output_tokens: 1 } },
+        });
+        expect(audioDone).toHaveBeenCalledTimes(turn + 1);
+        expect(transcriptDone).toHaveBeenCalledTimes(turn + 1);
+        expect(transcriptDone).toHaveBeenLastCalledWith(`Partial ${turn}`);
+      }
+      expect(error).not.toHaveBeenCalled();
+      expect(usage).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it('finishes a requested cancellation before any transcript arrives', () => {
+    const transcriptDone = vi.fn();
+    const audioDone = vi.fn();
+    connection.on('transcript_done', transcriptDone);
+    connection.on('audio_done', audioDone);
     (connection as any).setReady();
     vi.spyOn(connection as any, 'send').mockReturnValue(true);
     connection.cancelResponse();
     (connection as any).handleMessage(
       JSON.stringify({ type: 'response.done', response: { status: 'cancelled' } }),
     );
-    expect(error).not.toHaveBeenCalled();
+    expect(audioDone).toHaveBeenCalledOnce();
+    expect(transcriptDone).toHaveBeenCalledExactlyOnceWith('');
   });
 
   it('keeps the session ready when cancellation races with a completed response', () => {

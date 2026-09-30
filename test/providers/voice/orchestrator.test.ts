@@ -392,12 +392,14 @@ describe('VoiceConversationOrchestrator', () => {
   });
 
   it('cancels speaking targets on detector timeout and times out whole conversations', async () => {
+    vi.useFakeTimers();
     const orchestrator = new VoiceConversationOrchestrator(config({ timeoutMs: 200 }));
     const { result, target } = await startConversation(orchestrator);
     target.emit('audio_delta', chunk(0));
     (orchestrator as any).turnDetector.emit('turn_timeout');
     expect(target.cancelResponse).toHaveBeenCalled();
 
+    await vi.advanceTimersByTimeAsync(200);
     await expect(result).resolves.toEqual(expect.objectContaining({ stopReason: 'timeout' }));
   });
 

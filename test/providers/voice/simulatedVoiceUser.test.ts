@@ -201,6 +201,34 @@ describe('SimulatedVoiceUser', () => {
     },
   );
 
+  describe.each(['maxTurns', 'timeoutMs'] as const)('%s validation', (setting) => {
+    it.each([0, -1, 1.5, Number.NaN, Infinity, '10', null])(
+      'rejects %j before creating a connection',
+      async (value) => {
+        const response = await new SimulatedVoiceUser({
+          config: { [setting]: value },
+        }).callApi('Agent');
+        expect(response.error).toContain(`${setting} must be a positive integer`);
+        expect(mocks.MockOrchestrator.instances).toHaveLength(0);
+      },
+    );
+
+    it('preserves a positive integer', async () => {
+      await new SimulatedVoiceUser({ config: { [setting]: 12 } }).callApi('Agent');
+      expect(mocks.MockOrchestrator.instances[0].config[setting]).toBe(12);
+    });
+  });
+
+  it('uses bounded defaults for omitted limits', async () => {
+    await new SimulatedVoiceUser({
+      config: { maxTurns: undefined, timeoutMs: undefined },
+    }).callApi('Agent');
+    expect(mocks.MockOrchestrator.instances[0].config).toMatchObject({
+      maxTurns: 10,
+      timeoutMs: 120000,
+    });
+  });
+
   it('reports a setup timeout as an error when no turn completed', async () => {
     mocks.start.mockResolvedValue(
       result({ success: false, stopReason: 'timeout', turns: [], turnCount: 0 }),

@@ -124,7 +124,13 @@ Speak naturally and respond to the agent. Say "${STOP_MARKER}" when your goal is
     return this.config.targetSpeaksFirst ?? true;
   }
 
-  private validateLocalAudioConfiguration(): string | undefined {
+  private validateConfiguration(): string | undefined {
+    for (const setting of ['maxTurns', 'timeoutMs'] as const) {
+      const value = this.config[setting];
+      if (value !== undefined && (!Number.isInteger(value) || value <= 0)) {
+        return `Voice ${setting} must be a positive integer.`;
+      }
+    }
     if (
       (this.config.targetProvider ?? 'openai') !== 'openai' ||
       (this.config.simulatedUserProvider ?? 'openai') !== 'openai'
@@ -177,7 +183,7 @@ Speak naturally and respond to the agent. Say "${STOP_MARKER}" when your goal is
       simulatedUserProvider: this.config.simulatedUserProvider,
     });
 
-    const configurationError = this.validateLocalAudioConfiguration();
+    const configurationError = this.validateConfiguration();
     if (configurationError) {
       return { error: configurationError };
     }
@@ -189,8 +195,8 @@ Speak naturally and respond to the agent. Say "${STOP_MARKER}" when your goal is
       targetConfig,
       simulatedUserConfig,
       turnDetection: this.buildTurnDetectionConfig(),
-      maxTurns: this.config.maxTurns || DEFAULT_MAX_TURNS,
-      timeoutMs: this.config.timeoutMs || DEFAULT_TIMEOUT_MS,
+      maxTurns: this.config.maxTurns ?? DEFAULT_MAX_TURNS,
+      timeoutMs: this.config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       targetSpeaksFirst: this.shouldTargetSpeakFirst(),
       recordFullAudio: this.shouldRecordConversation(),
     });

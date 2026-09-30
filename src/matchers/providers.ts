@@ -133,7 +133,10 @@ async function loadFromProviderOptions(provider: ProviderOptions) {
   });
 }
 
-function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boolean {
+function isSimulatedUserProviderConfig(
+  provider: GradingConfig['provider'],
+  type: ProviderType,
+): boolean {
   if (typeof provider === 'string') {
     return (
       provider === 'promptfoo:simulated-user' ||
@@ -147,17 +150,15 @@ function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boo
   }
 
   if (typeof (provider as ApiProvider).id === 'function') {
-    return isSimulatedUserProviderConfig((provider as ApiProvider).id());
+    return isSimulatedUserProviderConfig((provider as ApiProvider).id(), type);
   }
 
   const providerId = (provider as ProviderOptions).id;
   if (typeof providerId === 'string') {
-    return isSimulatedUserProviderConfig(providerId);
+    return isSimulatedUserProviderConfig(providerId, type);
   }
 
-  return Object.values(provider as ProviderTypeMap).some((providerTypeConfig) =>
-    isSimulatedUserProviderConfig(providerTypeConfig),
-  );
+  return isSimulatedUserProviderConfig((provider as ProviderTypeMap)[type], type);
 }
 
 export async function getGradingProvider(
@@ -207,7 +208,7 @@ export async function getGradingProvider(
     const defaultTestObj = typeof defaultTest === 'object' ? (defaultTest as TestCase) : null;
     const fallbackProviders = [
       defaultTestObj?.provider || undefined,
-      defaultTestObj?.options?.provider?.text || undefined,
+      defaultTestObj?.options?.provider?.[type] || undefined,
       defaultTestObj?.options?.provider || undefined,
     ];
 
@@ -216,7 +217,7 @@ export async function getGradingProvider(
         return false;
       }
 
-      if (isSimulatedUserProviderConfig(candidateProvider)) {
+      if (isSimulatedUserProviderConfig(candidateProvider, type)) {
         logger.debug('[Grading] Skipping promptfoo:simulated-user as an implicit grader fallback');
         return false;
       }

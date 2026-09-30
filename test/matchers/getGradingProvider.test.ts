@@ -221,6 +221,32 @@ describe('getGradingProvider', () => {
       expect(result).toBe(azureProvider);
     });
 
+    it.each(['provider', 'options'] as const)(
+      'selects the requested modality before excluding simulated callers from %s',
+      async (source) => {
+        const providers = {
+          text: 'promptfoo:simulated-voice-user',
+          embedding: 'openai:embedding',
+          classification: 'huggingface:classification',
+        };
+        (cliState as any).config = {
+          defaultTest:
+            source === 'provider' ? { provider: providers } : { options: { provider: providers } },
+        };
+        vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+        for (const type of ['embedding', 'classification'] as const) {
+          expect(await getGradingProvider(type, undefined, null)).toBe(mockProvider);
+          expect(loadApiProvider).toHaveBeenLastCalledWith(providers[type], {
+            basePath: undefined,
+          });
+        }
+        vi.mocked(loadApiProvider).mockClear();
+        expect(await getGradingProvider('text', undefined, mockProvider)).toBe(mockProvider);
+        expect(loadApiProvider).not.toHaveBeenCalled();
+      },
+    );
+
     it('should prefer defaultTest.provider over defaultTest.options.provider', async () => {
       const azureProvider = createMockProvider({ id: 'azureopenai:chat:gpt-4' });
 

@@ -1,3 +1,5 @@
+import { ProxyAgent } from 'proxy-agent';
+import { getProxyForUrl } from 'proxy-from-env';
 import WebSocket from 'ws';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
@@ -70,6 +72,8 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
   private pendingCancelEventId: string | undefined;
   private nextEventId = 0;
   private pendingTranscript: string | undefined;
+  private partialTranscript = '';
+  private audioDone = false;
 
   constructor(config: VoiceProviderConfig) {
     super(config);
@@ -95,7 +99,13 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
       this.setPendingConnectionReject(reject);
       this.setConnectionTimeout(CONNECTION_TIMEOUT_MS, reject);
 
+      const proxyUrl = getProxyForUrl(url.replace(/^ws/, 'http'));
+      const agent = proxyUrl ? new ProxyAgent({ getProxyForUrl: () => proxyUrl }) : undefined;
+      if (agent) {
+        this.once('close', () => agent.destroy());
+      }
       this.ws = new WebSocket(url, {
+        agent,
         headers: {
           Authorization: `Bearer ${apiKey}`,
         },
@@ -287,11 +297,13 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
           voice: this.config.voice,
           cumulativePositionMs: this.cumulativeAudioPositionMs,
         });
+        this.audioDone = true;
         this.emit('audio_done');
         break;
 
       // Transcript events
       case 'response.output_audio_transcript.delta':
+        this.partialTranscript += msg.delta as string;
         this.emit('transcript_delta', msg.delta as string);
         break;
 
@@ -324,6 +336,9 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
 
       // Response lifecycle
       case 'response.created':
+        this.audioDone = false;
+        this.partialTranscript = '';
+        this.pendingTranscript = undefined;
         logger.debug('[OpenAIRealtime] Response created:', {
           voice: this.config.voice,
           cumulativePositionMs: this.cumulativeAudioPositionMs,
@@ -362,6 +377,13 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
           this.handleError(
             new Error(`OpenAI Realtime response ${status}${detail ? `: ${detail}` : ''}`),
           );
+        } else if (status === 'cancelled') {
+          if (!this.audioDone) {
+            this.audioDone = true;
+            this.emit('audio_done');
+          }
+          this.emit('transcript_done', this.pendingTranscript ?? this.partialTranscript);
+          this.pendingTranscript = undefined;
         } else if (this.pendingTranscript !== undefined) {
           const transcript = this.pendingTranscript;
           this.pendingTranscript = undefined;
@@ -373,6 +395,7 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
           this.pendingCancelEventId = undefined;
         }
         this.cancelRequested = false;
+        this.partialTranscript = '';
         break;
       }
 
