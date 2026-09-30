@@ -291,7 +291,6 @@
     "@azure/storage-blob": "^12.31.0",
     "@fal-ai/client": "~1.10.1",
     "@googleapis/sheets": "^18.0.0",
-    "@huggingface/transformers": "^4.0.0",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.11.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
@@ -416,10 +415,14 @@
   },
   "homepage": "https://promptfoo.dev",
   "peerDependencies": {
+    "@huggingface/transformers": "*",
     "node-sql-parser": "*",
     "pdf-parse": "*"
   },
   "peerDependenciesMeta": {
+    "@huggingface/transformers": {
+      "optional": true
+    },
     "node-sql-parser": {
       "optional": true
     },
