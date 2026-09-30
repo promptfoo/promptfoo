@@ -94,12 +94,18 @@ function replaceProcessEnv(nextEnv: Record<string, string | undefined>): void {
 
 export function mockProcessEnv(
   overrides: Record<string, string | undefined> = {},
-  options: { clear?: boolean } = {},
+  options: { clear?: boolean; clearPrefixes?: readonly string[] } = {},
 ): () => void {
   const originalEnv = { ...process.env };
 
   if (options.clear) {
     replaceProcessEnv({});
+  } else if (options.clearPrefixes) {
+    for (const key of Object.keys(process.env)) {
+      if (options.clearPrefixes.some((prefix) => key.startsWith(prefix))) {
+        Reflect.deleteProperty(process.env, key);
+      }
+    }
   }
 
   for (const [key, value] of Object.entries(overrides)) {
