@@ -150,23 +150,30 @@ describe('handleRougeScore', () => {
       expect(result.pass).toBe(false);
     });
 
-    it.each(['', ' ', '\n'])('scores blank output %j 0 instead of throwing', (blank) => {
-      const result = handleRougeScore(makeParams(blank, 'the cat sat', { baseType }));
+    it.each(['', ' ', '\n', '\u0085', ' \u0085\n'])(
+      'scores blank output %j 0 instead of throwing',
+      (blank) => {
+        const result = handleRougeScore(makeParams(blank, 'the cat sat', { baseType }));
 
-      expect(result.score).toBe(0);
-      expect(result.pass).toBe(false);
-    });
+        expect(result.score).toBe(0);
+        expect(result.pass).toBe(false);
+      },
+    );
 
-    it.each(['', ' ', '\n'])('scores a blank reference %j 0 instead of throwing', (blank) => {
-      const result = handleRougeScore(makeParams('the cat sat', blank, { baseType }));
+    it.each(['', ' ', '\n', '\u0085', ' \u0085\n'])(
+      'scores a blank reference %j 0 instead of throwing',
+      (blank) => {
+        const result = handleRougeScore(makeParams('the cat sat', blank, { baseType }));
 
-      expect(result.score).toBe(0);
-      expect(result.pass).toBe(false);
-    });
+        expect(result.score).toBe(0);
+        expect(result.pass).toBe(false);
+      },
+    );
 
     it.each([
       ['', ''],
       [' ', '\n'],
+      ['\u0085', ' \u0085\n'],
     ])('scores a blank output %j against a blank reference %j 0', (output, reference) => {
       const result = handleRougeScore(makeParams(output, reference, { baseType }));
 

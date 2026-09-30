@@ -72,7 +72,8 @@ function rougeNScore(candidate: string, reference: string, n = 1, beta = 1): num
  * @internal
  */
 function jsRougeScore(fnName: 'l' | 's', candidate: string, reference: string): number {
-  if (candidate.trim() === '' || reference.trim() === '') {
+  // js-rouge also treats Unicode NEXT LINE as whitespace; String.trim does not.
+  if (/^[\s\u0085]*$/u.test(candidate) || /^[\s\u0085]*$/u.test(reference)) {
     return 0;
   }
   return rouge[fnName](candidate, reference, {});
