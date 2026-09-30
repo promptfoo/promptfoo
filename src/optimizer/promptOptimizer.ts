@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import cliState from '../cliState';
 import { evaluate } from '../evaluator';
 import logger from '../logger';
 import Eval from '../models/eval';
@@ -11,6 +12,7 @@ import {
   type Prompt,
   type TestSuite,
 } from '../types/index';
+import { filterByRange } from '../util/filterRange';
 import { extractFirstJsonObject, safeJsonStringify } from '../util/json';
 import { isPromptAllowed } from '../util/promptMatching';
 import { sanitizeObject } from '../util/sanitizer';
@@ -71,6 +73,7 @@ export interface PromptOptimizationOptions {
   promptIndex?: number;
   providerIndex?: number;
   validationSplit?: number;
+  abortSignal?: AbortSignal;
 }
 
 interface PromptOptimizationHistoryItem {
@@ -209,18 +212,23 @@ export async function generateOptimizedPromptCandidates(params: {
   successes: EvaluateResult[];
   candidateCount?: number;
   history?: PromptOptimizationHistoryItem[];
+  abortSignal?: AbortSignal;
 }): Promise<PromptOptimizationCandidate[]> {
+  throwIfOptimizationAborted(params.abortSignal);
   const candidateCount = params.candidateCount ?? DEFAULT_CANDIDATE_COUNT;
   const provider = (await getDefaultProviders()).suggestionsProvider;
-  const response = await provider.callApi(
-    buildCandidateGenerationPayload({
-      prompt: params.prompt,
-      failures: params.failures,
-      successes: params.successes,
-      candidateCount,
-      history: params.history,
-    }),
-  );
+  throwIfOptimizationAborted(params.abortSignal);
+  const payload = buildCandidateGenerationPayload({
+    prompt: params.prompt,
+    failures: params.failures,
+    successes: params.successes,
+    candidateCount,
+    history: params.history,
+  });
+  const response = params.abortSignal
+    ? await provider.callApi(payload, undefined, { abortSignal: params.abortSignal })
+    : await provider.callApi(payload);
+  throwIfOptimizationAborted(params.abortSignal);
 
   if (response.error || !response.output) {
     throw new Error(
@@ -263,6 +271,7 @@ async function generateRoundCandidatesOrStop(
   try {
     return await generateOptimizedPromptCandidates(params);
   } catch (error) {
+    throwIfOptimizationAborted(params.abortSignal);
     if (round === 1) {
       throw error;
     }
@@ -718,14 +727,78 @@ function countConfiguredOptimizationTests(testSuite: TestSuite): number {
   return explicitTests + scenarioTests;
 }
 
-function createEvaluationOptions(config: Partial<UnifiedConfig>): InternalEvaluateOptions {
-  return {
+function throwIfOptimizationAborted(abortSignal: AbortSignal | undefined): void {
+  if (abortSignal?.aborted) {
+    throw new Error('Operation cancelled');
+  }
+}
+
+function applyFilterRangeBeforeValidationSplit(
+  config: Partial<UnifiedConfig>,
+  testSuite: TestSuite,
+  validationSplit: number | undefined,
+): { filterRangeApplied: boolean; testSuite: TestSuite } {
+  const filterRange = config.evaluateOptions?.filterRange;
+  if (
+    validationSplit === undefined ||
+    testSuite.scenarios?.length ||
+    !Array.isArray(testSuite.tests) ||
+    testSuite.tests.length < 2 ||
+    filterRange === undefined
+  ) {
+    return { filterRangeApplied: false, testSuite };
+  }
+
+  if (testSuite.extensions?.length) {
+    throw new Error(
+      'Prompt optimization cannot combine filterRange and validationSplit with extensions. Resolve the test list before optimizing, or omit the validation split.',
+    );
+  }
+
+  const tests = filterByRange(testSuite.tests, filterRange);
+  if (tests.length === 0) {
+    throw new Error('Prompt optimization filterRange did not select any tests.');
+  }
+  return { filterRangeApplied: true, testSuite: { ...testSuite, tests } };
+}
+
+function createEvaluationOptions(
+  config: Partial<UnifiedConfig>,
+  omitFilterRange = false,
+  abortSignal?: AbortSignal,
+): InternalEvaluateOptions {
+  const options: InternalEvaluateOptions = {
     ...config.evaluateOptions,
+    abortSignal,
     cache: false,
     eventSource: 'library',
+    generateSuggestions: false,
     showProgressBar: false,
     silent: true,
+    suggestionsCount: undefined,
   };
+  if (omitFilterRange) {
+    options.filterRange = undefined;
+  }
+  // Match the `eval` command: a configured delay only rate-limits API calls
+  // when concurrency is forced to 1, otherwise delayed evals still run in parallel.
+  if (typeof options.delay === 'number' && !Number.isNaN(options.delay) && options.delay > 0) {
+    options.maxConcurrency = 1;
+  } else {
+    options.delay = undefined;
+  }
+  return options;
+}
+
+function runOptimizationEvaluation(
+  testSuite: TestSuite,
+  evalRecord: Eval,
+  options: InternalEvaluateOptions,
+): Promise<Eval> {
+  const runEvaluation = () => evaluate(cloneOptimizationTestSuite(testSuite), evalRecord, options);
+  return options.maxConcurrency === undefined
+    ? runEvaluation()
+    : cliState.withMaxConcurrency(options.maxConcurrency, runEvaluation);
 }
 
 function assertOptimizationEvalHasResults(evalRecord: Eval | undefined, scope: string): void {
@@ -742,6 +815,11 @@ export async function optimizePromptTestSuite(
   options: PromptOptimizationOptions = {},
 ): Promise<PromptOptimizationResult> {
   validateOptimizationOptions(options);
+  const configuredAbortSignal = (config.evaluateOptions as InternalEvaluateOptions | undefined)
+    ?.abortSignal;
+  const abortSignal = options.abortSignal ?? configuredAbortSignal;
+  throwIfOptimizationAborted(abortSignal);
+
   if (testSuite.prompts.length === 0) {
     throw new Error('Prompt optimization requires at least one configured prompt.');
   }
@@ -753,8 +831,12 @@ export async function optimizePromptTestSuite(
   if (selectedTestSuite.prompts[0].function) {
     throw new Error('Prompt optimization currently supports literal string prompts only.');
   }
+  // Partition an already filtered explicit test set; forwarding the original
+  // range into each partition would apply absolute indices a second time.
+  const { testSuite: partitionableTestSuite, filterRangeApplied } =
+    applyFilterRangeBeforeValidationSplit(config, selectedTestSuite, options.validationSplit);
   const { searchTestSuite, validationTestSuite, searchTestCount, validationTestCount } =
-    createValidationPartition(selectedTestSuite, options.validationSplit);
+    createValidationPartition(partitionableTestSuite, options.validationSplit);
 
   // Internal optimizer evals are intermediate runs and must not write to the user's
   // configured output. Strip outputPath so the Evaluator does not append baseline or
@@ -762,19 +844,21 @@ export async function optimizePromptTestSuite(
   const optimizationConfig: Partial<UnifiedConfig> = { ...config, outputPath: undefined };
 
   logger.info('Running baseline evaluation for prompt optimization...');
-  const baselineEval = await evaluate(
-    cloneOptimizationTestSuite(searchTestSuite),
+  const baselineEval = await runOptimizationEvaluation(
+    searchTestSuite,
     new Eval(optimizationConfig, { persisted: false }),
-    createEvaluationOptions(config),
+    createEvaluationOptions(config, filterRangeApplied, abortSignal),
   );
+  throwIfOptimizationAborted(abortSignal);
   assertOptimizationEvalHasResults(baselineEval, 'the selected prompt/provider');
   const baselineValidationEval = validationTestSuite
-    ? await evaluate(
-        cloneOptimizationTestSuite(validationTestSuite),
+    ? await runOptimizationEvaluation(
+        validationTestSuite,
         new Eval(optimizationConfig, { persisted: false }),
-        createEvaluationOptions(config),
+        createEvaluationOptions(config, filterRangeApplied, abortSignal),
       )
     : undefined;
+  throwIfOptimizationAborted(abortSignal);
   assertOptimizationEvalHasResults(baselineValidationEval, 'the validation split');
   const { searchPrompt: baselinePrompt, validationPrompt: baselineValidationPrompt } =
     selectBestPromptPair({
@@ -821,7 +905,9 @@ export async function optimizePromptTestSuite(
       failures: currentFailures,
       successes: currentSuccesses,
       history,
+      abortSignal,
     });
+    throwIfOptimizationAborted(abortSignal);
     // Later rounds frequently fail to produce *new* candidates as the prompt
     // converges, or on a transient provider error. Don't discard the
     // improvements already adopted in earlier rounds: stop and return the best
@@ -840,25 +926,25 @@ export async function optimizePromptTestSuite(
       currentPromptSource,
       candidates,
     );
-    const candidateEval = await evaluate(
-      cloneOptimizationTestSuite(candidateSearchSuite),
+    const candidateEval = await runOptimizationEvaluation(
+      candidateSearchSuite,
       new Eval(optimizationConfig, { persisted: false }),
-      createEvaluationOptions(config),
+      createEvaluationOptions(config, filterRangeApplied, abortSignal),
     );
+    throwIfOptimizationAborted(abortSignal);
     const candidateValidationEval = validationTestSuite
-      ? await evaluate(
-          cloneOptimizationTestSuite(
-            createCandidateTestSuite(
-              validationTestSuite,
-              baselineSourcePrompt,
-              currentPromptSource,
-              candidates,
-            ),
+      ? await runOptimizationEvaluation(
+          createCandidateTestSuite(
+            validationTestSuite,
+            baselineSourcePrompt,
+            currentPromptSource,
+            candidates,
           ),
           new Eval(optimizationConfig, { persisted: false }),
-          createEvaluationOptions(config),
+          createEvaluationOptions(config, filterRangeApplied, abortSignal),
         )
       : undefined;
+    throwIfOptimizationAborted(abortSignal);
     const { searchPrompt: roundBestPrompt, validationPrompt: roundBestValidationPrompt } =
       selectBestPromptPair({
         searchPrompts: candidateEval.prompts,
@@ -923,6 +1009,8 @@ export async function optimizePromptTestSuite(
         (scoreOf(bestValidationPrompt) === scoreOf(baselineValidationPrompt) &&
           scoreOf(bestPrompt) > scoreOf(baselinePrompt))
       : scoreOf(bestPrompt) > scoreOf(baselinePrompt);
+
+  throwIfOptimizationAborted(abortSignal);
 
   logOptimizationOutcome({
     improved,

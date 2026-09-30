@@ -31,6 +31,7 @@ vi.mock('../../src/logger', () => ({
     debug: vi.fn(),
     info: vi.fn(),
     error: vi.fn(),
+    warn: vi.fn(),
   },
 }));
 
@@ -60,6 +61,7 @@ describe('optimize command', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.resetAllMocks();
     process.exitCode = undefined;
   });
@@ -129,6 +131,104 @@ describe('optimize command', () => {
 
     expect(setupEnv).toHaveBeenCalledTimes(1);
     expect(setupEnv).toHaveBeenCalledWith('.env.cli');
+  });
+
+  it('applies commandLineOptions eval settings to optimization', async () => {
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config: {
+        evaluateOptions: {
+          maxConcurrency: 9,
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [{ raw: 'Prompt', label: 'Prompt' }],
+        tests: Array.from({ length: 5 }, (_, id) => ({ vars: { id } })),
+      },
+      basePath: '',
+      commandLineOptions: {
+        delay: 25,
+        filterRange: '0:4',
+        maxConcurrency: 5,
+        repeat: 2,
+      },
+    } as any);
+
+    await doOptimize({ defaultConfig: {}, defaultConfigPath: 'promptfooconfig.yaml' });
+
+    expect(optimizePromptTestSuite).toHaveBeenCalledWith(
+      {
+        evaluateOptions: {
+          delay: 25,
+          filterRange: '0:4',
+          maxConcurrency: 5,
+          repeat: 2,
+        },
+      },
+      expect.objectContaining({
+        tests: expect.arrayContaining([
+          expect.objectContaining({ vars: { id: expect.any(Number) } }),
+        ]),
+      }),
+      expect.any(Object),
+    );
+    const filteredSuite = vi.mocked(optimizePromptTestSuite).mock.calls[0][1];
+    expect(filteredSuite.tests?.map((test) => test.vars?.id)).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it('does not merge command prompt-suggestion settings into optimizer eval config', async () => {
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config: {
+        evaluateOptions: {
+          generateSuggestions: false,
+          suggestionsCount: 4,
+        },
+      },
+      testSuite: {
+        providers: [],
+        prompts: [{ raw: 'Prompt', label: 'Prompt' }],
+        tests: [{}],
+      },
+      basePath: '',
+      commandLineOptions: {
+        generateSuggestions: true,
+        suggestionsCount: 3,
+      },
+    } as any);
+
+    await doOptimize({ defaultConfig: {}, defaultConfigPath: 'promptfooconfig.yaml' });
+
+    expect(optimizePromptTestSuite).toHaveBeenCalledWith(
+      {
+        evaluateOptions: {
+          generateSuggestions: false,
+          suggestionsCount: 4,
+        },
+      },
+      expect.any(Object),
+      expect.any(Object),
+    );
+  });
+
+  it('lets commandLineOptions delay zero disable a positive evaluateOptions delay', async () => {
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config: { evaluateOptions: { delay: 100, maxConcurrency: 8 } },
+      testSuite: {
+        providers: [],
+        prompts: [{ raw: 'Prompt', label: 'Prompt' }],
+        tests: [{}],
+      },
+      basePath: '',
+      commandLineOptions: { delay: 0, maxConcurrency: 4 },
+    } as any);
+
+    await doOptimize({ defaultConfig: {}, defaultConfigPath: 'promptfooconfig.yaml' });
+
+    expect(optimizePromptTestSuite).toHaveBeenCalledWith(
+      { evaluateOptions: { delay: 0, maxConcurrency: 4 } },
+      expect.any(Object),
+      expect.any(Object),
+    );
   });
 
   it('passes validation split through to the optimizer', async () => {
