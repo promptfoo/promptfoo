@@ -47,7 +47,7 @@ function formatComparisonJson(value: unknown): string | undefined {
       append(JSON.stringify(item));
       return;
     }
-    if (typeof item !== 'object' || item === null) {
+    if (typeof item !== 'object') {
       throw new Error('Comparison is not JSON');
     }
     const array = Array.isArray(item);
