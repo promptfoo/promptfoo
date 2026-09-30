@@ -139,15 +139,14 @@ const FoundationModelConfiguration = ({
   const isBedrockHttpApi =
     bedrockApiMode === 'responses' || bedrockApiMode === 'chat' || bedrockApiMode === 'messages';
   const isBedrockNativeApi = bedrockApiMode === 'invoke' || bedrockApiMode === 'converse';
-  const [modelId, setModelId] = useState(
-    isBedrock ? getBedrockModelFromId(selectedTarget.id) : selectedTarget.id || '',
-  );
-  const bedrockModelIdForValidation = BEDROCK_GPT_SHORTHAND.test(modelId)
-    ? `openai.${modelId}`
-    : modelId;
+  const [modelDraft, setModelDraft] = useState({
+    modelId: isBedrock ? getBedrockModelFromId(selectedTarget.id) : selectedTarget.id || '',
+    providerId: selectedTarget.id || '',
+  });
+  const { modelId } = modelDraft;
   const bedrockApiError =
     isBedrock && bedrockApiMode
-      ? getBedrockApiError(bedrockApiMode, bedrockModelIdForValidation)
+      ? getBedrockApiError(bedrockApiMode, getBedrockModelFromId(modelDraft.providerId))
       : undefined;
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [isMcpOpen, setIsMcpOpen] = useState(Boolean(selectedTarget.config?.mcp?.servers?.length));
@@ -177,19 +176,21 @@ const FoundationModelConfiguration = ({
     const route =
       providerType === 'bedrock' ? getBedrockTextRoute(selectedTarget.id || 'bedrock:') : undefined;
     setBedrockApiMode(route?.apiMode);
-    setModelId(
-      providerType === 'bedrock'
-        ? getBedrockModelFromId(selectedTarget.id)
-        : selectedTarget.id || '',
-    );
+    setModelDraft({
+      modelId:
+        providerType === 'bedrock'
+          ? getBedrockModelFromId(selectedTarget.id)
+          : selectedTarget.id || '',
+      providerId: selectedTarget.id || '',
+    });
   }, [providerType, selectedTarget.id]);
 
   const handleModelIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newId = e.target.value;
-    setModelId(newId);
-    updateProviderId(
-      isBedrock && bedrockApiMode ? buildBedrockProviderId(bedrockApiMode, newId) : newId,
-    );
+    const providerId =
+      isBedrock && bedrockApiMode ? buildBedrockProviderId(bedrockApiMode, newId) : newId;
+    setModelDraft({ modelId: newId, providerId });
+    updateProviderId(providerId);
   };
 
   const updateProviderId = (id: string, apiMode = bedrockApiMode) => {
@@ -207,9 +208,12 @@ const FoundationModelConfiguration = ({
     const id = buildBedrockProviderId(apiMode, modelId);
     const convertedModel = getBedrockModelFromId(id);
     setBedrockApiMode(apiMode);
-    setModelId(
-      modelId.startsWith('gpt-') ? convertedModel.replace(/^openai\./, '') : convertedModel,
-    );
+    setModelDraft({
+      modelId: modelId.startsWith('gpt-')
+        ? convertedModel.replace(/^openai\./, '')
+        : convertedModel,
+      providerId: id,
+    });
     updateProviderId(id, apiMode);
   };
 

@@ -602,6 +602,10 @@ describe('FoundationModelConfiguration', () => {
   it.each([
     ['gpt-5.6-sol', false],
     ['gpt-oss-120b', false],
+    ['gpt-oss-20b-1:0', false],
+    ['gpt-oss-120b-1:0', false],
+    ['openai.gpt-oss-20b-1:0', false],
+    ['openai.gpt-oss-120b-1:0', false],
     ['gpt-custom', true],
   ])('validates only recognized GPT shorthands in the current draft %s', async (model, invalid) => {
     const user = userEvent.setup();
@@ -623,6 +627,34 @@ describe('FoundationModelConfiguration', () => {
     } else {
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     }
+  });
+
+  it('revalidates an external target when its model text matches the previous draft', async () => {
+    const user = userEvent.setup();
+    const props = {
+      selectedTarget: { id: 'bedrock:responses:openai.gpt-5.5', config: {} },
+      updateCustomTarget: mockUpdateCustomTarget,
+      providerType: 'bedrock',
+    };
+    const { rerender } = render(<FoundationModelConfiguration {...props} />);
+    const input = screen.getByLabelText(/Model ID/i);
+    await user.clear(input);
+    await user.paste('openai.gpt-oss-120b-1:0');
+    expect(input).toHaveAttribute('aria-invalid', 'false');
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith(
+      'id',
+      'bedrock:responses:openai.gpt-oss-120b',
+    );
+
+    rerender(
+      <FoundationModelConfiguration
+        {...props}
+        selectedTarget={{ id: 'bedrock:responses:openai.gpt-oss-120b-1:0', config: {} }}
+      />,
+    );
+    expect(input).toHaveValue('openai.gpt-oss-120b-1:0');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByRole('alert')).toHaveTextContent('Responses requires');
   });
 
   it('should preserve the Responses prefix and use Responses-specific settings', async () => {
