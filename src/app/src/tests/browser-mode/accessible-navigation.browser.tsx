@@ -8,7 +8,6 @@ import { MediaFilters } from '@app/pages/media/components/MediaFilters';
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
-import type { EvaluateTable } from '@promptfoo/types';
 import '../../index.css';
 
 afterEach(() => {
@@ -99,7 +98,7 @@ it('restores focus after closing the chart comparison dialog', async () => {
           vars: [],
         },
       ],
-    } as unknown as EvaluateTable,
+    } as unknown as NonNullable<ReturnType<typeof useTableStore.getState>['table']>,
   });
   render(<ResultsCharts scores={[1, 0.5]} />);
   const opener = page.getByRole('button', { name: 'Compare prompt outputs' });

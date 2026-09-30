@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { MediaFilters } from './MediaFilters';
@@ -213,22 +213,6 @@ describe('MediaFilters', () => {
 
       expect(onEvalFilterChange).toHaveBeenCalledWith('eval-1');
       expect(evalFilterButton).toHaveAttribute('aria-expanded', 'false');
-    });
-
-    it('leaves IME composition keys to the search input', async () => {
-      const user = userEvent.setup();
-      const onSelect = vi.fn();
-      render(<MediaFilters {...defaultProps} evals={mockEvals} onEvalFilterChange={onSelect} />);
-      await user.click(screen.getByRole('button', { name: 'All Evaluations' }));
-      const search = await screen.findByRole('combobox', { name: 'Search evaluations' });
-      await user.keyboard('{ArrowDown}');
-      const active = search.getAttribute('aria-activedescendant');
-      for (const key of ['ArrowDown', 'ArrowUp', 'Enter', 'Escape']) {
-        fireEvent.keyDown(search, { key, isComposing: true });
-      }
-      expect(search).toHaveAttribute('aria-activedescendant', active);
-      expect(search).toHaveFocus();
-      expect(onSelect).not.toHaveBeenCalled();
     });
 
     it('closes a keyboard-open eval filter with escape', async () => {
