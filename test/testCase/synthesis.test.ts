@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadApiProvider } from '../../src/providers/index';
 import { generatePersonasPrompt, synthesize, testCasesPrompt } from '../../src/testCase/synthesis';
 import { createMockProvider } from '../factories/provider';
@@ -11,10 +11,6 @@ vi.mock('../../src/providers', () => ({
 }));
 
 describe('synthesize', () => {
-  beforeEach(() => {
-    vi.mocked(loadApiProvider).mockReset();
-  });
-
   afterEach(() => {
     vi.mocked(loadApiProvider).mockReset();
   });
