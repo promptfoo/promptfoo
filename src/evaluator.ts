@@ -2997,6 +2997,18 @@ function markComparisonRows(
   }
 }
 
+function hasCompletedComparison(
+  result: EvaluationStoreResult,
+  type: 'select-best' | 'max-score',
+): boolean {
+  return (
+    result.gradingResult?.assertion?.type === type ||
+    result.gradingResult?.componentResults?.some(
+      (component) => component.assertion?.type === type,
+    ) === true
+  );
+}
+
 type ComparisonErrorState = Pick<
   EvaluationStoreResult,
   'success' | 'score' | 'failureReason' | 'error'
@@ -4548,6 +4560,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         rowsWithMaxScoreAssertion: pendingMaxScore,
         runEvalOptions,
       });
+      providerAbortSignal?.throwIfAborted();
     } catch (error) {
       if (!isGradingAbort(error, providerAbortSignal)) {
         throw error;
@@ -4671,6 +4684,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const resultsToCompare = await this.getResultsToCompare(testIdx);
     if (resultsToCompare.length === 0) {
       logger.warn(`Expected results to be found for test index ${testIdx}`);
+      return;
+    }
+
+    if (
+      cliState.resume &&
+      resultsToCompare.every((result) => hasCompletedComparison(result, 'select-best'))
+    ) {
       return;
     }
 
@@ -4836,6 +4856,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const resultsToCompare = await this.getResultsToCompare(testIdx);
     if (resultsToCompare.length === 0) {
       logger.warn(`Expected results to be found for test index ${testIdx}`);
+      return;
+    }
+
+    if (
+      cliState.resume &&
+      resultsToCompare.every((result) => hasCompletedComparison(result, 'max-score'))
+    ) {
       return;
     }
 
@@ -5277,7 +5304,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       // Internal signal includes all abort sources
       combinedAbortSignal = AbortSignal.any([combinedAbortSignal, globalAbortController.signal]);
       globalTimeout = setTimeout(() => {
-        evalTimedOut = true;
+        // Keep the first cancellation cause if the deadline expires while saving interrupted rows.
+        evalTimedOut = !providerAbortSignal?.aborted;
         globalAbortController?.abort();
       }, maxEvalTimeMs);
     }
