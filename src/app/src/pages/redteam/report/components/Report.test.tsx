@@ -1168,4 +1168,53 @@ describe('Report loading', () => {
     expect(signal?.aborted).toBe(true);
     expect(console.error).not.toHaveBeenCalled();
   });
+
+  it('clears embedded actions while a new report loads, fails, and retries', async () => {
+    let finishLoad!: (response: Response) => void;
+    const pendingResponse = new Promise<Response>((resolve) => {
+      finishLoad = resolve;
+    });
+    mockCallApi
+      .mockResolvedValueOnce(response(report))
+      .mockReturnValueOnce(pendingResponse)
+      .mockResolvedValueOnce(response(report));
+    const onActionsReady = vi.fn();
+    const wrap = (id: string) => (
+      <TooltipProvider>
+        <MemoryRouter>
+          <App evalId={id} embedded onActionsReady={onActionsReady} />
+        </MemoryRouter>
+      </TooltipProvider>
+    );
+    const { rerender } = render(wrap('old'));
+    await screen.findByTestId('overview-total');
+    expect(onActionsReady).toHaveBeenCalled();
+    expect(onActionsReady).not.toHaveBeenLastCalledWith(null);
+
+    rerender(wrap('new'));
+    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    expect(onActionsReady).toHaveBeenLastCalledWith(null);
+
+    await act(async () => finishLoad(response(null, 503)));
+    await screen.findByRole('alert');
+    expect(onActionsReady).toHaveBeenLastCalledWith(null);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await screen.findByTestId('overview-total');
+    expect(onActionsReady).not.toHaveBeenLastCalledWith(null);
+  });
+
+  it('clears embedded actions when the report unmounts', async () => {
+    mockCallApi.mockResolvedValueOnce(response(report));
+    const onActionsReady = vi.fn();
+    const { unmount } = renderWithProviders(
+      <App evalId="requested-eval" embedded onActionsReady={onActionsReady} />,
+    );
+    await screen.findByTestId('overview-total');
+    expect(onActionsReady).toHaveBeenCalled();
+    expect(onActionsReady).not.toHaveBeenLastCalledWith(null);
+
+    unmount();
+    expect(onActionsReady).toHaveBeenLastCalledWith(null);
+  });
 });

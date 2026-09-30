@@ -657,6 +657,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
         </DropdownMenuItem>
       </>,
     );
+    return () => onActionsReady(null);
   }, [embedded, onActionsReady, evalData, evalId, isFiltersVisible]);
 
   usePageMeta({
