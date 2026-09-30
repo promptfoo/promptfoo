@@ -1,32 +1,13 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
 import { runIsolated } from './isolated.mjs';
 
-async function checkBrowser(stateDir, profile) {
-  const packageRequire = createRequire(createRequire(import.meta.url).resolve('promptfoo'));
+async function checkBrowser(stateDir) {
   const { evaluate, loadApiProvider } = await import('promptfoo');
-  if (profile === 'omit-optional') {
-    assert.throws(() => packageRequire.resolve('@playwright/browser-chromium/package.json'), {
-      code: 'MODULE_NOT_FOUND',
-    });
-    const provider = await loadApiProvider('browser', { options: { config: { steps: [] } } });
-    assert.equal(provider.id(), 'browser-provider');
-    const response = await provider.callApi('local capability probe');
-    assert.match(response.error, /Failed to import required modules/);
-    assert.match(response.error, /playwright-extra/);
-    assert.match(response.error, /puppeteer-extra-plugin-stealth/);
-    assert.equal(response.output, undefined);
-    console.log('Verified omitted browser capability: actionable missing-module error');
-    return;
-  }
-
-  packageRequire.resolve('@playwright/browser-chromium/package.json');
-  packageRequire.resolve('puppeteer-extra-plugin-stealth/evasions/navigator.webdriver');
   const htmlPath = path.join(stateDir, 'local browser.html');
   fs.writeFileSync(
     htmlPath,
@@ -103,33 +84,19 @@ async function checkBrowser(stateDir, profile) {
 }
 
 if (process.argv[2] === '--child') {
-  await checkBrowser(process.argv[3], process.argv[4]);
+  await checkBrowser(process.argv[3]);
 } else {
   const { values } = parseArgs({
     options: {
-      profile: { type: 'string', default: 'default' },
       'browsers-path': { type: 'string' },
     },
   });
-  assert(['default', 'omit-optional'].includes(values.profile), 'Unexpected browser profile');
-  if (values.profile === 'default') {
-    assert(
-      values['browsers-path'],
-      '--browsers-path must select a caller-owned Chromium installation',
-    );
-    assert(
-      fs.statSync(values['browsers-path']).isDirectory(),
-      'Expected an existing browser directory',
-    );
-  }
+  assert(
+    values['browsers-path'] && fs.statSync(values['browsers-path']).isDirectory(),
+    '--browsers-path must select a caller-owned Chromium installation',
+  );
   await runIsolated(import.meta.url, {
     label: 'browser',
-    args: [values.profile],
-    directories: ['browsers'],
-    env: (stateDir) => ({
-      PLAYWRIGHT_BROWSERS_PATH: values['browsers-path']
-        ? path.resolve(values['browsers-path'])
-        : path.join(stateDir, 'browsers'),
-    }),
+    env: { PLAYWRIGHT_BROWSERS_PATH: path.resolve(values['browsers-path']) },
   });
 }

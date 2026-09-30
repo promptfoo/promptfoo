@@ -85,15 +85,14 @@ compiler state is excluded from the published archive.
 
 ## Browser capability
 
-Add `--browser` to verify the installed browser provider:
+Add `--browser` to the default profile to install compatible browser SDKs and test them:
 
 ```sh
 npm run test:package-artifact -- --browser
-npm run test:package-artifact -- --profile omit-optional --browser
 ```
 
-The default profile downloads matching Chromium with the installed Playwright CLI
-into a temporary directory, then checks Unicode input, clicks, extraction, stealth,
-a missing-selector error, and recovery on local HTML. Expected scores are 1/0/1.
-The optional-omitted profile checks the missing-module error without downloading.
-Both run on Linux Node 24 in CI; other jobs require `--browser`.
+The installed Playwright CLI downloads matching Chromium into a temporary directory.
+The fixture checks Unicode input, clicks, extraction, stealth, a missing-selector
+error, and recovery on local HTML. Expected scores are 1/0/1. This runs on Linux
+Node 24 in CI; other jobs require `--browser`. Missing-SDK checks run in both profiles
+without this flag.

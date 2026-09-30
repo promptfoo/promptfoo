@@ -268,7 +268,7 @@ jobs:
         env:
           PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
           PROMPTFOO_DISABLE_TELEMETRY: 1
-        run: npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL" --profile omit-optional --runtime-assets all --browser
+        run: npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL" --profile omit-optional --runtime-assets all
 
       - name: Upload package for platform acceptance
         if: matrix.node == '24.x'
@@ -620,6 +620,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 2
+          persist-credentials: false
 
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -635,6 +636,10 @@ jobs:
 
       - name: Install Dependencies
         run: npm ci
+
+      # Browser binaries are opt-in; install the version from the locked SDK.
+      - name: Install Chromium
+        run: node node_modules/playwright/cli.js install --with-deps chromium
 
       - name: Run App Browser Tests
         run: npm run test:app:browser
