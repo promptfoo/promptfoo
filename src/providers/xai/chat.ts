@@ -1,4 +1,6 @@
 import logger from '../../logger';
+import { isCallerAbortError } from '../../util/fetch/requestSignal';
+import { preserveResponseHeadersObserverErrorResponse } from '../../util/fetch/responseHeadersObserver';
 import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from '../openai/chat';
@@ -7,6 +9,7 @@ import {
   getOpenAIChatOutputLimitFromEnv,
   getOpenAICompletionTokenLimitFromEnv,
   resolveDirectTestVariable,
+  throwIfAborted,
 } from '../shared';
 
 import type { ApiProvider, ProviderOptions } from '../../types/index';
@@ -1016,16 +1019,19 @@ class XAIProvider extends OpenAiChatCompletionProvider {
             response.error.includes('authentication error'))
         ) {
           // Provide a more helpful error message for x.ai specific issues
-          return {
+          return preserveResponseHeadersObserverErrorResponse(response, {
             ...response,
             error: `x.ai API error: ${response.error}\n\nTip: Ensure your XAI_API_KEY environment variable is set correctly. You can get an API key from https://x.ai/`,
-          };
+          });
         }
         return response;
       }
 
       return response;
     } catch (err) {
+      if (isCallerAbortError(err, callApiOptions?.abortSignal)) {
+        throwIfAborted(callApiOptions?.abortSignal);
+      }
       if (err instanceof XAIRequestConfigError) {
         return { error: `xAI request error: ${err.message}` };
       }

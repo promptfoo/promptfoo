@@ -98,7 +98,7 @@ describeEvaluator('evaluator options and hooks', () => {
           },
         }),
       }),
-      undefined,
+      expect.any(Object),
     );
   });
 
@@ -153,7 +153,7 @@ describeEvaluator('evaluator options and hooks', () => {
           },
         }),
       }),
-      undefined,
+      expect.any(Object),
     );
   });
 

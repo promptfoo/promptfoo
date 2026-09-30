@@ -104,6 +104,23 @@ describe('ProviderRateLimitState', () => {
       expect(metrics.failedRequests).toBe(1);
       expect(metrics.completedRequests).toBe(0);
     });
+
+    it('counts cancellation during error retry backoff', async () => {
+      const controller = new AbortController();
+      const pending = state.executeWithRetry(
+        'req-1',
+        async () => {
+          throw new Error('rate limit');
+        },
+        { abortSignal: controller.signal },
+      );
+      const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      await vi.advanceTimersByTimeAsync(0);
+      controller.abort();
+      await rejected;
+
+      expect(state.getMetrics()).toMatchObject({ totalRequests: 1, failedRequests: 1 });
+    });
   });
 
   describe('executeWithRetry - rate limit detection', () => {

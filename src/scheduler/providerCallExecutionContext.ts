@@ -19,6 +19,8 @@ export interface ProviderCallExecutionContext {
   abortSignal?: AbortSignal;
   providerCallQueue?: ProviderCallQueue;
   rateLimitRegistry?: RateLimitRegistryRef;
+  /** Provider whose evaluator-owned slot is active for this call. */
+  rateLimitProvider?: ApiProvider;
 }
 
 interface TracedProviderCallOptions {

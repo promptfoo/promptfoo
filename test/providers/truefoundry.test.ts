@@ -200,19 +200,21 @@ describe('TrueFoundry', () => {
           temperature: 0,
         };
 
-        expect(mockedFetchWithRetries).toHaveBeenCalledWith(
-          `${TRUEFOUNDRY_API_BASE}/chat/completions`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: 'Bearer test-key',
-            },
-            body: JSON.stringify(expectedBody),
+        expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1);
+        const [url, request, timeout, maxRetries, onRateLimitBackoff] =
+          mockedFetchWithRetries.mock.calls[0];
+        expect(url).toBe(`${TRUEFOUNDRY_API_BASE}/chat/completions`);
+        expect(request).toEqual({
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer test-key',
           },
-          300000,
-          undefined,
-        );
+          body: JSON.stringify(expectedBody),
+        });
+        expect(timeout).toBe(300000);
+        expect(maxRetries).toBeUndefined();
+        expect(onRateLimitBackoff).toEqual(expect.any(Function));
 
         expect(result).toEqual({
           output: 'Test output',
@@ -688,18 +690,21 @@ describe('TrueFoundry', () => {
 
       const result = await embeddingProvider.callEmbeddingApi('Test text');
 
-      expect(mockedFetchWithRetries).toHaveBeenCalledWith(
-        `${TRUEFOUNDRY_API_BASE}/embeddings`,
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            Authorization: 'Bearer test-key',
-          }),
-        }),
-        300000,
-        undefined,
-      );
+      expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1);
+      const [url, request, timeout, maxRetries, onRateLimitBackoff] =
+        mockedFetchWithRetries.mock.calls[0];
+      expect(url).toBe(`${TRUEFOUNDRY_API_BASE}/embeddings`);
+      expect(request).toEqual({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer test-key',
+        },
+        body: JSON.stringify({ input: 'Test text', model: 'openai/text-embedding-3-large' }),
+      });
+      expect(timeout).toBe(300000);
+      expect(maxRetries).toBeUndefined();
+      expect(onRateLimitBackoff).toEqual(expect.any(Function));
 
       expect(result).toEqual({
         embedding: [0.1, 0.2, 0.3],
@@ -829,15 +834,21 @@ describe('TrueFoundry', () => {
           embedding: [0.1, 0.2],
           tokenUsage: { total: 3, prompt: 3, numRequests: 1 },
         });
-        expect(mockedFetchWithRetries).toHaveBeenCalledWith(
-          'https://tenant.example/gateway/embeddings',
-          expect.objectContaining({
-            headers: expect.objectContaining({ Authorization: 'Bearer scoped-test-key' }),
-            body: JSON.stringify({ input: 'hello', model: modelName, input_type: 'search_query' }),
-          }),
-          expect.any(Number),
-          undefined,
-        );
+        expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1);
+        const [url, request, timeout, maxRetries, onRateLimitBackoff] =
+          mockedFetchWithRetries.mock.calls[0];
+        expect(url).toBe('https://tenant.example/gateway/embeddings');
+        expect(request).toMatchObject({
+          method: 'POST',
+          body: JSON.stringify({ input: 'hello', model: modelName, input_type: 'search_query' }),
+        });
+        expect(request?.headers).toEqual({
+          Authorization: 'Bearer scoped-test-key',
+          'Content-Type': 'application/json',
+        });
+        expect(timeout).toEqual(expect.any(Number));
+        expect(maxRetries).toBeUndefined();
+        expect(onRateLimitBackoff).toEqual(expect.any(Function));
       },
     );
 

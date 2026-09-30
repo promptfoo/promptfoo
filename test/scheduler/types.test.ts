@@ -51,6 +51,68 @@ describe('isProviderResponseRateLimited', () => {
     });
   });
 
+  describe('Tool diagnostic attribution', () => {
+    it.each(['Tool returned 429', 'Tool rate limit exceeded', 'Quota exceeded: tool 429'])(
+      'ignores tool quota text: %s',
+      (error) => {
+        expect(
+          isProviderResponseRateLimited({ error, metadata: { errorOrigin: 'tool' } }, undefined),
+        ).toBe(false);
+      },
+    );
+
+    it.each(['Model returned 429', 'Model rate limit exceeded'])(
+      'retains unmarked model error detection: %s',
+      (error) => {
+        expect(
+          isProviderResponseRateLimited(
+            { error, metadata: { http: { status: 200, statusText: 'OK' } } },
+            undefined,
+          ),
+        ).toBe(true);
+      },
+    );
+
+    it('retains an actual target HTTP 429 despite tool hard-quota text', () => {
+      expect(
+        isProviderResponseRateLimited(
+          {
+            error: 'Quota exceeded: tool 429',
+            metadata: {
+              errorOrigin: 'tool',
+              http: { status: 429, statusText: 'Too Many Requests' },
+            },
+          },
+          undefined,
+        ),
+      ).toBe(true);
+    });
+
+    it.each([
+      ['quota', false],
+      ['rate_limit', true],
+    ] as const)('retains structured target quota kind %s', (rateLimitKind, expected) => {
+      expect(
+        isProviderResponseRateLimited(
+          {
+            error: 'Quota exceeded: tool 429',
+            metadata: { errorOrigin: 'tool', rateLimitKind },
+          },
+          undefined,
+        ),
+      ).toBe(expected);
+    });
+
+    it('retains an independent thrown target rate-limit error', () => {
+      expect(
+        isProviderResponseRateLimited(
+          { error: 'Quota exceeded: tool 429', metadata: { errorOrigin: 'tool' } },
+          new Error('Target rate limit exceeded'),
+        ),
+      ).toBe(true);
+    });
+  });
+
   describe('Thrown error detection', () => {
     it('should detect 429 in error.message', () => {
       const error = new Error('Request failed with status 429');

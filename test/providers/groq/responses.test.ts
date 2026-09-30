@@ -196,6 +196,7 @@ describe('GroqResponsesProvider', () => {
         }),
         expect.any(Number),
         undefined,
+        expect.any(Function),
       );
 
       expect(result.error).toContain('400');

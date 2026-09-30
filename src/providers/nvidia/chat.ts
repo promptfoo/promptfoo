@@ -102,7 +102,7 @@ export class NvidiaProvider extends OpenAiChatCompletionProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const response = await super.callApi(prompt, context, callApiOptions);
-    if (response.error) {
+    if (response.error && (response.metadata?.errorOrigin !== 'tool' || !response.tokenUsage)) {
       return response;
     }
 

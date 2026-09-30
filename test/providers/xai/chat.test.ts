@@ -65,6 +65,8 @@ describe('xAI Chat Provider', () => {
         'json',
         undefined,
         undefined,
+        expect.any(Function),
+        undefined,
       );
     });
 
