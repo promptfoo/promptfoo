@@ -20,6 +20,29 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 }));
 
 describe('ProviderTypeSelector', () => {
+  it('prevents changing providers when model selection is disabled', async () => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: 'openai:gpt-6-sol', config: {} }}
+        providerType="openai"
+        setProvider={setProvider}
+        disableModelSelection
+      />,
+    );
+
+    const providerCard = screen.getByText('Anthropic', { exact: true }).closest('[role="button"]')!;
+    await user.click(providerCard);
+    expect(providerCard).toHaveFocus();
+    await user.keyboard('{Enter} ');
+
+    expect(setProvider).not.toHaveBeenCalled();
+    expect(providerCard).toHaveAttribute('aria-disabled', 'true');
+    expect(providerCard).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByLabelText('Search providers')).toBeDisabled();
+  });
+
   it('selects a registered Bedrock Agent provider ID', async () => {
     const user = userEvent.setup();
     const setProvider = vi.fn();
@@ -484,7 +507,7 @@ describe('ProviderTypeSelector', () => {
     );
   });
 
-  it('should initialize selectedProviderType from the providerType prop when provided, and show the corresponding provider as selected in the collapsed view', () => {
+  it('marks the providerType prop as selected', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'file:///path/to/your/script.go',
@@ -744,8 +767,6 @@ describe('ProviderTypeSelector', () => {
       provider_tag: 'agents',
     });
   });
-
-  // Test removed - collapsed view and Change button no longer exist
 
   it('should update selectedProviderType and call setProvider with the correct file path format when an agent provider is selected', async () => {
     const user = userEvent.setup();

@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 
 import logger from '../logger';
 import { fetchWithRetries } from '../util/fetch';
+import { isHttpRateLimitError } from '../util/fetch/errors';
 import { getNunjucksEngine } from '../util/templates';
 import { getRequestTimeoutMs } from './shared';
 
@@ -584,6 +585,14 @@ export class N8nProvider implements ApiProvider {
       if (response.status < 200 || response.status >= 300) {
         return {
           error: `n8n webhook call error: HTTP ${response.status} ${response.statusText}`,
+          metadata: {
+            rateLimitRetryable: false,
+            http: {
+              status: response.status,
+              statusText: response.statusText,
+              headers: Object.fromEntries(response.headers.entries()),
+            },
+          },
         };
       }
 
@@ -596,8 +605,12 @@ export class N8nProvider implements ApiProvider {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       logger.error(`[n8n] Request failed: ${errorMessage}`);
+      const http = isHttpRateLimitError(err)
+        ? { status: err.status, statusText: err.statusText, headers: err.headers }
+        : undefined;
       return {
         error: `n8n webhook call error: ${errorMessage}`,
+        ...(http && { metadata: { http, rateLimitRetryable: false } }),
       };
     }
 
