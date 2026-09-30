@@ -332,7 +332,7 @@ ${nativeSource}`,
     }
   }
 
-  function killRecordedProcesses(files: string[]) {
+  async function killRecordedProcesses(files: string[]) {
     for (const file of files) {
       if (!fs.existsSync(file)) {
         continue;
@@ -346,6 +346,10 @@ ${nativeSource}`,
             throw error;
           }
         }
+        await vi.waitFor(() => expect(processIsRunning(pid)).toBe(false), {
+          timeout: 1_000,
+          interval: 20,
+        });
       }
     }
   }
@@ -467,7 +471,7 @@ if (process.argv[2] === '--child') {
           expect(fs.readdirSync(temporary)).toEqual([]);
         }
       } finally {
-        killRecordedProcesses(pidFiles);
+        await killRecordedProcesses(pidFiles);
       }
     },
   );
@@ -521,7 +525,7 @@ Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);`
         expect(fs.readdirSync(temporary)).toEqual([]);
       } finally {
         fs.closeSync(descriptor);
-        killRecordedProcesses(pidFiles);
+        await killRecordedProcesses(pidFiles);
       }
     },
   );
@@ -576,7 +580,7 @@ Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);`,
         supervisor.kill('SIGKILL');
         await closed;
         fs.closeSync(descriptor);
-        killRecordedProcesses(pidFiles);
+        await killRecordedProcesses(pidFiles);
       }
     },
   );
@@ -642,7 +646,7 @@ childProcess.ChildProcess.prototype.kill = function (signal) {
       expect(fs.statSync(path.join(temporary, retained[0])).isDirectory()).toBe(true);
     } finally {
       fs.closeSync(descriptor);
-      killRecordedProcesses([pidFile]);
+      await killRecordedProcesses([pidFile]);
     }
   });
 });
