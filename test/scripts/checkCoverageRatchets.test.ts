@@ -121,8 +121,11 @@ describe('coverage ratchets', () => {
     expect(result.skippedFiles).toEqual(['src/legacy.ts']);
   });
 
-  it('enforces coverage floors for modified critical backend paths', () => {
-    const file = 'src/assertions/contains.ts';
+  it.each([
+    'src/assertions/contains.ts',
+    'src/evaluator/engine.ts',
+    'src/progress/evaluationProgress.ts',
+  ])('enforces coverage floors for modified critical backend path %s', (file) => {
     const result = evaluateCoverageRatchets({
       changedFiles: [{ path: file, status: 'M' }],
       coverageMap: {
