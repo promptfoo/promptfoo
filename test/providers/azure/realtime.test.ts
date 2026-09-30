@@ -603,6 +603,27 @@ describe('AzureRealtimeProvider', () => {
     });
   });
 
+  it('reconnects a persistent conversation when its safety identifier changes or is removed', async () => {
+    const provider = new AzureRealtimeProvider('gpt-realtime', {
+      config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key' },
+    });
+    for (const safety_identifier of ['first-user', 'first-user', 'second-user', undefined]) {
+      await provider.callApi('hi', {
+        vars: {},
+        prompt: { id: 'prompt-a', raw: 'hi', label: 'hi', config: { safety_identifier } },
+        test: { metadata: { conversationId: 'conversation-1' } },
+      });
+    }
+
+    expect(mockCleanup).toHaveBeenCalledTimes(2);
+    expect(
+      vi
+        .mocked(OpenAiRealtimeProvider)
+        .mock.calls.map(([, options]) => options?.config?.safety_identifier),
+    ).toEqual(['first-user', 'second-user', undefined]);
+    provider.cleanup();
+  });
+
   it('reports undefined cost for a deployment missing from the Azure pricing catalog', async () => {
     const provider = new AzureRealtimeProvider('my-custom-realtime-deployment', {
       config: {

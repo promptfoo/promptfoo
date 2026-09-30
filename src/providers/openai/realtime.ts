@@ -159,6 +159,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   // callers wait on this promise rather than racing each other to send on a
   // socket whose state is still CONNECTING.
   private connectionReady: Promise<void> | null = null;
+  private connectionSafetyIdentifier: string | undefined;
   private persistentConnectionLifecycleCleanup: (() => void) | null = null;
   // Per-provider serialization queue. Concurrent calls on the same provider
   // instance share one socket; the OpenAI Realtime wire shape is not designed
@@ -640,13 +641,13 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     );
   }
 
-  private getRealtimeRequestHeaders(): Record<string, string> {
+  private getRealtimeRequestHeaders(config = this.config): Record<string, string> {
     const headers = this.getOpenAiRequestHeaders();
     if (
-      this.config.safety_identifier !== undefined &&
+      config.safety_identifier !== undefined &&
       !hasHeaderOverride(headers, 'OpenAI-Safety-Identifier')
     ) {
-      headers['OpenAI-Safety-Identifier'] = this.config.safety_identifier;
+      headers['OpenAI-Safety-Identifier'] = config.safety_identifier;
     }
     return headers;
   }
@@ -654,9 +655,12 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   // Build the WebSocket handshake headers. When bearer auth is suppressed (Azure
   // api-key auth), also drop any Authorization header a user supplied via
   // config.headers so it can't re-introduce bearer credentials alongside api-key.
-  private buildRealtimeWsHeaders(wsUrl: string): Record<string, string> {
+  private buildRealtimeWsHeaders(
+    wsUrl: string,
+    headers = this.getRealtimeRequestHeaders(),
+  ): Record<string, string> {
     const omitBearer = this.shouldOmitBearerAuth(wsUrl);
-    const requestHeaders = this.getRealtimeRequestHeaders();
+    const requestHeaders = { ...headers };
     if (omitBearer) {
       for (const key of Object.keys(requestHeaders)) {
         if (key.toLowerCase() === 'authorization') {
@@ -1239,15 +1243,19 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
     try {
       const promptContent = this.getRealtimeUserContent(prompt);
+      const requestHeaders = this.getRealtimeRequestHeaders({
+        ...this.config,
+        ...context?.prompt?.config,
+      });
 
       // Use a persistent connection if we should maintain conversation context
       let result;
       if (this.config.maintainContext === true) {
-        result = await this.persistentWebSocketRequest(promptContent);
+        result = await this.persistentWebSocketRequest(promptContent, requestHeaders);
       } else {
         // Connect directly to the WebSocket API using API key
         logger.debug(`Connecting directly to OpenAI Realtime API WebSocket with API key`);
-        result = await this.directWebSocketRequest(promptContent);
+        result = await this.directWebSocketRequest(promptContent, requestHeaders);
       }
 
       let finalOutput = result.output;
@@ -1428,7 +1436,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
   }
 
-  async directWebSocketRequest(prompt: string | RealtimeUserContent[]): Promise<RealtimeResponse> {
+  async directWebSocketRequest(
+    prompt: string | RealtimeUserContent[],
+    requestHeaders = this.getRealtimeRequestHeaders(),
+  ): Promise<RealtimeResponse> {
     return new Promise((resolve, reject) => {
       const getCachedToolConfig = this.makeRequestToolConfigCache();
       const promptContent = this.normalizeRealtimePromptContent(prompt);
@@ -1440,7 +1451,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
       // Add WebSocket options with required headers
       const wsOptions = {
-        headers: this.buildRealtimeWsHeaders(wsUrl),
+        headers: this.buildRealtimeWsHeaders(wsUrl, requestHeaders),
         handshakeTimeout: 10000,
         perMessageDeflate: false,
       };
@@ -1945,6 +1956,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     this.persistentConnectionLifecycleCleanup = null;
     this.persistentConnection = null;
     this.connectionReady = null;
+    this.connectionSafetyIdentifier = undefined;
     // Realtime item IDs are scoped to the socket session. Reusing them after a
     // reconnect makes conversation.item.create point at a missing item.
     this.previousItemId = null;
@@ -2005,7 +2017,15 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
    * On error/close before OPEN, both the socket and the cached promise are torn
    * down so the next request creates a fresh connection.
    */
-  private openPersistentConnection(): Promise<void> {
+  private openPersistentConnection(
+    requestHeaders = this.getRealtimeRequestHeaders(),
+  ): Promise<void> {
+    const safetyIdentifier = Object.entries(requestHeaders).find(
+      ([name]) => name.toLowerCase() === 'openai-safety-identifier',
+    )?.[1];
+    if (this.persistentConnection && this.connectionSafetyIdentifier !== safetyIdentifier) {
+      this.cleanup();
+    }
     // Reuse the cached promise only if the underlying socket is still live.
     // After a disconnect, connectionReady can remain resolved while the
     // socket has been nulled — returning it would skip reconnection and the
@@ -2031,13 +2051,14 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     logger.debug(`Opening persistent WebSocket: ${sanitizeUrlForLogging(wsUrl)}`);
 
     const wsOptions = {
-      headers: this.buildRealtimeWsHeaders(wsUrl),
+      headers: this.buildRealtimeWsHeaders(wsUrl, requestHeaders),
       handshakeTimeout: 10000,
       perMessageDeflate: false,
     };
 
     const ws = new WebSocket(wsUrl, wsOptions);
     this.persistentConnection = ws;
+    this.connectionSafetyIdentifier = safetyIdentifier;
 
     this.connectionReady = new Promise<void>((resolve, reject) => {
       const removeBeforeOpenListeners = () => {
@@ -2093,6 +2114,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
    */
   async persistentWebSocketRequest(
     prompt: string | RealtimeUserContent[],
+    requestHeaders = this.getRealtimeRequestHeaders(),
   ): Promise<RealtimeResponse> {
     const promptContent = this.normalizeRealtimePromptContent(prompt);
     const previous = this.inflightTurn;
@@ -2102,7 +2124,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       } catch {
         // Prior turn errors don't poison the queue.
       }
-      await this.openPersistentConnection();
+      await this.openPersistentConnection(requestHeaders);
       return new Promise<RealtimeResponse>((resolve, reject) => {
         void this.setupMessageHandlers(promptContent, resolve, reject).catch(reject);
       });
