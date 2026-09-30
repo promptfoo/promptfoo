@@ -9,6 +9,15 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import {
+  type ApiEmbeddingProvider,
+  type CallApiContextParams,
+  type GuardrailResponse,
+  inheritProviderCapabilities,
+  type ProviderEmbeddingResponse,
+  type ProviderResponse,
+  type TokenUsage,
+} from '../../types/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
@@ -54,14 +63,6 @@ import {
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
-import type {
-  ApiEmbeddingProvider,
-  CallApiContextParams,
-  GuardrailResponse,
-  ProviderEmbeddingResponse,
-  ProviderResponse,
-  TokenUsage,
-} from '../../types/index';
 import type {
   ClaudeRequest,
   ClaudeResponse,
@@ -1255,6 +1256,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
 }
 
 export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    VertexEmbeddingProvider.declaredProviderCapabilities,
+  );
+
   modelName: string;
   config: VertexEmbeddingProviderConfig;
   env?: EnvOverrides;

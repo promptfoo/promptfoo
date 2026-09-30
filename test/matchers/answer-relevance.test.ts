@@ -224,6 +224,25 @@ describe('matchesAnswerRelevance', () => {
     expect(result.tokensUsed?.completionDetails).toBeDefined();
   });
 
+  it('rejects an excluded embedding operation before generating questions', async () => {
+    const callEmbeddingApi = vi.fn().mockRejectedValue(new Error('excluded embedding stub'));
+    const provider = {
+      id: () => 'similarity-only',
+      promptfooCapabilities: ['callSimilarityApi'] as const,
+      callApi: vi.fn(),
+      callSimilarityApi: vi.fn().mockResolvedValue({ similarity: 1 }),
+      callEmbeddingApi,
+    };
+
+    await expect(
+      matchesAnswerRelevance('Input text', 'Sample output', 0.5, {
+        provider: { embedding: provider, text: DefaultGradingProvider },
+      }),
+    ).rejects.toThrow('must implement callEmbeddingApi');
+    expect(callEmbeddingApi).not.toHaveBeenCalled();
+    expect(DefaultGradingProvider.callApi).not.toHaveBeenCalled();
+  });
+
   it('should return metadata with generated questions and similarities', async () => {
     const input = 'What is the capital of France?';
     const output = 'The capital of France is Paris.';

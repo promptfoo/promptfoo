@@ -3,6 +3,14 @@ import dedent from 'dedent';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
+import {
+  type ApiEmbeddingProvider,
+  type ApiProvider,
+  type CallApiContextParams,
+  inheritProviderCapabilities,
+  type ProviderEmbeddingResponse,
+  type ProviderResponse,
+} from '../../types/providers';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
@@ -23,13 +31,6 @@ import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHa
 import { calculateBedrockInvokeModelCost } from './pricing';
 import { INFERENCE_PROFILE_PREFIX, novaOutputFromMessage, novaParseMessages } from './util';
 
-import type {
-  ApiEmbeddingProvider,
-  ApiProvider,
-  CallApiContextParams,
-  ProviderEmbeddingResponse,
-  ProviderResponse,
-} from '../../types/providers';
 import type { TokenUsage, VarValue } from '../../types/shared';
 import type { ClaudeThinkingConfig } from '../anthropic/types';
 
@@ -3017,6 +3018,11 @@ export class AwsBedrockEmbeddingProvider
   extends AwsBedrockGenericProvider
   implements ApiEmbeddingProvider
 {
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    AwsBedrockEmbeddingProvider.declaredProviderCapabilities,
+  );
+
   declare config: BedrockEmbeddingOptions;
 
   constructor(

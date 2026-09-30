@@ -1,8 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { createTogetherAiProvider } from '../../src/providers/togetherai';
+import { hasProviderCapability } from '../../src/types/providers';
 import { ProviderOptionsSchema, ProviderSchema } from '../../src/validators/providers';
 import { createMockProvider } from '../factories/provider';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('ProviderOptionsSchema', () => {
   it('should filter unknown keys without erroring', () => {
@@ -92,6 +98,91 @@ describe('ProviderSchema union', () => {
     // unknownField should be filtered by ProviderOptionsSchema
     expect(result.data).not.toHaveProperty('unknownField');
   });
+
+  it('preserves explicit provider capabilities', () => {
+    const input = {
+      id: () => 'embedding',
+      callApi: async () => ({}),
+      promptfooCapabilities: ['callEmbeddingApi'],
+    };
+
+    const result = ProviderSchema.parse(input);
+
+    expect(result).toMatchObject({ promptfooCapabilities: ['callEmbeddingApi'] });
+  });
+
+  it('preserves inherited capability delegation and grader operations', () => {
+    class TextEmbeddingProvider extends OpenAiEmbeddingProvider {
+      override async callApi() {
+        return { output: 'text' };
+      }
+    }
+    const provider = ProviderSchema.parse(new TextEmbeddingProvider('fixture'));
+    expect(hasProviderCapability(provider, 'callApi')).toBe(true);
+
+    const custom = ProviderSchema.parse({
+      id: () => 'custom',
+      callApi: async () => ({ output: 'text' }),
+      callSimilarityApi: async () => ({ similarity: 1 }),
+      callModerationApi: async () => ({ flags: [] }),
+    });
+    expect(custom).toHaveProperty('callSimilarityApi');
+    expect(custom).toHaveProperty('callModerationApi');
+  });
+
+  it('preserves the receiver for parsed provider operations', async () => {
+    class StatefulProvider {
+      #value = 7;
+      id() {
+        return `stateful-${this.#value}`;
+      }
+      async callApi() {
+        return { output: this.#value };
+      }
+      async callEmbeddingApi() {
+        return { embedding: [this.#value] };
+      }
+      async callClassificationApi() {
+        return { classification: { fixture: this.#value } };
+      }
+      async callSimilarityApi() {
+        return { similarity: this.#value };
+      }
+      async callModerationApi() {
+        return { flags: [], value: this.#value };
+      }
+    }
+    const input = new StatefulProvider();
+    const provider = ProviderSchema.parse(input);
+    expect(typeof provider).toBe('object');
+    if (typeof provider === 'string' || !provider.callApi || typeof provider.id !== 'function') {
+      throw new Error('Expected a parsed API provider');
+    }
+
+    expect(provider.id()).toBe('stateful-7');
+    expect(await provider.callApi('')).toEqual({ output: 7 });
+    expect(await provider.callEmbeddingApi?.('')).toEqual({ embedding: [7] });
+    expect(await provider.callClassificationApi?.('')).toEqual({ classification: { fixture: 7 } });
+    expect(await provider.callSimilarityApi?.('', '')).toEqual({ similarity: 7 });
+    expect(await provider.callModerationApi?.('', '')).toEqual({ flags: [], value: 7 });
+  });
+
+  it.each([
+    { capabilities: ['misspelled'] },
+    { capabilities: ['callApi', 'third-party'] },
+    { capabilities: 'callApi' },
+  ])(
+    'rejects invalid capability declarations instead of returning options: %j',
+    ({ capabilities }) => {
+      const provider = {
+        id: () => 'custom',
+        callApi: async () => ({ output: 'fixture' }),
+        promptfooCapabilities: capabilities,
+      };
+
+      expect(ProviderSchema.safeParse(provider).success).toBe(false);
+    },
+  );
 
   it('should accept string provider', () => {
     const result = ProviderSchema.safeParse('openai:gpt-4');

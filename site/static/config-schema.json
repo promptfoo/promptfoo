@@ -17,58 +17,58 @@
           "$ref": "#/definitions/__schema2"
         },
         "prompts": {
-          "$ref": "#/definitions/__schema13"
+          "$ref": "#/definitions/__schema20"
         },
         "tests": {
-          "$ref": "#/definitions/__schema14"
+          "$ref": "#/definitions/__schema21"
         },
         "scenarios": {
-          "$ref": "#/definitions/__schema31"
-        },
-        "defaultTest": {
-          "$ref": "#/definitions/__schema32"
-        },
-        "outputPath": {
-          "$ref": "#/definitions/__schema33"
-        },
-        "sharing": {
-          "$ref": "#/definitions/__schema34"
-        },
-        "nunjucksFilters": {
-          "$ref": "#/definitions/__schema35"
-        },
-        "env": {
-          "$ref": "#/definitions/__schema36"
-        },
-        "derivedMetrics": {
-          "$ref": "#/definitions/__schema37"
-        },
-        "extensions": {
           "$ref": "#/definitions/__schema38"
         },
-        "metadata": {
+        "defaultTest": {
           "$ref": "#/definitions/__schema39"
         },
-        "redteam": {
+        "outputPath": {
           "$ref": "#/definitions/__schema40"
         },
+        "sharing": {
+          "$ref": "#/definitions/__schema41"
+        },
+        "nunjucksFilters": {
+          "$ref": "#/definitions/__schema42"
+        },
+        "env": {
+          "$ref": "#/definitions/__schema43"
+        },
+        "derivedMetrics": {
+          "$ref": "#/definitions/__schema44"
+        },
+        "extensions": {
+          "$ref": "#/definitions/__schema45"
+        },
+        "metadata": {
+          "$ref": "#/definitions/__schema46"
+        },
+        "redteam": {
+          "$ref": "#/definitions/__schema47"
+        },
         "writeLatestResults": {
-          "$ref": "#/definitions/__schema70"
-        },
-        "tracing": {
-          "$ref": "#/definitions/__schema71"
-        },
-        "basePath": {
-          "$ref": "#/definitions/__schema76"
-        },
-        "evaluateOptions": {
           "$ref": "#/definitions/__schema77"
         },
+        "tracing": {
+          "$ref": "#/definitions/__schema78"
+        },
+        "basePath": {
+          "$ref": "#/definitions/__schema83"
+        },
+        "evaluateOptions": {
+          "$ref": "#/definitions/__schema84"
+        },
         "commandLineOptions": {
-          "$ref": "#/definitions/__schema79"
+          "$ref": "#/definitions/__schema86"
         },
         "targets": {
-          "$ref": "#/definitions/__schema80"
+          "$ref": "#/definitions/__schema87"
         }
       },
       "required": ["prompts"],
@@ -134,41 +134,62 @@
     "__schema5": {
       "type": "object",
       "properties": {
-        "id": {},
-        "label": {},
-        "config": {},
+        "id": {
+          "$ref": "#/definitions/__schema6"
+        },
+        "label": {
+          "$ref": "#/definitions/__schema7"
+        },
+        "config": {
+          "$ref": "#/definitions/__schema8"
+        },
         "prompts": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+          "$ref": "#/definitions/__schema9"
         },
         "transform": {
           "type": "string"
         },
         "delay": {
-          "type": "number"
+          "$ref": "#/definitions/__schema12"
         },
         "env": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/__schema7"
-            }
-          ]
+          "$ref": "#/definitions/__schema13"
         },
         "inputs": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/__schema8"
-            }
-          ]
+          "$ref": "#/definitions/__schema15"
         }
       }
     },
-    "__schema6": {
+    "__schema6": {},
+    "__schema7": {},
+    "__schema8": {},
+    "__schema9": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "__schema10": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/__schema11"
+        }
+      ]
+    },
+    "__schema11": {
       "type": "string"
     },
-    "__schema7": {
+    "__schema12": {
+      "type": "number"
+    },
+    "__schema13": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/__schema14"
+        }
+      ]
+    },
+    "__schema14": {
       "type": "object",
       "properties": {
         "ABLIT_API_BASE_URL": {
@@ -650,7 +671,7 @@
         }
       }
     },
-    "__schema8": {
+    "__schema15": {
       "type": "object",
       "propertyNames": {
         "type": "string",
@@ -666,13 +687,13 @@
             "type": "object",
             "properties": {
               "config": {
-                "$ref": "#/definitions/__schema9"
+                "$ref": "#/definitions/__schema16"
               },
               "description": {
-                "$ref": "#/definitions/__schema11"
+                "$ref": "#/definitions/__schema18"
               },
               "type": {
-                "$ref": "#/definitions/__schema12"
+                "$ref": "#/definitions/__schema19"
               }
             },
             "required": ["description"]
@@ -680,7 +701,7 @@
         ]
       }
     },
-    "__schema9": {
+    "__schema16": {
       "type": "object",
       "properties": {
         "benign": {
@@ -694,24 +715,24 @@
           "minItems": 1,
           "type": "array",
           "items": {
-            "$ref": "#/definitions/__schema10"
+            "$ref": "#/definitions/__schema17"
           }
         }
       }
     },
-    "__schema10": {
+    "__schema17": {
       "type": "string",
       "minLength": 1
     },
-    "__schema11": {
+    "__schema18": {
       "type": "string",
       "minLength": 1
     },
-    "__schema12": {
+    "__schema19": {
       "type": "string",
       "enum": ["text", "pdf", "docx", "image"]
     },
-    "__schema13": {
+    "__schema20": {
       "anyOf": [
         {
           "type": "string"
@@ -775,7 +796,7 @@
         }
       ]
     },
-    "__schema14": {
+    "__schema21": {
       "anyOf": [
         {
           "type": "string"
@@ -788,62 +809,62 @@
                 "type": "string"
               },
               {
-                "$ref": "#/definitions/__schema15"
+                "$ref": "#/definitions/__schema22"
               },
               {
-                "$ref": "#/definitions/__schema30"
+                "$ref": "#/definitions/__schema37"
               }
             ]
           }
         },
         {
-          "$ref": "#/definitions/__schema30"
+          "$ref": "#/definitions/__schema37"
         }
       ]
     },
-    "__schema15": {
+    "__schema22": {
       "type": "object",
       "properties": {
         "description": {
-          "$ref": "#/definitions/__schema16"
-        },
-        "vars": {
-          "$ref": "#/definitions/__schema17"
-        },
-        "provider": {
-          "$ref": "#/definitions/__schema18"
-        },
-        "providers": {
-          "$ref": "#/definitions/__schema20"
-        },
-        "prompts": {
-          "$ref": "#/definitions/__schema21"
-        },
-        "providerOutput": {
-          "$ref": "#/definitions/__schema22"
-        },
-        "assert": {
           "$ref": "#/definitions/__schema23"
         },
-        "assertScoringFunction": {
-          "$ref": "#/definitions/__schema26"
+        "vars": {
+          "$ref": "#/definitions/__schema24"
         },
-        "options": {
+        "provider": {
+          "$ref": "#/definitions/__schema25"
+        },
+        "providers": {
           "$ref": "#/definitions/__schema27"
         },
-        "threshold": {
+        "prompts": {
           "$ref": "#/definitions/__schema28"
         },
-        "metadata": {
+        "providerOutput": {
           "$ref": "#/definitions/__schema29"
+        },
+        "assert": {
+          "$ref": "#/definitions/__schema30"
+        },
+        "assertScoringFunction": {
+          "$ref": "#/definitions/__schema33"
+        },
+        "options": {
+          "$ref": "#/definitions/__schema34"
+        },
+        "threshold": {
+          "$ref": "#/definitions/__schema35"
+        },
+        "metadata": {
+          "$ref": "#/definitions/__schema36"
         }
       }
     },
-    "__schema16": {
+    "__schema23": {
       "type": "string"
     },
-    "__schema17": {},
-    "__schema18": {
+    "__schema24": {},
+    "__schema25": {
       "anyOf": [
         {
           "type": "string"
@@ -852,17 +873,33 @@
           "$ref": "#/definitions/__schema5"
         },
         {
-          "$ref": "#/definitions/__schema19"
+          "$ref": "#/definitions/__schema26"
         }
       ]
     },
-    "__schema19": {
+    "__schema26": {
       "type": "object",
       "properties": {
         "id": {},
         "callApi": {},
         "callEmbeddingApi": {},
         "callClassificationApi": {},
+        "callSimilarityApi": {},
+        "callModerationApi": {},
+        "promptfooCapabilities": {
+          "readOnly": true,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "callApi",
+              "callEmbeddingApi",
+              "callClassificationApi",
+              "callSimilarityApi",
+              "callModerationApi"
+            ]
+          }
+        },
         "label": {},
         "transform": {
           "type": "string"
@@ -872,28 +909,70 @@
         },
         "config": {},
         "inputs": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/__schema8"
-            }
-          ]
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "config": {
+                    "type": "object",
+                    "properties": {
+                      "benign": {
+                        "type": "boolean"
+                      },
+                      "inputPurpose": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "injectionPlacements": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    }
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["text", "pdf", "docx", "image"]
+                  }
+                },
+                "required": ["description"]
+              }
+            ]
+          }
         }
       },
       "required": ["id", "callApi"]
     },
-    "__schema20": {
+    "__schema27": {
       "type": "array",
       "items": {
         "type": "string"
       }
     },
-    "__schema21": {
+    "__schema28": {
       "type": "array",
       "items": {
         "type": "string"
       }
     },
-    "__schema22": {
+    "__schema29": {
       "anyOf": [
         {
           "type": "string"
@@ -907,7 +986,7 @@
         }
       ]
     },
-    "__schema23": {
+    "__schema30": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -923,7 +1002,7 @@
                 "items": {
                   "allOf": [
                     {
-                      "$ref": "#/definitions/__schema24"
+                      "$ref": "#/definitions/__schema31"
                     }
                   ]
                 }
@@ -948,23 +1027,23 @@
             "required": ["type", "assert"]
           },
           {
-            "$ref": "#/definitions/__schema24"
+            "$ref": "#/definitions/__schema31"
           }
         ]
       }
     },
-    "__schema24": {
+    "__schema31": {
       "type": "object",
       "properties": {
         "type": {
           "anyOf": [
             {
-              "$ref": "#/definitions/__schema25"
+              "$ref": "#/definitions/__schema32"
             },
             {
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema25"
+                  "$ref": "#/definitions/__schema32"
                 }
               ]
             },
@@ -1003,7 +1082,7 @@
       },
       "required": ["type"]
     },
-    "__schema25": {
+    "__schema32": {
       "type": "string",
       "enum": [
         "agent-rubric",
@@ -1074,7 +1153,7 @@
         "word-count"
       ]
     },
-    "__schema26": {
+    "__schema33": {
       "anyOf": [
         {
           "type": "string",
@@ -1083,7 +1162,7 @@
         {}
       ]
     },
-    "__schema27": {
+    "__schema34": {
       "type": "object",
       "properties": {
         "prefix": {
@@ -1194,10 +1273,10 @@
       },
       "additionalProperties": {}
     },
-    "__schema28": {
+    "__schema35": {
       "type": "number"
     },
-    "__schema29": {
+    "__schema36": {
       "type": "object",
       "properties": {
         "pluginConfig": {},
@@ -1205,7 +1284,7 @@
       },
       "additionalProperties": {}
     },
-    "__schema30": {
+    "__schema37": {
       "type": "object",
       "properties": {
         "path": {
@@ -1247,7 +1326,7 @@
       },
       "required": ["path"]
     },
-    "__schema31": {
+    "__schema38": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -1268,77 +1347,77 @@
                     "description": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema16"
+                          "$ref": "#/definitions/__schema23"
                         }
                       ]
                     },
                     "vars": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema17"
+                          "$ref": "#/definitions/__schema24"
                         }
                       ]
                     },
                     "provider": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema18"
+                          "$ref": "#/definitions/__schema25"
                         }
                       ]
                     },
                     "providers": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema20"
+                          "$ref": "#/definitions/__schema27"
                         }
                       ]
                     },
                     "prompts": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema21"
+                          "$ref": "#/definitions/__schema28"
                         }
                       ]
                     },
                     "providerOutput": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema22"
+                          "$ref": "#/definitions/__schema29"
                         }
                       ]
                     },
                     "assert": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema23"
+                          "$ref": "#/definitions/__schema30"
                         }
                       ]
                     },
                     "assertScoringFunction": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema26"
+                          "$ref": "#/definitions/__schema33"
                         }
                       ]
                     },
                     "options": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema27"
+                          "$ref": "#/definitions/__schema34"
                         }
                       ]
                     },
                     "threshold": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema28"
+                          "$ref": "#/definitions/__schema35"
                         }
                       ]
                     },
                     "metadata": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema29"
+                          "$ref": "#/definitions/__schema36"
                         }
                       ]
                     }
@@ -1348,7 +1427,7 @@
               "tests": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/definitions/__schema15"
+                  "$ref": "#/definitions/__schema22"
                 }
               }
             },
@@ -1357,7 +1436,7 @@
         ]
       }
     },
-    "__schema32": {
+    "__schema39": {
       "anyOf": [
         {
           "type": "string"
@@ -1366,40 +1445,40 @@
           "type": "object",
           "properties": {
             "vars": {
-              "$ref": "#/definitions/__schema17"
+              "$ref": "#/definitions/__schema24"
             },
             "provider": {
-              "$ref": "#/definitions/__schema18"
+              "$ref": "#/definitions/__schema25"
             },
             "providers": {
-              "$ref": "#/definitions/__schema20"
-            },
-            "prompts": {
-              "$ref": "#/definitions/__schema21"
-            },
-            "providerOutput": {
-              "$ref": "#/definitions/__schema22"
-            },
-            "assert": {
-              "$ref": "#/definitions/__schema23"
-            },
-            "assertScoringFunction": {
-              "$ref": "#/definitions/__schema26"
-            },
-            "options": {
               "$ref": "#/definitions/__schema27"
             },
-            "threshold": {
+            "prompts": {
               "$ref": "#/definitions/__schema28"
             },
-            "metadata": {
+            "providerOutput": {
               "$ref": "#/definitions/__schema29"
+            },
+            "assert": {
+              "$ref": "#/definitions/__schema30"
+            },
+            "assertScoringFunction": {
+              "$ref": "#/definitions/__schema33"
+            },
+            "options": {
+              "$ref": "#/definitions/__schema34"
+            },
+            "threshold": {
+              "$ref": "#/definitions/__schema35"
+            },
+            "metadata": {
+              "$ref": "#/definitions/__schema36"
             }
           }
         }
       ]
     },
-    "__schema33": {
+    "__schema40": {
       "anyOf": [
         {
           "type": "string"
@@ -1412,7 +1491,7 @@
         }
       ]
     },
-    "__schema34": {
+    "__schema41": {
       "anyOf": [
         {
           "type": "boolean"
@@ -1430,7 +1509,7 @@
         }
       ]
     },
-    "__schema35": {
+    "__schema42": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -1439,10 +1518,10 @@
         "type": "string"
       }
     },
-    "__schema36": {
+    "__schema43": {
       "anyOf": [
         {
-          "$ref": "#/definitions/__schema7"
+          "$ref": "#/definitions/__schema14"
         },
         {
           "type": "object",
@@ -1455,7 +1534,7 @@
         }
       ]
     },
-    "__schema37": {
+    "__schema44": {
       "type": "array",
       "items": {
         "type": "object",
@@ -1475,7 +1554,7 @@
         "required": ["name", "value"]
       }
     },
-    "__schema38": {
+    "__schema45": {
       "anyOf": [
         {
           "type": "array",
@@ -1488,21 +1567,21 @@
         }
       ]
     },
-    "__schema39": {
+    "__schema46": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema40": {
+    "__schema47": {
       "type": "object",
       "properties": {
         "injectVar": {
           "description": "Variable to inject. Can be a string or array of strings. If string, it's transformed to an array. Inferred from the prompts by default.",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema41"
+              "$ref": "#/definitions/__schema48"
             }
           ]
         },
@@ -1510,7 +1589,7 @@
           "description": "Purpose override string - describes the prompt templates",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema42"
+              "$ref": "#/definitions/__schema49"
             }
           ]
         },
@@ -1518,7 +1597,7 @@
           "description": "Additional instructions for test generation applied to each plugin",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema43"
+              "$ref": "#/definitions/__schema50"
             }
           ]
         },
@@ -1526,7 +1605,7 @@
           "description": "Provider used for generating adversarial inputs",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema44"
+              "$ref": "#/definitions/__schema51"
             }
           ]
         },
@@ -1534,7 +1613,7 @@
           "description": "Number of tests to generate",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema45"
+              "$ref": "#/definitions/__schema52"
             }
           ]
         },
@@ -1542,7 +1621,7 @@
           "description": "Language(s) of tests to generate for this plugin",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema46"
+              "$ref": "#/definitions/__schema53"
             }
           ]
         },
@@ -1550,7 +1629,7 @@
           "description": "Compliance frameworks to include across reports and commands",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema47"
+              "$ref": "#/definitions/__schema54"
             }
           ]
         },
@@ -1558,7 +1637,7 @@
           "description": "Names of people, brands, or organizations related to your LLM application",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema49"
+              "$ref": "#/definitions/__schema56"
             }
           ]
         },
@@ -1566,7 +1645,7 @@
           "description": "Security contexts for testing multiple states - each context has its own purpose",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema50"
+              "$ref": "#/definitions/__schema57"
             }
           ]
         },
@@ -1574,7 +1653,7 @@
           "default": ["default"],
           "type": "array",
           "items": {
-            "$ref": "#/definitions/__schema53"
+            "$ref": "#/definitions/__schema60"
           },
           "description": "Plugins to use for redteam generation"
         },
@@ -1582,7 +1661,7 @@
           "default": ["default"],
           "type": "array",
           "items": {
-            "$ref": "#/definitions/__schema61"
+            "$ref": "#/definitions/__schema68"
           },
           "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:goblin, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
         },
@@ -1590,7 +1669,7 @@
           "description": "Maximum number of concurrent API calls",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema64"
+              "$ref": "#/definitions/__schema71"
             }
           ]
         },
@@ -1598,7 +1677,7 @@
           "description": "Maximum number of characters allowed per generated user message",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema65"
+              "$ref": "#/definitions/__schema72"
             }
           ]
         },
@@ -1606,7 +1685,7 @@
           "description": "Delay in milliseconds between plugin API calls",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema66"
+              "$ref": "#/definitions/__schema73"
             }
           ]
         },
@@ -1614,7 +1693,7 @@
           "description": "Whether to exclude target output from the agentific attack generation process",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema67"
+              "$ref": "#/definitions/__schema74"
             }
           ]
         },
@@ -1622,7 +1701,7 @@
           "description": "Tracing defaults applied to all strategies unless overridden",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema68"
+              "$ref": "#/definitions/__schema75"
             }
           ]
         },
@@ -1630,40 +1709,69 @@
           "description": "Global grading examples that apply to all plugins",
           "allOf": [
             {
-              "$ref": "#/definitions/__schema69"
+              "$ref": "#/definitions/__schema76"
             }
           ]
         }
       }
     },
-    "__schema41": {
+    "__schema48": {
       "type": "string"
     },
-    "__schema42": {
+    "__schema49": {
       "type": "string"
     },
-    "__schema43": {
+    "__schema50": {
       "type": "string"
     },
-    "__schema44": {
+    "__schema51": {
       "anyOf": [
         {
           "type": "string"
         },
         {
-          "$ref": "#/definitions/__schema19"
+          "$ref": "#/definitions/__schema26"
         },
         {
-          "$ref": "#/definitions/__schema5"
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/__schema6"
+            },
+            "label": {
+              "$ref": "#/definitions/__schema7"
+            },
+            "config": {
+              "$ref": "#/definitions/__schema8"
+            },
+            "prompts": {
+              "$ref": "#/definitions/__schema9"
+            },
+            "transform": {
+              "type": "string"
+            },
+            "delay": {
+              "$ref": "#/definitions/__schema12"
+            },
+            "env": {
+              "$ref": "#/definitions/__schema13"
+            },
+            "inputs": {
+              "$ref": "#/definitions/__schema15"
+            },
+            "callApi": {
+              "not": {}
+            }
+          }
         }
       ]
     },
-    "__schema45": {
+    "__schema52": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema46": {
+    "__schema53": {
       "anyOf": [
         {
           "type": "string"
@@ -1676,14 +1784,14 @@
         }
       ]
     },
-    "__schema47": {
+    "__schema54": {
       "minItems": 1,
       "type": "array",
       "items": {
-        "$ref": "#/definitions/__schema48"
+        "$ref": "#/definitions/__schema55"
       }
     },
-    "__schema48": {
+    "__schema55": {
       "type": "string",
       "enum": [
         "mitre:atlas",
@@ -1697,13 +1805,13 @@
         "dod:ai:ethics"
       ]
     },
-    "__schema49": {
+    "__schema56": {
       "type": "array",
       "items": {
         "type": "string"
       }
     },
-    "__schema50": {
+    "__schema57": {
       "type": "array",
       "items": {
         "type": "object",
@@ -1716,7 +1824,7 @@
             "description": "Optional purpose/context for this context - used for generation and grading, or inherited from the root redteam purpose when omitted or blank",
             "allOf": [
               {
-                "$ref": "#/definitions/__schema51"
+                "$ref": "#/definitions/__schema58"
               }
             ]
           },
@@ -1724,7 +1832,7 @@
             "description": "Variables passed to provider (e.g., context_file, user_role)",
             "allOf": [
               {
-                "$ref": "#/definitions/__schema52"
+                "$ref": "#/definitions/__schema59"
               }
             ]
           }
@@ -1732,10 +1840,10 @@
         "required": ["id"]
       }
     },
-    "__schema51": {
+    "__schema58": {
       "type": "string"
     },
-    "__schema52": {
+    "__schema59": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -1744,15 +1852,15 @@
         "type": "string"
       }
     },
-    "__schema53": {
+    "__schema60": {
       "anyOf": [
         {
           "anyOf": [
             {
-              "$ref": "#/definitions/__schema54"
+              "$ref": "#/definitions/__schema61"
             },
             {
-              "$ref": "#/definitions/__schema55"
+              "$ref": "#/definitions/__schema62"
             }
           ],
           "description": "Name of the plugin or path to custom plugin"
@@ -1763,10 +1871,10 @@
             "id": {
               "anyOf": [
                 {
-                  "$ref": "#/definitions/__schema56"
+                  "$ref": "#/definitions/__schema63"
                 },
                 {
-                  "$ref": "#/definitions/__schema57"
+                  "$ref": "#/definitions/__schema64"
                 }
               ],
               "description": "Name of the plugin"
@@ -1775,7 +1883,7 @@
               "description": "Number of tests to generate for this plugin",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema58"
+                  "$ref": "#/definitions/__schema65"
                 }
               ]
             },
@@ -1783,7 +1891,7 @@
               "description": "Plugin-specific configuration",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema59"
+                  "$ref": "#/definitions/__schema66"
                 }
               ]
             },
@@ -1791,7 +1899,7 @@
               "description": "Severity level for this plugin",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema60"
+                  "$ref": "#/definitions/__schema67"
                 }
               ]
             }
@@ -1800,7 +1908,7 @@
         }
       ]
     },
-    "__schema54": {
+    "__schema61": {
       "type": "string",
       "enum": [
         "aegis",
@@ -2096,10 +2204,10 @@
         "xstest"
       ]
     },
-    "__schema55": {
+    "__schema62": {
       "type": "string"
     },
-    "__schema56": {
+    "__schema63": {
       "type": "string",
       "enum": [
         "aegis",
@@ -2395,41 +2503,41 @@
         "xstest"
       ]
     },
-    "__schema57": {
+    "__schema64": {
       "type": "string"
     },
-    "__schema58": {
+    "__schema65": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema59": {
+    "__schema66": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema60": {
+    "__schema67": {
       "type": "string",
       "enum": ["critical", "high", "medium", "low", "informational"]
     },
-    "__schema61": {
+    "__schema68": {
       "anyOf": [
         {
-          "$ref": "#/definitions/__schema62"
+          "$ref": "#/definitions/__schema69"
         },
         {
           "type": "object",
           "properties": {
             "id": {
-              "$ref": "#/definitions/__schema62"
+              "$ref": "#/definitions/__schema69"
             },
             "config": {
               "description": "Strategy-specific configuration",
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema63"
+                  "$ref": "#/definitions/__schema70"
                 }
               ]
             }
@@ -2438,7 +2546,7 @@
         }
       ]
     },
-    "__schema62": {
+    "__schema69": {
       "anyOf": [
         {
           "type": "string",
@@ -2490,32 +2598,32 @@
         }
       ]
     },
-    "__schema63": {
+    "__schema70": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema64": {
+    "__schema71": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema65": {
+    "__schema72": {
       "type": "integer",
       "exclusiveMinimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema66": {
+    "__schema73": {
       "type": "integer",
       "minimum": 0,
       "maximum": 9007199254740991
     },
-    "__schema67": {
+    "__schema74": {
       "type": "boolean"
     },
-    "__schema68": {
+    "__schema75": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -2567,14 +2675,14 @@
           "additionalProperties": {
             "allOf": [
               {
-                "$ref": "#/definitions/__schema68"
+                "$ref": "#/definitions/__schema75"
               }
             ]
           }
         }
       }
     },
-    "__schema69": {
+    "__schema76": {
       "type": "array",
       "items": {
         "type": "object",
@@ -2595,10 +2703,10 @@
         "required": ["output", "pass", "score", "reason"]
       }
     },
-    "__schema70": {
+    "__schema77": {
       "type": "boolean"
     },
-    "__schema71": {
+    "__schema78": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -2709,19 +2817,19 @@
                   "const": "tempo"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema72"
+                  "$ref": "#/definitions/__schema79"
                 },
                 "auth": {
                   "type": "object",
                   "properties": {
                     "token": {
-                      "$ref": "#/definitions/__schema73"
+                      "$ref": "#/definitions/__schema80"
                     },
                     "username": {
-                      "$ref": "#/definitions/__schema74"
+                      "$ref": "#/definitions/__schema81"
                     },
                     "password": {
-                      "$ref": "#/definitions/__schema75"
+                      "$ref": "#/definitions/__schema82"
                     }
                   }
                 },
@@ -2750,7 +2858,7 @@
                   "const": "braintrust"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema72"
+                  "$ref": "#/definitions/__schema79"
                 },
                 "projectId": {
                   "type": "string",
@@ -2792,7 +2900,7 @@
                   "const": "langfuse"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema72"
+                  "$ref": "#/definitions/__schema79"
                 },
                 "auth": {
                   "type": "object",
@@ -2838,26 +2946,26 @@
         }
       }
     },
-    "__schema72": {
+    "__schema79": {
       "type": "string",
       "format": "uri"
     },
-    "__schema73": {
+    "__schema80": {
       "type": "string",
       "minLength": 1
     },
-    "__schema74": {
+    "__schema81": {
       "type": "string",
       "minLength": 1
     },
-    "__schema75": {
+    "__schema82": {
       "type": "string",
       "minLength": 1
     },
-    "__schema76": {
+    "__schema83": {
       "type": "string"
     },
-    "__schema77": {
+    "__schema84": {
       "type": "object",
       "properties": {
         "cache": {
@@ -2900,14 +3008,14 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema78"
+          "$ref": "#/definitions/__schema85"
         }
       }
     },
-    "__schema78": {
+    "__schema85": {
       "type": "string"
     },
-    "__schema79": {
+    "__schema86": {
       "type": "object",
       "properties": {
         "description": {
@@ -3036,7 +3144,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema78"
+              "$ref": "#/definitions/__schema85"
             }
           ]
         },
@@ -3109,7 +3217,7 @@
         }
       }
     },
-    "__schema80": {
+    "__schema87": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"

@@ -1,7 +1,12 @@
 import logger from '../logger';
+import {
+  type ApiProvider,
+  inheritProviderCapabilities,
+  type ProviderEmbeddingResponse,
+  type ProviderResponse,
+} from '../types/providers';
 import { providerRegistry } from './providerRegistry';
-
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types/index';
+import { loadTransformers } from './transformersAvailability';
 
 /**
  * Common options for all Transformers.js providers
@@ -185,20 +190,9 @@ async function getOrCreatePipeline(
       options?: Record<string, unknown>,
     ) => Promise<Pipeline>;
 
-    let pipelineFn: PipelineFn;
-
-    try {
-      // Dynamic import with type assertion - the library's complex generics
-      // don't work well with dynamic task strings, so we use a simplified type
-      const transformers = (await import('@huggingface/transformers')) as {
-        pipeline: PipelineFn;
-      };
-      pipelineFn = transformers.pipeline;
-    } catch {
-      throw new Error(
-        'Transformers.js is not installed. Install it with: npm install @huggingface/transformers',
-      );
-    }
+    // The shared loader validates the optional SDK before initializing its pipelines.
+    const transformers = (await loadTransformers()) as { pipeline: PipelineFn };
+    const pipelineFn = transformers.pipeline;
 
     const pipelineOptions: Record<string, unknown> = {
       progress_callback: (progress: {
@@ -321,6 +315,11 @@ function ensureCleanupRegistered(): void {
  * ```
  */
 export class TransformersEmbeddingProvider implements ApiProvider {
+  static readonly declaredProviderCapabilities = ['callEmbeddingApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    TransformersEmbeddingProvider.declaredProviderCapabilities,
+  );
+
   modelName: string;
   config: TransformersEmbeddingOptions;
 

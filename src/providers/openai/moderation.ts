@@ -2,15 +2,15 @@ import { createHmac } from 'crypto';
 
 import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
+import {
+  type ApiModerationProvider,
+  inheritProviderCapabilities,
+  type ModerationFlag,
+  type ProviderModerationResponse,
+} from '../../types/providers';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { appendOpenAiApiPath } from './util';
-
-import type {
-  ApiModerationProvider,
-  ModerationFlag,
-  ProviderModerationResponse,
-} from '../../types/index';
 
 const OPENAI_MODERATION_MODELS = [
   { id: 'omni-moderation-latest', maxTokens: 32768, capabilities: ['text', 'image'] },
@@ -220,6 +220,11 @@ export class OpenAiModerationProvider
   extends OpenAiGenericProvider
   implements ApiModerationProvider
 {
+  static readonly declaredProviderCapabilities = ['callModerationApi'] as const;
+  readonly promptfooCapabilities = inheritProviderCapabilities(
+    OpenAiModerationProvider.declaredProviderCapabilities,
+  );
+
   static MODERATION_MODELS = OPENAI_MODERATION_MODELS;
   static MODERATION_MODEL_IDS = OPENAI_MODERATION_MODELS.map((model) => model.id);
 
