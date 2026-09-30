@@ -9,7 +9,10 @@ const { metadata, createGateway } = vi.hoisted(() => ({
 }));
 
 vi.mock('ai/package.json', () => ({ default: metadata }));
-vi.mock('ai', () => ({ createGateway }));
+vi.mock('ai', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('ai')>()),
+  createGateway,
+}));
 vi.mock('../../src/cache', () => ({ getCache: vi.fn(), isCacheEnabled: () => false }));
 
 beforeEach(() => {

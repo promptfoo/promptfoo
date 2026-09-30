@@ -118,9 +118,12 @@ async function loadAiSdk() {
   }
 }
 
-async function createGatewayInstance(config: VercelAiConfig, env?: EnvOverrides) {
-  const { createGateway } = await loadAiSdk();
-  return createGateway({
+function createGatewayInstance(
+  sdk: typeof import('ai'),
+  config: VercelAiConfig,
+  env?: EnvOverrides,
+) {
+  return sdk.createGateway({
     apiKey: config.apiKey,
     baseURL: resolveBaseUrl(config, env),
     headers: config.headers,
@@ -349,8 +352,9 @@ export class VercelAiProvider implements ApiProvider {
     let streamError: { error: unknown } | undefined;
 
     try {
-      const gateway = await createGatewayInstance(config, this.env);
-      const { streamText } = await loadAiSdk();
+      const sdk = await loadAiSdk();
+      const gateway = createGatewayInstance(sdk, config, this.env);
+      const { streamText } = sdk;
 
       logger.debug('Calling Vercel AI Gateway (streaming)', {
         model: this.modelName,
@@ -475,8 +479,8 @@ export class VercelAiProvider implements ApiProvider {
     let response: ProviderResponse = {};
 
     try {
-      const gateway = await createGatewayInstance(config, this.env);
       sdk = await loadAiSdk();
+      const gateway = createGatewayInstance(sdk, config, this.env);
       const { generateText, Output, jsonSchema } = sdk;
 
       logger.debug('Calling Vercel AI Gateway', {
@@ -608,8 +612,9 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
     const { signal, cleanup } = createTimeoutController(timeout);
 
     try {
-      const gateway = await createGatewayInstance(config, this.env);
-      const { embed } = await loadAiSdk();
+      const sdk = await loadAiSdk();
+      const gateway = createGatewayInstance(sdk, config, this.env);
+      const { embed } = sdk;
 
       logger.debug('Calling Vercel AI Gateway for embedding', { model: this.modelName });
 
