@@ -3039,6 +3039,47 @@ describe('OpenAI Realtime Provider', () => {
       );
     };
 
+    describe.each(['direct', 'client-secret', 'persistent'])('%s safety identifier', (mode) => {
+      it.each([
+        { name: 'configured', config: { safety_identifier: 'user-123' }, expected: 'user-123' },
+        { name: 'unset', config: {}, expected: undefined },
+        {
+          name: 'custom header override',
+          config: {
+            safety_identifier: 'provider-user',
+            headers: { 'openai-safety-identifier': 'header-user' },
+          },
+          expected: 'header-user',
+        },
+      ])('sends the $name header', async ({ config, expected }) => {
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', { config });
+        try {
+          const pending =
+            mode === 'persistent'
+              ? (provider as any).openPersistentConnection()
+              : mode === 'direct'
+                ? provider.directWebSocketRequest('hi')
+                : provider.webSocketRequest('secret123', 'hi');
+          mockHandlers.open.forEach((handler) => handler());
+          if (mode !== 'persistent') {
+            simulateGaFlow();
+          }
+          await pending;
+
+          const options = (MockWebSocket as any).mock.calls[0][1];
+          const safetyHeaders = Object.entries(options.headers).filter(
+            ([name]) => name.toLowerCase() === 'openai-safety-identifier',
+          );
+          expect(safetyHeaders.map(([, value]) => value)).toEqual(
+            expected === undefined ? [] : [expected],
+          );
+          expect(await provider.getRealtimeSessionBody()).not.toHaveProperty('safety_identifier');
+        } finally {
+          provider.cleanup();
+        }
+      });
+    });
+
     it('uses default OpenAI base for direct WebSocket', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
       const promise = provider.directWebSocketRequest('hi');

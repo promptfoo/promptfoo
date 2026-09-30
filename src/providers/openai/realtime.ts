@@ -640,12 +640,23 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     );
   }
 
+  private getRealtimeRequestHeaders(): Record<string, string> {
+    const headers = this.getOpenAiRequestHeaders();
+    if (
+      this.config.safety_identifier !== undefined &&
+      !hasHeaderOverride(headers, 'OpenAI-Safety-Identifier')
+    ) {
+      headers['OpenAI-Safety-Identifier'] = this.config.safety_identifier;
+    }
+    return headers;
+  }
+
   // Build the WebSocket handshake headers. When bearer auth is suppressed (Azure
   // api-key auth), also drop any Authorization header a user supplied via
   // config.headers so it can't re-introduce bearer credentials alongside api-key.
   private buildRealtimeWsHeaders(wsUrl: string): Record<string, string> {
     const omitBearer = this.shouldOmitBearerAuth(wsUrl);
-    const requestHeaders = { ...this.getOpenAiRequestHeaders() };
+    const requestHeaders = this.getRealtimeRequestHeaders();
     if (omitBearer) {
       for (const key of Object.keys(requestHeaders)) {
         if (key.toLowerCase() === 'authorization') {
@@ -717,7 +728,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         headers: {
           'User-Agent': 'promptfoo Realtime API Client',
           Origin: this.getWebSocketOrigin(),
-          ...this.getOpenAiRequestHeaders(),
+          ...this.getRealtimeRequestHeaders(),
         },
         handshakeTimeout: 10000,
         perMessageDeflate: false,
