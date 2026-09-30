@@ -90,6 +90,7 @@
     "preversion": "command -v gh >/dev/null 2>&1 || (echo \"Error: GitHub CLI required.\" && exit 1) && [ \"$(git rev-parse --abbrev-ref HEAD)\" = \"main\" ] || (echo \"Error: Must be on main branch to version\" && exit 1) && git pull origin main && git checkout -b \"chore/bump-version-$(date +%s)\"",
     "changelog:release": "node scripts/update-changelog-version.cjs",
     "postversion": "npm run changelog:release && npm run citation:generate && git add CHANGELOG.md CITATION.cff && git commit --amend --no-edit && gh pr create --repo promptfoo/promptfoo --title \"chore: bump version $npm_package_version\" --body \"\"",
+    "package:pack": "tsx scripts/packPackageArtifact.ts",
     "prepublishOnly": "node -e \"if (!process.env.PROMPTFOO_POSTHOG_KEY) { console.error('Error: PROMPTFOO_POSTHOG_KEY must be set'); process.exit(1); }\" && npm run build:clean && npm run build",
     "test:app": "npm --prefix src/app run test --",
     "test:app:browser": "npm --prefix src/app run test:browser --",
@@ -238,6 +239,7 @@
     "@fal-ai/client": "~1.10.1",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.11.1",
+    "@openai/codex-security": "^0.1.31",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
     "@types/cli-progress": "^3.11.6",
@@ -265,7 +267,10 @@
     "node-sql-parser": "^5.4.0",
     "oxc-parser": "^0.150.0",
     "pdf-parse": "^2.4.5",
+    "playwright": "^1.63.0",
+    "playwright-extra": "^4.3.6",
     "prettier": "^3.8.1",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "read-excel-file": "^9.3.9",
     "shx": "^0.4.0",
     "source-map-support": "^0.5.21",
@@ -296,9 +301,7 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openai/agents": "^0.11.3",
     "@openai/codex-sdk": "^0.156.1",
-    "@openai/codex-security": "^0.1.31",
     "@opencode-ai/sdk": "^1.18.31",
-    "@playwright/browser-chromium": "^1.63.0",
     "@slack/web-api": "^8.1.1",
     "@smithy/node-http-handler": "^4.4.14",
     "google-auth-library": "^11.1.0",
@@ -309,9 +312,6 @@
     "node-sql-parser": "^5.4.0",
     "pdf-parse": "^2.4.5",
     "pem": "~1.14.8",
-    "playwright": "^1.63.0",
-    "playwright-extra": "^4.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "read-excel-file": "^9.3.9",
     "sharp": "^0.35.4"
   },
@@ -406,7 +406,6 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "@huggingface/transformers",
-      "@playwright/browser-chromium",
       "core-js",
       "core-js-pure",
       "esbuild",
@@ -417,10 +416,26 @@
   },
   "homepage": "https://promptfoo.dev",
   "peerDependencies": {
-    "@huggingface/transformers": "*"
+    "@huggingface/transformers": "*",
+    "@openai/codex-security": "*",
+    "playwright": "*",
+    "playwright-extra": "*",
+    "puppeteer-extra-plugin-stealth": "*"
   },
   "peerDependenciesMeta": {
     "@huggingface/transformers": {
+      "optional": true
+    },
+    "@openai/codex-security": {
+      "optional": true
+    },
+    "playwright": {
+      "optional": true
+    },
+    "playwright-extra": {
+      "optional": true
+    },
+    "puppeteer-extra-plugin-stealth": {
       "optional": true
     }
   }
