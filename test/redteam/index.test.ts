@@ -2687,6 +2687,34 @@ describe('Language configuration', () => {
   });
 
   describe('synthesize with language configuration', () => {
+    it('generates the pinned Guardrails dataset once in English regardless of requested languages', async () => {
+      const action = vi.fn().mockResolvedValue([{ vars: { query: 'A fixed English sample' } }]);
+      vi.mocked(Plugins.find).mockReturnValue({ key: 'openai-guardrails', action });
+      const plugins = [
+        { id: 'openai-guardrails', numTests: 1, config: { language: ['fr', 'de'] } },
+      ];
+
+      expect(calculateTotalTests(plugins, [], ['es', 'ja']).totalPluginTests).toBe(1);
+      const result = await synthesize({
+        language: ['es', 'ja'],
+        numTests: 1,
+        plugins,
+        prompts: ['{{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(action).toHaveBeenCalledOnce();
+      expect(action).toHaveBeenCalledWith(
+        expect.objectContaining({ config: expect.objectContaining({ language: 'en' }) }),
+      );
+      expect(result.testCases).toHaveLength(1);
+      expect(result.testCases[0].metadata).toMatchObject({
+        language: 'en',
+        modifiers: { language: 'en' },
+      });
+    });
+
     it('should generate test cases with single language', async () => {
       const result = await synthesize({
         language: 'en',
