@@ -157,6 +157,54 @@ describe('PluginStrategyFlow', () => {
       expect(screen.getByText('Vulnerable (1)')).toBeInTheDocument();
     });
 
+    it('should expose a labeled flow region with a concise summary table', () => {
+      const failuresByPlugin: TestRecord[] = [
+        {
+          prompt: 'fail prompt 1',
+          output: 'fail output 1',
+          result: { metadata: { pluginId: 'testPlugin' } } as unknown as EvaluateResult,
+          metadata: { strategyId: 'testStrategy' },
+        },
+      ];
+
+      const passesByPlugin: TestRecord[] = [
+        {
+          prompt: 'pass prompt 1',
+          output: 'pass output 1',
+          result: { metadata: { pluginId: 'testPlugin' } } as unknown as EvaluateResult,
+          metadata: { strategyId: 'testStrategy' },
+        },
+        {
+          prompt: 'pass prompt 2',
+          output: 'pass output 2',
+          result: { metadata: { pluginId: 'testPlugin' } } as unknown as EvaluateResult,
+          metadata: { strategyId: 'testStrategy' },
+        },
+      ];
+
+      render(
+        <PluginStrategyFlow failuresByPlugin={failuresByPlugin} passesByPlugin={passesByPlugin} />,
+      );
+
+      expect(
+        screen.getByRole('region', { name: 'Plugin strategy outcome flow' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText('3 tests across 1 plugin-strategy path: 2 defended and 1 vulnerable.'),
+      ).toBeInTheDocument();
+
+      const summaryTable = screen.getByRole('table');
+      expect(summaryTable.parentElement).toHaveClass('overflow-x-auto');
+      expect(summaryTable).toHaveClass('min-w-[640px]');
+      expect(summaryTable).toHaveTextContent('Plugin');
+      expect(summaryTable).toHaveTextContent('Strategy');
+      expect(summaryTable).toHaveTextContent('testPlugin');
+      expect(summaryTable).toHaveTextContent('testStrategy');
+      expect(summaryTable).toHaveTextContent('2');
+      expect(summaryTable).toHaveTextContent('1');
+      expect(summaryTable).toHaveTextContent('3');
+    });
+
     it('should render tooltip content correctly when hovering over a link', () => {
       const failuresByPlugin: TestRecord[] = [
         {
@@ -175,7 +223,10 @@ describe('PluginStrategyFlow', () => {
 
       const tooltipElement = screen.getByTestId('tooltip');
       expect(tooltipElement).toBeInTheDocument();
-      expect(tooltipElement).toHaveTextContent('PluginA → StrategyX: 1 tests');
+      expect(tooltipElement).toHaveTextContent('PluginA → StrategyX: 1 test');
+      expect(
+        screen.getByText('1 test across 1 plugin-strategy path: 0 defended and 1 vulnerable.'),
+      ).toBeInTheDocument();
     });
 
     it('should handle plugin and strategy IDs with special characters and long names', () => {

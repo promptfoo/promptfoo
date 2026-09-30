@@ -137,9 +137,14 @@ export default function ModelAuditHistory() {
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="text-sm font-mono text-primary cursor-pointer hover:underline truncate block">
+                <RouterLink
+                  to={MODEL_AUDIT_ROUTES.DETAIL(value)}
+                  aria-label={`View scan ${value}`}
+                  className="text-sm font-mono text-primary hover:underline truncate block"
+                  onClick={(event) => event.stopPropagation()}
+                >
                   {value}
-                </span>
+                </RouterLink>
               </TooltipTrigger>
               <TooltipContent>{value}</TooltipContent>
             </Tooltip>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { CopyButton } from '@app/components/ui/copy-button';
@@ -113,6 +113,38 @@ interface GraderItemProps {
 }
 
 function GraderItem({ grader, isExpanded, onToggle }: GraderItemProps) {
+  const reasonId = useId();
+  const hasReason = Boolean(grader.reason);
+  const summary = (
+    <>
+      {grader.pass ? (
+        <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+      ) : (
+        <XCircle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
+      )}
+      <span className="text-sm font-medium min-w-0 flex-1 break-words">{grader.name}</span>
+      <span
+        className={cn(
+          'text-xs font-semibold tabular-nums px-1.5 py-0.5 rounded',
+          grader.pass
+            ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'
+            : 'text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/50',
+        )}
+      >
+        {Math.round(grader.score * 100)}%
+      </span>
+      {hasReason && (
+        <ChevronDown
+          className={cn(
+            'h-4 w-4 text-muted-foreground transition-transform shrink-0',
+            isExpanded && 'rotate-180',
+          )}
+        />
+      )}
+    </>
+  );
+  const summaryClassName = 'w-full flex items-center gap-2.5 px-3 py-2 text-left rounded-lg';
+
   return (
     <div
       className={cn(
@@ -122,38 +154,24 @@ function GraderItem({ grader, isExpanded, onToggle }: GraderItemProps) {
           : 'border-red-200 dark:border-red-800/50 bg-red-50/50 dark:bg-red-950/20',
       )}
     >
-      <button
-        onClick={onToggle}
-        aria-expanded={isExpanded}
-        className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-left rounded-lg"
-      >
-        {grader.pass ? (
-          <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-        ) : (
-          <XCircle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
-        )}
-        <span className="text-sm font-medium min-w-0 flex-1 break-words">{grader.name}</span>
-        <span
+      {hasReason ? (
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={isExpanded}
+          aria-controls={reasonId}
           className={cn(
-            'text-xs font-semibold tabular-nums px-1.5 py-0.5 rounded',
-            grader.pass
-              ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50'
-              : 'text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/50',
+            summaryClassName,
+            'transition-colors hover:bg-black/5 dark:hover:bg-white/5',
           )}
         >
-          {Math.round(grader.score * 100)}%
-        </span>
-        {grader.reason && (
-          <ChevronDown
-            className={cn(
-              'h-4 w-4 text-muted-foreground transition-transform shrink-0',
-              isExpanded && 'rotate-180',
-            )}
-          />
-        )}
-      </button>
-      {isExpanded && grader.reason && (
-        <div className="px-3 pb-3 pt-1">
+          {summary}
+        </button>
+      ) : (
+        <div className={summaryClassName}>{summary}</div>
+      )}
+      {isExpanded && hasReason && (
+        <div id={reasonId} className="px-3 pb-3 pt-1">
           <div className="bg-white/80 dark:bg-black/20 rounded-md p-2.5 max-h-48 overflow-y-auto">
             <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap break-words">
               {grader.reason}
@@ -192,6 +210,7 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
   const isInList = currentIndex >= 0;
   const hasPrevious = isInList && currentIndex > 0;
   const hasNext = isInList && currentIndex < items.length - 1;
+  const technicalDetailsId = 'media-technical-details';
 
   const handlePrevious = useCallback(() => {
     if (hasPrevious) {
@@ -608,7 +627,7 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
               <button
                 onClick={handlePrevious}
                 className="absolute left-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow-lg transition-all hover:scale-105 hover:bg-white dark:bg-zinc-800/90 dark:hover:bg-zinc-700"
-                aria-label="Previous"
+                aria-label="Previous media item"
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
@@ -617,7 +636,7 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
               <button
                 onClick={handleNext}
                 className="absolute right-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow-lg transition-all hover:scale-105 hover:bg-white dark:bg-zinc-800/90 dark:hover:bg-zinc-700"
-                aria-label="Next"
+                aria-label="Next media item"
               >
                 <ChevronRight className="h-5 w-5" />
               </button>
@@ -811,7 +830,10 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
               {/* Details Toggle */}
               <div className="pt-2 border-t border-border/50">
                 <button
+                  type="button"
                   onClick={() => setShowDetails(!showDetails)}
+                  aria-expanded={showDetails}
+                  aria-controls={technicalDetailsId}
                   className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
                 >
                   <ChevronDown
@@ -823,7 +845,10 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
                 </button>
 
                 {showDetails && (
-                  <div className="mt-3 space-y-2 text-xs bg-card rounded-lg border border-border/50 p-3">
+                  <div
+                    id={technicalDetailsId}
+                    className="mt-3 space-y-2 text-xs bg-card rounded-lg border border-border/50 p-3"
+                  >
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Cell</span>
                       <span className="font-mono">
