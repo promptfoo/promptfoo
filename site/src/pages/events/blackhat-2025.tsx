@@ -349,7 +349,7 @@ export default function BlackHat2025(): React.ReactElement {
                 className={styles.primaryButton}
                 onClick={(e) => handleSmoothScroll(e, '#schedule-demo')}
               >
-                Book Your Demo Slot
+                Book a demo
               </a>
               <Link to="/security" className={styles.secondaryButton}>
                 Explore Our Security Platform
