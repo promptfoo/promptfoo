@@ -117,7 +117,9 @@ export default function EvalHeader({
     if (evalId) {
       try {
         await updateEvalAuthor(evalId, newAuthor);
-        setAuthor(newAuthor || null);
+        if (useTableStore.getState().evalId === evalId) {
+          setAuthor(newAuthor || null);
+        }
       } catch (error) {
         console.error('Failed to update author:', error);
         throw error;
@@ -190,6 +192,7 @@ export default function EvalHeader({
           <div className="flex flex-wrap gap-2 items-center mt-2 print:hidden">
             {evalId && <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />}
             <AuthorChip
+              key={evalId}
               author={author}
               onEditAuthor={handleEditAuthor}
               currentUserEmail={currentUserEmail}
