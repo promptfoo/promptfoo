@@ -332,20 +332,24 @@ describe('Envoy gateway URLs', () => {
   });
 
   it.each([undefined, '', 'not-a-url', 'https://env.example/v1/'])(
-    'preserves generic fallback for an empty config URL when the Envoy URL is %s',
+    'rejects an empty config URL when the Envoy URL is %s',
     async (envoyUrl) => {
       mockProcessEnv({
         ENVOY_API_BASE_URL: envoyUrl,
         OPENAI_API_BASE_URL: 'https://openai.example/custom',
       });
-      const provider = await loadApiProvider('envoy:route:stable', {
-        options: { config: { apiBaseUrl: '' } },
-      });
-
-      expect((await provider.callApi('Hello')).output).toBe('Hello');
-      expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(
-        'https://openai.example/custom/chat/completions',
-      );
+      await expect(
+        loadApiProvider('envoy:route:stable', {
+          options: {
+            config: {
+              apiBaseUrl: '',
+              apiKeyRequired: false,
+              headers: { 'x-api-key': 'dummy-header-key' },
+            },
+          },
+        }),
+      ).rejects.toThrow('requires a gateway URL');
+      expect(fetchWithCache).not.toHaveBeenCalled();
     },
   );
 

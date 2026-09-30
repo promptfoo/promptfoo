@@ -63,7 +63,7 @@ providers:
       ENVOY_API_BASE_URL: 'https://your-envoy-gateway.com'
 ```
 
-Provider environment values override suite and process values. An empty gateway value masks those fallbacks and requires `config.apiBaseUrl`. Omit `config.apiBaseUrl` to use an environment URL; promptfoo adds `/v1` when needed. Explicit `config.apiBaseUrl` values keep the API path you supply, so include `/v1` or your gateway's custom path.
+Provider environment values override suite and process values. An empty gateway value masks those fallbacks and requires `config.apiBaseUrl`. Omit `config.apiBaseUrl` to use an environment URL; promptfoo adds `/v1` when needed. An empty `config.apiBaseUrl` is invalid. Explicit URLs keep the API path you supply, so include `/v1` or your gateway's custom path.
 
 ### Authenticating via header
 

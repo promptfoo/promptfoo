@@ -56,31 +56,28 @@ export function createEnvoyProvider(
   let apiBaseUrl =
     configuredBaseUrl ?? env.ENVOY_API_BASE_URL ?? getEnvString('ENVOY_API_BASE_URL');
 
-  // An explicitly empty config URL retains the generic OpenAI URL fallback.
-  if (configuredBaseUrl !== '') {
-    if (!apiBaseUrl) {
-      throw new Error(
-        'Envoy provider requires a gateway URL. Set ENVOY_API_BASE_URL environment variable or specify apiBaseUrl in config.',
-      );
-    }
+  if (!apiBaseUrl) {
+    throw new Error(
+      'Envoy provider requires a gateway URL. Set ENVOY_API_BASE_URL environment variable or specify apiBaseUrl in config.',
+    );
+  }
 
-    let parsedUrl: URL;
-    try {
-      parsedUrl = new URL(apiBaseUrl);
-      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-        throw new Error('Unsupported gateway protocol');
-      }
-    } catch {
-      throw new Error(
-        'Envoy provider requires a valid gateway URL. Check ENVOY_API_BASE_URL or config.apiBaseUrl.',
-      );
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(apiBaseUrl);
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      throw new Error('Unsupported gateway protocol');
     }
+  } catch {
+    throw new Error(
+      'Envoy provider requires a valid gateway URL. Check ENVOY_API_BASE_URL or config.apiBaseUrl.',
+    );
+  }
 
-    if (configuredBaseUrl == null) {
-      const basePath = parsedUrl.pathname.replace(/\/+$/, '');
-      parsedUrl.pathname = basePath.endsWith('/v1') ? basePath : `${basePath}/v1`;
-      apiBaseUrl = parsedUrl.toString();
-    }
+  if (configuredBaseUrl == null) {
+    const basePath = parsedUrl.pathname.replace(/\/+$/, '');
+    parsedUrl.pathname = basePath.endsWith('/v1') ? basePath : `${basePath}/v1`;
+    apiBaseUrl = parsedUrl.toString();
   }
 
   const envoyConfig = {
