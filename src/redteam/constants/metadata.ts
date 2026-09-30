@@ -991,7 +991,7 @@ export const categoryAliases: Record<Plugin, string> = {
   hijacking: 'Hijacking',
   imitation: 'Imitation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
-  'persona-injection': 'Persona Injection',
+  'persona-injection': 'PersonaInjection',
   'insurance:coverage-discrimination': 'InsuranceCoverageDiscrimination',
   'insurance:data-disclosure': 'InsuranceDataDisclosure',
   'insurance:network-misinformation': 'InsuranceNetworkMisinformation',
