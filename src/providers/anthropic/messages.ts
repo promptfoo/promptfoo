@@ -1192,8 +1192,6 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       });
       const cost = getAnthropicCostFromCalls(this.modelName, config, responses);
 
-      // Only attach the key when a tool actually ran: an always-present empty array
-      // would break downstream filters that test `metadata?.toolCalls?.length > 0`.
       const mcpMetadata = toolCalls.length > 0 ? { toolCalls } : undefined;
 
       if (error) {
@@ -1251,7 +1249,15 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       );
       return {
         ...response,
-        ...(mcpMetadata ? { metadata: { ...response.metadata, ...mcpMetadata } } : {}),
+        ...(mcpMetadata
+          ? {
+              metadata: {
+                ...response.metadata,
+                ...mcpMetadata,
+                ...(mcpError && { rateLimitRetryable: false }),
+              },
+            }
+          : {}),
         ...(mcpError ? { error: mcpError } : {}),
       };
     } catch (err) {

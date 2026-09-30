@@ -1113,6 +1113,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 headers: responseHeaders ?? {},
               },
               ...(mcpToolCalls.length > 0 && { toolCalls: mcpToolCalls }),
+              ...(mcpError && { rateLimitRetryable: false }),
             },
           };
         }

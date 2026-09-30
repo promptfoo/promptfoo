@@ -17,6 +17,9 @@ import type {
  */
 function extractMetadata(data: any, processedOutput: ProcessedOutput): Record<string, any> {
   const metadata: Record<string, any> = {};
+  if (processedOutput.mcpError) {
+    metadata.rateLimitRetryable = false;
+  }
 
   // Response ID - for linking to OpenAI dashboard
   if (typeof data.id === 'string' && data.id) {

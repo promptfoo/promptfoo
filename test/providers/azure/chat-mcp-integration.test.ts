@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 
 const mcpMocks = vi.hoisted(() => {
   const mockInitialize = vi.fn().mockResolvedValue(undefined);
@@ -153,7 +154,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
     await (provider as any).initializationPromise;
 
     mcpMocks.mockCallTool.mockResolvedValue({
-      content: 'Path traversal not allowed',
+      content: '429 rate limit',
       isError: true,
     });
     vi.mocked(fetchWithCache).mockResolvedValue({
@@ -179,8 +180,10 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
 
     const result = await provider.callApi('List the resources');
 
-    expect(result.output).toBe('MCP Tool Error (list_resources): Path traversal not allowed');
-    expect(result.error).toBe('MCP Tool Error (list_resources): Path traversal not allowed');
+    expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+
+    expect(result.output).toBe('MCP Tool Error (list_resources): 429 rate limit');
+    expect(result.error).toBe('MCP Tool Error (list_resources): 429 rate limit');
   });
 
   it('does not set an error for a successful MCP tool call via callApi', async () => {

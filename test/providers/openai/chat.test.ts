@@ -2012,6 +2012,11 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
     it.each([
       {
+        label: 'tool rate limit',
+        callToolResult: { content: '429 rate limit', isError: true },
+        expectedOutput: 'MCP Tool Error (read_file): 429 rate limit',
+      },
+      {
         label: 'isError result',
         callToolResult: { content: 'Path traversal not allowed', isError: true },
         expectedOutput: 'MCP Tool Error (read_file): Path traversal not allowed',
@@ -2067,6 +2072,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
           path: '../../../etc/passwd',
         });
         expect(result.output).toBe(expectedOutput);
+        expect(result.error).toBe(expectedOutput);
+        expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
       },
     );
 

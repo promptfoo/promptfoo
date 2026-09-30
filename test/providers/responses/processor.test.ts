@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResponsesProcessor } from '../../../src/providers/responses/processor';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 
 vi.mock('../../../src/providers/functionCallbackUtils');
 
@@ -301,14 +302,23 @@ describe('ResponsesProcessor', () => {
       expect(result.error).toBeUndefined();
     });
 
-    it('surfaces a hosted MCP tool call error on ProviderResponse.error', async () => {
+    it.each([false, true])('retains a hosted MCP error with refusal=%s', async (refusal) => {
       const mockData = {
         output: [
+          ...(refusal
+            ? [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'refusal', refusal: 'Cannot complete the lookup' }],
+                },
+              ]
+            : []),
           {
             type: 'mcp_call',
             name: 'read_file',
             server_label: 'test_server',
-            error: 'Path traversal not allowed',
+            error: '429 rate limit',
             status: 'failed',
           },
         ],
@@ -317,8 +327,11 @@ describe('ResponsesProcessor', () => {
 
       const result = await processor.processResponseOutput(mockData, {}, false);
 
-      expect(result.output).toContain('MCP Tool Error (read_file): Path traversal not allowed');
-      expect(result.error).toBe('MCP Tool Error (read_file): Path traversal not allowed');
+      expect(result.output).toContain(
+        refusal ? 'Cannot complete the lookup' : 'MCP Tool Error (read_file): 429 rate limit',
+      );
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+      expect(result.error).toBe('MCP Tool Error (read_file): 429 rate limit');
     });
 
     it.each(['failed', 'incomplete', 'calling', 'in_progress'])(

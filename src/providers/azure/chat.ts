@@ -617,7 +617,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
       return {
         output,
-        ...(mcpError ? { error: mcpError } : {}),
+        ...(mcpError ? { error: mcpError, metadata: { rateLimitRetryable: false } } : {}),
         tokenUsage: cached
           ? { cached: data.usage?.total_tokens, total: data?.usage?.total_tokens }
           : {

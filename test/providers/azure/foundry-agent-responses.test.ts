@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../../src/cache';
 import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
 import { calculateAzureCost } from '../../../src/providers/azure/util';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -419,6 +420,42 @@ describe('Foundry Responses conversation and accounting', () => {
     const result = await provider().callApi('weather?');
     expect(result).toMatchObject({ output: 'Cannot help', isRefusal: true });
     expect(result.error).toBeUndefined();
+  });
+
+  it.each(['completed', 'failed', 'incomplete'])(
+    'preserves an MCP error in a %s tool item when output_text is present',
+    async (status) => {
+      const response = reply(
+        'one',
+        [
+          { type: 'mcp_call', name: 'lookup', status, error: '429 rate limit', output: null },
+          text('The lookup is unavailable.'),
+        ],
+        { output_text: 'The lookup is unavailable.' },
+      );
+      create.mockResolvedValue(response);
+
+      const result = await provider().callApi('weather?');
+
+      expect(result.error).toBe('MCP Tool Error (lookup): 429 rate limit');
+      expect(result.output).toContain('The lookup is unavailable.');
+      expect(result.metadata?.responseStatus).toBe('completed');
+      expect(result.tokenUsage).toMatchObject({ total: 15, numRequests: 1 });
+      expect(result.raw).toBe(response);
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+      expect(callback).not.toHaveBeenCalled();
+      expect(create).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('uses output_text when a completed response has no output items', async () => {
+    create.mockResolvedValue(reply('one', [], { output_text: 'The weather is sunny.' }));
+
+    const result = await provider().callApi('weather?');
+
+    expect(result.output).toBe('The weather is sunny.');
+    expect(result.error).toBeUndefined();
+    expect(result.tokenUsage).toMatchObject({ total: 15, numRequests: 1 });
   });
 
   it('reports empty output as an error and retains its usage', async () => {

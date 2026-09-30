@@ -12,6 +12,7 @@ import logger from '../../../src/logger';
 import { hashAnthropicCacheValue } from '../../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { MCPClient } from '../../../src/providers/mcp/client';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file';
 import { mockProcessEnv } from '../../util/utils';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -2165,6 +2166,11 @@ describe('AnthropicMessagesProvider', () => {
 
     it.each([
       {
+        label: 'tool rate limit',
+        mcpResult: { content: '429 rate limit', isError: true },
+        expectedContent: 'MCP Tool Error (search_companies): 429 rate limit',
+      },
+      {
         label: 'isError result with content',
         mcpResult: { content: 'lookup failed', isError: true },
         expectedContent: 'MCP Tool Error (search_companies): lookup failed',
@@ -2220,6 +2226,7 @@ describe('AnthropicMessagesProvider', () => {
 
         expect(result.output).toBe('I could not complete that lookup.');
         expect(result.error).toBe(expectedContent);
+        expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
         const secondRequest = createSpy.mock.calls[1][0] as Anthropic.Messages.MessageCreateParams;
         expect(secondRequest.messages.slice(-1)).toEqual([
           {
@@ -2934,7 +2941,7 @@ describe('AnthropicMessagesProvider', () => {
       });
 
       mcpMocks.callTool.mockResolvedValueOnce({
-        content: 'lookup failed',
+        content: '429 rate limit',
         isError: true,
       });
 
@@ -2964,7 +2971,8 @@ describe('AnthropicMessagesProvider', () => {
       const result = await provider.callApi('Find solar companies');
 
       expect(result.output).toBe('I could not complete that lookup.');
-      expect(result.error).toBe('MCP Tool Error (search_companies): lookup failed');
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+      expect(result.error).toBe('MCP Tool Error (search_companies): 429 rate limit');
     });
 
     it('returns a streaming error once further MCP execution exceeds max_tool_calls', async () => {

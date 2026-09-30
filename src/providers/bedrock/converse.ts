@@ -1588,12 +1588,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
           dispatchResults.unshift(progress);
         }
       }
-      // Surface MCP failures via the response `error` field so downstream
-      // consumers (assertions, exit codes, redteam grader) treat broken MCP
-      // calls as failures rather than greenlighting them on the strength of an
-      // embedded "MCP Tool Error: ..." string. Malformed-output stop reasons
-      // take precedence since they're a model-level (not tool-level) failure.
+      // Model output errors take precedence over tool failures.
       const error = malformedError ?? joinMcpErrors(mcpErrors);
+      if (mcpErrors.length > 0) {
+        metadata.rateLimitRetryable = false;
+      }
       return {
         output: dispatchResults.join('\n'),
         tokenUsage,
@@ -1797,10 +1796,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         this.config.serviceTier,
       );
 
-      // Surface MCP failures via the response `error` field. If the model also
-      // produced a malformed-output stop reason, that takes precedence since it
-      // is a model-level failure rather than a tool-level one.
+      // Model output errors take precedence over tool failures.
       const error = malformedError ?? joinMcpErrors(mcpErrors);
+      if (mcpErrors.length > 0) {
+        metadata.rateLimitRetryable = false;
+      }
 
       return {
         output: finalOutput,
