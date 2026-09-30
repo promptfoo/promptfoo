@@ -40,7 +40,7 @@ import {
   REDACTED,
   sanitizeConfigForOutput,
   sanitizeObject,
-  stripAssertionPrompts,
+  stripAssertionRubricPrompts,
 } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
@@ -172,6 +172,7 @@ function projectTranscriptMetadata<T>(
     stripVars: boolean;
     stripGrading: boolean;
   },
+  testMetadata?: AtomicTestCase['metadata'],
 ): T {
   const record = asRecord(metadata);
   if (
@@ -301,10 +302,21 @@ function projectTranscriptMetadata<T>(
       });
     }
   }
+  const userMetadata = asRecord(testMetadata);
+  if (userMetadata) {
+    for (const [key, value] of Object.entries(record)) {
+      if (
+        Object.prototype.hasOwnProperty.call(userMetadata, key) &&
+        isDeepStrictEqual(value, userMetadata[key])
+      ) {
+        projected[key] = value;
+      }
+    }
+  }
   return projected as T;
 }
 
-// Follow the grading schema while leaving arbitrary assertion values unchanged.
+// Grading projection follows the schema, not arbitrary assertion/output objects.
 function projectGradingResult<T>(
   gradingResult: T,
   stripMetadata: boolean,
@@ -323,7 +335,7 @@ function projectGradingResult<T>(
     delete projected.metadata;
   }
   if (stripPrompt && 'assertion' in projected) {
-    projected.assertion = stripAssertionPrompts(projected.assertion);
+    projected.assertion = stripAssertionRubricPrompts(projected.assertion);
   }
   const tokensUsed = record.tokensUsed as GradingResult['tokensUsed'];
   const cachedResponse = asRecord(record.metadata)?.cachedResponse;
@@ -350,8 +362,16 @@ export function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: bool
   }
   // Older imported rows may carry a primitive prompt with a valid promptId.
   const record = asRecord(prompt) ?? {};
+  const config = asRecord(record.config);
+  const projectedConfig = config ? { ...config } : undefined;
+  if (projectedConfig) {
+    delete projectedConfig.prefix;
+    delete projectedConfig.suffix;
+    delete projectedConfig.rubricPrompt;
+  }
   return {
     ...record,
+    ...(projectedConfig && { config: projectedConfig }),
     ...('display' in record ? { display: '[prompt stripped]' } : {}),
     ...('template' in record ? { template: '[prompt stripped]' } : {}),
     label: '[prompt stripped]',
@@ -431,9 +451,6 @@ function projectTestCase(
   if (options.stripVars) {
     projectedTestCase.vars = undefined;
   }
-  if (options.stripPrompt && Array.isArray(testCase.assert)) {
-    projectedTestCase.assert = stripAssertionPrompts(testCase.assert);
-  }
   if (options.stripPrompt && Array.isArray(testCase.prompts)) {
     projectedTestCase.prompts = testCase.prompts.map((prompt) =>
       typeof prompt === 'string' ? '[prompt stripped]' : prompt,
@@ -447,6 +464,11 @@ function projectTestCase(
       ...rest
     } = testCase.options;
     projectedTestCase.options = rest;
+  }
+  if (options.stripPrompt && Array.isArray(testCase.assert)) {
+    projectedTestCase.assert = testCase.assert.map((assertion) =>
+      stripAssertionRubricPrompts(assertion),
+    );
   }
 
   if (options.stripOutput) {
@@ -1025,25 +1047,23 @@ export function projectTracesForOutput(traces: TraceData[], stripFlags = getStri
           return Object.keys(projected).length ? projected : undefined;
         };
         let name = span.name;
-        if (shouldStripResponseOutput && span.attributes && typeof name === 'string') {
-          if (
-            COMMAND_ATTRIBUTE_KEYS.some((key) => key in span.attributes!) &&
-            name.startsWith('exec ')
-          ) {
+        const attributes = asRecord(span.attributes);
+        if (shouldStripResponseOutput && typeof name === 'string' && attributes) {
+          if (COMMAND_ATTRIBUTE_KEYS.some((key) => key in attributes) && name.startsWith('exec ')) {
             name = 'exec [output stripped]';
           } else if (
-            SEARCH_ATTRIBUTE_KEYS.some((key) => key in span.attributes!) &&
+            SEARCH_ATTRIBUTE_KEYS.some((key) => key in attributes) &&
             name.startsWith('search "')
           ) {
             name = 'search "[output stripped]"';
-          } else if (name === span.attributes['otel.log.body']) {
+          } else if (name === attributes['otel.log.body']) {
             name = '[output stripped]';
           }
         }
         const events = asRecord(span)?.events;
         return {
           ...span,
-          name,
+          ...(typeof name === 'string' && { name }),
           attributes: projectAttributes(span.attributes),
           ...(Array.isArray(events) && {
             events: events.map((event) => {
@@ -1175,6 +1195,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
             stripVars: shouldStripTestVars,
             stripGrading: shouldStripGradingResult,
           },
+          (artifactResult.testCase as AtomicTestCase | undefined)?.metadata,
         ),
   } as T;
 }
@@ -1301,6 +1322,7 @@ export function sanitizeTableForArtifact(
               stripVars: shouldStripTestVars,
               stripGrading: shouldStripGradingResult,
             },
+            output.testCase?.metadata,
           ),
       testCase: sanitizeTestCase(output.testCase) as AtomicTestCase,
     } as EvaluateTableOutput;
@@ -1778,6 +1800,7 @@ export default class EvalResult {
               stripVars: shouldStripTestVars,
               stripGrading: shouldStripGradingResult,
             },
+            this.testCase?.metadata,
           ),
       failureReason: this.failureReason,
     };

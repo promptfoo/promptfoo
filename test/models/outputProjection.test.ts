@@ -4,6 +4,7 @@ import {
   projectTracesForOutput,
   sanitizePromptForArtifact,
   sanitizeResultForJsonlArtifact,
+  sanitizeTableForArtifact,
 } from '../../src/models/evalResult';
 import { sanitizeConfigForOutput } from '../../src/util/sanitizer';
 
@@ -187,12 +188,35 @@ describe('artifact projection compatibility', () => {
     expect(projected.spans[0].attributes).toEqual({ operation: 'provider-call' });
   });
 
+  it.each([undefined, { 'codex.command': 'fixture command' }, 'legacy attributes'])(
+    'preserves missing legacy span names with attributes %s',
+    (attributes) => {
+      const trace = {
+        traceId: 'trace',
+        evaluationId: 'eval',
+        testCaseId: 'test',
+        spans: [{ spanId: 'span', startTime: 1, endTime: 2, attributes }],
+      };
+      const original = structuredClone(trace);
+      const [projected] = projectTracesForOutput(
+        [trace as unknown as TraceData],
+        flags({ shouldStripResponseOutput: true }),
+      );
+      expect(projected.spans[0]).not.toHaveProperty('name');
+      expect(projected.spans[0]).toMatchObject({ spanId: 'span', startTime: 1, endTime: 2 });
+      expect(JSON.stringify(projected)).not.toContain('fixture command');
+      expect(trace).toEqual(original);
+    },
+  );
+
   it('removes agent tool payloads and duplicated audio only with response-output stripping', () => {
     const metadata = {
       toolCalls: [{ input: 'tool input', output: 'tool output' }],
       skillCalls: [{ input: 'skill input' }],
       permissionDenials: ['denied call'],
       structuredOutput: { answer: 'structured output' },
+      bestImageDescription: 'generated image description',
+      bestImageUrl: 'https://images.example.test/output.png',
       audio: { data: 'audio data' },
       sessionId: 'session',
       count: 2,
@@ -214,5 +238,80 @@ describe('artifact projection compatibility', () => {
     expect(projected.metadata).toEqual({ sessionId: 'session', count: 2 });
     expect(sanitizeResultForJsonlArtifact(row, flags()).response).toEqual(row.response);
     expect(row.metadata).toBe(metadata);
+  });
+});
+
+describe('grading prompt projection', () => {
+  it.each([false, true])('strips schema-defined rubric prompts only when enabled (%s)', (strip) => {
+    const assertion = {
+      type: 'llm-rubric',
+      value: 'retained criterion',
+      rubricPrompt: 'private rubric prompt',
+    };
+    const testCase = {
+      options: {
+        rubricPrompt: [{ role: 'system', content: 'private options prompt' }],
+        temperature: 0.2,
+      },
+      assert: [assertion, { type: 'assert-set', assert: [assertion] }],
+      metadata: { rubricPrompt: 'ordinary user metadata' },
+    };
+    const config = {
+      tests: [testCase],
+      defaultTest: testCase,
+      scenarios: [{ config: [testCase], tests: [testCase] }],
+    };
+    const row = {
+      testCase,
+      prompt: {
+        raw: 'input',
+        label: 'input',
+        config: { ...testCase.options, prefix: 'private prefix', suffix: 'private suffix' },
+      },
+      response: { output: 'retained output', tokenUsage: { total: 3 } },
+      gradingResult: {
+        pass: true,
+        score: 1,
+        reason: 'retained reason',
+        assertion,
+        tokensUsed: { total: 4 },
+        componentResults: [{ pass: true, score: 1, reason: 'retained child reason', assertion }],
+      },
+      score: 1,
+      success: true,
+    };
+    const table = {
+      head: { prompts: [], vars: [] },
+      body: [
+        {
+          vars: [],
+          test: testCase,
+          outputs: [{ ...row, prompt: 'input', text: 'retained output' }],
+        },
+      ],
+    };
+    const original = structuredClone({ config, row, table });
+    const options = flags({ shouldStripPromptText: strip });
+    const projectedRow = sanitizeResultForJsonlArtifact(row, options);
+    const projected = {
+      config: sanitizeConfigForOutput(config as never, options),
+      row: projectedRow,
+      table: sanitizeTableForArtifact(table as never, options),
+    };
+    const json = JSON.stringify(projected);
+    expect(json.includes('private rubric prompt')).toBe(!strip);
+    expect(json.includes('private options prompt')).toBe(!strip);
+    expect(json.includes('private prefix')).toBe(!strip);
+    expect(json.includes('private suffix')).toBe(!strip);
+    expect(projectedRow.prompt.config.temperature).toBe(0.2);
+    expect(json).toContain('ordinary user metadata');
+    expect(json).toContain('retained criterion');
+    expect(projectedRow.gradingResult).toMatchObject({
+      pass: true,
+      score: 1,
+      tokensUsed: { total: 4 },
+    });
+    expect(projectedRow.response).toEqual(row.response);
+    expect({ config, row, table }).toEqual(original);
   });
 });
