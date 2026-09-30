@@ -697,6 +697,141 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
   }
 }
 
+async function runInstalledCodingSdkEval(tarballPath: string, configDir: string): Promise<void> {
+  // Keep SDK install states separate from providers that can install Codex transitively.
+  const consumerDir = fs.mkdtempSync(path.join(path.dirname(configDir), 'coding-sdk-consumer-'));
+  fs.writeFileSync(
+    path.join(consumerDir, 'package.json'),
+    JSON.stringify({ name: 'promptfoo-coding-sdk-consumer', private: true, type: 'module' }),
+  );
+  runNpm(
+    [
+      'install',
+      '--omit=optional',
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+      '--no-package-lock',
+      tarballPath,
+    ],
+    consumerDir,
+    { npm_config_engine_strict: 'false' },
+  );
+  const fixturesDir = path.join(consumerDir, 'coding-sdks');
+  fs.cpSync(path.join(ROOT, 'test/fixtures/coding-sdks'), fixturesDir, { recursive: true });
+  // The Codex SDK sends `exec` as its first argument. Let Node load that script on all platforms.
+  fs.copyFileSync(path.join(fixturesDir, 'codex.mjs'), path.join(consumerDir, 'exec'));
+  const scriptPath = path.join(consumerDir, 'coding-sdks.mjs');
+  fs.writeFileSync(
+    scriptPath,
+    `import assert from 'node:assert/strict';
+import path from 'node:path';
+import { evaluate } from 'promptfoo';
+
+const mode = process.argv[2];
+const installed = mode === 'installed';
+if (mode === 'missing') {
+  for (const sdk of ['@openai/codex-sdk', '@anthropic-ai/claude-agent-sdk']) {
+    assert.throws(() => import.meta.resolve(sdk), { code: 'ERR_MODULE_NOT_FOUND' });
+  }
+}
+// An older SDK used elsewhere in the project must not break ordinary evaluations.
+const ordinary = await evaluate({
+  prompts: ['hello fixture'],
+  providers: ['echo'],
+  tests: [{ vars: {}, assert: [{ type: 'equals', value: 'hello fixture' }] }],
+}, { cache: false, maxConcurrency: 1 });
+const { results: ordinaryResults } = await ordinary.toEvaluateSummary();
+assert.equal(ordinaryResults.length, 1);
+assert.equal(ordinaryResults[0].success, true);
+const fixture = (name) => path.join(import.meta.dirname, 'coding-sdks', name);
+const record = await evaluate({
+  prompts: ['{{input}}'],
+  providers: [
+    {
+      id: 'openai:codex-sdk',
+      config: {
+        apiKey: 'test-local-fixture',
+        codex_path_override: process.execPath,
+        working_dir: import.meta.dirname,
+        skip_git_repo_check: true,
+        persist_threads: false,
+      },
+    },
+    {
+      id: 'anthropic:claude-agent-sdk',
+      config: {
+        apiKey: 'test-local-fixture',
+        path_to_claude_code_executable: fixture('claude.mjs'),
+        working_dir: import.meta.dirname,
+      },
+    },
+  ],
+  tests: (installed ? ['hello fixture', 'fixture error'] : ['hello fixture']).map((input) => ({
+    vars: { input },
+    assert: [{ type: 'equals', value: 'local SDK fixture response' }],
+  })),
+}, { cache: false, maxConcurrency: 1 });
+const { results } = await record.toEvaluateSummary();
+assert.equal(results.length, installed ? 4 : 2);
+for (const result of results) {
+  if (!installed) {
+    assert.equal(result.success, false);
+    assert.match(result.response.error, new RegExp('npm install promptfoo @(openai/codex-sdk|anthropic-ai/claude-agent-sdk)'));
+    if (mode === 'incompatible') {
+      assert.match(result.response.error, /found 0\\.(154\\.0|3\\.235)/);
+    }
+  } else if (result.vars.input === 'fixture error') {
+    assert.equal(result.success, false);
+    assert.match(result.response.error, /fixture request failed|error_during_execution/);
+  } else {
+    assert.equal(result.success, true);
+    assert.equal(result.score, 1);
+    assert.equal(result.response.output, 'local SDK fixture response');
+    assert.equal(result.response.tokenUsage.prompt, 3);
+    assert.equal(result.response.tokenUsage.completion, 5);
+    assert.match(result.response.sessionId, /^fixture-(thread|session)$/);
+  }
+}
+`,
+  );
+  const env = {
+    PROMPTFOO_CONFIG_DIR: configDir,
+    PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+    PROMPTFOO_DISABLE_TELEMETRY: '1',
+    PROMPTFOO_DISABLE_UPDATE: 'true',
+  };
+  await runAsync(process.execPath, [scriptPath, 'missing'], consumerDir, env);
+  runNpm(
+    [
+      'install',
+      '--omit=optional',
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+      '--no-package-lock',
+      '@openai/codex-sdk@0.154.0',
+      '@anthropic-ai/claude-agent-sdk@0.3.235',
+    ],
+    consumerDir,
+  );
+  await runAsync(process.execPath, [scriptPath, 'incompatible'], consumerDir, env);
+  runNpm(
+    [
+      'install',
+      '--omit=optional',
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+      '--no-package-lock',
+      '@openai/codex-sdk@^0.156.1',
+      '@anthropic-ai/claude-agent-sdk@^0.3.273',
+    ],
+    consumerDir,
+  );
+  await runAsync(process.execPath, [scriptPath, 'installed'], consumerDir, env);
+}
+
 async function assertOptionalBrowserDependencies(
   consumerDir: string,
   configDir: string,
@@ -950,6 +1085,7 @@ async function main(): Promise<void> {
     await runInstalledCompressionEval(consumerDir, configDir);
     await assertOptionalBrowserDependencies(consumerDir, configDir);
     await runInstalledTransformersProvider(consumerDir, configDir);
+    await runInstalledCodingSdkEval(tarballPath, configDir);
 
     console.log(`Verified installed package artifact: ${packResult.filename}`);
   } finally {

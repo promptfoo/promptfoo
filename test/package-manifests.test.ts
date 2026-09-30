@@ -434,7 +434,6 @@ describe('package manifests', () => {
       readPackageJson<PackageLockManifest<{ optional?: boolean }>>('package-lock.json');
     for (const dependency of [
       '@alcalzone/ansi-tokenize',
-      '@anthropic-ai/claude-agent-sdk',
       '@langfuse/client',
       '@modelcontextprotocol/sdk',
       '@openai/codex-security',
