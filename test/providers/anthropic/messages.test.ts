@@ -1,5 +1,6 @@
 import { APIError } from '@anthropic-ai/sdk';
 import dedent from 'dedent';
+import { satisfies } from 'semver';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearCache,
@@ -16,6 +17,8 @@ import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file'
 import { mockProcessEnv } from '../../util/utils';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { Mocked, MockedFunction } from 'vitest';
+
+import type { AnthropicMessageOptions } from '../../../src/providers/anthropic/types';
 
 type AnthropicUsageWithOutputDetails = NonNullable<Anthropic.Messages.Message['usage']> & {
   output_tokens_details?: { thinking_tokens?: number } | null;
@@ -1722,6 +1725,113 @@ describe('AnthropicMessagesProvider', () => {
             },
           ],
         },
+      ]);
+    });
+
+    it.each([
+      { label: 'between_tools', stream: false },
+      { label: 'streaming between_tools', stream: true },
+      { label: 'summarized adaptive thinking', adaptive: true },
+      { label: 'hidden thinking', showThinking: false },
+      { label: 'structured output', structured: true },
+      { label: 'an older model', model: 'claude-sonnet-4-6' },
+      { label: 'previously combined progress', combined: true },
+    ])('preserves MCP progress for Sonnet 5.5 with $label', async (options) => {
+      const model = options.model ?? 'claude-sonnet-5-5';
+      provider = createProvider(model, {
+        config: {
+          stream: options.stream,
+          showThinking: options.showThinking,
+          thinking: options.adaptive
+            ? { type: 'adaptive', display: 'summarized' }
+            : { type: 'between_tools' },
+          ...(options.structured && {
+            output_format: {
+              type: 'json_schema',
+              schema: { type: 'object', properties: { answer: { type: 'string' } } },
+            },
+          }),
+          mcp: { enabled: true, server: { command: 'npm', args: ['start'] } },
+        },
+      });
+      const messages: Anthropic.Messages.Message[] = [0, 1, 2].map((round) => ({
+        id: `msg_${round}`,
+        type: 'message',
+        role: 'assistant',
+        model,
+        container: null,
+        stop_details: null,
+        stop_reason: round < 2 ? 'tool_use' : 'end_turn',
+        stop_sequence: null,
+        content: [
+          { type: 'thinking', thinking: `Progress ${round}`, signature: `sig_${round}` },
+          ...(round < 2
+            ? ([
+                {
+                  type: 'tool_use',
+                  id: `toolu_${round}`,
+                  name: 'search_companies',
+                  input: { query: `query ${round}` },
+                  caller: { type: 'direct' },
+                },
+              ] satisfies Anthropic.Messages.ContentBlock[])
+            : ([
+                {
+                  type: 'text',
+                  text: options.structured ? '{"answer":"Acme Solar"}' : 'Acme Solar',
+                  citations: null,
+                },
+              ] satisfies Anthropic.Messages.ContentBlock[])),
+        ],
+        usage: {
+          input_tokens: 10,
+          output_tokens: 5,
+          cache_creation: null,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+          inference_geo: null,
+          output_tokens_details: null,
+          server_tool_use: null,
+          service_tier: null,
+        },
+      }));
+      if (options.combined) {
+        // Aggregated responses reuse blocks; distinct blocks can still have identical text.
+        messages[0].content[0] = { ...messages[1].content[0] };
+        messages[2].content.unshift(messages[1].content[0]);
+      }
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create');
+      const streamSpy = vi.spyOn(provider.anthropic.messages, 'stream');
+      for (const message of messages) {
+        createSpy.mockResolvedValueOnce(message);
+        streamSpy.mockReturnValueOnce({
+          finalMessage: async () => message,
+        } as ReturnType<typeof provider.anthropic.messages.stream>);
+      }
+      mcpMocks.callTool.mockResolvedValue({ content: 'Acme Solar' });
+
+      const result = await provider.callApi('Find companies');
+
+      const expectedProgress = (options.model ? [2] : options.combined ? [1, 1, 2] : [0, 1, 2])
+        .map((round) => `Thinking: Progress ${round}\nSignature: sig_${round}`)
+        .join('\n\n');
+      expect(result.output).toEqual(
+        options.structured
+          ? { answer: 'Acme Solar' }
+          : options.showThinking === false
+            ? 'Acme Solar'
+            : `${expectedProgress}\n\nAcme Solar`,
+      );
+      expect(result.tokenUsage).toMatchObject({ prompt: 30, completion: 15, total: 45 });
+      expect(result.metadata?.toolCalls).toHaveLength(2);
+      expect(result.error).toBeUndefined();
+      const calls = options.stream ? streamSpy.mock.calls : createSpy.mock.calls;
+      expect(calls).toHaveLength(3);
+      expect(calls[2][0].messages.slice(-4)).toMatchObject([
+        { role: 'assistant', content: messages[0].content },
+        { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_0' }] },
+        { role: 'assistant', content: messages[1].content },
+        { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1' }] },
       ]);
     });
 
@@ -5023,7 +5133,7 @@ describe('AnthropicMessagesProvider', () => {
     });
   });
 
-  describe.each(['claude-fable-5-1', 'claude-mythos-5-1', 'claude-opus-5-5'])(
+  describe.each(['claude-fable-5-1', 'claude-mythos-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5'])(
     '%s tool choice',
     (model) => {
       it.each([
@@ -5066,6 +5176,113 @@ describe('AnthropicMessagesProvider', () => {
       });
     },
   );
+
+  describe('claude-sonnet-5-5 thinking', () => {
+    const mockResponse = () =>
+      ({
+        content: [{ type: 'text', text: 'Response' }],
+        model: 'claude-sonnet-5-5',
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_details: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }) as Anthropic.Messages.Message;
+
+    const callWith = async (config: AnthropicMessageOptions) => {
+      const provider = createProvider('claude-sonnet-5-5', { config });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue(mockResponse());
+      await provider.callApi('Test prompt');
+      return createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+    };
+
+    it('sends disabled thinking as between_tools, the lowest setting the API accepts', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      const params = await callWith({ thinking: { type: 'disabled' } });
+
+      expect(params.thinking).toEqual({ type: 'between_tools' });
+      // No up-front thinking, so no thinking headroom in the default max_tokens.
+      expect(params.max_tokens).toBe(1024);
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Claude Sonnet 5.5 does not accept thinking.type "disabled", so it has been sent as "between_tools", the model\'s lowest setting, which turns off up-front thinking. Set thinking.type "between_tools" to silence this warning.',
+      );
+    });
+
+    it('omits disabled thinking above high effort, where between_tools is also rejected', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      const params = await callWith({ thinking: { type: 'disabled' }, effort: 'max' });
+
+      expect(params).not.toHaveProperty('thinking');
+      expect(params.output_config).toEqual({ effort: 'max' });
+      expect(params.max_tokens).toBe(2048);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Claude Sonnet 5.5 only accepts thinking.type "between_tools" at effort "high" or below (got "max")',
+        ),
+      );
+    });
+
+    it('omits explicit between_tools above high effort, where the API rejects it', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      const params = await callWith({ thinking: { type: 'between_tools' }, effort: 'max' });
+
+      expect(params).not.toHaveProperty('thinking');
+      expect(params.output_config).toEqual({ effort: 'max' });
+      expect(params.max_tokens).toBe(2048);
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Claude Sonnet 5.5 only accepts thinking.type "between_tools" at effort "high" or below (got "max"), so it has been omitted and the model thinks adaptively. Lower effort to "high" to turn off up-front thinking.',
+      );
+    });
+
+    it('passes explicit between_tools through without a warning', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      const params = await callWith({ thinking: { type: 'between_tools' }, effort: 'high' });
+
+      expect(params.thinking).toEqual({ type: 'between_tools' });
+      expect(params.max_tokens).toBe(1024);
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it('leaves thinking to the API default and reserves headroom for it', async () => {
+      const params = await callWith({});
+
+      expect(params).not.toHaveProperty('thinking');
+      expect(params).not.toHaveProperty('temperature');
+      expect(params.max_tokens).toBe(2048);
+    });
+
+    it('converts manual budgets to adaptive thinking and drops sampling params', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      const params = await callWith({
+        thinking: { type: 'enabled', budget_tokens: 2048 },
+        temperature: 0.5,
+        top_p: 0.9,
+        top_k: 40,
+      });
+
+      expect(params.thinking).toEqual({ type: 'adaptive' });
+      expect(params).not.toHaveProperty('temperature');
+      expect(params).not.toHaveProperty('top_p');
+      expect(params).not.toHaveProperty('top_k');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('not supported on Claude Sonnet 5.5 and has been converted'),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'temperature is deprecated on Claude Sonnet 5.5 and will be omitted',
+        ),
+      );
+    });
+  });
 
   describe('Claude Code OAuth authentication', () => {
     const validCredential = () => ({
@@ -5120,9 +5337,45 @@ describe('AnthropicMessagesProvider', () => {
       const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
       expect(headers['anthropic-beta']).toContain('claude-code-20250219');
       expect(headers['anthropic-beta']).toContain('oauth-2025-04-20');
-      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['user-agent']).toBe('claude-cli/2.1.285 (external, promptfoo)');
       expect(headers['x-app']).toBe('cli');
     });
+
+    it.each([false, true])(
+      'sends a supported OAuth client version to newer models (stream: %s)',
+      async (stream) => {
+        mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+        claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
+        const model = 'claude-opus-5-5';
+        const oauthProvider = createProvider(model, {
+          config: { apiKeyRequired: false, stream },
+        });
+        const message = mockMessageResponse(model);
+        const createSpy = vi
+          .spyOn(oauthProvider.anthropic.messages, 'create')
+          .mockResolvedValue(message);
+        const streamSpy = vi.spyOn(oauthProvider.anthropic.messages, 'stream').mockReturnValue({
+          finalMessage: async () => message,
+        } as ReturnType<typeof oauthProvider.anthropic.messages.stream>);
+
+        const response = await oauthProvider.callApi('hello');
+
+        expect(response.error).toBeUndefined();
+        expect(response.output).toBe('ok');
+        const requestSpy = stream ? streamSpy : createSpy;
+        expect(requestSpy).toHaveBeenCalledTimes(1);
+        const [params, requestOptions] = requestSpy.mock.calls[0];
+        expect(params.model).toBe(model);
+        const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
+        const match = /^claude-cli\/(\d+\.\d+\.\d+) \(external, promptfoo\)$/.exec(
+          headers['user-agent'],
+        );
+        expect(match).not.toBeNull();
+        // The API rejects this model below 2.1.280; compare semver components
+        // correctly across minor/major releases. See issue #11322.
+        expect(satisfies(match?.[1] ?? '', '>=2.1.280')).toBe(true);
+      },
+    );
 
     it('isolates response-cache namespaces for distinct Claude Code OAuth tenants', async () => {
       mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
@@ -5298,7 +5551,7 @@ describe('AnthropicMessagesProvider', () => {
 
       const [, requestOptions] = createSpy.mock.calls[0];
       const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
-      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['user-agent']).toBe('claude-cli/2.1.285 (external, promptfoo)');
       expect(headers['x-app']).toBe('cli');
     });
 
@@ -5325,7 +5578,7 @@ describe('AnthropicMessagesProvider', () => {
       const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
       expect(headers['anthropic-beta']).toContain('claude-code-20250219');
       expect(headers['anthropic-beta']).toContain('oauth-2025-04-20');
-      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['user-agent']).toBe('claude-cli/2.1.285 (external, promptfoo)');
       expect(headers['x-app']).toBe('cli');
     });
   });

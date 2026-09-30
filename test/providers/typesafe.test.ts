@@ -3,6 +3,8 @@ import { fetchWithCache } from '../../src/cache';
 import { matchesClassification } from '../../src/matchers/classification';
 import { matchesLlmRubric } from '../../src/matchers/llmGrading';
 import { getTypeSafeCacheKey, TypeSafeProvider } from '../../src/providers/typesafe';
+import { HttpRateLimitError } from '../../src/util/fetch/errors';
+import { withFetchRetryContext } from '../../src/util/fetch/retryContext';
 import { mockProcessEnv } from '../util/utils';
 
 import type { TypeSafeConfig } from '../../src/providers/typesafe';
@@ -23,14 +25,25 @@ function mockResponse(
     statusText = 'OK',
     cached = false,
     headers = {},
+    coalesced = false,
   }: {
     status?: number;
     statusText?: string;
     cached?: boolean;
     headers?: Record<string, string>;
+    coalesced?: boolean;
   } = {},
 ) {
-  return { data, cached, status, statusText, headers, latencyMs: 12, deleteFromCache: vi.fn() };
+  return {
+    data: JSON.stringify(data),
+    cached,
+    coalesced,
+    status,
+    statusText,
+    headers,
+    latencyMs: 12,
+    deleteFromCache: vi.fn(),
+  };
 }
 
 function jevResponse(answer: Record<string, unknown>, questionId = 'grade') {
@@ -131,13 +144,13 @@ describe('TypeSafeProvider', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
       });
-      expect(request.format).toBe('json');
+      expect(request.format).toBe('text');
       expect(request.body).toEqual({
         state: 'Hello world',
         model: 'jev-latest',
         questions: { grade: { type: 'noul', instructions: 'Content contains a greeting' } },
       });
-      expect(request.cacheOptions.cacheKey).toMatch(/^typesafe:v1:jev-latest:[0-9a-f]{64}$/);
+      expect(request.cacheOptions.cacheKey).toMatch(/^typesafe:v2:jev-latest:[0-9a-f]{64}$/);
       expect(request.cacheOptions.cacheKey).not.toContain(API_KEY);
     });
 
@@ -199,6 +212,7 @@ describe('TypeSafeProvider', () => {
           questionType: 'noul',
           answer,
           threshold: 0.5,
+          estimatedCost: expect.any(Number),
           requestId: 'req_123',
         },
       });
@@ -295,6 +309,97 @@ describe('TypeSafeProvider', () => {
       expect(result.tokenUsage).toEqual({ cached: 316, total: 316 });
     });
 
+    it.each([
+      { providerThreshold: undefined, assertionThreshold: 0.3, score: 0.4, pass: false },
+      { providerThreshold: 0.3, assertionThreshold: 0.5, score: 0.4, pass: false },
+      { providerThreshold: 0.3, assertionThreshold: 0.3, score: 0.4, pass: true },
+      { providerThreshold: 0.7, assertionThreshold: 0.5, score: 0.7, pass: true },
+    ])(
+      'requires both provider and assertion thresholds: %j',
+      async ({ providerThreshold, assertionThreshold, score, pass }) => {
+        mockedFetchWithCache.mockResolvedValue(
+          mockResponse(jevResponse({ type: 'noul', noul: score })),
+        );
+        const result = await matchesLlmRubric(
+          'Is polite',
+          'Thanks!',
+          {
+            provider: createProvider({ threshold: providerThreshold }),
+          },
+          undefined,
+          { type: 'llm-rubric', value: 'Is polite', threshold: assertionThreshold },
+        );
+        expect(result).toMatchObject({ pass, score });
+      },
+    );
+
+    it.each([
+      { cached: false, coalesced: false, expectedCost: 296 * (0.042 / 1_000_000) },
+      { cached: true, coalesced: false, expectedCost: 0 },
+      { cached: false, coalesced: true, expectedCost: 0 },
+    ])(
+      'tracks published input cost and avoids duplicate billing: %j',
+      async ({ cached, coalesced, expectedCost }) => {
+        mockedFetchWithCache.mockResolvedValue(
+          mockResponse(jevResponse({ type: 'noul', noul: 0.9 }), { cached, coalesced }),
+        );
+        const result = await createProvider({ instructions: 'Is polite?' }).callApi('Thanks!');
+        expect(result.cost).toBeCloseTo(expectedCost, 12);
+        expect(result.metadata?.typesafe.estimatedCost).toBe(result.cost);
+        expect(result.cached).toBe(cached || coalesced);
+        expect(result.tokenUsage).toEqual(
+          cached || coalesced
+            ? { cached: 316, total: 316 }
+            : { prompt: 296, completion: 20, total: 316, numRequests: 1 },
+        );
+      },
+    );
+
+    it.each([
+      { model: 'future-model', usage: { input_tokens: 296 } },
+      { model: undefined, usage: { input_tokens: 296 } },
+      { model: 'jev-1.13.0', usage: undefined },
+      { model: 'jev-1.13.0', usage: { input_tokens: -1 } },
+      { model: 'jev-1.13.0', usage: { input_tokens: '296' } },
+    ])('omits estimates for unknown prices or invalid usage: %j', async (overrides) => {
+      mockedFetchWithCache.mockResolvedValue(
+        mockResponse({ ...jevResponse({ type: 'noul', noul: 0.9 }), ...overrides }),
+      );
+      const result = await createProvider({ instructions: 'Is polite?' }).callApi('Thanks!');
+      expect(result.error).toBeUndefined();
+      expect(result.cost).toBeUndefined();
+      expect(result.metadata?.typesafe).not.toHaveProperty('estimatedCost');
+    });
+
+    it('uses a pinned model price if the response does not include its version', async () => {
+      mockedFetchWithCache.mockResolvedValue(
+        mockResponse({
+          answers: { grade: { type: 'noul', noul: 1 } },
+          usage: { input_tokens: 1_000_000 },
+        }),
+      );
+      const result = await new TypeSafeProvider('jev-1.13.0', {
+        config: { apiKey: API_KEY, instructions: 'Is polite?' },
+      }).callApi('Thanks!');
+      expect(result.cost).toBe(0.042);
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 1_000_000,
+        completion: 0,
+        total: 1_000_000,
+      });
+    });
+
+    it('does not report negative token counts', async () => {
+      mockedFetchWithCache.mockResolvedValue(
+        mockResponse({
+          ...jevResponse({ type: 'noul', noul: 1 }),
+          usage: { input_tokens: -1, output_tokens: -10 },
+        }),
+      );
+      const result = await createProvider({ instructions: 'Is polite?' }).callApi('Thanks!');
+      expect(result.tokenUsage).toEqual({ prompt: 0, completion: 0, total: 0, numRequests: 1 });
+    });
+
     it('works end to end through matchesLlmRubric', async () => {
       const answer = { type: 'noul', noul: 0.12 };
       mockedFetchWithCache.mockResolvedValue(mockResponse(jevResponse(answer)));
@@ -350,6 +455,32 @@ describe('TypeSafeProvider', () => {
       });
     });
 
+    it('preserves structured instructions and Score levels', async () => {
+      mockedFetchWithCache.mockResolvedValue(
+        mockResponse(jevResponse({ type: 'score', score: 1 })),
+      );
+      const instructions = { question: 'How polite is this?' };
+      const levels = [{ description: 'Rude' }, ['Polite', 'Friendly']];
+      const result = await createProvider({ instructions, levels }).callApi('Thanks!');
+      expect(result.error).toBeUndefined();
+      expect(lastRequest().body.questions.grade).toEqual({
+        type: 'score',
+        instructions,
+        criteria: levels,
+      });
+    });
+
+    it.each([null, 1, false])(
+      'rejects unsupported instruction entries: %j',
+      async (instructions) => {
+        const result = await createProvider({ instructions } as unknown as TypeSafeConfig).callApi(
+          'Thanks!',
+        );
+        expect(result.error).toMatch(/needs a question/);
+        expect(mockedFetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
     it('errors without a question and does not call the API', async () => {
       const result = await createProvider().callApi('Some text');
 
@@ -370,11 +501,11 @@ describe('TypeSafeProvider', () => {
         },
       },
     };
-    const key = (request: typeof base | Record<string, any>, threshold?: number) =>
-      getTypeSafeCacheKey('https://api.typesafe.ai', request as typeof base, threshold);
+    const key = (request: typeof base | Record<string, any>) =>
+      getTypeSafeCacheKey('https://api.typesafe.ai', request as typeof base);
 
     it('is stable for identical requests', () => {
-      expect(key(base, 0.5)).toBe(key(structuredClone(base), 0.5));
+      expect(key(base)).toBe(key(structuredClone(base)));
     });
 
     it('changes when the candidate labels change', () => {
@@ -403,7 +534,7 @@ describe('TypeSafeProvider', () => {
       expect(key(score(['Calm', 'Angry']))).not.toBe(key(score(['Angry', 'Calm'])));
     });
 
-    it('changes with the question type, instructions, state, model, threshold and base URL', () => {
+    it('changes with the question type, instructions, state, model and base URL', () => {
       const noul = {
         ...base,
         questions: { department: { type: 'noul', instructions: 'Which team should handle this?' } },
@@ -417,14 +548,12 @@ describe('TypeSafeProvider', () => {
         }),
         key({ ...base, state: 'Different state' }),
         key({ ...base, model: 'jev-1.13.0' }),
-        key(base, 0.5),
-        key(base, 0.7),
         getTypeSafeCacheKey('https://proxy.example.com', base),
       ];
       expect(new Set(variants).size).toBe(variants.length);
     });
 
-    it('gives different grader configurations different keys', async () => {
+    it('varies with grading levels but reuses raw responses across local thresholds', async () => {
       mockedFetchWithCache.mockResolvedValue(
         mockResponse(jevResponse({ type: 'score', score: 1 })),
       );
@@ -440,7 +569,8 @@ describe('TypeSafeProvider', () => {
       }).callApi('p', context);
       const third = lastRequest().cacheOptions.cacheKey;
 
-      expect(new Set([first, second, third]).size).toBe(3);
+      expect(first).not.toBe(second);
+      expect(third).toBe(first);
     });
   });
 
@@ -499,6 +629,99 @@ describe('TypeSafeProvider', () => {
       expect(result.error).toContain('upstream said no');
     });
 
+    it.each([false, true])(
+      'preserves exhausted rate-limit details and quota semantics (quota=%s)',
+      async (quota) => {
+        mockedFetchWithCache.mockRejectedValue(
+          new HttpRateLimitError({
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: { 'x-typesafe-request-id': 'req_exhausted' },
+            body: { detail: 'Capacity exceeded', apiKey: API_KEY },
+            ...(quota ? { code: 'credit_balance_exhausted' } : {}),
+          }),
+        );
+        const result = await createProvider({ instructions: 'Is polite?' }).callApi('Thanks!');
+        expect(result.error).toContain('429 Too Many Requests');
+        expect(result.error).toContain('req_exhausted');
+        expect(result.error).toContain('Capacity exceeded');
+        expect(result.error).toContain(quota ? 'Quota exceeded' : 'Rate limit exceeded');
+        expect(result.error).not.toContain(API_KEY);
+        if (quota) {
+          expect(result.error).not.toContain('retry after');
+        }
+      },
+    );
+
+    it('bounds and redacts non-JSON HTTP error diagnostics', async () => {
+      mockedFetchWithCache.mockResolvedValue({
+        ...mockResponse(null, {
+          status: 502,
+          statusText: 'Bad Gateway',
+          headers: { 'x-typesafe-request-id': 'req_html' },
+        }),
+        data: `<html>Overloaded ${API_KEY} ${'x'.repeat(3000)}</html>`,
+      });
+      const result = await createProvider({ instructions: 'Is polite?' }).callApi('Thanks!');
+      expect(result.error).toContain('502 Bad Gateway');
+      expect(result.error).toContain('req_html');
+      expect(result.error).toContain('Overloaded');
+      expect(result.error).not.toContain(API_KEY);
+      expect(result.error!.length).toBeLessThanOrEqual(1000);
+    });
+
+    it('evicts malformed non-JSON success responses', async () => {
+      const response = {
+        ...mockResponse(null, { headers: { 'x-typesafe-request-id': 'req_bad' } }),
+        data: '<html>not JSON</html>',
+      };
+      mockedFetchWithCache.mockResolvedValue(response);
+      const result = await createProvider({ instructions: 'Is polite?' }).callApi('Thanks!');
+      expect(result.error).toContain('malformed non-JSON');
+      expect(result.error).toContain('HTTP 200');
+      expect(result.error).toContain('req_bad');
+      expect(response.deleteFromCache).toHaveBeenCalledOnce();
+    });
+
+    it('propagates abort errors instead of returning a grading error', async () => {
+      const error = new DOMException('Cancelled', 'AbortError');
+      mockedFetchWithCache.mockRejectedValue(error);
+      await expect(createProvider({ instructions: 'Is polite?' }).callApi('Thanks!')).rejects.toBe(
+        error,
+      );
+    });
+
+    it('does not start transport for an already aborted request', async () => {
+      const signal = AbortSignal.abort();
+      await expect(
+        createProvider({ instructions: 'Is polite?' }).callApi('Thanks!', undefined, {
+          abortSignal: signal,
+        }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(mockedFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('passes the signal and shared retry policy to transport', async () => {
+      mockedFetchWithCache.mockResolvedValue(mockResponse(jevResponse({ type: 'noul', noul: 1 })));
+      const { signal } = new AbortController();
+      await createProvider({ instructions: 'Is polite?', maxRetries: 2 }).callApi(
+        'Thanks!',
+        undefined,
+        { abortSignal: signal },
+      );
+      expect(lastRequest().options).toMatchObject({ signal, retryableStatusCodes: [529] });
+      expect(mockedFetchWithCache.mock.calls[0][5]).toBe(2);
+      expect(createProvider().handlesOwnRetries).toBe(true);
+    });
+
+    it('honors an ambient retry override when config does not override it', async () => {
+      mockedFetchWithCache.mockResolvedValue(mockResponse(jevResponse({ type: 'noul', noul: 1 })));
+      await withFetchRetryContext(0, () =>
+        createProvider({ instructions: 'Is polite?' }).callApi('Thanks!'),
+      );
+      expect(mockedFetchWithCache.mock.calls[0][5]).toBe(0);
+    });
+
     it('reports fetch failures', async () => {
       mockedFetchWithCache.mockRejectedValue(
         new Error('Error parsing response: Unexpected token <'),
@@ -522,7 +745,8 @@ describe('TypeSafeProvider', () => {
       ['a non-numeric Noul', jevResponse({ type: 'noul', noul: 'high' }), /not a probability/],
       ['a Noul above 1', jevResponse({ type: 'noul', noul: 1.2 }), /not a probability/],
     ])('rejects %s', async (_name, data, error) => {
-      mockedFetchWithCache.mockResolvedValue(mockResponse(data));
+      const response = mockResponse(data);
+      mockedFetchWithCache.mockResolvedValue(response);
 
       const result = await createProvider().callApi(
         'rendered grading prompt',
@@ -531,6 +755,7 @@ describe('TypeSafeProvider', () => {
 
       expect(result.error).toMatch(error);
       expect(result.output).toBeUndefined();
+      expect(response.deleteFromCache).toHaveBeenCalledOnce();
     });
 
     it('rejects a Score outside the level range', async () => {
@@ -546,11 +771,19 @@ describe('TypeSafeProvider', () => {
       expect(result.error).toMatch(/outside levels 0–2/);
     });
 
-    it.each([
+    it.each<[TypeSafeConfig, RegExp]>([
       [{ threshold: 1.5 }, /`threshold` must be a number between 0 and 1/],
       [{ threshold: '0.5' as unknown as number }, /`threshold` must be a number/],
       [{ levels: ['Only one'] }, /`levels` must be an array of 2–10/],
       [{ levels: Array.from({ length: 11 }, (_, i) => `Level ${i}`) }, /`levels` must be/],
+      ...[null, 1, false].map<[TypeSafeConfig, RegExp]>((entry) => [
+        { levels: ['low', entry] } as TypeSafeConfig,
+        /`levels` entries/,
+      ]),
+      ...[-1, 0.5, Infinity, '2'].map<[TypeSafeConfig, RegExp]>((maxRetries) => [
+        { maxRetries } as TypeSafeConfig,
+        /`maxRetries` must be/,
+      ]),
     ])('rejects invalid config %j', async (config, error) => {
       const result = await createProvider(config).callApi(
         'rendered grading prompt',
@@ -607,7 +840,12 @@ describe('TypeSafeProvider', () => {
       mockedFetchWithCache.mockResolvedValue(
         mockResponse(
           jevResponse(
-            { type: 'choice', probabilities: { refund: 0.9, other: 0.1 } },
+            {
+              type: 'choice',
+              choice: 'refund',
+              confidence: 0.8,
+              probabilities: { refund: 0.9, other: 0.1 },
+            },
             'classification',
           ),
         ),
@@ -626,7 +864,12 @@ describe('TypeSafeProvider', () => {
       mockedFetchWithCache.mockResolvedValue(
         mockResponse(
           jevResponse(
-            { type: 'choice', probabilities: { billing: 0.88, technical: 0.12, sales: 0 } },
+            {
+              type: 'choice',
+              choice: 'billing',
+              confidence: 0.81,
+              probabilities: { billing: 0.88, technical: 0.12, sales: 0 },
+            },
             'classification',
           ),
         ),
@@ -655,6 +898,113 @@ describe('TypeSafeProvider', () => {
 
       expect(result.error).toMatch(error);
       expect(mockedFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { probabilities: {} },
+      { probabilities: { billing: 1 } },
+      { probabilities: { billing: 0.8, technical: 0.1, other: 0.1 } },
+      { probabilities: { billing: 0.8, technical: 0.1, sales: 0.1, extra: 0 } },
+      { probabilities: { billing: 0.8, technical: 0.1, sales: 0.2 } },
+      { probabilities: { billing: 0.6, technical: 0.1, sales: 0.1 } },
+      { probabilities: { billing: 1, technical: 0.1, sales: -0.1 } },
+      { probabilities: { billing: '0.8', technical: 0.1, sales: 0.1 } },
+      { probabilities: { billing: null, technical: 0.1, sales: 0.1 } },
+      { choice: undefined },
+      { choice: 'missing' },
+      { choice: 'sales' },
+      { confidence: undefined },
+      { confidence: -0.1 },
+      { confidence: 1.1 },
+      { confidence: '0.8' },
+    ])('rejects and evicts malformed Choice answers: %j', async (overrides) => {
+      const response = mockResponse(
+        jevResponse(
+          {
+            type: 'choice',
+            choice: 'billing',
+            confidence: 0.8,
+            probabilities: { billing: 0.8, technical: 0.1, sales: 0.1 },
+            ...overrides,
+          },
+          'classification',
+        ),
+      );
+      mockedFetchWithCache.mockResolvedValue(response);
+      const result = await classifier().callClassificationApi('text');
+      expect(result.error).toMatch(/TypeSafe Choice answer has (?:an )?invalid/);
+      expect(result.classification).toBeUndefined();
+      expect(response.deleteFromCache).toHaveBeenCalledOnce();
+    });
+
+    it('accepts rounded probabilities whose sum is close to one', async () => {
+      mockedFetchWithCache.mockResolvedValue(
+        mockResponse(
+          jevResponse(
+            {
+              type: 'choice',
+              choice: 'billing',
+              confidence: 0,
+              probabilities: { billing: 0.333333, technical: 0.333333, sales: 0.333333 },
+            },
+            'classification',
+          ),
+        ),
+      );
+      const result = await classifier().callClassificationApi('text');
+      expect(result.error).toBeUndefined();
+      expect(result.classification).toEqual({
+        billing: 0.333333,
+        technical: 0.333333,
+        sales: 0.333333,
+      });
+    });
+
+    it.each([null, 3, false])(
+      'rejects unsupported instruction entries: %j',
+      async (instructions) => {
+        const result = await classifier({
+          instructions,
+        } as unknown as TypeSafeConfig).callClassificationApi('text');
+        expect(result.error).toMatch(/requires `instructions`/);
+        expect(mockedFetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      ['billing', '  '],
+      { '': null, other: null },
+      { '  ': null, other: null },
+      { billing: 1, other: null },
+      { billing: false, other: null },
+    ])('rejects invalid labels or descriptions: %j', async (labels) => {
+      const result = await classifier({ labels } as TypeSafeConfig).callClassificationApi('text');
+      expect(result.error).toMatch(/`labels`/);
+      expect(mockedFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('preserves structured instruction and label description entries', async () => {
+      mockedFetchWithCache.mockResolvedValue(
+        mockResponse(
+          jevResponse(
+            {
+              type: 'choice',
+              choice: 'billing',
+              confidence: 0.8,
+              probabilities: { billing: 1, other: 0 },
+            },
+            'classification',
+          ),
+        ),
+      );
+      const instructions = [{ task: 'Classify the text' }];
+      const labels = { billing: { topic: 'Payments' }, other: ['Everything else'] };
+      const result = await classifier({ instructions, labels }).callClassificationApi('text');
+      expect(result.error).toBeUndefined();
+      expect(lastRequest().body.questions.classification).toMatchObject({
+        instructions,
+        criteria: labels,
+      });
     });
 
     it('rejects invalid Choice answers', async () => {
@@ -700,7 +1050,10 @@ describe('TypeSafeProvider', () => {
     it('uses a cache key that depends on the label order', async () => {
       mockedFetchWithCache.mockResolvedValue(
         mockResponse(
-          jevResponse({ type: 'choice', probabilities: { a: 0.5, b: 0.5 } }, 'classification'),
+          jevResponse(
+            { type: 'choice', choice: 'a', confidence: 0, probabilities: { a: 0.5, b: 0.5 } },
+            'classification',
+          ),
         ),
       );
 

@@ -3,6 +3,13 @@
  */
 export interface FetchOptions extends RequestInit {
   /**
+   * Additional HTTP statuses to retry within fetchWithRetries' existing attempt
+   * budget. Retry-After is honored; the final response is returned for callers
+   * to report its body and headers. This option is not forwarded to fetch.
+   */
+  retryableStatusCodes?: number[];
+
+  /**
    * Resolve default authentication headers immediately before each HTTP attempt, including
    * retries. Explicit request headers take precedence (case-insensitively). The signal includes
    * the request timeout. The callback is never forwarded to fetch or included in cache keys.

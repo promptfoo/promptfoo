@@ -1526,6 +1526,85 @@ describe('fetchWithRetries', () => {
     expect(sleep).not.toHaveBeenCalled();
   });
 
+  describe('opt-in HTTP status retries', () => {
+    it('leaves unconfigured statuses unchanged', async () => {
+      await vi.mocked(getEnvBool).withImplementation(
+        () => false,
+        async () => {
+          const response = new Response('overloaded', { status: 529 });
+          vi.mocked(global.fetch).mockResolvedValueOnce(response);
+
+          expect(await fetchWithRetries('https://example.com', {}, 1000, 2)).toBe(response);
+          expect(global.fetch).toHaveBeenCalledTimes(1);
+          expect(sleep).not.toHaveBeenCalled();
+        },
+      );
+    });
+
+    it('honors Retry-After and consumes the option before calling fetch', async () => {
+      const unavailable = new Response('overloaded', {
+        status: 529,
+        headers: { 'Retry-After': '2' },
+      });
+      const recovered = new Response('recovered');
+      vi.mocked(global.fetch).mockResolvedValueOnce(unavailable).mockResolvedValueOnce(recovered);
+
+      const result = await fetchWithRetries(
+        'https://example.com',
+        { retryableStatusCodes: [529] },
+        1000,
+        1,
+      );
+
+      expect(result).toBe(recovered);
+      expect(sleep).toHaveBeenCalledWith(2000);
+      expect(unavailable.bodyUsed).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      for (const [, options] of vi.mocked(global.fetch).mock.calls) {
+        expect(options).not.toHaveProperty('retryableStatusCodes');
+      }
+    });
+
+    it('returns the final response intact even with global 5xx retries enabled', async () => {
+      await vi.mocked(getEnvBool).withImplementation(
+        (key) => key === 'PROMPTFOO_RETRY_5XX',
+        async () => {
+          vi.mocked(global.fetch).mockImplementation(
+            async () =>
+              new Response('still overloaded', {
+                status: 529,
+                headers: { 'Retry-After': '0', 'x-request-id': 'last-request' },
+              }),
+          );
+
+          const result = await fetchWithRetries(
+            'https://example.com',
+            { retryableStatusCodes: [529] },
+            1000,
+            1,
+          );
+
+          expect(result.status).toBe(529);
+          expect(result.headers.get('x-request-id')).toBe('last-request');
+          expect(await result.text()).toBe('still overloaded');
+          expect(global.fetch).toHaveBeenCalledTimes(2);
+        },
+      );
+    });
+
+    it('preserves quota fail-fast when 429 is explicitly included', async () => {
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { code: 'insufficient_quota' } }), { status: 429 }),
+      );
+
+      await expect(
+        fetchWithRetries('https://example.com', { retryableStatusCodes: [429, 529] }, 1000, 2),
+      ).rejects.toMatchObject({ name: 'HttpRateLimitError', kind: 'quota' });
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(sleep).not.toHaveBeenCalled();
+    });
+  });
+
   it('should handle negative retry values by treating them as 0', async () => {
     const successResponse = createMockResponse();
     vi.mocked(global.fetch).mockResolvedValueOnce(successResponse);

@@ -19,6 +19,9 @@ import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
+import { HttpRateLimitError, isAbortError } from '../util/fetch/errors';
+import { getFetchRetryContextMaxRetries } from '../util/fetch/retryContext';
+import { sanitizeObject } from '../util/sanitizer';
 import { ellipsize } from '../util/text';
 import { getRequestTimeoutMs } from './shared';
 
@@ -31,6 +34,7 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
+import type { FetchOptions } from '../util/fetch/types';
 
 const DEFAULT_API_BASE_URL = 'https://api.typesafe.ai';
 const DEFAULT_THRESHOLD = 0.5;
@@ -40,6 +44,9 @@ const MIN_SCORE_LEVELS = 2;
 const MAX_SCORE_LEVELS = 10;
 const MIN_CHOICE_OPTIONS = 2;
 const MAX_CHOICE_OPTIONS = 255;
+const PROBABILITY_SUM_TOLERANCE = 0.0001;
+// https://docs.typesafe.ai/models: Jev 1.13 costs $0.042 / million input tokens.
+const JEV_1_13_INPUT_COST_PER_TOKEN = 0.042 / 1_000_000;
 
 /** Jev accepts a string, a JSON object, or an array wherever it takes content. */
 type TypeSafeEntry = string | Record<string, unknown> | unknown[];
@@ -48,6 +55,8 @@ export interface TypeSafeConfig {
   apiKey?: string;
   /** Defaults to https://api.typesafe.ai */
   apiBaseUrl?: string;
+  /** Maximum additional attempts for retryable failures. Defaults to 4. */
+  maxRetries?: number;
   /** `callApi` passes when the derived 0–1 score is >= threshold. Defaults to 0.5. */
   threshold?: number;
   /** Ordered Score levels, low to high (2–10). When set, `callApi` asks a Score question. */
@@ -97,9 +106,9 @@ interface TypeSafeScoreAnswer {
 
 interface TypeSafeChoiceAnswer {
   type: 'choice';
-  choice?: string;
+  choice: string;
   probabilities: Record<string, number>;
-  confidence?: number;
+  confidence: number;
 }
 
 type TypeSafeResult =
@@ -108,6 +117,7 @@ type TypeSafeResult =
       cached: boolean;
       latencyMs?: number;
       requestId?: string;
+      deleteFromCache?: () => Promise<void>;
     }
   | { error: string };
 
@@ -130,8 +140,12 @@ function toEntry(value: unknown): TypeSafeEntry {
   return JSON.stringify(value) ?? String(value);
 }
 
-function hasEntry(value: TypeSafeEntry | undefined): value is TypeSafeEntry {
-  return value !== undefined && !(typeof value === 'string' && value.trim() === '');
+function isEntry(value: unknown): value is TypeSafeEntry {
+  return typeof value === 'string' || Array.isArray(value) || isPlainObject(value);
+}
+
+function hasEntry(value: unknown): value is TypeSafeEntry {
+  return isEntry(value) && !(typeof value === 'string' && value.trim() === '');
 }
 
 function getOrderedLabels(question: TypeSafeQuestion): TypeSafeEntry[] {
@@ -148,29 +162,31 @@ function getOrderedLabels(question: TypeSafeQuestion): TypeSafeEntry[] {
  * Build the cache key for a Jev request.
  *
  * The key covers the model, the state, the full question schema, the ordered labels (Choice
- * options or Score levels), and the pass threshold, so a changed candidate set never reuses a
- * cached probability. The request is hashed exactly as sent rather than with sorted keys:
+ * options or Score levels), so a changed candidate set never reuses a cached probability.
+ * The pass threshold only changes local interpretation and is deliberately excluded.
+ * The request is hashed exactly as sent rather than with sorted keys:
  * key order inside `state` and Choice `criteria` is model input. The API key is not part of
  * the key.
  */
-export function getTypeSafeCacheKey(
-  apiBaseUrl: string,
-  request: TypeSafeRequest,
-  threshold?: number,
-): string {
+export function getTypeSafeCacheKey(apiBaseUrl: string, request: TypeSafeRequest): string {
   const orderedLabels = Object.fromEntries(
     Object.entries(request.questions).map(([id, question]) => [id, getOrderedLabels(question)]),
   );
-  return `typesafe:v1:${request.model}:${sha256(
+  return `typesafe:v2:${request.model}:${sha256(
     JSON.stringify({
       apiBaseUrl,
       model: request.model,
       state: request.state,
       questions: request.questions,
       orderedLabels,
-      threshold: threshold ?? null,
     }),
   )}`;
+}
+
+function safeErrorDetail(value: unknown, apiKey?: string): string {
+  const sanitized = sanitizeObject(value, { sanitizeUrls: true });
+  const detail = typeof sanitized === 'string' ? sanitized : (JSON.stringify(sanitized) ?? '');
+  return ellipsize(apiKey ? detail.split(apiKey).join('[REDACTED]') : detail, 1000);
 }
 
 function formatTypeSafeError(
@@ -178,18 +194,25 @@ function formatTypeSafeError(
   statusText: string,
   data: unknown,
   requestId?: string,
+  apiKey?: string,
+  quota = false,
 ): string {
-  const detail = typeof data === 'string' ? data : (JSON.stringify(data) ?? '');
+  const detail = safeErrorDetail(data, apiKey);
   const hints: Record<number, string> = {
     401: ' Check TYPESAFE_API_KEY or the `apiKey` provider config.',
     422: ' The request failed validation.',
-    429: ' Rate limit exceeded; retry after a short delay.',
+    429: quota
+      ? ' Quota exceeded; check your TypeSafe plan and billing.'
+      : ' Rate limit exceeded; retry after a short delay.',
     529: ' TypeSafe is overloaded; retry after a short delay.',
   };
   const requestIdText = requestId ? ` (request id ${requestId})` : '';
-  return `TypeSafe API error: ${status} ${statusText || 'Unknown error'}${requestIdText}.${
-    hints[status] ?? ''
-  }${detail ? `\n${ellipsize(detail, 1000)}` : ''}`;
+  return safeErrorDetail(
+    `TypeSafe API error: ${status} ${statusText || 'Unknown error'}${requestIdText}.${
+      hints[status] ?? ''
+    }${detail ? `\n${detail}` : ''}`,
+    apiKey,
+  );
 }
 
 function getAnswer(data: TypeSafeResponse, questionId: string, type: TypeSafeQuestion['type']) {
@@ -207,13 +230,42 @@ function getAnswer(data: TypeSafeResponse, questionId: string, type: TypeSafeQue
 
 function getTokenUsage(data: TypeSafeResponse, cached: boolean): Partial<TokenUsage> {
   const usage = data.usage ?? {};
-  const prompt = isFiniteNumber(usage.input_tokens) ? usage.input_tokens : 0;
-  const completion = isFiniteNumber(usage.output_tokens) ? usage.output_tokens : 0;
+  const prompt =
+    isFiniteNumber(usage.input_tokens) && usage.input_tokens >= 0 ? usage.input_tokens : 0;
+  const completion =
+    isFiniteNumber(usage.output_tokens) && usage.output_tokens >= 0 ? usage.output_tokens : 0;
   const total = prompt + completion;
   if (cached) {
     return { cached: total, total };
   }
   return { total, prompt, completion, numRequests: 1 };
+}
+
+function getCost(
+  data: TypeSafeResponse,
+  requestedModel: string,
+  cached: boolean,
+): number | undefined {
+  if (cached) {
+    return 0;
+  }
+  const inputTokens = data.usage?.input_tokens;
+  if (
+    (data.model ?? requestedModel) === 'jev-1.13.0' &&
+    isFiniteNumber(inputTokens) &&
+    inputTokens >= 0
+  ) {
+    return inputTokens * JEV_1_13_INPUT_COST_PER_TOKEN;
+  }
+  return undefined;
+}
+
+function getMaxRetries(configured: unknown): number {
+  const maxRetries = configured ?? getFetchRetryContextMaxRetries() ?? 4;
+  if (!isFiniteNumber(maxRetries) || !Number.isSafeInteger(maxRetries) || maxRetries < 0) {
+    throw new Error('TypeSafe `maxRetries` must be a non-negative integer');
+  }
+  return maxRetries;
 }
 
 function getThreshold(threshold: unknown): number {
@@ -241,13 +293,16 @@ function getLevels(levels: unknown): TypeSafeEntry[] | undefined {
       `TypeSafe \`levels\` must be an array of ${MIN_SCORE_LEVELS}–${MAX_SCORE_LEVELS} level descriptions, ordered low to high`,
     );
   }
-  return levels.map(toEntry);
+  if (!levels.every(isEntry)) {
+    throw new Error('TypeSafe `levels` entries must be strings, JSON objects, or arrays');
+  }
+  return levels;
 }
 
 function getChoiceCriteria(labels: unknown): Record<string, TypeSafeEntry | null> {
   let criteria: Record<string, TypeSafeEntry | null>;
   if (Array.isArray(labels)) {
-    if (labels.some((label) => typeof label !== 'string' || label === '')) {
+    if (labels.some((label) => typeof label !== 'string' || label.trim() === '')) {
       throw new Error('TypeSafe `labels` must be non-empty strings');
     }
     if (new Set(labels).size !== labels.length) {
@@ -255,12 +310,17 @@ function getChoiceCriteria(labels: unknown): Record<string, TypeSafeEntry | null
     }
     criteria = Object.fromEntries(labels.map((label) => [label, null]));
   } else if (isPlainObject(labels)) {
-    criteria = Object.fromEntries(
-      Object.entries(labels).map(([label, description]) => [
-        label,
-        description === null ? null : toEntry(description),
-      ]),
-    );
+    if (Object.keys(labels).some((label) => label.trim() === '')) {
+      throw new Error('TypeSafe `labels` must be non-empty strings');
+    }
+    if (
+      Object.values(labels).some((description) => description !== null && !isEntry(description))
+    ) {
+      throw new Error(
+        'TypeSafe `labels` descriptions must be strings, JSON objects, arrays, or null',
+      );
+    }
+    criteria = labels as Record<string, TypeSafeEntry | null>;
   } else {
     throw new Error(
       'TypeSafe classification requires `labels` in the provider config: a list of labels or a label → description map',
@@ -321,6 +381,8 @@ export class TypeSafeProvider implements ApiClassificationProvider {
   modelName: string;
   config: Omit<TypeSafeConfig, 'apiKey'>;
   private apiKey?: string;
+  // Transport retries finish before returning; do not repeat them in the scheduler.
+  handlesOwnRetries = true;
 
   constructor(
     modelName: string,
@@ -361,7 +423,7 @@ export class TypeSafeProvider implements ApiClassificationProvider {
   private buildGradingRequest(prompt: string, context?: CallApiContextParams): TypeSafeRequest {
     const vars = context?.prompt?.label === 'llm-rubric' ? context.vars : undefined;
     const isRubricGrading = vars?.rubric !== undefined;
-    const instructions = isRubricGrading ? toEntry(vars?.rubric) : this.config.instructions;
+    const instructions = isRubricGrading ? vars?.rubric : this.config.instructions;
     if (!hasEntry(instructions)) {
       throw new Error(
         `TypeSafe provider ${this.id()} needs a question: use it as the llm-rubric grader, or set \`instructions\` in the provider config`,
@@ -397,41 +459,84 @@ export class TypeSafeProvider implements ApiClassificationProvider {
       questionTypes: Object.values(request.questions).map((question) => question.type),
     });
 
-    let response;
     try {
-      response = await fetchWithCache<unknown>(
-        `${this.getApiBaseUrl()}/v1/systemone`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.apiKey}`,
-          },
-          body: JSON.stringify(request),
-          ...(abortSignal ? { signal: abortSignal } : {}),
+      const maxRetries = getMaxRetries(this.config.maxRetries);
+      if (abortSignal?.aborted) {
+        throw new DOMException('TypeSafe request aborted', 'AbortError');
+      }
+      const requestOptions: FetchOptions = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
         },
-        getRequestTimeoutMs(),
-        'json',
-        { bust, cacheKey },
-      );
-    } catch (err) {
-      return { error: `TypeSafe API call error: ${String(err)}` };
-    }
-
-    const { data, cached, status, statusText, headers, latencyMs } = response;
-    const requestId = headers?.['x-typesafe-request-id'];
-    if (status < 200 || status >= 300) {
-      return { error: formatTypeSafeError(status, statusText, data, requestId) };
-    }
-    if (!isPlainObject(data) || !isPlainObject(data.answers)) {
-      return {
-        error: `TypeSafe API returned a malformed response: ${ellipsize(
-          JSON.stringify(data) ?? String(data),
-          500,
-        )}`,
+        body: JSON.stringify(request),
+        retryableStatusCodes: [529],
+        ...(abortSignal ? { signal: abortSignal } : {}),
       };
+      // The shared transport owns one retry budget for 429, 529, and network errors.
+      // Read text so non-JSON failures retain their HTTP status and request id.
+      const response = await fetchWithCache<string>(
+        `${this.getApiBaseUrl()}/v1/systemone`,
+        requestOptions,
+        getRequestTimeoutMs(),
+        'text',
+        { bust, cacheKey },
+        maxRetries,
+      );
+      if (abortSignal?.aborted) {
+        throw new DOMException('TypeSafe request aborted', 'AbortError');
+      }
+      const { status, statusText, headers, latencyMs, deleteFromCache } = response;
+      const requestId = headers?.['x-typesafe-request-id'];
+      if (status < 200 || status >= 300) {
+        return {
+          error: formatTypeSafeError(status, statusText, response.data, requestId, this.apiKey),
+        };
+      }
+      let data: unknown;
+      try {
+        data = JSON.parse(response.data);
+      } catch {
+        await deleteFromCache?.();
+        return {
+          error: `TypeSafe API returned a malformed non-JSON response (HTTP ${status}${requestId ? `; request id ${safeErrorDetail(requestId, this.apiKey)}` : ''}): ${safeErrorDetail(response.data, this.apiKey)}`,
+        };
+      }
+      if (!isPlainObject(data) || !isPlainObject(data.answers)) {
+        await deleteFromCache?.();
+        return {
+          error: `TypeSafe API returned a malformed response: ${safeErrorDetail(data, this.apiKey)}`,
+        };
+      }
+      return {
+        data: data as unknown as TypeSafeResponse,
+        cached: response.cached || response.coalesced === true,
+        latencyMs,
+        requestId,
+        deleteFromCache,
+      };
+    } catch (err) {
+      if (isAbortError(err)) {
+        throw err;
+      }
+      if (abortSignal?.aborted) {
+        throw new DOMException('TypeSafe request aborted', 'AbortError');
+      }
+      if (err instanceof HttpRateLimitError) {
+        return {
+          error: formatTypeSafeError(
+            err.status,
+            err.statusText,
+            err.body,
+            err.headers?.['x-typesafe-request-id'],
+            this.apiKey,
+            err.kind === 'quota',
+          ),
+        };
+      }
+      return { error: `TypeSafe API call error: ${safeErrorDetail(String(err), this.apiKey)}` };
     }
-    return { data: data as unknown as TypeSafeResponse, cached, latencyMs, requestId };
   }
 
   async callApi(
@@ -450,7 +555,7 @@ export class TypeSafeProvider implements ApiClassificationProvider {
 
     const result = await this.sendRequest(
       request,
-      getTypeSafeCacheKey(this.getApiBaseUrl(), request, threshold),
+      getTypeSafeCacheKey(this.getApiBaseUrl(), request),
       context?.bustCache ?? context?.debug,
       options?.abortSignal,
     );
@@ -462,6 +567,7 @@ export class TypeSafeProvider implements ApiClassificationProvider {
     const question = request.questions[GRADE_QUESTION_ID];
     try {
       const answer = getAnswer(data, GRADE_QUESTION_ID, question.type);
+      const cost = getCost(data, this.modelName, cached);
       const derived =
         question.type === 'score'
           ? deriveScore(answer, question.criteria, threshold)
@@ -471,6 +577,7 @@ export class TypeSafeProvider implements ApiClassificationProvider {
         cached,
         latencyMs,
         tokenUsage: getTokenUsage(data, cached),
+        cost,
         metadata: {
           // Jev's raw decision. `output.reason` is derived from it, not written by the model.
           typesafe: {
@@ -478,12 +585,19 @@ export class TypeSafeProvider implements ApiClassificationProvider {
             questionType: question.type,
             answer,
             threshold,
+            ...(cost === undefined ? {} : { estimatedCost: cost }),
             ...(requestId ? { requestId } : {}),
           },
         },
       };
     } catch (err) {
-      return { error: (err as Error).message, cached, tokenUsage: getTokenUsage(data, cached) };
+      await result.deleteFromCache?.();
+      return {
+        error: safeErrorDetail((err as Error).message, this.apiKey),
+        cached,
+        tokenUsage: getTokenUsage(data, cached),
+        cost: getCost(data, this.modelName, cached),
+      };
     }
   }
 
@@ -521,18 +635,35 @@ export class TypeSafeProvider implements ApiClassificationProvider {
 
     try {
       const answer = getAnswer(result.data, CLASSIFICATION_QUESTION_ID, 'choice');
-      const { probabilities } = answer as unknown as TypeSafeChoiceAnswer;
+      const { probabilities, choice, confidence } = answer as unknown as TypeSafeChoiceAnswer;
+      const question = request.questions[CLASSIFICATION_QUESTION_ID];
+      const labels = question.type === 'choice' ? Object.keys(question.criteria) : [];
       if (
         !isPlainObject(probabilities) ||
-        Object.values(probabilities).some((p) => !isFiniteNumber(p) || p < 0 || p > 1)
+        Object.keys(probabilities).length !== labels.length ||
+        labels.some((label) => !Object.hasOwn(probabilities, label)) ||
+        Object.values(probabilities).some((p) => !isFiniteNumber(p) || p < 0 || p > 1) ||
+        Math.abs(Object.values(probabilities).reduce((sum, p) => sum + p, 0) - 1) >
+          PROBABILITY_SUM_TOLERANCE
       ) {
         throw new Error(
           `TypeSafe Choice answer has invalid probabilities: ${JSON.stringify(answer)}`,
         );
       }
+      if (
+        typeof choice !== 'string' ||
+        !Object.hasOwn(probabilities, choice) ||
+        probabilities[choice] < Math.max(...Object.values(probabilities))
+      ) {
+        throw new Error('TypeSafe Choice answer has an invalid chosen option');
+      }
+      if (!isFiniteNumber(confidence) || confidence < 0 || confidence > 1) {
+        throw new Error('TypeSafe Choice answer has invalid confidence');
+      }
       return { classification: { ...probabilities } };
     } catch (err) {
-      return { error: (err as Error).message };
+      await result.deleteFromCache?.();
+      return { error: safeErrorDetail((err as Error).message, this.apiKey) };
     }
   }
 }

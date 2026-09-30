@@ -27,6 +27,7 @@ import {
   initializeAgenticCache,
   resolveAgenticWorkingDir,
 } from './agentic-utils';
+import { assertIsolatedWorkingDir, clearRepositoryEnv } from './agentWorkspace';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode, validateMCPConfigForClaudeCode } from './mcp/transform';
 import {
@@ -423,6 +424,12 @@ export interface ClaudeCodeOptions {
    * If not supplied, we'll use an empty temp dir for isolation
    */
   working_dir?: string;
+
+  /**
+   * Run each eval call in a fresh copy of `working_dir`, created by promptfoo eval. `true` clones
+   * a clean git repository and copies anything else; `'git'` or `'copy'` forces one method.
+   */
+  copy_working_dir?: boolean | 'git' | 'copy';
 
   /**
    * 'model' and 'fallback_model' are optional
@@ -1435,6 +1442,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+    // A fresh workspace must not be served from, or written to, the response cache.
+    const inIsolatedWorkspace = assertIsolatedWorkingDir(config);
 
     if (config.ask_user_question !== undefined) {
       validateAskUserQuestionConfig(config.ask_user_question);
@@ -1470,6 +1479,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           env[key] = value;
         }
       }
+    }
+
+    if (inIsolatedWorkspace) {
+      clearRepositoryEnv(env);
     }
 
     if (config.deep_tracing) {
@@ -1792,6 +1805,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       );
     }
     const cacheResult =
+      inIsolatedWorkspace ||
       runtimeCallbackBypassesCache ||
       sensitiveMcpBypassesCache ||
       settingsConfigurationBypassesCache ||

@@ -225,7 +225,11 @@ export async function fetchWithProxy(
     : options.signal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
-  const { getAuthHeaders, ...requestOptions } = options;
+  const {
+    getAuthHeaders,
+    retryableStatusCodes: _retryableStatusCodes,
+    ...requestOptions
+  } = options;
   const finalOptions: FetchOptions & { dispatcher?: any } = {
     ...requestOptions,
     headers: getFetchWithProxyHeaders(url, options),
@@ -743,7 +747,8 @@ export async function fetchWithRetries(
   timeout: number,
   maxRetries?: number,
 ): Promise<Response> {
-  options = preserveCloudAuthRedirects(url, options);
+  const { retryableStatusCodes, ...requestOptions } = options;
+  options = preserveCloudAuthRedirects(url, requestOptions);
   const contextMaxRetries = getFetchRetryContextMaxRetries();
   maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
 
@@ -761,12 +766,28 @@ export async function fetchWithRetries(
         timeout,
       );
 
-      if (getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600) {
+      if (
+        getEnvBool('PROMPTFOO_RETRY_5XX') &&
+        response.status >= 500 &&
+        response.status < 600 &&
+        !retryableStatusCodes?.includes(response.status)
+      ) {
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
       }
 
       if (response && isRateLimited(response)) {
         await handleRateLimitedResponse(response, url, i, maxRetries, signal);
+        continue;
+      }
+
+      if (retryableStatusCodes?.includes(response.status) && i < maxRetries) {
+        const { retryAfterMs } = rateLimitTimingFromHeaders(
+          Object.fromEntries(response.headers.entries()),
+        );
+        // Release this attempt's response before waiting for another connection.
+        await response.body?.cancel();
+        const waitTime = retryAfterMs ?? Math.pow(2, i) * (backoff + 1000 * Math.random());
+        await sleepWithAbort(waitTime, signal);
         continue;
       }
 

@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadApiProvider } from '../../src/providers/index';
 import { generatePersonasPrompt, synthesize, testCasesPrompt } from '../../src/testCase/synthesis';
 import { createMockProvider } from '../factories/provider';
@@ -11,6 +11,10 @@ vi.mock('../../src/providers', () => ({
 }));
 
 describe('synthesize', () => {
+  afterEach(() => {
+    vi.mocked(loadApiProvider).mockReset();
+  });
+
   it('should generate test cases based on prompts and personas', async () => {
     let i = 0;
     const mockProvider = createMockProvider({
@@ -34,6 +38,23 @@ describe('synthesize', () => {
 
     expect(result).toHaveLength(2);
     expect(result).toEqual([{ var1: 'value1' }, { var2: 'value2' }]);
+  });
+
+  it.each([
+    { output: [{ name: 'Persona 1' }, { name: 'Persona 2' }] },
+    { output: '{"personas": "Persona 1"}' },
+  ])('rejects a response without a personas array: $output', async ({ output }) => {
+    const mockProvider = createMockProvider({ response: { output } });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+    await expect(
+      synthesize({
+        provider: 'mock-provider',
+        prompts: ['Test prompt'],
+        tests: [],
+      }),
+    ).rejects.toThrow('Expected the personas response to contain a "personas" array.');
+    expect(mockProvider.callApi).toHaveBeenCalledTimes(1);
   });
 });
 
