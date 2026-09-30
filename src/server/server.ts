@@ -121,6 +121,7 @@ export function findStaticDir(): string {
 
 export function createApp() {
   const app = express();
+  let openApiDocument: object | undefined;
 
   const staticDir = findStaticDir();
 
@@ -129,6 +130,16 @@ export function createApp() {
   app.use(compression());
   app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));
   app.use(express.urlencoded({ limit: REQUEST_SIZE_LIMIT, extended: true }));
+  app.get('/api/openapi.json', async (_req, res) => {
+    try {
+      const { createServerOpenApiDocument } = await import('../openapi/server');
+      openApiDocument ??= createServerOpenApiDocument({ serverUrl: '/' });
+      res.json(openApiDocument);
+    } catch (error) {
+      sendError(res, 500, 'Failed to generate API specification', error);
+    }
+  });
+
   app.get('/health', (_req, res) => {
     // Health probes must never 500 from a self-imposed schema check.
     res.status(200).json({ status: 'OK', version: VERSION });

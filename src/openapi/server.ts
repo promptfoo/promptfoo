@@ -33,7 +33,7 @@ const OpenApiMediaParamsSchema = z.object({
   type: z.enum(['audio', 'image', 'video', 'blob']),
   filename: z
     .string()
-    .regex(/^(?:[a-f0-9]{12}\.[a-z0-9]+|[a-f0-9]{64})$/i)
+    .regex(/^(?:[A-Fa-f0-9]{12}\.[A-Za-z0-9]+|[A-Fa-f0-9]{64})$/)
     .describe('Full SHA256 for blob; 12-character hash plus extension for legacy media'),
 });
 
@@ -94,7 +94,7 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+export const SERVER_OPENAPI_ROUTE_COUNT = 68;
 
 type OpenApiSchema = NonNullable<ZodMediaTypeObject['schema']>;
 type OpenApiResponse = ResponseConfig & { description: string };
@@ -228,6 +228,18 @@ export function createServerOpenApiRegistry() {
     routes.push(route);
     registry.registerPath(route);
   }
+
+  register({
+    method: 'get',
+    path: '/api/openapi.json',
+    operationId: 'getOpenApiDocument',
+    tags: ['Server'],
+    summary: 'Get the installed local server API specification',
+    responses: {
+      200: jsonResponse('OpenApiDocument', OpenApiLooseObjectSchema),
+      500: serverError(),
+    },
+  });
 
   register({
     method: 'get',
@@ -389,7 +401,13 @@ export function createServerOpenApiRegistry() {
     tags: ['Telemetry'],
     summary: 'Record a web UI telemetry event',
     request: {
-      body: jsonBody('TelemetryEvent', ServerSchemas.Telemetry.Request),
+      body: jsonBody(
+        'TelemetryEvent',
+        ServerSchemas.Telemetry.Request.extend({
+          // The server supplies its installed version when this field is absent.
+          packageVersion: z.string().optional(),
+        }),
+      ),
     },
     responses: {
       200: jsonResponse('TelemetryResponse', ServerSchemas.Telemetry.Response),
@@ -802,7 +820,7 @@ export function createServerOpenApiRegistry() {
     responses: {
       200: jsonResponse('ScanResponse', ModelAuditSchemas.Scan.Response),
       400: validationError(),
-      500: jsonResponse('ScanErrorResponse', ModelAuditSchemas.Scan.ErrorResponse),
+      500: jsonResponse('ScanErrorResponse', ModelAuditSchemas.Scan.ErrorResponse, 'Scan failed'),
     },
   });
 
@@ -943,7 +961,7 @@ export function createServerOpenApiRegistry() {
         'TestRequestTransformResponse',
         ProviderSchemas.TestRequestTransform.Response,
       ),
-      400: jsonResponse('ProviderTransformErrorResponse', ErrorResponseSchema),
+      400: validationError(),
     },
   });
 
@@ -961,7 +979,7 @@ export function createServerOpenApiRegistry() {
         'TestResponseTransformResponse',
         ProviderSchemas.TestResponseTransform.Response,
       ),
-      400: jsonResponse('ProviderTransformErrorResponse', ErrorResponseSchema),
+      400: validationError(),
     },
   });
 
@@ -1259,7 +1277,9 @@ export function createServerOpenApiRegistry() {
   return { registry, routes };
 }
 
-export function createServerOpenApiDocument() {
+export function createServerOpenApiDocument(
+  options: { version?: string; serverUrl?: string } = {},
+) {
   const { registry } = createServerOpenApiRegistry();
   const generator = new OpenApiGeneratorV31(registry.definitions, {
     sortComponents: 'alphabetically',
@@ -1270,14 +1290,14 @@ export function createServerOpenApiDocument() {
     openapi: SERVER_OPENAPI_VERSION,
     info: {
       title: 'Promptfoo Local Server API',
-      version: VERSION,
+      version: options.version ?? VERSION,
       description:
         'OpenAPI document generated from the shared Zod DTO schemas used by the Promptfoo local server and web UI.',
     },
     servers: [
       {
-        url: 'http://localhost:15500',
-        description: 'Default local Promptfoo server',
+        url: options.serverUrl ?? 'http://localhost:15500',
+        description: 'Local Promptfoo server',
       },
     ],
   });

@@ -362,6 +362,12 @@ const validUuid = '00000000-0000-4000-8000-000000000000';
 const validMediaFilename = 'abcdef123456.mp3';
 
 const smokeCases: SmokeCase[] = [
+  {
+    method: 'get',
+    openApiPath: '/api/openapi.json',
+    path: '/api/openapi.json',
+    expectedStatus: 200,
+  },
   { method: 'get', openApiPath: '/health', path: '/health', expectedStatus: 200 },
   {
     method: 'get',
@@ -848,6 +854,40 @@ describe('server route end-to-end smoke coverage', { concurrent: false }, () => 
   afterEach(() => {
     promptCacheService.invalidate();
     vi.resetAllMocks();
+  });
+
+  it('serves the installed spec once per app with a relative server URL', async () => {
+    const generator = await import('../../../src/openapi/server');
+    const spy = vi.spyOn(generator, 'createServerOpenApiDocument');
+    try {
+      const freshApp = createApp();
+      const testCase = smokeCases.find((entry) => entry.path === '/api/openapi.json')!;
+      const first = await sendRequest(freshApp, testCase);
+      const second = await sendRequest(freshApp, testCase);
+      expect(first.status).toBe(200);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(first.text)).toEqual(createServerOpenApiDocument({ serverUrl: '/' }));
+      expect(second.text).toBe(first.text);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('returns a recoverable error when spec generation fails', async () => {
+    const generator = await import('../../../src/openapi/server');
+    const spy = vi.spyOn(generator, 'createServerOpenApiDocument').mockImplementationOnce(() => {
+      throw new Error('internal generator detail');
+    });
+    try {
+      const freshApp = createApp();
+      const testCase = smokeCases.find((entry) => entry.path === '/api/openapi.json')!;
+      const failed = await sendRequest(freshApp, testCase);
+      expect(failed.status).toBe(500);
+      expect(JSON.parse(failed.text)).toEqual({ error: 'Failed to generate API specification' });
+      expect((await sendRequest(freshApp, testCase)).status).toBe(200);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('has one smoke case for every generated OpenAPI route', () => {

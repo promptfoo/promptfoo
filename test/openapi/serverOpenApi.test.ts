@@ -58,6 +58,65 @@ function sourceRouteOperations() {
 }
 
 describe('server OpenAPI generation', () => {
+  it('supports stable docs versions without changing runtime defaults', () => {
+    const runtime = createServerOpenApiDocument();
+    const snapshot = createServerOpenApiDocument({ version: 'latest' });
+    expect(snapshot.info.version).toBe('latest');
+    expect(createServerOpenApiDocument().info.version).toBe(runtime.info.version);
+    expect(createServerOpenApiDocument({ serverUrl: '/' }).servers).toEqual([
+      expect.objectContaining({ url: '/' }),
+    ]);
+    const telemetry = snapshot.paths!['/api/telemetry']!.post!.requestBody as {
+      content: { 'application/json': { schema: { properties: Record<string, unknown> } } };
+    };
+    expect(telemetry.content['application/json'].schema.properties.packageVersion).toEqual({
+      type: 'string',
+    });
+  });
+
+  it('publishes hash and filename patterns that accept both letter cases', () => {
+    const patterns: Record<string, unknown>[] = [];
+    const visit = (value: unknown) => {
+      if (!value || typeof value !== 'object') {
+        return;
+      }
+      if ('pattern' in value && typeof value.pattern === 'string' && value.pattern.includes('{')) {
+        patterns.push(value as Record<string, unknown>);
+      }
+      for (const child of Object.values(value)) {
+        visit(child);
+      }
+    };
+    visit(createServerOpenApiDocument());
+    expect(patterns).toHaveLength(6);
+    const ajv = new Ajv2020({ strict: false });
+    for (const schema of patterns) {
+      const validate = ajv.compile(schema);
+      const isFilename = String(schema.pattern).includes('{12}');
+      const valid = isFilename ? `${'a'.repeat(12)}.png` : 'a'.repeat(64);
+      expect(validate(valid)).toBe(true);
+      expect(validate(valid.toUpperCase())).toBe(true);
+      expect(validate(isFilename ? 'file.png' : 'not-a-hash')).toBe(false);
+      if (isFilename) {
+        expect(validate('a'.repeat(64))).toBe(true);
+        expect(validate('A'.repeat(64))).toBe(true);
+        expect(validate('a'.repeat(63))).toBe(false);
+      }
+    }
+  });
+
+  it('describes error responses as errors', () => {
+    for (const { operation } of operations(createServerOpenApiDocument())) {
+      const responses = (operation as { responses: Record<string, { description: string }> })
+        .responses;
+      for (const [status, response] of Object.entries(responses)) {
+        if (Number(status) >= 400) {
+          expect(response.description).not.toBe('Successful response');
+        }
+      }
+    }
+  });
+
   it('registers every server route exactly once', () => {
     const { routes } = createServerOpenApiRegistry();
     const document = createServerOpenApiDocument();
@@ -157,7 +216,7 @@ describe('server OpenAPI generation', () => {
     expect(
       listBlobLibraryOperation?.responses['200']?.content?.['application/json']?.schema?.properties
         ?.data?.properties?.items?.items?.properties?.hash,
-    ).toEqual(expect.objectContaining({ pattern: '^[a-f0-9]{64}$/i', type: 'string' }));
+    ).toEqual(expect.objectContaining({ pattern: '^[A-Fa-f0-9]{64}$', type: 'string' }));
   });
 
   it('emits representative inline DTO schemas', () => {
