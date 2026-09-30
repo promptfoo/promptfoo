@@ -416,6 +416,76 @@ if (process.argv[2] !== '--child') {
     expect(fs.readdirSync(temporary)).toEqual([]);
   });
 
+  it.each(['success', 'throw', 'exit-code', 'abrupt', 'lingering'] as const)(
+    'supervises detached descendants through fixture completion (%s)',
+    async (mode) => {
+      const { root, temporary, nativeDir } = prepareConsumer('');
+      const fixture = path.join(root, 'completion.mjs');
+      const pidFiles = ['native-pid', 'descendant-pid'].map((name) => path.join(nativeDir, name));
+      fs.writeFileSync(
+        fixture,
+        `import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { spawn } from 'node:child_process';
+import { setTimeout as delay } from 'node:timers/promises';
+import { runIsolated } from './isolated.mjs';
+if (process.argv[2] === '--child') {
+  assert.deepEqual(process.argv.slice(4), ['argument with spaces']);
+  fs.writeFileSync(${JSON.stringify(pidFiles[0])}, String(process.pid));
+  spawn(process.execPath, ['-e', ${JSON.stringify(`require('node:fs').writeFileSync(process.argv[1], String(process.pid)); setInterval(() => {}, 1000);`)}, ${JSON.stringify(pidFiles[1])}], {
+    stdio: 'ignore', detached: true,
+  }).unref();
+  while (!fs.existsSync(${JSON.stringify(pidFiles[1])})) await delay(10);
+  if (${JSON.stringify(mode)} === 'throw') throw new Error('completion-error-sentinel');
+  if (${JSON.stringify(mode)} === 'exit-code') process.exitCode = 7;
+  if (${JSON.stringify(mode)} === 'abrupt') process.exit(9);
+  if (${JSON.stringify(mode)} === 'lingering') setInterval(() => {}, 1000);
+} else {
+  await runIsolated(import.meta.url, {
+    label: 'completion', args: ['argument with spaces'], timeoutMs: 1500,
+  });
+}
+`,
+      );
+      try {
+        const result = spawnSync(process.execPath, [fixture], {
+          encoding: 'utf8',
+          timeout: 8_000,
+          killSignal: 'SIGKILL',
+          env: { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary },
+        });
+        expect(result.error).toBeUndefined();
+        expect(result.status).not.toBeNull();
+        if (mode === 'success') {
+          expect(result.status, result.stderr).toBe(0);
+        } else {
+          expect(result.status).not.toBe(0);
+        }
+        if (mode === 'throw') {
+          expect(result.stderr).toContain('completion-error-sentinel');
+        } else if (mode === 'exit-code') {
+          expect(result.stderr).toContain('Installed completion check failed (7)');
+        } else if (mode === 'lingering') {
+          expect(result.stderr).toContain('Installed completion check timed out after 1500ms');
+        }
+        const pids = pidFiles.map((file) => Number(fs.readFileSync(file, 'utf8')));
+        expect(new Set([result.pid, ...pids]).size).toBe(3);
+        if (mode === 'abrupt') {
+          expect(result.stderr).toContain('Retained completion state after termination failure');
+          expect(fs.readdirSync(temporary)).toHaveLength(1);
+        } else {
+          await vi.waitFor(() => expect(pids.filter(processIsRunning)).toEqual([]), {
+            timeout: 1_000,
+            interval: 20,
+          });
+          expect(fs.readdirSync(temporary)).toEqual([]);
+        }
+      } finally {
+        killRecordedProcesses(pidFiles);
+      }
+    },
+  );
+
   it.each(['none', 'inherited', 'detached'] as const)(
     'terminates a stalled native check and cleans owned state (descendant: %s)',
     async (mode) => {

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const platformEnv = Object.fromEntries(
   [
@@ -147,12 +147,16 @@ async function terminateTree(pid) {
 }
 
 async function runChild(fixturePath, stateDir, { label, timeoutMs, args, env }) {
-  const child = spawn(process.execPath, [fixturePath, '--child', stateDir, ...args], {
-    cwd: path.dirname(fixturePath),
-    env: { ...isolatedEnv(stateDir), ...(typeof env === 'function' ? env(stateDir) : env) },
-    stdio: ['ignore', 'pipe', 'pipe'],
-    detached: process.platform !== 'win32',
-  });
+  const child = spawn(
+    process.execPath,
+    [fileURLToPath(import.meta.url), '--fixture-child', fixturePath, stateDir, ...args],
+    {
+      cwd: path.dirname(fixturePath),
+      env: { ...isolatedEnv(stateDir), ...(typeof env === 'function' ? env(stateDir) : env) },
+      stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+      detached: process.platform !== 'win32',
+    },
+  );
   child.stdout.pipe(process.stdout);
   child.stderr.pipe(process.stderr);
   let failure;
@@ -162,15 +166,28 @@ async function runChild(fixturePath, stateDir, { label, timeoutMs, args, env }) 
   let stop;
   try {
     await new Promise((resolve, reject) => {
-      child.once('error', reject);
-      child.once('close', async (code, signal) => {
+      child.once('error', (error) => (child.pid ? stop(error) : reject(error)));
+      child.once('exit', (code, signal) => {
+        if (!termination) {
+          // An unannounced exit can reparent detached descendants before we can
+          // discover them. Retain state rather than claim their cleanup succeeded.
+          reject(
+            new TerminationError(
+              child.pid,
+              new Error(`Fixture exited without completion (${signal ?? code})`),
+            ),
+          );
+          child.stdout.destroy();
+          child.stderr.destroy();
+          child.unref();
+        }
+      });
+      child.once('close', async () => {
         await termination;
         if (failure) {
           reject(failure);
-        } else if (code === 0) {
-          resolve();
         } else {
-          reject(new Error(`Installed ${label} check failed (${signal ?? code})`));
+          resolve();
         }
       });
       stop = (error) => {
@@ -193,6 +210,15 @@ async function runChild(fixturePath, stateDir, { label, timeoutMs, args, env }) 
           child.unref();
         });
       };
+      child.on('message', (message) => {
+        if (message?.type === 'fixture-complete' && Number.isInteger(message.code)) {
+          stop(
+            message.code === 0
+              ? undefined
+              : new Error(`Installed ${label} check failed (${message.code})`),
+          );
+        }
+      });
       for (const signal of ['SIGINT', 'SIGTERM']) {
         process.on(signal, onSignal);
       }
@@ -207,6 +233,28 @@ async function runChild(fixturePath, stateDir, { label, timeoutMs, args, env }) 
       process.removeListener(signal, onSignal);
     }
   }
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] === '--fixture-child') {
+  const fixturePath = process.argv[3];
+  process.argv.splice(1, 3, fixturePath, '--child');
+  const keepAlive = setInterval(() => {}, 1_000);
+  const complete = (code) => {
+    keepAlive.ref();
+    process.send({ type: 'fixture-complete', code });
+  };
+  // Do not await here: fixtures import this module themselves. Hold the leader
+  // through errors and natural completion until the supervisor kills its tree.
+  import(pathToFileURL(fixturePath).href).then(
+    () => {
+      process.once('beforeExit', () => complete(Number(process.exitCode ?? 0)));
+      keepAlive.unref();
+    },
+    (error) => {
+      console.error(error);
+      complete(1);
+    },
+  );
 }
 
 export async function runIsolated(
