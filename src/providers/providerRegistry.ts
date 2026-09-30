@@ -4,6 +4,7 @@ import logger from '../logger';
 
 interface CleanupProvider {
   shutdown(): Promise<void>;
+  shutdownForProcess?(): Promise<void>;
 }
 
 interface IdleCleanupProvider {
@@ -135,23 +136,11 @@ export class ProviderRegistry {
         if (ready) {
           await this.waitForScope(scope, ready, signal);
         }
-        signal?.throwIfAborted();
-        if (scope && !scope.active) {
-          throw this.closedScopeError();
-        }
-        if (this.processShuttingDown) {
-          throw this.processShutdownError();
-        }
+        this.throwIfResourceUseAborted(signal);
         let release = this.restoreProviderRegistration(provider);
         while (release) {
           await this.waitForScope(scope, release, signal);
-          signal?.throwIfAborted();
-          if (scope && !scope.active) {
-            throw this.closedScopeError();
-          }
-          if (this.processShuttingDown) {
-            throw this.processShutdownError();
-          }
+          this.throwIfResourceUseAborted(signal);
           release = this.restoreProviderRegistration(provider);
         }
         return await run();
@@ -317,9 +306,10 @@ export class ProviderRegistry {
   private forceResource(state: ResourceState): Promise<void> | undefined {
     const release = this.maybeReleaseResource(state, undefined, true);
     if (release) {
-      void state.release?.start(true);
+      const forced = state.release?.start(true) ?? release;
       if (this.processShuttingDown) {
-        this.trackProcessRelease(release);
+        this.trackProcessRelease(forced);
+        return forced;
       }
     }
     return release;
@@ -584,22 +574,33 @@ export class ProviderRegistry {
       finish();
     };
     let actual: Promise<void> | undefined;
+    let processActual: Promise<void> | undefined;
+    const invoke = (shutdown: () => Promise<void>) => {
+      const registration = state.registration;
+      state.registered = false;
+      return Promise.resolve()
+        .then(() => this.releasingResource.run({ state, registration }, shutdown))
+        .catch((error) => {
+          logger.warn('Error shutting down provider: ' + String(error));
+        });
+    };
     const start = (forceShutdown = false) => {
+      if (forceShutdown && this.processShuttingDown && state.resource.shutdownForProcess) {
+        if (!processActual) {
+          processActual = invoke(() => state.resource.shutdownForProcess!());
+          if (!actual) {
+            actual = processActual.then(complete);
+            processActual = actual;
+          }
+        }
+        return processActual;
+      }
       if (!actual) {
         if (usesEvaluationCleanup && !forceShutdown) {
           actual = Promise.resolve();
           complete();
         } else {
-          const registration = state.registration;
-          state.registered = false;
-          actual = Promise.resolve()
-            .then(() =>
-              this.releasingResource.run({ state, registration }, () => state.resource.shutdown()),
-            )
-            .catch((error) => {
-              logger.warn('Error shutting down provider: ' + String(error));
-            })
-            .then(complete);
+          actual = invoke(() => state.resource.shutdown()).then(complete);
         }
       }
       return actual;
@@ -611,7 +612,7 @@ export class ProviderRegistry {
         () => start(),
       );
     } else {
-      void start();
+      void start(this.processShuttingDown);
     }
     return promise;
   }

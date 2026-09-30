@@ -21,7 +21,7 @@ Evaluations use `providerRegistry.withEvaluation()` (`src/providers/providerRegi
 - Register resources before asynchronous initialization creates processes or connections. Registration of a provider instance is restored when an evaluation reuses it. An idle cleanup hook may leave the provider registered for process shutdown.
 - For shared singleton transports, await `useResource()` on every access and call `throwIfResourceUseAborted()` after asynchronous acquisition. Both use the current provider call's signal; direct callers can supply one.
 - Pass the request signal to `withProvider()`. When using a temporary adapter, retain ownership on the provider that performs cleanup. Cancelled calls waiting for cleanup never start; active calls retain resources until they settle.
-- Process shutdown closes registered resources immediately. The CLI also cleans up its own targets, including targets without registered resources. Caller-supplied graders remain borrowed.
+- Process shutdown closes registered resources immediately. Implement `shutdownForProcess()` to cancel active remote work on process exit; idle release still calls `shutdown()`. The CLI also cleans up its own targets, including targets without registered resources. Caller-supplied graders remain borrowed.
 
 **Reference implementations:**
 
