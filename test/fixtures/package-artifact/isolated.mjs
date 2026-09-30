@@ -5,7 +5,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const platformEnv = Object.fromEntries(
-  ['PATH', 'Path', 'SystemRoot', 'WINDIR', 'COMSPEC', 'PATHEXT', 'LANG', 'LC_ALL']
+  [
+    'PATH',
+    'Path',
+    'SystemRoot',
+    'WINDIR',
+    'COMSPEC',
+    'PATHEXT',
+    'LANG',
+    'LC_ALL',
+    'LD_LIBRARY_PATH',
+  ]
     .filter((key) => process.env[key] !== undefined)
     .map((key) => [key, process.env[key]]),
 );

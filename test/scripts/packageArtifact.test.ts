@@ -9,7 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { packPackageArtifact } from '../../scripts/packPackageArtifact';
 import { mockProcessEnv } from '../util/utils';
 
-const npmExecPath = execSync('npm exec --offline -- node -p process.env.npm_execpath', {
+// Command mode avoids package resolution and finds node.exe on Windows.
+const npmExecPath = execSync('npm exec --offline --call "node -p process.env.npm_execpath"', {
   encoding: 'utf8',
 }).trim();
 const directories: string[] = [];
@@ -363,14 +364,24 @@ ${nativeSource}`,
     }
   }
 
-  it('loads native bindings in a child and cleans owned state when that child fails', () => {
+  it('preserves loader paths, isolates credentials, and cleans state when a native child fails', () => {
+    const loaderPath = process.env.LD_LIBRARY_PATH || 'artifact-loader-path';
     const { temporary, nativeDir, fixture } = prepareConsumer(
-      "throw new Error('artifact-native-binding-sentinel');",
+      `require('node:assert/strict').equal(process.env.LD_LIBRARY_PATH, ${JSON.stringify(loaderPath)});
+require('node:assert/strict').equal(process.env.OPENAI_API_KEY, undefined);
+throw new Error('artifact-native-binding-sentinel');`,
     );
     const result = spawnSync(process.execPath, [fixture], {
       encoding: 'utf8',
       timeout: 8_000,
-      env: { ...process.env, TMPDIR: temporary, TMP: temporary, TEMP: temporary },
+      env: {
+        ...process.env,
+        TMPDIR: temporary,
+        TMP: temporary,
+        TEMP: temporary,
+        LD_LIBRARY_PATH: loaderPath,
+        OPENAI_API_KEY: 'fixture-key',
+      },
     });
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('artifact-native-binding-sentinel');
