@@ -170,6 +170,62 @@ describe('fetchTraceContext', () => {
     expect(result?.spans.map((span) => span.spanId)).toContain('unsafe');
   });
 
+  it.each([
+    { endTime: 3 },
+    { statusCode: 2, statusMessage: 'Fixture operation failed' },
+    { attributes: { 'fixture.phase': 'complete' } },
+    { events: [{ name: 'fixture.complete', timestamp: 3, attributes: {} }] },
+  ])('waits for unchanged contents when existing spans gain %j', async (update) => {
+    const initial = { spanId: 'root', name: 'fixture.operation', startTime: 1 };
+    const complete = { ...initial, ...update };
+    mocks.addSpans.mockImplementation(async (_traceId: string, spans: SpanData[]) => {
+      storedSpans.splice(0, storedSpans.length, ...structuredClone(spans));
+      return { stored: true };
+    });
+    const fetchTrace = vi
+      .fn()
+      .mockResolvedValueOnce({ fetchedAt: 1, traceId: 'trace-1', spans: [initial] })
+      .mockResolvedValueOnce({ fetchedAt: 2, traceId: 'trace-1', spans: [complete] })
+      .mockResolvedValueOnce({ fetchedAt: 3, traceId: 'trace-1', spans: [complete] });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const result = await fetchTraceContext('trace-1', {
+      providerConfig,
+      queryDelay: 0,
+      retryDelayMs: 0,
+      maxRetries: 2,
+    });
+
+    expect(fetchTrace).toHaveBeenCalledTimes(3);
+    expect(result?.fetchedAt).toBe(3);
+    expect(storedSpans).toEqual([complete]);
+    expect(result?.spans[0]).toMatchObject({ spanId: 'root', name: 'fixture.operation' });
+  });
+
+  it('ignores snapshot order and fetch time when selected contents are unchanged', async () => {
+    const first = { spanId: 'a', name: 'fixture.a', startTime: 1 };
+    const second = { spanId: 'b', name: 'fixture.b', startTime: 2 };
+    mocks.addSpans.mockImplementation(async (_traceId: string, spans: SpanData[]) => {
+      storedSpans.splice(0, storedSpans.length, ...structuredClone(spans));
+      return { stored: true };
+    });
+    const fetchTrace = vi
+      .fn()
+      .mockResolvedValueOnce({ fetchedAt: 1, traceId: 'trace-1', spans: [first, second] })
+      .mockResolvedValueOnce({ fetchedAt: 2, traceId: 'trace-1', spans: [second, first] });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const result = await fetchTraceContext('trace-1', {
+      providerConfig,
+      queryDelay: 0,
+      retryDelayMs: 0,
+      maxRetries: 3,
+    });
+
+    expect(fetchTrace).toHaveBeenCalledTimes(2);
+    expect(result?.spans).toHaveLength(2);
+  });
+
   it('keeps meaningful internal external spans before applying the span limit', async () => {
     const spans = [
       {

@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import logger from '../logger';
 import { createTraceProvider, isExternalTraceProvider } from './providers';
 import {
@@ -426,7 +428,7 @@ async function fetchFromExternalProvider(
     await waitForRetry(queryDelay, abortSignal);
   }
 
-  let previousSpanIds: string | undefined;
+  let previousSpans: SpanData[] | undefined;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (abortSignal?.aborted) {
       throw createTraceAbortError(abortSignal);
@@ -466,12 +468,9 @@ async function fetchFromExternalProvider(
         continue;
       }
 
-      const spanIds = spans
-        .map((span) => span.spanId)
-        .sort()
-        .join(',');
-      if (attempt < maxRetries && spanIds !== previousSpanIds) {
-        previousSpanIds = spanIds;
+      const sortedSpans = [...spans].sort((a, b) => a.spanId.localeCompare(b.spanId));
+      if (attempt < maxRetries && !isDeepStrictEqual(sortedSpans, previousSpans)) {
+        previousSpans = sortedSpans;
         await waitForRetry(retryDelayMs, abortSignal);
         continue;
       }
