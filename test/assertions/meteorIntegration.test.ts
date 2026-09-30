@@ -10,12 +10,23 @@ vi.mock('../../src/assertions/meteor', () => ({
 import { runAssertion } from '../../src/assertions';
 
 describe('METEOR assertion', () => {
+  let params: Parameters<typeof runAssertion>[0];
+
   beforeEach(() => {
     mockHandleMeteorAssertion.mockReset();
+    params = {
+      assertion: {
+        type: 'meteor',
+        value: 'Expected output',
+        threshold: 0.7,
+      },
+      test: {},
+      providerResponse: { output: 'Actual output' },
+    };
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    mockHandleMeteorAssertion.mockReset();
   });
 
   it('should use the handleMeteorAssertion when natural is available', async () => {
@@ -23,67 +34,34 @@ describe('METEOR assertion', () => {
       pass: true,
       score: 0.85,
       reason: 'METEOR test passed',
-      assertion: { type: 'meteor' },
+      assertion: params.assertion,
     });
 
-    const result = await runAssertion({
-      prompt: 'Test prompt',
-      provider: {} as any,
-      assertion: {
-        type: 'meteor',
-        value: 'Expected output',
-        threshold: 0.7,
-      },
-      test: {} as any,
-      providerResponse: { output: 'Actual output' },
-    });
+    const result = await runAssertion(params);
 
-    expect(mockHandleMeteorAssertion).toHaveBeenCalledWith(expect.anything());
+    expect(mockHandleMeteorAssertion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assertion: params.assertion,
+        renderedValue: 'Expected output',
+        outputString: 'Actual output',
+      }),
+    );
     expect(result.pass).toBe(true);
     expect(result.score).toBe(0.85);
     expect(result.reason).toBe('METEOR test passed');
+    expect(result.assertion).toBe(params.assertion);
   });
 
-  it('handles the loader missing-package error', async () => {
-    const message =
-      'The "natural" package is required for METEOR assertions. Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1.';
+  it.each([
+    'The "natural" package is required for METEOR assertions. Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1.',
+    'METEOR requires natural@^8.1.1; found 7.1.0. Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1.',
+  ])('returns an actionable dependency failure: %s', async (message) => {
     mockHandleMeteorAssertion.mockRejectedValue(new Error(message));
 
-    const result = await runAssertion({
-      prompt: 'Test prompt',
-      provider: {} as any,
-      assertion: {
-        type: 'meteor',
-        value: 'Expected output',
-        threshold: 0.7,
-      },
-      test: {} as any,
-      providerResponse: { output: 'Actual output' },
-    });
+    const result = await runAssertion(params);
 
-    expect(result.pass).toBe(false);
-    expect(result.score).toBe(0);
-    expect(result.reason).toBe(message);
-    expect(result.assertion).toEqual({
-      type: 'meteor',
-      value: 'Expected output',
-      threshold: 0.7,
-    });
-  });
-
-  it('returns an actionable failure for an incompatible Natural version', async () => {
-    const message =
-      'METEOR requires natural@^8.1.1; found 7.1.0. Install it alongside Promptfoo: npm install promptfoo natural@^8.1.1.';
-    mockHandleMeteorAssertion.mockRejectedValue(new Error(message));
-    const assertion = { type: 'meteor' as const, value: 'expected' };
-    const result = await runAssertion({
-      prompt: 'Test prompt',
-      provider: {} as any,
-      assertion,
-      test: {} as any,
-      providerResponse: { output: 'actual' },
-    });
-    expect(result).toMatchObject({ pass: false, score: 0, reason: message, assertion });
+    expect(result).toMatchObject({ pass: false, score: 0, reason: message });
+    expect(result.assertion).toBe(params.assertion);
   });
 
   it.each(['Some other error', "Cannot find module 'natural-binding'"])(
@@ -92,19 +70,7 @@ describe('METEOR assertion', () => {
       const error = Object.assign(new Error(message), { code: 'MODULE_NOT_FOUND' });
       mockHandleMeteorAssertion.mockRejectedValue(error);
 
-      await expect(
-        runAssertion({
-          prompt: 'Test prompt',
-          provider: {} as any,
-          assertion: {
-            type: 'meteor',
-            value: 'Expected output',
-            threshold: 0.7,
-          },
-          test: {} as any,
-          providerResponse: { output: 'Actual output' },
-        }),
-      ).rejects.toBe(error);
+      await expect(runAssertion(params)).rejects.toBe(error);
     },
   );
 });
