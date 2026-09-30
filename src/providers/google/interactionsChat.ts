@@ -1039,12 +1039,12 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
 
     try {
       const parsed: unknown = JSON.parse(prompt);
-      if (
-        isPlainObject(parsed) &&
-        Array.isArray(parsed.contents) &&
-        !('system_instruction' in parsed)
-      ) {
-        prompt = JSON.stringify(parsed.contents);
+      if (isPlainObject(parsed) && Array.isArray(parsed.contents)) {
+        if (!('system_instruction' in parsed) && 'systemInstruction' in parsed) {
+          prompt = JSON.stringify({ ...parsed, system_instruction: parsed.systemInstruction });
+        } else if (!('system_instruction' in parsed)) {
+          prompt = JSON.stringify(parsed.contents);
+        }
       }
     } catch {
       // The formatter also accepts plain text.
@@ -1194,7 +1194,9 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     }
 
     return {
-      output,
+      ...(lastData.status === 'incomplete' && !output.trim()
+        ? { error: 'No output from Gemini Interactions API (status: incomplete)' }
+        : { output }),
       cached: false,
       raw: lastData,
       tokenUsage: buildTokenUsage(totals),

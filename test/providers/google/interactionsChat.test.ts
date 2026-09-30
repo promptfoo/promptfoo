@@ -142,19 +142,22 @@ describe('GoogleInteractionsChatProvider', () => {
   );
 
   describe('request mapping', () => {
-    it('preserves system instructions in native Gemini prompt wrappers', async () => {
-      mockFetchWithCache.mockResolvedValue(interaction() as any);
-      await make().callApi(
-        JSON.stringify({
-          system_instruction: { parts: [{ text: 'Reply briefly.' }] },
-          contents: [{ role: 'user', parts: [{ text: 'Hi' }] }],
-        }),
-      );
-      expect(bodyOf(mockFetchWithCache.mock.calls[0])).toMatchObject({
-        system_instruction: 'Reply briefly.',
-        input: [{ type: 'user_input', content: [{ type: 'text', text: 'Hi' }] }],
-      });
-    });
+    it.each(['system_instruction', 'systemInstruction'])(
+      'preserves %s in native Gemini prompt wrappers',
+      async (field) => {
+        mockFetchWithCache.mockResolvedValue(interaction() as any);
+        await make().callApi(
+          JSON.stringify({
+            [field]: { parts: [{ text: 'Reply briefly.' }] },
+            contents: [{ role: 'user', parts: [{ text: 'Hi' }] }],
+          }),
+        );
+        expect(bodyOf(mockFetchWithCache.mock.calls[0])).toMatchObject({
+          system_instruction: 'Reply briefly.',
+          input: [{ type: 'user_input', content: [{ type: 'text', text: 'Hi' }] }],
+        });
+      },
+    );
 
     it.each(['apiHost', 'apiBaseUrl'])(
       'renders a configured %s before building the endpoint',
@@ -1482,6 +1485,35 @@ describe('GoogleInteractionsChatProvider', () => {
       );
       const result = await make().callApi('Hello');
       expect(result.error).toBe('Gemini Interactions API error: generation failed');
+    });
+
+    it.each([
+      { steps: [] },
+      { steps: [{ type: 'thought', signature: 'budget-signature' }] },
+      { steps: [{ type: 'model_output', content: [{ type: 'text', text: '' }] }] },
+    ])('reports incomplete responses without usable output: %j', async ({ steps }) => {
+      mockFetchWithCache.mockResolvedValue(interaction({ status: 'incomplete', steps }) as any);
+      const result = await make({ maxOutputTokens: 1 }).callApi('Hello');
+      expect(result.error).toContain('No output');
+      expect(result.tokenUsage).toMatchObject({ total: 30, prompt: 10, completion: 5 });
+      expect(result.cost).toBeGreaterThan(0);
+      expect(result.metadata?.interactionStatus).toBe('incomplete');
+    });
+
+    it('retains a pending function call when an interaction is incomplete', async () => {
+      mockFetchWithCache.mockResolvedValue(
+        interaction({
+          status: 'incomplete',
+          steps: [
+            { type: 'function_call', id: 'pending', name: 'lookup', arguments: { city: 'Paris' } },
+          ],
+        }) as any,
+      );
+      const result = await make().callApi('Hello');
+      expect(result.error).toBeUndefined();
+      expect(JSON.parse(result.output as string)).toEqual([
+        { functionCall: { id: 'pending', name: 'lookup', args: { city: 'Paris' } } },
+      ]);
     });
 
     it('returns the partial output of a truncated interaction instead of failing', async () => {
