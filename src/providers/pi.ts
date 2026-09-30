@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import fs from 'fs';
 import fsPromises from 'fs/promises';
 import os from 'os';
@@ -124,9 +124,6 @@ const PI_PROVIDER_ENV_KEYS: Record<string, string> = {
 
 export type PiThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
-/**
- * Pi provider configuration
- */
 export interface PiProviderConfig {
   /** Base directory supplied by the provider loader for config-relative paths. */
   basePath?: string;
@@ -653,15 +650,12 @@ export class PiProvider implements ApiProvider {
     const promptConfig = (context?.prompt?.config ?? {}) as PiProviderConfig;
     const config: PiProviderConfig = {
       ...this.config,
-      model: promptConfig.model ?? this.config.model,
-      provider_id: promptConfig.provider_id ?? this.config.provider_id,
       thinking: promptConfig.thinking ?? this.config.thinking,
     };
 
     // Only the evaluator may replace the working directory with a registered copy.
     // Test rows cannot change process, tool, credential, or resource-loading controls.
     if (
-      this.config.copy_working_dir &&
       typeof promptConfig.working_dir === 'string' &&
       isAgentWorkspace(promptConfig.working_dir)
     ) {
@@ -703,14 +697,17 @@ export class PiProvider implements ApiProvider {
     },
   ): Promise<PiRunResult> {
     return new Promise((resolve, reject) => {
+      const systemRoot = process.env.SystemRoot;
+      if (process.platform === 'win32' && (!systemRoot || !path.win32.isAbsolute(systemRoot))) {
+        reject(new Error('Pi cannot locate the Windows system directory for process cleanup'));
+        return;
+      }
       const child = spawn(command, args, {
         cwd: options.cwd,
         env: options.env,
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
-        // Run pi in its own process group on POSIX so we can signal pi AND any
-        // tool grandchildren it spawned (e.g. bash) on timeout/abort/overflow,
-        // instead of orphaning them. Windows has no equivalent here.
+        // POSIX groups and Windows taskkill keep tool descendants within run cleanup.
         detached: process.platform !== 'win32',
       });
 
@@ -724,36 +721,52 @@ export class PiProvider implements ApiProvider {
       let aborted = false;
       let settled = false;
       let exitSignal: NodeJS.Signals | null = null;
+      let forceKillTimer: NodeJS.Timeout | undefined;
+      let windowsCleanup: Promise<void> | undefined;
 
-      // Signal pi directly (so the mockable child.kill path stays exercised) and,
-      // on POSIX, the whole process group via the negative pid so descendant
-      // tool processes are terminated too.
       const signalGroup = (signal: NodeJS.Signals) => {
+        if (process.platform === 'win32' && typeof child.pid === 'number') {
+          windowsCleanup ??= new Promise<void>((done) => {
+            execFile(
+              path.win32.join(systemRoot!, 'System32', 'taskkill.exe'),
+              ['/PID', String(child.pid), '/T', '/F'],
+              { windowsHide: true, timeout: KILL_GRACE_MS },
+              (error) => {
+                try {
+                  if (error) {
+                    logger.debug('[Pi] Process-tree cleanup failed', { error });
+                    child.kill(signal);
+                  }
+                } catch (killError) {
+                  logger.debug('[Pi] Process cleanup failed', { error: killError });
+                } finally {
+                  done();
+                }
+              },
+            );
+          });
+          return;
+        }
         try {
           child.kill(signal);
-        } catch (err) {
-          logger.debug(`[Pi] Failed to send ${signal}: ${err}`);
+        } catch (error) {
+          logger.debug('[Pi] Process already stopped or unavailable', { error });
         }
-        if (process.platform !== 'win32' && typeof child.pid === 'number') {
+        if (typeof child.pid === 'number') {
           try {
             process.kill(-child.pid, signal);
-          } catch (err) {
-            // ESRCH when the group is already gone; nothing to do.
-            logger.debug(`[Pi] Failed to signal process group: ${err}`);
+          } catch (error) {
+            logger.debug('[Pi] Process group already stopped or unavailable', { error });
           }
         }
       };
 
       const killChild = () => {
+        if (!forceKillTimer) {
+          forceKillTimer = setTimeout(() => signalGroup('SIGKILL'), KILL_GRACE_MS);
+          forceKillTimer.unref();
+        }
         signalGroup('SIGTERM');
-        setTimeout(() => {
-          // Force-kill the whole group, not gated on pi's own liveness: pi may
-          // have exited cleanly from SIGTERM while a tool grandchild (e.g. a
-          // bash that ignores SIGTERM) is still alive in the group. child.kill
-          // on an already-exited child is a safe no-op, and process.kill(-pid)
-          // throws ESRCH (caught) once the group is gone.
-          signalGroup('SIGKILL');
-        }, KILL_GRACE_MS).unref();
       };
 
       const timeoutHandle = setTimeout(() => {
@@ -774,6 +787,7 @@ export class PiProvider implements ApiProvider {
         }
         settled = true;
         clearTimeout(timeoutHandle);
+        clearTimeout(forceKillTimer);
         options.abortSignal?.removeEventListener('abort', abortListener);
         fn();
       };
@@ -786,10 +800,13 @@ export class PiProvider implements ApiProvider {
         if (stdoutOverflow) {
           return;
         }
+        const availableBytes = Math.max(0, options.maxOutputBytes - stdoutBytes);
         stdoutBytes += Buffer.byteLength(chunk, 'utf-8');
         if (stdoutBytes > options.maxOutputBytes) {
-          // Truncating JSONL would corrupt the final agent_end event, so abort
-          // the run rather than parse a partial transcript.
+          // A single chunk can contain billed events before an oversized later event.
+          const retained =
+            stdout + Buffer.from(chunk).subarray(0, availableBytes).toString('utf-8');
+          stdout = retained.slice(0, retained.lastIndexOf('\n') + 1);
           stdoutOverflow = true;
           killChild();
           return;
@@ -841,17 +858,20 @@ export class PiProvider implements ApiProvider {
       });
 
       const resolveRun = (code: number | null) => {
-        finish(() =>
-          resolve({
-            stdout,
-            stderr,
-            exitCode: code,
-            signal: exitSignal,
-            timedOut,
-            aborted,
-            stdoutOverflow,
-          }),
-        );
+        finish(() => {
+          signalGroup('SIGKILL');
+          void Promise.resolve(windowsCleanup).then(() =>
+            resolve({
+              stdout,
+              stderr,
+              exitCode: code,
+              signal: exitSignal,
+              timedOut,
+              aborted,
+              stdoutOverflow,
+            }),
+          );
+        });
       };
 
       // 'close' waits for all stdio to end; a descendant process holding the
@@ -860,13 +880,7 @@ export class PiProvider implements ApiProvider {
       child.on('exit', (code, signal) => {
         exitSignal = signal;
         setTimeout(() => {
-          // If 'close' still hasn't fired, pi exited while a descendant (e.g. a
-          // backgrounded bash child) is holding the inherited pipes open. Kill
-          // the process group before settling so we don't leak that orphan after
-          // returning. When 'close' already fired, this is a no-op (settled).
-          if (!settled) {
-            signalGroup('SIGKILL');
-          }
+          // resolveRun also terminates descendants before settling.
           resolveRun(code);
         }, STDIO_FLUSH_GRACE_MS).unref();
       });
@@ -885,7 +899,16 @@ export class PiProvider implements ApiProvider {
         continue;
       }
       try {
-        events.push(JSON.parse(trimmed));
+        const event: unknown = JSON.parse(trimmed);
+        if (
+          event &&
+          typeof event === 'object' &&
+          !Array.isArray(event) &&
+          'type' in event &&
+          typeof event.type === 'string'
+        ) {
+          events.push(event as PiEvent);
+        }
       } catch {
         logger.debug('[Pi] Skipping non-JSON output line');
       }
@@ -1010,8 +1033,7 @@ export class PiProvider implements ApiProvider {
       };
     }
 
-    // Usage, cost, and the transcript are reported on both the error and success
-    // branches (the error branch keeps them so a failed row stays inspectable).
+    // Keep billing and the transcript when Pi reports an error.
     const usageCostRaw = {
       ...(tokenUsage ? { tokenUsage } : {}),
       ...(cost === undefined ? {} : { cost }),
@@ -1099,16 +1121,23 @@ export class PiProvider implements ApiProvider {
         abortSignal: callOptions?.abortSignal,
       });
 
+      const events = this.parseEvents(runResult.stdout);
+      const response = this.buildProviderResponse(events, runResult.stderr);
+      const fail = (error: string): ProviderResponse => {
+        delete response.output;
+        return { ...response, error };
+      };
+
       if (runResult.aborted) {
-        return { error: 'Pi call aborted' };
+        return fail('Pi call aborted');
       }
       if (runResult.timedOut) {
-        return { error: `Pi call timed out after ${timeoutMs}ms` };
+        return fail(`Pi call timed out after ${timeoutMs}ms`);
       }
       if (runResult.stdoutOverflow) {
-        return {
-          error: `Pi produced more than ${maxOutputBytes} bytes of output and was terminated. Increase max_output_bytes if this output is expected.`,
-        };
+        return fail(
+          `Pi produced more than ${maxOutputBytes} bytes of output and was terminated. Increase max_output_bytes if this output is expected.`,
+        );
       }
 
       // A successful process exit is required in addition to a completed agent run.
@@ -1118,22 +1147,21 @@ export class PiProvider implements ApiProvider {
           runResult.exitCode === null && runResult.signal
             ? `was terminated by signal ${runResult.signal}`
             : `exited with code ${runResult.exitCode}`;
-        return { error: `Pi ${reason}.${stderrSuffix}` };
+        return fail(`Pi ${reason}.${stderrSuffix}`);
       }
 
-      const events = this.parseEvents(runResult.stdout);
       const failure = events.find(
         (event) =>
           event?.type === 'response' && event.command === 'prompt' && event.success === false,
       );
       if (failure) {
-        return { error: failure.error ?? 'Pi rejected the prompt' };
+        return fail(failure.error ?? 'Pi rejected the prompt');
       }
       if (!events.some((event) => event?.type === 'agent_end' && event.willRetry !== true)) {
         const stderrSuffix = runResult.stderr ? `\n${truncateStderr(runResult.stderr)}` : '';
-        return { error: `Pi exited before completing the run.${stderrSuffix}` };
+        return fail(`Pi exited before completing the run.${stderrSuffix}`);
       }
-      return this.buildProviderResponse(events, runResult.stderr);
+      return response;
     } catch (error) {
       if (
         (error instanceof Error && error.name === 'AbortError') ||

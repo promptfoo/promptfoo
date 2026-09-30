@@ -13,6 +13,7 @@ import {
   redactArgsForLog,
 } from '../../src/providers/pi';
 import * as genaiTracer from '../../src/tracing/genaiTracer';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/cliState', () => ({
   default: { basePath: '/test/basePath' },
@@ -28,9 +29,12 @@ vi.mock('../../src/tracing/genaiTracer', async (importOriginal) => ({
 vi.mock('child_process', async (importOriginal) => ({
   ...(await importOriginal<typeof import('child_process')>()),
   spawn: vi.fn(),
+  execFile: vi.fn(),
 }));
 
-const { spawn } = await import('child_process');
+const { spawn, execFile } = await import('child_process');
+const realChildProcess = await vi.importActual<typeof import('child_process')>('child_process');
+const mockExecFile = vi.mocked(execFile);
 const mockSpawn = vi.mocked(spawn);
 
 class FakeChildProcess extends EventEmitter {
@@ -131,6 +135,16 @@ function spawnedOptions(callIndex = 0): Record<string, any> {
 describe('PiProvider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mockExecFile.mockImplementation((...args: any[]) => {
+      if (String(args[0]).endsWith('taskkill.exe')) {
+        queueMicrotask(() => {
+          mockSpawn.mock.results.at(-1)?.value?.emit('close', null, 'SIGTERM');
+          args.at(-1)(null, '', '');
+        });
+        return {} as never;
+      }
+      return (realChildProcess.execFile as any)(...args);
+    });
   });
 
   describe('id and construction', () => {
@@ -325,21 +339,26 @@ describe('PiProvider', () => {
       expect(args).not.toContain('--no-approve');
     });
 
-    it('allows per-test model selection', async () => {
+    it('keeps per-test routing from moving provider credentials', async () => {
       mockPiRun(defaultEvents());
-      const provider = new PiProvider({ config: { model: 'openai/gpt-4o-mini' } });
+      const provider = new PiProvider({
+        config: { model: 'openai/gpt-4o-mini', apiKey: 'fixture-openai-key' },
+      });
 
       await provider.callApi('test prompt', {
         prompt: {
           raw: 'test prompt',
           label: 'test',
-          config: { model: 'anthropic/claude-sonnet-4-5' },
+          config: { model: 'anthropic/claude-sonnet-4-5', provider_id: 'anthropic' },
         },
         vars: {},
       });
 
       const args = spawnedArgs();
-      expect(args[args.indexOf('--model') + 1]).toBe('anthropic/claude-sonnet-4-5');
+      expect(args[args.indexOf('--model') + 1]).toBe('openai/gpt-4o-mini');
+      expect(args).not.toContain('--provider');
+      expect(spawnedOptions().env.OPENAI_API_KEY).toBe('fixture-openai-key');
+      expect(spawnedOptions().env.ANTHROPIC_API_KEY).not.toBe('fixture-openai-key');
     });
 
     it('keeps environment configuration provider-only', async () => {
@@ -421,25 +440,28 @@ describe('PiProvider', () => {
       expect(spawnedOptions().env.PI_CODING_AGENT_DIR).not.toBe('/unused/agent');
     });
 
-    it('accepts an evaluator-managed workspace when copy_working_dir is configured', async () => {
-      const source = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-workspace-source-'));
-      const workspace = await createAgentWorkspace(source, 'copy');
-      try {
-        mockPiRun(defaultEvents());
-        const provider = new PiProvider({
-          config: { working_dir: source, copy_working_dir: 'copy', no_tools: true },
-        });
-        await provider.callApi('hello', {
-          prompt: { raw: 'hello', label: 'test', config: { working_dir: workspace.dir } },
-          vars: {},
-        });
-        expect(spawnedOptions().cwd).toBe(workspace.dir);
-        expect(spawnedArgs()).toContain('--no-tools');
-      } finally {
-        await workspace.remove();
-        fs.rmSync(source, { recursive: true, force: true });
-      }
-    });
+    it.each([undefined, 'copy'] as const)(
+      'accepts a managed target workspace with grader copy_working_dir=%s',
+      async (copy_working_dir) => {
+        const source = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-workspace-source-'));
+        const workspace = await createAgentWorkspace(source, 'copy');
+        try {
+          mockPiRun(defaultEvents());
+          const provider = new PiProvider({
+            config: { working_dir: source, copy_working_dir, no_tools: true },
+          });
+          await provider.callApi('hello', {
+            prompt: { raw: 'hello', label: 'test', config: { working_dir: workspace.dir } },
+            vars: {},
+          });
+          expect(spawnedOptions().cwd).toBe(workspace.dir);
+          expect(spawnedArgs()).toContain('--no-tools');
+        } finally {
+          await workspace.remove();
+          fs.rmSync(source, { recursive: true, force: true });
+        }
+      },
+    );
   });
 
   describe('prompt delivery', () => {
@@ -766,6 +788,13 @@ describe('PiProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result.error).toContain('before completing the run');
+    });
+
+    it('skips valid JSON that is not a protocol event', async () => {
+      mockPiRun([null, false, 5, 'status', [], { type: 17 }, ...defaultEvents('complete')]);
+      const response = await new PiProvider().callApi('hello');
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe('complete');
     });
 
     it('skips malformed JSON lines', async () => {
@@ -1166,6 +1195,119 @@ describe('PiProvider', () => {
       }
     });
 
+    it.each([false, true])(
+      'settles Windows tree cleanup when fallback throws=%s',
+      async (fallbackThrows) => {
+        const platform = process.platform;
+        const restoreEnv = mockProcessEnv({ SystemRoot: 'C:\\Windows' });
+        Object.defineProperty(process, 'platform', { value: 'win32' });
+        const controller = new AbortController();
+        const child = new FakeChildProcess();
+        (child as { pid?: number }).pid = 4243;
+        mockSpawn.mockImplementationOnce(() => child as never);
+        mockExecFile.mockImplementationOnce(() => ({}) as never);
+        try {
+          const pending = new PiProvider().callApi('hello', undefined, {
+            abortSignal: controller.signal,
+          });
+          controller.abort();
+          expect(mockExecFile).toHaveBeenCalledWith(
+            'C:\\Windows\\System32\\taskkill.exe',
+            ['/PID', '4243', '/T', '/F'],
+            { windowsHide: true, timeout: 5_000 },
+            expect.any(Function),
+          );
+          child.emit('close', null, 'SIGTERM');
+          let settled = false;
+          void pending.then(() => {
+            settled = true;
+          });
+          await Promise.resolve();
+          expect(settled).toBe(false);
+          const callback = mockExecFile.mock.calls[0][3] as (...args: unknown[]) => void;
+          if (fallbackThrows) {
+            child.kill.mockImplementation(() => {
+              throw new Error('Access denied');
+            });
+          }
+          expect(() =>
+            callback(fallbackThrows ? new Error('taskkill failed') : null),
+          ).not.toThrow();
+          expect((await pending).error).toBe('Pi call aborted');
+          if (fallbackThrows) {
+            expect(child.kill).toHaveBeenCalled();
+          } else {
+            expect(child.kill).not.toHaveBeenCalled();
+          }
+        } finally {
+          Object.defineProperty(process, 'platform', { value: platform });
+          restoreEnv();
+        }
+      },
+    );
+
+    it('terminates the detached group after a normal close', async () => {
+      const killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
+      try {
+        const child = mockPiRun(defaultEvents('complete'));
+        (child as { pid?: number }).pid = 5152;
+        const result = await new PiProvider().callApi('hello');
+        expect(result.output).toBe('complete');
+        if (process.platform !== 'win32') {
+          expect(killSpy).toHaveBeenCalledWith(-5152, 'SIGKILL');
+        }
+      } finally {
+        killSpy.mockRestore();
+      }
+    });
+
+    it.each(['timeout', 'abort', 'overflow', 'coalesced overflow', 'nonzero', 'incomplete'])(
+      'retains completed usage when a later turn ends through %s',
+      async (reason) => {
+        vi.useFakeTimers();
+        const controller = new AbortController();
+        const child = new FakeChildProcess();
+        child.kill.mockImplementation(() => {
+          child.emit('close', null, 'SIGTERM');
+          return true;
+        });
+        mockSpawn.mockImplementationOnce(() => child as never);
+        const provider = new PiProvider({ config: { timeout: 20, max_output_bytes: 2_000 } });
+        try {
+          const pending = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+          const completed =
+            JSON.stringify({ type: 'message_end', message: assistantMessage('billed turn') }) +
+            '\n';
+          child.stdout.emit(
+            'data',
+            completed + (reason === 'coalesced overflow' ? 'x'.repeat(2_001) : ''),
+          );
+          if (reason === 'timeout') {
+            await vi.advanceTimersByTimeAsync(20);
+          } else if (reason === 'abort') {
+            controller.abort();
+          } else if (reason === 'overflow') {
+            child.stdout.emit('data', 'x'.repeat(2_001));
+          } else if (reason !== 'coalesced overflow') {
+            child.emit('close', reason === 'nonzero' ? 1 : 0);
+          }
+          const result = await pending;
+          expect(result.error).toBeTruthy();
+          expect(result.output).toBeUndefined();
+          expect(result.tokenUsage).toMatchObject({
+            prompt: 100,
+            completion: 10,
+            total: 110,
+            numRequests: 1,
+          });
+          expect(result.cost).toBe(0.001);
+          expect(JSON.parse(result.raw as string)[0].content[0].text).toBe('billed turn');
+        } finally {
+          vi.useRealTimers();
+        }
+      },
+    );
+
     it('short-circuits when the abort signal is already aborted', async () => {
       const controller = new AbortController();
       controller.abort();
@@ -1266,11 +1408,16 @@ describe('PiProvider', () => {
         });
 
         expect(result.error).toBe('Pi call aborted');
-        expect(child.kill).toHaveBeenCalledWith('SIGTERM');
         if (process.platform === 'win32') {
-          // Windows has no POSIX process group; only the direct child is signaled.
-          expect(killSpy).not.toHaveBeenCalledWith(-4242, 'SIGTERM');
+          expect(mockExecFile).toHaveBeenCalledWith(
+            expect.stringContaining('taskkill.exe'),
+            ['/PID', '4242', '/T', '/F'],
+            expect.any(Object),
+            expect.any(Function),
+          );
+          expect(killSpy).not.toHaveBeenCalled();
         } else {
+          expect(child.kill).toHaveBeenCalledWith('SIGTERM');
           // Negative pid signals pi AND its tool grandchildren (e.g. bash).
           expect(killSpy).toHaveBeenCalledWith(-4242, 'SIGTERM');
         }

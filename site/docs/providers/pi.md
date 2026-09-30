@@ -142,7 +142,7 @@ With `bash`, `edit`, or `write` enabled, the agent executes commands and modifie
 
 Extension, skill, prompt-template, and context-file discovery are disabled by default. The provider also passes `--no-approve`, so project-local pi files (a `.pi/settings.json`, project extensions, or a `.pi/SYSTEM.md` in the `working_dir`) are ignored even if the project was previously trusted. Discovery (`load_*`) and trust are independent: context files load without trust, while project-local extensions/skills/templates and `.pi/SYSTEM.md` require `trust_project_files: true` (`--approve`). Enabling project trust applies to every project-local Pi file, including a `settings.json` that can change the model.
 
-Per-test `options` can change `model`, `provider_id`, and `thinking`. Configure process paths, credentials, tools, resource discovery, environment variables, and other execution settings on the provider. When the provider enables `copy_working_dir`, promptfoo supplies its managed workspace for each eval step.
+Per-test `options` can change `thinking`. Configure model routing, process paths, credentials, tools, resource discovery, environment variables, and other execution settings on the provider. Promptfoo supplies registered workspaces for isolated eval steps and for graders inspecting a target’s workspace.
 
 ## Response Format
 
