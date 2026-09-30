@@ -7,7 +7,7 @@ import {
   type Severity,
 } from './constants';
 
-import type { UnifiedConfig, Vars } from '../types/index';
+import type { ProviderOptions, UnifiedConfig, Vars } from '../types/index';
 import type { RedteamPluginObject, SavedRedteamConfig } from './types';
 
 export function getRiskCategorySeverityMap(
@@ -35,14 +35,80 @@ export function getRiskCategorySeverityMap(
   };
 }
 
+export function getTargetForExecution(provider: ProviderOptions): ProviderOptions {
+  const target = { ...provider, config: { ...provider.config } };
+
+  if (
+    !/^https?(?::|$)/.test(provider.id ?? '') ||
+    !target.config.tls ||
+    typeof target.config.tls !== 'object' ||
+    Array.isArray(target.config.tls)
+  ) {
+    return target;
+  }
+
+  const tls = { ...target.config.tls };
+  const certificateType = tls.certificateType;
+  if (['none', 'pem', 'pfx', 'pkcs12', 'jks'].includes(certificateType)) {
+    if (certificateType !== 'pem') {
+      delete tls.cert;
+      delete tls.certPath;
+      delete tls.key;
+      delete tls.keyPath;
+    }
+    if (certificateType !== 'pfx' && certificateType !== 'pkcs12') {
+      delete tls.pfx;
+      delete tls.pfxPath;
+    }
+    if (certificateType !== 'jks') {
+      delete tls.jksContent;
+      delete tls.jksPath;
+      delete tls.keyAlias;
+    }
+    if (certificateType === 'none') {
+      delete tls.passphrase;
+    }
+  }
+
+  // Keep certificate data while removing the setup form's input state.
+  delete tls.enabled;
+  delete tls.certInputType;
+  delete tls.keyInputType;
+  delete tls.jksInputType;
+  delete tls.pfxInputType;
+  delete tls.caInputType;
+  delete tls.jksFileName;
+  delete tls.jksExtractConfigured;
+  delete tls.certificateType;
+
+  for (const key of ['ca', 'cert', 'key']) {
+    if (Array.isArray(tls[key])) {
+      const entries = tls[key].filter(
+        (entry: unknown) => typeof entry !== 'string' || entry.trim() !== '',
+      );
+      tls[key] = entries.length ? entries : undefined;
+    }
+  }
+  for (const key of Object.keys(tls)) {
+    if (tls[key] === '' || tls[key] === undefined) {
+      delete tls[key];
+    }
+  }
+  if (Object.keys(tls).length) {
+    target.config.tls = tls;
+  } else {
+    delete target.config.tls;
+  }
+
+  return target;
+}
+
 export function getUnifiedConfig(
   config: SavedRedteamConfig,
 ): UnifiedConfig & { redteam: NonNullable<UnifiedConfig['redteam']> } {
-  // Remove UI specific configs from target
-  const target = { ...config.target, config: { ...config.target.config } };
-  delete target.config.sessionSource;
-  delete target.config.stateful;
-
+  const target = getTargetForExecution(config.target);
+  delete target.config!.sessionSource;
+  delete target.config!.stateful;
   const defaultTest = {
     ...(config.defaultTest ?? {}),
     options: {

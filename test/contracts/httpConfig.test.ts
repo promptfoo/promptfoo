@@ -369,7 +369,10 @@ describe('HTTP authoring contracts', () => {
       { cert: 'cert', keyPath: 'key' },
       { certPath: 'cert', key: 'key' },
       { pfxPath: 'bundle', cert: 'cert' },
+      { jksPath: 'client.jks', passphrase: 'fixture', keyAlias: 'client' },
+      { jksContent: 'base64-jks', passphrase: 'fixture' },
     ]) {
+      expect(HttpProviderConfigSchema.parse({ method: 'GET', tls }).tls).toMatchObject(tls);
       expect(validate({ method: 'GET', tls })).toBe(true);
       expect(HttpProviderConfigInputSchema.safeParse({ method: 'GET', tls }).success).toBe(true);
     }

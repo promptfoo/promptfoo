@@ -210,6 +210,29 @@ describe('EvalResult', () => {
       expect(saved?.provider.config?.apiBaseUrl).not.toContain('short-secret');
     });
 
+    it('redacts wrapped JKS contents before persistence and JSONL output', async () => {
+      const jksContent = `${'YWJj'.repeat(20)}\n${'ZGVm'.repeat(20)}\n`;
+      const provider = {
+        id: 'test-provider',
+        config: { tls: { jksContent, keyAlias: 'client', rejectUnauthorized: true } },
+      };
+      const input = { ...mockEvaluateResult, provider };
+      const result = await EvalResult.createFromEvaluateResult('jks-redaction', input);
+
+      for (const saved of [
+        result,
+        await EvalResult.findById(result.id),
+        sanitizeResultForJsonlArtifact(input),
+      ]) {
+        expect(saved?.provider.config?.tls).toEqual({
+          jksContent: '[REDACTED]',
+          keyAlias: 'client',
+          rejectUnauthorized: true,
+        });
+      }
+      expect(provider.config.tls.jksContent).toBe(jksContent);
+    });
+
     it('should create and persist an EvalResult', async () => {
       const evalId = 'test-eval-id';
       const result = await EvalResult.createFromEvaluateResult(evalId, mockEvaluateResult);

@@ -229,6 +229,27 @@ describe('Purpose Component', () => {
   });
 
   describe('Target Purpose Discovery', () => {
+    it('omits deselected credentials from the intercepted preview request', async () => {
+      const tls = { certificateType: 'none', jksContent: 'old-upload', keyAlias: 'old' };
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          applicationDefinition: { purpose: 'A greeting service' },
+          target: { id: 'http', config: { url: 'https://fixture.example.test', tls } },
+        },
+        updateApplicationDefinition: mockUpdateApplicationDefinition,
+        updateConfig: mockUpdateConfig,
+      });
+      renderComponent({ onNext: vi.fn() });
+
+      await userEvent.setup().click(screen.getByRole('button', { name: /discover/i }));
+
+      const [, options] = vi
+        .mocked(callApi)
+        .mock.calls.find(([url]) => url === '/providers/discover')!;
+      expect(JSON.parse(options!.body as string).config.tls).toBeUndefined();
+      expect(tls.jksContent).toBe('old-upload');
+    });
+
     it('blocks auto-discovery when the saved target configuration has an invalid JSON edit', async () => {
       const user = userEvent.setup();
       mockUseRedTeamConfig.mockReturnValue({

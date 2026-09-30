@@ -1,10 +1,14 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { mockCallApiRoutes, resetCallApiMock } from '@app/tests/apiMocks';
+import { callApi } from '@app/utils/api';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
+
+vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
 
 vi.mock('react-simple-code-editor', () => ({
   default: ({ value, onValueChange }: any) => (
@@ -54,6 +58,41 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
     mockSetBodyError = vi.fn();
     mockSetUrlError = vi.fn();
     vi.clearAllMocks();
+    resetCallApiMock();
+  });
+
+  it('removes deselected saved JKS credentials before the target preview', async () => {
+    mockCallApiRoutes([
+      {
+        path: '/providers/test',
+        method: 'POST',
+        response: { testResult: { success: true, message: 'Hello' } },
+      },
+    ]);
+    const tls = {
+      certificateType: 'none',
+      jksContent: 'old-upload',
+      jksPath: '/old/client.jks',
+      keyAlias: 'old',
+    };
+    renderWithProviders(
+      <HttpEndpointConfiguration
+        {...defaultProps}
+        selectedTarget={{
+          ...defaultProps.selectedTarget,
+          config: { ...defaultProps.selectedTarget.config, tls },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setBodyError={mockSetBodyError}
+        setUrlError={mockSetUrlError}
+      />,
+    );
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Test Target' }));
+
+    const [, options] = vi.mocked(callApi).mock.calls.find(([url]) => url === '/providers/test')!;
+    expect(JSON.parse(options!.body as string).providerOptions.config.tls).toBeUndefined();
+    expect(tls.jksContent).toBe('old-upload');
   });
 
   it('should maintain minimum widths for header Name and Value fields on narrow viewports', () => {
@@ -343,6 +382,7 @@ describe('HttpEndpointConfiguration - Header Management', () => {
     mockSetBodyError = vi.fn();
     mockSetUrlError = vi.fn();
     vi.clearAllMocks();
+    resetCallApiMock();
   });
 
   it('should add a new header row with visible Name and Value fields when the Add Header button is clicked', async () => {

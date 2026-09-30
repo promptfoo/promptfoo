@@ -22,6 +22,7 @@ import { Textarea } from '@app/components/ui/textarea';
 import { cn } from '@app/lib/utils';
 import ChatMessages from '@app/pages/eval/components/ChatMessages';
 import { callApi } from '@app/utils/api';
+import { getTargetForExecution } from '@promptfoo/redteam/sharedFrontend';
 import {
   AlertCircle,
   AlertTriangle,
@@ -360,7 +361,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          provider: selectedTarget,
+          provider: getTargetForExecution(selectedTarget),
           sessionConfig: {
             sessionSource: selectedTarget.config?.sessionSource,
             sessionParser: selectedTarget.config?.sessionParser,

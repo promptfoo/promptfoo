@@ -17,6 +17,7 @@ import {
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
+import { getTargetForExecution } from '@promptfoo/redteam/sharedFrontend';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import { type Config } from '../types';
 import { TestCaseDialog } from './TestCaseDialog';
@@ -170,7 +171,7 @@ async function callTestExecutionApi(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      providerOptions: target,
+      providerOptions: getTargetForExecution(target),
       prompt,
     }),
     signal: AbortSignal.any([AbortSignal.timeout(TEST_EXECUTION_TIMEOUT), abortController.signal]),

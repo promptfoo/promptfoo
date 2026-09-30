@@ -811,7 +811,25 @@ export const HttpProviderConfigSchema = HttpProviderConfigFieldsSchema.strip().e
   tokenEstimation: TokenEstimationConfigSchema.optional(),
   auth: HttpAuthSchema.optional(),
   signatureAuth: HttpSignatureAuthSchema.optional().transform(preprocessSignatureAuthConfig),
-  tls: TlsCertificateSchema.optional(),
+  tls: z
+    .preprocess((value) => {
+      if (
+        value &&
+        typeof value === 'object' &&
+        'certificateType' in value &&
+        value.certificateType !== undefined &&
+        value.certificateType !== 'jks'
+      ) {
+        // Older setup exports can retain an upload after JKS was deselected.
+        const tls = { ...(value as Record<string, unknown>) };
+        delete tls.jksContent;
+        delete tls.jksPath;
+        delete tls.keyAlias;
+        return tls;
+      }
+      return value;
+    }, TlsCertificateSchema)
+    .optional(),
 });
 
 export interface HttpProviderConfig extends z.output<typeof HttpProviderConfigSchema> {
@@ -1559,7 +1577,7 @@ async function createHttpsAgent(
 ): Promise<Dispatcher> {
   const tlsOptions: https.AgentOptions = {};
   const basePath = cliState.basePath || '';
-  const usingJks = Boolean((tlsConfig as any).jksPath || (tlsConfig as any).jksContent);
+  const usingJks = Boolean(tlsConfig.jksPath || tlsConfig.jksContent);
 
   // Kick off all independent file reads in parallel. JKS and cert/key are
   // mutually exclusive, so at most we read CA + cert + key + PFX concurrently.
@@ -1616,11 +1634,11 @@ async function createHttpsAgent(
       }
 
       let keystoreData: Buffer;
-      if ((tlsConfig as any).jksContent) {
+      if (tlsConfig.jksContent) {
         logger.debug(`[HTTP Provider] Loading JKS from base64 content for TLS`);
-        keystoreData = Buffer.from((tlsConfig as any).jksContent, 'base64');
-      } else if ((tlsConfig as any).jksPath) {
-        const resolvedPath = safeResolve(basePath, (tlsConfig as any).jksPath);
+        keystoreData = Buffer.from(tlsConfig.jksContent, 'base64');
+      } else if (tlsConfig.jksPath) {
+        const resolvedPath = safeResolve(basePath, tlsConfig.jksPath);
         logger.debug(`[HTTP Provider] Loading JKS from file for TLS: ${resolvedPath}`);
         keystoreData = await fs.readFile(resolvedPath);
       } else {
@@ -1634,7 +1652,11 @@ async function createHttpsAgent(
         throw new Error('No certificates found in JKS file');
       }
 
-      const targetAlias = (tlsConfig as any).keyAlias || aliases[0];
+      const targetAlias =
+        tlsConfig.keyAlias || aliases.find((alias) => keystore[alias].cert && keystore[alias].key);
+      if (!targetAlias) {
+        throw new Error('No client certificate and private key pair found in JKS file');
+      }
       const entry = keystore[targetAlias];
 
       if (!entry) {
@@ -1807,9 +1829,7 @@ export class HttpProvider implements ApiProvider {
     } else {
       invariant(
         this.config.body || this.config.multipart || this.config.method === 'GET',
-        `Expected HTTP provider ${this.url} to have a config containing {body}, but instead got ${safeJsonStringify(
-          this.config,
-        )}`,
+        `Expected HTTP provider ${this.url} to have a config containing {body}`,
       );
     }
 
@@ -1955,6 +1975,8 @@ export class HttpProvider implements ApiProvider {
 
       if (httpsAgent) {
         fetchOptions.dispatcher = httpsAgent;
+      } else if (this.config.tls?.rejectUnauthorized !== undefined) {
+        fetchOptions.rejectUnauthorized = this.config.tls.rejectUnauthorized;
       }
 
       const response = await fetchWithCache(
@@ -2280,6 +2302,8 @@ export class HttpProvider implements ApiProvider {
 
     if (httpsAgent) {
       fetchOptions.dispatcher = httpsAgent;
+    } else if (this.config.tls?.rejectUnauthorized !== undefined) {
+      fetchOptions.rejectUnauthorized = this.config.tls.rejectUnauthorized;
     }
 
     const response = await fetchWithCache(
@@ -2323,6 +2347,14 @@ export class HttpProvider implements ApiProvider {
 
   private async getHttpsAgent(): Promise<Dispatcher | undefined> {
     if (!this.config.tls) {
+      return undefined;
+    }
+
+    if (
+      Object.entries(this.config.tls).every(
+        ([key, value]) => key === 'rejectUnauthorized' || value === undefined || value === '',
+      )
+    ) {
       return undefined;
     }
 
@@ -2673,6 +2705,8 @@ export class HttpProvider implements ApiProvider {
     if (httpsAgent) {
       fetchOptions.dispatcher = httpsAgent;
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
+    } else if (this.config.tls?.rejectUnauthorized !== undefined) {
+      fetchOptions.rejectUnauthorized = this.config.tls.rejectUnauthorized;
     }
 
     let data,
@@ -2915,6 +2949,8 @@ export class HttpProvider implements ApiProvider {
     if (httpsAgent) {
       fetchOptions.dispatcher = httpsAgent;
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
+    } else if (this.config.tls?.rejectUnauthorized !== undefined) {
+      fetchOptions.rejectUnauthorized = this.config.tls.rejectUnauthorized;
     }
 
     let data,

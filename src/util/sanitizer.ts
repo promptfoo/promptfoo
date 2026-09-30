@@ -218,6 +218,7 @@ export const SECRET_FIELD_NAMES = new Set([
   'passphrase',
   'certificatecontent',
   'keystorecontent',
+  'jkscontent',
   'pfx',
   'pfxcontent',
   'keycontent',
