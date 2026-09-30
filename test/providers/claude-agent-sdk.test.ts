@@ -2497,6 +2497,43 @@ describe('ClaudeCodeSDKProvider', () => {
         );
       });
 
+      it.each([
+        {
+          label: 'valid',
+          traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+          expected:
+            'service.name=host-app,promptfoo.trace_id=0af7651916cd43dd8448eb211c80319c,promptfoo.parent_span_id=b7ad6b7169203331',
+        },
+        {
+          label: 'malformed',
+          traceparent: '00-0af7651916cd43dd8448eb211c80319c',
+          expected: 'service.name=host-app',
+        },
+      ])(
+        'preserves inherited OTEL resource attributes with $label traceparent',
+        async ({ traceparent, expected }) => {
+          const restoreEnv = mockProcessEnv({ OTEL_RESOURCE_ATTRIBUTES: 'service.name=host-app' });
+          try {
+            mockQuery.mockReturnValue(createMockResponse('ok'));
+            const provider = new ClaudeCodeSDKProvider({
+              env: { ANTHROPIC_API_KEY: 'test-api-key' },
+            });
+
+            await provider.callApi('prompt', {
+              traceparent,
+              prompt: { raw: 'prompt', label: 'prompt' },
+              vars: {},
+            } as CallApiContextParams);
+
+            expect(mockQuery.mock.calls.at(-1)?.[0].options.env.OTEL_RESOURCE_ATTRIBUTES).toBe(
+              expected,
+            );
+          } finally {
+            restoreEnv();
+          }
+        },
+      );
+
       it('overrides a user-provided promptfoo.trace_id rather than duplicating it', async () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));
 
