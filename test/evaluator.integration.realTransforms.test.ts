@@ -17,8 +17,7 @@ vi.mock('../src/assertions', async () => {
   };
 });
 
-vi.mock('../src/cache', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../src/cache')>()),
+vi.mock('../src/cache', () => ({
   getCache: vi.fn(() => ({
     get: vi.fn(),
     set: vi.fn(),

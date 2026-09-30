@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearCache, enableCache, withCacheEnabled } from '../../src/cache';
+import { clearCache, enableCache, fetchWithCache, withCacheEnabled } from '../../src/cache';
 import { runEval } from '../../src/evaluator';
 import { HuggingfaceTextGenerationProvider } from '../../src/providers/huggingface';
 import { LocalAiChatProvider, LocalAiCompletionProvider } from '../../src/providers/localai';
@@ -78,7 +78,7 @@ const providers = [
 ];
 
 describe('latency assertions with real provider caching', () => {
-  it('annotates a stored replay before the traced provider call finishes', async () => {
+  it('preserves the provider replay flag before the traced call finishes', async () => {
     vi.spyOn(evaluatorTracing, 'generateTraceContextIfNeeded').mockResolvedValue({
       traceparent: `00-${'a'.repeat(32)}-${'b'.repeat(16)}-01`,
       evaluationId: 'trace-fixture',
@@ -96,12 +96,32 @@ describe('latency assertions with real provider caching', () => {
       Response.json({ choices: [{ text: output }] }),
     );
     const provider = new LocalAiCompletionProvider('fixture');
+    const callApi = vi.spyOn(provider, 'callApi');
 
     await evaluateLatency(provider);
     await evaluateLatency(provider);
 
     expect(tracedResponses).toHaveLength(2);
+    expect(await callApi.mock.results[1].value).toMatchObject({ output, cacheHit: true });
     expect(tracedResponses[1]).toMatchObject({ output, cacheHit: true });
+    expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not infer final replay state from a cached auxiliary fetch', async () => {
+    vi.mocked(fetchWithRetries).mockImplementation(async () =>
+      Response.json({ label: 'Greeting' }),
+    );
+    const provider: ApiProvider = {
+      id: () => 'auxiliary-context-fixture',
+      async callApi() {
+        await fetchWithCache('https://fixture.example/context', {}, 1000);
+        return { output };
+      },
+    };
+    await evaluateLatency(provider);
+    const [fresh] = await evaluateLatency(provider);
+    expect(fresh.success).toBe(true);
+    expect(fresh.response?.cacheHit).toBeUndefined();
     expect(fetchWithRetries).toHaveBeenCalledTimes(1);
   });
 
@@ -157,6 +177,7 @@ describe('latency assertions with real provider caching', () => {
 
     const rawReplay = await provider.callApi('hello');
     expect(rawReplay.output).toBe(output);
+    expect(rawReplay.cacheHit).toBe(true);
     const [replay] = await evaluateLatency(provider);
     expect(replay.success).toBe(false);
     expect(replay.failureReason).toBe(ResultFailureReason.ERROR);
@@ -263,6 +284,38 @@ describe('latency assertions with real provider caching', () => {
     expect(replay.failureReason).toBe(ResultFailureReason.ERROR);
     expect(replay.error).toContain('does not support cached results');
     expect(fetchWithRetries).toHaveBeenCalledTimes(3);
+  });
+
+  it('grades a live HTTP policy refusal after replaying a queued background job', async () => {
+    vi.mocked(fetchWithRetries)
+      .mockResolvedValueOnce(Response.json({ id: 'resp_policy', status: 'queued', output: [] }))
+      .mockResolvedValueOnce(Response.json({ error: { message: 'Unavailable' } }, { status: 503 }))
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            error: {
+              code: 'content_filter',
+              message: 'Fixture policy response',
+              metadata: { error_type: 'content_policy_violation' },
+            },
+          },
+          { status: 403 },
+        ),
+      )
+      .mockResolvedValueOnce(Response.json({ id: 'resp_policy', status: 'cancelled' }));
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'fixture-key',
+        apiBaseUrl: 'https://gateway.example/v1',
+        background: true,
+        headers: { 'OpenAI-Project': 'fixture-project', Authorization: '' },
+      },
+    });
+    expect((await provider.callApi('hello')).error).toContain('Unavailable');
+    const [fresh] = await evaluateLatency(provider);
+    expect(fresh.success).toBe(true);
+    expect(fresh.response).toMatchObject({ isRefusal: true, cacheHit: false });
+    expect(fetchWithRetries).toHaveBeenCalledTimes(4);
   });
 
   it('grades live speech subscribers and rejects a later stored replay', async () => {

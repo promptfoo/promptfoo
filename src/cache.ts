@@ -34,7 +34,6 @@ let cacheClearGeneration = 0;
 
 const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
 const cacheEnabledStorage = new AsyncLocalStorage<{ enabled: boolean }>();
-const cacheHitStorage = new AsyncLocalStorage<{ cacheHit: boolean }>();
 
 let enabled = getEnvBool('PROMPTFOO_CACHE_ENABLED', true);
 
@@ -282,13 +281,6 @@ export function withCacheEnabled<T>(enabledOverride: boolean | undefined, fn: ()
   }
 
   return cacheEnabledStorage.run({ enabled: enabledOverride }, fn);
-}
-
-/** Track stored fetch replays within one provider invocation, including providers that drop cached. */
-export async function withCacheHitTracking<T>(fn: () => Promise<T>) {
-  const state = { cacheHit: false };
-  const result = await cacheHitStorage.run(state, fn);
-  return { result, cacheHit: state.cacheHit };
 }
 
 function getEffectiveCacheEnabled() {
@@ -921,12 +913,7 @@ export async function fetchWithCache<T = unknown>(
     logger.debug(
       `Returning cached response for ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${cachedResponse}`,
     );
-    const result = deserializeFetchResponse<T>(cachedResponse, true, cache, cacheKey);
-    const tracking = cacheHitStorage.getStore();
-    if (tracking) {
-      tracking.cacheHit = true;
-    }
-    return result;
+    return deserializeFetchResponse<T>(cachedResponse, true, cache, cacheKey);
   }
 
   const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, fetchOptions);

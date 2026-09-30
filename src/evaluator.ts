@@ -14,7 +14,7 @@ import {
   runCompareAssertion,
 } from './assertions/index';
 import { extractAndStoreBinaryData } from './blobs/extractor';
-import { getCache, withCacheHitTracking, withCacheNamespace } from './cache';
+import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
@@ -1101,15 +1101,8 @@ async function callActiveProvider({
   });
   const callApiOptions = abortSignal ? { abortSignal } : undefined;
 
-  const callApi = async () => {
+  const callApi = () => {
     onProviderInvoked();
-    const invokeProvider = async (context?: CallApiContextParams) => {
-      const { result, cacheHit } = await withCacheHitTracking(() =>
-        activeProvider.callApi(renderedPrompt, context, callApiOptions),
-      );
-      // Providers can report fresh output after discarding an expired cached response.
-      return cacheHit && result.cacheHit === undefined ? { ...result, cacheHit: true } : result;
-    };
     const invoke = () =>
       traceContext?.traceparent
         ? withTracedProviderCall(
@@ -1120,9 +1113,9 @@ async function callActiveProvider({
               evalId: callApiContext.evaluationId,
               testIndex,
             },
-            invokeProvider,
+            async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
           )
-        : invokeProvider(callApiContext);
+        : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
     return testSuite?.tracing
       ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
       : invoke();

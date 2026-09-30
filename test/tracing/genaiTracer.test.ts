@@ -584,6 +584,25 @@ describe('genaiTracer', () => {
   });
 
   describe('extractProviderResponseAttributes', () => {
+    it('keeps coalesced billing usage separate from replay provenance', () => {
+      setGenAIResponseAttributes(
+        mockSpan as any,
+        extractProviderResponseAttributes({
+          cached: true,
+          cacheHit: false,
+          tokenUsage: { prompt: 10, completion: 5, total: 15, cached: 15 },
+        }),
+      );
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(PromptfooAttributes.CACHE_HIT, false);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS,
+        15,
+      );
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        expect.anything(),
+      );
+    });
     it.each([
       { response: { cached: true, cacheHit: false }, expected: false },
       { response: { cached: false, cacheHit: true }, expected: true },

@@ -253,6 +253,7 @@ export async function withTracedProviderCall<T extends ProviderResponse>(
           (response) => ({
             tokenUsage: response.tokenUsage,
             cacheHit: response.cacheHit ?? response.cached,
+            cached: response.cached,
           }),
         );
       }

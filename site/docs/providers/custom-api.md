@@ -49,7 +49,7 @@ module.exports = class OpenAIProvider {
   }
 
   async callApi(prompt, context, options) {
-    const { data } = await promptfoo.cache.fetchWithCache(
+    const { data, cached } = await promptfoo.cache.fetchWithCache(
       'https://api.openai.com/v1/chat/completions',
       {
         method: 'POST',
@@ -69,6 +69,7 @@ module.exports = class OpenAIProvider {
     return {
       output: data.choices[0].message.content,
       tokenUsage: data.usage,
+      cached,
     };
   }
 };

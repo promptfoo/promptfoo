@@ -404,6 +404,7 @@ async function pollBackgroundResponse(
           headers: responseHeaders,
           error: `API error: ${status} ${statusText}\n${JSON.stringify(data)}`,
           cancelled: shouldCancel,
+          cacheHit: false,
         };
       }
     }
