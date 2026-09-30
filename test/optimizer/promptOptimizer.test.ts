@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as cache from '../../src/cache';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import {
@@ -428,7 +429,7 @@ describe('prompt optimizer', () => {
 
     expect(vi.mocked(evaluate).mock.calls[0][2]).toEqual(
       expect.objectContaining({
-        cache: false,
+        cache: true,
         delay: 50,
         eventSource: 'library',
         maxConcurrency: 1,
@@ -437,6 +438,70 @@ describe('prompt optimizer', () => {
         silent: true,
       }),
     );
+  });
+
+  it.each([undefined, 0.5])(
+    'disables caching for every search and validation evaluation, split=%s',
+    async (validationSplit) => {
+      const provider = createMockProvider({ id: 'optimizer-provider' });
+      vi.mocked(provider.callApi)
+        .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
+        .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
+        .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
+      vi.mocked(getDefaultProviders).mockResolvedValue({ suggestionsProvider: provider } as any);
+
+      const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
+      const candidateEval = evalWith(
+        [
+          completedPrompt('Seed', 'Seed', 0.5),
+          completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
+        ],
+        [],
+      );
+      const cacheStates: boolean[] = [];
+      vi.mocked(evaluate).mockImplementation(async () => {
+        cacheStates.push(cache.isCacheEnabled());
+        return cacheStates.length <= (validationSplit ? 2 : 1) ? baselineEval : candidateEval;
+      });
+      const testSuite: TestSuite = {
+        providers: [createMockProvider({ id: 'target-provider' })],
+        prompts: [{ raw: 'Seed', label: 'Seed' }],
+        tests: [{ vars: { case: 'first' } }, { vars: { case: 'second' } }],
+      };
+
+      await cache.withCacheEnabled(true, async () => {
+        await optimizePromptTestSuite({ evaluateOptions: { cache: true } }, testSuite, {
+          validationSplit,
+        });
+        expect(cache.isCacheEnabled()).toBe(true);
+      });
+
+      expect(cacheStates).toEqual(Array(validationSplit ? 8 : 4).fill(false));
+      if (validationSplit) {
+        const cases = vi
+          .mocked(evaluate)
+          .mock.calls.map(([suite]) => suite.tests?.map((test) => test.vars?.case));
+        expect(cases).toEqual(Array.from({ length: 4 }, () => [['first'], ['second']]).flat());
+      }
+    },
+  );
+
+  it('restores ambient caching when an internal evaluation fails', async () => {
+    vi.mocked(evaluate).mockImplementation(async () => {
+      expect(cache.isCacheEnabled()).toBe(false);
+      throw new Error('Fixture evaluation failed');
+    });
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      tests: [{}],
+    };
+    await cache.withCacheEnabled(true, async () => {
+      await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
+        'Fixture evaluation failed',
+      );
+      expect(cache.isCacheEnabled()).toBe(true);
+    });
   });
 
   it('strips outputPath from internal optimizer evals so they do not pollute the user output file', async () => {

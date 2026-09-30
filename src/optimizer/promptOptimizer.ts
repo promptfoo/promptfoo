@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import { withCacheEnabled } from '../cache';
 import { evaluate } from '../evaluator';
 import logger from '../logger';
 import Eval from '../models/eval';
@@ -721,11 +722,19 @@ function countConfiguredOptimizationTests(testSuite: TestSuite): number {
 function createEvaluationOptions(config: Partial<UnifiedConfig>): InternalEvaluateOptions {
   return {
     ...config.evaluateOptions,
-    cache: false,
     eventSource: 'library',
     showProgressBar: false,
     silent: true,
   };
+}
+
+// Internal evaluations bypass evaluateWithSource, so scope caching explicitly.
+function evaluateWithoutCache(
+  testSuite: TestSuite,
+  evalRecord: Eval,
+  options: InternalEvaluateOptions,
+): Promise<Eval> {
+  return withCacheEnabled(false, () => evaluate(testSuite, evalRecord, options));
 }
 
 function assertOptimizationEvalHasResults(evalRecord: Eval | undefined, scope: string): void {
@@ -762,14 +771,14 @@ export async function optimizePromptTestSuite(
   const optimizationConfig: Partial<UnifiedConfig> = { ...config, outputPath: undefined };
 
   logger.info('Running baseline evaluation for prompt optimization...');
-  const baselineEval = await evaluate(
+  const baselineEval = await evaluateWithoutCache(
     cloneOptimizationTestSuite(searchTestSuite),
     new Eval(optimizationConfig, { persisted: false }),
     createEvaluationOptions(config),
   );
   assertOptimizationEvalHasResults(baselineEval, 'the selected prompt/provider');
   const baselineValidationEval = validationTestSuite
-    ? await evaluate(
+    ? await evaluateWithoutCache(
         cloneOptimizationTestSuite(validationTestSuite),
         new Eval(optimizationConfig, { persisted: false }),
         createEvaluationOptions(config),
@@ -840,13 +849,13 @@ export async function optimizePromptTestSuite(
       currentPromptSource,
       candidates,
     );
-    const candidateEval = await evaluate(
+    const candidateEval = await evaluateWithoutCache(
       cloneOptimizationTestSuite(candidateSearchSuite),
       new Eval(optimizationConfig, { persisted: false }),
       createEvaluationOptions(config),
     );
     const candidateValidationEval = validationTestSuite
-      ? await evaluate(
+      ? await evaluateWithoutCache(
           cloneOptimizationTestSuite(
             createCandidateTestSuite(
               validationTestSuite,
