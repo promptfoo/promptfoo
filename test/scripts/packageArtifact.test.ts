@@ -21,7 +21,7 @@ beforeEach(() => {
 afterEach(() => {
   restoreEnv();
   for (const directory of directories.splice(0)) {
-    fs.rmSync(directory, { recursive: true, force: true });
+    fs.rmSync(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 });
 
