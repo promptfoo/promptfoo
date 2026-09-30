@@ -29,7 +29,7 @@ const CallApiFunctionSchema = z.custom<CallApiFunction & { label?: string }>(
   (v) => typeof v === 'function',
 );
 
-const ApiProviderObjectSchema = z.object({
+export const ApiProviderObjectSchema = z.object({
   id: z.custom<() => string>((v) => typeof v === 'function'),
   callApi: z.custom<CallApiFunction>((v) => typeof v === 'function'),
   callEmbeddingApi: z

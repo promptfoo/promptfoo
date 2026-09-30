@@ -849,7 +849,89 @@
         }
       ]
     },
-    "__schema18": {},
+    "__schema18": {
+      "type": "object",
+      "properties": {
+        "id": {},
+        "callApi": {},
+        "callEmbeddingApi": {},
+        "callClassificationApi": {},
+        "callSimilarityApi": {},
+        "callModerationApi": {},
+        "promptfooCapabilities": {
+          "readOnly": true,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "callApi",
+              "callEmbeddingApi",
+              "callClassificationApi",
+              "callSimilarityApi",
+              "callModerationApi"
+            ]
+          }
+        },
+        "label": {},
+        "transform": {
+          "type": "string"
+        },
+        "delay": {
+          "type": "number"
+        },
+        "config": {},
+        "inputs": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "config": {
+                    "type": "object",
+                    "properties": {
+                      "benign": {
+                        "type": "boolean"
+                      },
+                      "inputPurpose": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "injectionPlacements": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    }
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["text", "pdf", "docx", "image"]
+                  }
+                },
+                "required": ["description"]
+              }
+            ]
+          }
+        }
+      },
+      "required": ["id", "callApi"]
+    },
     "__schema19": {
       "type": "array",
       "items": {

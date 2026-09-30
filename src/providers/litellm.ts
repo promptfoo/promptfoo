@@ -22,9 +22,6 @@ interface LiteLLMProviderOptions {
   env?: EnvOverrides;
 }
 
-/**
- * Base class for LiteLLM providers that maintains LiteLLM identity
- */
 type LiteLLMDelegate =
   | OpenAiChatCompletionProvider
   | OpenAiCompletionProvider
