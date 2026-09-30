@@ -7,6 +7,7 @@ import { BLOB_MAX_SIZE } from '../../blobs/constants';
 import { type FetchWithCacheResult, fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { fetchWithProxy, getFetchTlsOptions, getProxyUrlForTarget } from '../../util/fetch/index';
+import { stripDecompressionHeaders } from '../../util/fetch/stripDecompressionHeaders';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { ellipsize } from '../../util/text';
 import { getRequestTimeoutMs } from '../shared';
@@ -55,14 +56,7 @@ const GPT_IMAGE2_MAX_PIXELS = 8_294_400;
 const DATED_GPT_IMAGE2_MODEL_PATTERN = /^gpt-image-2-\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_SIZE = '1024x1024';
 const BLOCKED_IMAGE_HOSTNAMES = new Set(['localhost', 'metadata', 'metadata.google.internal']);
-const SAFE_EXTERNAL_IMAGE_MIME_TYPES = new Set([
-  'image/avif',
-  'image/gif',
-  'image/jpeg',
-  'image/jpg',
-  'image/png',
-  'image/webp',
-]);
+const MAX_IMAGE_BATCH_SIZE = 10;
 
 export const DALLE2_COSTS: Record<DallE2Size, number> = {
   '256x256': 0.016,
@@ -755,11 +749,35 @@ async function createPinnedExternalImageDispatcher(
       statusCodes: [],
     }),
     interceptors.decompress({ skipErrorResponses: false, maxSize: BLOB_MAX_SIZE }),
+    stripDecompressionHeaders(),
   );
 }
 
-function isSafeExternalImageMimeType(mimeType: string): boolean {
-  return SAFE_EXTERNAL_IMAGE_MIME_TYPES.has(mimeType.toLowerCase());
+function getDownloadedImageMimeType(buffer: Buffer): string | undefined {
+  if (buffer.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) {
+    return 'image/png';
+  }
+  if (buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) {
+    return 'image/jpeg';
+  }
+  if (['GIF87a', 'GIF89a'].includes(buffer.subarray(0, 6).toString('ascii'))) {
+    return 'image/gif';
+  }
+  if (
+    buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  if (buffer.length >= 16 && buffer.subarray(4, 8).toString('ascii') === 'ftyp') {
+    const boxEnd = Math.min(buffer.readUInt32BE(0), buffer.length);
+    for (let offset = 8; offset + 4 <= boxEnd; offset += offset === 8 ? 8 : 4) {
+      if (['avif', 'avis'].includes(buffer.subarray(offset, offset + 4).toString('ascii'))) {
+        return 'image/avif';
+      }
+    }
+  }
+  return undefined;
 }
 
 function formatImageMarkdown(prompt: string, imageSrc: string): string {
@@ -807,14 +825,11 @@ export function buildStructuredImageOutputs(
 
 async function downloadExternalImage(
   url: string,
-  outputFormat?: string,
-  abortSignal?: AbortSignal,
+  abortSignal: AbortSignal,
+  maxBytes: number,
 ): Promise<ImageOutput | null> {
   const controller = new AbortController();
-  const timeoutHandle = setTimeout(() => controller.abort(), getRequestTimeoutMs());
-  const signal = abortSignal
-    ? AbortSignal.any([controller.signal, abortSignal])
-    : controller.signal;
+  const signal = AbortSignal.any([controller.signal, abortSignal]);
   let dispatcher: Dispatcher | undefined;
   try {
     signal.throwIfAborted();
@@ -849,11 +864,11 @@ async function downloadExternalImage(
     }
 
     const contentLength = Number(response.headers.get('content-length') ?? 0);
-    if (Number.isFinite(contentLength) && contentLength > BLOB_MAX_SIZE) {
+    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
       logger.warn('[OpenAI Image] External image exceeds blob size limit', {
         url,
         contentLength,
-        maxSizeBytes: BLOB_MAX_SIZE,
+        maxSizeBytes: maxBytes,
       });
       return null;
     }
@@ -868,12 +883,12 @@ async function downloadExternalImage(
           break;
         }
         totalBytes += value.byteLength;
-        if (totalBytes > BLOB_MAX_SIZE) {
+        if (totalBytes > maxBytes) {
           controller.abort();
           logger.warn('[OpenAI Image] External image exceeded blob size limit during download', {
             url,
             sizeBytes: totalBytes,
-            maxSizeBytes: BLOB_MAX_SIZE,
+            maxSizeBytes: maxBytes,
           });
           return null;
         }
@@ -882,12 +897,12 @@ async function downloadExternalImage(
     } else {
       const arrayBuffer = await response.arrayBuffer();
       totalBytes = arrayBuffer.byteLength;
-      if (totalBytes > BLOB_MAX_SIZE) {
+      if (totalBytes > maxBytes) {
         controller.abort();
         logger.warn('[OpenAI Image] External image exceeded blob size limit after download', {
           url,
           sizeBytes: totalBytes,
-          maxSizeBytes: BLOB_MAX_SIZE,
+          maxSizeBytes: maxBytes,
         });
         return null;
       }
@@ -899,16 +914,17 @@ async function downloadExternalImage(
       ?.split(';', 1)[0]
       ?.trim()
       .toLowerCase();
-    const mimeType =
-      responseMimeType || inferMimeTypeFromUrl(url) || getMimeTypeForOutputFormat(outputFormat);
-    if (!isSafeExternalImageMimeType(mimeType)) {
-      logger.warn('[OpenAI Image] External image response used an unsafe content type', {
+    const buffer = Buffer.concat(chunks, totalBytes);
+    const mimeType = getDownloadedImageMimeType(buffer);
+    const declaredMimeType = responseMimeType === 'image/jpg' ? 'image/jpeg' : responseMimeType;
+    if (!mimeType || (declaredMimeType && declaredMimeType !== mimeType)) {
+      logger.warn('[OpenAI Image] External image bytes did not match a supported content type', {
         url,
-        mimeType,
+        declaredMimeType,
+        detectedMimeType: mimeType,
       });
       return null;
     }
-    const buffer = Buffer.concat(chunks, totalBytes);
     return { data: `data:${mimeType};base64,${buffer.toString('base64')}`, mimeType };
   } catch (error) {
     logger.warn('[OpenAI Image] Failed to internalize external image URL', {
@@ -917,7 +933,6 @@ async function downloadExternalImage(
     });
     return null;
   } finally {
-    clearTimeout(timeoutHandle);
     controller.abort();
     await dispatcher?.destroy();
   }
@@ -929,30 +944,53 @@ export async function buildSafeStructuredImageOutputs(
   responseFormat?: string,
   abortSignal?: AbortSignal,
 ): Promise<ImageOutput[] | undefined> {
-  if (!Array.isArray(data.data) || data.data.length === 0) {
+  if (
+    !Array.isArray(data.data) ||
+    data.data.length === 0 ||
+    data.data.length > MAX_IMAGE_BATCH_SIZE
+  ) {
     return undefined;
   }
 
-  const images = await Promise.all(
-    data.data.map(async (item: any): Promise<ImageOutput | null> => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), getRequestTimeoutMs());
+  const signal = abortSignal
+    ? AbortSignal.any([controller.signal, abortSignal])
+    : controller.signal;
+  const images: ImageOutput[] = [];
+  let remainingBytes = BLOB_MAX_SIZE;
+  try {
+    for (const item of data.data) {
+      if (signal.aborted || remainingBytes <= 0) {
+        return undefined;
+      }
+      let image: ImageOutput | null = null;
       if (item.b64_json) {
         const mimeType = getMimeTypeForOutputFormat(outputFormat);
-        return { data: `data:${mimeType};base64,${item.b64_json}`, mimeType };
+        image = { data: `data:${mimeType};base64,${item.b64_json}`, mimeType };
+      } else if (responseFormat !== 'b64_json' && typeof item.url === 'string') {
+        if (isExternalImageUrl(item.url)) {
+          image = await downloadExternalImage(item.url, signal, remainingBytes);
+        } else if (item.url.startsWith('data:image/')) {
+          image = { data: item.url };
+        }
       }
-
-      if (responseFormat === 'b64_json' || typeof item.url !== 'string') {
-        return null;
+      if (!image?.data || signal.aborted) {
+        return undefined;
       }
-
-      if (isExternalImageUrl(item.url)) {
-        return downloadExternalImage(item.url, outputFormat, abortSignal);
+      remainingBytes -= Buffer.byteLength(
+        image.data.slice(image.data.indexOf(',') + 1),
+        image.data.includes(';base64,') ? 'base64' : 'utf8',
+      );
+      if (remainingBytes < 0) {
+        return undefined;
       }
-
-      return item.url.startsWith('data:image/') ? { data: item.url } : null;
-    }),
-  );
-
-  return images.every((item): item is ImageOutput => item !== null) ? images : undefined;
+      images.push(image);
+    }
+    return images;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export function formatStructuredImageOutput(
@@ -970,6 +1008,9 @@ export function formatStructuredImageOutput(
     const b64Json = data.data?.[0]?.b64_json;
     if (!b64Json) {
       return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
+    }
+    if (!images?.length) {
+      return { error: 'No usable image data: the generated image did not pass validation.' };
     }
 
     return `data:${getMimeTypeForOutputFormat(outputFormat)};base64,${b64Json}`;

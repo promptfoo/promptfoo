@@ -9,6 +9,7 @@ import {
   getFetchTlsOptions,
   getProxyUrlForTarget,
 } from '../../../src/util/fetch/index';
+import { JPEG_IMAGE } from '../../fixtures/images';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/logger');
@@ -31,7 +32,7 @@ vi.mock('../../../src/providers/openai/image', async () => {
 const lookupMock = lookup as unknown as Mock;
 
 describe('XAI Image Provider', () => {
-  const imageData = `data:image/jpeg;base64,${Buffer.alloc(1024).toString('base64')}`;
+  const imageData = `data:image/jpeg;base64,${JPEG_IMAGE.toString('base64')}`;
   const mockApiKey = 'test-api-key';
   const mockPrompt = 'test prompt';
 
@@ -85,7 +86,7 @@ describe('XAI Image Provider', () => {
       status: 200,
       statusText: 'OK',
       headers: new Headers({ 'content-type': 'image/jpeg' }),
-      arrayBuffer: async () => new ArrayBuffer(1024),
+      arrayBuffer: async () => Uint8Array.from(JPEG_IMAGE).buffer,
     } as Response);
   });
 

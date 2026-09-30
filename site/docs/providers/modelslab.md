@@ -73,6 +73,8 @@ providers:
 
 The provider downloads the first generated image and returns inline image data for grading. Saved results store the image as a blob reference, so the viewer does not need to load the temporary ModelsLab URL.
 
+Downloads require public HTTPS destinations, validate the image signature, and are limited to 50 MiB within the configured request timeout.
+
 ### Full Example
 
 ```yaml

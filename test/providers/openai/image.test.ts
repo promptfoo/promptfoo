@@ -8,6 +8,7 @@ import {
   getFetchTlsOptions,
   getProxyUrlForTarget,
 } from '../../../src/util/fetch/index';
+import { PNG_IMAGE } from '../../fixtures/images';
 import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
@@ -37,7 +38,7 @@ vi.mock('../../../src/logger', () => ({
 const lookupMock = lookup as unknown as Mock;
 
 describe('OpenAiImageProvider', () => {
-  const imageData = `data:image/png;base64,${Buffer.alloc(1024).toString('base64')}`;
+  const imageData = `data:image/png;base64,${PNG_IMAGE.toString('base64')}`;
   const mockFetchResponse = {
     data: {
       data: [{ url: 'https://example.com/image.png' }],
@@ -67,7 +68,7 @@ describe('OpenAiImageProvider', () => {
       status: 200,
       statusText: 'OK',
       headers: new Headers({ 'content-type': 'image/png' }),
-      arrayBuffer: async () => new ArrayBuffer(1024),
+      arrayBuffer: async () => Uint8Array.from(PNG_IMAGE).buffer,
     } as Response);
   });
 

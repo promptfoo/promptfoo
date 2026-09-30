@@ -412,6 +412,39 @@ describe('Fal Provider', () => {
         expect(mockSubscribe).not.toHaveBeenCalled();
       });
 
+      it('reuses a fresh generation after its download was cancelled', async () => {
+        const controller = new AbortController();
+        vi.mocked(isCacheEnabled).mockReturnValue(true);
+        const cache = getCache();
+        mockSubscribe.mockResolvedValue({
+          data: { images: [{ url: 'https://images.example/square.png' }] },
+        });
+        vi.mocked(buildSafeStructuredImageOutputs).mockImplementationOnce(async () => {
+          controller.abort();
+          return undefined;
+        });
+
+        const cancelled = await provider.callApi('A blue square', undefined, {
+          abortSignal: controller.signal,
+        });
+        expect(cancelled).toMatchObject({
+          cached: false,
+          error: 'The generated image could not be downloaded safely.',
+        });
+        expect(cache.del).not.toHaveBeenCalled();
+        expect(cache.set).toHaveBeenCalledWith(
+          expect.any(String),
+          JSON.stringify('![A blue square](https://images.example/square.png)'),
+        );
+
+        vi.mocked(cache.get).mockResolvedValue(vi.mocked(cache.set).mock.calls[0][1]);
+        expect(await provider.callApi('A blue square')).toMatchObject({
+          cached: true,
+          output: imageData,
+        });
+        expect(mockSubscribe).toHaveBeenCalledTimes(1);
+      });
+
       it('should use cached response when cache is enabled and available', async () => {
         vi.mocked(isCacheEnabled).mockImplementation(function () {
           return true;

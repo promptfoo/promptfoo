@@ -26,6 +26,8 @@ The `fal` provider supports the [fal.ai](https://fal.ai) inference API using the
 
 Promptfoo downloads generated images from public HTTPS URLs and stores inline data or blob references in evaluation results. Downloads use the configured proxy and TLS settings; redirects and unsupported image responses produce provider errors.
 
+Downloads validate the image signature and are limited to 50 MiB. When caching is enabled, a cancelled download retains the completed generation so a later run can retry the download without generating another image.
+
 ## Provider Format
 
 To run a model, specify the model type and model name: `fal:<model_type>:<model_name>`.

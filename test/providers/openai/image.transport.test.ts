@@ -1,8 +1,10 @@
 import { lookup } from 'node:dns/promises';
+import { gzipSync } from 'node:zlib';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildSafeStructuredImageOutputs } from '../../../src/providers/openai/image';
 import { getFetchTlsOptions, getProxyUrlForTarget } from '../../../src/util/fetch/index';
+import { PNG_IMAGE } from '../../fixtures/images';
 import type { Dispatcher } from 'undici';
 
 const transport = vi.hoisted(() => ({
@@ -10,6 +12,7 @@ const transport = vi.hoisted(() => ({
   requests: [] as Dispatcher.DispatchOptions[],
   errors: [] as string[],
   status: 200,
+  compressed: false,
 }));
 
 vi.mock('node:dns/promises', () => ({ lookup: vi.fn() }));
@@ -34,8 +37,15 @@ vi.mock('undici', async (importOriginal) => {
           Object.assign(new Error('Fixture connection failed'), { code: errorCode }),
         );
       } else {
-        request.reply(transport.status, Buffer.alloc(1024), {
-          headers: { 'content-type': 'image/png' },
+        const body = transport.compressed ? gzipSync(PNG_IMAGE) : PNG_IMAGE;
+        request.reply(transport.status, body, {
+          headers: {
+            'content-type': 'image/png',
+            ...(transport.compressed && {
+              'content-encoding': 'gzip',
+              'content-length': String(body.length),
+            }),
+          },
         });
       }
       return super.dispatch(options, handler);
@@ -71,12 +81,28 @@ beforeEach(() => {
   transport.requests.length = 0;
   transport.errors.length = 0;
   transport.status = 200;
+  transport.compressed = false;
   vi.mocked(lookup).mockResolvedValue([{ address: '93.184.216.34', family: 4 }] as never);
   vi.mocked(getFetchTlsOptions).mockReturnValue({ rejectUnauthorized: true });
 });
 afterEach(() => vi.restoreAllMocks());
 
 describe('image download dispatcher', () => {
+  it.each(['direct', 'proxy'])(
+    'decodes a compressed image once with %s transport',
+    async (kind) => {
+      transport.compressed = true;
+      vi.mocked(getProxyUrlForTarget).mockReturnValue(
+        kind === 'proxy' ? 'http://proxy.example' : '',
+      );
+      const images = await buildSafeStructuredImageOutputs({
+        data: [{ url: 'https://images.example/picture.png' }],
+      });
+      expect(images?.[0].data).toBe(`data:image/png;base64,${PNG_IMAGE.toString('base64')}`);
+      expect(transport.requests).toHaveLength(1);
+    },
+  );
+
   it.each(['direct', 'proxy'])(
     'retries another validated address family with %s transport',
     async (kind) => {

@@ -22,9 +22,14 @@ import {
   getFetchTlsOptions,
   getProxyUrlForTarget,
 } from '../../../src/util/fetch/index';
+import { AVIF_IMAGE, GIF_IMAGE, JPEG_IMAGE, PNG_IMAGE, WEBP_IMAGE } from '../../fixtures/images';
 
 vi.mock('node:dns/promises', () => ({
   lookup: vi.fn(),
+}));
+vi.mock('../../../src/blobs/constants', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/blobs/constants')>()),
+  BLOB_MAX_SIZE: 1024,
 }));
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -53,7 +58,7 @@ describe('OpenAI Image Provider Functions', () => {
       status: 200,
       statusText: 'OK',
       headers: new Headers({ 'content-type': 'image/png' }),
-      arrayBuffer: async () => new ArrayBuffer(1024),
+      arrayBuffer: async () => Uint8Array.from(PNG_IMAGE).buffer,
     } as Response);
   });
 
@@ -515,10 +520,10 @@ describe('OpenAI Image Provider Functions', () => {
       );
 
       expect(result).toMatchObject({
-        output: `data:image/png;base64,${Buffer.alloc(1024).toString('base64')}`,
+        output: `data:image/png;base64,${PNG_IMAGE.toString('base64')}`,
         images: [
           {
-            data: `data:image/png;base64,${Buffer.alloc(1024).toString('base64')}`,
+            data: `data:image/png;base64,${PNG_IMAGE.toString('base64')}`,
             mimeType: 'image/png',
           },
         ],
@@ -745,6 +750,146 @@ describe('OpenAI Image Provider Functions', () => {
   });
 
   describe('buildSafeStructuredImageOutputs', () => {
+    it.each([
+      ['png', PNG_IMAGE],
+      ['jpeg', JPEG_IMAGE],
+      ['gif', GIF_IMAGE],
+      ['webp', WEBP_IMAGE],
+      ['avif', AVIF_IMAGE],
+    ] as const)('recognizes %s bytes without a content-type or filename', async (format, bytes) => {
+      vi.mocked(fetchWithProxy).mockResolvedValue(new Response(Uint8Array.from(bytes)));
+      const images = await buildSafeStructuredImageOutputs({
+        data: [{ url: 'https://images.example/generated' }],
+      });
+      expect(images).toEqual([
+        {
+          data: `data:image/${format};base64,${bytes.toString('base64')}`,
+          mimeType: `image/${format}`,
+        },
+      ]);
+    });
+
+    it.each([new Uint8Array(), new TextEncoder().encode('{"status":"pending"}')])(
+      'rejects an empty or ordinary non-image response body',
+      async (body) => {
+        vi.mocked(fetchWithProxy).mockResolvedValue(new Response(body));
+        expect(
+          await buildSafeStructuredImageOutputs({
+            data: [{ url: 'https://images.example/generated.png' }],
+          }),
+        ).toBeUndefined();
+      },
+    );
+
+    it('rejects a content type that disagrees with the image bytes', async () => {
+      vi.mocked(fetchWithProxy).mockResolvedValue(
+        new Response(Uint8Array.from(PNG_IMAGE), { headers: { 'content-type': 'image/jpeg' } }),
+      );
+      expect(
+        await buildSafeStructuredImageOutputs({
+          data: [{ url: 'https://images.example/generated' }],
+        }),
+      ).toBeUndefined();
+    });
+
+    it('downloads a batch sequentially and preserves image order', async () => {
+      let active = 0;
+      let maxActive = 0;
+      let releaseFirst!: () => void;
+      const firstPending = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      let markStarted!: () => void;
+      const firstStarted = new Promise<void>((resolve) => {
+        markStarted = resolve;
+      });
+      const bytes = [PNG_IMAGE, GIF_IMAGE];
+      vi.mocked(fetchWithProxy).mockImplementation(async () => {
+        maxActive = Math.max(maxActive, ++active);
+        const body = bytes.shift()!;
+        if (body === PNG_IMAGE) {
+          markStarted();
+          await firstPending;
+        }
+        active--;
+        return new Response(Uint8Array.from(body));
+      });
+      const pending = buildSafeStructuredImageOutputs({
+        data: [{ url: 'https://images.example/first' }, { url: 'https://images.example/second' }],
+      });
+      await firstStarted;
+      try {
+        expect(fetchWithProxy).toHaveBeenCalledTimes(1);
+      } finally {
+        releaseFirst();
+      }
+      const result = await pending;
+      expect(result?.map((image) => image.mimeType)).toEqual(['image/png', 'image/gif']);
+      expect(maxActive).toBe(1);
+    });
+
+    it('limits total downloaded bytes across a batch', async () => {
+      const bytes = Buffer.alloc(600);
+      PNG_IMAGE.copy(bytes);
+      vi.mocked(fetchWithProxy).mockImplementation(
+        async () => new Response(Uint8Array.from(bytes)),
+      );
+      expect(
+        await buildSafeStructuredImageOutputs({
+          data: [{ url: 'https://images.example/first' }, { url: 'https://images.example/second' }],
+        }),
+      ).toBeUndefined();
+      expect(fetchWithProxy).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects batches over ten images before downloading', async () => {
+      expect(
+        await buildSafeStructuredImageOutputs({
+          data: Array.from({ length: 11 }, () => ({ url: 'https://images.example/generated' })),
+        }),
+      ).toBeUndefined();
+      expect(fetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('keeps generation cost when a single base64 image exceeds the byte limit', async () => {
+      const result = await processApiResponse(
+        { data: [{ b64_json: Buffer.alloc(BLOB_MAX_SIZE + 1).toString('base64') }] },
+        'A blue square',
+        'b64_json',
+        false,
+        'dall-e-2',
+        '1024x1024',
+      );
+      expect(result).toMatchObject({
+        cost: 0.02,
+        error: expect.stringContaining('No usable image'),
+      });
+      expect(result.output).toBeUndefined();
+      expect(result.images).toBeUndefined();
+    });
+
+    it('stops the batch when cancellation arrives after a completed download', async () => {
+      const controller = new AbortController();
+      vi.mocked(fetchWithProxy).mockImplementation(async () => {
+        controller.abort();
+        return new Response(Uint8Array.from(PNG_IMAGE));
+      });
+      expect(
+        await buildSafeStructuredImageOutputs(
+          {
+            data: [
+              { url: 'https://images.example/first' },
+              { url: 'https://images.example/second' },
+            ],
+          },
+          undefined,
+          undefined,
+          controller.signal,
+        ),
+      ).toBeUndefined();
+      expect(fetchWithProxy).toHaveBeenCalledTimes(1);
+    });
+
     it('ends a stalled DNS lookup when the caller cancels', async () => {
       lookupMock.mockReturnValue(new Promise(() => {}));
       const controller = new AbortController();
@@ -823,7 +968,7 @@ describe('OpenAI Image Provider Functions', () => {
 
       expect(result).toMatchObject([
         {
-          data: `data:image/png;base64,${Buffer.alloc(1024).toString('base64')}`,
+          data: `data:image/png;base64,${PNG_IMAGE.toString('base64')}`,
           mimeType: 'image/png',
         },
       ]);
@@ -973,7 +1118,7 @@ describe('OpenAI Image Provider Functions', () => {
         status: 200,
         statusText: 'OK',
         headers: new Headers({ 'content-type': 'text/html' }),
-        arrayBuffer: async () => new ArrayBuffer(1024),
+        arrayBuffer: async () => Uint8Array.from(PNG_IMAGE).buffer,
       } as Response);
 
       const result = await buildSafeStructuredImageOutputs({
@@ -989,7 +1134,7 @@ describe('OpenAI Image Provider Functions', () => {
         status: 200,
         statusText: 'OK',
         headers: new Headers({ 'content-type': 'image/svg+xml' }),
-        arrayBuffer: async () => new ArrayBuffer(1024),
+        arrayBuffer: async () => Uint8Array.from(PNG_IMAGE).buffer,
       } as Response);
 
       const result = await buildSafeStructuredImageOutputs({
@@ -1008,7 +1153,7 @@ describe('OpenAI Image Provider Functions', () => {
           'content-type': 'image/png',
           'content-length': String(BLOB_MAX_SIZE + 1),
         }),
-        arrayBuffer: async () => new ArrayBuffer(1024),
+        arrayBuffer: async () => Uint8Array.from(PNG_IMAGE).buffer,
       } as Response);
 
       const result = await buildSafeStructuredImageOutputs({

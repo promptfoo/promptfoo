@@ -8,6 +8,7 @@ import {
   getFetchTlsOptions,
   getProxyUrlForTarget,
 } from '../../src/util/fetch/index';
+import { PNG_IMAGE } from '../fixtures/images';
 
 vi.mock('node:dns/promises', () => ({
   lookup: vi.fn(),
@@ -36,7 +37,7 @@ vi.mock('../../src/providers/openai/image', async () => {
 const lookupMock = lookup as unknown as Mock;
 
 describe('NscaleImageProvider', () => {
-  const imageData = `data:image/png;base64,${Buffer.alloc(1024).toString('base64')}`;
+  const imageData = `data:image/png;base64,${PNG_IMAGE.toString('base64')}`;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -56,7 +57,7 @@ describe('NscaleImageProvider', () => {
       status: 200,
       statusText: 'OK',
       headers: new Headers({ 'content-type': 'image/png' }),
-      arrayBuffer: async () => new ArrayBuffer(1024),
+      arrayBuffer: async () => Uint8Array.from(PNG_IMAGE).buffer,
     } as Response);
   });
 

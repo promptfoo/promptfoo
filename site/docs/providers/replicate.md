@@ -139,4 +139,6 @@ Supported environment variables for images:
 
 Promptfoo downloads generated images from public HTTPS URLs before saving evaluation results. Downloads use the configured proxy and TLS settings, reject redirects, and enforce image type and size limits. A failed download produces a provider error.
 
+Image batches accept up to ten images and 50 MiB of decoded data. URL downloads run one at a time within a shared request timeout, and their bytes must match a supported raster image type.
+
 Image bytes use Promptfoo's existing media storage. Results contain inline data or stored blob references, so the viewer does not depend on temporary Replicate URLs. A separate download hook is no longer needed.

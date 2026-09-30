@@ -194,8 +194,16 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
         options?.abortSignal,
       );
       if (!images?.[0]?.data) {
-        if (cache && cacheKey && !options?.abortSignal?.aborted) {
-          await cache.del(cacheKey);
+        if (cache && cacheKey) {
+          if (!options?.abortSignal?.aborted) {
+            await cache.del(cacheKey);
+          } else if (!cached) {
+            try {
+              await cache.set(cacheKey, JSON.stringify(response));
+            } catch (err) {
+              logger.error(`Failed to cache response: ${String(err)}`);
+            }
+          }
         }
         return { cached, error: 'The generated image could not be downloaded safely.' };
       }

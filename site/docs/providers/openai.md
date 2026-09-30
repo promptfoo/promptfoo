@@ -836,6 +836,8 @@ Cost estimates may be absent for `quality: auto` or custom sizes. Returned usage
 
 Generated images from URL responses are downloaded before they are saved. Downloads require public HTTPS destinations and do not follow redirects. If your gateway returns internal URLs, use `response_format: b64_json` where supported.
 
+Image batches accept up to ten images and 50 MiB of decoded data. URL downloads run one at a time within a shared request timeout. Downloaded bytes must have a supported raster image signature and match the response's content type when one is provided.
+
 The eval viewer displays inline images and saved media references. It does not load external image URLs from model output, including Markdown.
 
 ## Audio {#audio-capabilities}
