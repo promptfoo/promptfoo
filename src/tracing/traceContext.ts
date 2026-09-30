@@ -5,26 +5,13 @@ import {
   type TraceProviderConfig,
   TraceProviderError,
 } from './providers/types';
-import {
-  getTraceTextRedactionState,
-  getTraceTextRedactor,
-  sanitizeTraceAttributes,
-  type TraceTextRedactionState,
-} from './sanitizeAttributes';
-import {
-  type AddSpansOptions,
-  getTraceStore,
-  type SpanData,
-  TraceIncompleteError,
-  TraceLimitError,
-  type TraceSpanQueryOptions,
-} from './store';
+import { sanitizeTraceAttributes } from './sanitizeAttributes';
+import { getTraceStore, type SpanData, type TraceSpanQueryOptions } from './store';
 import { getToolNameFromAttributes } from './toolAttributes';
 
 export interface TraceEvent {
   name: string;
   timestamp: number;
-  timestampNanos?: string;
   attributes: Record<string, any>;
 }
 
@@ -50,16 +37,12 @@ export interface TraceContextData {
   spans: TraceSpan[];
   insights: string[];
   fetchedAt: number;
-  /** Filtered, sanitized view for model-facing summaries when spans hold complete grading data. */
-  summary?: { spans: TraceSpan[]; insights: string[] };
 }
 
 export interface FetchTraceContextOptions
   extends Omit<TraceSpanQueryOptions, 'includeInternalSpans' | 'sanitizeAttributes'> {
   includeInternalSpans?: boolean;
   sanitizeAttributes?: boolean;
-  /** Read all spans in the requested time range for deterministic grading. */
-  requireComplete?: boolean;
   maxRetries?: number;
   retryDelayMs?: number;
   /** External trace provider configuration (Tempo, Jaeger, etc.) */
@@ -75,6 +58,7 @@ export interface FetchTraceContextOptions
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 500;
 const DEFAULT_QUERY_DELAY_MS = 3000;
+const EXTERNAL_SPAN_BATCH_SIZE = 500;
 const inFlightExternalFetches = new WeakMap<
   TraceProviderConfig,
   Map<string, Promise<TraceContextData | null>>
@@ -154,10 +138,7 @@ function createTraceSpans(spans: SpanData[]): TraceSpan[] {
         message: span.statusMessage,
       },
       depth: depthMap.get(span.spanId) ?? 0,
-      events: (span.events ?? []).map((event) => ({
-        ...event,
-        attributes: event.attributes ?? {},
-      })),
+      events: [],
     };
   });
 }
@@ -266,26 +247,26 @@ function computeSpanDepth(
 }
 
 /**
- * Sever malformed parent cycles without discarding their execution evidence.
+ * Drop malformed parent cycles before persisting or processing external spans.
  */
-function detachCyclicExternalSpans(spans: SpanData[]): SpanData[] {
+function discardCyclicExternalSpans(spans: SpanData[]): SpanData[] {
   const spanMap = new Map(spans.map((span) => [span.spanId, span]));
   const depthCache = new Map<string, number | null>();
   const cyclicSpanIds = new Set<string>();
 
-  const validSpans = spans.map((span) => {
+  const validSpans = spans.filter((span) => {
     const depth = computeSpanDepth(span, spanMap, depthCache);
     if (depth === null) {
       cyclicSpanIds.add(span.spanId);
-      return { ...span, parentSpanId: undefined };
+      return false;
     }
 
-    return span;
+    return true;
   });
 
   if (cyclicSpanIds.size > 0) {
     logger.warn(
-      `[TraceContext] Detached cyclic parent relationships from ${cyclicSpanIds.size} spans`,
+      `[TraceContext] Skipping ${cyclicSpanIds.size} spans with cyclic parent relationships`,
     );
   }
 
@@ -296,78 +277,111 @@ function detachCyclicExternalSpans(spans: SpanData[]): SpanData[] {
  * Store spans fetched from an external provider in the local database.
  * This allows the spans to be displayed in the UI and persisted.
  */
-async function storeExternalSpans(
-  traceId: string,
-  spans: SpanData[],
-  redactSpans?: AddSpansOptions['redactSpans'],
-): Promise<boolean> {
+async function storeExternalSpans(traceId: string, spans: SpanData[]): Promise<boolean> {
   try {
     const traceStore = getTraceStore();
-    const result = await traceStore.addSpans(traceId, spans, {
-      warnIfMissingTrace: false,
-      updateExisting: true,
-      ...(redactSpans && { redactSpans }),
-    });
-    if (!result.stored) {
-      return false;
+    for (let index = 0; index < spans.length; index += EXTERNAL_SPAN_BATCH_SIZE) {
+      const result = await traceStore.addSpans(
+        traceId,
+        spans.slice(index, index + EXTERNAL_SPAN_BATCH_SIZE),
+        {
+          warnIfMissingTrace: false,
+          ...(index > 0 && { skipTraceCheck: true }),
+        },
+      );
+      if (!result.stored) {
+        return false;
+      }
     }
     logger.debug(`[TraceContext] Stored ${spans.length} spans from external provider`);
     return true;
   } catch (error) {
-    if (error instanceof TraceIncompleteError) {
-      throw error;
-    }
     logger.warn(`[TraceContext] Failed to store external spans: ${error}`);
     return false;
   }
 }
 
-function redactExternalSpans(
-  spans: SpanData[],
-  redactAttributes: string[],
-  state?: TraceTextRedactionState,
-): SpanData[] {
-  const options = { redactAttributes, sanitizeSensitiveAttributes: false, truncateValues: false };
-  const sanitized = spans.map((span) => ({
-    ...span,
-    attributes: sanitizeTraceAttributes(span.attributes, options),
-    events: span.events?.map((event) => ({
-      ...event,
-      attributes: sanitizeTraceAttributes(event.attributes, options),
-    })),
-  }));
-  const redactText = getTraceTextRedactor(
-    spans.flatMap((span, index) => [
-      { original: span.attributes, sanitized: sanitized[index].attributes },
-      ...(span.events ?? []).map((event, eventIndex) => ({
-        original: event.attributes,
-        sanitized: sanitized[index].events?.[eventIndex].attributes,
-      })),
-    ]),
-    '[REDACTED]',
-    state,
+function redactExternalSpan(span: SpanData, redactAttributes: string[]): SpanData {
+  const attributes = span.attributes ?? {};
+  const sanitizedAttributes = sanitizeTraceAttributes(attributes, {
+    redactAttributes,
+    sanitizeSensitiveAttributes: false,
+    truncateValues: false,
+  });
+  const redactedValues = new Set<string>();
+  const pendingValues: Array<{ original: unknown; sanitized: unknown }> = [
+    { original: attributes, sanitized: sanitizedAttributes },
+  ];
+  while (pendingValues.length > 0) {
+    const { original, sanitized } = pendingValues.pop()!;
+    if (typeof original !== 'object') {
+      if (original !== undefined && sanitized === '[REDACTED]') {
+        const value = String(original);
+        if (value.length > 0) {
+          redactedValues.add(value);
+        }
+      }
+      continue;
+    }
+    if (!original) {
+      continue;
+    }
+    if (Array.isArray(original)) {
+      for (let index = 0; index < original.length; index++) {
+        pendingValues.push({
+          original: original[index],
+          sanitized: sanitized === '[REDACTED]' ? sanitized : (sanitized as unknown[])?.[index],
+        });
+      }
+      continue;
+    }
+    for (const [key, value] of Object.entries(original)) {
+      pendingValues.push({
+        original: value,
+        sanitized:
+          sanitized === '[REDACTED]' ? sanitized : (sanitized as Record<string, unknown>)?.[key],
+      });
+    }
+  }
+  const orderedRedactedValues = [...redactedValues].sort(
+    (left, right) => right.length - left.length,
   );
-  return spans.map((span) => ({
+  const scrubEcho = <T extends string | undefined>(value: T): T => {
+    if (typeof value !== 'string') {
+      return value;
+    }
+
+    let sanitizedValue: string = value;
+    for (const redactedValue of orderedRedactedValues) {
+      sanitizedValue = sanitizedValue.split(redactedValue).join('[REDACTED]');
+    }
+
+    return sanitizedValue as T;
+  };
+
+  return {
     ...span,
-    name: redactText(span.name),
-    statusMessage: redactText(span.statusMessage),
-    attributes: sanitizeTraceAttributes(span.attributes, { ...options, redactText }),
-    events: span.events?.map((event) => ({
-      ...event,
-      name: redactText(event.name),
-      attributes: sanitizeTraceAttributes(event.attributes, { ...options, redactText }),
-    })),
-  }));
+    name: scrubEcho(span.name),
+    statusMessage: scrubEcho(span.statusMessage),
+    attributes: sanitizedAttributes,
+  };
 }
 
 function getProviderFetchOptions(
-  spanOptions: Pick<FetchTraceContextOptions, 'earliestStartTime'>,
+  spanOptions: Pick<
+    FetchTraceContextOptions,
+    'earliestStartTime' | 'includeInternalSpans' | 'maxSpans' | 'spanFilter'
+  >,
   abortSignal?: AbortSignal,
 ): FetchTraceOptions | undefined {
+  const requiresPostFetchFiltering =
+    spanOptions.includeInternalSpans === false || Boolean(spanOptions.spanFilter?.length);
   const providerOptions = {
     ...(spanOptions.earliestStartTime !== undefined && {
       earliestStartTime: spanOptions.earliestStartTime,
     }),
+    ...(spanOptions.maxSpans !== undefined &&
+      !requiresPostFetchFiltering && { maxSpans: spanOptions.maxSpans }),
     ...(abortSignal && { abortSignal }),
   };
 
@@ -416,13 +430,8 @@ async function fetchFromExternalProvider(
       throw createTraceAbortError(abortSignal);
     }
     try {
-      const incomplete = (await getTraceStore().getTraceMetadata(traceId))
-        ?.promptfooTraceIncomplete;
-      if (incomplete) {
-        throw incomplete === 'limit exceeded' ? new TraceLimitError() : new TraceIncompleteError();
-      }
       const result = await provider.fetchTrace(traceId, providerFetchOptions);
-      const validSpans = result ? detachCyclicExternalSpans(result.spans) : [];
+      const validSpans = result ? discardCyclicExternalSpans(result.spans) : [];
 
       if (!result || validSpans.length === 0) {
         if (attempt === maxRetries) {
@@ -438,17 +447,11 @@ async function fetchFromExternalProvider(
         continue;
       }
 
-      let redactSpans: AddSpansOptions['redactSpans'];
-      if (redactAttributes?.length) {
-        redactSpans = (spans) =>
-          redactExternalSpans(
-            spans,
-            redactAttributes,
-            getTraceTextRedactionState(getTraceStore(), traceId, spans),
-          );
-      }
+      const storedSpans = redactAttributes?.length
+        ? validSpans.map((span) => redactExternalSpan(span, redactAttributes))
+        : validSpans;
 
-      if (!(await storeExternalSpans(traceId, validSpans, redactSpans))) {
+      if (!(await storeExternalSpans(traceId, storedSpans))) {
         return null;
       }
 
@@ -471,17 +474,6 @@ async function fetchFromExternalProvider(
         fetchedAt: result.fetchedAt,
       };
     } catch (error) {
-      if (error instanceof TraceProviderError && error.limitExceeded) {
-        await getTraceStore().markTraceIncomplete(traceId);
-        throw new TraceLimitError();
-      }
-      if (error instanceof TraceProviderError && error.invalidEvidence) {
-        await getTraceStore().markTraceIncomplete(traceId, 'invalid external evidence');
-        throw new TraceIncompleteError();
-      }
-      if (error instanceof TraceIncompleteError) {
-        throw error;
-      }
       if (abortSignal?.aborted) {
         throw createTraceAbortError(abortSignal);
       }
@@ -547,10 +539,6 @@ async function fetchFromLocalStore(
     }
     try {
       const spans = await traceStore.getSpans(traceId, spanOptions);
-      const incomplete = (await traceStore.getTraceMetadata(traceId))?.promptfooTraceIncomplete;
-      if (incomplete) {
-        throw incomplete === 'limit exceeded' ? new TraceLimitError() : new TraceIncompleteError();
-      }
 
       if (spans.length === 0) {
         if (attempt === maxRetries) {
@@ -567,7 +555,15 @@ async function fetchFromLocalStore(
       }
 
       const traceSpans = createTraceSpans(
-        redactAttributes?.length ? redactExternalSpans(spans, redactAttributes) : spans,
+        redactAttributes?.length
+          ? spans.map((span) => ({
+              ...span,
+              attributes: sanitizeTraceAttributes(span.attributes, {
+                redactAttributes,
+                sanitizeSensitiveAttributes: spanOptions.sanitizeAttributes,
+              }),
+            }))
+          : spans,
       );
       const insights = deriveInsights(traceSpans);
 
@@ -584,9 +580,6 @@ async function fetchFromLocalStore(
 
       return context;
     } catch (error) {
-      if (error instanceof TraceIncompleteError) {
-        throw error;
-      }
       if (abortSignal?.aborted) {
         throw createTraceAbortError(abortSignal);
       }
@@ -615,41 +608,7 @@ export async function fetchTraceContext(
   traceId: string,
   options: FetchTraceContextOptions = {},
 ): Promise<TraceContextData | null> {
-  const context = await fetchTraceContextData(traceId, options);
-  if (!context || !options.requireComplete) {
-    return context;
-  }
-
   const {
-    earliestStartTime,
-    includeInternalSpans,
-    maxSpans,
-    maxDepth,
-    spanFilter,
-    sanitizeAttributes,
-  } = options;
-  const selected = await getTraceStore().getSpans(traceId, {
-    earliestStartTime,
-    includeInternalSpans,
-    maxSpans,
-    maxDepth,
-    spanFilter,
-    sanitizeAttributes,
-  });
-  const spanIds = new Set(context.spans.map((span) => span.spanId));
-  const spans = selected.filter((span) => spanIds.has(span.spanId));
-  const summarySpans = createTraceSpans(
-    options.redactAttributes?.length ? redactExternalSpans(spans, options.redactAttributes) : spans,
-  );
-  return { ...context, summary: { spans: summarySpans, insights: deriveInsights(summarySpans) } };
-}
-
-async function fetchTraceContextData(
-  traceId: string,
-  options: FetchTraceContextOptions = {},
-): Promise<TraceContextData | null> {
-  const {
-    requireComplete = false,
     includeInternalSpans = true,
     sanitizeAttributes = true,
     maxRetries = DEFAULT_MAX_RETRIES,
@@ -662,10 +621,9 @@ async function fetchTraceContextData(
   const fetchOptions = {
     maxRetries,
     retryDelayMs,
-    sanitizeAttributes: !requireComplete && sanitizeAttributes,
+    includeInternalSpans,
+    sanitizeAttributes,
     ...spanOptions,
-    includeInternalSpans: requireComplete || includeInternalSpans,
-    ...(requireComplete ? { maxSpans: undefined, maxDepth: undefined, spanFilter: undefined } : {}),
   };
 
   // If external provider is configured, use it

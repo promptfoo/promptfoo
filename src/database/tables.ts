@@ -18,7 +18,6 @@ import {
   type ProviderOptions,
   type ProviderResponse,
   ResultFailureReason,
-  type TraceSpanEvent,
   type UnifiedConfig,
 } from '../types/index';
 import type { Attributes } from '@opentelemetry/api';
@@ -425,7 +424,6 @@ export const spansTable = sqliteTable(
     startTime: integer('start_time').notNull(),
     endTime: integer('end_time'),
     attributes: text('attributes', { mode: 'json' }).$type<Attributes>(),
-    events: text('events', { mode: 'json' }).$type<TraceSpanEvent[]>(),
     statusCode: integer('status_code'),
     statusMessage: text('status_message'),
   },

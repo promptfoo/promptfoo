@@ -1,7 +1,6 @@
 import crypto from 'crypto';
 import fs from 'fs/promises';
 
-import { z } from 'zod';
 import { BLOB_MAX_SIZE, isSafeInlineBlobMimeType, recordBlobReference, storeBlob } from '../blobs';
 import { BLOB_HASH_REGEX, collectBlobHashes } from '../blobs/blobRefs';
 import { getDb } from '../database/index';
@@ -12,7 +11,7 @@ import Eval, { createEvalId } from '../models/eval';
 import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
 import EvalResult, { stripTraceLinkageFromMetadata } from '../models/evalResult';
 import telemetry from '../telemetry';
-import { getTraceStore, spanHash, validateTraceBatchSize } from '../tracing/store';
+import { getTraceStore } from '../tracing/store';
 import { sha256 } from '../util/createHash';
 import { sanitizeTracingConfigForPersistence } from '../util/sanitizer';
 import type { Command } from 'commander';
@@ -22,6 +21,8 @@ import type {
   EvaluateSummaryV2,
   EvaluateSummaryV3,
   ExportedBlobAsset,
+  TraceData,
+  TraceSpan,
 } from '../types';
 
 function extractEvalId(evalData: any): string | undefined {
@@ -238,113 +239,71 @@ async function replaceExistingEval(
   return importId;
 }
 
-const traceTextSchema = z.string().trim().min(1);
-const traceAttributesSchema = z.record(z.string(), z.unknown());
-const importedTraceSchema = z.object({
-  traceId: traceTextSchema,
-  testCaseId: traceTextSchema,
-  metadata: traceAttributesSchema.optional(),
-  spans: z.array(
-    z
-      .object({
-        spanId: traceTextSchema,
-        parentSpanId: z.string().optional(),
-        name: traceTextSchema,
-        startTime: z.number().finite(),
-        endTime: z.number().finite().optional(),
-        attributes: traceAttributesSchema.optional(),
-        statusCode: z.number().finite().optional(),
-        statusMessage: z.string().optional(),
-        incomplete: z.literal(false).optional(),
-        events: z
-          .array(
-            z
-              .object({
-                name: traceTextSchema,
-                timestamp: z.number().finite().nonnegative(),
-                timestampNanos: z
-                  .string()
-                  .refine(
-                    (value) => /^\d{1,20}$/.test(value) && BigInt(value) <= 0xffffffffffffffffn,
-                  )
-                  .optional(),
-                attributes: traceAttributesSchema.optional(),
-              })
-              .refine(
-                ({ timestamp, timestampNanos }) =>
-                  timestampNanos === undefined ||
-                  Math.abs(timestamp - Number(timestampNanos) / 1_000_000) <=
-                    Number.EPSILON * Math.max(1, timestamp),
-              ),
-          )
-          .optional(),
-      })
-      .refine((span) => span.endTime === undefined || span.endTime >= span.startTime),
-  ),
-});
-
-type ImportedTrace = z.infer<typeof importedTraceSchema>;
-
-function assertImportableTrace(trace: unknown): asserts trace is ImportedTrace {
-  const result = importedTraceSchema.safeParse(trace);
-  if (!result.success) {
-    const [collection, index, field] = result.error.issues[0].path;
-    let record = 'trace record';
-    if (collection === 'spans' && typeof index === 'number') {
-      record = field === 'events' ? 'trace span events' : 'trace span';
-    }
-    throw new Error(`Invalid ${record} in imported evaluation`);
-  }
+function isImportableTrace(trace: unknown): trace is TraceData {
+  const candidate = trace as Partial<TraceData>;
+  return (
+    trace !== null &&
+    typeof trace === 'object' &&
+    typeof candidate.traceId === 'string' &&
+    typeof candidate.testCaseId === 'string' &&
+    Array.isArray(candidate.spans)
+  );
 }
 
-function prepareTraces(traces: unknown): ImportedTrace[] {
-  if (traces === undefined) {
+function isImportableTraceSpan(span: unknown): span is TraceSpan {
+  const candidate = span as Partial<TraceSpan>;
+  return (
+    span !== null &&
+    typeof span === 'object' &&
+    typeof candidate.spanId === 'string' &&
+    typeof candidate.name === 'string' &&
+    typeof candidate.startTime === 'number' &&
+    Number.isFinite(candidate.startTime)
+  );
+}
+
+function prepareTraces(traces: unknown): TraceData[] {
+  if (!Array.isArray(traces)) {
     return [];
   }
-  if (!Array.isArray(traces)) {
-    throw new Error('Invalid trace collection in imported evaluation');
-  }
 
-  const preparedTraces: ImportedTrace[] = [];
-  const traceIds = new Set<string>();
+  const preparedTraces: TraceData[] = [];
   for (const trace of traces) {
-    assertImportableTrace(trace);
-    if (traceIds.has(trace.traceId)) {
-      throw new Error('Duplicate trace IDs in imported evaluation');
+    if (!isImportableTrace(trace)) {
+      logger.warn('Skipping malformed trace during import');
+      continue;
     }
-    traceIds.add(trace.traceId);
 
-    const spans = trace.spans;
-    validateTraceBatchSize(spans);
-    const hashes = new Map<string, string>();
-    for (const span of spans) {
-      const hash = spanHash(span);
-      if (hashes.has(span.spanId) && hashes.get(span.spanId) !== hash) {
-        throw new Error('Conflicting span records in imported evaluation');
+    const spans = trace.spans.filter((span): span is TraceSpan => {
+      const importable = isImportableTraceSpan(span);
+      if (!importable) {
+        logger.warn('Skipping malformed trace span during import');
       }
-      hashes.set(span.spanId, hash);
-    }
-    preparedTraces.push(trace);
+      return importable;
+    });
+    preparedTraces.push({ ...trace, spans });
   }
 
   return preparedTraces;
 }
 
 async function importTraces(
-  traces: ImportedTrace[],
+  traces: TraceData[],
   evalId: string,
   generateNewTraceIds: boolean,
 ): Promise<Map<string, string>> {
   const traceStore = getTraceStore();
+  const usedTraceIds = new Set<string>();
   const importedTraceIds = new Map<string, string>();
   for (const trace of traces) {
     // Trace IDs are globally unique in the local trace store. Duplicate eval
     // imports and conflicting imports need fresh IDs so spans never attach to
     // another eval's trace.
     let traceId = trace.traceId;
-    if (generateNewTraceIds || (await traceStore.getTrace(traceId))) {
+    if (generateNewTraceIds || usedTraceIds.has(traceId) || (await traceStore.getTrace(traceId))) {
       traceId = crypto.randomUUID().replaceAll('-', '');
     }
+    usedTraceIds.add(traceId);
 
     await traceStore.createTrace({
       traceId,
@@ -401,7 +360,7 @@ function prepareImportArtifacts(
   evalData: any,
   importV3: boolean,
 ): {
-  traces: ImportedTrace[];
+  traces: TraceData[];
   blobAssets: PreparedBlobAsset[];
 } {
   const traces = importV3 ? prepareTraces(evalData.traces) : [];
@@ -423,7 +382,7 @@ function prepareImportArtifacts(
 
 async function createImportedV3Eval(
   evalData: any,
-  traces: ImportedTrace[],
+  traces: TraceData[],
   blobAssets: PreparedBlobAsset[],
   context: ImportedEvalContext,
 ): Promise<string> {
@@ -495,7 +454,7 @@ export function importCommand(program: Command) {
         let importV3 = false;
         let importLegacy = false;
         let artifactsPrepared = false;
-        let traces: ImportedTrace[] = [];
+        let traces: TraceData[] = [];
         let blobAssets: PreparedBlobAsset[] = [];
         const validateImportFormat = () => {
           if (!formatChecked) {

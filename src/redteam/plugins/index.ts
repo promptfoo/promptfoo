@@ -17,7 +17,6 @@ import {
   REMOTE_ONLY_PLUGIN_IDS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
-import { AGENTIC_RUNTIME_PLUGINS } from '../constants/agentic';
 import { recordGenerationTokenUsage } from '../generationTokenUsage';
 import { buildPromptInputDescriptions } from '../inputVariables';
 import {
@@ -44,7 +43,6 @@ import {
 } from '../shared/promptLength';
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
-import { AgenticRuntimePlugin } from './agentic';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
@@ -76,7 +74,7 @@ import { TeenSafetyDangerousContentPlugin } from './teenSafety/dangerousContent'
 import { TeenSafetyDangerousRoleplayPlugin } from './teenSafety/dangerousRoleplay';
 import { TEEN_SAFETY_DEFAULT_GRADER_EXAMPLES } from './teenSafety/graderExamples';
 import { TeenSafetyHarmfulBodyIdealsPlugin } from './teenSafety/harmfulBodyIdeals';
-import { ToolDiscoveryPlugin } from './toolDiscovery';
+import { TOOL_DISCOVERY_ATTACK_CONSTRAINTS, ToolDiscoveryPlugin } from './toolDiscovery';
 import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { UnverifiableClaimsPlugin } from './unverifiableClaims';
@@ -375,16 +373,15 @@ async function fetchRemoteTestCases(
   // Strip graderExamples before sending - they're not used during generation,
   // only during grading. The CLI re-attaches the full config to test case metadata after.
   const { graderExamples, ...configForRemote } = config ?? {};
-  const { targetManifest, ...remoteConfig } = configForRemote as Record<string, unknown>;
   const maxCharsModifier = getMaxCharsPerMessageModifierValue(config?.maxCharsPerMessage);
   if (maxCharsModifier) {
-    remoteConfig.modifiers = {
-      ...((remoteConfig.modifiers as Record<string, string> | undefined) ?? {}),
+    configForRemote.modifiers = {
+      ...((configForRemote.modifiers as Record<string, string> | undefined) ?? {}),
       [MAX_CHARS_PER_MESSAGE_MODIFIER_KEY]: maxCharsModifier,
     };
   }
   const body = JSON.stringify({
-    config: remoteConfig,
+    config: configForRemote,
     injectVar,
     // Send inputs at top level for server compatibility (server expects it there)
     inputs: config?.inputs,
@@ -394,7 +391,6 @@ async function fetchRemoteTestCases(
     ...remoteGenerationContextPayload(redteamGenerationContext),
     version: VERSION,
     email: getUserEmail(),
-    ...(targetManifest && typeof targetManifest === 'object' ? { targetManifest } : {}),
   });
 
   interface PluginGenerationResponse extends RemoteMaterializationResponse {
@@ -454,7 +450,17 @@ function createPluginFactory<T extends PluginConfig>(
       targetId,
       redteamGenerationContext,
     }: PluginActionParams) => {
-      const configWithDefaults = applyDefaultGraderExamples(key, config as T);
+      let configWithDefaults = applyDefaultGraderExamples(key, config as T);
+      // Send the constraint to remote generation and retain it for every strategy turn.
+      if (key === 'tool-discovery') {
+        configWithDefaults = {
+          ...configWithDefaults,
+          modifiers: {
+            ...configWithDefaults?.modifiers,
+            toolDiscoveryAttackConstraints: TOOL_DISCOVERY_ATTACK_CONSTRAINTS,
+          },
+        };
+      }
 
       if ((PluginClass as any).canGenerateRemote === false || !shouldGenerateRemote()) {
         logger.debug(`Using local redteam generation for ${key}`);
@@ -744,11 +750,6 @@ remotePlugins.push(
 
 export const Plugins: PluginFactory[] = [
   ...pluginFactories,
-  ...AGENTIC_RUNTIME_PLUGINS.map((key) => ({
-    key,
-    action: ({ provider, purpose, injectVar, n, config }: PluginActionParams) =>
-      new AgenticRuntimePlugin(provider, purpose, injectVar, config ?? {}, key).generateTests(n),
-  })),
   ...piiPlugins,
   ...biasPlugins,
   ...remotePlugins,

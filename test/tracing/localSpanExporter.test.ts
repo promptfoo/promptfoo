@@ -1,7 +1,7 @@
 import { ExportResultCode } from '@opentelemetry/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalSpanExporter } from '../../src/tracing/localSpanExporter';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace-node';
 
 // Mock the store module
 const mockAddSpans = vi.fn();
@@ -46,7 +46,6 @@ describe('LocalSpanExporter', () => {
       startTime: [number, number];
       endTime: [number, number];
       attributes: Record<string, unknown>;
-      events: ReadableSpan['events'];
       resourceAttributes: Record<string, unknown>;
       status: { code: number; message?: string };
     }> = {},
@@ -70,7 +69,7 @@ describe('LocalSpanExporter', () => {
       status: overrides.status ?? { code: 1 },
       kind: 2, // CLIENT
       links: [],
-      events: overrides.events ?? [],
+      events: [],
       resource: { attributes: overrides.resourceAttributes ?? {} },
       instrumentationLibrary: { name: 'test' },
       duration: [0, 700000000],
@@ -89,36 +88,6 @@ describe('LocalSpanExporter', () => {
   }
 
   describe('export', () => {
-    it.each(['span attributes', 'events', 'event attributes'])(
-      'preserves loss of %s for the store',
-      async (source) => {
-        const span = createMockSpan();
-        Object.assign(
-          span,
-          source === 'span attributes'
-            ? { droppedAttributesCount: 1 }
-            : source === 'events'
-              ? { droppedEventsCount: 1 }
-              : {
-                  events: [
-                    {
-                      name: 'verifier',
-                      time: [1000, 0],
-                      attributes: {},
-                      droppedAttributesCount: 1,
-                    },
-                  ],
-                },
-        );
-        await exportSpans([span]);
-        expect(mockAddSpans).toHaveBeenCalledWith(
-          'trace-id-123',
-          [expect.objectContaining({ incomplete: true })],
-          expect.anything(),
-        );
-      },
-    );
-
     it('should export empty span array successfully', async () => {
       const result = await exportSpans([]);
 
@@ -240,85 +209,6 @@ describe('LocalSpanExporter', () => {
       );
     });
 
-    it('preserves shadowed resource secrets needed to redact retained events', async () => {
-      const secret = 'PRIVATE_RESOURCE_EVENT_SECRET';
-      await exportSpans([
-        createMockSpan({
-          resourceAttributes: { authorization: secret },
-          attributes: { authorization: 'safe' },
-          events: [
-            {
-              name: `echo ${secret}`,
-              time: [1001, 0],
-              attributes: { detail: secret },
-              droppedAttributesCount: 0,
-            },
-          ],
-        }),
-      ]);
-      const stored = mockAddSpans.mock.calls[0][1][0];
-      expect(stored.attributes).toMatchObject({
-        authorization: 'safe',
-        'otel.resource.attributes': [{ authorization: secret }],
-      });
-      expect(stored.events[0].attributes.detail).toBe(secret);
-    });
-
-    it('should preserve span events with millisecond timestamps', async () => {
-      const span = createMockSpan({
-        events: [
-          {
-            name: 'guardrail decision',
-            time: [102, 250000000],
-            attributes: { 'guardrails.decision': 'blocked' },
-            droppedAttributesCount: 0,
-          },
-        ],
-      });
-
-      const result = await exportSpans([span]);
-
-      expect(result.code).toBe(ExportResultCode.SUCCESS);
-      expect(mockAddSpans).toHaveBeenCalledWith(
-        expect.any(String),
-        [
-          expect.objectContaining({
-            events: [
-              {
-                name: 'guardrail decision',
-                timestamp: 102250,
-                timestampNanos: '102250000000',
-                attributes: { 'guardrails.decision': 'blocked' },
-              },
-            ],
-          }),
-        ],
-        expect.any(Object),
-      );
-    });
-
-    it('retains nanosecond ordering for epoch-scale local spans and events', async () => {
-      await exportSpans([
-        createMockSpan({
-          startTime: [1789000000, 100],
-          endTime: [1789000000, 400],
-          events: [
-            { name: 'guardrail update_seat', time: [1789000000, 200], droppedAttributesCount: 0 },
-            { name: 'tool update_seat', time: [1789000000, 300], droppedAttributesCount: 0 },
-          ],
-        }),
-      ]);
-      expect(
-        mockAddSpans.mock.calls[0][1][0].events.map(
-          (event: { timestampNanos?: string }) => event.timestampNanos,
-        ),
-      ).toEqual(['1789000000000000200', '1789000000000000300']);
-      expect(mockAddSpans.mock.calls[0][1][0].attributes).toMatchObject({
-        'otel.span.start_time_unix_nano': '1789000000000000100',
-        'otel.span.end_time_unix_nano': '1789000000000000400',
-      });
-    });
-
     it('should include parent span ID when present', async () => {
       const span = createMockSpan({
         parentSpanId: 'parent-span-id',
@@ -341,7 +231,7 @@ describe('LocalSpanExporter', () => {
     it('should include span attributes', async () => {
       const span = createMockSpan({
         attributes: {
-          'gen_ai.system': 'openai',
+          'gen_ai.provider.name': 'openai',
           'gen_ai.request.model': 'gpt-4',
           'gen_ai.usage.input_tokens': 100,
         },
@@ -355,11 +245,40 @@ describe('LocalSpanExporter', () => {
         [
           expect.objectContaining({
             attributes: {
-              'gen_ai.system': 'openai',
+              'gen_ai.provider.name': 'openai',
               'gen_ai.request.model': 'gpt-4',
               'gen_ai.usage.input_tokens': 100,
-              'otel.span.start_time_unix_nano': '1000500000000',
-              'otel.span.end_time_unix_nano': '1001200000000',
+            },
+          }),
+        ],
+        expect.any(Object),
+      );
+    });
+
+    it('preserves resource attributes and lets span attributes override matching keys', async () => {
+      const span = createMockSpan({
+        resourceAttributes: {
+          'service.name': 'configured-promptfoo-service',
+          'service.version': '1.2.3',
+          'deployment.environment': 'resource',
+        },
+        attributes: {
+          'deployment.environment': 'span',
+          'gen_ai.provider.name': 'openai',
+        },
+      });
+
+      await exportSpans([span]);
+
+      expect(mockAddSpans).toHaveBeenCalledWith(
+        expect.any(String),
+        [
+          expect.objectContaining({
+            attributes: {
+              'service.name': 'configured-promptfoo-service',
+              'service.version': '1.2.3',
+              'deployment.environment': 'span',
+              'gen_ai.provider.name': 'openai',
             },
           }),
         ],

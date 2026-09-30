@@ -20,7 +20,6 @@ import {
   UI_DISABLED_WHEN_REMOTE_UNAVAILABLE,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../src/redteam/constants';
-import { AGENTIC_RUNTIME_PLUGINS } from '../../src/redteam/constants/agentic';
 import {
   CODING_AGENT_COLLECTIONS,
   CODING_AGENT_CORE_PLUGINS,
@@ -142,14 +141,10 @@ describe('constants', () => {
     ]);
   });
 
-  it('remote-only UI guards should exclude local agentic runtime plugins', () => {
+  it('remote-only UI guards should include coding-agent plugins and collections', () => {
     expect(REMOTE_ONLY_PLUGIN_IDS).toEqual(
       expect.arrayContaining([...CODING_AGENT_COLLECTIONS, ...CODING_AGENT_PLUGINS]),
     );
-    for (const plugin of AGENTIC_RUNTIME_PLUGINS) {
-      expect(REMOTE_ONLY_PLUGIN_IDS).not.toContain(plugin);
-      expect(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE).not.toContain(plugin);
-    }
     expect(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE).toEqual(
       expect.arrayContaining([...CODING_AGENT_COLLECTIONS, ...CODING_AGENT_PLUGINS]),
     );
@@ -157,8 +152,7 @@ describe('constants', () => {
 
   it('AGENTIC_PLUGINS should contain expected plugins', () => {
     expect(AGENTIC_PLUGINS).toContain('agentic:memory-poisoning');
-    expect(AGENTIC_PLUGINS).toContain('agentic:approval-continuity');
-    expect(AGENTIC_PLUGINS).toContain('agentic:guardrail-coverage-gap');
+    expect(AGENTIC_PLUGINS.length).toBe(1);
   });
 
   it('DEFAULT_PLUGINS should contain expected plugins', () => {
@@ -199,7 +193,6 @@ describe('constants', () => {
         'Compliance & Legal',
         'Trust & Safety',
         'Brand',
-        'Agentic Security',
         'Coding Agent Security',
         'Domain-Specific Risks',
         'Datasets',
@@ -218,7 +211,6 @@ describe('constants', () => {
         'Compliance & Legal',
         'Trust & Safety',
         'Brand',
-        'Agentic Security',
         'Coding Agent Security',
         'Domain-Specific Risks',
         'Datasets',
@@ -259,11 +251,6 @@ describe('constants', () => {
     it('should have coding agent risks', () => {
       expect(riskCategories['Coding Agent Security']).toBeDefined();
       expect(riskCategories['Coding Agent Security']).toEqual(CODING_AGENT_PLUGINS);
-    });
-
-    it('should have agentic runtime risks', () => {
-      expect(riskCategories['Agentic Security']).toBeDefined();
-      expect(riskCategories['Agentic Security']).toEqual(AGENTIC_RUNTIME_PLUGINS);
     });
   });
 });

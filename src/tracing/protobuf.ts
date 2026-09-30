@@ -106,13 +106,6 @@ export interface DecodedStatus {
   message?: string;
 }
 
-export interface DecodedSpanEvent {
-  timeUnixNano?: Long | number;
-  name: string;
-  attributes?: DecodedAttribute[];
-  droppedAttributesCount?: number;
-}
-
 /**
  * Decoded OTLP span
  */
@@ -126,7 +119,7 @@ export interface DecodedSpan {
   endTimeUnixNano?: Long | number;
   attributes?: DecodedAttribute[];
   status?: DecodedStatus;
-  events?: DecodedSpanEvent[];
+  events?: any[];
   links?: any[];
   droppedAttributesCount?: number;
   droppedEventsCount?: number;
@@ -142,7 +135,6 @@ export interface DecodedScope {
   name?: string;
   version?: string;
   attributes?: DecodedAttribute[];
-  droppedAttributesCount?: number;
 }
 
 /**
@@ -228,7 +220,7 @@ export async function decodeExportTraceServiceRequest(
 
     // Convert to plain JavaScript object
     const decoded = messageType.toObject(message, {
-      // Keep Long values so event timestamps retain nanosecond precision.
+      longs: Number, // Convert longs to numbers (may lose precision for very large values)
       bytes: Uint8Array, // Keep bytes as Uint8Array
       defaults: true, // Include default values
       arrays: true, // Always use arrays for repeated fields
