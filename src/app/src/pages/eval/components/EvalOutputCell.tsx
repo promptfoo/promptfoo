@@ -1688,7 +1688,12 @@ function EvalOutputCell({
         handlePromptOpen,
         handlePromptClose,
         handleCheckOutput:
-          evaluationId && output.id && !inComparisonMode && IS_RUNNING_LOCALLY
+          evaluationId &&
+          output.id &&
+          output.response?.output != null &&
+          !output.response.error &&
+          !inComparisonMode &&
+          IS_RUNNING_LOCALLY
             ? () => setOpenCheckOutput(true)
             : undefined,
         setActionsHovered,

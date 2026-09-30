@@ -134,6 +134,7 @@ describe('EvalOutputCell', () => {
       provider: 'test-provider',
       score: 0.8,
       text: 'Test output text',
+      response: { output: 'Test output text' },
       testCase: {},
     },
     maxTextLength: 100,
@@ -177,6 +178,7 @@ describe('EvalOutputCell', () => {
       provider: 'test-provider',
       score: 0.8,
       text: 'Test output text',
+      response: { output: 'Test output text' },
       testCase: {},
       metadata: { testKey: 'testValue' },
     },
@@ -204,6 +206,36 @@ describe('EvalOutputCell', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent('Check saved output');
     expect(screen.getByRole('dialog')).toHaveTextContent('does not change saved assertions');
   });
+
+  it.each([
+    undefined,
+    {},
+    { output: null },
+    { output: 'Partial output', error: 'Fixture provider error' },
+  ])('hides saved-output previews without usable output (%j)', (response) => {
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-fixture"
+        output={{ ...defaultProps.output, response }}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Check saved output' })).not.toBeInTheDocument();
+  });
+
+  it.each(['', 0, false, { answer: 'Fixture' }])(
+    'offers saved-output previews for a usable %j output',
+    (output) => {
+      renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          evaluationId="eval-fixture"
+          output={{ ...defaultProps.output, response: { output } }}
+        />,
+      );
+      expect(screen.getByRole('button', { name: 'Check saved output' })).toBeInTheDocument();
+    },
+  );
 
   it('hides saved-output previews in a hosted viewer', () => {
     hosting.local = false;

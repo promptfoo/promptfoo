@@ -5,7 +5,7 @@ import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
-import EvalResult from '../../models/evalResult';
+import EvalResult, { getStripFlags } from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
@@ -709,12 +709,17 @@ evalRouter.post(
       return;
     }
     try {
+      const config = await EvalQueries.getConfig(params.data.evalId);
       const result = await EvalResult.findById(params.data.id);
-      if (!result || result.evalId !== params.data.evalId) {
+      if (!config || !result || result.evalId !== params.data.evalId) {
         res.status(404).json({ error: 'Evaluation result not found' });
         return;
       }
-      if (result.response?.output == null || result.response.error) {
+      if (
+        getStripFlags(config.env).shouldStripResponseOutput ||
+        result.response?.output == null ||
+        result.response.error
+      ) {
         res.status(400).json({ error: 'This result has no saved output to check' });
         return;
       }

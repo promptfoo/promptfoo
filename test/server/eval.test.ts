@@ -12,6 +12,7 @@ import { createApp } from '../../src/server/server';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
@@ -213,6 +214,37 @@ describe('eval routes', () => {
         const before = await snapshot(evaluation.id);
         expect((await api.post(url).send({ assertion: { type: 'is-json' } })).status).toBe(400);
         expect(await snapshot(evaluation.id)).toEqual(before);
+      },
+    );
+
+    it.each([
+      { savedFlag: 'true', processFlag: 'false', expectedStatus: 400 },
+      { savedFlag: undefined, processFlag: 'true', expectedStatus: 400 },
+      { savedFlag: 'false', processFlag: 'true', expectedStatus: 200 },
+    ])(
+      'honors output stripping with saved=$savedFlag and process=$processFlag',
+      async ({ savedFlag, processFlag, expectedStatus }) => {
+        const { evaluation, result, url } = await fixture();
+        evaluation.config.env =
+          savedFlag === undefined ? {} : { PROMPTFOO_STRIP_RESPONSE_OUTPUT: savedFlag };
+        await evaluation.save();
+        const before = await snapshot(evaluation.id);
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: processFlag });
+        try {
+          const response = await api
+            .post(url)
+            .send({ assertion: { type: 'equals', value: 'Different fixture output' } });
+          expect(response.status).toBe(expectedStatus);
+          if (expectedStatus === 400) {
+            expect(response.body).toEqual({ error: 'This result has no saved output to check' });
+            expect(JSON.stringify(response.body)).not.toContain(String(result.response!.output));
+          } else {
+            expect(response.body).toMatchObject({ pass: false, score: 0 });
+          }
+          expect(await snapshot(evaluation.id)).toEqual(before);
+        } finally {
+          restoreEnv();
+        }
       },
     );
 
