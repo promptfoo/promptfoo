@@ -151,3 +151,9 @@ ls examples/myprovider/promptfooconfig.yaml
 ```
 
 **Reference existing providers** - 50+ implementations to learn from.
+
+## Gemini maintenance
+
+AI Studio and Vertex share `google/gemini.ts` for request construction, streamed-content parsing, and token accounting. The provider classes own authentication, transport, caching, pricing, and final response fields. Cover shared request and parser changes in `test/providers/google/geminiPipeline.test.ts`.
+
+Preserve each provider's request field order, response-schema handling, system-instruction names, and unknown-usage and error contracts. Vertex also keeps its context/examples and Model Armor fields. Its non-Gemini paths stay separate.
