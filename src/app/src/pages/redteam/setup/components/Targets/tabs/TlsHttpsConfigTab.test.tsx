@@ -37,6 +37,60 @@ describe('TlsHttpsConfigTab', () => {
     vi.resetAllMocks();
   });
 
+  it.each(['ca', 'cert', 'key'] as const)(
+    'preserves imported %s array entries when editing',
+    async (field) => {
+      const original = ['FIRST_PEM_ENTRY', 'SECOND_PEM_ENTRY'];
+      function EditableTarget() {
+        const [target, setTarget] = React.useState<HttpProviderOptions>({
+          id: 'http',
+          config: { tls: { [field]: original } },
+        });
+        return (
+          <>
+            <TlsHttpsConfigTab
+              selectedTarget={target}
+              updateCustomTarget={(key, value) =>
+                setTarget((previous) => ({
+                  ...previous,
+                  config: { ...previous.config, [key]: value },
+                }))
+              }
+            />
+            <output data-testid="tls-state">{JSON.stringify(target.config?.tls)}</output>
+          </>
+        );
+      }
+      const user = userEvent.setup();
+      renderWithProviders(<EditableTarget />);
+      const first = screen.getByDisplayValue(original[0]);
+      expect(screen.getByDisplayValue(original[1])).toBeInTheDocument();
+      await user.clear(first);
+      await user.type(first, 'EDITED_PEM_ENTRY');
+      expect(JSON.parse(screen.getByTestId('tls-state').textContent!)[field]).toEqual([
+        'EDITED_PEM_ENTRY',
+        original[1],
+      ]);
+      expect(original).toEqual(['FIRST_PEM_ENTRY', 'SECOND_PEM_ENTRY']);
+    },
+  );
+
+  it('restores inherited verification without clearing credentials', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <TlsHttpsConfigTab
+        selectedTarget={{ id: 'http', config: { tls: { rejectUnauthorized: false, ca: 'CA' } } }}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+    await user.click(screen.getByRole('combobox', { name: /Server certificate verification/i }));
+    await user.click(screen.getByRole('option', { name: 'Use default' }));
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('tls', {
+      rejectUnauthorized: undefined,
+      ca: 'CA',
+    });
+  });
+
   describe('Server Certificate Verification', () => {
     it.each(['caPath', 'certPath', 'keyPath', 'jksPath', 'pfxPath'] as const)(
       'keeps the imported %s editor while clearing and replacing its value',
@@ -70,7 +124,7 @@ describe('TlsHttpsConfigTab', () => {
       },
     );
 
-    it('should show the verification switch by default without any TLS config', () => {
+    it('shows verification settings without any TLS config', () => {
       const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
         config: {},
@@ -84,11 +138,11 @@ describe('TlsHttpsConfigTab', () => {
       );
 
       expect(
-        screen.getByRole('switch', { name: /Verify server certificate/i }),
+        screen.getByRole('combobox', { name: /Server certificate verification/i }),
       ).toBeInTheDocument();
     });
 
-    it('should default to verification enabled (checked)', () => {
+    it('leaves absent TLS settings unchanged on mount', () => {
       const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
         config: {},
@@ -101,9 +155,11 @@ describe('TlsHttpsConfigTab', () => {
         />,
       );
 
-      const verifySwitch = screen.getByRole('switch', { name: /Verify server certificate/i });
-      expect(verifySwitch).toBeChecked();
-      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('tls', { rejectUnauthorized: true });
+      const verifySwitch = screen.getByRole('combobox', {
+        name: /Server certificate verification/i,
+      });
+      expect(verifySwitch).toHaveTextContent('Use default');
+      expect(mockUpdateCustomTarget).not.toHaveBeenCalled();
     });
 
     it('should set rejectUnauthorized: false when verification is toggled off', async () => {
@@ -120,8 +176,11 @@ describe('TlsHttpsConfigTab', () => {
         />,
       );
 
-      const verifySwitch = screen.getByRole('switch', { name: /Verify server certificate/i });
+      const verifySwitch = screen.getByRole('combobox', {
+        name: /Server certificate verification/i,
+      });
       await user.click(verifySwitch);
+      await user.click(screen.getByRole('option', { name: 'Skip verification' }));
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('tls', {
         rejectUnauthorized: false,
@@ -146,8 +205,11 @@ describe('TlsHttpsConfigTab', () => {
         />,
       );
 
-      const verifySwitch = screen.getByRole('switch', { name: /Verify server certificate/i });
+      const verifySwitch = screen.getByRole('combobox', {
+        name: /Server certificate verification/i,
+      });
       await user.click(verifySwitch);
+      await user.click(screen.getByRole('option', { name: 'Verify certificate' }));
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('tls', {
         rejectUnauthorized: true,
@@ -175,8 +237,11 @@ describe('TlsHttpsConfigTab', () => {
         />,
       );
 
-      const verifySwitch = screen.getByRole('switch', { name: /Verify server certificate/i });
+      const verifySwitch = screen.getByRole('combobox', {
+        name: /Server certificate verification/i,
+      });
       await user.click(verifySwitch);
+      await user.click(screen.getByRole('option', { name: 'Skip verification' }));
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith('tls', {
         ca: 'my-ca-cert',
@@ -761,7 +826,7 @@ describe('TlsHttpsConfigTab', () => {
       );
 
       // Client cert section auto-opens because certificateType is 'pem'
-      const certTypeSelect = screen.getByRole('combobox');
+      const certTypeSelect = screen.getByRole('combobox', { name: 'Certificate Type' });
       await user.click(certTypeSelect);
       await user.click(screen.getByRole('option', { name: 'No Client Certificate' }));
 
@@ -797,7 +862,7 @@ describe('TlsHttpsConfigTab', () => {
         />,
       );
 
-      await user.click(screen.getByRole('combobox'));
+      await user.click(screen.getByRole('combobox', { name: 'Certificate Type' }));
       await user.click(screen.getByRole('option', { name: 'No Client Certificate' }));
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
@@ -835,7 +900,7 @@ describe('TlsHttpsConfigTab', () => {
         />,
       );
 
-      await user.click(screen.getByRole('combobox'));
+      await user.click(screen.getByRole('combobox', { name: 'Certificate Type' }));
       await user.click(screen.getByRole('option', { name: 'JKS (Java KeyStore)' }));
 
       expect(mockUpdateCustomTarget).toHaveBeenCalledWith(

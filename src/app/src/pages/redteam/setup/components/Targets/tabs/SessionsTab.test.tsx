@@ -524,7 +524,7 @@ describe('SessionsTab', () => {
 
       const [, options] = vi.mocked(callApi).mock.calls[0];
       const request = JSON.parse(options!.body as string);
-      expect(request.provider.config.tls).toEqual({ rejectUnauthorized: true });
+      expect(request.provider.config.tls).toBeUndefined();
       expect(request.sessionConfig.sessionSource).toBe('server');
       expect(tls.jksContent).toBe('old-upload');
     });

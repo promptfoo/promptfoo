@@ -84,6 +84,19 @@ describe('HttpProvider with TLS Configuration', () => {
   });
 
   describe('TLS certificate configuration', () => {
+    it('reports missing request configuration without serializing TLS credentials', () => {
+      expect(
+        () =>
+          new HttpProvider('https://fixture.example.test', {
+            config: { tls: { jksContent: 'inert-keystore', passphrase: 'inert-passphrase' } },
+          }),
+      ).toThrow(
+        new Error(
+          'Invariant failed: Expected HTTP provider https://fixture.example.test to have a config containing {body}',
+        ),
+      );
+    });
+
     it('should preserve JKS TLS fields during configuration validation', () => {
       const config = HttpProviderConfigSchema.parse({
         tls: {
@@ -137,6 +150,60 @@ describe('HttpProvider with TLS Configuration', () => {
         const options = mockFetchWithCache.mock.calls[0][1];
         expect(options).toHaveProperty('rejectUnauthorized', rejectUnauthorized);
         expect(options).not.toHaveProperty('dispatcher');
+      },
+    );
+
+    it.each([{}, { caPath: '', certPath: '', keyPath: '', servername: '', passphrase: '' }])(
+      'uses shared transport after all custom TLS values are cleared: %j',
+      async (tls) => {
+        const { Agent } = await import('undici');
+        const provider = new HttpProvider('https://api.example.com', {
+          config: { method: 'GET', tls },
+        });
+        await provider.callApi('Hello');
+        expect(Agent).not.toHaveBeenCalled();
+        expect(mockFetchWithCache.mock.calls[0][1]).not.toHaveProperty('dispatcher');
+      },
+    );
+
+    it.each([undefined, 'client'])(
+      'selects a client identity after trusted CA entries (alias %s)',
+      async (keyAlias) => {
+        const jks = vi.mocked(await import('jks-js'));
+        jks.toPem.mockReturnValue({
+          ca: { cert: 'CA_ONLY' },
+          client: { cert: 'CLIENT_CERT', key: 'CLIENT_KEY' },
+        });
+        const provider = new HttpProvider('https://api.example.com', {
+          config: {
+            method: 'GET',
+            tls: { jksContent: 'Zml4dHVyZQ==', passphrase: 'fixture', keyAlias },
+          },
+        });
+        const result = await provider.callApi('Hello');
+        expect(result.error).toBeUndefined();
+        expect(mockFetchWithCache.mock.calls[0][1]).toMatchObject({
+          dispatcher: { options: { connect: { cert: 'CLIENT_CERT', key: 'CLIENT_KEY' } } },
+        });
+      },
+    );
+
+    it.each(['ca', 'missing'])(
+      'does not silently replace an explicit unusable JKS alias %s',
+      async (keyAlias) => {
+        const jks = vi.mocked(await import('jks-js'));
+        jks.toPem.mockReturnValue({
+          ca: { cert: 'CA_ONLY' },
+          client: { cert: 'CLIENT_CERT', key: 'CLIENT_KEY' },
+        });
+        const provider = new HttpProvider('https://api.example.com', {
+          config: {
+            method: 'GET',
+            tls: { jksContent: 'Zml4dHVyZQ==', passphrase: 'fixture', keyAlias },
+          },
+        });
+        await expect(provider.callApi('Hello')).rejects.toThrow('Failed to load JKS certificate');
+        expect(mockFetchWithCache).not.toHaveBeenCalled();
       },
     );
 

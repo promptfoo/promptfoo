@@ -132,6 +132,15 @@ describe('getRiskCategorySeverityMap', () => {
 });
 
 describe('getTargetForExecution', () => {
+  it('removes cleared form values without creating a verification override', () => {
+    const provider = {
+      id: 'http',
+      config: { tls: { caPath: '', certPath: '', keyPath: '', caInputType: 'path' } },
+    };
+    expect(getTargetForExecution(provider)).toEqual({ id: 'http', config: {} });
+    expect(provider.config.tls.caPath).toBe('');
+  });
+
   it('preserves provider options while removing TLS form fields', () => {
     const provider = {
       id: 'openai:chatkit',
@@ -490,7 +499,7 @@ describe('getUnifiedConfig', () => {
       expect(tls.jksPath).toBe('/path/to/keystore.jks');
     });
 
-    it('preserves the secure TLS default after stripping UI fields', () => {
+    it('leaves transport defaults unchanged after stripping UI fields', () => {
       const configWithTls: SavedRedteamConfig = {
         ...baseConfig,
         target: {
@@ -508,16 +517,16 @@ describe('getUnifiedConfig', () => {
 
       const result = getUnifiedConfig(configWithTls);
 
-      expect(getFirstTargetConfig(result).tls).toEqual({ rejectUnauthorized: true });
+      expect(getFirstTargetConfig(result).tls).toBeUndefined();
     });
 
-    it('preserves verification for an imported empty TLS block before visiting the form', () => {
+    it('omits an empty TLS block before visiting the form', () => {
       const result = getUnifiedConfig({
         ...baseConfig,
         target: { ...baseConfig.target, config: { tls: {} } },
       });
 
-      expect(getFirstTargetConfig(result).tls).toEqual({ rejectUnauthorized: true });
+      expect(getFirstTargetConfig(result).tls).toBeUndefined();
     });
 
     it('preserves explicit certificate verification without other TLS fields', () => {

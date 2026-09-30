@@ -1652,7 +1652,11 @@ async function createHttpsAgent(
         throw new Error('No certificates found in JKS file');
       }
 
-      const targetAlias = tlsConfig.keyAlias || aliases[0];
+      const targetAlias =
+        tlsConfig.keyAlias || aliases.find((alias) => keystore[alias].cert && keystore[alias].key);
+      if (!targetAlias) {
+        throw new Error('No client certificate and private key pair found in JKS file');
+      }
       const entry = keystore[targetAlias];
 
       if (!entry) {
@@ -1825,9 +1829,7 @@ export class HttpProvider implements ApiProvider {
     } else {
       invariant(
         this.config.body || this.config.multipart || this.config.method === 'GET',
-        `Expected HTTP provider ${this.url} to have a config containing {body}, but instead got ${safeJsonStringify(
-          this.config,
-        )}`,
+        `Expected HTTP provider ${this.url} to have a config containing {body}`,
       );
     }
 
@@ -2349,9 +2351,8 @@ export class HttpProvider implements ApiProvider {
     }
 
     if (
-      this.config.tls.rejectUnauthorized !== undefined &&
       Object.entries(this.config.tls).every(
-        ([key, value]) => key === 'rejectUnauthorized' || value === undefined,
+        ([key, value]) => key === 'rejectUnauthorized' || value === undefined || value === '',
       )
     ) {
       return undefined;

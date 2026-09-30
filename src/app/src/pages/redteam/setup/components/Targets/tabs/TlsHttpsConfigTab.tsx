@@ -11,7 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@app/components/ui/select';
-import { Switch } from '@app/components/ui/switch';
 import { Textarea } from '@app/components/ui/textarea';
 import { useToast } from '@app/hooks/useToast';
 import {
@@ -37,6 +36,41 @@ interface TlsHttpsConfigTabProps {
 }
 
 type TlsConfig = NonNullable<NonNullable<HttpProviderOptions['config']>['tls']>;
+
+function PemInput({
+  label,
+  value,
+  placeholder,
+  onChange,
+}: {
+  label: string;
+  value: string | string[] | undefined;
+  placeholder: string;
+  onChange: (value: string | string[]) => void;
+}) {
+  const entries = Array.isArray(value) ? (value.length ? value : ['']) : [value ?? ''];
+  return (
+    <div className="space-y-2">
+      {entries.map((entry, index) => (
+        <Textarea
+          // Entries retain their position while their contents are edited.
+          key={index}
+          rows={4}
+          aria-label={Array.isArray(value) ? `${label} ${index + 1}` : label}
+          placeholder={placeholder}
+          value={entry}
+          onChange={(event) =>
+            onChange(
+              Array.isArray(value)
+                ? entries.map((previous, i) => (i === index ? event.target.value : previous))
+                : event.target.value,
+            )
+          }
+        />
+      ))}
+    </div>
+  );
+}
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -110,8 +144,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
 
   useEffect(() => {
     // Keep inferred selections when an imported certificate value is cleared for editing.
-    const defaults = {
-      rejectUnauthorized: tls?.rejectUnauthorized ?? true,
+    const defaults: Partial<TlsConfig> = {
       ...(certificateType && { certificateType }),
       ...(caInputType && { caInputType }),
       ...(certInputType && { certInputType }),
@@ -119,7 +152,9 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
       ...(jksInputType && { jksInputType }),
       ...(pfxInputType && { pfxInputType }),
     };
-    if (Object.entries(defaults).some(([key, value]) => tls?.[key] !== value)) {
+    if (
+      (Object.keys(defaults) as (keyof TlsConfig)[]).some((key) => tls?.[key] !== defaults[key])
+    ) {
       updateCustomTarget('tls', { ...tls, ...defaults });
     }
   }, [
@@ -187,21 +222,29 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
       </p>
 
       <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Switch
-            id="reject-unauthorized"
-            checked={tls?.rejectUnauthorized !== false}
-            onCheckedChange={(checked) =>
-              updateCustomTarget('tls', {
-                ...tls,
-                rejectUnauthorized: checked,
-              })
-            }
-          />
-          <Label htmlFor="reject-unauthorized">Verify server certificate</Label>
-        </div>
+        <Label htmlFor="reject-unauthorized">Server certificate verification</Label>
+        <Select
+          value={tls?.rejectUnauthorized === undefined ? 'default' : String(tls.rejectUnauthorized)}
+          onValueChange={(value) =>
+            updateCustomTarget('tls', {
+              ...tls,
+              rejectUnauthorized: value === 'default' ? undefined : value === 'true',
+            })
+          }
+        >
+          <SelectTrigger id="reject-unauthorized" className="w-full max-w-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="default">Use default</SelectItem>
+            <SelectItem value="true">Verify certificate</SelectItem>
+            <SelectItem value="false">Skip verification</SelectItem>
+          </SelectContent>
+        </Select>
         <p className="text-sm text-muted-foreground">
-          For a private CA, keep verification enabled and add its certificate below.
+          Custom TLS credentials enable verification by default. Without custom TLS settings, the
+          server's transport settings apply. For a private CA, verify certificates and add its CA
+          below.
         </p>
         {tls?.rejectUnauthorized === false && (
           <Alert variant="warning">
@@ -315,14 +358,14 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
             )}
 
             {caInputType === 'inline' && (
-              <Textarea
-                rows={4}
+              <PemInput
+                label="CA certificate"
                 placeholder="-----BEGIN CERTIFICATE-----&#10;...CA certificate content...&#10;-----END CERTIFICATE-----"
-                value={tls?.ca || ''}
-                onChange={(e) =>
+                value={tls?.ca}
+                onChange={(value) =>
                   updateCustomTarget('tls', {
                     ...tls,
-                    ca: e.target.value,
+                    ca: value,
                     caPath: undefined,
                   })
                 }
@@ -339,12 +382,12 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
         >
           <div className="mt-2 space-y-4">
             <div className="space-y-2">
-              <Label>Certificate Type</Label>
+              <Label htmlFor="tls-certificate-type">Certificate Type</Label>
               <Select
                 value={certificateType || 'none'}
                 onValueChange={(value) => updateCustomTarget('tls', setCertificateType(tls, value))}
               >
-                <SelectTrigger>
+                <SelectTrigger id="tls-certificate-type">
                   <SelectValue placeholder="Select certificate type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -457,14 +500,14 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                   )}
 
                   {certInputType === 'inline' && (
-                    <Textarea
-                      rows={4}
+                    <PemInput
+                      label="Client certificate"
                       placeholder="-----BEGIN CERTIFICATE-----&#10;...certificate content...&#10;-----END CERTIFICATE-----"
-                      value={tls?.cert || ''}
-                      onChange={(e) =>
+                      value={tls?.cert}
+                      onChange={(value) =>
                         updateCustomTarget('tls', {
                           ...tls,
-                          cert: e.target.value,
+                          cert: value,
                           certPath: undefined,
                         })
                       }
@@ -572,14 +615,14 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                   )}
 
                   {keyInputType === 'inline' && (
-                    <Textarea
-                      rows={4}
+                    <PemInput
+                      label="Private key"
                       placeholder="-----BEGIN PRIVATE KEY-----&#10;...key content...&#10;-----END PRIVATE KEY-----"
-                      value={tls?.key || ''}
-                      onChange={(e) =>
+                      value={tls?.key}
+                      onChange={(value) =>
                         updateCustomTarget('tls', {
                           ...tls,
-                          key: e.target.value,
+                          key: value,
                           keyPath: undefined,
                         })
                       }

@@ -246,7 +246,7 @@ describe('Purpose Component', () => {
       const [, options] = vi
         .mocked(callApi)
         .mock.calls.find(([url]) => url === '/providers/discover')!;
-      expect(JSON.parse(options!.body as string).config.tls).toEqual({ rejectUnauthorized: true });
+      expect(JSON.parse(options!.body as string).config.tls).toBeUndefined();
       expect(tls.jksContent).toBe('old-upload');
     });
 

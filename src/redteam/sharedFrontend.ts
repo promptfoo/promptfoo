@@ -40,10 +40,7 @@ export function getTargetForExecution(provider: ProviderOptions): ProviderOption
 
   // Keep certificate data while removing the setup form's input state.
   if (target.config.tls) {
-    const tls = {
-      ...target.config.tls,
-      rejectUnauthorized: target.config.tls.rejectUnauthorized ?? true,
-    };
+    const tls = { ...target.config.tls };
     if (tls.certificateType !== undefined && tls.certificateType !== 'jks') {
       delete tls.jksContent;
       delete tls.jksPath;
@@ -59,7 +56,16 @@ export function getTargetForExecution(provider: ProviderOptions): ProviderOption
     delete tls.jksExtractConfigured;
     delete tls.certificateType;
 
-    target.config.tls = tls;
+    for (const key of Object.keys(tls)) {
+      if (tls[key] === '' || tls[key] === undefined) {
+        delete tls[key];
+      }
+    }
+    if (Object.keys(tls).length) {
+      target.config.tls = tls;
+    } else {
+      delete target.config.tls;
+    }
   }
 
   return target;

@@ -629,9 +629,7 @@ describe('TestCaseGenerationProvider', () => {
       );
 
       const [, options] = callApiMock.mock.calls.find(([path]) => path === '/providers/test')!;
-      expect(JSON.parse(options!.body as string).providerOptions.config.tls).toEqual({
-        rejectUnauthorized: true,
-      });
+      expect(JSON.parse(options!.body as string).providerOptions.config.tls).toBeUndefined();
       expect(tls.jksContent).toBe('old-upload');
     });
 

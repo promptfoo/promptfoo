@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { mockCallApiRoutes, resetCallApiMock } from '@app/tests/apiMocks';
 import { callApi } from '@app/utils/api';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -57,13 +58,17 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
     mockSetBodyError = vi.fn();
     mockSetUrlError = vi.fn();
     vi.clearAllMocks();
+    resetCallApiMock();
   });
 
   it('removes deselected saved JKS credentials before the target preview', async () => {
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ testResult: { success: true, message: 'Hello' } }),
-    } as Response);
+    mockCallApiRoutes([
+      {
+        path: '/providers/test',
+        method: 'POST',
+        response: { testResult: { success: true, message: 'Hello' } },
+      },
+    ]);
     const tls = {
       certificateType: 'none',
       jksContent: 'old-upload',
@@ -86,9 +91,7 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Test Target' }));
 
     const [, options] = vi.mocked(callApi).mock.calls.find(([url]) => url === '/providers/test')!;
-    expect(JSON.parse(options!.body as string).providerOptions.config.tls).toEqual({
-      rejectUnauthorized: true,
-    });
+    expect(JSON.parse(options!.body as string).providerOptions.config.tls).toBeUndefined();
     expect(tls.jksContent).toBe('old-upload');
   });
 
@@ -379,6 +382,7 @@ describe('HttpEndpointConfiguration - Header Management', () => {
     mockSetBodyError = vi.fn();
     mockSetUrlError = vi.fn();
     vi.clearAllMocks();
+    resetCallApiMock();
   });
 
   it('should add a new header row with visible Name and Value fields when the Add Header button is clicked', async () => {
