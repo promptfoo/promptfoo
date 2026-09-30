@@ -9,6 +9,7 @@ import { KeyvFile } from 'keyv-file';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
 import { getRequestTimeoutMs } from './providers/shared';
+import { registerCacheOperationScope } from './util/cacheOperationScope';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
 import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
@@ -30,7 +31,12 @@ import type { FetchOptions } from './util/fetch/types';
 
 let cacheInstance: Cache | undefined;
 const namespacedCacheInstances = new Map<string, Cache>();
+const namespacedCacheClearGenerations = new Map<string, number>();
+const activeNamespacedCacheClears = new Map<string, number>();
 let cacheClearGeneration = 0;
+let cacheOperationClearGeneration = 0;
+let globalCacheClearGeneration = 0;
+let activeGlobalCacheClears = 0;
 
 const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
 const cacheEnabledStorage = new AsyncLocalStorage<{ enabled: boolean }>();
@@ -116,10 +122,22 @@ function getCacheInstance() {
     });
     const clear = cacheInstance.clear.bind(cacheInstance);
     cacheInstance.clear = async () => {
-      const result = await clear();
-      cacheClearGeneration += 1;
-      return result;
+      const finishClear = startCacheOperationClear();
+      try {
+        const result = await clear();
+        cacheClearGeneration += 1;
+        return result;
+      } finally {
+        finishClear();
+      }
     };
+    registerCacheOperationScope(
+      cacheInstance,
+      cacheInstance,
+      (key) => key,
+      getCacheKeyClearGeneration,
+      isCacheKeyClearing,
+    );
   }
   return cacheInstance;
 }
@@ -164,8 +182,83 @@ function getNamespacedCache(namespace: string) {
       ),
   } as Cache;
 
+  registerCacheOperationScope(
+    namespacedCache,
+    cache,
+    (key) => getScopedCacheKey(key, namespace),
+    (key) => getCacheKeyClearGeneration(getScopedCacheKey(key, namespace)),
+    (key) => isCacheKeyClearing(getScopedCacheKey(key, namespace)),
+  );
   namespacedCacheInstances.set(namespace, namespacedCache);
   return namespacedCache;
+}
+
+// In-flight operations are invalidated both when storage starts clearing and when it settles.
+// Keep each active clear visible to operations submitted between those two points.
+function startCacheOperationClear(namespace?: string) {
+  if (namespace === undefined) {
+    activeGlobalCacheClears++;
+  } else {
+    activeNamespacedCacheClears.set(
+      namespace,
+      (activeNamespacedCacheClears.get(namespace) ?? 0) + 1,
+    );
+  }
+  markCacheOperationClear(namespace);
+  return () => {
+    if (namespace === undefined) {
+      activeGlobalCacheClears--;
+    } else {
+      const remaining = (activeNamespacedCacheClears.get(namespace) ?? 1) - 1;
+      if (remaining) {
+        activeNamespacedCacheClears.set(namespace, remaining);
+      } else {
+        activeNamespacedCacheClears.delete(namespace);
+      }
+    }
+    markCacheOperationClear(namespace);
+  };
+}
+
+function markCacheOperationClear(namespace?: string) {
+  cacheOperationClearGeneration += 1;
+  if (namespace === undefined) {
+    globalCacheClearGeneration = cacheOperationClearGeneration;
+    namespacedCacheClearGenerations.clear();
+  } else {
+    namespacedCacheClearGenerations.set(namespace, cacheOperationClearGeneration);
+  }
+}
+
+function getCacheKeyClearGeneration(key: string) {
+  let generation = globalCacheClearGeneration;
+  for (
+    let separator = key.indexOf(':');
+    separator !== -1;
+    separator = key.indexOf(':', separator + 1)
+  ) {
+    generation = Math.max(
+      generation,
+      namespacedCacheClearGenerations.get(key.slice(0, separator)) ?? 0,
+    );
+  }
+  return generation;
+}
+
+function isCacheKeyClearing(key: string) {
+  if (activeGlobalCacheClears) {
+    return true;
+  }
+  for (
+    let separator = key.indexOf(':');
+    separator !== -1;
+    separator = key.indexOf(':', separator + 1)
+  ) {
+    if (activeNamespacedCacheClears.has(key.slice(0, separator))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function getCurrentCacheNamespace() {
@@ -201,39 +294,44 @@ function getUnscopedCacheKey(cacheKey: string, namespace: string) {
 async function clearNamespacedCache(cache: Cache, namespace: string) {
   const namespacePrefix = `${namespace}:`;
 
-  for (const store of cache.stores) {
-    if (!store.iterator) {
-      throw new Error(
-        `[Cache] Cannot clear namespace ${namespace} because a cache store does not support key iteration.`,
-      );
-    }
+  const finishClear = startCacheOperationClear(namespace);
+  try {
+    for (const store of cache.stores) {
+      if (!store.iterator) {
+        throw new Error(
+          `[Cache] Cannot clear namespace ${namespace} because a cache store does not support key iteration.`,
+        );
+      }
 
-    const keysToDelete: string[] = [];
-    for await (const [key] of store.iterator(undefined)) {
-      if (typeof key === 'string' && key.startsWith(namespacePrefix)) {
-        keysToDelete.push(key);
+      const keysToDelete: string[] = [];
+      for await (const [key] of store.iterator(undefined)) {
+        if (typeof key === 'string' && key.startsWith(namespacePrefix)) {
+          keysToDelete.push(key);
+        }
+      }
+
+      if (keysToDelete.length === 0) {
+        continue;
+      }
+
+      try {
+        if (store.deleteMany) {
+          await store.deleteMany(keysToDelete);
+        } else {
+          await Promise.all(keysToDelete.map((key) => store.delete(key)));
+        }
+      } catch (err) {
+        throw new Error(
+          `[Cache] Failed to clear ${keysToDelete.length} keys for namespace "${namespace}": ${(err as Error).message}`,
+        );
       }
     }
 
-    if (keysToDelete.length === 0) {
-      continue;
-    }
-
-    try {
-      if (store.deleteMany) {
-        await store.deleteMany(keysToDelete);
-      } else {
-        await Promise.all(keysToDelete.map((key) => store.delete(key)));
-      }
-    } catch (err) {
-      throw new Error(
-        `[Cache] Failed to clear ${keysToDelete.length} keys for namespace "${namespace}": ${(err as Error).message}`,
-      );
-    }
+    cacheClearGeneration += 1;
+    return true;
+  } finally {
+    finishClear();
   }
-
-  cacheClearGeneration += 1;
-  return true;
 }
 
 /**

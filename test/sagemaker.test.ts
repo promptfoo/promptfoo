@@ -8,6 +8,8 @@ import { mockProcessEnv } from './util/utils';
 
 import type { LoadApiProviderContext } from '../src/types/index';
 
+vi.mock('../src/telemetry', () => ({ default: { record: vi.fn() } }));
+
 // Mock the transform utility
 vi.mock('../src/util/transform', () => ({
   transform: vi.fn().mockImplementation((transformPath, input) => {
@@ -137,6 +139,15 @@ vi.mock('@aws-sdk/client-sagemaker-runtime', () => ({
   SageMakerRuntimeClient: MockSageMakerRuntimeClient,
   InvokeEndpointCommand: MockInvokeEndpointCommand,
 }));
+
+vi.mock('@smithy/core/config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@smithy/core/config')>();
+  return {
+    ...actual,
+    // Keep the mocked SDK fixture from resolving auto defaults through IMDS.
+    resolveDefaultsModeConfig: () => async () => 'legacy' as const,
+  };
+});
 
 // Mock the sleep function
 vi.mock('../src/util/time', async (importOriginal) => {
