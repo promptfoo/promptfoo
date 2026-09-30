@@ -107,6 +107,7 @@ export const COVERAGE_RATCHET_REPORTS: CoverageReportConfig[] = [
     criticalFiles: [
       'src/evaluator.ts',
       'src/evaluator/engine.ts',
+      'src/progress/evaluationProgress.ts',
       'src/evaluatorHelpers.ts',
       'src/prompts.ts',
     ],
