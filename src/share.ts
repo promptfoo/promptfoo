@@ -762,12 +762,13 @@ async function prepareChunkForShare(
 
   if (remoteBlobUploadCache) {
     for (const [index, result] of remappedChunk.entries()) {
-      recordResultBlobRefsForShare(chunkToSend[index], remoteBlobUploadCache, {
-        localEvalId,
-        remoteEvalId,
-        promptIdx: result.promptIdx,
-        testIdx: result.testIdx,
-      });
+      // Keep row ownership after inlining, but transfer only unresolved result references.
+      recordResultBlobRefsForShare(
+        result,
+        remoteBlobUploadCache,
+        { localEvalId, remoteEvalId, promptIdx: result.promptIdx, testIdx: result.testIdx },
+        chunkToSend[index],
+      );
     }
   }
 

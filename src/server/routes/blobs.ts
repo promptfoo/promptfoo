@@ -71,13 +71,9 @@ blobsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
   const { context } = bodyResult.data;
   const { evalId } = context;
 
-  // Blobs are served back from this server's own origin, so a client-supplied MIME like
-  // text/html or image/svg+xml would be a stored-XSS vector. Persist only a media allowlist;
-  // everything else is downgraded to application/octet-stream (same gate as portable imports).
+  // These bytes share the viewer's origin; use the import MIME allowlist before storage.
   const mimeType = sanitizeBlobMimeType(bodyResult.data.mimeType);
-  // Derive kind from the sanitized MIME rather than trusting the client: the media-library
-  // response only permits image/video/audio/other, so a client kind like "application" (from a
-  // non-media MIME prefix) would otherwise fail response validation and 500 the listing.
+  // Derive kind from the sanitized MIME so media-library responses stay valid.
   const refContext = { ...context, kindFromMimeType: getKindFromMimeType };
   try {
     const db = await getDb();
