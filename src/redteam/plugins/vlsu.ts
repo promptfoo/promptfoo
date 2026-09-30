@@ -21,6 +21,41 @@ const VLSU_CSV_URL = 'https://raw.githubusercontent.com/apple/ml-vlsu/main/data/
 const DEFAULT_MAX_CONCURRENCY = 5;
 
 /**
+ * Resolve how many images to fetch at once from the loosely-typed plugin config.
+ *
+ * Unlike the top-level `redteam.maxConcurrency` (validated with `z.int().positive()`),
+ * this plugin-level option reaches us unvalidated, so it can be 0, negative, fractional,
+ * or not a number at all. A non-positive value makes the batching loop in
+ * `processRecordsWithImages` advance by zero (or backwards), spinning forever instead of
+ * generating tests, so the loop step is always clamped to at least 1.
+ */
+export function resolveImageFetchConcurrency(config?: { maxConcurrency?: number }): number {
+  const raw = config?.maxConcurrency;
+
+  if (raw === undefined || raw === null) {
+    return DEFAULT_MAX_CONCURRENCY;
+  }
+
+  const n = Number(raw);
+
+  if (!Number.isFinite(n)) {
+    logger.warn(
+      `[vlsu] Invalid maxConcurrency: ${String(raw)}. Using default of ${DEFAULT_MAX_CONCURRENCY}.`,
+    );
+    return DEFAULT_MAX_CONCURRENCY;
+  }
+
+  const step = Math.floor(n);
+
+  if (step < 1) {
+    logger.warn(`[vlsu] maxConcurrency must be a positive integer, got ${String(raw)}. Using 1.`);
+    return 1;
+  }
+
+  return step;
+}
+
+/**
  * Safety grades in the VLSU dataset
  */
 export type VLSUGrade = 'safe' | 'unsafe' | 'borderline' | 'not_sure';
@@ -326,7 +361,7 @@ export class VLSUDatasetManager extends ImageDatasetManager<VLSUInput> {
     records: VLSURawRecord[],
     config?: VLSUPluginConfig,
   ): Promise<VLSUInput[]> {
-    const concurrency = config?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
+    const concurrency = resolveImageFetchConcurrency(config);
     const skipBroken = config?.skipBrokenImages ?? true;
 
     const results: VLSUInput[] = [];

@@ -4,6 +4,7 @@ import logger from '../../../src/logger';
 import * as imageDatasetUtils from '../../../src/redteam/plugins/imageDatasetUtils';
 import {
   CATEGORY_NAMES,
+  resolveImageFetchConcurrency,
   VALID_GRADES,
   VLSU_CATEGORIES,
   VLSUDatasetManager,
@@ -410,6 +411,39 @@ describe('VLSUPlugin', () => {
       );
     });
 
+    it('should use the configured maxConcurrency as the image-fetch batch size', async () => {
+      const mockRecords = [
+        createMockCSVRecord({ prompt: 'Test prompt 1' }),
+        createMockCSVRecord({ prompt: 'Test prompt 2' }),
+        createMockCSVRecord({ prompt: 'Test prompt 3' }),
+      ];
+
+      mockFetchWithCache.mockResolvedValue({
+        status: 200,
+        data: createMockCSVText(mockRecords),
+        cached: false,
+        statusText: 'OK',
+      } as any);
+
+      // Track the high-water mark of in-flight image fetches so we can assert the
+      // batching loop really steps by the configured value (and not the default of 5).
+      let inFlight = 0;
+      let maxInFlight = 0;
+      mockFetchImageAsBase64.mockImplementation(async () => {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await Promise.resolve();
+        inFlight--;
+        return 'data:image/jpeg;base64,test';
+      });
+
+      const plugin = new VLSUPlugin(mockProvider, 'test purpose', 'image', { maxConcurrency: 1 });
+      const tests = await plugin.generateTests(3);
+
+      expect(tests).toHaveLength(3);
+      expect(maxInFlight).toBe(1);
+    });
+
     it('should include prompt as separate variable by default', async () => {
       const mockRecords = [createMockCSVRecord({ prompt: 'Test multimodal prompt' })];
 
@@ -490,6 +524,62 @@ describe('VLSUPlugin', () => {
       expect(metadata?.combinedGrade).toBe('unsafe');
       expect(metadata?.originalPrompt).toBe('Test prompt');
     });
+  });
+});
+
+describe('resolveImageFetchConcurrency', () => {
+  // These are the regression tests for the `maxConcurrency: 0` hang. They assert on the
+  // resolved step rather than driving the plugin with 0 on purpose: an unbounded loop step
+  // is an infinite *microtask* loop (`await Promise.allSettled([])` never yields to the
+  // timers phase), so it starves timers instead of failing them. A `Promise.race` against
+  // `setTimeout`, or a vitest per-test timeout, would therefore never fire and would hang
+  // the whole suite rather than report a failure. Asserting the clamp here fails fast and
+  // deterministically; the plugin-level test above proves the value is actually consumed
+  // as the batch size, so a 0 still resolves to a 1-wide batch and the loop terminates.
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should use the default when no config is provided', () => {
+    expect(resolveImageFetchConcurrency()).toBe(5);
+    expect(resolveImageFetchConcurrency({})).toBe(5);
+  });
+
+  it('should pass through a valid positive integer', () => {
+    expect(resolveImageFetchConcurrency({ maxConcurrency: 3 })).toBe(3);
+    expect(resolveImageFetchConcurrency({ maxConcurrency: 32 })).toBe(32);
+  });
+
+  it('should clamp zero to one so the batching loop advances', () => {
+    expect(resolveImageFetchConcurrency({ maxConcurrency: 0 })).toBe(1);
+  });
+
+  it('should clamp negative values to one so the batching loop advances', () => {
+    expect(resolveImageFetchConcurrency({ maxConcurrency: -1 })).toBe(1);
+    expect(resolveImageFetchConcurrency({ maxConcurrency: -100 })).toBe(1);
+  });
+
+  it('should clamp fractional values to a whole number of at least one', () => {
+    expect(resolveImageFetchConcurrency({ maxConcurrency: 0.5 })).toBe(1);
+    expect(resolveImageFetchConcurrency({ maxConcurrency: 2.9 })).toBe(2);
+  });
+
+  it('should fall back to the default for non-numeric values', () => {
+    expect(resolveImageFetchConcurrency({ maxConcurrency: Number.NaN })).toBe(5);
+    expect(resolveImageFetchConcurrency({ maxConcurrency: Number.POSITIVE_INFINITY })).toBe(5);
+    expect(resolveImageFetchConcurrency({ maxConcurrency: 'abc' as any })).toBe(5);
+  });
+
+  it('should warn when the configured value is clamped or unusable', () => {
+    resolveImageFetchConcurrency({ maxConcurrency: 0 });
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('maxConcurrency must be a positive integer'),
+    );
+
+    vi.clearAllMocks();
+
+    resolveImageFetchConcurrency({ maxConcurrency: Number.NaN });
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Invalid maxConcurrency'));
   });
 });
 
