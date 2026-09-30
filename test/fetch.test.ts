@@ -702,7 +702,9 @@ describe('fetchWithProxy', () => {
         expect(constructor).toHaveBeenNthCalledWith(
           index,
           expect.objectContaining(
-            useProxy ? { uri: proxyUrl, requestTls: tls, proxyTls: tls } : { connect: tls },
+            useProxy
+              ? { uri: proxyUrl, requestTls: tls, proxyTls: { ca, rejectUnauthorized: true } }
+              : { connect: tls },
           ),
         );
       }
@@ -711,6 +713,52 @@ describe('fetchWithProxy', () => {
       }
     },
   );
+
+  it.each([false, true])(
+    'keeps the environment proxy TLS policy when target verification is %s',
+    async (rejectUnauthorized) => {
+      const proxyUrl = 'https://proxy.example.com';
+      mockProcessEnv({ HTTPS_PROXY: proxyUrl });
+      vi.mocked(getEnvBool).mockImplementation((key, defaultValue = false) =>
+        key === 'PROMPTFOO_INSECURE_SSL' ? rejectUnauthorized : defaultValue,
+      );
+      global.fetch = vi.fn().mockResolvedValue(new Response());
+
+      await fetchWithProxy('https://example.com', { rejectUnauthorized });
+
+      expect(ProxyAgent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          uri: proxyUrl,
+          requestTls: { rejectUnauthorized },
+          proxyTls: { rejectUnauthorized: !rejectUnauthorized },
+        }),
+      );
+    },
+  );
+
+  it('separates cached proxy agents when only the environment TLS policy changes', async () => {
+    mockProcessEnv({ HTTPS_PROXY: 'https://proxy.example.com' });
+    let insecure = false;
+    vi.mocked(getEnvBool).mockImplementation((key, defaultValue = false) =>
+      key === 'PROMPTFOO_INSECURE_SSL' ? insecure : defaultValue,
+    );
+    global.fetch = vi.fn().mockResolvedValue(new Response());
+
+    await fetchWithProxy('https://example.com', { rejectUnauthorized: false });
+    insecure = true;
+    await fetchWithProxy('https://example.com', { rejectUnauthorized: false });
+    await fetchWithProxy('https://example.com', { rejectUnauthorized: false });
+
+    expect(ProxyAgent).toHaveBeenCalledTimes(2);
+    expect(ProxyAgent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ proxyTls: { rejectUnauthorized: true } }),
+    );
+    expect(ProxyAgent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ proxyTls: { rejectUnauthorized: false } }),
+    );
+  });
 
   it('should handle missing CA certificate file gracefully', async () => {
     const mockCertPath = path.normalize('/path/to/nonexistent.pem');

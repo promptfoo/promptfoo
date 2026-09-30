@@ -177,6 +177,40 @@ describe('testProviderConnectivity', () => {
     expect(body.parsedResponse).toBe('Hello! How can I help you?');
   });
 
+  it.each(['custom-config', ['first', 'second'], true, 42, null, undefined, new Date(0)])(
+    'preserves opaque provider configs during connectivity analysis: %j',
+    async (config) => {
+      const provider = createMockProvider({ config });
+
+      const result = await testProviderConnectivity({ provider });
+
+      expect(result.success).toBe(true);
+      expect(provider.config).toBe(config);
+      expect(mockEvaluate.mock.calls[0][0].providers[0].config).toBe(config);
+      const body = JSON.parse(mockFetchWithProxy.mock.calls[0][1].body);
+      const expected = JSON.parse(JSON.stringify({ config }));
+      expect(body.config).toEqual(expected.config);
+    },
+  );
+
+  it.each([
+    new (class {
+      method = 'POST';
+      tls = { key: 'inert-private-key' };
+    })(),
+    { toJSON: () => ({ method: 'POST', tls: { key: 'inert-private-key' } }) },
+  ])('omits TLS credentials from custom config serialization', async (config) => {
+    const provider = createMockProvider({ config });
+
+    const result = await testProviderConnectivity({ provider });
+
+    expect(result.success).toBe(true);
+    expect(provider.config).toBe(config);
+    const body = JSON.parse(mockFetchWithProxy.mock.calls[0][1].body);
+    expect(body.config).toEqual({ method: 'POST' });
+    expect(mockFetchWithProxy.mock.calls[0][1].body).not.toContain('inert-private-key');
+  });
+
   it('should use custom prompt when provided', async () => {
     const provider = createMockProvider();
     await testProviderConnectivity({ provider, prompt: 'Custom prompt' });

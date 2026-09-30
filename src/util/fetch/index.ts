@@ -114,17 +114,21 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
   return agent;
 }
 
-function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions): Dispatcher {
+function getOrCreateProxyAgent(
+  proxyUrl: string,
+  requestTls: ConnectionOptions,
+  proxyTls: ConnectionOptions,
+): Dispatcher {
   const concurrency = getConnectionPoolSize();
-  const cacheKey = JSON.stringify([proxyUrl, concurrency, tlsOptions]);
+  const cacheKey = JSON.stringify([proxyUrl, concurrency, requestTls, proxyTls]);
   const existing = cachedProxyAgents.get(cacheKey);
   if (existing) {
     return existing;
   }
   const agent = new ProxyAgent({
     uri: proxyUrl,
-    proxyTls: tlsOptions,
-    requestTls: tlsOptions,
+    proxyTls,
+    requestTls,
     headersTimeout: getRequestTimeoutMs(),
     keepAliveTimeout: 30_000,
     keepAliveMaxTimeout: 60_000,
@@ -213,10 +217,10 @@ export async function fetchWithProxy(
       : abortSignal
     : options.signal;
 
-  // This is overridden globally but Node v20 is still complaining so we need to add it here too
+  const proxyRejectUnauthorized = !getEnvBool('PROMPTFOO_INSECURE_SSL', true);
   const {
     getAuthHeaders,
-    rejectUnauthorized = !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+    rejectUnauthorized = proxyRejectUnauthorized,
     ...requestOptions
   } = options;
   const finalOptions: FetchOptions & { dispatcher?: any } = {
@@ -285,7 +289,10 @@ export async function fetchWithProxy(
   if (!finalOptions.dispatcher) {
     if (proxyUrl) {
       logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
-      finalOptions.dispatcher = getOrCreateProxyAgent(proxyUrl, tlsOptions);
+      finalOptions.dispatcher = getOrCreateProxyAgent(proxyUrl, tlsOptions, {
+        ...tlsOptions,
+        rejectUnauthorized: proxyRejectUnauthorized,
+      });
     } else {
       finalOptions.dispatcher = getOrCreateAgent(tlsOptions);
     }
