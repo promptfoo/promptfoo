@@ -2,11 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { matchesLlmRubric } from '../../src/matchers/llmGrading';
 import { createMockProvider } from '../factories/provider';
 
-// Key-free verification that every default-grader provider family routes image outputs
-// to the multimodal shape its API accepts. Misrouting (e.g. sending OpenAI image_url to
-// a provider that can't parse it) is the failure mode that broke Bedrock Nova, so this
-// pins the routing for each default grader from src/providers/defaults.ts.
-describe('multimodal grading: format routing per default grader', () => {
+describe('multimodal grading provider formats', () => {
   const dataUri = 'data:image/png;base64,aGVsbG8=';
 
   const openaiImagePart = { type: 'image_url', image_url: { url: dataUri } };
@@ -17,15 +13,14 @@ describe('multimodal grading: format routing per default grader', () => {
   };
   const googleImagePart = { inlineData: { mimeType: 'image/png', data: 'aGVsbG8=' } };
 
-  // [provider id (as resolved by the default grader for each vendor), expected image part]
   const cases: Array<[string, Record<string, unknown>]> = [
-    // OpenAI default + OpenAI-compatible vendors (Azure, Mistral, GitHub Models) -> chat image_url
+    // Chat APIs use image_url.
     ['openai:gpt-4o-mini', openaiImagePart],
     ['azure:gpt-4o', openaiImagePart],
     ['mistral:mistral-small-latest', openaiImagePart],
     ['github:gpt-4o', openaiImagePart],
     ['openrouter:x-ai/grok-2-vision-1212', openaiImagePart],
-    // Responses-API vendors (xAI default is xai:responses:grok-4.3) -> input_image
+    // Responses APIs use input_image.
     ['xai:responses:grok-4.3', responsesImagePart],
     ['openai:responses:gpt-4o-mini', responsesImagePart],
     // Anthropic (direct + Bedrock Claude + Vertex Claude) -> base64 image block

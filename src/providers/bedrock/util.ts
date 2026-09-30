@@ -4,6 +4,14 @@ import { getEnvString } from '../../envars';
 
 const REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
 
+/**
+ * Matches the geo/global prefix of a system-defined inference profile ID, e.g. the
+ * `us.` in `us.anthropic.claude-sonnet-4-6`.
+ *
+ * See https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html
+ */
+export const INFERENCE_PROFILE_PREFIX = /^(?:us|us-gov|eu|apac|global|jp|au|ca|in)\./;
+
 export function hasProxyEnv(): boolean {
   return Boolean(getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY'));
 }
@@ -227,14 +235,7 @@ function normalizeGoogleImagePart(block: Record<string, unknown>): ImageBlockPar
     : undefined;
 }
 
-/**
- * Normalize a single message content part into Amazon Nova's content-block
- * shape. Converts OpenAI (`image_url`/`text`), Responses (`input_image`/
- * `input_text`), Anthropic (`image`/`text`), and Google (`inlineData`) parts to
- * Nova `{ text }` / `{ image: { format, source: { bytes } } }` blocks. Parts
- * already in Nova shape, tool blocks, and unrecognized parts pass through
- * unchanged so existing behavior is preserved.
- */
+// Convert supported image/text parts while preserving native Nova and tool blocks.
 function novaNormalizeContentPart(part: unknown): unknown {
   if (typeof part === 'string') {
     return { text: part };
@@ -270,11 +271,6 @@ function novaNormalizeContentPart(part: unknown): unknown {
   return part;
 }
 
-/**
- * Normalize an Amazon Nova message's `content` into an array of Nova content
- * blocks. String content becomes a single text block (matching prior behavior);
- * array content has each part normalized via {@link novaNormalizeContentPart}.
- */
 export function novaNormalizeContent(content: unknown): MessageParam['content'] {
   if (Array.isArray(content)) {
     return content.map(novaNormalizeContentPart) as MessageParam['content'];

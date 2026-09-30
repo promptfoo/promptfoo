@@ -1,77 +1,68 @@
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { getBlobByHash, resetBlobStorageProvider, setBlobStorageProvider } from '../../src/blobs';
-import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion, runAssertions } from '../../src/assertions';
 import { matchesLlmRubric } from '../../src/matchers/llmGrading';
 import { createMockProvider } from '../factories/provider';
 
-// The resolver the evaluator injects through the grading call contract — here wired to
-// the real (filesystem) store so the test exercises the full externalize -> resolve round-trip.
-const resolveImageBlob = async (hash: string) => {
-  const blob = await getBlobByHash(hash);
-  return { data: blob.data, mimeType: blob.metadata.mimeType };
+const hash = 'a'.repeat(64);
+const blobRef = {
+  hash,
+  uri: `promptfoo://blob/${hash}`,
+  mimeType: 'image/jpeg',
+  sizeBytes: 3,
+  provider: 'fixture',
 };
 
-// Regression for the externalized-image grading path: the evaluator externalizes
-// image outputs larger than BLOB_MIN_SIZE (1KiB) to images[].blobRef before
-// assertions run, so llm-rubric must resolve those blobs back to inline images for
-// grading (previously it errored with "Blob-backed image outputs are not supported").
-describe('multimodal grading with blob-backed (externalized) image outputs', () => {
-  let tempDir: string;
-  let provider: FilesystemBlobStorageProvider;
-
-  beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-blob-grading-'));
-    provider = new FilesystemBlobStorageProvider({ basePath: tempDir });
-    setBlobStorageProvider(provider);
+function createGrader() {
+  return createMockProvider({
+    response: { output: JSON.stringify({ pass: true, score: 1, reason: 'image received' }) },
   });
+}
 
-  afterEach(() => {
-    resetBlobStorageProvider();
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  });
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
-  it('resolves a blob-backed image output and attaches it to the grader', async () => {
-    // Store a >1KiB image in the (real, filesystem) blob store, mirroring what the
-    // evaluator's externalization produces.
-    const bytes = Buffer.alloc(2048, 7);
-    const { ref } = await provider.store(bytes, 'image/png');
-    const dataUri = `data:image/png;base64,${bytes.toString('base64')}`;
+describe('blob-backed image grading', () => {
+  it.each(['single', 'batch'] as const)(
+    'keeps the explicit resolver without a target provider (%s)',
+    async (mode) => {
+      const grader = createGrader();
+      const resolveImageBlob = vi.fn(async () => ({ data: Buffer.from('abc') }));
+      const assertion = { type: 'llm-rubric' as const, value: 'An image is attached.' };
+      const args = {
+        test: { options: { provider: grader }, assert: [assertion] },
+        providerResponse: { output: blobRef.uri, images: [{ blobRef }] },
+        resolveImageBlob,
+      };
+      const result =
+        mode === 'single' ? await runAssertion({ ...args, assertion }) : await runAssertions(args);
 
-    const blobbedResponse = {
-      // The evaluator rewrites large image outputs to a blob URI in `output` too.
-      output: ref.uri,
-      images: [{ mimeType: 'image/png', blobRef: ref }],
-    };
+      expect(result.pass).toBe(true);
+      expect(resolveImageBlob).toHaveBeenCalledExactlyOnceWith(hash);
+      expect(grader.callApi.mock.calls[0][0]).toContain('data:image/jpeg;base64,YWJj');
+    },
+  );
 
-    const grader = createMockProvider({
-      response: { output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }) },
-    });
-
+  it.each([
+    { imageMime: undefined, resolverMime: undefined, expected: 'image/jpeg' },
+    { imageMime: undefined, resolverMime: 'image/webp', expected: 'image/webp' },
+    { imageMime: 'image/png', resolverMime: 'image/webp', expected: 'image/png' },
+  ])('uses the resolved image MIME: $expected', async ({ imageMime, resolverMime, expected }) => {
+    const grader = createGrader();
     const result = await matchesLlmRubric(
-      'Is this an image?',
-      blobbedResponse.output,
-      { rubricPrompt: 'Grade this output: {{ output }}', provider: grader },
+      'An image is attached.',
+      blobRef.uri,
+      { provider: grader },
       {},
       undefined,
-      { providerResponse: blobbedResponse, resolveImageBlob },
+      {
+        providerResponse: { output: blobRef.uri, images: [{ blobRef, mimeType: imageMime }] },
+        resolveImageBlob: async () => ({ data: Buffer.from('abc'), mimeType: resolverMime }),
+      },
     );
 
     expect(result.pass).toBe(true);
-    expect(result.metadata?.renderedGradingPromptImages).toBe(1);
-
-    const prompt = grader.callApi.mock.calls[0][0] as string;
-    const content = JSON.parse(prompt)[0].content;
-    // The resolved blob is attached as an image part...
-    expect(content.at(-1)).toMatchObject({
-      type: 'image_url',
-      image_url: { url: dataUri },
-    });
-    // ...and neither the heavy base64 nor the blob URI leaks into the stored prompt text.
-    expect(result.metadata?.renderedGradingPrompt).not.toContain(bytes.toString('base64'));
-    expect(result.metadata?.renderedGradingPrompt).not.toContain(ref.hash);
+    expect(grader.callApi.mock.calls[0][0]).toContain(`data:${expected};base64,YWJj`);
+    expect(result.metadata?.renderedGradingPrompt).not.toContain(hash);
   });
 });

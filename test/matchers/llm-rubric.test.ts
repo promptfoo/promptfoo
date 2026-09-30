@@ -1,6 +1,6 @@
 import path from 'path';
 
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadFromJavaScriptFile } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -9,6 +9,10 @@ import { renderLlmRubricPrompt } from '../../src/matchers/rubric';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 import * as remoteGrading from '../../src/remoteGrading';
+import {
+  accumulateAssertionTokenUsage,
+  createEmptyAssertions,
+} from '../../src/util/tokenUsageUtils';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 import { mockProcessEnv, TestGrader } from '../util/utils';
 
@@ -17,16 +21,16 @@ import type { Assertion, GradingConfig } from '../../src/types/index';
 vi.mock('../../src/esm', () => ({
   importModule: vi.fn(),
 }));
-vi.mock('../../src/cliState');
 vi.mock('../../src/remoteGrading', () => ({
   doRemoteGrading: vi.fn(),
 }));
-vi.mock('../../src/redteam/remoteGeneration', () => ({
-  shouldGenerateRemote: vi.fn().mockReturnValue(false),
-}));
-// The matcher resolves blob-backed images via a resolver injected through the grading
-// options (the evaluator threads it through the call contract at runtime). Pass this mock
-// via `options.resolveImageBlob` instead of mocking the store.
+vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/redteam/remoteGeneration')>();
+  return {
+    ...actual,
+    shouldGenerateRemote: vi.fn().mockReturnValue(false),
+  };
+});
 const mockBlobResolver = vi.fn();
 // Create mock functions that can be configured in tests - use vi.hoisted for mock factory access
 const { mockExistsSync, mockReadFileSync } = vi.hoisted(() => ({
@@ -73,7 +77,8 @@ describe('matchesLlmRubric', () => {
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(mockFileContent);
 
-    (cliState as any).config = {};
+    cliState.config = {};
+    cliState.selectedProviderConfigs = undefined;
 
     vi.mocked(remoteGrading.doRemoteGrading).mockReset();
     vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
@@ -87,6 +92,10 @@ describe('matchesLlmRubric', () => {
       output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
+  });
+
+  afterEach(() => {
+    cliState.selectedProviderConfigs = undefined;
   });
 
   it('should pass when the grading provider returns a passing result', async () => {
@@ -117,6 +126,54 @@ describe('matchesLlmRubric', () => {
         },
       }),
     );
+  });
+
+  it('preserves component-only grading usage through matcher normalization and assertion aggregation', async () => {
+    vi.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ pass: true, reason: 'Test grading output' }),
+      tokenUsage: { prompt: 7, completion: 3 },
+    });
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    });
+    const assertionUsage = createEmptyAssertions();
+    accumulateAssertionTokenUsage(assertionUsage, result.tokensUsed);
+
+    expect(result.tokensUsed).toMatchObject({ total: 10, prompt: 7, completion: 3 });
+    expect(assertionUsage).toMatchObject({ total: 10, prompt: 7, completion: 3 });
+  });
+
+  it('should keep reserved output and rubric vars ahead of user vars', async () => {
+    const provider = createMockProvider({
+      response: {
+        output: JSON.stringify({ pass: true, reason: 'Test grading output' }),
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      },
+    });
+    const options: GradingConfig = {
+      rubricPrompt: 'output={{ output }}\nrubric={{ rubric }}\nextra={{ extra }}',
+      provider,
+    };
+
+    await matchesLlmRubric('rubric from assertion', 'output from provider', options, {
+      output: 'vars output sentinel',
+      rubric: 'vars rubric sentinel',
+      extra: 'kept user var',
+    });
+
+    const [prompt, callApiContext] = provider.callApi.mock.calls[0];
+    expect(prompt).toContain('output=output from provider');
+    expect(prompt).toContain('rubric=rubric from assertion');
+    expect(prompt).toContain('extra=kept user var');
+    expect(prompt).not.toContain('vars output sentinel');
+    expect(prompt).not.toContain('vars rubric sentinel');
+    expect(callApiContext?.vars).toMatchObject({
+      output: 'output from provider',
+      rubric: 'rubric from assertion',
+      extra: 'kept user var',
+    });
   });
 
   it('should handle when provider returns direct object output instead of string', async () => {
@@ -197,6 +254,65 @@ describe('matchesLlmRubric', () => {
       uploadId: 'upload-123',
       trace: { id: 'trace-456' },
       renderedGradingPrompt: 'Grading prompt',
+    });
+  });
+
+  it('preserves response-cache provenance when the provider retains historical token usage', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'cached grading result' }),
+          cached: true,
+          tokenUsage: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+        },
+      }),
+    });
+
+    expect(result.metadata).toMatchObject({
+      cachedResponse: true,
+      renderedGradingPrompt: 'Grading prompt',
+    });
+    expect(result.tokensUsed?.total).toBe(37);
+  });
+
+  it('does not trust cache provenance supplied in fresh provider metadata', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Fresh grading result' }),
+          cached: false,
+          metadata: { cachedResponse: true, uploadId: 'upload-123' },
+          tokenUsage: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+        },
+      }),
+    });
+
+    expect(result.metadata).toEqual({
+      uploadId: 'upload-123',
+      renderedGradingPrompt: 'Grading prompt',
+    });
+    expect(result.tokensUsed).toMatchObject({ total: 37, numRequests: 1 });
+  });
+
+  it('derives cached provenance from the provider response instead of conflicting metadata', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Cached grading result' }),
+          cached: true,
+          metadata: { cachedResponse: false, uploadId: 'upload-123' },
+          tokenUsage: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+        },
+      }),
+    });
+
+    expect(result.metadata).toEqual({
+      uploadId: 'upload-123',
+      renderedGradingPrompt: 'Grading prompt',
+      cachedResponse: true,
     });
   });
 
@@ -379,6 +495,73 @@ describe('matchesLlmRubric', () => {
       image_url: { url: 'data:image/png;base64,qg==' },
     });
   });
+
+  it.each(['a=', 'a==', 'YWJj='])('rejects incomplete base64 padding: %s', async (data) => {
+    const provider = createMockProvider();
+    await expect(
+      matchesLlmRubric('An image is attached.', 'image', { provider }, {}, undefined, {
+        providerResponse: { images: [{ data, mimeType: 'image/png' }] },
+      }),
+    ).rejects.toThrow('not valid base64');
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it.each(['uri array', 'base64 objects', 'data wrapper'])(
+    'replaces image-only structured output: %s',
+    async (shape) => {
+      const images = [
+        { data: 'data:image/png;base64,YWJj', mimeType: 'image/png' },
+        { data: 'data:image/png;base64,ZGVm', mimeType: 'image/png' },
+      ];
+      const parts = images.map(({ data }) => ({ b64_json: data.split(',')[1] }));
+      const output = JSON.stringify(
+        shape === 'uri array'
+          ? images.map(({ data }) => data)
+          : shape === 'data wrapper'
+            ? { data: parts }
+            : parts,
+      );
+      const provider = createMockProvider({ response: { output: '{"pass":true,"score":1}' } });
+      const result = await matchesLlmRubric(
+        'An image is attached.',
+        output,
+        { provider },
+        {},
+        undefined,
+        {
+          providerResponse: { output, images },
+        },
+      );
+      expect(result.metadata?.renderedGradingPrompt).toContain('[Image output attached.');
+      expect(result.metadata?.renderedGradingPrompt).not.toContain('YWJj');
+      expect(result.metadata?.renderedGradingPromptImages).toBe(2);
+    },
+  );
+
+  it.each(['scalar', 'array', 'object'])(
+    'preserves accompanying image description: %s',
+    async (shape) => {
+      const uri = `promptfoo://blob/${'a'.repeat(64)}`;
+      const description = 'The bicycle has a blue frame.';
+      const output =
+        shape === 'scalar'
+          ? `${uri}\n${description}`
+          : JSON.stringify(shape === 'array' ? [uri, description] : { b64_json: uri, description });
+      const provider = createMockProvider({ response: { output: '{"pass":true,"score":1}' } });
+      const result = await matchesLlmRubric(
+        'Describe the bicycle.',
+        output,
+        { provider },
+        {},
+        undefined,
+        {
+          providerResponse: { output, images: [{ data: uri }] },
+          resolveImageBlob: async () => ({ data: Buffer.from('abc'), mimeType: 'image/png' }),
+        },
+      );
+      expect(result.metadata?.renderedGradingPrompt).toContain(description);
+    },
+  );
 
   it('should accept URL-safe base64 inside a data URI image output', async () => {
     const provider = createMockProvider({
@@ -619,49 +802,49 @@ describe('matchesLlmRubric', () => {
     });
   });
 
-  it.each([
-    'google:gemini-2.5-pro',
-    'vertex:gemini-2.5-pro',
-  ])('should use Google inlineData image parts for Gemini grading provider %s', async (id) => {
-    const provider = createMockProvider({
-      id,
-      response: {
-        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-      },
-    });
-
-    await matchesLlmRubric(
-      'Does the image match?',
-      'Generated image',
-      {
-        rubricPrompt: 'Grade this output: {{ output }}',
-        provider,
-      },
-      {},
-      undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,YWJjMTIz', mimeType: 'image/png' }],
+  it.each(['google:gemini-2.5-pro', 'vertex:gemini-2.5-pro'])(
+    'should use Google inlineData image parts for Gemini grading provider %s',
+    async (id) => {
+      const provider = createMockProvider({
+        id,
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
         },
-      },
-    );
+      });
 
-    const prompt = provider.callApi.mock.calls[0][0] as string;
-    expect(JSON.parse(prompt)).toEqual([
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: 'Grade this output: Generated image' },
-          {
-            type: 'text',
-            text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
+      await matchesLlmRubric(
+        'Does the image match?',
+        'Generated image',
+        {
+          rubricPrompt: 'Grade this output: {{ output }}',
+          provider,
+        },
+        {},
+        undefined,
+        {
+          providerResponse: {
+            output: 'Generated image',
+            images: [{ data: 'data:image/png;base64,YWJjMTIz', mimeType: 'image/png' }],
           },
-          { inlineData: { mimeType: 'image/png', data: 'YWJjMTIz' } },
-        ],
-      },
-    ]);
-  });
+        },
+      );
+
+      const prompt = provider.callApi.mock.calls[0][0] as string;
+      expect(JSON.parse(prompt)).toEqual([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Grade this output: Generated image' },
+            {
+              type: 'text',
+              text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
+            },
+            { inlineData: { mimeType: 'image/png', data: 'YWJjMTIz' } },
+          ],
+        },
+      ]);
+    },
+  );
 
   it('should convert existing chat content parts when using Gemini grading providers', async () => {
     const provider = createMockProvider({
@@ -834,40 +1017,43 @@ describe('matchesLlmRubric', () => {
     ['azure:my-deployment', 'AzureResponsesProvider'],
     ['bedrock:openai.gpt-5.5', 'BedrockOpenAiResponsesProvider'],
     ['openai:gpt-5.5', 'OpenAiResponsesProvider'],
-  ])('should use Responses image parts for %s when provider class is %s', async (id, providerClassName) => {
-    const provider = createMockProvider({
-      id,
-      response: {
-        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-      },
-    });
-    Object.defineProperty(provider, 'constructor', {
-      value: { name: providerClassName },
-    });
-
-    await matchesLlmRubric(
-      'Does the image match?',
-      'Generated image',
-      {
-        rubricPrompt: 'Grade this output: {{ output }}',
-        provider,
-      },
-      {},
-      undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,YWJjMTIz', mimeType: 'image/png' }],
+  ])(
+    'should use Responses image parts for %s when provider class is %s',
+    async (id, providerClassName) => {
+      const provider = createMockProvider({
+        id,
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
         },
-      },
-    );
+      });
+      Object.defineProperty(provider, 'constructor', {
+        value: { name: providerClassName },
+      });
 
-    const prompt = provider.callApi.mock.calls[0][0] as string;
-    expect(JSON.parse(prompt)[0].content).toContainEqual({
-      type: 'input_image',
-      image_url: 'data:image/png;base64,YWJjMTIz',
-    });
-  });
+      await matchesLlmRubric(
+        'Does the image match?',
+        'Generated image',
+        {
+          rubricPrompt: 'Grade this output: {{ output }}',
+          provider,
+        },
+        {},
+        undefined,
+        {
+          providerResponse: {
+            output: 'Generated image',
+            images: [{ data: 'data:image/png;base64,YWJjMTIz', mimeType: 'image/png' }],
+          },
+        },
+      );
+
+      const prompt = provider.callApi.mock.calls[0][0] as string;
+      expect(JSON.parse(prompt)[0].content).toContainEqual({
+        type: 'input_image',
+        image_url: 'data:image/png;base64,YWJjMTIz',
+      });
+    },
+  );
 
   it('should not use Responses image parts for Bedrock completion providers', async () => {
     const provider = createMockProvider({
@@ -1688,6 +1874,40 @@ describe('matchesLlmRubric', () => {
     });
   });
 
+  it('preserves trusted cache provenance when a cached grading response has no output', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: null,
+          cached: true,
+          tokenUsage: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+        },
+      }),
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'No output',
+      metadata: { graderError: true, cachedResponse: true },
+      tokensUsed: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+    });
+  });
+
+  it('counts a fresh failed grading request even when its provider reports no usage', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({ response: { output: null } }),
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'No output',
+      metadata: { graderError: true },
+      tokensUsed: { total: 0, numRequests: 1 },
+    });
+  });
+
   it('should fail when output is an array', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';
@@ -1744,6 +1964,25 @@ describe('matchesLlmRubric', () => {
         completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
         numRequests: 0,
       },
+    });
+  });
+
+  it('preserves cache provenance when a cached grading response contains malformed JSON', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: 'This cached response does not contain JSON',
+          cached: true,
+          tokenUsage: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+        },
+      }),
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      metadata: { graderError: true, cachedResponse: true },
+      tokensUsed: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
     });
   });
 
@@ -1970,7 +2209,7 @@ describe('matchesLlmRubric', () => {
       provider: {
         id: 'openai:gpt-4o-mini',
         config: {
-          apiKey: 'abc123',
+          apiKey: 'YWJjMTIz',
           temperature: 3.1415926,
         },
       },
@@ -1979,7 +2218,7 @@ describe('matchesLlmRubric', () => {
     const mockCallApi = vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi');
     mockCallApi.mockImplementation(function (this: OpenAiChatCompletionProvider) {
       expect(this.config.temperature).toBe(3.1415926);
-      expect(this.getApiKey()).toBe('abc123');
+      expect(this.getApiKey()).toBe('YWJjMTIz');
       return Promise.resolve({
         output: JSON.stringify({ pass: true, reason: 'Grading passed' }),
         tokenUsage: { total: 10, prompt: 5, completion: 5 },
@@ -2659,6 +2898,49 @@ Evaluate the response
     });
     expect(grading.provider.callApi).not.toHaveBeenCalled();
     expect(result.reason).toBe('Remote grading passed');
+  });
+
+  it('should include Cloud target context in remote grading requests', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    (cliState as any).config = {
+      providers: ['promptfoo://provider/cloud-target-123'],
+      redteam: {},
+    };
+
+    await matchesLlmRubric(rubric, llmOutput, {});
+
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
+      task: 'llm-rubric',
+      rubric,
+      output: llmOutput,
+      vars: {},
+      targetId: 'cloud-target-123',
+    });
+  });
+
+  it('should prefer filtered providers when building remote grading context', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    cliState.config = {
+      providers: ['promptfoo://provider/excluded-target'],
+      redteam: {},
+    };
+    cliState.selectedProviderConfigs = ['promptfoo://provider/selected-target'];
+
+    await matchesLlmRubric(rubric, llmOutput, {});
+
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
+      task: 'llm-rubric',
+      rubric,
+      output: llmOutput,
+      vars: {},
+      targetId: 'selected-target',
+    });
   });
 
   it('should call remote with image outputs when multimodal grading is remote-eligible', async () => {

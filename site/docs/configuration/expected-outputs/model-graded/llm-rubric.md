@@ -28,7 +28,7 @@ Under the hood, `llm-rubric` uses a model to evaluate the output based on the cr
 
 - **OpenAI API key**: `gpt-5`
 - **Codex/ChatGPT login**: `openai:codex-sdk` when the Codex SDK package is installed, Codex is signed in, and no higher-priority API credentials are set
-- **Anthropic API key**: `claude-sonnet-4-5-20250929`
+- **Anthropic API key**: `claude-sonnet-5`
 - **Google AI Studio API key**: `gemini-2.5-pro` (GEMINI_API_KEY, GOOGLE_API_KEY, or PALM_API_KEY)
 - **Google Vertex credentials**: `gemini-2.5-pro` (service account credentials)
 - **Mistral API key**: `mistral-large-latest`
@@ -64,6 +64,26 @@ assert:
 
       Anything funny enough to be on SNL should pass, otherwise fail.
 ```
+
+## Audio output
+
+To evaluate tone, pacing, or pronunciation, choose an audio-capable OpenAI Chat Completions grader. Promptfoo attaches the target provider's `response.audio` to the grading request:
+
+```yaml
+assert:
+  - type: llm-rubric
+    value: The speaker sounds calm and speaks at a steady pace.
+    provider:
+      id: openai:chat:gpt-audio-1.5
+      config:
+        modalities: [text]
+```
+
+`modalities: [text]` requests the grader's JSON result as text. The grader listens to the attached audio and uses the transcript as supporting context. This works with audio from [OpenAI Realtime](/docs/providers/openai#realtime-api-models), audio chat, text to speech, or a custom target provider that returns the same audio fields.
+
+The target must return inline base64 audio with `format: wav` or `format: mp3`, up to 20 MiB. Blob references and other formats produce a grading error. The built-in Realtime provider converts its default PCM16 output to WAV, including in persistent conversations; use `output_audio_format: pcm16` for grading. Text-only graders retain their existing behavior and evaluate the text output or transcript.
+
+An assertion with `transform` grades the transformed text and does not attach the original audio. Successful audio grades include `renderedGradingPromptAudio: true` in assertion metadata; `renderedGradingPrompt` contains the text prompt without the attached audio bytes.
 
 ## Using variables in the rubric
 
@@ -168,78 +188,58 @@ for the full metric list.
 
 ## Grading image (multimodal) outputs
 
-When a provider returns image outputs (for example image-generation models, or a target that
-attaches images to its response), `llm-rubric` automatically attaches those images to the grading
-prompt so a vision-capable grader can judge the visual content directly. The base64/data-URI text is
-replaced with a short placeholder in the text channel and the real image is sent as a proper
-multimodal message part, so multi-megabyte base64 never bloats the prompt or the stored results.
+`llm-rubric` attaches provider image outputs to the grading request. Use a grader model that accepts
+images, and write the rubric about the image's visible content:
 
-Point the grader at a vision-capable model and write the rubric against what should be visible:
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - openai:image:gpt-image-1
+```yaml
 defaultTest:
   options:
-    // highlight-next-line
-    provider: openai:gpt-4o-mini # a vision-capable grader
-prompts:
-  - 'A red bicycle on a beach at sunset'
-tests:
-  - assert:
-      - type: llm-rubric
-        value: The image shows a red bicycle on a beach.
+    provider: openai:gpt-4o-mini
+  assert:
+    - type: llm-rubric
+      value: The image shows a red bicycle.
 ```
 
-The image content is formatted for the grader's API automatically. Validated grader families:
+Supported outputs include raw base64, base64url, image data URIs, and Promptfoo blob references.
+The evaluator resolves its stored image blobs automatically. Direct matcher or assertion callers
+must supply `resolveImageBlob` for blob references. Remote HTTP image URLs are rejected.
 
-| Grader                    | Example id                                            | Image format sent        |
-| ------------------------- | ----------------------------------------------------- | ------------------------ |
-| OpenAI (chat)             | `openai:gpt-4o-mini`                                  | `image_url` data URI     |
-| OpenAI (responses)        | `openai:responses:gpt-4o-mini`                        | `input_image`            |
-| Anthropic                 | `anthropic:messages:claude-haiku-4-5`                 | base64 `image` block     |
-| Amazon Bedrock (Claude)   | `bedrock:us.anthropic.claude-haiku-4-5-...`           | base64 `image` block     |
-| Amazon Bedrock (Nova)     | `bedrock:amazon.nova-lite-v1:0`                       | Nova `image` bytes block |
-| Google AI Studio / Vertex | `google:gemini-2.5-flash`, `vertex:gemini-2.5-flash`  | `inlineData`             |
-| Promptfoo remote grader   | _(red team evals only, when no grader is configured)_ | data URI                 |
+Image-only output text is replaced with a placeholder; accompanying descriptions remain available
+to the grader. Grading metadata records `renderedGradingPromptImages` and the text prompt without
+reattaching image bytes. Normal media-storage settings still control whether the saved provider
+response contains inline data or blob references.
 
-Large image outputs are externalized to the local blob store before assertions run; `llm-rubric`
-resolves those blobs automatically, so this works out of the box. Only inline base64 / data-URI image
-output (or its blob reference) is supported. Remote `http(s)://` image URLs are rejected so the grader
-never fetches arbitrary URLs — configure the provider to return inline base64/data-URI image output
-instead.
+| Grader family                            | Image format          |
+| ---------------------------------------- | --------------------- |
+| OpenAI chat and compatible APIs          | `image_url`           |
+| OpenAI Responses and compatible APIs     | `input_image`         |
+| Anthropic, Bedrock Claude, Vertex Claude | base64 `image` blocks |
+| Google AI Studio and Vertex Gemini       | `inlineData`          |
+| Bedrock Nova                             | native image blocks   |
 
-For ordinary (non-red-team) evals, image grading uses your **local** default grader — the
-credential-backed vision model promptfoo selects from your configured API keys (or whatever you set via
-`provider` / `--grader`). Promptfoo's remote Cloud grader is used only for red team evals when no grader
-provider is configured; it is not the default for a plain `llm-rubric` assertion.
+The model must support image input; support varies within each provider family. The configured
+grader receives the image bytes. Choosing a local model can keep grading on your infrastructure;
+sharing and other configured network calls have separate controls.
+
+See [the image grading example](https://github.com/promptfoo/promptfoo/tree/main/examples/multimodal-output-grading)
+for a positive and negative color check.
 
 ### Image grading limits
 
-These limits guard against oversized image payloads. They are enforced **client-side**, before the
-grader is called, so they constrain **both** local grader requests and uploads to Promptfoo's remote
-grader. Each value is an **integer byte count** (or count) — unit suffixes like `20MB` are not parsed
-(`20MB` is read as `20`).
+These limits apply before a grading request is sent. Set integer counts, bytes, or characters as
+specified below, without unit suffixes such as `MB`.
 
-| Variable                                      | Default                      | Purpose                                      |
-| --------------------------------------------- | ---------------------------- | -------------------------------------------- |
-| `PROMPTFOO_GRADING_MAX_IMAGES`                | `4`                          | Max images attached to one grading prompt    |
-| `PROMPTFOO_GRADING_IMAGE_MAX_BYTES`           | `20971520` (20 MiB)          | Max decoded size of a single image           |
-| `PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES`     | `20971520` (20 MiB)          | Max combined decoded size of all images      |
-| `PROMPTFOO_GRADING_IMAGE_MAX_RAW_CHARS`       | derived from max bytes       | Max raw base64/data-URI characters per image |
-| `PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS` | derived from max total bytes | Max combined raw characters across images    |
+| Variable                                      | Default                               | Purpose                      |
+| --------------------------------------------- | ------------------------------------- | ---------------------------- |
+| `PROMPTFOO_GRADING_MAX_IMAGES`                | `4`                                   | Images per grading request   |
+| `PROMPTFOO_GRADING_IMAGE_MAX_BYTES`           | `20971520` (20 MiB)                   | Decoded bytes per image      |
+| `PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES`     | `20971520` (20 MiB)                   | Combined decoded image bytes |
+| `PROMPTFOO_GRADING_IMAGE_MAX_RAW_CHARS`       | Derived from the per-image byte limit | Raw characters per image     |
+| `PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_RAW_CHARS` | Derived from the total byte limit     | Combined raw characters      |
 
-:::note
-These variables are applied **client-side** to every grading request — both local grader calls and
-uploads to Promptfoo's remote grader (used only for red team evals when no grader provider is
-configured). Lowering them below the remote caps tightens what is sent remotely too; for example
-`PROMPTFOO_GRADING_MAX_IMAGES=0` rejects the request locally before any upload.
-
-The remote Cloud grader additionally enforces its own **fixed** server-side caps (4 images, 20 MiB per
-image and in total) that these variables cannot raise. To grade larger images, or to keep image data on
-your own infrastructure, configure a local vision grader (as above) so the image is sent only to your
-chosen provider.
-:::
+Grader services may impose additional limits that these settings cannot raise. Ordinary
+`llm-rubric` assertions use the configured or default grading provider. Eligible red team evals
+may use Promptfoo's remote grader, which also enforces server-side limits.
 
 ## Customizing the rubric prompt
 
@@ -307,13 +307,13 @@ assert:
 assert:
   - type: llm-rubric
     # German: "Responds politely and helpfully. Provide reasoning in German."
-    value: "Antwortet höflich und hilfreich. Begründung auf Deutsch geben."
+    value: 'Antwortet höflich und hilfreich. Begründung auf Deutsch geben.'
 
 # Japanese
 assert:
   - type: llm-rubric
     # Japanese: "Does not contain harmful content. Please provide evaluation reasoning in Japanese."
-    value: "有害なコンテンツを含まない。評価理由は日本語で答えてください。"
+    value: '有害なコンテンツを含まない。評価理由は日本語で答えてください。'
 ```
 
 **Note:** Option 1 works with `llm-rubric`, `g-eval`, and `model-graded-closedqa`. For other assertion types like `factuality` or `context-recall`, create assertion-specific prompts that match their expected formats.

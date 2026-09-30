@@ -1,45 +1,34 @@
 import type { GradingResult, TokenUsage } from '../types/index';
 
 /**
- * Placeholder substituted for an evaluated output when the output text *is* the
- * raw image data (base64 / data URI). The real image is attached to the grading
- * prompt separately, so this keeps multi-megabyte base64 out of the grader's
- * text channel while still signalling that an image is present.
- *
- * Shared by `llmGrading.ts` and the redteam `goat` provider so the grader-facing
- * wording stays in sync.
- */
-export const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
-  '[Image output attached. Inspect the attached image directly for visual grading.]';
-
-/**
- * Instruction prepended to a grading prompt when image outputs are attached. It
- * steers the grader to judge the visual content rather than any base64/data URI
- * text in the output or the originating prompt.
- */
-export const MULTIMODAL_GRADING_INSTRUCTION =
-  'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.';
-
-/**
  * Normalize token usage for matcher results. Unlike the evaluator-level
  * normalizeTokenUsage, this excludes the `assertions` field and preserves
- * the existing completionDetails shape (passing through whatever the
- * provider returned, or undefined if not present).
+ * the existing completionDetails shape and any incurred usage reported by
+ * the provider.
  */
 export function normalizeMatcherTokenUsage(
   tokenUsage: Partial<TokenUsage> | undefined,
 ): TokenUsage {
+  const prompt = tokenUsage?.prompt ?? 0;
+  const completion = tokenUsage?.completion ?? 0;
+  const cached = tokenUsage?.cached ?? 0;
+  const componentTotal = prompt + completion;
+  const cachedResponse = tokenUsage?.numRequests === 0 && cached > 0 && componentTotal <= cached;
+
   return {
-    total: tokenUsage?.total || 0,
-    prompt: tokenUsage?.prompt || 0,
-    completion: tokenUsage?.completion || 0,
-    cached: tokenUsage?.cached || 0,
-    numRequests: tokenUsage?.numRequests || 0,
+    total: tokenUsage?.total ?? (cachedResponse ? 0 : componentTotal),
+    prompt,
+    completion,
+    cached,
+    numRequests: tokenUsage?.numRequests ?? 0,
     completionDetails: tokenUsage?.completionDetails || {
       reasoning: 0,
       acceptedPrediction: 0,
       rejectedPrediction: 0,
     },
+    ...(tokenUsage?.incurredTokenUsage && {
+      incurredTokenUsage: tokenUsage.incurredTokenUsage,
+    }),
   };
 }
 
@@ -69,6 +58,16 @@ export function graderFail(
     ...fail(reason, tokensUsed),
     metadata: { graderError: true },
   };
+}
+
+/**
+ * Inverts a grader score for a negated assertion (the `not-` prefix).
+ *
+ * The result is clamped to `[0, 1]` so a NaN or out-of-range grader score cannot
+ * turn `1 - score` into a misleading negative/inflated value.
+ */
+export function invertScore(score: number): number {
+  return Math.min(1, Math.max(0, 1 - (Number.isFinite(score) ? score : 0)));
 }
 
 export function cosineSimilarity(vecA: number[], vecB: number[]): number {
@@ -111,4 +110,44 @@ export function tryParse(content: string) {
 
 export function splitIntoSentences(text: string) {
   return text.split('\n').filter((sentence) => sentence.trim() !== '');
+}
+
+/**
+ * Segments text into units for sentence-level metrics (e.g. the RAGAS context
+ * relevance denominator).
+ *
+ * Text that spans **two or more** non-empty lines is treated as already segmented
+ * (one unit per line) — a context passed one chunk/sentence per line. This also
+ * avoids mis-splitting abbreviations (e.g. "i.e.", "U.S.") in pre-formatted text.
+ *
+ * Otherwise the text is a single prose block (the common shape of a retrieved RAG
+ * passage) and is segmented on sentence boundaries (`.`, `!`, `?` followed by
+ * whitespace). This is the important case: {@link splitIntoSentences} splits on
+ * newlines only, so a prose passage with no newlines collapses to a single unit,
+ * forcing the denominator to 1 and the score to ~1.0 regardless of relevance.
+ *
+ * The "two or more lines" threshold (rather than the mere presence of a newline)
+ * is deliberate: it keeps a prose paragraph carrying an incidental leading/trailing
+ * newline — common when a context is loaded from a file, a template, or a YAML
+ * block scalar — in the prose branch instead of collapsing it to one unit.
+ *
+ * Note: the sentence split is a lightweight heuristic and does not handle every
+ * edge case (e.g. decimals like "3.14", abbreviations); full segmentation would
+ * need an NLP tokenizer. It is a substantial improvement over newline-only
+ * splitting for the common prose case.
+ *
+ * Bare enumeration markers are dropped: splitting an inline numbered list such as
+ * "1. Paris is the capital. 2. France is in Europe." on the sentence boundary
+ * strands the "1." / "2." markers as their own segments, which would inflate
+ * sentence-level counts (e.g. the RAGAS context-relevance numerator). A segment
+ * that is only a list marker carries no content, so it is not a unit.
+ */
+const ENUMERATION_MARKER_ONLY = /^\d+[.)]$/;
+
+export function splitTextIntoSentences(text: string): string[] {
+  const lines = text.split('\n').filter((line) => line.trim() !== '');
+  const segments = lines.length > 1 ? lines : text.split(/(?<=[.!?])\s+/);
+  return segments
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 0 && !ENUMERATION_MARKER_ONLY.test(sentence));
 }

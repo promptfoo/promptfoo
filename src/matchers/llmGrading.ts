@@ -9,13 +9,17 @@ import {
   TRAJECTORY_GOAL_SUCCESS_PROMPT,
 } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
-import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { doRemoteGrading } from '../remoteGrading';
 import { doRemoteScoringWithPi } from '../remoteScoring';
 import invariant from '../util/invariant';
 import { extractFirstJsonObject } from '../util/json';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
-import { callProviderWithContext, getAndCheckProvider } from './providers';
+import {
+  callProviderWithContext,
+  getAndCheckProvider,
+  getRemoteGradingContext,
+  shouldUseRemoteGrading,
+} from './providers';
 import {
   LlmRubricProviderError,
   loadRubricPrompt,
@@ -24,13 +28,7 @@ import {
   resolveBlobBackedImageOutputs,
   runJsonGradingPrompt,
 } from './rubric';
-import {
-  ATTACHED_IMAGE_OUTPUT_PLACEHOLDER,
-  fail,
-  graderFail,
-  normalizeMatcherTokenUsage,
-  tryParse,
-} from './shared';
+import { graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
 
 import type {
   Assertion,
@@ -45,6 +43,9 @@ import type {
 type LlmRubricGradingConfig = GradingConfig & {
   __promptfooPreferRemote?: boolean;
 };
+
+const ATTACHED_IMAGE_OUTPUT_PLACEHOLDER =
+  '[Image output attached. Inspect the attached image directly for visual grading.]';
 
 const FACTUALITY_CATEGORY_DESCRIPTIONS: Record<string, string> = {
   A: 'The submitted answer is a subset of the expert answer and is fully consistent with it.',
@@ -150,31 +151,58 @@ function getGradingOutputForImages(llmOutput: string, imageOutputs: ProviderResp
     return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
   }
 
-  if (/^data:image\/[^;,]+;base64,/i.test(trimmedOutput)) {
-    return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
-  }
-
-  // The evaluator externalizes large image outputs, so `output` is often a blob URI
-  // (e.g. `promptfoo://blob/<hash>`) rather than the base64 itself. Replace it too.
-  if (/^promptfoo:\/\/blob\/[a-f0-9]{64}/i.test(trimmedOutput)) {
-    return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
-  }
-
-  // Compare against the original (pre-normalization) image payloads so a raw
-  // base64url output still matches its attached image and gets the placeholder.
-  if (
-    imageOutputs.some((image) => {
-      if (!image.data) {
-        return false;
+  const imageValues = new Set<string>();
+  for (const image of imageOutputs) {
+    if (image.data) {
+      imageValues.add(image.data.trim());
+      const payload = getDataUriPayload(image.data);
+      if (payload) {
+        imageValues.add(payload);
       }
-      const imageData = image.data.trim();
-      return imageData === trimmedOutput || getDataUriPayload(imageData) === trimmedOutput;
-    })
+    }
+    if (image.blobRef) {
+      imageValues.add(image.blobRef.uri);
+    }
+  }
+  const isImageValue = (value: unknown): boolean => {
+    if (typeof value === 'string') {
+      return imageValues.has(value.trim());
+    }
+    return (
+      value !== null &&
+      typeof value === 'object' &&
+      Object.keys(value).length === 1 &&
+      'b64_json' in value &&
+      typeof value.b64_json === 'string' &&
+      imageValues.has(value.b64_json.trim())
+    );
+  };
+  const parsed: unknown = tryParse(trimmedOutput);
+  const imageList =
+    parsed && typeof parsed === 'object' && Object.keys(parsed).length === 1 && 'data' in parsed
+      ? parsed.data
+      : parsed;
+  if (
+    isImageValue(parsed) ||
+    (Array.isArray(imageList) && imageList.length > 0 && imageList.every(isImageValue))
   ) {
     return ATTACHED_IMAGE_OUTPUT_PLACEHOLDER;
   }
 
   return llmOutput;
+}
+
+function getGradingOutputForAudio(llmOutput: string, audio: ProviderResponse['audio']) {
+  if (!audio?.data) {
+    return llmOutput;
+  }
+  const outputData = llmOutput
+    .trim()
+    .replace(/^data:audio\/[^;,]+;base64,/i, '')
+    .replace(/\s/g, '');
+  return outputData === audio.data.replace(/\s/g, '')
+    ? audio.transcript || '[Audio output]'
+    : llmOutput;
 }
 
 export async function matchesLlmRubric(
@@ -203,25 +231,22 @@ export async function matchesLlmRubric(
     options?.preferRemote ||
     (grading as LlmRubricGradingConfig).__promptfooPreferRemote ||
     !grading.provider;
-  // Resolve any blob-backed image outputs (the evaluator externalizes images > 1KiB
-  // to blobRefs before assertions run) so they can be attached to the grader. The
-  // resolver is injected by the evaluator through the grading call contract.
   const resolvedImages = await resolveBlobBackedImageOutputs(
     options?.providerResponse?.images,
     options?.resolveImageBlob,
   );
-  // Materialize once here and reuse downstream; runJsonGradingPrompt no longer
-  // re-validates/re-decodes the (potentially multi-MB) image payloads.
   const { imageOutputs, imageData } = materializeImageOutputsForGrading(resolvedImages);
-  const gradingOutput = imageOutputs.length
-    ? getGradingOutputForImages(llmOutput, options?.providerResponse?.images)
-    : llmOutput;
+  const audio = options?.providerResponse?.audio;
+  const gradingOutput = getGradingOutputForImages(
+    getGradingOutputForAudio(llmOutput, audio),
+    imageOutputs.length ? options?.providerResponse?.images : undefined,
+  );
   if (
     !grading.rubricPrompt &&
     shouldPreferRemote &&
     !cliState.config?.redteam?.provider &&
     cliState.config?.redteam &&
-    shouldGenerateRemote({ canUseCodexDefaultProvider: true })
+    shouldUseRemoteGrading({ canUseCodexDefaultProvider: true })
   ) {
     try {
       return {
@@ -231,6 +256,7 @@ export async function matchesLlmRubric(
           output: gradingOutput,
           vars: vars || {},
           ...(imageOutputs.length ? { images: imageOutputs } : {}),
+          ...getRemoteGradingContext(),
         })),
         assertion,
       };
@@ -252,10 +278,11 @@ export async function matchesLlmRubric(
       providerCallContext,
       throwOnError: options?.throwOnError,
       imageData,
+      audio,
       vars: {
+        ...(vars || {}),
         output: tryParse(gradingOutput),
         rubric,
-        ...(vars || {}),
       },
     });
   } catch (error) {
@@ -340,7 +367,7 @@ export async function matchesFactuality(
   }
 
   const parsedOutput = tryParse(output);
-  const templateVars = { input, ideal: expected, completion: parsedOutput, ...(vars || {}) };
+  const templateVars = { ...(vars || {}), input, ideal: expected, completion: parsedOutput };
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, PROMPTFOO_FACTUALITY_PROMPT);
   const prompt = await renderLlmRubricPrompt(rubricPrompt, templateVars);
@@ -360,7 +387,7 @@ export async function matchesFactuality(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'factuality produced malformed response');
@@ -371,7 +398,7 @@ export async function matchesFactuality(
       return buildFactualityResult(parsedJson.option, parsedJson.reason, grading, resp);
     }
   } catch (err) {
-    return fail((err as Error).message, resp.tokenUsage);
+    return graderFail((err as Error).message, resp.tokenUsage);
   }
 
   // Fallback to old pattern matching format
@@ -380,7 +407,7 @@ export async function matchesFactuality(
     const parsedLegacy = parseLegacyFactualityResponse(resp.output);
     return buildFactualityResult(parsedLegacy.option, parsedLegacy.reason, grading, resp);
   } catch (err) {
-    return fail((err as Error).message, resp.tokenUsage);
+    return graderFail((err as Error).message, resp.tokenUsage);
   }
 }
 
@@ -399,7 +426,7 @@ export async function matchesClosedQa(
   }
 
   const parsedOutput = tryParse(output);
-  const templateVars = { input, criteria: expected, completion: parsedOutput, ...(vars || {}) };
+  const templateVars = { ...(vars || {}), input, criteria: expected, completion: parsedOutput };
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, OPENAI_CLOSED_QA_PROMPT);
   const prompt = await renderLlmRubricPrompt(rubricPrompt, templateVars);
@@ -418,7 +445,7 @@ export async function matchesClosedQa(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'model-graded-closedqa produced malformed response');
@@ -430,7 +457,10 @@ export async function matchesClosedQa(
     } else if (resp.output.trimEnd().endsWith('N')) {
       reason = `The submission does not meet the criterion:\n${resp.output}`;
     } else {
-      reason = `Model grader produced a malformed response:\n${resp.output}`;
+      return graderFail(
+        `Model grader produced a malformed response:\n${resp.output}`,
+        resp.tokenUsage,
+      );
     }
     return {
       pass,
@@ -439,7 +469,7 @@ export async function matchesClosedQa(
       tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
     };
   } catch (err) {
-    return fail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
+    return graderFail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
   }
 }
 

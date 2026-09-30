@@ -1,8 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-import async from 'async';
-import yaml from 'js-yaml';
 import { loadFromJavaScriptFile } from '../assertions/utils';
 import cliState from '../cliState';
 import { getEnvBool, getEnvInt } from '../envars';
@@ -14,8 +12,9 @@ import { parseFileUrl } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
 import { extractJsonObjects, safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
+import { loadYaml } from '../util/yamlLoad';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
-import { graderFail, MULTIMODAL_GRADING_INSTRUCTION, normalizeMatcherTokenUsage } from './shared';
+import { graderFail, normalizeMatcherTokenUsage } from './shared';
 
 import type {
   ApiProvider,
@@ -29,15 +28,19 @@ import type {
   VarValue,
 } from '../types/index';
 
+const MULTIMODAL_GRADING_INSTRUCTION =
+  'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.';
+
 const nunjucks = getNunjucksEngine(undefined, false, true);
 const DEFAULT_GRADING_MAX_IMAGES = 4;
 const DEFAULT_GRADING_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
+const GRADING_AUDIO_MAX_BYTES = 20 * 1024 * 1024;
 const DEFAULT_GRADING_IMAGE_MAX_TOTAL_BYTES = 20 * 1024 * 1024;
 // Headroom added per image for the `data:image/...;base64,` prefix when deriving
 // the raw-character cap from a byte limit.
 const DATA_URI_METADATA_MAX_CHARS = 256;
 const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
-const BLOB_URI_REGEX = /promptfoo:\/\/blob\/([a-f0-9]{64})/i;
+const BLOB_URI_REGEX = /^promptfoo:\/\/blob\/([a-f0-9]{64})$/i;
 const RESPONSES_PROVIDER_CLASS_NAMES = new Set([
   'AzureResponsesProvider',
   'BedrockOpenAiResponsesProvider',
@@ -157,6 +160,7 @@ export async function renderLlmRubricPrompt(
 
 type MultimodalPromptPart =
   | { type: 'text'; text: string }
+  | { type: 'input_audio'; input_audio: { data: string; format: 'wav' | 'mp3' } }
   | { type: 'image_url'; image_url: { url: string } }
   | { type: 'input_text'; text: string }
   | { type: 'input_image'; image_url: string }
@@ -202,14 +206,10 @@ function isValidBase64Payload(data: string): boolean {
   }
 
   const padding = data.slice(firstPaddingIndex);
-  return padding.length <= 2 && /^=+$/.test(padding);
+  return data.length % 4 === 0 && padding.length <= 2 && /^=+$/.test(padding);
 }
 
-/**
- * Canonicalize a (possibly URL-safe, possibly unpadded) base64 string to the
- * standard alphabet with padding, so downstream data URI / Anthropic / Google
- * payloads are always well-formed regardless of the encoding the provider used.
- */
+/** Use the standard alphabet and complete padding for provider payloads. */
 function toStandardBase64(base64: string): string {
   const standardized = base64.replace(/-/g, '+').replace(/_/g, '/');
   const remainder = standardized.length % 4;
@@ -246,10 +246,7 @@ function normalizeBase64ImageData(
     payload = rawPayload;
   }
 
-  // Strip whitespace (some providers line-wrap base64) and accept both the
-  // standard and URL-safe alphabets. URL-safe input is canonicalized to standard
-  // base64 (with padding) so downstream data URI / provider payloads are
-  // well-formed; standard base64 is left untouched to preserve existing outputs.
+  // Providers may return line-wrapped or URL-safe base64.
   const rawBase64 = payload.replace(/\s/g, '');
   if (!isValidBase64Payload(rawBase64)) {
     throw new Error(
@@ -300,8 +297,7 @@ function imageOutputToImageUrl(
   image: ImageOutput,
 ): { output: ImageOutput; dataUri: string; base64Data: string; mimeType: string } | undefined {
   if (image.blobRef || hasBlobRefImageValue(image.data)) {
-    // Blob-backed outputs should have been resolved by resolveBlobBackedImageOutputs
-    // before reaching here; if one slips through, fail loudly rather than silently drop it.
+    // The caller must resolve stored images before formatting the grading request.
     throw new Error(
       'Blob-backed image output could not be resolved for multimodal grading. Ensure the blob store is reachable, or configure the image provider to return base64 or data URI image output.',
     );
@@ -334,7 +330,7 @@ function getBlobHashForImage(image: ImageOutput): string | undefined {
   if (typeof image.blobRef?.hash === 'string' && BLOB_HASH_REGEX.test(image.blobRef.hash)) {
     return image.blobRef.hash;
   }
-  if (typeof image.data === 'string') {
+  if (image.data?.length === 'promptfoo://blob/'.length + 64) {
     return BLOB_URI_REGEX.exec(image.data)?.[1];
   }
   return undefined;
@@ -382,6 +378,22 @@ function getImageOutputRawChars(image: ImageOutput, maxRawChars: number): number
   return rawChars;
 }
 
+function assertImageByteLimit(bytes: number, maxBytes: number): void {
+  if (bytes > maxBytes) {
+    throw new Error(
+      `Image output exceeds multimodal grading size limit: ${bytes} bytes, maximum is ${maxBytes}.`,
+    );
+  }
+}
+
+function assertTotalImageByteLimit(bytes: number, maxBytes: number): void {
+  if (bytes > maxBytes) {
+    throw new Error(
+      `Image outputs exceed multimodal grading total size limit: ${bytes} bytes, maximum is ${maxBytes}.`,
+    );
+  }
+}
+
 function assertImageRawCharLimit(rawChars: number, maxRawChars: number): void {
   if (rawChars > maxRawChars) {
     throw new Error(
@@ -403,23 +415,8 @@ function getDataUriRawChars(byteLength: number, mimeType: string): number {
   return 'data:'.length + mimeType.length + ';base64,'.length + base64Chars;
 }
 
-// Reads are already count-capped to maxImages (default 4); this bounds memory if the cap is raised.
-const BLOB_READ_CONCURRENCY = 4;
-
-/**
- * Resolve blob-backed image outputs to inline base64 data URIs so they can be
- * attached to the grading prompt. The evaluator externalizes any image output
- * larger than `BLOB_MIN_SIZE` (1KiB) to `images[].blobRef` before assertions run,
- * so without this step the headline "grade an image output" workflow would error.
- *
- * Resource guards run in stages so no work is wasted on rejected payloads: the
- * image-count cap and the declared `blobRef.sizeBytes` cap reject before any read;
- * each blob's actual read size is checked before encoding; and the cumulative actual
- * byte total is verified BEFORE any base64 expansion. Reads are bounded-concurrency.
- * The blob bytes are fetched via a resolver injected by the evaluator (threaded through
- * the grading call contract) so this core matcher never imports the blob store. Inline
- * images are returned untouched; the resolved data URI is transient and not persisted.
- */
+// Resolve through the caller's storage adapter; keep matcher code independent of persistence.
+// Validate all sizes before encoding, and read one blob at a time to bound memory use.
 export async function resolveBlobBackedImageOutputs(
   images?: ImageOutput[],
   resolveImageBlob?: GradingBlobResolver,
@@ -431,14 +428,12 @@ export async function resolveBlobBackedImageOutputs(
   const { maxImages, maxImageBytes, maxTotalImageBytes, maxRawChars, maxTotalRawChars } =
     getGradingImageLimits();
 
-  // (a) Count cap BEFORE any blob read.
   if (images.length > maxImages) {
     throw new Error(
       `Too many images for multimodal grading: received ${images.length}, maximum is ${maxImages}.`,
     );
   }
 
-  // Compute each image's blob hash once (it scans image.data via regex) and reuse below.
   const hashedImages = images.map((image) => ({ image, hash: getBlobHashForImage(image) }));
   if (!hashedImages.some(({ hash }) => hash)) {
     return images;
@@ -463,105 +458,60 @@ export async function resolveBlobBackedImageOutputs(
       continue;
     }
     const decodedBytes = getBase64DecodedBytes(normalized.base64Data);
-    if (decodedBytes > maxImageBytes) {
-      throw new Error(
-        `Image output exceeds multimodal grading size limit: ${decodedBytes} bytes, maximum is ${maxImageBytes}.`,
-      );
-    }
+    assertImageByteLimit(decodedBytes, maxImageBytes);
     totalActualBytes += decodedBytes;
-    if (totalActualBytes > maxTotalImageBytes) {
-      throw new Error(
-        `Image outputs exceed multimodal grading total size limit: ${totalActualBytes} bytes, maximum is ${maxTotalImageBytes}.`,
-      );
-    }
+    assertTotalImageByteLimit(totalActualBytes, maxTotalImageBytes);
   }
 
-  // (b) Reject by DECLARED blobRef.sizeBytes BEFORE reading (per-image + cumulative).
+  // Check declared sizes before reading any blobs; verify actual sizes below.
   let declaredTotalBytes = totalActualBytes;
   for (const { image, hash } of hashedImages) {
     if (!hash) {
       continue;
     }
     const sizeBytes = typeof image.blobRef?.sizeBytes === 'number' ? image.blobRef.sizeBytes : 0;
-    if (sizeBytes > maxImageBytes) {
-      throw new Error(
-        `Image output exceeds multimodal grading size limit: ${sizeBytes} bytes, maximum is ${maxImageBytes}.`,
-      );
-    }
+    assertImageByteLimit(sizeBytes, maxImageBytes);
     declaredTotalBytes += sizeBytes;
-    if (declaredTotalBytes > maxTotalImageBytes) {
-      throw new Error(
-        `Image outputs exceed multimodal grading total size limit: ${declaredTotalBytes} bytes, maximum is ${maxTotalImageBytes}.`,
-      );
-    }
+    assertTotalImageByteLimit(declaredTotalBytes, maxTotalImageBytes);
   }
 
-  // (c) Read + per-image actual-size check (bounded concurrency), WITHOUT encoding yet.
-  type ResolvedSlot = { image: ImageOutput; blob?: { data: Buffer; mimeType?: string } };
-  const slots: ResolvedSlot[] = await async.mapLimit(
-    hashedImages,
-    BLOB_READ_CONCURRENCY,
-    async ({ image, hash }: { image: ImageOutput; hash?: string }): Promise<ResolvedSlot> => {
-      if (!hash) {
-        return { image };
-      }
-      if (!resolveImageBlob) {
-        throw new Error(
-          'Blob-backed image output could not be resolved for multimodal grading: no blob resolver provided. ' +
-            'This is wired automatically by the evaluator; configure the image provider to return base64 or a data URI if running the matcher standalone.',
-        );
-      }
-
-      let blob: { data: Buffer; mimeType?: string };
-      try {
-        blob = await resolveImageBlob(hash);
-      } catch (error) {
-        throw new Error(
-          `Failed to load blob-backed image output for multimodal grading (blob ${hash.slice(0, 12)}…): ${error}`,
-        );
-      }
-
-      // Declared size may lie; the store may hold up to BLOB_MAX_SIZE while grading caps lower.
-      if (blob.data.length > maxImageBytes) {
-        throw new Error(
-          `Image output exceeds multimodal grading size limit: ${blob.data.length} bytes, maximum is ${maxImageBytes}.`,
-        );
-      }
-      return { image, blob };
-    },
-  );
-
-  // (d) Cumulative ACTUAL-byte cap BEFORE any base64 expansion.
-  for (const { blob } of slots) {
-    if (!blob) {
+  type ResolvedSlot = { image: ImageOutput; blob?: { data: Buffer; mimeType: string } };
+  const slots: ResolvedSlot[] = [];
+  for (const { image, hash } of hashedImages) {
+    if (!hash) {
+      slots.push({ image });
       continue;
     }
+    if (!resolveImageBlob) {
+      throw new Error(
+        'Blob-backed image output could not be resolved for multimodal grading: no blob resolver provided. ' +
+          'Pass resolveImageBlob when calling the matcher outside the evaluator.',
+      );
+    }
+    let blob: Awaited<ReturnType<GradingBlobResolver>>;
+    try {
+      blob = await resolveImageBlob(hash);
+    } catch (error) {
+      throw new Error('Failed to load blob-backed image output for multimodal grading.', {
+        cause: error,
+      });
+    }
+    assertImageByteLimit(blob.data.length, maxImageBytes);
     totalActualBytes += blob.data.length;
-    if (totalActualBytes > maxTotalImageBytes) {
-      throw new Error(
-        `Image outputs exceed multimodal grading total size limit: ${totalActualBytes} bytes, maximum is ${maxTotalImageBytes}.`,
-      );
-    }
-  }
-
-  // (e) Enforce the exact raw-character caps before allocating base64 strings.
-  for (const { image, blob } of slots) {
-    if (!blob) {
-      continue;
-    }
-    const mimeType = image.mimeType || blob.mimeType || 'image/png';
+    assertTotalImageByteLimit(totalActualBytes, maxTotalImageBytes);
+    const mimeType = image.mimeType || blob.mimeType || image.blobRef?.mimeType || 'image/png';
     const rawChars = getDataUriRawChars(blob.data.length, mimeType);
     assertImageRawCharLimit(rawChars, maxRawChars);
     totalRawChars += rawChars;
     assertTotalImageRawCharLimit(totalRawChars, maxTotalRawChars);
+    slots.push({ image, blob: { data: blob.data, mimeType } });
   }
 
-  // (f) Encode now that per-image and cumulative byte/raw totals are within bounds.
   return slots.map(({ image, blob }) => {
     if (!blob) {
       return image;
     }
-    const mimeType = image.mimeType || blob.mimeType || 'image/png';
+    const { mimeType } = blob;
     return {
       ...image,
       data: `data:${mimeType};base64,${blob.data.toString('base64')}`,
@@ -590,11 +540,7 @@ export function materializeImageOutputsForGrading(images?: ImageOutput[]): {
     );
   }
 
-  // Enforce the raw-character caps on the *original* payloads BEFORE any normalization,
-  // so a whitespace-padded or adversarial output can't force a multi-hundred-MB
-  // allocation/scan in normalizeBase64ImageData's whitespace strip. A raw base64 payload
-  // also contributes its separate mimeType to the on-wire data URI, so count that too;
-  // a data: URI already carries its prefix inside image.data, so it isn't double-counted.
+  // Bound the original data and MIME metadata before normalization.
   let totalRawChars = 0;
   for (const image of images) {
     const rawChars = getImageOutputRawChars(image, maxRawChars);
@@ -615,17 +561,9 @@ export function materializeImageOutputsForGrading(images?: ImageOutput[]): {
   let totalImageBytes = 0;
   for (const image of materializedImages) {
     const decodedBytes = getBase64DecodedBytes(image.base64Data);
-    if (decodedBytes > maxImageBytes) {
-      throw new Error(
-        `Image output exceeds multimodal grading size limit: ${decodedBytes} bytes, maximum is ${maxImageBytes}.`,
-      );
-    }
+    assertImageByteLimit(decodedBytes, maxImageBytes);
     totalImageBytes += decodedBytes;
-    if (totalImageBytes > maxTotalImageBytes) {
-      throw new Error(
-        `Image outputs exceed multimodal grading total size limit: ${totalImageBytes} bytes, maximum is ${maxTotalImageBytes}.`,
-      );
-    }
+    assertTotalImageByteLimit(totalImageBytes, maxTotalImageBytes);
   }
 
   return {
@@ -638,9 +576,9 @@ export function materializeImageOutputsForGrading(images?: ImageOutput[]): {
   };
 }
 
-function appendImagesToContent(
+function appendMediaToContent(
   content: unknown,
-  imageParts: MultimodalPromptPart[],
+  mediaParts: MultimodalPromptPart[],
   format: MultimodalPromptFormat,
 ): MultimodalPromptPart[] {
   if (Array.isArray(content)) {
@@ -650,18 +588,18 @@ function appendImagesToContent(
         : format === 'google'
           ? content.map(toGoogleContentPart)
           : content;
-    return [...normalizedContent, ...imageParts] as MultimodalPromptPart[];
+    return [...normalizedContent, ...mediaParts] as MultimodalPromptPart[];
   }
 
   if (typeof content === 'string') {
-    return [buildTextPart(content, format), ...imageParts];
+    return [buildTextPart(content, format), ...mediaParts];
   }
 
   if (content === undefined || content === null) {
-    return imageParts;
+    return mediaParts;
   }
 
-  return [buildTextPart(stringifyContentPart(content), format), ...imageParts];
+  return [buildTextPart(stringifyContentPart(content), format), ...mediaParts];
 }
 
 function getMultimodalPromptFormat(provider: ApiProvider): MultimodalPromptFormat {
@@ -901,21 +839,16 @@ function stringifyContentPart(part: unknown): string {
   return JSON.stringify(part) ?? String(part);
 }
 
-function appendImagesToChatPrompt(
+function appendMediaToChatPrompt(
   renderedPrompt: string,
-  images: { dataUri: string; base64Data: string; mimeType: string }[],
+  mediaParts: MultimodalPromptPart[],
   format: MultimodalPromptFormat,
 ): string {
-  const imageParts: MultimodalPromptPart[] = [
-    buildTextPart(MULTIMODAL_GRADING_INSTRUCTION, format),
-    ...buildImageParts(images, format),
-  ];
-
   let parsed: ChatMessageLike[] | undefined;
   const trimmedPrompt = renderedPrompt.trim();
   if (trimmedPrompt.startsWith('- role:')) {
     try {
-      parsed = yaml.load(renderedPrompt) as ChatMessageLike[] | undefined;
+      parsed = loadYaml(renderedPrompt) as ChatMessageLike[] | undefined;
     } catch (err) {
       throw new Error(
         `Chat Completion prompt is not a valid YAML string: ${err}\n\n${renderedPrompt}`,
@@ -942,10 +875,10 @@ function appendImagesToChatPrompt(
       const userMessage = messages[userMessageIndex];
       messages[userMessageIndex] = {
         ...userMessage,
-        content: appendImagesToContent(userMessage.content, imageParts, format),
+        content: appendMediaToContent(userMessage.content, mediaParts, format),
       };
     } else {
-      messages.push({ role: 'user', content: imageParts });
+      messages.push({ role: 'user', content: mediaParts });
     }
 
     return JSON.stringify(messages);
@@ -954,24 +887,68 @@ function appendImagesToChatPrompt(
   return JSON.stringify([
     {
       role: 'user',
-      content: [buildTextPart(renderedPrompt, format), ...imageParts],
+      content: [buildTextPart(renderedPrompt, format), ...mediaParts],
     },
   ]);
 }
 
-function buildGradingProviderPrompt(
+function buildAudioGradingPart(
+  audio: NonNullable<ProviderResponse['audio']>,
+  provider: ApiProvider,
+): MultimodalPromptPart | undefined {
+  if (provider.getAudioInputFormat?.() !== 'openai') {
+    return undefined;
+  }
+  if (audio.blobRef || hasBlobRefImageValue(audio.data)) {
+    throw new Error(
+      'Audio grading requires inline base64 audio; blob references are not supported.',
+    );
+  }
+  if (audio.format !== 'wav' && audio.format !== 'mp3') {
+    throw new Error('Audio grading requires WAV or MP3 output. Configure the target audio format.');
+  }
+  const data = audio.data?.replace(/\s/g, '') || '';
+  if (data.length > Math.ceil(GRADING_AUDIO_MAX_BYTES / 3) * 4) {
+    throw new Error('Audio output exceeds the 20 MiB grading size limit.');
+  }
+  if (!isValidBase64Payload(data) || getBase64DecodedBytes(data) <= 0) {
+    throw new Error('Audio grading requires non-empty, valid base64 audio data.');
+  }
+  if (getBase64DecodedBytes(data) > GRADING_AUDIO_MAX_BYTES) {
+    throw new Error('Audio output exceeds the 20 MiB grading size limit.');
+  }
+  return { type: 'input_audio', input_audio: { data, format: audio.format } };
+}
+
+async function buildGradingProviderPrompt(
   renderedPrompt: string,
   imageData?: GradingImageData[],
   provider?: ApiProvider,
-): { prompt: string; imageCount: number } {
-  if (!imageData?.length) {
-    return { prompt: renderedPrompt, imageCount: 0 };
+  audio?: ProviderResponse['audio'],
+): Promise<{ prompt: string; imageCount: number; audioAttached: boolean }> {
+  const audioPart = audio && provider ? buildAudioGradingPart(audio, provider) : undefined;
+  const promptFormat = audioPart || !provider ? 'openai' : getMultimodalPromptFormat(provider);
+  const mediaParts: MultimodalPromptPart[] = imageData?.length
+    ? [
+        buildTextPart(MULTIMODAL_GRADING_INSTRUCTION, promptFormat),
+        ...buildImageParts(imageData, promptFormat),
+      ]
+    : [];
+  if (audioPart) {
+    mediaParts.push(
+      buildTextPart(
+        'The evaluated output includes the attached audio. Listen to it as primary evidence for the rubric. Use the transcript only as supporting context; do not infer vocal delivery or sound quality from the transcript alone.',
+        promptFormat,
+      ),
+      audioPart,
+    );
   }
-
-  const promptFormat = provider ? getMultimodalPromptFormat(provider) : 'openai';
   return {
-    prompt: appendImagesToChatPrompt(renderedPrompt, imageData, promptFormat),
-    imageCount: imageData.length,
+    prompt: mediaParts.length
+      ? appendMediaToChatPrompt(renderedPrompt, mediaParts, promptFormat)
+      : renderedPrompt,
+    imageCount: imageData?.length ?? 0,
+    audioAttached: Boolean(audioPart),
   };
 }
 
@@ -979,7 +956,7 @@ function parseJsonGradingResponse(
   label: string,
   resp: ProviderResponse,
 ): { parsed?: Partial<GradingResult>; failure?: Omit<GradingResult, 'assertion'> } {
-  const failWithTokens = (reason: string) => graderFail(reason, resp.tokenUsage);
+  const failWithTokens = (reason: string) => graderFailureFromResponse(reason, resp);
 
   let jsonObjects: unknown[] = [];
   if (typeof resp.output === 'string') {
@@ -1019,6 +996,32 @@ function parseJsonGradingResponse(
   return { parsed: parsed as Partial<GradingResult> };
 }
 
+function graderFailureFromResponse(
+  reason: string,
+  response: ProviderResponse,
+): Omit<GradingResult, 'assertion'> {
+  const failure = graderFail(reason, response.tokenUsage);
+  if (response.cached) {
+    return {
+      ...failure,
+      metadata: { ...failure.metadata, cachedResponse: true },
+    };
+  }
+
+  const usage = failure.tokensUsed;
+  if (
+    usage &&
+    !usage.numRequests &&
+    !(usage.total ?? 0) &&
+    !(usage.prompt ?? 0) &&
+    !(usage.completion ?? 0)
+  ) {
+    return { ...failure, tokensUsed: { ...usage, numRequests: 1 } };
+  }
+
+  return failure;
+}
+
 export async function runJsonGradingPrompt({
   assertion,
   checkName,
@@ -1026,9 +1029,12 @@ export async function runJsonGradingPrompt({
   grading,
   label,
   providerCallContext,
+  providerPromptConfig,
   throwOnError,
   vars,
   imageData,
+  images,
+  audio,
 }: {
   assertion?: Assertion;
   checkName: string;
@@ -1036,9 +1042,13 @@ export async function runJsonGradingPrompt({
   grading: GradingConfig;
   label: string;
   providerCallContext?: CallApiContextParams;
+  /** Prompt config for the grader call, which providers merge over their own config. */
+  providerPromptConfig?: Record<string, unknown>;
   throwOnError?: boolean;
   vars: Record<string, VarValue>;
   imageData?: GradingImageData[];
+  images?: ImageOutput[];
+  audio?: ProviderResponse['audio'];
 }): Promise<GradingResult> {
   const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, defaultPrompt);
   const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
@@ -1052,10 +1062,15 @@ export async function runJsonGradingPrompt({
     defaultProvider,
     checkName,
   );
-  const { prompt: providerPrompt, imageCount } = buildGradingProviderPrompt(
+  const {
+    prompt: providerPrompt,
+    imageCount,
+    audioAttached,
+  } = await buildGradingProviderPrompt(
     renderedPrompt,
-    imageData,
+    imageData ?? materializeImageOutputsForGrading(images).imageData,
     finalProvider,
+    audio,
   );
   const resp = await callProviderWithContext(
     finalProvider,
@@ -1063,12 +1078,13 @@ export async function runJsonGradingPrompt({
     label,
     vars,
     providerCallContext,
+    providerPromptConfig,
   );
   if (resp.error || !resp.output) {
     if (throwOnError) {
       throw new Error(resp.error || 'No output');
     }
-    return graderFail(resp.error || 'No output', resp.tokenUsage);
+    return graderFailureFromResponse(resp.error || 'No output', resp);
   }
   const { parsed, failure } = parseJsonGradingResponse(label, resp);
   if (!parsed) {
@@ -1101,6 +1117,7 @@ export async function runJsonGradingPrompt({
       ? (JSON.parse(serializedMetadata) as Record<string, unknown>)
       : {};
   }
+  const { cachedResponse: _untrustedCachedResponse, ...trustedResponseMetadata } = responseMetadata;
 
   return {
     assertion,
@@ -1112,9 +1129,11 @@ export async function runJsonGradingPrompt({
       completionDetails: resp.tokenUsage?.completionDetails || parsed.tokensUsed?.completionDetails,
     }),
     metadata: {
-      ...responseMetadata,
+      ...trustedResponseMetadata,
       renderedGradingPrompt: renderedPrompt,
       ...(imageCount > 0 ? { renderedGradingPromptImages: imageCount } : {}),
+      ...(audioAttached ? { renderedGradingPromptAudio: true } : {}),
+      ...(resp.cached ? { cachedResponse: true } : {}),
     },
   };
 }
