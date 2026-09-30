@@ -781,8 +781,8 @@ export async function fetchWithRetries(
         const { retryAfterMs } = rateLimitTimingFromHeaders(
           Object.fromEntries(response.headers.entries()),
         );
-        // Release this attempt's response before waiting for another connection.
-        await response.body?.cancel();
+        // A logging clone may keep cleanup pending; do not block retries on its stream.
+        void response.body?.cancel().catch(() => {});
         const waitTime = retryAfterMs ?? Math.pow(2, i) * (backoff + 1000 * Math.random());
         await sleepWithAbort(waitTime, signal);
         continue;

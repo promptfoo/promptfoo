@@ -1512,7 +1512,9 @@ describe('computeRateLimitWaitMs', () => {
 describe('fetchWithRetries', () => {
   beforeEach(() => {
     vi.mocked(sleep).mockClear();
-    vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
+    vi.spyOn(global, 'fetch')
+      .mockReset()
+      .mockImplementation(() => Promise.resolve(new Response()));
     vi.clearAllMocks();
   });
 
@@ -1527,6 +1529,82 @@ describe('fetchWithRetries', () => {
   });
 
   describe('opt-in HTTP response retries', () => {
+    it.each(['retry', 'abort'] as const)(
+      'allows %s to finish while a logging clone keeps response cleanup pending',
+      async (action) => {
+        vi.useFakeTimers();
+        let bodyController!: ReadableStreamDefaultController<Uint8Array>;
+        const unavailable = new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              bodyController = controller;
+            },
+          }),
+          { status: 503, headers: { 'Retry-After': action === 'abort' ? '60' : '0' } },
+        );
+        // Match the response clone read by logRequestResponse while its body is still open.
+        const loggingRead = unavailable.clone().text();
+        const recovered = new Response('recovered');
+        vi.mocked(global.fetch).mockResolvedValueOnce(unavailable).mockResolvedValueOnce(recovered);
+        const controller = new AbortController();
+        let outcome: Response | Error | undefined;
+        const pending = fetchWithRetries(
+          'https://example.com',
+          { retryableResponse: (response) => response.status === 503, signal: controller.signal },
+          100,
+          1,
+        ).then(
+          (response) => {
+            outcome = response;
+          },
+          (error) => {
+            outcome = error;
+          },
+        );
+
+        try {
+          await vi.advanceTimersByTimeAsync(1);
+          if (action === 'abort') {
+            controller.abort();
+            await vi.advanceTimersByTimeAsync(1);
+            expect(outcome).toMatchObject({ name: 'AbortError' });
+            expect(global.fetch).toHaveBeenCalledTimes(1);
+          } else {
+            expect(outcome).toBe(recovered);
+            expect(global.fetch).toHaveBeenCalledTimes(2);
+          }
+        } finally {
+          bodyController.close();
+          await loggingRead;
+          await vi.runAllTimersAsync();
+          await pending;
+          vi.useRealTimers();
+        }
+      },
+    );
+
+    it('preserves Retry-After when best-effort response cancellation rejects', async () => {
+      const unavailable = new Response(
+        new ReadableStream({
+          cancel: () => Promise.reject(new Error('cleanup failed')),
+        }),
+        { status: 503, headers: { 'Retry-After': '0' } },
+      );
+      const recovered = new Response('recovered');
+      vi.mocked(global.fetch).mockResolvedValueOnce(unavailable).mockResolvedValueOnce(recovered);
+
+      expect(
+        await fetchWithRetries(
+          'https://example.com',
+          { retryableResponse: (response) => response.status === 503 },
+          100,
+          1,
+        ),
+      ).toBe(recovered);
+      expect(sleep).toHaveBeenCalledExactlyOnceWith(0);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    });
+
     it('preserves the exhausted global 5xx error for callers without a predicate', async () => {
       await vi.mocked(getEnvBool).withImplementation(
         (key) => key === 'PROMPTFOO_RETRY_5XX',
