@@ -13,7 +13,6 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
 import {
   accumulateAttackerTokenUsage,
   accumulateResponseTokenUsage,
@@ -345,11 +344,6 @@ export default class GoatProvider implements ApiProvider {
               options,
             );
 
-            if (!unblockingResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
-              logger.debug(`Sleeping for ${targetProvider.delay}ms`);
-              await sleep(targetProvider.delay);
-            }
-
             accumulateResponseTokenUsage(totalTokenUsage, unblockingResponse);
 
             const unblockingOutput =
@@ -617,11 +611,6 @@ export default class GoatProvider implements ApiProvider {
         )) as GoatProviderResponse;
         messages.push(pendingMessage);
         lastFinalAttackPrompt = lastTransformResult?.prompt || latestMessageContent;
-
-        if (!targetResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
-          logger.debug(`Sleeping for ${targetProvider.delay}ms`);
-          await sleep(targetProvider.delay);
-        }
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
         logger.debug(`GOAT turn ${turn} target response`, { response: targetResponse });

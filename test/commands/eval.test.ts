@@ -1801,59 +1801,67 @@ describe('evalCommand', () => {
     loggerErrorSpy.mockRestore();
   });
 
-  it('should resume an existing eval with persisted prompts', async () => {
-    const resumeEval = new Eval({ prompts: [] } as UnifiedConfig);
-    resumeEval.prompts = [
-      { raw: 'saved prompt', label: 'Saved', config: { temperature: 0 } },
-    ] as any;
-    resumeEval.runtimeOptions = {
-      repeat: 2,
-      cache: false,
-      maxConcurrency: 2,
-      delay: 0,
-      providerFilter: 'selected-target',
-    };
-    const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(resumeEval);
-    vi.mocked(resolveConfigs).mockResolvedValueOnce({
-      config: {} as UnifiedConfig,
-      testSuite: {
-        prompts: [],
-        providers: [
-          {
-            id: () => 'echo',
-            label: 'selected-target',
-            callApi: vi.fn(),
-          } as ApiProvider,
-        ],
-      },
-      basePath: path.resolve('/'),
-    });
-    vi.mocked(evaluate).mockImplementationOnce(async (testSuite, evalRecord, options) => {
-      expect(testSuite.prompts).toEqual([
+  it.each([undefined, 0, 15])(
+    'resumes saved prompts and pacing without a fresh env default (%s)',
+    async (delay) => {
+      const restore = mockProcessEnv({ PROMPTFOO_DELAY_MS: '1000' });
+      const resumeEval = new Eval({ prompts: [] } as UnifiedConfig);
+      resumeEval.prompts = [
         { raw: 'saved prompt', label: 'Saved', config: { temperature: 0 } },
-      ]);
-      expect(options).toEqual(expect.objectContaining({ repeat: 2, cache: false }));
-      return evalRecord as Eval;
-    });
+      ] as any;
+      resumeEval.runtimeOptions = {
+        repeat: 2,
+        cache: false,
+        maxConcurrency: 2,
+        delay,
+        providerFilter: 'selected-target',
+      };
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValueOnce(resumeEval);
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: {} as UnifiedConfig,
+        testSuite: {
+          prompts: [],
+          providers: [
+            {
+              id: () => 'echo',
+              label: 'selected-target',
+              callApi: vi.fn(),
+            } as ApiProvider,
+          ],
+        },
+        basePath: path.resolve('/'),
+      });
+      vi.mocked(evaluate).mockImplementationOnce(async (testSuite, evalRecord, options) => {
+        expect(testSuite.prompts).toEqual([
+          { raw: 'saved prompt', label: 'Saved', config: { temperature: 0 } },
+        ]);
+        expect(options).toEqual(
+          expect.objectContaining({ repeat: 2, cache: false, delay, delayResolved: true }),
+        );
+        return evalRecord as Eval;
+      });
 
-    try {
-      const result = await doEval(
-        { resume: 'eval-123' } as Parameters<typeof doEval>[0],
-        defaultConfig,
-        defaultConfigPath,
-        {},
-      );
+      try {
+        const result = await doEval(
+          { resume: 'eval-123' } as Parameters<typeof doEval>[0],
+          defaultConfig,
+          defaultConfigPath,
+          {},
+        );
 
-      expect(result).toBe(resumeEval);
-      expect(findByIdSpy).toHaveBeenCalledWith('eval-123');
-      expect(resolveConfigs).toHaveBeenCalledWith(
-        { filterProviders: 'selected-target' },
-        resumeEval.config,
-      );
-    } finally {
-      findByIdSpy.mockRestore();
-    }
-  });
+        expect(result).toBe(resumeEval);
+        expect(result.runtimeOptions).not.toHaveProperty('delayResolved');
+        expect(findByIdSpy).toHaveBeenCalledWith('eval-123');
+        expect(resolveConfigs).toHaveBeenCalledWith(
+          { filterProviders: 'selected-target' },
+          resumeEval.config,
+        );
+      } finally {
+        findByIdSpy.mockRestore();
+        restore();
+      }
+    },
+  );
 
   it('should retry error results from the latest eval and clean up after success', async () => {
     const latestEval = new Eval({ prompts: [] } as UnifiedConfig);
@@ -2401,6 +2409,74 @@ describe('evalCommand', () => {
       expect.objectContaining({ delay: 1000 }),
     );
   });
+
+  it('distinguishes an omitted CLI delay from explicit zero', () => {
+    expect(EvalCommandSchema.parse({}).delay).toBeUndefined();
+    expect(EvalCommandSchema.parse({ delay: '0' }).delay).toBe(0);
+  });
+
+  it('preserves an unspecified delay for grading-provider fallbacks', async () => {
+    const restore = mockProcessEnv({ PROMPTFOO_DELAY_MS: undefined });
+    try {
+      await doEval({}, defaultConfig, defaultConfigPath, {});
+      expect(evaluate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ delay: undefined, delayResolved: true }),
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  it.each([undefined, 0])(
+    'resolves environment delay while preserving explicit zero (%s)',
+    async (delay) => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_DELAY_MS: '13' });
+      try {
+        await doEval({ delay }, defaultConfig, defaultConfigPath, {});
+        expect(evaluate).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.anything(),
+          expect.objectContaining({ delay: delay ?? 13, delayResolved: true }),
+        );
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
+
+  it.each([undefined, 'cli'] as const)(
+    'restores concurrency after preflight failure (%s)',
+    async (eventSource) => {
+      const previousConcurrency = cliState.maxConcurrency;
+      const previousExitCode = process.exitCode;
+      const provider = { id: () => 'offline-delayed', delay: 5, callApi: vi.fn() };
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: {},
+        testSuite: { prompts: [], providers: [provider] },
+        basePath: '',
+      });
+      vi.mocked(checkProviderApiKeys).mockReturnValueOnce(
+        new Map([['FIXTURE_KEY', [provider.id()]]]),
+      );
+      cliState.maxConcurrency = 9;
+      try {
+        const result = doEval({}, defaultConfig, defaultConfigPath, { eventSource });
+        if (eventSource === 'cli') {
+          await result;
+          expect(process.exitCode).toBe(1);
+        } else {
+          await expect(result).rejects.toThrow('Missing required API keys');
+        }
+        expect(cliState.maxConcurrency).toBe(9);
+        expect(provider.callApi).not.toHaveBeenCalled();
+      } finally {
+        cliState.maxConcurrency = previousConcurrency;
+        process.exitCode = previousExitCode;
+      }
+    },
+  );
 
   it('should handle maxConcurrency option', async () => {
     const cmdObj = { maxConcurrency: 5 };

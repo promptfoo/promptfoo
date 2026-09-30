@@ -1,10 +1,13 @@
+import { getEventListeners } from 'node:events';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import { callGradingProvider as callOwnedGradingProvider } from '../../../src/matchers/providers';
 import { PromptfooChatCompletionProvider } from '../../../src/providers/promptfoo';
 import {
   ATTACKER_MODEL,
   ATTACKER_MODEL_SMALL,
-  TEMPERATURE,
+  DEFAULT_TEMPERATURE,
 } from '../../../src/redteam/providers/constants';
 import {
   accumulateGraderResult,
@@ -26,10 +29,13 @@ import {
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
 import { isRateLimitWrapped, RateLimitRegistry } from '../../../src/scheduler';
-import { withProviderCallTracingContext } from '../../../src/scheduler/providerCallExecutionContext';
+import {
+  withProviderCallExecutionContext,
+  withProviderCallTracingContext,
+} from '../../../src/scheduler/providerCallExecutionContext';
 import { sleep } from '../../../src/util/time';
 import { createMockProvider } from '../../factories/provider';
-import { mockProcessEnv } from '../../util/utils';
+import { createDeferred, mockProcessEnv } from '../../util/utils';
 
 import type { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import type { ProviderCallTracingContext } from '../../../src/scheduler/providerCallExecutionContext';
@@ -40,6 +46,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   Prompt,
+  ProviderResponse,
 } from '../../../src/types/index';
 
 // Hoisted mocks for class constructor and loadApiProviders
@@ -181,9 +188,6 @@ describe('shared redteam provider utilities', () => {
 
     // Clear the redteam provider manager cache
     redteamProviderManager.clearProvider();
-    // clearProvider() intentionally keeps the rate limit registry, so reset it
-    // here to keep provider-wrapping state from leaking across shuffled tests.
-    redteamProviderManager.setRateLimitRegistry(undefined);
     resetRedteamProviderLoader();
 
     // Reset cliState to default
@@ -204,7 +208,7 @@ describe('shared redteam provider utilities', () => {
       expect(mockOpenAiInstances.length).toBe(1);
       expect(result.id()).toBe(`openai:${ATTACKER_MODEL}`);
       expect(mockOpenAiInstances[0].config).toEqual({
-        temperature: TEMPERATURE,
+        temperature: DEFAULT_TEMPERATURE,
         response_format: undefined,
       });
     });
@@ -321,7 +325,7 @@ describe('shared redteam provider utilities', () => {
       expect(mockOpenAiInstances.length).toBe(1);
       expect(result.id()).toBe(`openai:${ATTACKER_MODEL_SMALL}`);
       expect(mockOpenAiInstances[0].config).toEqual({
-        temperature: TEMPERATURE,
+        temperature: DEFAULT_TEMPERATURE,
         response_format: undefined,
       });
     });
@@ -333,7 +337,7 @@ describe('shared redteam provider utilities', () => {
       expect(mockOpenAiInstances.length).toBe(1);
       expect(result.id()).toBe(`openai:${ATTACKER_MODEL}`);
       expect(mockOpenAiInstances[0].config).toEqual({
-        temperature: TEMPERATURE,
+        temperature: DEFAULT_TEMPERATURE,
         response_format: { type: 'json_object' },
       });
     });
@@ -666,7 +670,6 @@ describe('shared redteam provider utilities', () => {
         mockedLoadApiProviders.mockResolvedValue([mockProvider]);
 
         const registry = new RateLimitRegistry({ maxConcurrency: 1 });
-        redteamProviderManager.setRateLimitRegistry(registry);
 
         setCliStateConfig({
           redteam: {
@@ -679,7 +682,10 @@ describe('shared redteam provider utilities', () => {
           },
         });
 
-        const got = await redteamProviderManager.getProvider({});
+        const got = await withProviderCallExecutionContext({ rateLimitRegistry: registry }, () =>
+          redteamProviderManager.getProvider({}),
+        );
+        registry.dispose();
 
         // The defaultTest fallback path must apply rate limiting like every other return path.
         expect(isRateLimitWrapped(got)).toBe(true);
@@ -755,7 +761,7 @@ describe('shared redteam provider utilities', () => {
         // Check that an instance was created with json_object response_format
         expect(mockOpenAiInstances.length).toBe(1);
         expect(mockOpenAiInstances[0].config).toEqual({
-          temperature: TEMPERATURE,
+          temperature: DEFAULT_TEMPERATURE,
           response_format: { type: 'json_object' },
         });
       });
@@ -1432,6 +1438,202 @@ describe('shared redteam provider utilities', () => {
   });
 
   describe('callGradingProvider', () => {
+    it.each(
+      [false, true].flatMap((traced) => ['resolve', 'reject'].map((late) => ({ traced, late }))),
+    )('retains its owning scheduler slot until the judge settles: %j', async ({ traced, late }) => {
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const controller = new AbortController();
+      const started = createDeferred<void>();
+      const pending = createDeferred<ProviderResponse>();
+      const owner = createMockProvider({ id: 'offline-owned-grader' });
+      const judge = createMockProvider({
+        id: 'offline-judge',
+        callApi: async () => {
+          started.resolve();
+          return pending.promise;
+        },
+      });
+      const tracingContext: ProviderCallTracingContext = {
+        getActiveTraceparent: () => undefined,
+        withGraderSpan: async (_context, callback) => callback(),
+        withProviderSpan: async ({ callContext }, callback) => callback(callContext),
+      };
+      const invoke = () =>
+        callOwnedGradingProvider(owner, 'fixture', () =>
+          callGradingProvider(judge, 'benign fixture'),
+        );
+      const first = withProviderCallExecutionContext(
+        { abortSignal: controller.signal, rateLimitRegistry: registry },
+        () => (traced ? withProviderCallTracingContext(tracingContext, invoke) : invoke()),
+      ).catch((error) => error.name);
+      const next = vi.fn(async () => ({ output: 'next result' }));
+      let second: Promise<ProviderResponse> | undefined;
+      try {
+        await started.promise;
+        controller.abort();
+        expect(await first).toBe('AbortError');
+        expect(judge.callApi).toHaveBeenCalledWith('benign fixture', undefined, {
+          abortSignal: controller.signal,
+        });
+        second = withProviderCallExecutionContext({ rateLimitRegistry: registry }, () =>
+          callOwnedGradingProvider(owner, 'fixture', next),
+        );
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(next).not.toHaveBeenCalled();
+      } finally {
+        if (late === 'resolve') {
+          pending.resolve({ output: 'late result' });
+        } else {
+          pending.reject(new Error('late fixture failure'));
+        }
+        await first;
+        await second;
+        registry.dispose();
+      }
+      expect(next).toHaveBeenCalledOnce();
+    });
+
+    it.each(
+      [false, true].flatMap((traced) => ['resolve', 'reject'].map((late) => ({ traced, late }))),
+    )(
+      'stops waiting for an uncooperative grader and removes its listener: %j',
+      async ({ traced, late }) => {
+        const controller = new AbortController();
+        let finish!: () => void;
+        const pending = new Promise<{ output: string }>((resolve, reject) => {
+          finish = () =>
+            late === 'resolve'
+              ? resolve({ output: 'late grading' })
+              : reject(new Error('late failure'));
+        });
+        const provider = createMockProvider();
+        vi.mocked(provider.callApi).mockReturnValue(pending);
+        const invoke = () => callGradingProvider(provider, 'fixture');
+        const result = withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
+          traced
+            ? withProviderCallTracingContext(
+                {
+                  getActiveTraceparent: () => undefined,
+                  withGraderSpan: async (_context, callback) => callback(),
+                  withProviderSpan: async ({ callContext }, callback) => callback(callContext),
+                },
+                invoke,
+              )
+            : invoke(),
+        ).then(
+          () => 'resolved',
+          (error) => error.name,
+        );
+        try {
+          expect(provider.callApi).toHaveBeenCalledOnce();
+          controller.abort();
+          const outcome = await Promise.race([
+            result,
+            new Promise((resolve) => setImmediate(() => resolve('still waiting'))),
+          ]);
+          expect(outcome).toBe('AbortError');
+          expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+        } finally {
+          finish();
+          await result;
+        }
+      },
+    );
+
+    it.each(['resolve', 'reject'])(
+      'removes the cancellation listener after normal %s',
+      async (outcome) => {
+        const controller = new AbortController();
+        const provider = createMockProvider();
+        if (outcome === 'reject') {
+          vi.mocked(provider.callApi).mockRejectedValue(new Error('ordinary grader failure'));
+        }
+        const result = withProviderCallExecutionContext({ abortSignal: controller.signal }, () =>
+          callGradingProvider(provider, 'fixture'),
+        );
+        if (outcome === 'reject') {
+          await expect(result).rejects.toThrow('ordinary grader failure');
+        } else {
+          await expect(result).resolves.toHaveProperty('output');
+        }
+        expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+      },
+    );
+
+    it.each(
+      [false, true].flatMap((traced) =>
+        ['ambient only', 'ambient with options', 'combined caller', 'combined evaluation'].map(
+          (mode) => ({ traced, mode }),
+        ),
+      ),
+    )('forwards in-flight grader cancellation: %j', async ({ traced, mode }) => {
+      const evaluation = new AbortController();
+      const caller = new AbortController();
+      const options: CallApiOptionsParams | undefined =
+        mode === 'ambient only'
+          ? undefined
+          : mode === 'ambient with options'
+            ? { includeLogProbs: true }
+            : { abortSignal: caller.signal, includeLogProbs: true };
+      let received: CallApiOptionsParams | undefined;
+      const provider = createMockProvider();
+      vi.mocked(provider.callApi).mockImplementation(async (_prompt, _context, callOptions) => {
+        received = callOptions;
+        if (!callOptions?.abortSignal) {
+          return { output: 'missing cancellation' };
+        }
+        return new Promise((_, reject) => {
+          callOptions.abortSignal!.addEventListener(
+            'abort',
+            () => reject(new DOMException('Fixture cancelled', 'AbortError')),
+            { once: true },
+          );
+        });
+      });
+      const invoke = () => callGradingProvider(provider, 'fixture', undefined, options);
+      const result = withProviderCallExecutionContext({ abortSignal: evaluation.signal }, () =>
+        traced
+          ? withProviderCallTracingContext(
+              {
+                getActiveTraceparent: () => undefined,
+                withGraderSpan: async (_context, callback) => callback(),
+                withProviderSpan: async ({ callContext }, callback) => callback(callContext),
+              },
+              invoke,
+            )
+          : invoke(),
+      ).catch((error) => error);
+      try {
+        (mode === 'combined caller' ? caller : evaluation).abort();
+        expect(received?.abortSignal?.aborted).toBe(true);
+        expect(received?.includeLogProbs).toBe(options?.includeLogProbs);
+        const error = await result;
+        expect(error).toBeInstanceOf(DOMException);
+        expect(error.name).toBe('AbortError');
+        expect(options?.abortSignal).toBe(mode.startsWith('combined') ? caller.signal : undefined);
+      } finally {
+        caller.abort();
+        evaluation.abort();
+        await result;
+      }
+    });
+
+    it.each(['evaluation', 'caller'] as const)(
+      'does not invoke a grader when the %s signal is already aborted',
+      async (source) => {
+        const evaluation = new AbortController();
+        const caller = new AbortController();
+        (source === 'evaluation' ? evaluation : caller).abort();
+        const provider = createMockProvider();
+        await expect(
+          withProviderCallExecutionContext({ abortSignal: evaluation.signal }, () =>
+            callGradingProvider(provider, 'fixture', undefined, { abortSignal: caller.signal }),
+          ),
+        ).rejects.toMatchObject({ name: 'AbortError' });
+        expect(provider.callApi).not.toHaveBeenCalled();
+      },
+    );
+
     it('preserves the provider request when tracing is disabled', async () => {
       const response = { output: 'judge response' };
       const provider = createMockProvider({ response });

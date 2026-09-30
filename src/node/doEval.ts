@@ -77,6 +77,8 @@ import type { InternalEvaluateOptions } from '../types/internal';
 import type { FilterOptions } from '../util/eval/filterTests';
 
 export const EvalCommandSchema = CommandLineOptionsSchema.extend({
+  // Keep omission available for CLI precedence without changing the public schema default.
+  delay: z.coerce.number().int().nonnegative().optional(),
   help: z.boolean().optional(),
   interactiveProviders: z.boolean().optional(),
   remote: z.boolean().optional(),
@@ -279,8 +281,11 @@ export async function doEval(
   defaultConfigPath: string | undefined,
   evaluateOptions: InternalEvaluateOptions,
 ): Promise<Eval> {
-  const envFileOverrides = isCliEventSource(evaluateOptions) ? undefined : {};
+  const envFileOverrides: EnvOverrides = {};
   setupEnv(cmdObj.envPath, { processEnv: envFileOverrides });
+  if (isCliEventSource(evaluateOptions)) {
+    Object.assign(process.env, envFileOverrides);
+  }
   return cliState.withEnvFileOverrides(envFileOverrides, () =>
     doEvalWithEnv(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, envFileOverrides),
   );
@@ -566,6 +571,9 @@ async function doEvalWithEnv(
     if ((!cmdObj.envPath || cmdObj.envPath.length === 0) && commandLineOptions?.envPath) {
       logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
       setupEnv(commandLineOptions.envPath, { processEnv: envFileOverrides });
+      if (isCliInvocation) {
+        Object.assign(process.env, envFileOverrides);
+      }
     }
 
     warnIfRedteamConfigHasNoTests(config, testSuite);
@@ -604,7 +612,7 @@ async function doEvalWithEnv(
     let repeat: number;
     let cache: boolean | undefined;
     let maxConcurrency: number;
-    let delay: number;
+    let delay: number | undefined;
     if (resumeRaw) {
       const persisted = (resumeEval?.runtimeOptions ||
         config.evaluateOptions ||
@@ -615,7 +623,7 @@ async function doEvalWithEnv(
           : 1;
       cache = persisted.cache ?? true;
       maxConcurrency = (persisted.maxConcurrency as number | undefined) ?? DEFAULT_MAX_CONCURRENCY;
-      delay = (persisted.delay as number | undefined) ?? 0;
+      delay = persisted.delay as number | undefined;
     } else {
       // Misc settings with proper CLI vs config priority
       // CLI values explicitly provided by user should override config, but defaults should not
@@ -628,7 +636,11 @@ async function doEvalWithEnv(
         commandLineOptions?.maxConcurrency ??
         evaluateOptions.maxConcurrency ??
         DEFAULT_MAX_CONCURRENCY;
-      delay = cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0;
+      delay =
+        cmdObj.delay ??
+        commandLineOptions?.delay ??
+        evaluateOptions.delay ??
+        getEnvInt('PROMPTFOO_DELAY_MS');
     }
 
     if (cache === false) {
@@ -648,17 +660,6 @@ async function doEvalWithEnv(
       : (cmdObj.maxConcurrency ??
         commandLineOptions?.maxConcurrency ??
         evaluateOptions.maxConcurrency);
-
-    if (delay > 0) {
-      maxConcurrency = 1;
-      // Also limit Python workers to 1 when delay is set (no point having more workers than concurrency)
-      cliState.maxConcurrency = 1;
-      logger.info(
-        `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
-      );
-    } else if (explicitMaxConcurrency !== undefined) {
-      cliState.maxConcurrency = explicitMaxConcurrency;
-    }
 
     const hasScenarios = Boolean(testSuite.scenarios?.length);
     const canSynthesizeImplicitDefaultTest = testSuite.scenarios === undefined;
@@ -742,6 +743,21 @@ async function doEvalWithEnv(
       );
     }
 
+    const effectiveDelay = testSuite.providers.reduce(
+      (max, provider) => Math.max(max, provider.delay ?? delay ?? 0),
+      0,
+    );
+    if (effectiveDelay > 0) {
+      maxConcurrency = 1;
+      // Also limit Python workers to 1 when delay is set (no point having more workers than concurrency)
+      cliState.maxConcurrency = 1;
+      logger.info(
+        `Running at concurrency=1 because ${effectiveDelay}ms delay was requested between API calls`,
+      );
+    } else if (explicitMaxConcurrency !== undefined) {
+      cliState.maxConcurrency = explicitMaxConcurrency;
+    }
+
     // Check for missing API keys after provider filtering
     const missingApiKeys = checkProviderApiKeys(testSuite.providers, { useDescriptions: true });
 
@@ -783,7 +799,7 @@ async function doEvalWithEnv(
               : evaluateOptions.showProgressBar
             : cmdObj.progressBar !== false,
       repeat,
-      delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
+      delay: delay !== undefined && Number.isFinite(delay) && delay >= 0 ? delay : undefined,
       filterRange,
       maxConcurrency,
       cache,
@@ -944,6 +960,8 @@ async function doEvalWithEnv(
     try {
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
+        // Keep a saved omission distinct from zero without adopting a new env default.
+        delayResolved: true,
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
         abortSignal: evaluateOptions.abortSignal,
         isRedteam: Boolean(config.redteam),
@@ -1308,7 +1326,11 @@ async function doEvalWithEnv(
     const runEnv: EnvOverrides = {};
     return cliState.withConfig(undefined, () =>
       cliState.withBasePath(undefined, () =>
-        cliState.withEnv(runEnv, () => runEvaluationWithEnv(runEnv, initialization)),
+        cliState.withEnv(runEnv, () =>
+          cliState.withMaxConcurrency(undefined, () =>
+            runEvaluationWithEnv(runEnv, initialization),
+          ),
+        ),
       ),
     );
   };

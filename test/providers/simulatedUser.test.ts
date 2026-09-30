@@ -1,12 +1,14 @@
 import dedent from 'dedent';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SimulatedUser } from '../../src/providers/simulatedUser';
+import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
 import * as timeUtils from '../../src/util/time';
 import {
   createMockProvider,
   createProviderResponse,
   type MockApiProvider,
 } from '../factories/provider';
+import { createDeferred } from '../util/utils';
 
 import type { ApiProvider } from '../../src/types/index';
 
@@ -62,6 +64,10 @@ describe('SimulatedUser', () => {
     });
 
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('id()', () => {
@@ -189,6 +195,7 @@ describe('SimulatedUser', () => {
           '{"role":"user","content":"{\\"reply\\":\\"I like that idea\\",\\"preference\\":\\"outdoor\\"}"}',
         ),
         expect.anything(),
+        undefined,
       );
     });
 
@@ -294,6 +301,7 @@ describe('SimulatedUser', () => {
             instructions: 'test instructions',
           }),
         }),
+        undefined,
       );
     });
 
@@ -339,6 +347,108 @@ describe('SimulatedUser', () => {
       expect(providerWithDelay.callApi).toHaveBeenCalledTimes(2);
       expect(timeUtils.sleep).toHaveBeenCalledWith(100);
     });
+
+    it.each(['cached', 'self-delaying'])(
+      'does not add a target delay for %s responses',
+      async (mode) => {
+        const target: ApiProvider = {
+          id: () => 'offline-target',
+          delay: 100,
+          handlesOwnDelay: mode === 'self-delaying',
+          callApi: vi.fn().mockResolvedValue({ output: 'ok', cached: mode === 'cached' }),
+        };
+        await simulatedUser.callApi('hello', {
+          originalProvider: target,
+          vars: {},
+          prompt: { raw: 'hello', label: 'fixture' },
+        });
+        expect(target.callApi).toHaveBeenCalledTimes(2);
+        expect(timeUtils.sleep).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([false, true])(
+      'forwards call options to every conversation turn (initial=%s)',
+      async (initial) => {
+        const controller = new AbortController();
+        const options = { abortSignal: controller.signal, includeLogProbs: true };
+        await simulatedUser.callApi(
+          'hello',
+          {
+            originalProvider,
+            vars: initial ? { initialMessages: [{ role: 'user', content: 'hello' }] } : {},
+            prompt: { raw: 'hello', label: 'fixture' },
+          },
+          options,
+        );
+        expect(originalProvider.callApi).toHaveBeenCalledTimes(initial ? 3 : 2);
+        for (const call of vi.mocked(originalProvider.callApi).mock.calls) {
+          expect(call[2]).toEqual(options);
+        }
+        expect(mockUserProviderCallApi).toHaveBeenCalledTimes(2);
+        for (const call of mockUserProviderCallApi.mock.calls) {
+          expect(call[2]).toEqual(options);
+        }
+      },
+    );
+
+    it.each([false, true])(
+      'cancels user generation without starting a target turn (already aborted=%s)',
+      async (alreadyAborted) => {
+        const controller = new AbortController();
+        const reason = new DOMException('Fixture cancellation', 'AbortError');
+        const entered = createDeferred<void>();
+        mockUserProviderCallApi.mockImplementationOnce(
+          (_prompt, _context, options) =>
+            new Promise((resolve, reject) => {
+              entered.resolve();
+              const signal = options?.abortSignal;
+              if (!signal) {
+                resolve({ output: '###STOP###' });
+              } else if (signal.aborted) {
+                reject(signal.reason);
+              } else {
+                signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+              }
+            }),
+        );
+        if (alreadyAborted) {
+          controller.abort(reason);
+        }
+        const pending = simulatedUser.callApi(
+          'fixture',
+          { originalProvider, vars: {}, prompt: { raw: 'fixture', label: 'fixture' } },
+          { abortSignal: controller.signal },
+        );
+        const rejected = expect(pending).rejects.toBe(reason);
+        await entered.promise;
+        controller.abort(reason);
+        await rejected;
+        expect(mockUserProviderCallApi).toHaveBeenCalledTimes(1);
+        expect(originalProvider.callApi).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([0, 25])(
+      'preserves invocation-local delay %s with an unchanged target',
+      async (delay) => {
+        const result = await withProviderCallExecutionContext(
+          { providerDelay: { provider: originalProvider, delay } },
+          () =>
+            simulatedUser.callApi('hello', {
+              originalProvider,
+              vars: {},
+              prompt: { raw: 'hello', label: 'hello' },
+            }),
+        );
+        expect(result.error).toBeUndefined();
+        expect(originalProvider.callApi).toHaveBeenCalledTimes(2);
+        expect(vi.mocked(timeUtils.sleep).mock.calls.map(([ms]) => ms)).toEqual(
+          delay ? [delay, delay] : [],
+        );
+        expect(originalProvider.delay).toBeUndefined();
+      },
+    );
 
     it('should include sessionId from agentResponse in metadata', async () => {
       const providerWithSessionId = createMockProvider({

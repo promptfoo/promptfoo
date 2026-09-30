@@ -92,6 +92,8 @@ Or via environment variable:
 PROMPTFOO_DELAY_MS=1000 promptfoo eval
 ```
 
+An explicit provider delay takes precedence over the eval delay, which takes precedence over `PROMPTFOO_DELAY_MS`. Set `--delay 0` or `evaluateOptions.delay: 0` to override the environment default. Reusing a provider in another eval does not retain the previous eval's delay.
+
 ### Backoff Configuration
 
 Promptfoo has two retry layers:

@@ -1,10 +1,10 @@
 import logger, { isDebugEnabled } from '../logger';
 import { getSessionId } from '../redteam/util';
+import { callProviderWithContext } from '../scheduler/providerCallExecutionContext';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
-import { sleep } from '../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { PromptfooSimulatedUserProvider } from './promptfoo';
 
@@ -198,6 +198,7 @@ export class SimulatedUser implements ApiProvider {
   private async sendMessageToUser(
     messages: Message[],
     userProvider: PromptfooSimulatedUserProvider,
+    options?: CallApiOptionsParams,
   ): Promise<{ messages: Message[]; response: ProviderResponse }> {
     logger.debug('[SimulatedUser] Sending message to simulated user provider');
 
@@ -208,7 +209,11 @@ export class SimulatedUser implements ApiProvider {
       };
     });
 
-    const response = await userProvider.callApi(JSON.stringify(flippedMessages));
+    const response = await userProvider.callApi(
+      JSON.stringify(flippedMessages),
+      undefined,
+      options,
+    );
 
     // Propagate error from remote generation disable check
     if (response.error) {
@@ -247,6 +252,7 @@ export class SimulatedUser implements ApiProvider {
     messages: Message[],
     targetProvider: ApiProvider,
     context: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     invariant(context?.prompt?.raw, 'Expected context.prompt.raw to be set');
 
@@ -270,16 +276,11 @@ export class SimulatedUser implements ApiProvider {
 
     logger.debug(`[SimulatedUser] Sending message to target provider: ${targetPrompt}`);
 
-    const response = await targetProvider.callApi(targetPrompt, context);
+    const response = await callProviderWithContext(targetProvider, targetPrompt, context, options);
 
     if (response.sessionId) {
       context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
       context.vars.sessionId = response.sessionId;
-    }
-
-    if (targetProvider.delay) {
-      logger.debug(`[SimulatedUser] Sleeping for ${targetProvider.delay}ms`);
-      await sleep(targetProvider.delay);
     }
 
     if (isDebugEnabled()) {
@@ -291,7 +292,7 @@ export class SimulatedUser implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     const targetProvider = context.originalProvider;
@@ -336,7 +337,13 @@ export class SimulatedUser implements ApiProvider {
       logger.debug(
         '[SimulatedUser] Initial messages end with user message, getting agent response first',
       );
-      agentResponse = await this.sendMessageToAgent(prompt, messages, targetProvider, context);
+      agentResponse = await this.sendMessageToAgent(
+        prompt,
+        messages,
+        targetProvider,
+        context,
+        callApiOptions,
+      );
 
       this.accumulateTargetTokenUsage(tokenUsage, agentResponse);
 
@@ -355,7 +362,7 @@ export class SimulatedUser implements ApiProvider {
       logger.debug(`[SimulatedUser] Turn ${i + 1} of ${maxTurns}`);
 
       // The simulated-user provider generates the next attack turn and may signal completion.
-      const userResult = await this.sendMessageToUser(messages, userProvider);
+      const userResult = await this.sendMessageToUser(messages, userProvider, callApiOptions);
 
       this.accumulateSimulatedUserTokenUsage(tokenUsage, userResult.response);
 
@@ -386,6 +393,7 @@ export class SimulatedUser implements ApiProvider {
         messagesToUser,
         targetProvider,
         context,
+        callApiOptions,
       );
 
       this.accumulateTargetTokenUsage(tokenUsage, agentResponse);
