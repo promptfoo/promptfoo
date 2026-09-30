@@ -24,6 +24,7 @@ import {
 } from '../constants';
 import { SetupSection } from '../SetupSection';
 import BedrockAuthentication from './BedrockAuthentication';
+import SensitiveTextField from './tabs/SensitiveTextField';
 
 import type { ProviderOptions } from '../../types';
 
@@ -670,18 +671,13 @@ const FoundationModelConfiguration = ({
             </div>
 
             {!isBedrock && (
-              <div className="space-y-2">
-                <Label htmlFor="api-key">API Key</Label>
-                <Input
-                  id="api-key"
-                  type="password"
-                  value={selectedTarget.config?.apiKey ?? ''}
-                  onChange={(e) => updateCustomTarget('apiKey', e.target.value || undefined)}
-                />
-                <p className="text-sm text-muted-foreground">
-                  Optional - defaults to {providerInfo.envVar} environment variable
-                </p>
-              </div>
+              <SensitiveTextField
+                key={`${providerType}:${selectedTarget.id}`}
+                label="API Key"
+                value={selectedTarget.config?.apiKey ?? ''}
+                onChange={(e) => updateCustomTarget('apiKey', e.target.value || undefined)}
+                helperText={`Leave blank to use ${providerInfo.envVar}. Keys entered here are included in the provider configuration and exported YAML.`}
+              />
             )}
 
             {(!isBedrock || isBedrockHttpApi) && (

@@ -42,6 +42,8 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
 }) => {
   const { showToast } = useToast();
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const privateKeyId = React.useId();
+  const secretHelpId = `${privateKeyId}-help`;
 
   return (
     <>
@@ -80,6 +82,11 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
 
       {selectedTarget.config?.tls?.enabled && (
         <div className="mt-6 space-y-8">
+          <p id={secretHelpId} className="text-sm text-muted-foreground">
+            Keys and passwords entered or uploaded here are included in the provider configuration
+            and exported YAML. Reference key files by path to keep their contents out of the
+            configuration.
+          </p>
           {/* Certificate Type Selection */}
           <div className="space-y-2">
             <Label>Certificate Type</Label>
@@ -368,18 +375,28 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                 )}
 
                 {selectedTarget.config?.tls?.keyInputType === 'inline' && (
-                  <Textarea
-                    rows={4}
-                    placeholder="-----BEGIN PRIVATE KEY-----&#10;...key content...&#10;-----END PRIVATE KEY-----"
-                    value={selectedTarget.config?.tls?.key || ''}
-                    onChange={(e) =>
-                      updateCustomTarget('tls', {
-                        ...selectedTarget.config?.tls,
-                        key: e.target.value,
-                        keyPath: undefined,
-                      })
-                    }
-                  />
+                  <div className="space-y-2">
+                    <Label htmlFor={privateKeyId}>Private Key</Label>
+                    <Textarea
+                      id={privateKeyId}
+                      aria-describedby={secretHelpId}
+                      autoComplete="new-password"
+                      spellCheck={false}
+                      data-1p-ignore
+                      data-lpignore="true"
+                      data-form-type="other"
+                      rows={4}
+                      placeholder="-----BEGIN PRIVATE KEY-----&#10;...key content...&#10;-----END PRIVATE KEY-----"
+                      value={selectedTarget.config?.tls?.key || ''}
+                      onChange={(e) =>
+                        updateCustomTarget('tls', {
+                          ...selectedTarget.config?.tls,
+                          key: e.target.value,
+                          keyPath: undefined,
+                        })
+                      }
+                    />
+                  </div>
                 )}
               </div>
 

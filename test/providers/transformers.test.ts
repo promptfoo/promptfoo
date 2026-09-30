@@ -5,6 +5,10 @@ vi.mock('@huggingface/transformers', () => ({
   pipeline: vi.fn(),
 }));
 
+vi.mock('../../src/providers/transformersAvailability', () => ({
+  loadTransformers: () => import('@huggingface/transformers'),
+}));
+
 // Mock the providerRegistry to prevent actual cleanup registration
 vi.mock('../../src/providers/providerRegistry', () => ({
   providerRegistry: {

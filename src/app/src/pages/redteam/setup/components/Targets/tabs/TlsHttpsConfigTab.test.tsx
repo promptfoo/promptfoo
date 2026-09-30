@@ -33,6 +33,47 @@ describe('TlsHttpsConfigTab', () => {
     mockUpdateCustomTarget = vi.fn();
   });
 
+  it('labels inline key and password fields and explains where their values go', async () => {
+    const user = userEvent.setup();
+    const tls = {
+      enabled: true,
+      rejectUnauthorized: true,
+      certificateType: 'pem',
+      keyInputType: 'inline',
+      key: 'test-key',
+      passphrase: 'test-password',
+    } satisfies NonNullable<HttpProviderOptions['config']>['tls'];
+    renderWithProviders(
+      <TlsHttpsConfigTab
+        selectedTarget={{ id: 'http', config: { tls } }}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+    const key = screen.getByRole('textbox', { name: 'Private Key' });
+    expect(key).toHaveAccessibleDescription(
+      /included in the provider configuration and exported YAML/,
+    );
+    expect(key).toHaveAttribute('spellcheck', 'false');
+    expect(key).toHaveAttribute('autocomplete', 'new-password');
+    await user.click(key);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('replacement-key');
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('tls', {
+      ...tls,
+      key: 'replacement-key',
+      keyPath: undefined,
+    });
+
+    const password = screen.getByLabelText('Password');
+    expect(password).toHaveAttribute('type', 'password');
+    expect(password).toHaveAccessibleDescription(
+      /Required only if your private key file is encrypted/,
+    );
+    await user.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(password).toHaveAttribute('type', 'text');
+    expect(key).toHaveValue('test-key');
+  });
+
   describe('TLS Version Selects', () => {
     it('should render TLS version selects without errors when Advanced TLS Options is expanded', async () => {
       const user = userEvent.setup();
