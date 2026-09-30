@@ -4205,6 +4205,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           prompts,
         });
       }
+      checkAbort();
     } catch (err) {
       if (!combinedAbortSignal.aborted) {
         cleanupProgressAfterError(progressBarManager, ciProgressReporter, err);

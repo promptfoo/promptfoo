@@ -1391,6 +1391,7 @@ describeEvaluator('evaluator execution control', () => {
         await evaluation;
         expect(receivedSignal?.aborted).toBe(true);
         expect(judge.callApi).toHaveBeenCalledOnce();
+        expect(record.setDurationMs).toHaveBeenCalledOnce();
         expect(results).toHaveLength(1);
         expect(results[0]).toMatchObject({
           success: false,
