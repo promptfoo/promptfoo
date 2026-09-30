@@ -48,6 +48,8 @@ An alias such as `jev-latest` moves when TypeSafe ships a new release. If you tu
 | `labels`         | array/object        | -                         | 2–255 Choice options for `classifier`: a list of unique, nonempty labels, or a map of label to description    |
 | `maxRetries`     | integer             | `4`                       | Additional attempts for transient failures, including `429` and `529`; set to `0` to disable retries          |
 
+`apiBaseUrl` must use HTTP or HTTPS and must not contain embedded credentials, a query, or a fragment. Supply the API key with `apiKey` or `TYPESAFE_API_KEY`.
+
 Level descriptions, label descriptions, and `instructions` can be strings, JSON objects, or arrays, as in the [TypeSafe API](https://docs.typesafe.ai/primitives/advanced). Label descriptions can also be `null` when the label needs no extra detail. Label names must contain non-whitespace characters.
 
 ## Grading with `llm-rubric`
