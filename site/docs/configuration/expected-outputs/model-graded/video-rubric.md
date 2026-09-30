@@ -1,7 +1,7 @@
 ---
 sidebar_label: Video rubric
 title: Video rubric
-description: Grade generated videos against a written rubric with a video-capable model. Configure the judge and score threshold, and understand managed storage and size limits.
+description: Grade generated videos against a rubric with a video-capable model. Configure the judge and score threshold, and understand managed storage and size limits.
 sidebar_position: 30
 ---
 
