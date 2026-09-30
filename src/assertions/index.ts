@@ -811,17 +811,7 @@ export async function runAssertions({
     })
     .flat();
 
-  const shouldPreloadTrace =
-    !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
-  let preloadedTraceData: TraceData | null | undefined;
-  if (shouldPreloadTrace && traceId) {
-    try {
-      preloadedTraceData = await loadTraceData(traceId);
-    } catch (error) {
-      logger.debug(`Failed to preload trace data for assertions: ${error}`);
-      preloadedTraceData = null;
-    }
-  }
+  let traceDataPromise: Promise<TraceData | null> | undefined;
 
   // Serialize when the grouping queue is active: concurrent dispatch can
   // reorder provider enqueues and split same-judge groups.
@@ -847,9 +837,10 @@ export async function runAssertions({
 
   const jobs: (typeof asserts)[] = [];
   for (const entry of asserts) {
-    const previous = jobs.at(-1)?.at(-1);
+    const previousChain = jobs[jobs.length - 1];
+    const previous = previousChain?.[previousChain.length - 1];
     if (previous?.assertion.fallback === 'next' && previous.assertResult === entry.assertResult) {
-      jobs.at(-1)!.push(entry);
+      previousChain.push(entry);
     } else {
       jobs.push([entry]);
     }
@@ -862,6 +853,14 @@ export async function runAssertions({
         // Comparison assertions run after all provider outputs are available.
         return;
       }
+      let traceData: TraceData | null | undefined;
+      if (traceId && assertionMayNeedTraceContext(assertion)) {
+        traceDataPromise ??= loadTraceData(traceId).catch((error) => {
+          logger.debug(`Failed to fetch trace data for assertions: ${error}`);
+          return null;
+        });
+        traceData = await traceDataPromise;
+      }
       const result = await runAssertion({
         prompt,
         provider,
@@ -872,7 +871,7 @@ export async function runAssertions({
         latencyMs,
         assertIndex: index,
         traceId,
-        traceData: preloadedTraceData,
+        traceData,
         claimStoredGradingUsage,
       });
       if (!result.pass && assertion.fallback === 'next') {

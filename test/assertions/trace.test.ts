@@ -299,7 +299,7 @@ describe('trace assertions', () => {
       expect(result.pass).toBe(true);
     });
 
-    it('should reuse a preloaded missing trace instead of retrying once per assertion', async () => {
+    it('should reuse a missing trace instead of retrying once per assertion', async () => {
       mockProcessEnv({ PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: '2' });
       mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: '0' });
       mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: '1' });
@@ -326,6 +326,42 @@ describe('trace assertions', () => {
 
       expect(result.pass).toBe(true);
       expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([null, mockTraceData])('does not fetch an unreached trace fallback', async (trace) => {
+      mockTraceStore.getTrace.mockResolvedValue(trace);
+      const result = await runAssertions({
+        test: {
+          assert: [
+            { type: 'contains', value: 'Test', fallback: 'next' },
+            { type: 'trace-span-count', value: { pattern: '*', min: 1 } },
+          ],
+        },
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+      expect(result).toMatchObject({ pass: true, score: 1 });
+      expect(result.componentResults).toHaveLength(1);
+      expect(mockTraceStore.getTrace).not.toHaveBeenCalled();
+    });
+
+    it('shares one trace fetch between reached fallbacks', async () => {
+      mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+      const result = await runAssertions({
+        test: {
+          assert: [
+            { type: 'equals', value: 'other', fallback: 'next' },
+            { type: 'trace-span-count', value: { pattern: '*', min: 2 } },
+            { type: 'contains', value: 'missing', fallback: 'next' },
+            { type: 'trace-span-duration', value: { max: 1000 } },
+          ],
+        },
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+      expect(result).toMatchObject({ pass: true, score: 1 });
+      expect(result.componentResults).toHaveLength(2);
+      expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(1);
     });
 
     it('should pass trace data to file:// scripts for non-trace assertion types', async () => {
