@@ -619,6 +619,12 @@ describe('XAIResponsesProvider', () => {
       cost: 0.023,
     },
     {
+      name: 'input-only custom pricing without an output rate',
+      config: { passthrough: { model: 'custom-model' }, inputCost: 0.002 },
+      usage: { input_tokens: 10, output_tokens: 0, cost_in_usd_ticks: 12_500_000_000 },
+      cost: 0.02,
+    },
+    {
       name: 'input-only usage',
       config: {},
       usage: { input_tokens: 10, output_tokens: 0, input_tokens_details: { cached_tokens: 8 } },
