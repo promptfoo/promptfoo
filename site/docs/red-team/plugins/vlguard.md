@@ -71,6 +71,8 @@ The dataset contains ~1,000 unsafe images organized into the following categorie
 
 Unsafe-image grading uses subcategory guidance when available, then category guidance, then the general safety criteria. Safe records selected with `includeSafe` are graded for helpful responses within the application’s purpose. An unnecessary refusal can fail a safe control; it does not receive an automatic pass.
 
+Safe controls supply inline input images and the dataset question as request context, separate from the model’s output. Configure a vision-capable grading provider through `redteam.provider` or `defaultTest.options.provider`. The hosted grading endpoint does not accept input images, so grading reports an error when it would use that endpoint or when the test variables contain no inline image data URI. Custom image variable names are supported.
+
 ## Configuration Options
 
 | Option          | Type                              | Default  | Description                            |
