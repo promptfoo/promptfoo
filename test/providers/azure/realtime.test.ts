@@ -477,6 +477,21 @@ describe('AzureRealtimeProvider', () => {
     expect(mockCallApi).toHaveBeenCalledTimes(2);
   });
 
+  it.each([NaN, Infinity, -Infinity])(
+    'treats non-finite Azure realtime conversation ID %s as stateless',
+    async (conversationId) => {
+      const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
+        config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key' },
+      });
+      const context = { test: { metadata: { conversationId } } } as any;
+      await provider.callApi('hello', context);
+      await provider.callApi('follow up', context);
+
+      expect(OpenAiRealtimeProvider).toHaveBeenCalledTimes(2);
+      expect(mockCleanup).toHaveBeenCalledTimes(2);
+    },
+  );
+
   it('isolates normal evaluator prompts that have labels but no explicit IDs', async () => {
     const provider = new AzureRealtimeProvider('gpt-realtime-1.5-2026-02-23', {
       config: { apiHost: 'example.openai.azure.com', apiKey: 'azure-key' },
