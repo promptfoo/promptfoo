@@ -37,6 +37,20 @@ function writeBuildAssets(source: string): void {
   }
 }
 
+describe('package artifact profiles', () => {
+  it('rejects browser installation in the omit-optional profile', () => {
+    const script = path.resolve(__dirname, '../../scripts/testPackageArtifact.ts');
+    const result = spawnSync(
+      process.execPath,
+      ['--import', 'tsx', script, '--browser', '--profile', 'omit-optional'],
+      { encoding: 'utf8' },
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('--browser requires the default profile');
+    expect(result.stdout).not.toContain('Installing packed consumer');
+  });
+});
+
 describe('package artifact packing', () => {
   it('packs prebuilt bytes without hooks and inspects an unchanged archive with spaces in its path', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-packer-'));
