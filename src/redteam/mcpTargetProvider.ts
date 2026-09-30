@@ -133,7 +133,14 @@ class RedteamMcpTargetProvider implements ApiProvider {
           },
           options,
         ).catch((error: unknown) => {
-          materializationUsage = { tokenUsage: getErrorTokenUsage(error) };
+          materializationUsage = {
+            tokenUsage: getErrorTokenUsage(error),
+            cached:
+              typeof error === 'object' &&
+              error !== null &&
+              'cached' in error &&
+              error.cached === true,
+          };
           throw error;
         });
 

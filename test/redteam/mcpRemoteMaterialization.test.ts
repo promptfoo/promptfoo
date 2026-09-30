@@ -214,28 +214,40 @@ describe('materializeMcpToolCallRemote', () => {
       status: 200,
       statusText: 'OK',
     },
-  ])('preserves paid token usage when $description', async ({ result, status, statusText }) => {
-    vi.mocked(getEnvString).mockImplementation((key: string) =>
-      key === 'PROMPTFOO_REMOTE_GENERATION_URL' ? 'https://remote.example.test/task' : '',
-    );
-    const tokenUsage = { prompt: 12, completion: 4, total: 16, numRequests: 1 };
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: { result, tokenUsage },
-      status,
-      statusText,
-    } as Awaited<ReturnType<typeof fetchWithCache>>);
+    {
+      description: 'cached output fails validation',
+      result: { tool: 'unknown_tool', args: {} },
+      status: 200,
+      statusText: 'OK',
+      cached: true,
+    },
+  ])(
+    'preserves reported token usage when $description',
+    async ({ result, status, statusText, cached }) => {
+      vi.mocked(getEnvString).mockImplementation((key: string) =>
+        key === 'PROMPTFOO_REMOTE_GENERATION_URL' ? 'https://remote.example.test/task' : '',
+      );
+      const tokenUsage = { prompt: 12, completion: 4, total: 16, numRequests: 1 };
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { result, tokenUsage },
+        cached,
+        status,
+        statusText,
+      } as Awaited<ReturnType<typeof fetchWithCache>>);
 
-    await expect(
-      materializeMcpToolCallRemote({
-        tools: [searchCompaniesTool],
-        value: 'Find clean energy companies.',
-      }),
-    ).rejects.toMatchObject({
-      cause: expect.any(Error),
-      message: expect.stringContaining('Remote MCP materialization failed'),
-      tokenUsage,
-    });
-  });
+      await expect(
+        materializeMcpToolCallRemote({
+          tools: [searchCompaniesTool],
+          value: 'Find clean energy companies.',
+        }),
+      ).rejects.toMatchObject({
+        cause: expect.any(Error),
+        message: expect.stringContaining('Remote MCP materialization failed'),
+        tokenUsage,
+        ...(cached && { cached: true }),
+      });
+    },
+  );
 
   it('preserves paid token usage carried by a rejected remote request', async () => {
     vi.mocked(getEnvString).mockImplementation((key: string) =>
