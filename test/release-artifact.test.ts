@@ -28,6 +28,11 @@ const workflow = yaml.load(
   jobs: Record<string, Job>;
 };
 const directories: string[] = [];
+// npm and npx expose sibling entrypoints; other runners can still use npm from PATH.
+const npmCli = process.env.npm_execpath
+  ? path.join(path.dirname(process.env.npm_execpath), 'npm-cli.js')
+  : undefined;
+const directNpm = npmCli && fs.existsSync(npmCli);
 const bash =
   process.platform === 'win32'
     ? path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Git/bin/bash.exe')
@@ -286,9 +291,11 @@ else {
       )!.run!;
       const evidence = path.join(root, 'cli-calls');
       const result = spawnSync(bash, ['-e', '-o', 'pipefail'], {
-        // Package these tiny fixtures without starting npm twice before the acceptance workflow.
-        // Relative archive paths also avoid GNU tar treating Windows drive letters as remote hosts.
+        // Git Bash's npm launcher starts several helper processes to rediscover Node and npm.
+        // Use this runner's entrypoints, while still running the real npm install and rebuild.
+        // Relative archive paths avoid GNU tar treating Windows drive letters as remote hosts.
         input:
+          (directNpm ? 'npm() { "$NODE_BINARY" "$NPM_CLI" "$@"; }\n' : '') +
           'tar -czf better-sqlite3-0.0.0.tgz -C native package\n' +
           'tar -czf artifact/promptfoo-0.0.0.tgz -C fixture package\n' +
           'cd fixture/package\n' +
@@ -299,6 +306,8 @@ else {
         timeout: 15_000,
         env: {
           ...process.env,
+          NODE_BINARY: process.execPath.replaceAll('\\', '/'),
+          NPM_CLI: npmCli?.replaceAll('\\', '/'),
           RUNNER_TEMP: root.replaceAll('\\', '/'),
           PACKAGE_TARBALL: tarball,
           PACKAGE_DIR: packageDir.replaceAll('\\', '/'),
@@ -311,8 +320,9 @@ else {
           npm_config_cache: path.join(root, 'npm-cache'),
         },
       });
-      expect(result.error).toBeUndefined();
-      expect(result.status === 0, result.stderr).toBe(failure === 'none');
+      const output = `${result.stdout}\n${result.stderr}`;
+      expect(result.error, output).toBeUndefined();
+      expect(result.status === 0, output).toBe(failure === 'none');
       expect(fs.existsSync(evidence)).toBe(failure !== 'rebuild');
       if (failure === 'rebuild') {
         expect(result.stderr).toContain('fixture native rebuild failed');
