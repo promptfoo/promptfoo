@@ -91,7 +91,10 @@ jobs:
           # Keep the matrix label at 22.22 for stable check names, but install exactly
           # 22.22.0 so this lane tests the engines floor itself rather than latest 22.22.x.
           node-version: ${{ matrix.node == '22.22' && '22.22.0' || matrix.node }}
-          cache: 'npm'
+          # Windows already caches node_modules below; compressing npm's download cache
+          # again can stall post-job cleanup long after the tests finish.
+          cache: ${{ runner.os != 'Windows' && 'npm' || '' }}
+          package-manager-cache: false
 
       - name: Use Python 3.14
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
