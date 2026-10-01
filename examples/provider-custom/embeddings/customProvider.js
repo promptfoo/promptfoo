@@ -5,6 +5,7 @@ class CustomApiProvider {
 
     // The config object contains any options passed to the provider in the config file.
     this.config = options.config;
+    this.apiKey = this.config?.apiKey ?? options.env?.OPENAI_API_KEY;
   }
 
   id() {
@@ -24,7 +25,7 @@ class CustomApiProvider {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${this.apiKey ?? process.env.OPENAI_API_KEY}`,
       },
       body: JSON.stringify(body),
     });
@@ -35,7 +36,7 @@ class CustomApiProvider {
         error: 'Unknown error',
       };
     }
-    const ret = {
+    return {
       embedding: data.data[0].embedding,
       tokenUsage: {
         total: data.usage.total_tokens,
@@ -43,7 +44,6 @@ class CustomApiProvider {
         completion: 0,
       },
     };
-    return ret;
   }
 }
 
