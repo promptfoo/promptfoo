@@ -91,7 +91,22 @@ describe('TempoProvider', () => {
     'rejects incomplete or invalid %s counters without returning partial spans',
     async (location) => {
       const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
-      for (const count of [1, '1', -1, 0.5, 'unknown', {}, false]) {
+      for (const count of [
+        1,
+        '1',
+        -1,
+        0.5,
+        '0.01',
+        '1e-4',
+        '+0',
+        '00',
+        '0x0',
+        '0.',
+        '',
+        'unknown',
+        {},
+        false,
+      ]) {
         const data = structuredClone(traceResponse);
         const batch = data.batches[0];
         const scope = batch.scopeSpans[0];
@@ -144,7 +159,7 @@ describe('TempoProvider', () => {
     await expect(provider.fetchTrace(TRACE_ID)).rejects.toThrow('must be arrays');
   });
 
-  it.each([undefined, null, 0, '0', '0.0', '0e0'])(
+  it.each([undefined, null, 0, '0', '0.0', '0e0', '-0', '0.00e-12', ' -0.0E+12\r\n'])(
     'accepts omitted, null, and zero dropped counters: %s',
     async (count) => {
       const data = structuredClone(traceResponse);

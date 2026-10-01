@@ -106,14 +106,13 @@ function attributesToRecord(
 
 function assertNoDroppedTelemetry(...counts: unknown[]): void {
   const incomplete = counts.some((count) => {
-    if (count == null) {
+    if (count == null || count === 0) {
       return false;
     }
-    try {
-      return (typeof count === 'string' ? JSON.parse(count) : count) !== 0;
-    } catch {
-      return true;
-    }
+    return (
+      typeof count !== 'string' ||
+      !/^[ \t\r\n]*-?0(?:\.0+)?(?:[eE][+-]?\d+)?[ \t\r\n]*$/.test(count)
+    );
   });
   if (incomplete) {
     throw new TraceProviderError('Tempo returned incomplete trace data: dropped telemetry');
@@ -321,14 +320,14 @@ export class TempoProvider implements TraceProvider {
 
     for (const batch of data.batches ?? []) {
       assertNoDroppedTelemetry(batch?.resource?.droppedAttributesCount);
-      if (!batch || !Array.isArray(batch.scopeSpans)) {
+      if (!Array.isArray(batch?.scopeSpans)) {
         malformedSpans++;
         continue;
       }
       const resourceAttributes = attributesToRecord(batch.resource?.attributes);
       for (const scopeSpan of batch.scopeSpans) {
         assertNoDroppedTelemetry(scopeSpan?.scope?.droppedAttributesCount);
-        if (!scopeSpan || !Array.isArray(scopeSpan.spans)) {
+        if (!Array.isArray(scopeSpan?.spans)) {
           malformedSpans++;
           continue;
         }
