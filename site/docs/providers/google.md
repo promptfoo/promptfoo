@@ -205,7 +205,7 @@ export GOOGLE_API_KEY="your_api_key_here"
 - Add delays between requests:
   ```yaml
   evaluateOptions:
-  delay: 1000 # 1 second delay between API calls
+    delay: 1000 # 1 second delay between API calls
   ```
 - Upgrade your API quota in Google AI Studio
 - Use a lower rate tier model like `gemini-2.5-flash-lite`
