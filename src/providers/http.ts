@@ -21,8 +21,10 @@ import { HttpTlsFieldsSchema } from '../contracts/providerConfig/httpTls';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { createDecompressionInterceptor } from '../util/fetch/decompress';
-import { stripDecompressionHeaders } from '../util/fetch/stripDecompressionHeaders';
+import {
+  createDecompressionInterceptor,
+  stripDecompressionHeaders,
+} from '../util/fetch/decompress';
 import {
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,

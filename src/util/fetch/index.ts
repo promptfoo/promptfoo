@@ -14,7 +14,7 @@ import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
 import { CloudAuthRedirectError } from './cloudAuthRedirects';
-import { createDecompressionInterceptor } from './decompress';
+import { createDecompressionInterceptor, stripDecompressionHeaders } from './decompress';
 import {
   extractRateLimitErrorCode,
   extractRateLimitErrorType,
@@ -23,7 +23,6 @@ import {
 } from './errors';
 import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
 import { getFetchRetryContextMaxRetries } from './retryContext';
-import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
 import type { FetchOptions } from './types';
 

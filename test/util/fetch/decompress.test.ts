@@ -105,6 +105,24 @@ describe('createDecompressionInterceptor', () => {
     expect(emitWarning).toHaveBeenCalledExactlyOnceWith('warning after failure');
   });
 
+  it('preserves a newer warning handler installed during initialization', () => {
+    const replacementEmitWarning = vi.fn() as typeof process.emitWarning;
+    emitWarning.mockImplementation(() => {
+      process.emitWarning = replacementEmitWarning;
+    });
+    vi.mocked(interceptors.decompress).mockImplementation(() => {
+      process.emitWarning('another notice');
+      return interceptor;
+    });
+
+    createDecompressionInterceptor();
+    process.emitWarning('warning after initialization');
+
+    expect(emitWarning).toHaveBeenCalledExactlyOnceWith('another notice');
+    expect(process.emitWarning).toBe(replacementEmitWarning);
+    expect(replacementEmitWarning).toHaveBeenCalledExactlyOnceWith('warning after initialization');
+  });
+
   it('suppresses the real dependency notice without disabling other Node warnings', () => {
     // A fresh process ensures undici has not already emitted its once-per-process notice.
     const helperUrl = new URL('../../../src/util/fetch/decompress.ts', import.meta.url).href;
