@@ -80,6 +80,11 @@ describe('GoogleInteractionsProvider', () => {
     vi.stubEnv('VERTEX_API_HOST', '');
     vi.stubEnv('GOOGLE_API_HOST', '');
     vi.stubEnv('PALM_API_HOST', '');
+    // Shell credentials must not override fixtures or satisfy missing-key checks.
+    vi.stubEnv('GOOGLE_API_KEY', '');
+    vi.stubEnv('GEMINI_API_KEY', '');
+    vi.stubEnv('PALM_API_KEY', '');
+    vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
     mockStoreBlob.mockResolvedValue({
       ref: { uri: 'blob://video/omni', hash: 'omni', mimeType: 'video/mp4', sizeBytes: 5 },
       deduplicated: false,
@@ -3034,7 +3039,6 @@ describe('GoogleInteractionsProvider', () => {
   it('requires a Gemini API key', async () => {
     const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
       config: {},
-      env: { GOOGLE_API_KEY: undefined, GEMINI_API_KEY: undefined },
     });
 
     await expect(provider.callApi('A city at dusk')).resolves.toMatchObject({
@@ -3925,7 +3929,6 @@ describe('GoogleInteractionsProvider', () => {
       config: {
         passthrough: { previous_interaction_id: 'interaction-0' },
       },
-      env: { GOOGLE_API_KEY: undefined, GEMINI_API_KEY: undefined },
     });
 
     const result = await provider.callApi('Make it brighter');

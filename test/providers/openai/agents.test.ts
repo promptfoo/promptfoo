@@ -78,6 +78,10 @@ vi.mock('@openai/agents', async (importOriginal) => {
       return this.toolsExplicitlyConfigured;
     }
 
+    async getEnabledHandoffs() {
+      return this.handoffs;
+    }
+
     asTool(options: Record<string, any> = {}) {
       const sourceAgent = this;
       const handlers = new Map<string, Set<(event: unknown) => unknown>>();

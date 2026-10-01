@@ -993,6 +993,7 @@ tests:
 #### Voice Pricing
 
 <a id="pricing-2"></a>
+<a id="voice-pricing"></a>
 
 [Grok Voice 2.0 pricing](https://docs.x.ai/developers/models/speech-to-speech) is
 $0.08 per minute plus $0.004 per text input. The default `server_vad` mode bills

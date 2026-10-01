@@ -2263,6 +2263,34 @@ describe('OpenAiAgentsApiProvider', () => {
     );
   });
 
+  it.each([undefined, 0, 7])(
+    'prices Astra only with an explicit cache-write count (%s)',
+    async (cacheWriteTokens) => {
+      const sessionUsage = {
+        ...usage,
+        input_tokens_details: { cached_tokens: 40, cache_write_tokens: cacheWriteTokens },
+      };
+      mockApi((pathname) =>
+        pathname.endsWith('/sessions') || pathname.endsWith('/sess_test')
+          ? json({ ...session, usage: sessionUsage })
+          : undefined,
+      );
+
+      const result = await provider().callApi('hi');
+      expect(result.output).toBe('42');
+      expect(result.error).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, cached: 40 });
+      if (cacheWriteTokens === undefined) {
+        expect(result.cost).toBeUndefined();
+      } else {
+        expect(result.cost).toBeCloseTo(
+          ((60 - cacheWriteTokens) * 10 + 40 + cacheWriteTokens * 12.5 + 20 * 50) / 1e6,
+          10,
+        );
+      }
+    },
+  );
+
   it('uses the configured service tier when the final session omits it', async () => {
     const standard = await provider().callApi('hi');
     const priority = await provider({
