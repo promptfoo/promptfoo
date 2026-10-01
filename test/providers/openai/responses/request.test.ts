@@ -200,6 +200,150 @@ describe('OpenAiResponsesProvider request building', () => {
     },
   );
 
+  it.each(['queued', 'completed', 'queued after cancellation'] as const)(
+    'shares a %s replacement during creation without releasing unclaimed usage',
+    async (replacementStatus) => {
+      const realCache = await vi.importActual<typeof cache>('../../../../src/cache');
+      const pendingStored = createDeferred<void>();
+      vi.mocked(cache.fetchWithCache).mockImplementation(async (...args) => {
+        const result = await realCache.fetchWithCache(...args);
+        return {
+          ...result,
+          updateCache: async (...values) => {
+            await result.updateCache?.(...values);
+            const data = values[0] as { id?: string; status?: string };
+            if (data.id === 'resp_creation_replacement' && data.status === 'queued') {
+              pendingStored.resolve();
+            }
+          },
+        };
+      });
+      const creationEntered = createDeferred<void>();
+      const creation = createDeferred<Response>();
+      const claimEntered = createDeferred<void>();
+      const releaseClaim = createDeferred<void>();
+      let claimed = false;
+      const claimSpy = vi.spyOn(cache, 'claimBackgroundUsageOnce').mockImplementation(async () => {
+        claimEntered.resolve();
+        await releaseClaim.promise;
+        const owner = !claimed;
+        claimed = true;
+        return owner;
+      });
+      const completed = {
+        id: 'resp_creation_replacement',
+        status: 'completed',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Shared replacement' }],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+      };
+      const response = (data: unknown, status = 200) =>
+        new Response(JSON.stringify(data), {
+          status,
+          headers: { 'content-type': 'application/json' },
+        });
+      let creates = 0;
+      let oldPolls = 0;
+      vi.mocked(fetchWithRetries).mockImplementation(async (url, options) => {
+        if (options?.method === 'POST') {
+          creates++;
+          if (creates === 1) {
+            return response({ id: 'resp_creation_expired', status: 'queued', output: [] });
+          }
+          if (creates === 2) {
+            creationEntered.resolve();
+            return creation.promise;
+          }
+          return response({ ...completed, id: `resp_duplicate_${creates}` });
+        }
+        if (String(url).endsWith('/resp_creation_expired')) {
+          return response({ error: { message: 'Retry fixture' } }, ++oldPolls === 1 ? 503 : 404);
+        }
+        return response(completed);
+      });
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'fixture-key',
+          background: true,
+          headers: { 'X-Tenant-Id': 'shared-replacement' },
+        },
+      });
+      try {
+        await realCache.withCacheNamespace(
+          `replacement-creation-${replacementStatus}`,
+          async () => {
+            expect((await provider.callApi('Share a replacement')).error).toContain('503');
+            const settled: boolean[] = [];
+            const controller = new AbortController();
+            const first = provider
+              .callApi('Share a replacement', undefined, { abortSignal: controller.signal })
+              .then((result) => {
+                settled[0] = true;
+                return result;
+              });
+            await creationEntered.promise;
+            const second = provider
+              .callApi('Share a replacement', undefined, { abortSignal: controller.signal })
+              .then((result) => {
+                settled[1] = true;
+                return result;
+              });
+            const stopped = Promise.allSettled([first, second]);
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            const createsBeforeRelease = creates;
+            if (replacementStatus === 'queued after cancellation') {
+              controller.abort();
+              expect((await stopped).every((result) => result.status === 'rejected')).toBe(true);
+              creation.resolve(response({ id: completed.id, status: 'queued', output: [] }));
+              await pendingStored.promise;
+              releaseClaim.resolve();
+              const resumed = await provider.callApi('Share a replacement');
+              expect(resumed.output).toBe('Shared replacement');
+              expect(resumed.error).toBeUndefined();
+              expect(resumed.cost).toBeGreaterThan(0);
+              expect(createsBeforeRelease).toBe(2);
+              expect(creates).toBe(2);
+              return;
+            }
+            creation.resolve(
+              response(
+                replacementStatus === 'queued'
+                  ? { id: completed.id, status: 'queued', output: [] }
+                  : completed,
+              ),
+            );
+            await claimEntered.promise;
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            const settledBeforeClaim = settled.some(Boolean);
+            releaseClaim.resolve();
+            const results = await Promise.all([first, second]);
+            expect(createsBeforeRelease).toBe(2);
+            expect(settledBeforeClaim).toBe(false);
+            expect(
+              results.every((result) => !result.error && result.output === 'Shared replacement'),
+            ).toBe(true);
+            expect(results.filter((result) => (result.cost ?? 0) > 0)).toHaveLength(1);
+            expect(results.filter((result) => result.tokenUsage?.cached === 15)).toHaveLength(1);
+            const replay = await provider.callApi('Share a replacement');
+            expect(replay.output).toBe('Shared replacement');
+            expect(replay.cached).toBe(true);
+            expect(replay.cost).toBe(0);
+            expect(creates).toBe(2);
+          },
+        );
+      } finally {
+        creation.resolve(response(completed));
+        releaseClaim.resolve();
+        claimSpy.mockRestore();
+      }
+    },
+  );
+
   it('keeps a terminal replacement out of cache while its claim is pending', async () => {
     const realCache = await vi.importActual<typeof cache>('../../../../src/cache');
     const entered = createDeferred<void>();

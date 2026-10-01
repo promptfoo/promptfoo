@@ -153,10 +153,19 @@ type BackgroundRequest = {
   hasPerPromptAuthorization: boolean;
   signal?: AbortSignal;
 };
+type DeferredBackgroundCache = Pick<
+  FetchWithCacheResult<OpenAIResponsesResponse>,
+  'deleteFromCache' | 'updateCache'
+>;
+type BackgroundCreationResult = FetchWithCacheResult<OpenAIResponsesResponse> & {
+  requiresAttribution?: boolean;
+};
+
 const inFlightBackgroundCreations = new Map<
   string,
   {
     promise: Promise<FetchWithCacheResult<OpenAIResponsesResponse>>;
+    deferredCache?: DeferredBackgroundCache;
     subscribers: number;
     billed: boolean;
   }
@@ -437,12 +446,13 @@ async function createBackgroundResponseWithCancellation(
   timeout: number,
   bustCache: boolean | undefined,
   maxRetries: number | undefined,
-): Promise<FetchWithCacheResult<OpenAIResponsesResponse>> {
+  deferredCache?: DeferredBackgroundCache,
+): Promise<BackgroundCreationResult> {
   const signal = request.signal;
   const cacheIdentity = getBackgroundCacheIdentity(url, request);
   const canCoalesce = isCacheEnabled() && !bustCache && cacheIdentity.coalescable;
   const effectiveCacheOptions = cacheIdentity.cacheable
-    ? { bust: bustCache, cacheKey: cacheIdentity.key }
+    ? { bust: deferredCache ? true : bustCache, cacheKey: cacheIdentity.key }
     : true;
   const cacheKey = getScopedCacheKey(cacheIdentity.key);
   let inFlight = canCoalesce ? inFlightBackgroundCreations.get(cacheKey) : undefined;
@@ -459,8 +469,19 @@ async function createBackgroundResponseWithCancellation(
       'json',
       effectiveCacheOptions,
       maxRetries,
-    );
-    inFlight = { promise, subscribers: 0, billed: false };
+    ).then(async (created) => {
+      // Keep pending jobs resumable even if creation loses its last subscriber.
+      if (created.data.status === 'queued' || created.data.status === 'in_progress') {
+        await deferredCache?.updateCache?.(
+          created.data,
+          created.status,
+          created.statusText,
+          created.headers,
+        );
+      }
+      return created;
+    });
+    inFlight = { promise, deferredCache, subscribers: 0, billed: false };
     if (canCoalesce) {
       inFlightBackgroundCreations.set(cacheKey, inFlight);
       void promise
@@ -519,12 +540,21 @@ async function createBackgroundResponseWithCancellation(
   });
 
   try {
-    const created = await Promise.race([inFlight.promise, cancellation]);
+    const fetched = await Promise.race([inFlight.promise, cancellation]);
+    const created = inFlight.deferredCache
+      ? {
+          ...fetched,
+          ...inFlight.deferredCache,
+          requiresAttribution: fetched.status >= 200 && fetched.status < 300,
+        }
+      : fetched;
     if (
       created.cached ||
       created.status < 200 ||
       created.status >= 300 ||
-      (created.data.status !== 'completed' && created.data.status !== 'incomplete')
+      (inFlight.deferredCache
+        ? created.data.status === 'queued' || created.data.status === 'in_progress'
+        : created.data.status !== 'completed' && created.data.status !== 'incomplete')
     ) {
       return created;
     }
@@ -567,8 +597,9 @@ async function resolveBackgroundResponse(
       url,
       request,
       Math.max(1, deadline - Date.now()),
-      true,
+      cancelOnStop,
       maxRetries,
+      { deleteFromCache, updateCache },
     );
     if (retried.status < 200 || retried.status >= 300) {
       return {
@@ -581,13 +612,6 @@ async function resolveBackgroundResponse(
       };
     }
 
-    // Pending replacements remain resumable; terminal data waits for attribution below.
-    if (
-      !cancelOnStop &&
-      (retried.data.status === 'queued' || retried.data.status === 'in_progress')
-    ) {
-      await updateCache?.(retried.data, retried.status, retried.statusText, retried.headers);
-    }
     polled =
       retried.data.status === 'queued' || retried.data.status === 'in_progress'
         ? await pollBackgroundResponse(
@@ -605,6 +629,7 @@ async function resolveBackgroundResponse(
             status: retried.status,
             statusText: retried.statusText,
             headers: retried.headers,
+            shared: retried.cached,
           };
     polled.retried = true;
   }
@@ -1376,6 +1401,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     let updateCache: FetchWithCacheResult<OpenAIResponsesResponse>['updateCache'];
     let responseHeaders: Record<string, string> | undefined;
     let pollingBackground = false;
+    let requiresBackgroundAttribution: boolean | undefined;
     try {
       const url = appendOpenAiApiPath(this.getApiUrl(), 'responses');
       const backgroundDeadline = body.background ? Date.now() + timeout : undefined;
@@ -1573,15 +1599,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           clearTimeout(timeoutHandle);
         }
       } else {
-        ({
-          data,
-          cached,
-          status,
-          statusText,
-          deleteFromCache,
-          updateCache,
-          headers: responseHeaders,
-        } = body.background
+        const response: BackgroundCreationResult = body.background
           ? await createBackgroundResponseWithCancellation(
               url,
               request,
@@ -1602,7 +1620,17 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
               'json',
               this.shouldBustCache(context),
               config.maxRetries,
-            ));
+            );
+        ({
+          data,
+          cached,
+          status,
+          statusText,
+          deleteFromCache,
+          updateCache,
+          headers: responseHeaders,
+          requiresAttribution: requiresBackgroundAttribution,
+        } = response);
       }
 
       const policyResponse = this.getPolicyResponse(
@@ -1613,7 +1641,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         statusText,
         responseHeaders,
       );
-      if (policyResponse) {
+      if (policyResponse && !requiresBackgroundAttribution) {
         return policyResponse;
       }
       if (status < 200 || status >= 300) {
@@ -1654,7 +1682,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         };
       }
 
-      if (body.background && (data.status === 'queued' || data.status === 'in_progress')) {
+      if (
+        body.background &&
+        (requiresBackgroundAttribution || data.status === 'queued' || data.status === 'in_progress')
+      ) {
         pollingBackground = true;
         const cancelOnStop =
           !isCacheEnabled() ||
