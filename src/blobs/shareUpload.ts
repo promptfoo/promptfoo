@@ -153,6 +153,7 @@ export async function uploadTraceBlobRefsForShare(
   cache: RemoteBlobUploadCache,
   context: ShareBlobUploadContext,
   target?: RemoteBlobUploadTarget,
+  uploadedResultHashes = new Set<string>(),
 ): Promise<void> {
   const hashes = collectBlobHashes(value, {
     maxDepth: BLOB_SCAN_MAX_DEPTH,
@@ -160,6 +161,13 @@ export async function uploadTraceBlobRefsForShare(
   });
   const uploads = [...hashes].flatMap((hash) => {
     const contexts = cache.resultContexts.get(hash);
+    if (contexts?.size) {
+      // Result ownership is the same for every trace that references this blob.
+      if (uploadedResultHashes.has(hash)) {
+        return [];
+      }
+      uploadedResultHashes.add(hash);
+    }
     return [...(contexts?.size ? contexts.values() : [context])].map((uploadContext) => ({
       hash,
       context: uploadContext,

@@ -805,6 +805,7 @@ async function uploadTraceBlobRefsForShare(
     return;
   }
 
+  const uploadedResultHashes = new Set<string>();
   for (const trace of traces) {
     const promptIdx =
       typeof trace.metadata?.promptIdx === 'number' ? trace.metadata.promptIdx : undefined;
@@ -821,6 +822,7 @@ async function uploadTraceBlobRefsForShare(
         testIdx,
       },
       blobUploadTarget,
+      uploadedResultHashes,
     );
   }
 }
