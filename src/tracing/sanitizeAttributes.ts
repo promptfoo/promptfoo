@@ -3,6 +3,7 @@ export interface AttributeSanitizationOptions {
   sanitizeSensitiveAttributes?: boolean;
   truncateValues?: boolean;
   redactedValues?: Set<string>;
+  truncatedValues?: Map<string, string>;
 }
 
 const SENSITIVE_ATTRIBUTE_KEYS = [
@@ -85,7 +86,12 @@ export function sanitizeTraceAttributes(
 
   const sanitizeValue = (value: any): any => {
     if (typeof value === 'string') {
-      return truncateValues && value.length > 400 ? `${value.slice(0, 400)}…` : value;
+      if (truncateValues && value.length > 400) {
+        const truncated = `${value.slice(0, 400)}…`;
+        options.truncatedValues?.set(value, truncated);
+        return truncated;
+      }
+      return value;
     }
     if (Array.isArray(value)) {
       return value.map(sanitizeValue);

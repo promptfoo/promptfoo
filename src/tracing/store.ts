@@ -82,18 +82,23 @@ function serializeSpan(
 ): SpanData {
   const rawAttributes = span.attributes ?? undefined;
   const redactedValues = new Set<string>();
+  const truncatedValues = new Map<string, string>();
+  const sanitization = { redactedValues, truncatedValues };
   const attributes =
     rawAttributes && shouldSanitizeAttributes
-      ? sanitizeTraceAttributes(rawAttributes, { redactedValues })
+      ? sanitizeTraceAttributes(rawAttributes, sanitization)
       : rawAttributes;
   const events = normalizeEvents(span.events)?.map((event) => ({
     ...event,
     attributes: shouldSanitizeAttributes
-      ? sanitizeTraceAttributes(event.attributes, { redactedValues })
+      ? sanitizeTraceAttributes(event.attributes, sanitization)
       : event.attributes,
   }));
+  // Keep exact echoes aligned with their attributes for later export/custom redaction.
   const scrubEcho = <T extends string | null | undefined>(value: T): T =>
-    typeof value === 'string' && redactedValues.has(value) ? ('<redacted>' as T) : value;
+    typeof value === 'string'
+      ? ((redactedValues.has(value) ? '<redacted>' : (truncatedValues.get(value) ?? value)) as T)
+      : value;
 
   return {
     spanId: span.spanId,

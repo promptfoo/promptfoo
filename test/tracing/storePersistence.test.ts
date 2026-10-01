@@ -10,6 +10,8 @@ import { getDb } from '../../src/database/index';
 import { spansTable, tracesTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import { TraceStore } from '../../src/tracing/store';
+import { fetchTraceContext } from '../../src/tracing/traceContext';
+import { createOutputData } from '../../src/util/output';
 import EvalFactory from '../factories/evalFactory';
 import { removeTempDir } from '../util/utils';
 
@@ -69,6 +71,75 @@ describe('TraceStore span persistence', () => {
     expect(
       (await store.getSpans('events-roundtrip', { sanitizeAttributes: false }))[0].events?.[0].name,
     ).toBe('fixture-private-value');
+  });
+
+  it.each([
+    ['promptfoo.request.body', 'PROMPTFOO_STRIP_PROMPT_TEXT', '[prompt stripped]'],
+    ['promptfoo.response.body', 'PROMPTFOO_STRIP_RESPONSE_OUTPUT', '[output stripped]'],
+  ])('strips long event-name body echoes from actual exports: %s', async (key, flag, marker) => {
+    const evaluation = await EvalFactory.create({ numResults: 0 });
+    evaluation.config.env = { [flag]: 'true' };
+    const traceId = 'long-body-export';
+    const store = new TraceStore();
+    await store.createTrace({ evaluationId: evaluation.id, testCaseId: 'ordinary', traceId });
+    const body = 'ordinary body text '.repeat(30);
+    await store.addSpans(traceId, [
+      {
+        spanId: 'body-span',
+        name: 'ordinary span',
+        startTime: 1,
+        attributes: { [key]: body },
+        events: [
+          { name: body, timestamp: 2 },
+          { name: body, timestamp: 3, attributes: { [key]: body } },
+          { name: 'ordinary event', timestamp: 4 },
+        ],
+      },
+    ]);
+    const output = await createOutputData(evaluation, null);
+    expect(output.traces?.[0].spans[0].events?.map((event) => event.name)).toEqual([
+      marker,
+      marker,
+      'ordinary event',
+    ]);
+    expect(JSON.stringify(output.traces)).not.toContain(body);
+    expect((await store.getSpans(traceId, { sanitizeAttributes: false }))[0].events?.[0].name).toBe(
+      body,
+    );
+  });
+
+  it('matches long event-name echoes before local custom redaction', async () => {
+    const traceId = 'long-local-redaction';
+    const store = await createTrace(traceId);
+    const value = 'ordinary customer note '.repeat(25);
+    const unrelated = 'unrelated event name '.repeat(25);
+    await store.addSpans(traceId, [
+      {
+        spanId: 'customer-span',
+        name: 'ordinary span',
+        startTime: 1,
+        events: [
+          { name: value, timestamp: 2, attributes: { details: { customer_note: value } } },
+          { name: unrelated, timestamp: 3 },
+        ],
+      },
+    ]);
+    const displayed = (await store.getSpans(traceId))[0].events!;
+    expect(displayed[0].name).toBe(displayed[0].attributes?.details.customer_note);
+    expect(displayed[0].name).toHaveLength(401);
+    expect(displayed[1].name).toBe(unrelated);
+    const context = await fetchTraceContext(traceId, {
+      maxRetries: 0,
+      includeInternalSpans: true,
+      redactAttributes: ['customer_note'],
+    });
+    expect(context?.spans[0].events[0]).toMatchObject({
+      name: '[REDACTED]',
+      attributes: { details: { customer_note: '[REDACTED]' } },
+    });
+    expect((await store.getSpans(traceId, { sanitizeAttributes: false }))[0].events?.[0].name).toBe(
+      value,
+    );
   });
 
   it('ignores malformed legacy event data without hiding otherwise valid spans', async () => {

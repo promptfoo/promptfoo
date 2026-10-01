@@ -27,6 +27,7 @@ interface OTLPAttribute {
     intValue?: string;
     doubleValue?: number;
     boolValue?: boolean;
+    bytesValue?: string;
     arrayValue?: { values: any[] };
     kvlistValue?: { values: OTLPAttribute[] };
   };
@@ -49,9 +50,9 @@ interface OTLPSpan {
 }
 
 interface OTLPSpanEvent {
-  timeUnixNano?: string;
+  timeUnixNano?: string | null;
   name: string;
-  attributes?: OTLPAttribute[];
+  attributes?: OTLPAttribute[] | null;
 }
 
 interface OTLPScopeSpan {
@@ -979,6 +980,9 @@ export class OTLPReceiver {
     if (value.boolValue !== undefined) {
       return value.boolValue;
     }
+    if (typeof value.bytesValue === 'string') {
+      return Buffer.from(value.bytesValue, 'base64').toString('base64');
+    }
     if (value.arrayValue?.values) {
       return value.arrayValue.values.map((v) => this.parseAttributeValue(v));
     }
@@ -1102,14 +1106,12 @@ export class OTLPReceiver {
       if (!event || typeof event !== 'object' || typeof event.name !== 'string') {
         throw new InvalidSpanEventError('Invalid OTLP span event: expected a name');
       }
-      const timestamp =
-        event.timeUnixNano === undefined || String(event.timeUnixNano) === '0'
-          ? startTime
-          : this.toMilliseconds(event.timeUnixNano);
+      const eventTime = event.timeUnixNano == null ? 0 : this.toMilliseconds(event.timeUnixNano);
+      const timestamp = eventTime === 0 ? startTime : eventTime;
       if (timestamp === undefined || !Number.isFinite(timestamp)) {
         throw new InvalidSpanEventError('Invalid OTLP span event timestamp');
       }
-      if (event.attributes !== undefined && !Array.isArray(event.attributes)) {
+      if (event.attributes != null && !Array.isArray(event.attributes)) {
         throw new InvalidSpanEventError('Invalid OTLP span event attributes');
       }
       try {
@@ -1121,18 +1123,31 @@ export class OTLPReceiver {
   }
 
   private toMilliseconds(value: unknown): number | undefined {
-    if (value === undefined || value === null || !/^\d+$/.test(String(value))) {
+    const parts = /^(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/i.exec(String(value));
+    if (!parts) {
       return undefined;
     }
-    try {
-      const nanoseconds = BigInt(String(value));
-      const milliseconds = Number((nanoseconds / 1_000_000n).toString());
-      return Number.isSafeInteger(milliseconds)
-        ? milliseconds + Number((nanoseconds % 1_000_000n).toString()) / 1_000_000
-        : undefined;
-    } catch {
+    const fraction = parts[2] ?? '';
+    const digits = (parts[1] + fraction).replace(/^0+/, '');
+    if (!digits) {
+      return 0;
+    }
+    const shift = Number(parts[3] ?? 0) - fraction.length;
+    const integerLength = digits.length + shift;
+    // Safe integer milliseconds need at most 22 decimal nanosecond digits.
+    if (!Number.isSafeInteger(shift) || integerLength < 1 || integerLength > 22) {
       return undefined;
     }
+    if (shift < 0 && /[1-9]/.test(digits.slice(shift))) {
+      return undefined;
+    }
+    const nanoseconds = BigInt(
+      shift < 0 ? digits.slice(0, shift) : digits.padEnd(integerLength, '0'),
+    );
+    const milliseconds = Number((nanoseconds / 1_000_000n).toString());
+    return Number.isSafeInteger(milliseconds)
+      ? milliseconds + Number((nanoseconds % 1_000_000n).toString()) / 1_000_000
+      : undefined;
   }
 }
 
