@@ -779,10 +779,13 @@ export class PiProvider implements ApiProvider {
         if (stdoutOverflow) {
           return;
         }
+        const availableBytes = Math.max(0, options.maxOutputBytes - stdoutBytes);
         stdoutBytes += Buffer.byteLength(chunk, 'utf-8');
         if (stdoutBytes > options.maxOutputBytes) {
-          // Truncating JSONL would corrupt the final agent_end event, so abort
-          // the run rather than parse a partial transcript.
+          // Retain complete billed events before the output limit.
+          const retained =
+            stdout + Buffer.from(chunk).subarray(0, availableBytes).toString('utf-8');
+          stdout = retained.slice(0, retained.lastIndexOf('\n') + 1);
           stdoutOverflow = true;
           killChild();
           return;
@@ -874,7 +877,16 @@ export class PiProvider implements ApiProvider {
         continue;
       }
       try {
-        events.push(JSON.parse(trimmed));
+        const event: unknown = JSON.parse(trimmed);
+        if (
+          event &&
+          typeof event === 'object' &&
+          !Array.isArray(event) &&
+          'type' in event &&
+          typeof event.type === 'string'
+        ) {
+          events.push(event as PiEvent);
+        }
       } catch {
         logger.debug('[Pi] Skipping non-JSON output line');
       }
@@ -1134,16 +1146,23 @@ export class PiProvider implements ApiProvider {
         abortSignal: callOptions?.abortSignal,
       });
 
+      const events = this.parseEvents(runResult.stdout);
+      const response = this.buildProviderResponse(events, runResult.stderr);
+      const fail = (error: string): ProviderResponse => {
+        delete response.output;
+        return { ...response, error };
+      };
+
       if (runResult.aborted) {
-        return { error: 'Pi call aborted' };
+        return fail('Pi call aborted');
       }
       if (runResult.timedOut) {
-        return { error: `Pi call timed out after ${timeoutMs}ms` };
+        return fail(`Pi call timed out after ${timeoutMs}ms`);
       }
       if (runResult.stdoutOverflow) {
-        return {
-          error: `Pi produced more than ${maxOutputBytes} bytes of output and was terminated. Increase max_output_bytes if this output is expected.`,
-        };
+        return fail(
+          `Pi produced more than ${maxOutputBytes} bytes of output and was terminated. Increase max_output_bytes if this output is expected.`,
+        );
       }
 
       // A successful process exit is required in addition to a completed agent run.
@@ -1153,22 +1172,21 @@ export class PiProvider implements ApiProvider {
           runResult.exitCode === null && runResult.signal
             ? `was terminated by signal ${runResult.signal}`
             : `exited with code ${runResult.exitCode}`;
-        return { error: `Pi ${reason}.${stderrSuffix}` };
+        return fail(`Pi ${reason}.${stderrSuffix}`);
       }
 
-      const events = this.parseEvents(runResult.stdout);
       const failure = events.find(
         (event) =>
           event?.type === 'response' && event.command === 'prompt' && event.success === false,
       );
       if (failure) {
-        return { error: failure.error ?? 'Pi rejected the prompt' };
+        return fail(failure.error ?? 'Pi rejected the prompt');
       }
       if (!events.some((event) => event?.type === 'agent_settled')) {
         const stderrSuffix = runResult.stderr ? `\n${truncateStderr(runResult.stderr)}` : '';
-        return { error: `Pi exited before completing the run.${stderrSuffix}` };
+        return fail(`Pi exited before completing the run.${stderrSuffix}`);
       }
-      return this.buildProviderResponse(events, runResult.stderr);
+      return response;
     } catch (error) {
       if (
         (error instanceof Error && error.name === 'AbortError') ||

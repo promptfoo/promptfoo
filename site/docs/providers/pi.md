@@ -135,7 +135,7 @@ because it cannot receive the target’s copied workspace through this integrati
 | `offline`               | `boolean`  | `true`        | Pass `--offline` to skip pi's startup version checks and telemetry (LLM calls are unaffected) |
 | `max_output_bytes`      | `number`   | `33554432`    | Cap on retained stdout before the run is aborted (guards against runaway/large tool output)   |
 
-Extension, skill, prompt-template, and context-file discovery are disabled by default so eval prompts are processed verbatim and results stay reproducible. The provider also passes `--no-approve`, so project-local pi files (a `.pi/settings.json`, project extensions, or a `.pi/SYSTEM.md` in the `working_dir`) are ignored even if the project was previously trusted. Discovery (`load_*`) and trust are independent: context files load without trust, while project-local extensions/skills/templates and `.pi/SYSTEM.md` require `trust_project_files: true` (`--approve`). pi's trust is all-or-nothing — enabling it trusts every project-local pi file, including a `settings.json` that can change the model.
+Extension, skill, prompt-template, and context-file discovery are disabled by default. The provider also passes `--no-approve`, so project-local pi files (a `.pi/settings.json`, project extensions, or a `.pi/SYSTEM.md` in the `working_dir`) are ignored even if the project was previously trusted. Discovery (`load_*`) and trust are independent: context files load without trust, while project-local extensions/skills/templates and `.pi/SYSTEM.md` require `trust_project_files: true` (`--approve`). Enabling project trust applies to every project-local Pi file, including a `settings.json` that can change the model.
 
 ## Response Format
 

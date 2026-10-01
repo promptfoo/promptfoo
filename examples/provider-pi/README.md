@@ -104,7 +104,7 @@ providers:
       # apiKey: '{{env.ANTHROPIC_API_KEY}}'
 ```
 
-By default the provider runs `pi --mode rpc --no-session --offline` with extension, skill, prompt-template, and context-file discovery disabled, so evals are reproducible and nothing is written to your pi session history.
+By default the provider runs `pi --mode rpc --no-session --offline` with extension, skill, prompt-template, and context-file discovery disabled. Runs are not saved to Pi session history.
 
 ## Learn More
 

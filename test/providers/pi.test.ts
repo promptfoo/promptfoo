@@ -837,6 +837,13 @@ describe('PiProvider', () => {
       expect(result.error).toContain('before completing the run');
     });
 
+    it('skips valid JSON that is not a protocol event', async () => {
+      mockPiRun([null, false, 5, 'status', [], { type: 17 }, ...defaultEvents('complete')]);
+      const response = await createProvider().callApi('hello');
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe('complete');
+    });
+
     it('skips malformed JSON lines', async () => {
       const child = new FakeChildProcess();
       mockSpawn.mockImplementationOnce(() => {
@@ -1140,6 +1147,54 @@ describe('PiProvider', () => {
   });
 
   describe('timeouts and aborts', () => {
+    it.each(['timeout', 'abort', 'overflow', 'coalesced overflow', 'nonzero', 'incomplete'])(
+      'retains completed usage when a later turn ends through %s',
+      async (reason) => {
+        vi.useFakeTimers();
+        const controller = new AbortController();
+        const child = new FakeChildProcess();
+        child.kill.mockImplementation(() => {
+          child.emit('close', null, 'SIGTERM');
+          return true;
+        });
+        mockSpawn.mockImplementationOnce(() => child as never);
+        const provider = createProvider({ config: { timeout: 20, max_output_bytes: 2_000 } });
+        try {
+          const pending = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+          await vi.advanceTimersByTimeAsync(0);
+          const completed =
+            JSON.stringify({ type: 'message_end', message: assistantMessage('billed turn') }) +
+            '\n';
+          child.stdout.emit(
+            'data',
+            completed + (reason === 'coalesced overflow' ? 'x'.repeat(2_001) : ''),
+          );
+          if (reason === 'timeout') {
+            await vi.advanceTimersByTimeAsync(20);
+          } else if (reason === 'abort') {
+            controller.abort();
+          } else if (reason === 'overflow') {
+            child.stdout.emit('data', 'x'.repeat(2_001));
+          } else if (reason !== 'coalesced overflow') {
+            child.emit('close', reason === 'nonzero' ? 1 : 0);
+          }
+          const result = await pending;
+          expect(result.error).toBeTruthy();
+          expect(result.output).toBeUndefined();
+          expect(result.tokenUsage).toMatchObject({
+            prompt: 100,
+            completion: 10,
+            total: 110,
+            numRequests: 1,
+          });
+          expect(result.cost).toBe(0.001);
+          expect(JSON.parse(result.raw as string)[0].content[0].text).toBe('billed turn');
+        } finally {
+          vi.useRealTimers();
+        }
+      },
+    );
+
     it('awaits a running process during registry shutdown and can be reused', async () => {
       vi.useFakeTimers();
       const registered = vi.spyOn(providerRegistry, 'register');
