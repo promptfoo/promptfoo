@@ -46,6 +46,7 @@ beforeEach(() => {
 
 afterEach(() => {
   Object.defineProperty(process, 'platform', platformDescriptor);
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.mocked(fs.writeFile).mockReset();
   vi.mocked(fs.rename).mockReset();
@@ -246,6 +247,51 @@ describe('completed media blob publication', () => {
         hash,
         `${hash}.meta.json`,
       ]);
+    },
+  );
+
+  it.each(['data', 'metadata'] as const)(
+    'waits for the retry delay before republishing Windows %s',
+    async (stage) => {
+      vi.useFakeTimers({ toFake: ['setTimeout'] });
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+      const delayStarted = createDeferred<void>();
+      const resumePublication = createDeferred<void>();
+      vi.mocked(sleep).mockImplementationOnce((delay) => {
+        setTimeout(() => resumePublication.resolve(), delay);
+        delayStarted.resolve();
+        return resumePublication.promise;
+      });
+      const provider = new FilesystemBlobStorageProvider({ basePath: directory });
+      const destination = `${provider.getFilePath(hash)}${stage === 'metadata' ? '.meta.json' : ''}`;
+      let attempts = 0;
+      vi.mocked(fs.rename).mockImplementation(async (source, target) => {
+        if (target === destination && ++attempts === 1) {
+          throw Object.assign(new Error('fixture temporary file lock'), { code: 'EPERM' });
+        }
+        return realFs.rename(source, target);
+      });
+
+      const storing = provider.store(data, 'image/jpeg');
+      try {
+        await delayStarted.promise;
+        expect(sleep).toHaveBeenCalledExactlyOnceWith(50);
+        expect(attempts).toBe(1);
+        await vi.advanceTimersByTimeAsync(49);
+        expect(attempts).toBe(1);
+        expect(fs.rm).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        await storing;
+      } finally {
+        resumePublication.resolve();
+        await storing;
+      }
+
+      expect(attempts).toBe(2);
+      expect(await provider.getByHash(hash)).toMatchObject({
+        data,
+        metadata: { mimeType: 'image/jpeg' },
+      });
     },
   );
 
