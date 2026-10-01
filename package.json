@@ -242,6 +242,7 @@
     "@langfuse/client": "^5.11.1",
     "@openai/agents": "^0.11.8",
     "@openai/codex-security": "^0.1.31",
+    "@slack/web-api": "^8.1.1",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
     "@types/cli-progress": "^3.11.6",
@@ -284,7 +285,6 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@alcalzone/ansi-tokenize": "0.3.1",
     "@anthropic-ai/claude-agent-sdk": "0.3.278",
     "@aws/bedrock-token-generator": "^1.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
@@ -304,7 +304,6 @@
     "@modelcontextprotocol/server-filesystem": "2026.8.31",
     "@openai/codex-sdk": "^0.156.1",
     "@opencode-ai/sdk": "^1.18.31",
-    "@slack/web-api": "^8.1.1",
     "@smithy/node-http-handler": "^4.4.14",
     "google-auth-library": "^11.1.0",
     "hono": "^4.13.8",
@@ -421,6 +420,7 @@
     "@huggingface/transformers": "*",
     "@openai/agents": "*",
     "@openai/codex-security": "*",
+    "@slack/web-api": "*",
     "playwright": "*",
     "playwright-extra": "*",
     "puppeteer-extra-plugin-stealth": "*"
@@ -433,6 +433,9 @@
       "optional": true
     },
     "@openai/codex-security": {
+      "optional": true
+    },
+    "@slack/web-api": {
       "optional": true
     },
     "playwright": {
