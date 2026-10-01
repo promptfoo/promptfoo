@@ -61,7 +61,7 @@
     "satori": "^0.26.0",
     "typescript": "^7.0.0",
     "vitest": "^5.0.0",
-    "webpack": "5.111.0"
+    "webpack": "5.111.1"
   },
   "optionalDependencies": {
     "sharp": "^0.35.4"
@@ -91,7 +91,7 @@
     "@mui/system": "^9.0.0",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "dompurify": "^3.4.8",
+    "dompurify": "^3.4.16",
     "js-yaml": "5.4.2",
     "react-countup": "^6.5.3",
     "react-turnstile": "^1.1.5",

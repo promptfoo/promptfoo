@@ -5,7 +5,6 @@ import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
-import { isMissingPackageImportError } from '../util/packageImportErrors';
 import { A2AProvider } from './a2a';
 import { createAbliterationProvider } from './abliteration';
 import { AI21ChatCompletionProvider } from './ai21';
@@ -73,6 +72,7 @@ import { createN8nProvider } from './n8n';
 import { createNovitaProvider } from './novita';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
+import { loadOpenAiAgentsModule } from './openai/agents-availability';
 import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
@@ -780,7 +780,7 @@ export const providerMap: ProviderFactory[] = [
 
       if (!model) {
         throw new Error(
-          'Helicone provider requires a model in format helicone:<provider/model> (e.g., helicone:openai/gpt-4o, helicone:anthropic/claude-3-5-sonnet)',
+          'Helicone provider requires a model in format helicone:<provider/model> (e.g., helicone:openai/gpt-4o, helicone:anthropic/claude-sonnet-5)',
         );
       }
 
@@ -1158,17 +1158,10 @@ export const providerMap: ProviderFactory[] = [
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
       if (modelType === 'agents') {
-        try {
-          const { OpenAiAgentsProvider } = await import('./openai/agents');
-          return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
-        } catch (error) {
-          if (isMissingPackageImportError(error, '@openai/agents')) {
-            throw new Error(
-              'The @openai/agents package is required for OpenAI Agents providers. Install it with: npm install @openai/agents',
-            );
-          }
-          throw error;
-        }
+        const { OpenAiAgentsProvider } = await loadOpenAiAgentsModule(
+          () => import('./openai/agents'),
+        );
+        return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
       }
       if (modelType === 'chatkit') {
         const { OpenAiChatKitProvider } = await import('./openai/chatkit');
@@ -1717,8 +1710,8 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       // Validate dependency is available early, before parsing config
-      const { validateTransformersDependency } = await import('./transformersAvailability');
-      await validateTransformersDependency();
+      const { loadTransformers } = await import('./transformersAvailability');
+      await loadTransformers();
 
       const splits = providerPath.split(':');
       if (splits.length < 3) {
