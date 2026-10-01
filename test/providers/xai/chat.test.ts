@@ -221,6 +221,35 @@ describe('xAI Chat Provider', () => {
       );
     });
 
+    it.each([
+      [{ passthrough: { service_tier: 'priority' } }, { service_tier: 'default' }, 'default'],
+      [{ service_tier: 'priority' }, { passthrough: { reasoning_effort: 'low' } }, 'priority'],
+      [
+        { passthrough: { service_tier: 'priority' } },
+        { passthrough: { reasoning_effort: 'low' } },
+        undefined,
+      ],
+      [
+        { service_tier: 'priority' },
+        { service_tier: 'priority', passthrough: { service_tier: 'default' } },
+        'default',
+      ],
+    ] as const)(
+      'preserves Grok 4.7 service tier precedence for provider %j and prompt %j',
+      async (config, promptConfig, tier) => {
+        const provider = createXAIProvider('xai:grok-4.7', {
+          config: { config: { apiKey: 'test-key', ...config } },
+        });
+        const result = await provider.callApi('hello', {
+          vars: {},
+          prompt: { raw: 'hello', label: 'fixture', config: promptConfig },
+        });
+        expect(result.error).toBeUndefined();
+        const request = JSON.parse(mockFetchWithCache.mock.calls.at(-1)![1].body);
+        expect(request.service_tier).toBe(tier);
+      },
+    );
+
     it('generates correct id() for the provider', () => {
       const provider = createXAIProvider('xai:grok-3-beta');
       expect(provider.id()).toBe('xai:grok-3-beta');

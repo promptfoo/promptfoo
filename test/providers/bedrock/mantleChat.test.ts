@@ -364,6 +364,42 @@ describe('bedrock mantle Chat Completions provider', () => {
       expect(result.error).toBeUndefined();
     });
 
+    it.each([
+      ['openai.gpt-5.6-terra', { AWS_BEDROCK_REGION: 'us-gov-west-1' }, undefined, undefined, 1],
+      ['openai.gpt-5.6-terra', { AWS_REGION: 'us-gov-east-1' }, undefined, undefined, 1],
+      ['openai.gpt-5.6-luna', {}, { AWS_BEDROCK_REGION: 'us-gov-west-1' }, undefined, 0.1],
+      ['openai.gpt-5.6-luna', { AWS_REGION: 'us-east-1' }, undefined, 'us-gov-west-1', 0.1],
+    ] as const)(
+      'preserves the resolved region when billing %s through a proxy (%j, %j, %s)',
+      async (model, processEnv, env, region, scale) => {
+        restoreEnv = mockProcessEnv(processEnv);
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: {
+            choices: [{ message: { content: 'hello' }, finish_reason: 'stop' }],
+            usage: {
+              prompt_tokens: 1000,
+              completion_tokens: 500,
+              total_tokens: 1500,
+              prompt_tokens_details: { cached_tokens: 200, cache_write_tokens: 100 },
+            },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const provider = new BedrockMantleChatProvider(model, {
+          config: { apiKey: 'bedrock-key', apiBaseUrl: 'http://localhost:15571/openai/v1', region },
+          env,
+        });
+        const result = await provider.callApi('hello');
+        expect(result.error).toBeUndefined();
+        expect(result.cost).toBeCloseTo(
+          ((700 * 2.64 + 200 * 0.264 + 100 * 3.3 + 500 * 15.84) * scale) / 1e6,
+          12,
+        );
+      },
+    );
+
     it.each(['provider', 'prompt'] as const)(
       'keeps AWS billing identity for a %s passthrough override through a proxy',
       async (scope) => {

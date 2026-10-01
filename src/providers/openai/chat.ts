@@ -622,6 +622,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       : super.getBillingModelName(config);
   }
 
+  protected getBillingRegion(): string | undefined {
+    return undefined;
+  }
+
   /**
    * Calculate the response cost from the provider's raw usage payload.
    *
@@ -642,6 +646,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       apiUrl: this.getApiUrl(),
       cachedResponse: cached,
       provider: this.getGenAISystem(),
+      region: this.getBillingRegion(),
       serviceTier: data.service_tier ?? config.service_tier,
     });
     const searchCost = cached ? 0 : getChatSearchSurcharge(modelName);

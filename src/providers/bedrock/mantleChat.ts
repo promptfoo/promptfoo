@@ -79,6 +79,7 @@ function isBedrockMantleEndpoint(apiBaseUrl: string): boolean {
  */
 export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
   private readonly bedrockTokenProvider: BedrockTokenProvider;
+  private readonly bedrockRegion: string;
 
   constructor(modelName: string, options: BedrockMantleChatProviderOptions = {}) {
     super(modelName, options);
@@ -89,6 +90,7 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
         ? DEFAULT_BEDROCK_MANTLE_GROK_CHAT_REGION
         : DEFAULT_BEDROCK_MANTLE_CHAT_REGION,
     );
+    this.bedrockRegion = region;
     // Pin direct construction too, before any AWS credential can be resolved.
     this.config = {
       ...this.config,
@@ -114,6 +116,10 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
 
   protected override getGenAISystem(): string {
     return 'bedrock';
+  }
+
+  protected override getBillingRegion(): string {
+    return this.bedrockRegion;
   }
 
   protected normalizeCapabilityModelName(modelName: string): string {

@@ -863,27 +863,14 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       typeof config.passthrough?.model === 'string' && GROK_REASONING_MODELS.includes(model);
     const testOptions = context?.test?.options;
     let effort: string | undefined;
-    let parentContext = context;
     if (usesGrok47) {
-      const raw = config.passthrough;
       effort = resolveGrok47ReasoningEffort(
         getXAIRequestOption('reasoning_effort', testOptions, context?.prompt?.config, this.config),
         context?.vars,
       );
       validateXAIReasoningEffort(model, effort, 'reasoning_effort');
-      parentContext = {
-        ...context,
-        prompt: {
-          ...context?.prompt,
-          config: {
-            ...context?.prompt?.config,
-            reasoning_effort: effort,
-            ...(raw && { passthrough: { ...raw, reasoning_effort: effort } }),
-          },
-        },
-      };
     }
-    const result = await super.getOpenAiBody(prompt, parentContext, callApiOptions);
+    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
 
     // Ensure we have a valid result
     if (!result || !result.body) {
