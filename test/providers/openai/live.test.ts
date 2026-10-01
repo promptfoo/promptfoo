@@ -1985,19 +1985,22 @@ describe('OpenAiLiveProvider', () => {
     expect(socket.terminate).toHaveBeenCalledOnce();
   });
 
-  it('accepts canonical output audio with or without padding', async () => {
+  it.each([
+    { deltas: ['AQI', 'AwQ='], bytes: [1, 2, 3, 4] },
+    { deltas: ['AQ', 'Ag=='], bytes: [1, 2] },
+    { deltas: ['AQIDBAUG'], bytes: [1, 2, 3, 4, 5, 6] },
+  ])('accepts canonical output audio $deltas', async ({ deltas, bytes }) => {
     const result = provider().callApi('Hi');
     const socket = await connect();
     start(socket);
-    emit(socket, { type: 'session.output_audio.delta', delta: 'AQI' });
-    emit(socket, { type: 'session.output_audio.delta', delta: 'AwQ=' });
+    for (const delta of deltas) {
+      emit(socket, { type: 'session.output_audio.delta', delta });
+    }
     await vi.advanceTimersByTimeAsync(100);
     closed(socket);
     const response = await result;
     expect(response.error).toBeUndefined();
-    expect(Buffer.from(response.audio!.data!, 'base64').subarray(44)).toEqual(
-      Buffer.from([1, 2, 3, 4]),
-    );
+    expect(Buffer.from(response.audio!.data!, 'base64').subarray(44)).toEqual(Buffer.from(bytes));
   });
 
   it.each(['AQI===', 'AQI====', 'AQ=', 'AQ=I', 'AQI!', 'AQJ'])(
