@@ -427,6 +427,7 @@ export class ReplicateProvider implements ApiProvider {
       }
       return {
         error: `API call error: ${String(err)}`,
+        cacheHit,
         ...(cached && { cached: true, tokenUsage: createEmptyTokenUsage() }),
       };
     }

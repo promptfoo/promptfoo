@@ -279,6 +279,7 @@ describe('ReplicateProvider', () => {
     expect(result).toMatchObject({
       error: 'API call error: Error: Model error',
       cached: true,
+      cacheHit: true,
       tokenUsage: { total: 0, cached: 0, numRequests: 0 },
     });
   });

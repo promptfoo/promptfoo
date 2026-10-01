@@ -8,6 +8,7 @@ import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 import { OpenAiTtsProvider } from '../../src/providers/openai/tts';
 import { ReplicateImageProvider, ReplicateProvider } from '../../src/providers/replicate';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
+import { extractProviderResponseAttributes } from '../../src/tracing/genaiTracer';
 import * as targetTracer from '../../src/tracing/targetTracer';
 import { ResultFailureReason } from '../../src/types/index';
 import { fetchWithRetries } from '../../src/util/fetch/index';
@@ -246,6 +247,33 @@ describe('latency assertions with real provider caching', () => {
       expect(replay.failureReason).toBe(ResultFailureReason.ERROR);
       expect(replay.error).toContain('does not support cached results');
       expect(fetchWithRetries).toHaveBeenCalledTimes(3);
+    },
+  );
+
+  it.each([false, true])(
+    'keeps failed shared Replicate responses marked live (polling: %s)',
+    async (polling) => {
+      const creation = createDeferred<Response>();
+      const failed = { id: 'prediction', status: 'failed', error: 'Fixture unavailable' };
+      vi.mocked(fetchWithRetries)
+        .mockImplementationOnce(() => creation.promise)
+        .mockImplementation(async () => Response.json(failed));
+      const provider = new ReplicateProvider('fixture/model', {
+        config: { apiKey: 'fixture-key' },
+      });
+      const calls = [provider.callApi('hello'), provider.callApi('hello')];
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchWithRetries).toHaveBeenCalledOnce();
+      creation.resolve(Response.json(polling ? { id: failed.id, status: 'processing' } : failed));
+      const results = await Promise.all(calls);
+
+      expect(results.filter((result) => result.cached)).toHaveLength(1);
+      for (const result of results) {
+        expect(result.error).toContain('Fixture unavailable');
+        expect(result.cacheHit).toBe(false);
+        expect(extractProviderResponseAttributes(result).cacheHit).toBe(false);
+      }
+      expect(fetchWithRetries).toHaveBeenCalledTimes(polling ? 3 : 1);
     },
   );
 

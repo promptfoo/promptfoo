@@ -9,7 +9,8 @@
  * the ChatKit web component, which this provider automates using Playwright.
  *
  * Prerequisites:
- *   - Playwright installed: npm install playwright && npx playwright install chromium
+ *   - Playwright installed alongside Promptfoo: npm install promptfoo "playwright@^1.63.0"
+ *     followed by npx playwright install chromium
  *   - OPENAI_API_KEY environment variable set
  *
  * Usage:
@@ -26,18 +27,20 @@
  *   - First test may be slower due to browser launch and ChatKit initialization
  *
  * Troubleshooting:
- *   - "Playwright not found": Run `npx playwright install chromium`
+ *   - Missing Playwright package: Run `npm install promptfoo "playwright@^1.63.0"`
+ *   - Missing Chromium binary: Run `npx playwright install chromium`
  *   - Timeout errors: Increase timeout config or use --max-concurrency 1
  *   - Empty responses: The workflow may not generate text for some inputs
  */
 
 import * as http from 'http';
 
-import { type Browser, type BrowserContext, chromium, type Page } from 'playwright';
 import logger from '../../logger';
+import { CHROMIUM_INSTALL_HINT, loadPlaywright } from '../browserDependencies';
 import { providerRegistry } from '../providerRegistry';
 import { ChatKitBrowserPool } from './chatkit-pool';
 import { OpenAiGenericProvider } from './index';
+import type { Browser, BrowserContext, Page } from 'playwright';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -804,6 +807,8 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       version: this.chatKitConfig.version,
     });
 
+    const { chromium } = await loadPlaywright();
+
     // Create HTTP server to serve the ChatKit HTML
     const html = generateChatKitHTML(
       apiKey,
@@ -841,7 +846,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         errorMessage.includes('browserType.launch')
       ) {
         throw new Error(
-          'Playwright browser not installed. Run: npx playwright install chromium\n' +
+          `Playwright browser not installed. ${CHROMIUM_INSTALL_HINT}\n` +
             `Original error: ${errorMessage}`,
         );
       }
@@ -898,20 +903,34 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
    * Clean up browser resources
    */
   async cleanup(): Promise<void> {
-    if (this.context) {
-      await this.context.close();
-      this.context = null;
-      this.page = null;
-    }
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
-    }
-    if (this.server) {
-      this.server.close();
-      this.server = null;
-    }
+    const { context, browser, server } = this;
+    this.context = null;
+    this.page = null;
+    this.browser = null;
+    this.server = null;
+    this.serverPort = 0;
     this.initialized = false;
+
+    for (const [name, resource] of [
+      ['context', context],
+      ['browser', browser],
+    ] as const) {
+      try {
+        await resource?.close();
+      } catch (error) {
+        logger.debug('[ChatKitProvider] Cleanup failed', { resource: name, error });
+      }
+    }
+    if (server) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server.close((error) => (error ? reject(error) : resolve()));
+          server.closeAllConnections();
+        });
+      } catch (error) {
+        logger.debug('[ChatKitProvider] Cleanup failed', { resource: 'server', error });
+      }
+    }
   }
 
   /**
@@ -1063,18 +1082,20 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[ChatKitProvider] Call failed', { error: errorMessage });
 
-      // Check for ChatKit-specific errors in page state
+      // Read initialization diagnostics before cleanup closes the page.
+      let stateError: unknown;
       if (this.page) {
         try {
-          const stateError = await this.page.evaluate(() => (window as any).__state?.error);
-          if (stateError) {
-            return {
-              error: `ChatKit workflow error: ${stateError}`,
-            };
-          }
+          stateError = await this.page.evaluate(() => (window as any).__state?.error);
         } catch {
           // Page may be in bad state, continue with general error
         }
+      }
+      if (!this.initialized) {
+        await this.cleanup();
+      }
+      if (stateError) {
+        return { error: `ChatKit workflow error: ${stateError}` };
       }
 
       // Provide helpful error messages for common issues
@@ -1094,7 +1115,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
 
       if (errorMessage.includes('Playwright') || errorMessage.includes('browser')) {
         return {
-          error: `Browser error: ${errorMessage}. Ensure Playwright is installed: npx playwright install chromium`,
+          error: `Browser error: ${errorMessage}`,
         };
       }
 
