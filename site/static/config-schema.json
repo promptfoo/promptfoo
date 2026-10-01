@@ -618,6 +618,9 @@
         "XAI_API_KEY": {
           "type": "string"
         },
+        "Y_API_API_KEY": {
+          "type": "string"
+        },
         "AZURE_CONTENT_SAFETY_ENDPOINT": {
           "type": "string"
         },
