@@ -78,7 +78,6 @@ vi.mock('./EvalOutputCell', () => {
       testCaseId?: string;
       searchText?: string;
       evaluationId?: string;
-      testCaseId?: string;
     }) => {
       return (
         <div
