@@ -120,6 +120,38 @@ describe('Responses stream transport', () => {
     expect(response.body?.locked).toBe(false);
   });
 
+  it('preserves a provider error while a response clone is still being read', async () => {
+    const { setImmediate: nextTurn } =
+      await vi.importActual<typeof import('node:timers/promises')>('node:timers/promises');
+    let finishResponse = () => {};
+    const response = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode('data: {"type":"error","message":"fixture failure"}\n\n'),
+          );
+          finishResponse = () => controller.close();
+        },
+      }),
+    );
+    const loggingRead = response.clone().text();
+    let errorReturned = false;
+    const parsing = readResponsesStream(response, 'fixture', logger).catch((error) => {
+      errorReturned = true;
+      throw error;
+    });
+    const assertion = expect(parsing).rejects.toThrow('fixture failure');
+
+    try {
+      await nextTurn();
+      expect(errorReturned).toBe(true);
+      expect(response.body?.locked).toBe(false);
+    } finally {
+      finishResponse();
+      await Promise.all([assertion, loggingRead]);
+    }
+  });
+
   it('cancels an already-aborted body without consuming an event', async () => {
     const controller = new AbortController();
     controller.abort();

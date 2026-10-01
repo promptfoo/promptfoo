@@ -197,7 +197,8 @@ export async function readResponsesStream(
     }
     buffer = buffer.slice(start);
     searchFrom = Math.max(0, buffer.length - 1);
-    if (buffer.length > MAX_EVENT_CHARS) {
+    // The first delimiter newline may arrive in a separate chunk.
+    if (buffer.length > MAX_EVENT_CHARS + (buffer.endsWith('\n') ? 1 : 0)) {
       throw new Error(`${providerName} streaming response exceeds the event limit`);
     }
   };
@@ -240,7 +241,7 @@ export async function readResponsesStream(
   } finally {
     signal?.removeEventListener('abort', cancelReader);
     if (!ended) {
-      await reader.cancel().catch(() => {});
+      cancelReader();
     }
     reader.releaseLock();
   }
