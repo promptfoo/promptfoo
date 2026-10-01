@@ -11,6 +11,7 @@ import { parseArgs } from 'node:util';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 
 import { API } from 'typescript/unstable/sync';
+import { writePackedConsumerSbom } from './packedConsumerSbom';
 import { assertBuiltAssetsPackaged } from './packPackageArtifact';
 
 type PackFile = {
@@ -1122,6 +1123,7 @@ async function main(): Promise<void> {
       tarball: { type: 'string' },
       'runtime-assets': { type: 'string', default: 'none' },
       browser: { type: 'boolean', default: false },
+      'sbom-output': { type: 'string' },
     },
   });
   assert(
@@ -1184,6 +1186,7 @@ async function main(): Promise<void> {
       path.join(consumerDir, 'package.json'),
       JSON.stringify({
         name: 'promptfoo-package-artifact-consumer',
+        version: '0.0.0',
         private: true,
         type: 'module',
       }),
@@ -1197,7 +1200,9 @@ async function main(): Promise<void> {
         '--omit=dev',
         '--no-audit',
         '--no-fund',
-        '--no-package-lock',
+        // npm needs the local tarball's resolution metadata to validate its SBOM
+        // edge. The lock records this fresh install; SBOM generation reads disk.
+        values['sbom-output'] ? '--package-lock' : '--no-package-lock',
         tarballPath,
       ],
       consumerDir,
@@ -1205,6 +1210,16 @@ async function main(): Promise<void> {
     );
 
     const installedPackageDir = path.join(consumerDir, 'node_modules', 'promptfoo');
+    // Capture the pristine consumer before optional-SDK acceptance installs fixtures.
+    if (values['sbom-output']) {
+      writePackedConsumerSbom(
+        consumerDir,
+        tarballPath,
+        path.resolve(values['sbom-output']),
+        values.profile,
+        consumerNpmEnv,
+      );
+    }
     const installedPackageJson = JSON.parse(
       fs.readFileSync(path.join(installedPackageDir, 'package.json'), 'utf8'),
     ) as {
