@@ -87,6 +87,21 @@ describe('Responses stream transport', () => {
     },
   );
 
+  it.each(['wrapped', 'top-level'])(
+    'preserves a completed %s response after malformed data',
+    async (form) => {
+      const terminal = form === 'wrapped' ? { response: completed } : completed;
+      const response = chunkedResponse(
+        'data: {"type":"response.output_text.delta","delta":"draft"}\n\n' +
+          'data: not-json\n\n' +
+          `data: ${JSON.stringify(terminal)}\n\n`,
+        7,
+      );
+      await expect(readResponsesStream(response, 'fixture', logger)).resolves.toEqual(completed);
+      expect(response.body?.locked).toBe(false);
+    },
+  );
+
   it.each([false, true])(
     'preserves a terminal failure after malformed data with preserveFailedOutput=%s',
     async (preserveFailedOutput) => {

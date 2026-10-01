@@ -151,7 +151,8 @@ export async function readResponsesStream(
       onResponse?.(latestResponse);
     } else if (Array.isArray(event.output)) {
       latestResponse = event;
-      latestResponseIsCompleted = event.type === 'response.completed';
+      latestResponseIsCompleted =
+        event.type === 'response.completed' || latestResponse.status === 'completed';
     }
 
     if (event.type === 'response.output_text.delta') {
