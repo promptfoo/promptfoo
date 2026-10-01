@@ -1,8 +1,9 @@
+import { execFile } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { promisify } from 'node:util';
 
-import { execa } from 'execa';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MAX_BLOB_SIZE_BYTES } from '../../../src/codeScan/constants/filtering';
 import { processDiff } from '../../../src/codeScan/git/diffProcessor';
@@ -15,17 +16,18 @@ describe('processDiff with real git blobs', () => {
   beforeAll(async () => {
     repoPath = await mkdtemp(path.join(tmpdir(), 'promptfoo-diff-text-'));
     const git = async (args: string[], input?: string | Buffer): Promise<string> => {
-      const result = await execa('git', args, {
+      const command = promisify(execFile)('git', args, {
         cwd: repoPath,
-        input,
         env: {
+          ...process.env,
           GIT_AUTHOR_NAME: 'Diff test',
           GIT_AUTHOR_EMAIL: 'diff-test@example.com',
           GIT_COMMITTER_NAME: 'Diff test',
           GIT_COMMITTER_EMAIL: 'diff-test@example.com',
         },
       });
-      return result.stdout;
+      command.child.stdin?.end(input);
+      return (await command).stdout.trimEnd();
     };
 
     await git(['init', '--bare', '--template=']);
@@ -33,6 +35,8 @@ describe('processDiff with real git blobs', () => {
     const base = await git(['commit-tree', emptyTree, '-m', 'base']);
     const fixtures = [
       ['known.ts', text],
+      ['name with spaces;literal.ts', text],
+      ['large-patch.ts', 'line\n'.repeat(45_000)],
       ['unknown.pfaudit', text],
       ['extensionless', text],
       ['binary.pfaudit', Buffer.alloc(8192)],
@@ -56,7 +60,7 @@ describe('processDiff with real git blobs', () => {
     }
   });
 
-  it.each(['known.ts', 'unknown.pfaudit', 'extensionless'])(
+  it.each(['known.ts', 'unknown.pfaudit', 'extensionless', 'name with spaces;literal.ts'])(
     'includes text larger than 4KB in %s',
     (filename) => {
       expect(Buffer.byteLength(text)).toBeGreaterThan(4096);
@@ -68,6 +72,20 @@ describe('processDiff with real git blobs', () => {
       expect(files.find((file) => file.path === filename)?.skipReason).toBeUndefined();
     },
   );
+
+  it('skips a patch above its limit even when its blob fits', () => {
+    expect(files.find((file) => file.path === 'large-patch.ts')).toMatchObject({
+      isText: true,
+      afterSizeBytes: 225_000,
+      skipReason: 'patch too large',
+    });
+  });
+
+  it('reports Git failures for invalid refs', async () => {
+    await expect(processDiff(repoPath, 'missing-base', 'missing-head')).rejects.toThrow(
+      'Failed to process diff:',
+    );
+  });
 
   it('still excludes binary content with an unknown extension', () => {
     expect(files.find((file) => file.path === 'binary.pfaudit')).toMatchObject({
