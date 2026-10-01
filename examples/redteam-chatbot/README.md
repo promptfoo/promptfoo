@@ -50,6 +50,8 @@ promptfoo view
 
 ## Node.js Webserver Example Usage
 
+The server accepts only `api_provider: "openai"`, which selects `openai:chat:gpt-6-sol`. To change models, edit the provider ID in `app.js`; request bodies cannot select arbitrary providers or URLs.
+
 ### Single Message Request
 
 ```bash
