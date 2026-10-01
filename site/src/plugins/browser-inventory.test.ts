@@ -19,18 +19,25 @@ it('records concatenated client packages while excluding treeshaken and server-o
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'site-inventory-'));
   directories.push(root);
   const files: Record<string, string> = {
-    'main.js': 'import { unused } from "unused"; import { value } from "used"; console.log(value);',
+    'src/main.js':
+      'import { unused } from "unused"; import { value } from "used"; import "./components/NewsletterForm.js"; import "./pages/docs/api-reference.js"; console.log(value);',
     'node_modules/used/package.json':
       '{"name":"used","version":"1.0.0","type":"module","main":"index.js","sideEffects":false}',
     'node_modules/used/index.js': 'export const value = "used fixture";',
     'node_modules/unused/package.json':
       '{"name":"unused","version":"2.0.0","type":"module","main":"index.js","sideEffects":false}',
-    'node_modules/unused/index.js': 'export const unused = "unused fixture";',
+    'node_modules/unused/index.js':
+      'export const unused = "unused fixture"; const script = {}; script.src = "https://unused.example.test/script.js";',
     'node_modules/server-only/package.json':
       '{"name":"server-only","version":"3.0.0","main":"index.js"}',
     'node_modules/server-only/index.js': 'console.log("server only");',
     'static/copied.svg': '<svg></svg>',
-    'src/pages/docs/api-reference.tsx': 'script.src = "https://cdn.example.test/widget.js";',
+    'src/pages/docs/api-reference.js':
+      'const script = {}; script.src = "https://cdn.example.test/widget.js";',
+    'src/components/NewsletterForm.js':
+      'const script = {}; script.src = "https://newsletter.example.test/form.js";',
+    'static/js/scripts.js':
+      'const script = {}; script.src = "https://vector.example.test/pixel.js"; script.src = "https://dynamic.example.test/" + id + "/loader.js";',
     'static/js/consent.js': '',
   };
   for (const [file, content] of Object.entries(files)) {
@@ -49,7 +56,7 @@ it('records concatenated client packages while excluding treeshaken and server-o
     const compiler = webpack({
       mode: 'production',
       context: root,
-      entry: './main.js',
+      entry: './src/main.js',
       output: { path: outDir, filename: 'app.js' },
       ...clientConfig,
     });
@@ -73,8 +80,11 @@ it('records concatenated client packages while excluding treeshaken and server-o
     'app.js',
     'copied.svg',
     'js/consent.js',
+    'js/scripts.js',
   ]);
   expect(inventory.externalResources).toEqual([
-    { url: 'https://cdn.example.test/widget.js', source: 'src/pages/docs/api-reference.tsx' },
+    { url: 'https://cdn.example.test/widget.js', source: 'src/pages/docs/api-reference.js' },
+    { url: 'https://newsletter.example.test/form.js', source: 'src/components/NewsletterForm.js' },
+    { url: 'https://vector.example.test/pixel.js', source: 'static/js/scripts.js' },
   ]);
 });
