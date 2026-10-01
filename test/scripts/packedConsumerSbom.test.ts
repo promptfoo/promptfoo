@@ -67,7 +67,7 @@ describe('packed consumer SBOM', () => {
     writePackage(directory, {
       name: 'consumer',
       version: '1.0.0',
-      dependencies: { promptfoo: '1.0.0', '@fixture/dep': '2.0.0' },
+      dependencies: { promptfoo: '1.0.0', '@fixture/dep': '2.0.0', alias: 'npm:actual@3.0.0' },
     });
     writePackage(path.join(directory, 'node_modules/promptfoo'), {
       name: 'promptfoo',
@@ -78,6 +78,7 @@ describe('packed consumer SBOM', () => {
       name: '@fixture/dep',
       version: '2.0.0',
     });
+    writePackage(path.join(directory, 'node_modules/alias'), { name: 'actual', version: '3.0.0' });
     writePackage(path.join(directory, 'node_modules/promptfoo/node_modules/@fixture/dep'), {
       name: '@fixture/dep',
       version: '1.0.0',
@@ -100,6 +101,7 @@ describe('packed consumer SBOM', () => {
     expect(inventory.components).toEqual([
       { name: '@fixture/dep', version: '1.0.0' },
       { name: '@fixture/dep', version: '2.0.0' },
+      { name: 'actual', version: '3.0.0' },
       { name: 'promptfoo', version: '1.0.0' },
     ]);
     expect(inventory.artifact).toMatchObject({
@@ -132,9 +134,33 @@ describe('packed consumer SBOM', () => {
     expect(() =>
       assertSbomCoverage(installed, {
         bomFormat: 'CycloneDX',
-        components: [...installed, { name: 'dev-only', version: '1.0.0' }],
+        components: [
+          ...installed.map((component) => ({ ...component, purl: 'pkg:npm/promptfoo@1.0.0' })),
+          { name: 'dev-only', version: '1.0.0', purl: 'pkg:npm/dev-only@1.0.0' },
+        ],
       }),
     ).toThrow('actually installed');
+  });
+
+  it('matches an npm alias by its canonical PURL, not its installation name', () => {
+    expect(() =>
+      assertSbomCoverage([{ name: '@openai/codex', version: '0.156.1-linux-x64' }], {
+        bomFormat: 'CycloneDX',
+        components: [
+          {
+            name: '@openai/codex-linux-x64',
+            version: '0.156.1-linux-x64',
+            purl: 'pkg:npm/%40openai/codex@0.156.1-linux-x64',
+          },
+        ],
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertSbomCoverage([{ name: 'real', version: '1.0.0' }], {
+        bomFormat: 'CycloneDX',
+        components: [{ name: 'alias', version: '1.0.0', purl: 'pkg:npm/real@2.0.0' }],
+      }),
+    ).toThrow('PURL version');
   });
 
   it('does not count duplicate installations twice', () => {

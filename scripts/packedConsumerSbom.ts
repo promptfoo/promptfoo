@@ -50,14 +50,26 @@ export function installedComponents(consumerDir: string): Component[] {
 
 export function assertSbomCoverage(
   installed: Component[],
-  sbom: { bomFormat?: string; components?: Component[] },
+  sbom: { bomFormat?: string; components?: Array<Component & { purl: string }> },
 ): void {
   assert.equal(sbom.bomFormat, 'CycloneDX', 'Expected a CycloneDX SBOM');
   assert(Array.isArray(sbom.components), 'Missing SBOM components');
   const identities = (components: Component[]) =>
     [...new Set(components.map(({ name, version }) => `${name}@${version}`))].sort();
+  // npm's display name can be an install alias (e.g. Codex platform binaries).
+  // PURLs identify the underlying published package, as its manifest does.
+  const canonical = sbom.components.map((component) => {
+    assert(typeof component.purl === 'string' && component.purl.startsWith('pkg:npm/'));
+    const coordinate = component.purl.slice('pkg:npm/'.length).split(/[?#]/)[0];
+    const versionSeparator = coordinate.lastIndexOf('@');
+    assert(versionSeparator > 0, `Missing npm PURL version: ${component.purl}`);
+    const name = decodeURIComponent(coordinate.slice(0, versionSeparator));
+    const version = decodeURIComponent(coordinate.slice(versionSeparator + 1));
+    assert.equal(version, component.version, 'SBOM PURL version must match its component');
+    return { name, version };
+  });
   assert.deepEqual(
-    identities(sbom.components),
+    identities(canonical),
     identities(installed),
     'SBOM components must match packages actually installed on disk',
   );
