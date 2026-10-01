@@ -6,7 +6,7 @@ import path from 'path';
 
 import httpZ from 'http-z';
 import { LRUCache } from 'lru-cache';
-import { Agent, type Dispatcher, interceptors } from 'undici';
+import { Agent, type Dispatcher } from 'undici';
 import { z } from 'zod';
 import { fetchWithCache } from '../cache';
 import cliState from '../cliState';
@@ -21,6 +21,7 @@ import { HttpTlsFieldsSchema } from '../contracts/providerConfig/httpTls';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
+import { createDecompressionInterceptor } from '../util/fetch/decompress';
 import { stripDecompressionHeaders } from '../util/fetch/stripDecompressionHeaders';
 import {
   maybeLoadConfigFromExternalFile,
@@ -1740,7 +1741,7 @@ async function createHttpsAgent(
   return new Agent({
     connect: tlsOptions,
   })
-    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(createDecompressionInterceptor())
     .compose(stripDecompressionHeaders());
 }
 

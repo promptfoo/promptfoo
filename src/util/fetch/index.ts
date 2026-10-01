@@ -3,7 +3,7 @@ import path from 'path';
 import type { ConnectionOptions } from 'tls';
 
 import { getProxyForUrl } from 'proxy-from-env';
-import { Agent, type Dispatcher, interceptors, ProxyAgent } from 'undici';
+import { Agent, type Dispatcher, ProxyAgent } from 'undici';
 import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
@@ -14,6 +14,7 @@ import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
 import { CloudAuthRedirectError } from './cloudAuthRedirects';
+import { createDecompressionInterceptor } from './decompress';
 import {
   extractRateLimitErrorCode,
   extractRateLimitErrorType,
@@ -115,7 +116,7 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
     connections: concurrency,
     connect: tlsOptions,
   })
-    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(createDecompressionInterceptor())
     .compose(stripDecompressionHeaders());
   cachedAgents.set(concurrency, agent);
   return agent;
@@ -141,7 +142,7 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
   })
-    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(createDecompressionInterceptor())
     .compose(stripDecompressionHeaders());
   cachedProxyAgents.set(cacheKey, agent);
   return agent;
