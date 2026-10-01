@@ -152,6 +152,8 @@ jobs:
 
       - name: Upload Backend Coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard
+        # Authentication can fail before fail_ci_if_error applies; uploads are informational.
+        continue-on-error: true
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: ./coverage/coverage-final.json
@@ -301,7 +303,8 @@ jobs:
     name: Installed package on ${{ matrix.os }}
     needs: build
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    # Fresh Windows consumer installs can take 17m; leave time for assertions and cleanup.
+    timeout-minutes: ${{ matrix.os == 'windows-2025-vs2026' && 40 || 20 }}
     permissions:
       contents: read
     strategy:
@@ -686,6 +689,8 @@ jobs:
         run: test -s ./site/coverage/coverage-final.json
 
       - name: Upload Site Coverage to Codecov
+        # Authentication can fail before fail_ci_if_error applies; uploads are informational.
+        continue-on-error: true
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: ./site/coverage/coverage-final.json
@@ -743,6 +748,8 @@ jobs:
         run: npm run test:coverage:ratchet -- --report frontend
 
       - name: Upload Frontend Coverage to Codecov
+        # Authentication can fail before fail_ci_if_error applies; uploads are informational.
+        continue-on-error: true
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: ./src/app/coverage/coverage-final.json
