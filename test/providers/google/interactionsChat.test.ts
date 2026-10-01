@@ -609,6 +609,25 @@ describe('GoogleInteractionsChatProvider', () => {
       });
     });
 
+    it.each([
+      ['responseSchema', 'response_schema'],
+      ['response_schema', 'responseSchema'],
+    ])('preserves schema precedence across %s and %s aliases', async (camelKey, snakeKey) => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      await make({
+        passthrough: {
+          generationConfig: { [camelKey]: { type: 'STRING' } },
+          generation_config: {
+            [snakeKey]: { type: 'OBJECT', properties: { color: { type: 'STRING' } } },
+          },
+        },
+      }).callApi('Hello');
+      expect(bodyOf(mockFetchWithCache.mock.calls[0]).response_format.schema).toEqual({
+        type: 'object',
+        properties: { color: { type: 'string' } },
+      });
+    });
+
     it('preserves an explicit native response format override', async () => {
       mockFetchWithCache.mockResolvedValue(interaction() as any);
       const responseFormat = { type: 'text', mime_type: 'text/plain' };
@@ -1043,6 +1062,29 @@ describe('GoogleInteractionsChatProvider', () => {
         'google_search_call',
         'google_search_result',
       ]);
+    });
+
+    it.each([
+      undefined,
+      { total_tokens: 12 },
+      { total_input_tokens: 10 },
+      { total_output_tokens: 2 },
+    ])('leaves cost unknown when usage components are missing: %j', async (usage) => {
+      mockFetchWithCache.mockResolvedValue(interaction({ usage }) as any);
+      const result = await make().callApi('Hello');
+      expect(result.output).toBe('Hello');
+      expect(result.error).toBeUndefined();
+      expect(result.cost).toBeUndefined();
+      expect(result.tokenUsage?.numRequests).toBe(1);
+    });
+
+    it('prices explicit zero usage without requiring a total counter', async () => {
+      mockFetchWithCache.mockResolvedValue(
+        interaction({ usage: { total_input_tokens: 0, total_output_tokens: 0 } }) as any,
+      );
+      const result = await make().callApi('Hello');
+      expect(result.cost).toBe(0);
+      expect(result.tokenUsage?.numRequests).toBe(1);
     });
 
     it('reports token usage, reasoning tokens, and cost', async () => {

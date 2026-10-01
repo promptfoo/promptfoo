@@ -665,16 +665,24 @@ function resolveRetention(
     };
   }
 
+  const mergedGenerationConfig: Record<string, unknown> = {};
+  for (const block of [passthroughGenerationConfigCamel, passthroughGenerationConfig]) {
+    if (isPlainObject(block)) {
+      Object.assign(mergedGenerationConfig, block);
+      const schema = block.responseSchema ?? block.response_schema;
+      if (schema !== undefined) {
+        mergedGenerationConfig.responseSchema = schema;
+      }
+    }
+  }
+
   return {
     // Vertex rejects `store: false` outright ("must set store to true"), so the
     // privacy-preserving default only applies to the AI Studio route.
     store: requestedStore ?? (isVertexMode || Boolean(previousInteractionId)),
     previousInteractionId,
     passthrough,
-    passthroughGenerationConfig: {
-      ...(isPlainObject(passthroughGenerationConfigCamel) ? passthroughGenerationConfigCamel : {}),
-      ...(isPlainObject(passthroughGenerationConfig) ? passthroughGenerationConfig : {}),
-    },
+    passthroughGenerationConfig: mergedGenerationConfig,
   };
 }
 
@@ -871,8 +879,10 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
         this.isVertexMode
           ? { ...config, region: getVertexInteractionsRegion(config, this.env) }
           : config,
-        roundUsage.prompt,
-        roundUsage.completion + roundUsage.thoughts,
+        data.usage?.total_input_tokens == null ? undefined : roundUsage.prompt,
+        data.usage?.total_output_tokens == null
+          ? undefined
+          : roundUsage.completion + roundUsage.thoughts,
         this.isVertexMode,
         roundUsage.audioIn,
         roundUsage.audioOut,
