@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getGradingInputHash } from '../../../../src/redteam/grading/storedResult';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
+import { getGradingInputHash } from '../../../../src/redteam/grading/storedResult';
 import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
