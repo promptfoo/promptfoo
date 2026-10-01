@@ -51,7 +51,9 @@ describe('METEOR through the built CLI', () => {
     expect(result.status, result.stdout + result.stderr).toBe(100);
     const rows = JSON.parse(fs.readFileSync(output, 'utf8')).results.results;
     expect(rows).toHaveLength(3);
-    const [positive, inverseFailure, inversePass] = rows;
+    const [positive, inverseFailure, inversePass] = rows.toSorted(
+      (left: { testIdx: number }, right: { testIdx: number }) => left.testIdx - right.testIdx,
+    );
     expect(positive.success).toBe(true);
     expect(positive.score).toBeGreaterThan(0.9);
     expect(positive.error).toBeUndefined();
