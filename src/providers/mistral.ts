@@ -3,7 +3,11 @@ import { createHmac } from 'crypto';
 import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import {
+  extractTokenUsageAttributes,
+  type GenAISpanContext,
+  withGenAISpan,
+} from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util';
 import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
 
@@ -598,23 +602,10 @@ export class MistralChatCompletionProvider implements ApiProvider {
       traceparent: context?.traceparent,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      return result;
-    };
-
     return withGenAISpan(
       spanContext,
       () => this.callApiInternal(prompt, context, config),
-      resultExtractor,
+      extractTokenUsageAttributes,
     );
   }
 
