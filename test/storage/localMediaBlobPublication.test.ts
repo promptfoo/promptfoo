@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
 import logger from '../../src/logger';
 import { LocalFileSystemProvider } from '../../src/storage/localFileSystemProvider';
+import { sleep } from '../../src/util/time';
 import { createDeferred, createTempDir, removeTempDir } from '../util/utils';
 
 vi.mock('node:fs/promises', async (importOriginal) => {
@@ -19,7 +20,15 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   };
 });
 
+vi.mock('../../src/util/time', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/time')>()),
+  sleep: vi.fn(),
+}));
+
 const realFs = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+const { sleep: realSleep } =
+  await vi.importActual<typeof import('../../src/util/time')>('../../src/util/time');
+const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')!;
 
 const data = Buffer.from('complete content-addressed media bytes');
 const hash = createHash('sha256').update(data).digest('hex');
@@ -31,14 +40,17 @@ beforeEach(() => {
   vi.mocked(fs.writeFile).mockReset().mockImplementation(realFs.writeFile);
   vi.mocked(fs.rename).mockReset().mockImplementation(realFs.rename);
   vi.mocked(fs.rm).mockReset().mockImplementation(realFs.rm);
+  vi.mocked(sleep).mockReset().mockImplementation(realSleep);
   directory = createTempDir('promptfoo-media-publication-');
 });
 
 afterEach(() => {
+  Object.defineProperty(process, 'platform', platformDescriptor);
   vi.restoreAllMocks();
   vi.mocked(fs.writeFile).mockReset();
   vi.mocked(fs.rename).mockReset();
   vi.mocked(fs.rm).mockReset();
+  vi.mocked(sleep).mockReset();
   removeTempDir(directory);
 });
 
@@ -200,9 +212,102 @@ describe('completed media blob publication', () => {
     expect(stored).toEqual({ data, contentType: persisted.mimeType });
   });
 
+  it.each(['data', 'metadata'] as const)(
+    'retries transient Windows %s publication errors without partial writes',
+    async (stage) => {
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+      vi.mocked(sleep).mockResolvedValue(undefined);
+      const provider = new FilesystemBlobStorageProvider({ basePath: directory });
+      const destination = `${provider.getFilePath(hash)}${stage === 'metadata' ? '.meta.json' : ''}`;
+      const errors = ['EPERM', 'EACCES', 'EBUSY'];
+      const sources: string[] = [];
+      vi.mocked(fs.rename).mockImplementation(async (source, target) => {
+        if (target === destination) {
+          sources.push(String(source));
+          const code = errors.shift();
+          if (code) {
+            throw Object.assign(new Error('fixture temporary file lock'), { code });
+          }
+        }
+        return realFs.rename(source, target);
+      });
+
+      await expect(provider.store(data, 'image/jpeg')).resolves.toMatchObject({
+        deduplicated: false,
+      });
+      expect(sources).toHaveLength(4);
+      expect(new Set(sources).size).toBe(1);
+      expect(vi.mocked(sleep).mock.calls).toEqual([[50], [100], [150]]);
+      expect(await provider.getByHash(hash)).toMatchObject({
+        data,
+        metadata: { mimeType: 'image/jpeg', sizeBytes: data.length },
+      });
+      expect((await realFs.readdir(path.dirname(destination))).sort()).toEqual([
+        hash,
+        `${hash}.meta.json`,
+      ]);
+    },
+  );
+
+  it.each(['data', 'metadata'] as const)(
+    'bounds persistent Windows %s publication failures and preserves a competing writer',
+    async (stage) => {
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+      vi.mocked(sleep).mockResolvedValue(undefined);
+      const provider = new FilesystemBlobStorageProvider({ basePath: directory });
+      const failure = Object.assign(new Error('fixture persistent file lock'), { code: 'EPERM' });
+      let failedWriterDirectory: string | undefined;
+      let attempts = 0;
+      vi.mocked(fs.rename).mockImplementation(async (source, destination) => {
+        failedWriterDirectory ??= path.dirname(String(source));
+        if (
+          source === path.join(failedWriterDirectory, stage === 'data' ? 'data' : 'metadata.json')
+        ) {
+          if (++attempts === 1) {
+            await new FilesystemBlobStorageProvider({ basePath: directory }).store(
+              data,
+              'video/mp4',
+            );
+          }
+          throw failure;
+        }
+        return realFs.rename(source, destination);
+      });
+
+      await expect(provider.store(data, 'image/jpeg')).rejects.toBe(failure);
+      expect(attempts).toBe(6);
+      expect(vi.mocked(sleep).mock.calls).toEqual([[50], [100], [150], [200], [250]]);
+      expect(await provider.getByHash(hash)).toMatchObject({
+        data,
+        metadata: { mimeType: 'video/mp4' },
+      });
+      expect((await realFs.readdir(path.dirname(provider.getFilePath(hash)))).sort()).toEqual([
+        hash,
+        `${hash}.meta.json`,
+      ]);
+    },
+  );
+
+  it.each([
+    ['linux', 'EPERM'],
+    ['win32', 'ENOSPC'],
+    ['win32', 'ENOENT'],
+  ])('propagates %s publication error %s without retrying', async (platform, code) => {
+    Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+    const failure = Object.assign(new Error('fixture publication failure'), { code });
+    vi.mocked(fs.rename).mockRejectedValue(failure);
+    const provider = new FilesystemBlobStorageProvider({ basePath: directory });
+
+    await expect(provider.store(data, 'image/jpeg')).rejects.toBe(failure);
+    expect(fs.rename).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(await realFs.readdir(path.dirname(provider.getFilePath(hash)))).toEqual([]);
+  });
+
   it.each(['metadata write', 'metadata rename', 'data rename'] as const)(
     'propagates %s failures without publishing a deduplication hit',
     async (stage) => {
+      vi.mocked(sleep).mockResolvedValue(undefined);
       const failure = Object.assign(new Error(`fixture ${stage} failure`), { code: 'EACCES' });
       if (stage === 'metadata write') {
         vi.mocked(fs.writeFile).mockImplementation(async (target, value, options) => {
@@ -282,6 +387,7 @@ describe('completed media blob publication', () => {
   );
 
   it('preserves committed metadata when a competing data publication fails', async () => {
+    vi.mocked(sleep).mockResolvedValue(undefined);
     const failure = Object.assign(new Error('fixture publish failure'), { code: 'EACCES' });
     const provider = new FilesystemBlobStorageProvider({ basePath: directory });
     let failedWriterDirectory: string | undefined;
