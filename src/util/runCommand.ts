@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { stripVTControlCharacters } from 'node:util';
 
 import { onExit } from 'signal-exit';
 
@@ -19,6 +20,22 @@ function stripFinalNewline(output: Buffer): Buffer {
     return output;
   }
   return output.subarray(0, output.length - (output[output.length - 2] === 13 ? 2 : 1));
+}
+
+function escapeCommandMessage(message: string): string {
+  // Preserve readable multiline diagnostics while making terminal controls visible.
+  return stripVTControlCharacters(message).replaceAll(/[\p{Separator}\p{Other}]/gu, (character) => {
+    if (character === ' ' || character === '\n') {
+      return character;
+    }
+    const escaped = JSON.stringify(character).slice(1, -1);
+    if (escaped !== character) {
+      return escaped;
+    }
+    const codePoint = character.codePointAt(0) ?? 0;
+    const hex = codePoint.toString(16);
+    return codePoint <= 0xffff ? `\\u${hex.padStart(4, '0')}` : `\\u{${hex}}`;
+  });
 }
 
 export function runCommand(
@@ -63,6 +80,7 @@ export function runCommand(
             : { stdout: output.stdout.toString('utf8'), stderr: output.stderr.toString('utf8') };
         const failure = error ?? inputError;
         if (failure) {
+          failure.message = escapeCommandMessage(failure.message);
           reject(Object.assign(failure, result));
         } else {
           resolve(result);

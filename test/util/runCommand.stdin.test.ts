@@ -62,11 +62,18 @@ describe('runCommand stdin errors', () => {
   });
 
   it('terminates the child and rejects unexpected stdin errors even if it exits successfully', async () => {
-    const inputError = Object.assign(new Error('write EIO'), { code: 'EIO' });
+    const inputError = Object.assign(new Error('write \u001b[31mEIO\u001b[0m\u0001'), {
+      code: 'EIO',
+    });
     const { result, kill } = finishAfterStdinError(inputError);
 
     await expect(result).rejects.toBe(inputError);
-    expect(inputError).toMatchObject({ code: 'EIO', stdout: 'output', stderr: 'diagnostic' });
+    expect(inputError).toMatchObject({
+      code: 'EIO',
+      message: 'write EIO\\u0001',
+      stdout: 'output',
+      stderr: 'diagnostic',
+    });
     expect(kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
     expect(removeExitHandler).toHaveBeenCalledOnce();
   });

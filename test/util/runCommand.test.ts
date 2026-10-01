@@ -113,6 +113,37 @@ describe('runCommand', () => {
     expect(removeExitHandler).toHaveBeenCalledOnce();
   });
 
+  it.each(['utf8', 'buffer'] as const)(
+    'escapes failure messages while preserving raw %s output',
+    async (encoding) => {
+      const argument = '\u001b[31mcolored\u001b[0m\targument\r\u0001';
+      const stdout = '\u001b[32moutput\u001b[0m\u0002';
+      const stderr = 'first line\nsecond\tline\r\u0003\u0085\u202e\u2028';
+      const script = `process.stdout.write(${JSON.stringify(stdout)}); process.stderr.write(${JSON.stringify(stderr)}); process.exitCode = 7`;
+      onExit.mockReturnValue(removeExitHandler);
+      const args = ['-e', script, argument];
+      const result =
+        encoding === 'buffer'
+          ? runCommand(process.execPath, args, { encoding })
+          : runCommand(process.execPath, args);
+      const failure = await result.catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).toMatchObject({
+        code: 7,
+        stdout: encoding === 'buffer' ? Buffer.from(stdout) : stdout,
+        stderr: encoding === 'buffer' ? Buffer.from(stderr) : stderr,
+        message: expect.stringContaining('colored\\targument\\r\\u0001'),
+      });
+      expect(failure).toHaveProperty(
+        'message',
+        expect.stringContaining('first line\nsecond\\tline\\r\\u0003\\u0085\\u202e\\u2028'),
+      );
+      expect(failure).toHaveProperty('message', expect.not.stringContaining('\u001b'));
+      expect(removeExitHandler).toHaveBeenCalledOnce();
+    },
+  );
+
   it('rejects a missing executable and removes its exit handler', async () => {
     onExit.mockReturnValue(removeExitHandler);
     await expect(runCommand('promptfoo-missing-command-for-test', [])).rejects.toMatchObject({
