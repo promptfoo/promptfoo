@@ -72,7 +72,7 @@ jobs:
           cache: npm
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: '3.12'
+          python-version: '3.14'
       - name: Install the CLI, demo and Chromium
         run: |
           npm ci --registry=https://registry.npmjs.org/

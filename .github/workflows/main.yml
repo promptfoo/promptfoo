@@ -96,7 +96,7 @@ jobs:
       - name: Use Python 3.14
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: 3.14.4
+          python-version: 3.14.8
 
       # Ruby 4.0.1 is not yet available on Windows via setup-ruby, use 4.0.0 on Windows
       - name: Use Ruby
@@ -204,7 +204,7 @@ jobs:
         if: matrix.node == '24.x'
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: '3.12.13'
+          python-version: '3.14.8'
 
       - name: Use Ruby for installed wrapper acceptance
         if: matrix.node == '24.x'
@@ -421,6 +421,7 @@ jobs:
       - name: Use Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
+          # The pinned ModelAudit schema generator requires Python <3.14.
           python-version: '3.13'
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
@@ -689,7 +690,7 @@ jobs:
       - name: Use Python 3.14
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: 3.14.4
+          python-version: 3.14.8
 
       - name: Use Ruby
         uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
@@ -744,7 +745,7 @@ jobs:
       - name: Use Python 3.14
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: 3.14.4
+          python-version: 3.14.8
 
       - name: Use Ruby
         uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
