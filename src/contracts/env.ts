@@ -162,10 +162,13 @@ export const ProviderEnvOverridesSchema = z.object({
   PROMPTFOO_EVAL_TIMEOUT_MS: z.string().optional(),
 });
 
+export const EnvOverridesSchema = ProviderEnvOverridesSchema.extend({
+  PROMPTFOO_DISABLE_TELEMETRY: z.string().optional(),
+});
+
 // The runtime schema silently strips unknown keys at parse time (zod's default
 // `z.object` mode). The type widens with `Record<string, string | undefined>`
 // so downstream code can read arbitrary template variables (e.g.,
 // `{{ env.MY_CUSTOM_VAR }}`) without a cast; callers that need to preserve
 // unknown keys must read them off the unparsed source object.
-export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema> &
-  Record<string, string | undefined>;
+export type EnvOverrides = z.infer<typeof EnvOverridesSchema> & Record<string, string | undefined>;

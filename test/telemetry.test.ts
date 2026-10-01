@@ -66,6 +66,7 @@ vi.mock('../src/envars', async () => {
   const actual = await vi.importActual<typeof import('../src/envars')>('../src/envars');
   return {
     ...actual,
+    isHostTesting: false,
     getEnvBool: vi.fn().mockImplementation((key) => {
       if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
         return (process.env as NodeJS.ProcessEnv).PROMPTFOO_DISABLE_TELEMETRY === '1';
@@ -156,7 +157,22 @@ describe('Telemetry', () => {
     vi.useFakeTimers();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    const registry = Reflect.get(process, Symbol.for('promptfoo.telemetry.clients')) as
+      | {
+          clients: Set<{ client: { shutdown(): Promise<void> }; shutdown?: Promise<void> }>;
+          exiting: boolean;
+        }
+      | undefined;
+    if (registry) {
+      await Promise.allSettled(
+        [...registry.clients].map(
+          (record) => (record.shutdown ??= Promise.resolve().then(() => record.client.shutdown())),
+        ),
+      );
+      registry.clients.clear();
+      registry.exiting = false;
+    }
     restoreTelemetryEnv(originalEnv);
     vi.clearAllMocks();
     vi.restoreAllMocks();
@@ -222,7 +238,7 @@ describe('Telemetry', () => {
   });
 
   it('should include version in telemetry events', () => {
-    mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0' });
+    mockProcessEnv({ IS_TESTING: undefined, PROMPTFOO_DISABLE_TELEMETRY: '0' });
     const telemetry = new Telemetry();
     telemetry.record('eval_ran', { foo: 'bar' });
 
@@ -349,7 +365,7 @@ describe('Telemetry', () => {
   });
 
   it('should not send user events when telemetry is disabled', async () => {
-    mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '1' });
+    mockProcessEnv({ IS_TESTING: undefined, PROMPTFOO_DISABLE_TELEMETRY: '1' });
 
     resetModulesAndMockFetch();
 
@@ -461,6 +477,7 @@ describe('Telemetry', () => {
         const actual = await vi.importActual('../src/envars');
         return {
           ...actual,
+          isHostTesting: false,
           getEnvBool: vi.fn().mockImplementation((key: string) => {
             if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
               return (process.env as NodeJS.ProcessEnv).PROMPTFOO_DISABLE_TELEMETRY === '1';
@@ -749,8 +766,37 @@ describe('Telemetry', () => {
   });
 
   describe('telemetry disabled recording', () => {
+    it.each([false, true])('suppresses fallback events in test mode (opt-out=%s)', (disabled) => {
+      mockProcessEnv({
+        IS_TESTING: 'true',
+        PROMPTFOO_DISABLE_TELEMETRY: disabled ? '1' : undefined,
+      });
+      const telemetry = new Telemetry(false);
+      vi.mocked(getUserAuthInfo).mockClear();
+
+      telemetry.record('eval_ran', {});
+      telemetry.record('command_used', { name: 'eval' });
+
+      expect(fetchWithProxySpy).not.toHaveBeenCalled();
+      expect(getUserAuthInfo).not.toHaveBeenCalled();
+    });
+
+    it('preserves one documented opt-out acknowledgment outside test mode', () => {
+      mockProcessEnv({ IS_TESTING: undefined, PROMPTFOO_DISABLE_TELEMETRY: '1' });
+      const telemetry = new Telemetry(false);
+      telemetry.record('eval_ran', {});
+      telemetry.record('command_used', { name: 'eval' });
+
+      expect(fetchWithProxySpy).toHaveBeenCalledOnce();
+      const options = fetchWithProxySpy.mock.calls[0][1];
+      expect(JSON.parse(options!.body as string)).toMatchObject({
+        event: 'feature_used',
+        meta: { feature: 'telemetry disabled' },
+      });
+    });
+
     it('should record telemetry disabled event only once', () => {
-      mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '1' });
+      mockProcessEnv({ IS_TESTING: undefined, PROMPTFOO_DISABLE_TELEMETRY: '1' });
       const telemetry = new Telemetry();
 
       telemetry.record('eval_ran', { foo: 'bar' });
@@ -810,12 +856,10 @@ describe('Telemetry', () => {
 
   describe('beforeExit handler registration', () => {
     const SHUTDOWN_HANDLER_KEY = Symbol.for('promptfoo.telemetry.shutdownHandler');
-    const TELEMETRY_INSTANCE_KEY = Symbol.for('promptfoo.telemetry.instance');
 
     beforeEach(() => {
       // Clear the process-level flags before each test
       delete (process as unknown as Record<symbol, unknown>)[SHUTDOWN_HANDLER_KEY];
-      delete (process as unknown as Record<symbol, unknown>)[TELEMETRY_INSTANCE_KEY];
     });
 
     it('should register beforeExit handler only once across multiple module loads', async () => {
@@ -836,39 +880,6 @@ describe('Telemetry', () => {
       // Should have added exactly one listener total
       expect(listenersAfterFirst).toBe(beforeExitListenersBefore + 1);
       expect(listenersAfterSecond).toBe(listenersAfterFirst);
-    });
-
-    it('should store telemetry instance on process for beforeExit handler', async () => {
-      resetModulesAndMockFetch();
-
-      const telemetryModule = await import('../src/telemetry');
-      const telemetryInstance = telemetryModule.default;
-
-      const storedInstance = (process as unknown as Record<symbol, unknown>)[
-        TELEMETRY_INSTANCE_KEY
-      ];
-      expect(storedInstance).toBe(telemetryInstance);
-    });
-
-    it('should update stored instance when module is reloaded', async () => {
-      resetModulesAndMockFetch();
-
-      const firstModule = await import('../src/telemetry');
-      const firstInstance = firstModule.default;
-
-      resetModulesAndMockFetch();
-
-      const secondModule = await import('../src/telemetry');
-      const secondInstance = secondModule.default;
-
-      // Instances should be different (new module load)
-      expect(firstInstance).not.toBe(secondInstance);
-
-      // Stored instance should be the most recent one
-      const storedInstance = (process as unknown as Record<symbol, unknown>)[
-        TELEMETRY_INSTANCE_KEY
-      ];
-      expect(storedInstance).toBe(secondInstance);
     });
   });
 });

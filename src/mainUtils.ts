@@ -97,8 +97,6 @@ export function setupEnvFilesFromArgv(argv: string[] = process.argv.slice(2)): v
   if (envPath) {
     loadEnvPathOnce(envPath, false, true);
   }
-
-  telemetry.initialize();
 }
 
 export function shouldSkipDefaultConfigLoading(argv: string[] = process.argv.slice(2)): boolean {
@@ -196,7 +194,8 @@ export function addCommonOptionsRecursively(command: Command) {
 
     if (thisCommand === actionCommand) {
       const commandName = getCommandPath(actionCommand);
-      if (commandName) {
+      // Eval records start/completion events after loading the suite's telemetry settings.
+      if (commandName && commandName !== 'eval') {
         telemetry.record('command_used', { name: commandName });
       }
     }

@@ -181,9 +181,10 @@ export function evalCommand(
     .action(async (opts: EvalCommandOptions, command: Command) => {
       let validatedOpts: z.infer<typeof EvalCommandSchema>;
       try {
-        const optsWithAliases = normalizeTagOption(
-          opts as EvalCommandOptions & { tag?: Record<string, string> },
-        );
+        const optsWithAliases = normalizeTagOption({
+          ...opts,
+          envPath: command.optsWithGlobals().envPath,
+        } as EvalCommandOptions & { tag?: Record<string, string> });
         validatedOpts = EvalCommandSchema.parse(optsWithAliases);
       } catch (err) {
         logger.error(dedent`
