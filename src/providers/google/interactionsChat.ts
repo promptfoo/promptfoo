@@ -19,6 +19,7 @@ import {
   geminiFormatAndSystemInstructions,
   getGoogleResponseServiceTier,
   mergeGoogleCompletionOptions,
+  normalizeGoogleServiceTier,
   parseStringObject,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
@@ -1077,9 +1078,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
 
     const generationConfig = buildGenerationConfig(config);
 
-    // generateContent accepts the schema at the top level or nested under
-    // generationConfig; both must reach response_format, or opting into
-    // Interactions would silently downgrade structured output to free text.
+    // Preserve both generateContent schema locations when mapping to Interactions.
     const rawResponseSchema =
       passthroughGenerationConfig.responseSchema ??
       passthroughGenerationConfig.response_schema ??
@@ -1091,14 +1090,16 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       const renderedSchema = renderVarsInObject(rawResponseSchema, context?.vars);
       const schema = maybeLoadFromExternalFile(renderedSchema);
       try {
-        // `responseSchema` is typed as a string, so a literal schema arrives
-        // unparsed; Interactions needs the object itself.
         const parsedSchema = parseStringObject(schema);
-        responseFormat = lowercaseSchemaTypes(
-          typeof renderedSchema === 'string' && renderedSchema.startsWith('file://')
-            ? renderVarsInObject(parsedSchema, context?.vars)
-            : parsedSchema,
-        );
+        responseFormat = {
+          type: 'text',
+          mime_type: 'application/json',
+          schema: lowercaseSchemaTypes(
+            typeof renderedSchema === 'string' && renderedSchema.startsWith('file://')
+              ? renderVarsInObject(parsedSchema, context?.vars)
+              : parsedSchema,
+          ),
+        };
       } catch (err) {
         return {
           error: `Gemini Interactions API error: responseSchema is not valid JSON: ${String(err)}`,
@@ -1111,8 +1112,13 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       tools: _passthroughTools,
       toolConfig: _toolConfig,
       tool_config: _snakeToolConfig,
+      service_tier: passthroughServiceTier,
+      serviceTier: camelCasePassthroughServiceTier,
       ...passthroughWithoutTools
     } = passthrough;
+    const serviceTier = normalizeGoogleServiceTier(
+      passthroughServiceTier ?? camelCasePassthroughServiceTier ?? config.service_tier,
+    );
     const systemText = flattenSystemInstruction(systemInstruction);
     const mergedGenerationConfig = {
       ...generationConfig,
@@ -1125,11 +1131,13 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       model: this.modelName,
       ...(systemText ? { system_instruction: systemText } : {}),
       ...(tools.length > 0 ? { tools } : {}),
-      ...(responseFormat ? { response_format: responseFormat } : {}),
+      ...(responseFormat
+        ? { response_format: this.isVertexMode ? [responseFormat] : responseFormat }
+        : {}),
       ...(Object.keys(mergedGenerationConfig).length > 0
         ? { generation_config: mergedGenerationConfig }
         : {}),
-      ...(config.service_tier ? { service_tier: config.service_tier } : {}),
+      ...(serviceTier ? { service_tier: serviceTier } : {}),
       store,
       ...passthroughWithoutTools,
       background: false,

@@ -396,6 +396,24 @@ describe('GoogleInteractionsChatProvider', () => {
       expect(bodyOf(mockFetchWithCache.mock.calls[0]).service_tier).toBe('priority');
     });
 
+    it.each([
+      { passthrough: { serviceTier: 'priority' }, expected: 'priority' },
+      { passthrough: { service_tier: 'flex', serviceTier: 'priority' }, expected: 'flex' },
+      { passthrough: { serviceTier: 'SERVICE_TIER_PRIORITY' }, expected: 'priority' },
+    ])(
+      'uses the effective passthrough tier for requests and cost: $expected',
+      async ({ passthrough, expected }) => {
+        mockFetchWithCache.mockResolvedValue(interaction() as any);
+        const result = await make({ service_tier: 'standard', passthrough }).callApi('Hello');
+        const body = bodyOf(mockFetchWithCache.mock.calls[0]);
+        expect(body.service_tier).toBe(expected);
+        expect(body).not.toHaveProperty('serviceTier');
+        const reference = await make({ service_tier: expected }).callApi('Hello');
+        expect(result.cost).toBe(reference.cost);
+        expect(result.cost).toBeGreaterThan(0);
+      },
+    );
+
     it('prices a priority request at the actual standard processing tier', async () => {
       mockFetchWithCache.mockResolvedValue({
         ...interaction(),
@@ -433,7 +451,8 @@ describe('GoogleInteractionsChatProvider', () => {
           vars: { filename: 'schema', description: 'A "color"\n{{ literal }}', literal: 'unused' },
         } as any);
         expect(
-          bodyOf(mockFetchWithCache.mock.calls[0]).response_format.properties.color.description,
+          bodyOf(mockFetchWithCache.mock.calls[0]).response_format.schema.properties.color
+            .description,
         ).toBe('A "color"\n{{ literal }}');
       } finally {
         fs.rmSync(directory, { recursive: true, force: true });
@@ -449,7 +468,7 @@ describe('GoogleInteractionsChatProvider', () => {
           generationConfig: { response_schema: { type: 'NUMBER' } },
           passthrough: { generation_config: { [key]: { type: 'BOOLEAN' } } },
         }).callApi('Hello');
-        expect(bodyOf(mockFetchWithCache.mock.calls[0]).response_format).toEqual({
+        expect(bodyOf(mockFetchWithCache.mock.calls[0]).response_format.schema).toEqual({
           type: 'boolean',
         });
       },
@@ -584,29 +603,54 @@ describe('GoogleInteractionsChatProvider', () => {
       }).callApi('Hello');
 
       // Otherwise opting into Interactions would silently drop structured output.
-      expect(bodyOf(mockFetchWithCache.mock.calls[0]).response_format).toEqual({
+      expect(bodyOf(mockFetchWithCache.mock.calls[0]).response_format.schema).toEqual({
         type: 'object',
         properties: { color: { type: 'string' } },
       });
     });
 
-    it('sends responseSchema as a parsed response_format object', async () => {
+    it('preserves an explicit native response format override', async () => {
       mockFetchWithCache.mockResolvedValue(interaction() as any);
-
+      const responseFormat = { type: 'text', mime_type: 'text/plain' };
       await make({
-        responseSchema: JSON.stringify({
-          type: 'OBJECT',
-          properties: { color: { type: 'STRING' } },
-          required: ['color'],
-        }),
+        responseSchema: { type: 'STRING' },
+        passthrough: { response_format: responseFormat },
       }).callApi('Hello');
-
-      expect(bodyOf(mockFetchWithCache.mock.calls[0]).response_format).toEqual({
-        type: 'object',
-        properties: { color: { type: 'string' } },
-        required: ['color'],
-      });
+      expect(bodyOf(mockFetchWithCache.mock.calls[0]).response_format).toEqual(responseFormat);
     });
+
+    it.each([false, true])(
+      'sends responseSchema in the text response format with Vertex=%s',
+      async (vertexai) => {
+        if (vertexai) {
+          mockVertexAuth();
+        }
+        mockFetchWithCache.mockResolvedValue(interaction() as any);
+
+        await make({
+          vertexai,
+          projectId: 'fixture',
+          responseSchema: JSON.stringify({
+            type: 'OBJECT',
+            properties: { color: { type: 'STRING' } },
+            required: ['color'],
+          }),
+        }).callApi('Hello');
+
+        const format = {
+          type: 'text',
+          mime_type: 'application/json',
+          schema: {
+            type: 'object',
+            properties: { color: { type: 'string' } },
+            required: ['color'],
+          },
+        };
+        expect(bodyOf(mockFetchWithCache.mock.calls[0]).response_format).toEqual(
+          vertexai ? [format] : format,
+        );
+      },
+    );
 
     it('reports an unparseable responseSchema without calling the API', async () => {
       const result = await make({ responseSchema: '{not json' }).callApi('Hello');
@@ -745,7 +789,7 @@ describe('GoogleInteractionsChatProvider', () => {
           examples: [{ type: 'PREMIUM' }],
         }),
       }).callApi('Hello');
-      expect(bodyOf(mockFetchWithCache.mock.calls[0]).response_format).toEqual({
+      expect(bodyOf(mockFetchWithCache.mock.calls[0]).response_format.schema).toEqual({
         type: 'object',
         properties: { type: { type: 'string', const: 'PREMIUM' } },
         const: { type: 'STRING' },
@@ -765,7 +809,11 @@ describe('GoogleInteractionsChatProvider', () => {
       expect(body).toMatchObject({
         model: 'other-model',
         generation_config: { max_output_tokens: 12 },
-        response_format: { type: 'string' },
+        response_format: {
+          type: 'text',
+          mime_type: 'application/json',
+          schema: { type: 'string' },
+        },
       });
       expect(body.generationConfig).toBeUndefined();
     });
@@ -824,7 +872,7 @@ describe('GoogleInteractionsChatProvider', () => {
         }).callApi('Hello');
         expect(result.error).toBeUndefined();
         const body = bodyOf(mockFetchWithCache.mock.calls[0]);
-        expect(body.response_format).toEqual({
+        expect(body.response_format.schema).toEqual({
           type: 'object',
           properties: { color: { type: 'string' } },
         });
