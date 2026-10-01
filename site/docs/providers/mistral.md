@@ -19,6 +19,8 @@ keywords:
 
 Use the [Mistral AI API](https://docs.mistral.ai/api/) for chat, reasoning, code generation, and image understanding. Check [Mistral's model catalog](https://docs.mistral.ai/getting-started/models/) for capabilities and availability.
 
+For Mistral-hosted [Z.ai GLM 5.3](https://docs.mistral.ai/models/zai-glm-5-3), use `mistral:zai-glm-5-3`. Promptfoo includes standard input and output pricing for this model.
+
 ## API Key
 
 To use Mistral AI, you need to set the `MISTRAL_API_KEY` environment variable, or specify the `apiKey` in the provider configuration.
