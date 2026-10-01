@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,6 +10,7 @@ import { parse as parseYaml } from 'yaml';
 // Exercise the manual backfill patch in ordinary CI without publishing images.
 
 const WORKFLOW = path.join(process.cwd(), '.github/workflows/docker.yml');
+const workflow = parseYaml(fs.readFileSync(WORKFLOW, 'utf8'));
 
 /** Server stage exactly as historical releases shipped it, pre-#9790. */
 function legacyDockerfile(): string {
@@ -74,7 +75,6 @@ let scriptPath: string;
 let tmpRoot: string;
 
 beforeAll(() => {
-  const workflow = parseYaml(fs.readFileSync(WORKFLOW, 'utf8'));
   const script = workflow?.env?.PREPARE_LEGACY_BUILD_JS;
   expect(typeof script, 'docker.yml must define env.PREPARE_LEGACY_BUILD_JS').toBe('string');
 
@@ -270,4 +270,115 @@ describe('legacy Docker backfill patch (embedded in docker.yml)', () => {
     }
     expect(stderr).toContain('already declares "exclude"');
   });
+});
+
+// The Docker workflow runs on Ubuntu; these cases execute its Bash blocks directly.
+describe.runIf(process.platform !== 'win32')('legacy backfill publication guards', () => {
+  it.each([
+    { name: 'missing release tag', env: { LEGACY_BACKFILL: 'true', RELEASE_TAG: '' }, ok: false },
+    {
+      name: 'frontend override without backfill',
+      env: { EXCLUDE_LEGACY_FRONTEND_TESTS: 'true' },
+      ok: false,
+    },
+    { name: 'Python override without backfill', env: { PYTHON_VERSION: '3.14' }, ok: false },
+    {
+      name: 'invalid Python minor',
+      env: { LEGACY_BACKFILL: 'true', PYTHON_VERSION: 'wrong' },
+      ok: false,
+    },
+    { name: 'ordinary release', env: {}, ok: true },
+    {
+      name: 'historical release',
+      env: {
+        LEGACY_BACKFILL: 'true',
+        PYTHON_VERSION: '3.14',
+        EXCLUDE_LEGACY_FRONTEND_TESTS: 'true',
+      },
+      ok: true,
+    },
+  ])('validates $name', ({ env, ok }) => {
+    const step = workflow.jobs.test.steps.find(
+      (candidate: { name: string }) => candidate.name === 'Validate manual backfill options',
+    );
+    const result = spawnSync('bash', ['-e', '-c', step.run], {
+      encoding: 'utf8',
+      env: {
+        PATH: process.env.PATH,
+        LEGACY_BACKFILL: 'false',
+        RELEASE_TAG: '0.120.0',
+        PYTHON_VERSION: '',
+        EXCLUDE_LEGACY_FRONTEND_TESTS: 'false',
+        ...env,
+      },
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.status === 0, result.stdout + result.stderr).toBe(ok);
+  });
+
+  it.each(['404', '200', '401', '500'])(
+    'rechecks registry status %s before creating a manifest',
+    (status) => {
+      const dir = fs.mkdtempSync(path.join(tmpRoot, 'manifest-'));
+      const marker = path.join(dir, 'published');
+      fs.writeFileSync(path.join(dir, '1'.repeat(64)), '');
+      const step = workflow.jobs['merge-docker-digests'].steps.find(
+        (candidate: { name: string }) => candidate.name === 'Create manifest list and push',
+      );
+      const script = step.run
+        .replaceAll('${{ env.REGISTRY }}', 'fixture.invalid')
+        .replaceAll('${{ env.IMAGE_NAME }}', 'fixture/repo');
+      const result = spawnSync(
+        'bash',
+        [
+          '-e',
+          '-c',
+          `
+        curl() {
+          case "$*" in
+            *'/token?'*) printf '%s' '{"token":"fixture"}' ;;
+            *) printf '%s' "$FIXTURE_STATUS" ;;
+          esac
+        }
+        jq() {
+          if [[ "$1" == '-r' ]]; then
+            printf '%s' fixture
+          else
+            printf '%s' '-t fixture.invalid/fixture/repo:0.120.0'
+          fi
+        }
+        docker() { printf '%s\n' "$@" > "$FIXTURE_MARKER"; }
+        ${script}
+      `,
+        ],
+        {
+          cwd: dir,
+          encoding: 'utf8',
+          env: {
+            PATH: process.env.PATH,
+            LEGACY_BACKFILL: 'true',
+            REGISTRY: 'fixture.invalid',
+            IMAGE_NAME: 'fixture/repo',
+            RELEASE_TAG: '0.120.0',
+            FIXTURE_STATUS: status,
+            FIXTURE_MARKER: marker,
+            DOCKER_METADATA_OUTPUT_JSON: '{}',
+          },
+        },
+      );
+      expect(result.error).toBeUndefined();
+      expect(result.status === 0, result.stdout + result.stderr).toBe(status === '404');
+      expect(fs.existsSync(marker)).toBe(status === '404');
+      if (status === '404') {
+        expect(fs.readFileSync(marker, 'utf8').trim().split('\n')).toEqual([
+          'buildx',
+          'imagetools',
+          'create',
+          '-t',
+          'fixture.invalid/fixture/repo:0.120.0',
+          `fixture.invalid/fixture/repo@sha256:${'1'.repeat(64)}`,
+        ]);
+      }
+    },
+  );
 });
