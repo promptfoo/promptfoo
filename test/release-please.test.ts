@@ -125,7 +125,7 @@ describe('release-please automation', () => {
     expect(usesLine).toMatch(/#\s+v\d+(?:\.\d+){0,2}(?:[-+][\w.-]+)?\s*$/);
   });
 
-  it('gates code-scan mirror publication on an isolated attestation of the complete payload', () => {
+  it('gates code-scan mirror publication on isolated artifact attestation', () => {
     const workflow = yaml.load(
       readRepoFile('.github/workflows/release-please.yml'),
     ) as ReleasePleaseWorkflow;
