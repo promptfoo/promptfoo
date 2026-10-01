@@ -110,8 +110,8 @@ export function sanitizeTraceAttributes(
     const seen = new WeakSet<object>();
     while (pending.length > 0) {
       const item = pending.pop();
-      if (typeof item === 'string') {
-        options.redactedValues.add(item);
+      if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
+        options.redactedValues.add(String(item));
       } else if (item && typeof item === 'object' && !seen.has(item)) {
         seen.add(item);
         for (const value of Object.values(item)) {

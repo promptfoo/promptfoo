@@ -597,9 +597,9 @@ Trace reads redact credential-like attribute keys such as authorization headers,
 
 Evaluation result exports and sharing also apply the eval's saved `PROMPTFOO_STRIP_*` settings to trace metadata, test variables, and Promptfoo request/response bodies. These settings do not change locally stored spans.
 
-Span events from OTLP and the local SDK exporter retain their names, timestamps, and attributes. Event attributes follow the span redaction and export rules, including configured redaction in local trace context. Event names that exactly match a redacted value or stripped prompt/response body are masked too. Display reads shorten matching names and attributes together before applying further redaction.
+Span events from OTLP and the local SDK exporter retain their names, timestamps, and attributes. Event attributes follow the span redaction and export rules, including configured redaction in local trace context. Event names that exactly match a redacted value or stripped prompt/response body are masked too, including the text form of numeric and boolean values. Display reads shorten matching names and attributes together before applying further redaction.
 
-Event timestamps use milliseconds, including fractions within JavaScript number precision. Missing, null, or zero OTLP timestamps use the span start. JSON integer timestamps accept exponent notation, and null event attributes are treated as absent. Invalid OTLP event shapes return HTTP 400. Invalid event entries in imported or older stored traces are omitted while valid spans remain available.
+Event timestamps use milliseconds, including fractions within JavaScript number precision. Missing, null, or zero OTLP timestamps use the span start. JSON integer timestamps accept exponent notation. Null event attribute lists are treated as absent, and individual attributes with missing or null values are skipped. Invalid OTLP event shapes return HTTP 400. Invalid event entries in imported or older stored traces are omitted while valid spans remain available.
 
 ### Exporting Traces
 

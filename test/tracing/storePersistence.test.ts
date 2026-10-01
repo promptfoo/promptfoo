@@ -73,6 +73,45 @@ describe('TraceStore span persistence', () => {
     ).toBe('fixture-private-value');
   });
 
+  it.each([123456, 0, false])(
+    'redacts scalar event-name echoes on reads and exports: %s',
+    async (value) => {
+      const evaluation = await EvalFactory.create({ numResults: 0 });
+      const traceId = 'scalar-event-redaction';
+      const store = new TraceStore();
+      await store.createTrace({ evaluationId: evaluation.id, testCaseId: 'ordinary', traceId });
+      await store.addSpans(traceId, [
+        {
+          spanId: 'scalar-span',
+          name: 'ordinary span',
+          startTime: 1,
+          events: [
+            { name: String(value), timestamp: 2, attributes: { password: value } },
+            { name: 'ordinary event', timestamp: 3, attributes: { count: 7 } },
+          ],
+        },
+      ]);
+      const expected = [
+        { name: '<redacted>', timestamp: 2, attributes: { password: '<redacted>' } },
+        { name: 'ordinary event', timestamp: 3, attributes: { count: 7 } },
+      ];
+      expect((await store.getSpans(traceId))[0].events).toEqual(expected);
+      expect((await store.getTrace(traceId))?.spans[0].events).toEqual(expected);
+      expect((await store.getTracesByEvaluation(evaluation.id))[0].spans[0].events).toEqual(
+        expected,
+      );
+      expect((await createOutputData(evaluation, null)).traces?.[0].spans[0].events).toEqual(
+        expected,
+      );
+      const raw = (await store.getSpans(traceId, { sanitizeAttributes: false }))[0].events!;
+      expect(raw[0]).toEqual({
+        name: String(value),
+        timestamp: 2,
+        attributes: { password: value },
+      });
+    },
+  );
+
   it.each([
     ['promptfoo.request.body', 'PROMPTFOO_STRIP_PROMPT_TEXT', '[prompt stripped]'],
     ['promptfoo.response.body', 'PROMPTFOO_STRIP_RESPONSE_OUTPUT', '[output stripped]'],

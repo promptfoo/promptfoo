@@ -22,7 +22,7 @@ class InvalidSpanEventError extends Error {}
 
 interface OTLPAttribute {
   key: string;
-  value: {
+  value?: {
     stringValue?: string;
     intValue?: string;
     doubleValue?: number;
@@ -30,7 +30,7 @@ interface OTLPAttribute {
     bytesValue?: string;
     arrayValue?: { values: any[] };
     kvlistValue?: { values: OTLPAttribute[] };
-  };
+  } | null;
 }
 
 interface OTLPSpan {
@@ -968,6 +968,9 @@ export class OTLPReceiver {
   }
 
   private parseAttributeValue(value: OTLPAttribute['value']): any {
+    if (!value) {
+      return undefined;
+    }
     if (value.stringValue !== undefined) {
       return value.stringValue;
     }

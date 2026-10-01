@@ -243,6 +243,64 @@ describe('OTLPReceiver', () => {
       },
     );
 
+    it.each(['json', 'protobuf'])('skips unset event attribute values in %s', async (format) => {
+      const body = payload([
+        {
+          name: 'optional values',
+          attributes: [
+            { key: 'omitted' },
+            { key: 'null', value: null },
+            { key: 'empty', value: {} },
+            { key: 'ready', value: { boolValue: false } },
+            { key: 'count', value: { intValue: '0' } },
+          ],
+        },
+      ]);
+      const encoded =
+        format === 'protobuf'
+          ? await (await import('../../src/tracing/protobuf')).encodeExportTraceServiceRequest(body)
+          : body;
+      await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', format === 'protobuf' ? 'application/x-protobuf' : 'application/json')
+        .send(encoded)
+        .expect(200);
+      expect(mockTraceStore.addSpans.mock.calls[0][1][0].events).toEqual([
+        {
+          name: 'optional values',
+          timestamp: 1700000000000,
+          attributes: { ready: false, count: 0 },
+        },
+      ]);
+    });
+
+    it.each([
+      { intValue: '123456' },
+      { intValue: '0' },
+      { doubleValue: 1.5 },
+      { boolValue: false },
+    ])('redacts configured scalar event-name echoes during ingestion: %j', async (value) => {
+      receiver.setRedactAttributes(['private_marker']);
+      const name = String(Object.values(value)[0]);
+      await request(receiver.getApp())
+        .post('/v1/traces')
+        .send(
+          payload([
+            { name, attributes: [{ key: 'private_marker', value }] },
+            { name: 'ordinary event', attributes: [{ key: 'count', value: { intValue: '7' } }] },
+          ]),
+        )
+        .expect(200);
+      expect(mockTraceStore.addSpans.mock.calls[0][1][0].events).toEqual([
+        {
+          name: '[REDACTED]',
+          timestamp: 1700000000000,
+          attributes: { private_marker: '[REDACTED]' },
+        },
+        { name: 'ordinary event', timestamp: 1700000000000, attributes: { count: 7 } },
+      ]);
+    });
+
     it.each([
       ['1.70000000000025e18', '1.70000000000075e18'],
       ['17000000000002500000e-1', '17000000000007500000e-1'],
