@@ -29,20 +29,23 @@ When using browser automation:
 
 1. **Rate Limiting**: Always implement delays between requests to avoid overwhelming servers
 2. **Anti-Bot Detection**: Many websites employ anti-bot measures that can detect and block automated browsers
-3. **Resource Usage**: Browser automation is 10-100x slower than direct API calls and consumes significant CPU/memory
+3. **Resource Usage**: Browser automation uses more CPU and memory than direct API calls and adds page loading time
 4. **Legal Compliance**: Always check the website's Terms of Service and robots.txt before automating
 
 ## Prerequisites
 
-The browser provider requires Playwright and the stealth plugin. Install these packages in the project where you run promptfoo:
+Browser automation is an optional feature. Install Promptfoo, Playwright, and the stealth plugin together in your project, then install the matching Chromium binary:
 
 ```bash
-npm install playwright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth
+npm install promptfoo "playwright@^1.63.0" "playwright-extra@^4.3.6" "puppeteer-extra-plugin-stealth@^2.11.2"
+npx playwright install chromium
 ```
+
+For a global CLI, install the same packages with `npm install -g` and run `playwright install chromium`.
 
 Playwright 1.63 and later no longer support Ubuntu 20.04. Check [Playwright's system requirements](https://playwright.dev/docs/intro#system-requirements) before installing the browser on Linux.
 
-Note: Currently, promptfoo's browser provider only supports Chromium-based browsers (Chrome, Edge). The provider uses `playwright-extra` with the Chromium engine for enhanced stealth capabilities.
+The browser provider supports Chromium-based browsers, including Chrome and Edge.
 
 ## Configuration
 
