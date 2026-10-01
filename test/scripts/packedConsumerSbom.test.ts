@@ -60,7 +60,7 @@ describe('packed consumer SBOM', () => {
     expect(
       JSON.parse(fs.readFileSync(path.join(output, 'runtime-default.json'), 'utf8')).components,
     ).toEqual([{ name: 'promptfoo', version: '1.0.0' }]);
-  }, 30_000);
+  });
 
   it('matches a real npm SBOM against nested installed versions and scoped packages', () => {
     const directory = fixture();
@@ -124,7 +124,7 @@ describe('packed consumer SBOM', () => {
         stdio: 'pipe',
       }),
     ).toThrow();
-  }, 30_000);
+  });
 
   it('rejects silently omitted or phantom components', () => {
     const installed = [{ name: 'promptfoo', version: '1.0.0' }];

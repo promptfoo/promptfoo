@@ -37,6 +37,11 @@ or Node/npm major version changes, the runtime comparison is explicitly unavaila
 and this run records a baseline for the new environment. Browser comparisons still
 run independently.
 
+The app inventory records whether an analytics key was present at build time,
+without recording its value. When this differs (for example, a fork PR compared
+with main), the app comparison is unavailable; runtime and site comparisons still
+run. This avoids attributing differently configured bundles to the PR.
+
 On the first run, or when the base has no successful run or retained inventory,
 the summary explicitly says that no comparison is available. It records the
 current inventory without claiming a reduction. Missing or malformed current

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { BrowserInventory } from '../../scripts/browser-inventory.mjs';
 import type { Plugin } from 'vite';
 
-export function browserInventoryPlugin(): Plugin {
+export function browserInventoryPlugin(buildConfiguration: { posthogKeyPresent: boolean }): Plugin {
   let inventory = new BrowserInventory('app');
   let root: string;
   let outDir: string;
@@ -40,6 +40,7 @@ export function browserInventoryPlugin(): Plugin {
     },
     async writeBundle() {
       await inventory.write(outDir, {
+        buildConfiguration,
         limitations: [
           'Assets cover the app build output including copied public files. Package provenance uses rendered modules and emitted asset source filenames.',
           'CSS imported by CSS through preprocessors and generated CSS may not retain package provenance.',

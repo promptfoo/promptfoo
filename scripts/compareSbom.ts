@@ -12,6 +12,7 @@ interface Inventory {
   assets?: Array<{ path: string; size: number; sha256: string }>;
   externalResources?: Array<{ url: string; source: string }>;
   environment?: Record<string, string | boolean>;
+  buildConfiguration?: { posthogKeyPresent: boolean };
 }
 
 const surfaces = ['runtime-default', 'app', 'site'] as const;
@@ -42,6 +43,13 @@ export function validateInventory(value: unknown, surface: string): Inventory {
     }
     assert.equal(inventory.environment.lifecycleScripts, false);
   } else {
+    if (surface === 'app') {
+      assert.equal(
+        typeof inventory.buildConfiguration?.posthogKeyPresent,
+        'boolean',
+        'Missing app analytics build configuration',
+      );
+    }
     assert(Array.isArray(inventory.assets) && inventory.assets.length > 0);
     const paths = new Set<string>();
     for (const asset of inventory.assets) {
@@ -56,6 +64,12 @@ export function validateInventory(value: unknown, surface: string): Inventory {
 }
 
 function incompatibleEnvironment(before: Inventory, after: Inventory): string | undefined {
+  if (
+    after.surface === 'app' &&
+    before.buildConfiguration?.posthogKeyPresent !== after.buildConfiguration?.posthogKeyPresent
+  ) {
+    return 'Incompatible app analytics build configuration';
+  }
   if (after.surface === 'runtime-default') {
     for (const key of ['platform', 'arch', 'registry', 'installStrategy', 'lifecycleScripts']) {
       if (before.environment?.[key] !== after.environment?.[key]) {

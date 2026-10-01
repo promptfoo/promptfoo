@@ -22,6 +22,7 @@ function inventory(surface: string, name = 'original') {
     schemaVersion: 1,
     surface,
     components: [{ name, version: '1.0.0' }],
+    ...(surface === 'app' ? { buildConfiguration: { posthogKeyPresent: true } } : {}),
     ...(surface === 'runtime-default'
       ? { environment }
       : { assets: [{ path: 'assets/main.js', size: 10, sha256: 'a'.repeat(64) }] }),
@@ -120,6 +121,9 @@ describe('inventory comparison', () => {
     expect(() => validateInventory(inventory('site'), 'app')).toThrow('surface mismatch');
     expect(() => validateInventory({ ...inventory('app'), components: [] }, 'app')).toThrow();
     expect(() =>
+      validateInventory({ ...inventory('app'), buildConfiguration: undefined }, 'app'),
+    ).toThrow('Missing app analytics build configuration');
+    expect(() =>
       validateInventory(
         { ...inventory('app'), assets: [{ path: 'a.js', size: -1, sha256: 'invalid' }] },
         'app',
@@ -163,6 +167,27 @@ describe('inventory comparison', () => {
 
   it('fails when the consumer was captured from another source commit', () => {
     expect(() => writeComparison({ ...fixture(), sourceSha: baseSha })).toThrow('tested commit');
+  });
+
+  it('keeps runtime and site comparisons when a fork app lacks the main analytics key', () => {
+    const options = fixture();
+    const app = path.join(options.current, 'app-browser.json');
+    const report = JSON.parse(fs.readFileSync(app, 'utf8'));
+    report.buildConfiguration.posthogKeyPresent = false;
+    report.assets[0].size = 1;
+    fs.writeFileSync(app, JSON.stringify(report));
+    const summary = writeComparison(options);
+    expect(summary).toContain('| app | 1 | unavailable |');
+    expect(summary).toContain('| runtime-default | 1 | 0 |');
+    expect(summary).toContain('| site | 1 | 0 |');
+    expect(summary).toContain('Incompatible app analytics build configuration');
+    const comparison = JSON.parse(
+      fs.readFileSync(path.join(options.output, 'comparison.json'), 'utf8'),
+    );
+    expect(comparison.comparisons.map(({ surface }: { surface: string }) => surface)).toEqual([
+      'runtime-default',
+      'site',
+    ]);
   });
 
   it('explicitly reports first-run or expired baselines without claiming a reduction', () => {

@@ -75,7 +75,12 @@ export default {
     port: 3000,
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
-  plugins: [browserModulesPlugin(), reactCompilerPlugin(), ...react(), browserInventoryPlugin()],
+  plugins: [
+    browserModulesPlugin(),
+    reactCompilerPlugin(),
+    ...react(),
+    browserInventoryPlugin({ posthogKeyPresent: Boolean(process.env.PROMPTFOO_POSTHOG_KEY) }),
+  ],
   resolve: {
     alias: {
       '@app': path.resolve(__dirname, './src'),

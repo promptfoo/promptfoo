@@ -62,7 +62,7 @@ export class BrowserInventory {
     this.#externalResources.set(`${url}\0${source}`, { url, source });
   }
 
-  async write(outDir, { assetPaths, limitations = [] } = {}) {
+  async write(outDir, { assetPaths, buildConfiguration, limitations = [] } = {}) {
     const assets = [];
     for (const relative of [...new Set(assetPaths ?? (await listAssetPaths(outDir)))].sort()) {
       if (relative === inventoryName || relative.endsWith('.map')) {
@@ -88,6 +88,7 @@ export class BrowserInventory {
     const inventory = {
       schemaVersion: 1,
       surface: this.#surface,
+      ...(buildConfiguration ? { buildConfiguration } : {}),
       components: [...this.#packages.values()].sort((a, b) =>
         `${a.name}@${a.version}`.localeCompare(`${b.name}@${b.version}`, 'en'),
       ),
