@@ -11,9 +11,10 @@ cd openai-chatkit
 
 ## Prerequisites
 
-1. Install Playwright browser:
+1. Install the optional Playwright package alongside Promptfoo, then its matching browser:
 
 ```bash
+npm install promptfoo "playwright@^1.63.0"
 npx playwright install chromium
 ```
 
@@ -31,7 +32,7 @@ npx playwright install chromium
 ## Run the Eval
 
 ```bash
-npx promptfoo@latest eval --max-concurrency 4
+npx promptfoo eval --max-concurrency 4
 ```
 
 View results:
