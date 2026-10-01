@@ -18,6 +18,14 @@ import type {
 } from '../types/index';
 
 const MISTRAL_CHAT_MODELS = [
+  // Z.ai GLM 5.3 hosted by Mistral: https://docs.mistral.ai/models/zai-glm-5-3
+  {
+    id: 'zai-glm-5-3',
+    cost: {
+      input: 1.4 / 1000000,
+      output: 4.4 / 1000000,
+    },
+  },
   ...['open-mistral-7b', 'mistral-tiny', 'mistral-tiny-2312'].map((id) => ({
     id,
     cost: {
