@@ -1147,17 +1147,18 @@ export class OpenCodeSDKProvider implements ApiProvider {
     traceparent?: string,
   ): Record<string, string | undefined> {
     const serverEnv: Record<string, string | undefined> = {};
-
-    for (const [key, value] of Object.entries(getProcessEnv())) {
-      if (value !== undefined) {
-        serverEnv[key] = value;
-      }
-    }
-
+    const processEnv = getProcessEnv();
     const isWindows = os.platform() === 'win32';
     const pathKey = isWindows
-      ? (Object.keys(serverEnv).find((key) => key.toLowerCase() === 'path') ?? 'PATH')
+      ? (Object.keys(processEnv).find((key) => key.toLowerCase() === 'path') ?? 'PATH')
       : 'PATH';
+
+    for (const [key, value] of Object.entries(processEnv)) {
+      if (value !== undefined) {
+        const envKey = isWindows && key.toLowerCase() === 'path' ? pathKey : key;
+        serverEnv[envKey] = value;
+      }
+    }
 
     if (this.env) {
       for (const key of Object.keys(this.env).sort()) {

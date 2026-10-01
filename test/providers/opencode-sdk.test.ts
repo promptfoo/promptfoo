@@ -3368,6 +3368,39 @@ describe('OpenCodeSDKProvider', () => {
       }
     });
 
+    it.each([undefined, 'C:\\provider'])(
+      'collapses Windows env-file PATH aliases with provider path %s',
+      async (providerPath) => {
+        const { default: cliState } =
+          await vi.importActual<typeof import('../../src/cliState')>('../../src/cliState');
+        const delimiter = Object.getOwnPropertyDescriptor(path, 'delimiter')!;
+        Object.defineProperty(path, 'delimiter', { ...delimiter, value: ';' });
+        vi.spyOn(os, 'platform').mockReturnValue('win32');
+        mockProcessEnv({ PATH: undefined, Path: 'C:\\ambient' });
+        const seen = captureSpawnEnv();
+        try {
+          const provider = new OpenCodeSDKProvider({
+            ...(providerPath ? { env: { PATH: providerPath } } : {}),
+          });
+          await cliState.withEnvFileOverrides({ PATH: 'C:\\file' }, () =>
+            provider.callApi('Hello', contextWith(TRACEPARENT_A)),
+          );
+          const serverEnv = mockCreateOpencode.mock.calls[0][0].env;
+          expect(Object.keys(serverEnv).filter((key) => key.toLowerCase() === 'path')).toEqual([
+            'Path',
+          ]);
+          expect(serverEnv.Path).toBe(
+            `${path.join(os.homedir(), '.opencode', 'bin')};${providerPath ?? 'C:\\file'}`,
+          );
+          expect(seen[0].PATH).toBeUndefined();
+          expect(process.env.Path).toBe('C:\\ambient');
+          expect(process.env.PATH).toBeUndefined();
+        } finally {
+          Object.defineProperty(path, 'delimiter', delimiter);
+        }
+      },
+    );
+
     describe('restart_server_per_call', () => {
       it('restarts the server when the traceparent changes', async () => {
         const seen = captureSpawnEnv();
