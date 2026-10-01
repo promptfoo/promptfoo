@@ -3,6 +3,7 @@ import cliState from '../cliState';
 import logger from '../logger';
 import { getDefaultProviders } from '../providers/defaults';
 import { loadApiProvider } from '../providers/index';
+import { trackProvider, withProviderCleanup } from '../providers/lifecycle';
 import { sampleArray } from '../util/generation';
 import invariant from '../util/invariant';
 import { extractJsonObjects } from '../util/json';
@@ -426,7 +427,11 @@ interface GeneratedQuestion {
   question_type: string;
 }
 
-export async function synthesize({
+export async function synthesize(options: SynthesizeOptions): Promise<Assertion[]> {
+  return withProviderCleanup(() => synthesizeWithProvider(options));
+}
+
+async function synthesizeWithProvider({
   prompts,
   instructions,
   numQuestions = 5,
@@ -458,7 +463,7 @@ export async function synthesize({
   if (typeof provider === 'undefined') {
     providerModel = (await getDefaultProviders()).synthesizeProvider;
   } else {
-    providerModel = await loadApiProvider(provider, { basePath: cliState.basePath });
+    providerModel = trackProvider(await loadApiProvider(provider, { basePath: cliState.basePath }));
   }
   let newQuestionsPrompt = generateNewQuestionsPrompt(prompts, tests, numQuestions);
   if (instructions) {
@@ -488,7 +493,7 @@ export async function synthesize({
   providerModel.config = {
     maxTokens: 3000,
   };
-  const assertions = await Promise.all(
+  const results = await Promise.allSettled(
     questions.map(async (q) => {
       const pythonConvertPrompt = convertQuestionToPythonPrompt(prompts, q.question);
       const resp = await providerModel.callApi(pythonConvertPrompt);
@@ -508,6 +513,12 @@ export async function synthesize({
       }
     }),
   );
+  const assertions = results.map((result) => {
+    if (result.status === 'rejected') {
+      throw result.reason;
+    }
+    return result.value;
+  });
   logger.debug(`Generated ${assertions.length} new assertions`);
   if (progressBar) {
     progressBar.stop();

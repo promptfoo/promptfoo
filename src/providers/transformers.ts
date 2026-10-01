@@ -142,12 +142,16 @@ type Pipeline = {
   dispose?: () => Promise<void>;
 };
 
-// Pipeline cache - singleton instances keyed by task:model:device:dtype
-const pipelineCache = new Map<string, Pipeline>();
-const pendingPipelines = new Map<string, Promise<Pipeline>>();
+interface PipelineEntry {
+  key: string;
+  pipeline: Promise<Pipeline>;
+  owners: Set<Set<PipelineEntry>>;
+  value?: Pipeline;
+  disposal?: Promise<void>;
+}
 
-// Track if cleanup has been registered
-let cleanupRegistered = false;
+// Providers share pipelines until the last owner releases them.
+const pipelineCache = new Map<string, PipelineEntry>();
 
 function getPipelineCacheKey(
   task: string,
@@ -163,19 +167,17 @@ async function getOrCreatePipeline(
   task: string,
   model: string,
   options: TransformersBaseOptions,
+  owned: Set<PipelineEntry>,
 ): Promise<Pipeline> {
+  ensureCleanupRegistered();
   const cacheKey = getPipelineCacheKey(task, model, options);
 
-  // Return cached pipeline
-  if (pipelineCache.has(cacheKey)) {
-    logger.debug(`[Transformers] Using cached pipeline: ${cacheKey}`);
-    return pipelineCache.get(cacheKey)!;
-  }
-
-  // Wait for pending initialization
-  if (pendingPipelines.has(cacheKey)) {
-    logger.debug(`[Transformers] Waiting for pending pipeline: ${cacheKey}`);
-    return pendingPipelines.get(cacheKey)!;
+  const cached = pipelineCache.get(cacheKey);
+  if (cached) {
+    owned.add(cached);
+    cached.owners.add(owned);
+    logger.debug(`[Transformers] Using shared pipeline: ${cacheKey}`);
+    return getOwnedPipeline(cached, owned);
   }
 
   // Start new initialization
@@ -241,64 +243,94 @@ async function getOrCreatePipeline(
 
     logger.debug(`[Transformers] Pipeline loaded in ${loadTime}ms: ${cacheKey}`);
 
-    pipelineCache.set(cacheKey, pipe);
-    pendingPipelines.delete(cacheKey);
-
     return pipe;
   })();
 
-  pendingPipelines.set(cacheKey, initPromise);
-
-  try {
-    return await initPromise;
-  } catch (err) {
-    pendingPipelines.delete(cacheKey);
-    throw err;
-  }
-}
-
-/**
- * Dispose all cached pipelines to release resources.
- */
-async function disposePipelines(): Promise<void> {
-  const disposePromises: Promise<void>[] = [];
-
-  for (const [key, pipe] of pipelineCache.entries()) {
-    disposePromises.push(
-      (async () => {
-        try {
-          if (pipe.dispose) {
-            await pipe.dispose();
-          }
-          logger.debug(`[Transformers] Disposed pipeline: ${key}`);
-        } catch (err) {
-          logger.warn(`[Transformers] Error disposing pipeline ${key}:`, { error: err });
-        }
-      })(),
-    );
-  }
-
-  await Promise.all(disposePromises);
-  pipelineCache.clear();
-  pendingPipelines.clear();
-}
-
-/**
- * Ensure cleanup handler is registered with the provider registry.
- */
-function ensureCleanupRegistered(): void {
-  if (cleanupRegistered) {
-    return;
-  }
-  cleanupRegistered = true;
-
-  providerRegistry.register({
-    shutdown: async () => {
-      logger.debug('[Transformers] Shutting down all pipelines...');
-      await disposePipelines();
-      logger.debug('[Transformers] All pipelines disposed');
+  const entry: PipelineEntry = {
+    key: cacheKey,
+    pipeline: initPromise,
+    owners: new Set([owned]),
+  };
+  pipelineCache.set(cacheKey, entry);
+  owned.add(entry);
+  entry.pipeline = initPromise.then(
+    async (pipe) => {
+      entry.value = pipe;
+      if (entry.owners.size === 0) {
+        await disposePipeline(entry);
+      }
+      return pipe;
     },
-  });
+    (error) => {
+      forgetPipelineEntry(entry);
+      throw error;
+    },
+  );
+  return getOwnedPipeline(entry, owned);
+}
+
+async function getOwnedPipeline(
+  entry: PipelineEntry,
+  owned: Set<PipelineEntry>,
+): Promise<Pipeline> {
+  const pipe = await entry.pipeline;
+  if (!owned.has(entry)) {
+    throw new Error('Transformers pipeline was released during initialization');
+  }
+  return pipe;
+}
+
+function forgetPipelineEntry(entry: PipelineEntry): void {
+  if (pipelineCache.get(entry.key) === entry) {
+    pipelineCache.delete(entry.key);
+  }
+  for (const owner of entry.owners) {
+    owner.delete(entry);
+  }
+  entry.owners.clear();
+}
+
+function disposePipeline(entry: PipelineEntry): Promise<void> {
+  forgetPipelineEntry(entry);
+  const pipe = entry.value;
+  if (!pipe) {
+    // Initialization disposes its result when it finishes without any owners.
+    return Promise.resolve();
+  }
+  entry.disposal ??= (async () => {
+    try {
+      await pipe.dispose?.();
+      logger.debug(`[Transformers] Disposed pipeline: ${entry.key}`);
+    } catch (err) {
+      logger.warn(`[Transformers] Error disposing pipeline ${entry.key}:`, { error: err });
+    }
+  })();
+  return entry.disposal;
+}
+
+async function releasePipelines(owned: Set<PipelineEntry>): Promise<void> {
+  const disposals: Promise<void>[] = [];
+  for (const entry of owned) {
+    entry.owners.delete(owned);
+    if (entry.owners.size === 0) {
+      disposals.push(disposePipeline(entry));
+    }
+  }
+  owned.clear();
+  await Promise.all(disposals);
+}
+
+/** Dispose all pipelines during process shutdown or explicit global cleanup. */
+async function disposePipelines(): Promise<void> {
+  await Promise.all([...pipelineCache.values()].map(disposePipeline));
+}
+
+const pipelineCleanup = { shutdown: disposePipelines };
+
+function ensureCleanupRegistered(): void {
+  if (!providerRegistry.has(pipelineCleanup)) {
+    providerRegistry.register(pipelineCleanup);
+  }
 }
 
 /**
@@ -313,6 +345,7 @@ function ensureCleanupRegistered(): void {
 export class TransformersEmbeddingProvider implements ApiProvider {
   modelName: string;
   config: TransformersEmbeddingOptions;
+  private readonly pipelines = new Set<PipelineEntry>();
 
   constructor(
     modelName: string,
@@ -322,8 +355,6 @@ export class TransformersEmbeddingProvider implements ApiProvider {
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
-
-    ensureCleanupRegistered();
   }
 
   id(): string {
@@ -332,6 +363,10 @@ export class TransformersEmbeddingProvider implements ApiProvider {
 
   toString(): string {
     return `[Transformers Embedding Provider ${this.modelName}]`;
+  }
+
+  cleanup(): Promise<void> {
+    return releasePipelines(this.pipelines);
   }
 
   async callApi(_prompt: string): Promise<ProviderResponse> {
@@ -347,6 +382,7 @@ export class TransformersEmbeddingProvider implements ApiProvider {
         'feature-extraction',
         this.modelName,
         this.config,
+        this.pipelines,
       );
 
       // Apply prefix if configured (critical for BGE, E5, Instructor models)
@@ -419,6 +455,7 @@ export class TransformersEmbeddingProvider implements ApiProvider {
 export class TransformersTextGenerationProvider implements ApiProvider {
   modelName: string;
   config: TransformersTextGenerationOptions;
+  private readonly pipelines = new Set<PipelineEntry>();
 
   constructor(
     modelName: string,
@@ -428,8 +465,6 @@ export class TransformersTextGenerationProvider implements ApiProvider {
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
-
-    ensureCleanupRegistered();
   }
 
   id(): string {
@@ -440,9 +475,18 @@ export class TransformersTextGenerationProvider implements ApiProvider {
     return `[Transformers Text Generation Provider ${this.modelName}]`;
   }
 
+  cleanup(): Promise<void> {
+    return releasePipelines(this.pipelines);
+  }
+
   async callApi(prompt: string): Promise<ProviderResponse> {
     try {
-      const generator = await getOrCreatePipeline('text-generation', this.modelName, this.config);
+      const generator = await getOrCreatePipeline(
+        'text-generation',
+        this.modelName,
+        this.config,
+        this.pipelines,
+      );
 
       // Build generation options (convert camelCase to snake_case for library)
       const generationOptions: Record<string, unknown> = {

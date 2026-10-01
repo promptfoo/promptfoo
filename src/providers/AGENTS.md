@@ -13,13 +13,15 @@ Each provider:
 
 ## Provider Lifecycle & Cleanup
 
-The evaluator (`src/evaluator.ts`) manages provider lifecycle. After evaluation completes, it calls `providerRegistry.shutdownAll()` to clean up resources.
+The evaluator cleans providers created from evaluation configuration. Internal load sites
+explicitly enroll those instances with `trackProvider` or `trackConfiguredProviders`. Direct
+loader callers own their returned providers, including loads inside a caller-supplied provider.
 
 **If your provider allocates resources** (Python workers, connections, child processes):
 
 - Implement a `cleanup()` method on your provider
-- Register with `providerRegistry` for automatic cleanup
-- Resources are released in the evaluator's `finally` block
+- Ensure the owner that constructs the provider reaches its `cleanup()` hook
+- Evaluation-owned resources are released by `src/providers/lifecycle.ts` after the run
 
 **Reference implementations:**
 
