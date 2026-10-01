@@ -17,7 +17,7 @@ Then run:
 npx promptfoo@latest eval --no-cache -o results.json
 ```
 
-Inspect `results.json` for assertion scores and errors, or view the results with `npx promptfoo@latest view`. The example makes five grading calls to TypeSafe, plus any retries, and uses your account's API credits.
+Inspect `results.json` for assertion scores and errors, or view the results with `npx promptfoo@latest view`. The example makes five separate grading calls to TypeSafe, plus any retries, and uses your account's API credits. Each assertion sends the canned reply as state; the calls are not batched together.
 
 ## What this shows
 
@@ -27,7 +27,9 @@ Jev is TypeSafe's "System One" model. It answers typed questions with calibrated
 - `llm-rubric` with `levels`, which sends a Score question and scales the result to 0–1.
 - `classifier` with `labels`, which sends a Choice question and checks the probability of one label.
 
-Jev doesn't return a rationale. Each `llm-rubric` grading `reason` is derived from the answer, such as `Derived from Jev Noul p=0.93 >= threshold 0.5`. Its raw answer is in the grading result's `metadata.typesafe`; classifier assertions report the selected label's probability as their score without this metadata.
+The example's thresholds are starting points. Tune them against representative passing and failing outputs, and pin a versioned model when you do: `jev-latest` can change. Score and classifier thresholds use the score or label probability, not TypeSafe's separate confidence value.
+
+Jev doesn't return a rationale. Each `llm-rubric` grading `reason` is derived from the answer, such as `Derived from Jev Noul p=0.93 >= threshold 0.5`. Its raw answer is in the grading result's `metadata.typesafe`; classifier assertions report the requested label's probability as their score without this metadata.
 
 Caching is disabled by default. To reuse responses, give each TypeSafe provider config the same nonsecret, account-specific `cacheNamespace` and omit `--no-cache`. Use different namespaces for different accounts; never use an API key as a namespace.
 

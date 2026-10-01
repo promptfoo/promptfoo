@@ -127,7 +127,76 @@ describe('TypeSafeProvider', () => {
       expect(JSON.stringify(provider.config)).not.toContain(API_KEY);
       expect(provider.requiresApiKey()).toBe(true);
     });
+
+    it('normalizes pasted keys from config, environment overrides, and the environment', () => {
+      const pastedKey = ` \t${API_KEY}\r\n`;
+      restoreEnv();
+      restoreEnv = mockProcessEnv({ TYPESAFE_API_KEY: pastedKey });
+      const providers = [
+        createProvider({ apiKey: pastedKey }),
+        new TypeSafeProvider('jev-latest', { env: { TYPESAFE_API_KEY: pastedKey } }),
+        new TypeSafeProvider('jev-latest'),
+      ];
+
+      for (const provider of providers) {
+        expect(provider.getApiKey()).toBe(API_KEY);
+        expect(provider.getRateLimitKey()).toBe(createProvider().getRateLimitKey());
+      }
+    });
   });
+
+  describe.each(['callApi', 'callClassificationApi'] as const)(
+    '%s API key validation',
+    (method) => {
+      it.each(['', ' \t\r\n'])(
+        'does not fall back to another account when an explicit key is blank: %j',
+        async (apiKey) => {
+          restoreEnv();
+          restoreEnv = mockProcessEnv({ TYPESAFE_API_KEY: 'process-key' });
+          const config = { instructions: 'Is polite?', labels: ['polite', 'rude'] };
+          const configured = new TypeSafeProvider('jev-latest', {
+            config: { ...config, apiKey },
+            env: { TYPESAFE_API_KEY: 'override-key' },
+          });
+          const overridden = new TypeSafeProvider('jev-latest', {
+            config,
+            env: { TYPESAFE_API_KEY: apiKey },
+          });
+
+          for (const provider of [configured, overridden]) {
+            expect((await provider[method]('Thank you')).error).toContain('API key is not set');
+          }
+          expect(mockedFetchWithCache).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each([
+        'fixture key',
+        'fixture\tkey',
+        'fixture\nkey',
+        'fixture\u0000key',
+        'fixture\u007fkey',
+        'fixtureékey',
+      ])(
+        'rejects invalid keys before fetching without exposing their value: %j',
+        async (apiKey) => {
+          const provider = createProvider({
+            apiKey,
+            instructions: 'Is polite?',
+            labels: ['polite', 'rude'],
+          });
+
+          const result = await provider[method]('Thank you');
+
+          expect(result.error).toContain(
+            'only printable ASCII characters without internal whitespace',
+          );
+          expect(result.error).not.toContain(apiKey);
+          expect(mockedFetchWithCache).not.toHaveBeenCalled();
+        },
+      );
+    },
+  );
 
   describe('scheduler identity', () => {
     it('shares the resolved credential across config, environment overrides, and the environment', () => {

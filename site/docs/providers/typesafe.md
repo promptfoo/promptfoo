@@ -24,6 +24,8 @@ In Promptfoo, Jev works as a grader for [`llm-rubric`](/docs/configuration/expec
    export TYPESAFE_API_KEY=your_api_key_here
    ```
 
+Surrounding whitespace is trimmed from API keys. Empty or malformed keys fail locally; an explicitly configured empty `apiKey` does not fall back to an environment key.
+
 ## Provider format
 
 ```text
@@ -72,7 +74,9 @@ tests:
       message: My order arrived damaged.
     assert:
       - type: llm-rubric
-        value: The reply apologizes and offers a replacement or refund
+        value: The reply apologizes to the customer
+      - type: llm-rubric
+        value: The reply offers a replacement or a refund
 ```
 
 For each `llm-rubric` assertion, the provider sends one request. The graded output is the `state` and the rubric is a Noul question's `instructions`. The provider then returns the JSON that `llm-rubric` expects:
@@ -99,7 +103,7 @@ defaultTest:
           - Acknowledges the problem and offers a concrete fix
 ```
 
-For `llm-rubric`, set the cutoff with the provider's `config.threshold`; an assertion threshold is usually unnecessary.
+For `llm-rubric`, set the cutoff with the provider's `config.threshold`; an assertion threshold is usually unnecessary. Score pass/fail uses the normalized score, not TypeSafe's separate [confidence](https://docs.typesafe.ai/confidence) value.
 
 :::note
 
@@ -139,7 +143,7 @@ assert:
     threshold: 0.5
 ```
 
-`labels` can also be a plain list, such as `[billing, technical, sales]`. Set the assertion's `threshold` explicitly: `classifier` defaults to 1 and ignores the provider's `config.threshold`. The assertion reports the selected label's probability as its score; it does not expose the full distribution, `metadata.typesafe`, or token usage.
+`labels` can also be a plain list, such as `[billing, technical, sales]`. Set the assertion's `threshold` explicitly: `classifier` defaults to 1 and ignores the provider's `config.threshold`. The assertion reports the requested label's probability as its score; it does not expose the full distribution, `metadata.typesafe`, or token usage. This cutoff tests label probability, not TypeSafe's separate confidence value.
 
 Choice labels become JSON object keys. JavaScript serializes integer-index keys in ascending numeric order, so `['2', '1']` is sent in the same order as `['1', '2']`. Use descriptive labels such as `option-2` and `option-1` when the configured order matters. Score levels retain their array order.
 
@@ -162,6 +166,7 @@ The cache key includes the namespace, API base URL, and exact serialized request
 
 - Only `llm-rubric` and `classifier` are supported. Graders that expect other output formats, such as `factuality`, `model-graded-closedqa`, `g-eval`, or the RAG metrics, are not.
 - In `llm-rubric` mode the provider reads the rubric and output directly and ignores `rubricPrompt`.
+- Assertions use separate requests, each sending the output as state; this provider does not use TypeSafe's [multi-question batching](https://docs.typesafe.ai/cookbooks/parallel_questions).
 - Jev inputs can be strings, JSON objects, or arrays. Native image and audio grading is unsupported.
 - Each request allows 64k tokens in total and 32k for the state plus the longest question. See the [models page](https://docs.typesafe.ai/models) for rate limits.
 - Jev 1.13 has documented limitations with arithmetic, counting, date comparisons, and adversarial content in the state. Use code for exact calculations and test grading quality on representative outputs. See TypeSafe's [known model limitations](https://docs.typesafe.ai/model-jaggedness/jev-1.13).

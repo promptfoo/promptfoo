@@ -86,6 +86,24 @@ describe('TypeSafe HTTP transport integration', () => {
   });
 
   it.each(['callApi', 'callClassificationApi'] as const)(
+    'sends a pasted API key without surrounding whitespace for %s',
+    async (method) => {
+      mockFetch.mockResolvedValueOnce(method === 'callApi' ? gradeResponse() : choiceResponse());
+      const provider = createProvider({
+        apiKey: ' \tfixture-typesafe-key\r\n',
+        labels: ['polite', 'rude'],
+      });
+
+      expect((await provider[method]('Thank you')).error).toBeUndefined();
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const request = mockFetch.mock.calls[0][1];
+      expect(new Headers(request?.headers).get('authorization')).toBe(
+        'Bearer fixture-typesafe-key',
+      );
+    },
+  );
+
+  it.each(['callApi', 'callClassificationApi'] as const)(
     'does not reuse cached responses across unscoped credentials for %s',
     async (method) => {
       mockFetch

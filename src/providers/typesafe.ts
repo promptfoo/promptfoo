@@ -382,7 +382,8 @@ export class TypeSafeProvider implements ApiClassificationProvider {
     const { config, id, env } = options;
     this.modelName = modelName;
     const { apiKey, ...restConfig } = config ?? {};
-    this.apiKey = apiKey || env?.TYPESAFE_API_KEY || getEnvString('TYPESAFE_API_KEY');
+    // Preserve explicit overrides, including an empty key, and tolerate pasted newlines.
+    this.apiKey = (apiKey ?? env?.TYPESAFE_API_KEY ?? getEnvString('TYPESAFE_API_KEY'))?.trim();
     this.config = restConfig;
     this.id = id ? () => id : this.id;
   }
@@ -466,6 +467,12 @@ export class TypeSafeProvider implements ApiClassificationProvider {
       return {
         error:
           'TypeSafe API key is not set. Set the TYPESAFE_API_KEY environment variable or add `apiKey` to the provider config.',
+      };
+    }
+    if (!/^[\x21-\x7e]+$/.test(this.apiKey)) {
+      return {
+        error:
+          'TypeSafe API key must contain only printable ASCII characters without internal whitespace. Check TYPESAFE_API_KEY or the `apiKey` provider config.',
       };
     }
 
