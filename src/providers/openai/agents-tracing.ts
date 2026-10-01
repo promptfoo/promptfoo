@@ -1047,9 +1047,13 @@ function sanitizeStructuredAttributeValue(
 
   while (stack.length > 0) {
     const { source, target, depth, headerPairs: sourceHeaders } = stack.pop()!;
-    if (Array.isArray(source) && source.length > budget.remaining) {
-      state.changed = true;
-      return '<redacted>';
+    // Array holes also consume work when JSON.stringify serializes the copy.
+    if (Array.isArray(source)) {
+      budget.remaining -= source.length;
+      if (budget.remaining < 0) {
+        state.changed = true;
+        return '<redacted>';
+      }
     }
     for (const [key, entry] of structuredAttributeEntries(source)) {
       if (--budget.remaining < 0) {

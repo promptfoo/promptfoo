@@ -210,9 +210,21 @@ describe('OTLPTracingExporter', () => {
     async (format) => {
       const sparse: string[] = [];
       sparse[10_000] = 'fixture';
-      const { attributes } = await exportCustomData({ sparse, nested: { sparse } }, format);
+      const aggregate = Array.from({ length: 6 }, () => {
+        const item = [];
+        item[1_999] = 'last';
+        return item;
+      });
+      const { attributes } = await exportCustomData(
+        { sparse, nested: { sparse }, aggregate, ordinary: ['first', 'last'] },
+        format,
+      );
       expect(attributes.sparse).toBe('<redacted>');
       expect(attributes.nested).toBe('<redacted>');
+      expect(attributes.aggregate).toBe('<redacted>');
+      expect(attributes.ordinary).toEqual({
+        arrayValue: { values: [{ stringValue: 'first' }, { stringValue: 'last' }] },
+      });
     },
   );
 
