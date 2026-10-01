@@ -60,6 +60,7 @@ function applyCachedCallApiMetadata(apiType: PythonApiType, parsedResult: any) {
 
   logger.debug(`PythonProvider setting cached=true for cached ${apiType} result`);
   parsedResult.cached = true;
+  parsedResult.cacheHit = true;
 
   // Update token usage format for cached results
   if (parsedResult.tokenUsage) {

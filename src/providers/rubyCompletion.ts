@@ -54,6 +54,7 @@ function applyCachedRubyCallApiMetadata(apiType: RubyApiType, parsedResult: any)
 
   logger.debug(`RubyProvider setting cached=true for cached ${apiType} result`);
   parsedResult.cached = true;
+  parsedResult.cacheHit = true;
 
   // Update token usage format for cached results
   if (parsedResult.tokenUsage) {

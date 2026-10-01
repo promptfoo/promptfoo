@@ -354,23 +354,30 @@ describe('PythonProvider', () => {
   });
 
   describe('caching', () => {
-    it('should use cached result when available', async () => {
-      const provider = new PythonProvider('script.py');
-      mockIsCacheEnabled.mockReturnValue(true);
-      const mockCache = {
-        get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached result' })),
-        set: vi.fn(),
-      };
-      mockGetCache.mockResolvedValue(mockCache as never);
+    it.each([undefined, false, true])(
+      'marks a replay when stored cacheHit is %s',
+      async (cacheHit) => {
+        const provider = new PythonProvider('script.py');
+        mockIsCacheEnabled.mockReturnValue(true);
+        const mockCache = {
+          get: vi
+            .fn()
+            .mockResolvedValue(
+              JSON.stringify({ output: 'cached result', cached: false, cacheHit }),
+            ),
+          set: vi.fn(),
+        };
+        mockGetCache.mockResolvedValue(mockCache as never);
 
-      const result = await provider.callApi('test prompt');
+        const result = await provider.callApi('test prompt');
 
-      expect(mockCache.get).toHaveBeenCalledWith(
-        expect.stringContaining('python:undefined:default:call_api:'),
-      );
-      expect(mockPoolInstance.execute).not.toHaveBeenCalled();
-      expect(result).toEqual({ output: 'cached result', cached: true });
-    });
+        expect(mockCache.get).toHaveBeenCalledWith(
+          expect.stringContaining('python:undefined:default:call_api:'),
+        );
+        expect(mockPoolInstance.execute).not.toHaveBeenCalled();
+        expect(result).toEqual({ output: 'cached result', cached: true, cacheHit: true });
+      },
+    );
 
     it('should cache result when cache is enabled', async () => {
       const provider = new PythonProvider('script.py');
@@ -414,6 +421,7 @@ describe('PythonProvider', () => {
       expect(result).toEqual({
         output: 'cached result with token usage',
         cached: true,
+        cacheHit: true,
         tokenUsage: {
           cached: 25,
           total: 25,
