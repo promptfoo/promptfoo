@@ -478,7 +478,7 @@ tests:
         value: The image shows a cat wearing a top hat
 ```
 
-A custom rubric can stay text-only. Do not put `{{output}}` in an `image_url` block for these providers: during grading, it may be replaced with an attachment placeholder. Stored blob references are not supported by multimodal grading, so keep inline media enabled for this workflow.
+A custom rubric can stay text-only. Do not put `{{output}}` in an `image_url` block for these providers: during grading, it may be replaced with an attachment placeholder. Stored image blob references are not supported by this grading path, so keep inline media enabled for this workflow.
 
 See the [image eval guide](/docs/guides/image-evaluation) for a complete provider comparison and custom rubric example.
 

@@ -165,7 +165,7 @@ Use `promptfooconfig.judge.yaml` to grade generated images with a vision-capable
 PROMPTFOO_INLINE_MEDIA=true promptfoo eval -c promptfooconfig.judge.yaml --no-cache
 ```
 
-This config compares Flare and Sunburst images with `llm-rubric` and a GPT-6 Sol grader. Promptfoo attaches generated images automatically. Inline media keeps image bytes available to the grader; stored blob references are not supported for grading. See the [image evaluation guide](https://promptfoo.dev/docs/guides/image-evaluation) for details.
+This config compares Flare and Sunburst images with `llm-rubric` and a GPT-6 Sol grader. Promptfoo attaches generated images automatically. Inline media keeps image bytes available to the grader; stored image blob references are not supported for this grading path. See the [image evaluation guide](https://promptfoo.dev/docs/guides/image-evaluation) for details.
 
 ## Documentation
 

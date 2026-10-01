@@ -11,7 +11,7 @@ Use `llm-rubric` with a vision-capable grader to compare generated images agains
 
 ## How It Works
 
-Each test sends a prompt to the image provider. The grader receives the generated images and the assertion's criteria, then returns a pass/fail result, score, and reason. Set `PROMPTFOO_INLINE_MEDIA=true` to keep image bytes available to the grader. Stored blob references are not supported for multimodal grading.
+Each test sends a prompt to the image provider. The grader receives the generated images and the assertion's criteria, then returns a pass/fail result, score, and reason. Set `PROMPTFOO_INLINE_MEDIA=true` to keep image bytes available to the grader. Stored image blob references are not supported by this grading path.
 
 ## Prerequisites
 
