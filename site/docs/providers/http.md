@@ -114,7 +114,11 @@ tests. Supported formats are `pdf`, `png`, `jpeg`, and `jpg` (alias for `jpeg`).
 ### Uploading local files
 
 Use a `path` source to upload a file from the machine running promptfoo. Relative
-paths resolve from the promptfoo config directory.
+paths resolve from the promptfoo config directory, or the current working directory
+when no config directory is set. Before reading a file, promptfoo resolves symlinks
+and checks that the path is inside that directory. Only use a trusted local
+filesystem: this check does not prevent another process from replacing files or
+directories during an upload.
 
 ```yaml
 providers:
