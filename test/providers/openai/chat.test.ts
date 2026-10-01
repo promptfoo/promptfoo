@@ -1800,6 +1800,29 @@ describe('OpenAI Provider', () => {
       },
     );
 
+    it.each([null, undefined, ''])(
+      'preserves reasoning-only content %s with empty tool calls',
+      async (content) => {
+        for (const showThinking of [false, true]) {
+          mockFetchWithCache.mockResolvedValue({
+            data: {
+              choices: [{ message: { content, reasoning: 'Reasoning summary', tool_calls: [] } }],
+            },
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          });
+          const provider = new OpenAiChatCompletionProvider('fixture-model', {
+            config: { showThinking },
+          });
+          const result = await provider.callApi('Hello');
+          expect(result.output).toBe(
+            showThinking && content === '' ? 'Thinking: Reasoning summary\n\n' : content,
+          );
+        }
+      },
+    );
+
     it('preserves a reasoning-only response with null content', async () => {
       mockFetchWithCache.mockResolvedValue({
         data: { choices: [{ message: { content: null, reasoning: 'Reasoning summary' } }] },

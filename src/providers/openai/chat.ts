@@ -962,7 +962,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
 
-      const reasoning = message.reasoning;
+      // Preserve empty content even when reasoning is hidden.
+      const reasoning = data.choices[0].message.reasoning;
       let output: any = '';
       if (message.content && (message.function_call || message.tool_calls)) {
         if (Array.isArray(message.tool_calls) && message.tool_calls.length === 0) {
@@ -976,7 +977,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         (message.content === '' && message.tool_calls)
       ) {
         output =
-          message.function_call || message.tool_calls || (reasoning ? message.content : undefined);
+          message.function_call ||
+          (reasoning && !message.tool_calls?.length ? message.content : message.tool_calls);
       } else {
         output = message.content;
       }
