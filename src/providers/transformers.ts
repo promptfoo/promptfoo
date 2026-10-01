@@ -145,7 +145,8 @@ type Pipeline = {
 interface PipelineEntry {
   key: string;
   pipeline: Promise<Pipeline>;
-  owners: number;
+  owners: Set<Set<PipelineEntry>>;
+  value?: Pipeline;
   disposal?: Promise<void>;
 }
 
@@ -173,12 +174,10 @@ async function getOrCreatePipeline(
 
   const cached = pipelineCache.get(cacheKey);
   if (cached) {
-    if (!owned.has(cached)) {
-      owned.add(cached);
-      cached.owners++;
-    }
+    owned.add(cached);
+    cached.owners.add(owned);
     logger.debug(`[Transformers] Using shared pipeline: ${cacheKey}`);
-    return cached.pipeline;
+    return getOwnedPipeline(cached, owned);
   }
 
   // Start new initialization
@@ -247,32 +246,58 @@ async function getOrCreatePipeline(
     return pipe;
   })();
 
-  const entry: PipelineEntry = { key: cacheKey, pipeline: initPromise, owners: 1 };
+  const entry: PipelineEntry = {
+    key: cacheKey,
+    pipeline: initPromise,
+    owners: new Set([owned]),
+  };
   pipelineCache.set(cacheKey, entry);
   owned.add(entry);
-
-  try {
-    return await initPromise;
-  } catch (err) {
-    if (pipelineCache.get(cacheKey) === entry) {
-      pipelineCache.delete(cacheKey);
-    }
-    throw err;
-  }
+  entry.pipeline = initPromise.then(
+    async (pipe) => {
+      entry.value = pipe;
+      if (entry.owners.size === 0) {
+        await disposePipeline(entry);
+      }
+      return pipe;
+    },
+    (error) => {
+      forgetPipelineEntry(entry);
+      throw error;
+    },
+  );
+  return getOwnedPipeline(entry, owned);
 }
 
-function disposePipeline(entry: PipelineEntry): Promise<void> {
+async function getOwnedPipeline(
+  entry: PipelineEntry,
+  owned: Set<PipelineEntry>,
+): Promise<Pipeline> {
+  const pipe = await entry.pipeline;
+  if (!owned.has(entry)) {
+    throw new Error('Transformers pipeline was released during initialization');
+  }
+  return pipe;
+}
+
+function forgetPipelineEntry(entry: PipelineEntry): void {
   if (pipelineCache.get(entry.key) === entry) {
     pipelineCache.delete(entry.key);
   }
+  for (const owner of entry.owners) {
+    owner.delete(entry);
+  }
+  entry.owners.clear();
+}
+
+function disposePipeline(entry: PipelineEntry): Promise<void> {
+  forgetPipelineEntry(entry);
+  const pipe = entry.value;
+  if (!pipe) {
+    // Initialization disposes its result when it finishes without any owners.
+    return Promise.resolve();
+  }
   entry.disposal ??= (async () => {
-    let pipe: Pipeline;
-    try {
-      pipe = await entry.pipeline;
-    } catch {
-      // Initialization failed before a pipeline was allocated.
-      return;
-    }
     try {
       await pipe.dispose?.();
       logger.debug(`[Transformers] Disposed pipeline: ${entry.key}`);
@@ -286,7 +311,8 @@ function disposePipeline(entry: PipelineEntry): Promise<void> {
 async function releasePipelines(owned: Set<PipelineEntry>): Promise<void> {
   const disposals: Promise<void>[] = [];
   for (const entry of owned) {
-    if (--entry.owners === 0) {
+    entry.owners.delete(owned);
+    if (entry.owners.size === 0) {
       disposals.push(disposePipeline(entry));
     }
   }

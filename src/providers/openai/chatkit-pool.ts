@@ -52,6 +52,7 @@ export class ChatKitBrowserPool {
   private server: http.Server | null = null;
   private serverPort: number = 0;
   private pages: PooledPage[] = [];
+  private owners = new Set<object>();
   private waitQueue: Array<{ templateKey: string; resolve: (page: PooledPage) => void }> = [];
   private config: ChatKitPoolConfig;
   private templates: Map<string, string> = new Map(); // templateKey -> HTML
@@ -107,17 +108,7 @@ export class ChatKitBrowserPool {
       });
       ChatKitBrowserPool.registerCleanupHandlers();
 
-      // Register with providerRegistry for cleanup at end of evaluation
-      // This is cleaner than relying only on process exit handlers
-      const instance = ChatKitBrowserPool.instance;
-      providerRegistry.register({
-        async shutdown() {
-          if (instance) {
-            await instance.shutdown();
-            ChatKitBrowserPool.instance = null;
-          }
-        },
-      });
+      providerRegistry.register(ChatKitBrowserPool.instance);
     } else if (config) {
       // Warn if different config is requested for existing instance
       const existing = ChatKitBrowserPool.instance.config;
@@ -136,6 +127,16 @@ export class ChatKitBrowserPool {
       }
     }
     return ChatKitBrowserPool.instance;
+  }
+
+  retain(owner: object): void {
+    this.owners.add(owner);
+  }
+
+  async release(owner: object): Promise<void> {
+    if (this.owners.delete(owner) && this.owners.size === 0) {
+      await this.shutdown();
+    }
   }
 
   /**
@@ -545,6 +546,11 @@ export class ChatKitBrowserPool {
    */
   async shutdown(): Promise<void> {
     logger.debug('[ChatKitPool] Shutting down');
+    providerRegistry.unregister(this);
+    this.owners.clear();
+    if (ChatKitBrowserPool.instance === this) {
+      ChatKitBrowserPool.instance = null;
+    }
 
     // Cancel any pending idle timer
     this.cancelIdleTimer();
