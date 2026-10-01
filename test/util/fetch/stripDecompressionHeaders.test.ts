@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { stripDecompressionHeaders } from '../../../src/util/fetch/stripDecompressionHeaders';
+import { stripDecompressionHeaders } from '../../../src/util/fetch/decompress';
 import type { Dispatcher } from 'undici';
 
 type RawHeaderPairs = [string, string][];
