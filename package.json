@@ -165,7 +165,7 @@
     "@opentelemetry/sdk-trace-node": {
       "@opentelemetry/core": "2.11.0"
     },
-    "serialize-javascript": ">=7.0.5",
+    "serialize-javascript": ">=7.1.2",
     "gaxios": "^8.0.0",
     "ip-address": "10.7.2",
     "mongoose": {
@@ -335,7 +335,7 @@
     "@opentelemetry/resources": "^2.6.0",
     "@opentelemetry/sdk-trace-node": "^2.6.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
-    "ai": "^6.0.264",
+    "ai": "^6.0.286",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",

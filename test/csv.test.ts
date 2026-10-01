@@ -942,9 +942,17 @@ describe('assertionFromString', () => {
   });
 
   it('should not add a threshold for types without a CSV default when none is specified', () => {
-    expect(assertionFromString('bleu:Expected output')).toEqual({
+    expect(assertionFromString('bleu:Expected output')).toStrictEqual({
       type: 'bleu',
       value: 'Expected output',
+    });
+  });
+
+  it('should preserve an explicit zero threshold for types without a CSV default', () => {
+    expect(assertionFromString('bleu(0):Expected output')).toEqual({
+      type: 'bleu',
+      value: 'Expected output',
+      threshold: 0,
     });
   });
 
