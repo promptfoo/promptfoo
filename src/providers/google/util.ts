@@ -516,7 +516,8 @@ export function calculateGoogleCost(
     model?.introductoryPricing && Date.now() < model.introductoryPricing.expiresAt
       ? model.introductoryPricing.multiplier
       : 1;
-  const catalogMultiplier = vertexRegionalMultiplier * introductoryMultiplier;
+  const catalogMultiplier =
+    vertexRegionalMultiplier * introductoryMultiplier * serviceTierMultiplier;
   const applyCatalogMultiplier = (rate?: number) =>
     rate === undefined ? undefined : rate * catalogMultiplier;
   const inputCost = config.inputCost ?? config.cost ?? modelCost.input * catalogMultiplier;
@@ -616,16 +617,15 @@ export function calculateGoogleCost(
   }
 
   return (
-    ((textInputTokens - cachedTextTokens) * inputCost +
-      cachedTextTokens * cachedInputCost +
-      (audioInputTokens - cachedAudioTokens) * serviceTierAudioInputCost +
-      cachedAudioTokens * cachedAudioInputCost +
-      (imageInputTokens - cachedImageTokens) * imageInputCost +
-      cachedImageTokens * cachedImageInputCost +
-      (completionTokens - audioOutputTokens - videoOutputTokens) * outputCost +
-      audioOutputTokens * audioOutputCost +
-      videoOutputTokens * videoOutputCost) *
-    serviceTierMultiplier
+    (textInputTokens - cachedTextTokens) * inputCost +
+    cachedTextTokens * cachedInputCost +
+    (audioInputTokens - cachedAudioTokens) * serviceTierAudioInputCost +
+    cachedAudioTokens * cachedAudioInputCost +
+    (imageInputTokens - cachedImageTokens) * imageInputCost +
+    cachedImageTokens * cachedImageInputCost +
+    (completionTokens - audioOutputTokens - videoOutputTokens) * outputCost +
+    audioOutputTokens * audioOutputCost +
+    videoOutputTokens * videoOutputCost
   );
 }
 

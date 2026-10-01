@@ -223,7 +223,7 @@ function getTokenUsageLines(
     )}`,
   ];
 
-  if (isRedteam && tokenUsage.numRequests) {
+  if (isRedteam && tokenUsage.numRequests !== undefined) {
     lines.push(
       `  ${chalk.gray('Probes:')} ${chalk.white(tokenUsage.numRequests.toLocaleString())}`,
     );
