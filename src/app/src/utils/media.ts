@@ -14,7 +14,6 @@ const blobMediaRefreshVersions = new Map<string, number>();
 const retryingBlobMediaElements = new WeakMap<RetryableMediaElement, number>();
 const pendingBlobMediaRetryTimers = new WeakMap<RetryableMediaElement, number>();
 const BLOB_MEDIA_RETRY_DELAY_MS = 250;
-const MAX_FAILED_MEDIA_SOURCES = 256;
 
 type RetryableMediaElement = HTMLImageElement | HTMLSourceElement;
 
@@ -65,9 +64,6 @@ export function markMediaLoadFailed(
 
   const version = blobMediaRefreshVersions.get(source) ?? 0;
   blobMediaRefreshVersions.set(source, version + 1);
-  if (blobMediaRefreshVersions.size > MAX_FAILED_MEDIA_SOURCES) {
-    blobMediaRefreshVersions.delete(blobMediaRefreshVersions.keys().next().value!);
-  }
   if (retryingBlobMediaElements.has(element)) {
     return;
   }

@@ -259,6 +259,42 @@ describe('ChatMessages', () => {
     expect(refreshedImage).toHaveAttribute('src', `/api/blobs/${blobHash}`);
   });
 
+  it('remounts 1000 failed blob images on refresh while keeping successful media mounted', () => {
+    const timers = useTestTimers();
+    try {
+      const messages: Message[] = Array.from({ length: 1001 }, (_, index) => ({
+        role: 'user',
+        content: `Image ${index}`,
+        image: { blobRef: { uri: `promptfoo://blob/${index.toString(16).padStart(64, '0')}` } },
+      }));
+      const { rerender } = render(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+      const originalImages = screen.getAllByAltText('Input');
+      const failedImages = originalImages.slice(0, 1000);
+
+      act(() => {
+        for (const image of failedImages) {
+          image.dispatchEvent(new Event('error'));
+        }
+        timers.advanceBy(250);
+        for (const image of failedImages) {
+          image.dispatchEvent(new Event('error'));
+        }
+        originalImages[1000].dispatchEvent(new Event('load'));
+      });
+
+      rerender(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+
+      const refreshedImages = screen.getAllByAltText('Input');
+      const replacedCount = failedImages.filter(
+        (image, index) => refreshedImages[index] !== image,
+      ).length;
+      expect(replacedCount).toBe(1000);
+      expect(refreshedImages[1000]).toBe(originalImages[1000]);
+    } finally {
+      restoreTestTimers();
+    }
+  });
+
   it('retries when a blob failure arrives after the eval row refresh', () => {
     const timers = useTestTimers();
     try {

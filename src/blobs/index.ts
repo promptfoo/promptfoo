@@ -84,14 +84,7 @@ export async function storeBlob(
       .where(eq(blobAssetsTable.hash, result.ref.hash))
       .get();
 
-    const persistedEval = refContext?.evalId
-      ? await tx
-          .select({ id: evalsTable.id })
-          .from(evalsTable)
-          .where(eq(evalsTable.id, refContext.evalId))
-          .get()
-      : undefined;
-    if (persistedEval && refContext?.evalId) {
+    if (refContext?.evalId) {
       await tx
         .insert(blobReferencesTable)
         .values({
@@ -167,6 +160,16 @@ export async function getShareAuthorizedBlob(
   return getBlobByHash(hash);
 }
 
+export async function hasBlobReferenceOwner(evalId: string): Promise<boolean> {
+  const db = await getDb();
+  const persistedEval = await db
+    .select({ id: evalsTable.id })
+    .from(evalsTable)
+    .where(eq(evalsTable.id, evalId))
+    .get();
+  return Boolean(persistedEval);
+}
+
 export async function recordBlobReference(
   hash: string,
   refContext: {
@@ -192,17 +195,12 @@ export async function recordBlobReference(
     return;
   }
 
-  const db = await getDb();
-  const persistedEval = await db
-    .select({ id: evalsTable.id })
-    .from(evalsTable)
-    .where(eq(evalsTable.id, refContext.evalId))
-    .get();
-  if (!persistedEval) {
+  if (!(await hasBlobReferenceOwner(refContext.evalId))) {
     return;
   }
   // A failed store can retain bytes without committing their asset registration.
   // Referencing those bytes must not adopt them or create an invalid foreign key.
+  const db = await getDb();
   const asset = await db
     .select({ hash: blobAssetsTable.hash })
     .from(blobAssetsTable)

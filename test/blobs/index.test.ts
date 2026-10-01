@@ -12,10 +12,15 @@ import {
   setBlobStorageProvider,
   storeBlob,
 } from '../../src/blobs';
+import { BLOB_MIN_SIZE } from '../../src/blobs/constants';
+import { extractAndStoreBinaryData } from '../../src/blobs/extractor';
 import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
+import * as cache from '../../src/cache';
 import { getDb } from '../../src/database';
 import { blobAssetsTable, blobReferencesTable, evalsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
+import { ModelsLabImageProvider } from '../../src/providers/modelslab';
+import * as fetchUtils from '../../src/util/fetch/index';
 import { createDeferred, createTempDir, mockProcessEnv, removeTempDir } from '../util/utils';
 
 import type { BlobStorageProvider } from '../../src/blobs';
@@ -241,7 +246,7 @@ describe('storeBlob persistence failures with shared files', () => {
 
   beforeEach(async () => {
     tempDir = createTempDir('promptfoo-blob-rollback-');
-    restoreEnv = mockProcessEnv({ PROMPTFOO_CONFIG_DIR: tempDir });
+    restoreEnv = mockProcessEnv({ PROMPTFOO_CONFIG_DIR: tempDir, PROMPTFOO_INLINE_MEDIA: 'false' });
     provider = new FilesystemBlobStorageProvider({ basePath: path.join(tempDir, 'blobs') });
     setBlobStorageProvider(provider);
     db = await getDb();
@@ -309,13 +314,13 @@ describe('storeBlob persistence failures with shared files', () => {
   }
 
   it.each(['store', 'reference'])(
-    'keeps media usable for non-persisted eval IDs: %s',
+    'does not authorize stored media for non-persisted eval IDs: %s',
     async (operation) => {
       await storeBlob(data, mimeType);
       if (operation === 'store') {
         await expect(
           storeBlob(data, mimeType, { evalId: missingEvalId, kind: 'image' }),
-        ).resolves.toMatchObject({ ref: { hash } });
+        ).rejects.toThrow();
       } else {
         await expect(
           recordBlobReference(hash, { evalId: missingEvalId, kind: 'image' }),
@@ -328,6 +333,59 @@ describe('storeBlob persistence failures with shared files', () => {
       await expect(isBlobAllowedForShare(hash, missingEvalId)).resolves.toBe(false);
     },
   );
+
+  it('preserves the ModelsLab image URL when its eval is not persisted', async () => {
+    const imageUrl = 'https://example.com/fixture.png';
+    vi.spyOn(cache, 'fetchWithCache').mockResolvedValue({
+      data: { status: 'success', output: [imageUrl] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      deleteFromCache: vi.fn(),
+    });
+    vi.spyOn(fetchUtils, 'fetchWithProxy').mockResolvedValue(
+      new Response(data, { headers: { 'content-type': 'image/png' } }),
+    );
+    const imageProvider = new ModelsLabImageProvider('fixture', {
+      config: { apiKey: 'fixture-only' },
+    });
+
+    const response = await imageProvider.callApi('fixture', {
+      evaluationId: missingEvalId,
+      prompt: { raw: 'fixture', label: 'fixture' },
+      vars: {},
+    });
+
+    expect(response.output).toContain(imageUrl);
+    expect(response.metadata).toBeUndefined();
+    expect(response.error).toBeUndefined();
+    expect((await snapshotRows()).references).toEqual([]);
+  });
+
+  it.each([false, true])('stores audio only when its eval is persisted: %s', async (persisted) => {
+    const audioData = Buffer.alloc(BLOB_MIN_SIZE, 1);
+    const audioHash = createHash('sha256').update(audioData).digest('hex');
+    const response = {
+      output: 'fixture',
+      audio: { data: audioData.toString('base64'), format: 'wav' },
+    };
+
+    try {
+      const evalId = persisted ? firstEvalId : missingEvalId;
+      const result = await extractAndStoreBinaryData(response, { evalId });
+      if (persisted) {
+        expect(result?.audio?.data).toBeUndefined();
+        expect(result?.audio?.blobRef?.hash).toBe(audioHash);
+      } else {
+        expect(result).toBe(response);
+      }
+      expect(await provider.exists(audioHash)).toBe(persisted);
+      expect(await isBlobAllowedForShare(audioHash, evalId)).toBe(persisted);
+    } finally {
+      await db.delete(blobReferencesTable).where(eq(blobReferencesTable.blobHash, audioHash));
+      await db.delete(blobAssetsTable).where(eq(blobAssetsTable.hash, audioHash));
+    }
+  });
 
   it('preserves already shared files when a later reference transaction fails', async () => {
     await storeBlob(data, mimeType, { evalId: firstEvalId, location: 'import' });
