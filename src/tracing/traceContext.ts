@@ -559,13 +559,29 @@ async function fetchFromLocalStore(
 
       const traceSpans = createTraceSpans(
         redactAttributes?.length
-          ? spans.map((span) => ({
-              ...span,
-              attributes: sanitizeTraceAttributes(span.attributes, {
+          ? spans.map((span) => {
+              const redactedValues = new Set<string>();
+              const sanitization = {
                 redactAttributes,
                 sanitizeSensitiveAttributes: spanOptions.sanitizeAttributes,
-              }),
-            }))
+                redactedValues,
+              };
+              const attributes = sanitizeTraceAttributes(span.attributes, sanitization);
+              const events = span.events?.map((event) => ({
+                ...event,
+                attributes: sanitizeTraceAttributes(event.attributes, sanitization),
+              }));
+              return {
+                ...span,
+                attributes,
+                ...(events && {
+                  events: events.map((event) => ({
+                    ...event,
+                    name: redactedValues.has(event.name) ? '[REDACTED]' : event.name,
+                  })),
+                }),
+              };
+            })
           : spans,
       );
       const insights = deriveInsights(traceSpans);

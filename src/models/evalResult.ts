@@ -169,6 +169,7 @@ export function projectTracesForOutput(
     return {
       ...projectedTrace,
       spans: projectedTrace.spans.map((span) => {
+        const strippedValues = new Map<unknown, string>();
         const projectAttributes = <T extends { attributes?: Record<string, unknown> }>(
           item: T,
         ): T => {
@@ -177,17 +178,26 @@ export function projectTracesForOutput(
           }
           const attributes = { ...item.attributes };
           if (shouldStripPromptText) {
+            strippedValues.set(attributes[PromptfooAttributes.REQUEST_BODY], '[prompt stripped]');
             delete attributes[PromptfooAttributes.REQUEST_BODY];
           }
           if (shouldStripResponseOutput) {
+            strippedValues.set(attributes[PromptfooAttributes.RESPONSE_BODY], '[output stripped]');
             delete attributes[PromptfooAttributes.RESPONSE_BODY];
           }
           const { attributes: _attributes, ...projected } = item;
           return { ...projected, ...(Object.keys(attributes).length > 0 && { attributes }) } as T;
         };
         const projected = projectAttributes(span);
-        return span.events
-          ? { ...projected, events: span.events.map(projectAttributes) }
+        const events = span.events?.map(projectAttributes);
+        return events
+          ? {
+              ...projected,
+              events: events.map((event) => ({
+                ...event,
+                name: strippedValues.get(event.name) ?? event.name,
+              })),
+            }
           : projected;
       }),
     };
