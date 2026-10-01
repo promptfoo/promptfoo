@@ -7,7 +7,7 @@ sidebar_position: 7
 
 # Evaluating Image Generation
 
-Use `llm-rubric` with a vision-capable grader to compare generated images against written criteria. Built-in `openai:image` and `google:image` providers return structured images, which Promptfoo attaches to the grading prompt automatically.
+Use `llm-rubric` with a vision-capable grader to compare generated images against written criteria. Built-in OpenAI and Gemini image providers return structured images, which Promptfoo attaches to the grading prompt automatically.
 
 ## How It Works
 
@@ -86,11 +86,11 @@ All structured images returned by the provider are attached. Set `n: 1` when you
 
 ## Non-OpenAI Providers
 
-Select a provider that returns structured images, such as [Google Imagen](/docs/providers/google#image-generation-models):
+Select a provider that returns structured images, such as a [Gemini image model](/docs/providers/google#gemini-native-image-generation-models):
 
 ```yaml
 providers:
-  - id: google:image:imagen-3.0-generate-002
+  - id: google:gemini-3.1-flash-image
 ```
 
 A custom provider should return images through [`ProviderResponse.images`](/docs/configuration/reference/#providerresponse). A raw JSON string containing `b64_json` is not a structured image response and is not covered by this workflow. The grader must support image inputs.
