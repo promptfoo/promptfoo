@@ -133,8 +133,6 @@ permissions:
 jobs:
   agent-eval:
     runs-on: ubuntu-latest
-    env:
-      PROMPTFOO_CONFIG_DIR: ${{ runner.temp }}/promptfoo
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v6
@@ -142,6 +140,8 @@ jobs:
           node-version: 24
       - run: npm install
       - name: Run trace eval
+        env:
+          PROMPTFOO_CONFIG_DIR: ${{ runner.temp }}/promptfoo
         run: npx promptfoo@latest eval -c promptfooconfig.trajectory.yaml --no-cache -o eval-output.json
 ```
 
