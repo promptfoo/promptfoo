@@ -1975,87 +1975,107 @@ export class OpenCodeSDKProvider implements ApiProvider {
           await this.ensureClient(config, context?.traceparent);
           const session = await this.getOrCreateSession(config, workingDir);
           ephemeralSession = session.ephemeralSession;
-          if (callOptions?.abortSignal?.aborted) {
-            return { error: 'OpenCode SDK call aborted before it started' };
-          }
+          try {
+            if (callOptions?.abortSignal?.aborted) {
+              return { error: 'OpenCode SDK call aborted before it started' };
+            }
 
-          const promptOptions = this.buildPromptParameters(
-            config,
-            prompt,
-            session.sessionId,
-            session.sessionQuery,
-          );
-          logger.debug(`OpenCode SDK prompt options:`, promptOptions);
-
-          const client = this.client;
-          if (!client) {
-            throw new Error('OpenCode SDK client is not initialized');
-          }
-
-          // If the caller's abortSignal fires mid-prompt, ask the server to stop
-          // rather than letting it run to completion while we discard the result.
-          // session.abort is only on v2; v1 has no abort primitive, so we still
-          // honor cancellation locally via the response check below.
-          const abortSignal = callOptions?.abortSignal;
-          if (abortSignal && client.session.abort && this.opencodeModule?.apiVersion === 'v2') {
-            const abortParams = this.buildAbortSessionParameters(
+            const promptOptions = this.buildPromptParameters(
+              config,
+              prompt,
               session.sessionId,
               session.sessionQuery,
             );
-            abortListener = () => {
-              client.session.abort?.(abortParams).catch((err) => {
-                logger.debug(`[OpenCode SDK] Failed to abort session ${session.sessionId}: ${err}`);
-              });
-            };
-            abortSignal.addEventListener('abort', abortListener, { once: true });
-          }
+            logger.debug(`OpenCode SDK prompt options:`, promptOptions);
 
-          const response = await client.session.prompt(promptOptions);
-          logger.debug(`OpenCode SDK response received`);
-
-          // The prompt has returned, so an abort from here on must not ask the
-          // server to kill the session it already answered.
-          if (abortListener && abortSignal) {
-            abortSignal.removeEventListener('abort', abortListener);
-            abortListener = undefined;
-          }
-
-          if (abortSignal?.aborted) {
-            return { error: 'OpenCode SDK call aborted' };
-          }
-
-          // Fetch only the parts that belong to the current prompt from the session
-          // history so that deriveSkillCalls captures skill calls from intermediate
-          // turns. Gated on the effective tool policy, so the extra round trip is
-          // skipped whenever the skill tool is denied and no skill parts can exist.
-          let allSessionParts: OpenCodePromptPart[] = [];
-          if (this.isSkillToolEnabled(config)) {
-            try {
-              allSessionParts = await this.fetchCurrentPromptParts(
-                client,
-                session,
-                response,
-                abortSignal,
-              );
-            } catch (e) {
-              logger.debug(
-                `[OpenCode SDK] Could not fetch session history for skill tracking: ${e}`,
-              );
+            const client = this.client;
+            if (!client) {
+              throw new Error('OpenCode SDK client is not initialized');
             }
+
+            // If the caller's abortSignal fires mid-prompt, ask the server to stop
+            // rather than letting it run to completion while we discard the result.
+            // session.abort is only on v2; v1 has no abort primitive, so we still
+            // honor cancellation locally via the response check below.
+            const abortSignal = callOptions?.abortSignal;
+            if (abortSignal && client.session.abort && this.opencodeModule?.apiVersion === 'v2') {
+              const abortParams = this.buildAbortSessionParameters(
+                session.sessionId,
+                session.sessionQuery,
+              );
+              abortListener = () => {
+                client.session.abort?.(abortParams).catch((err) => {
+                  logger.debug(
+                    `[OpenCode SDK] Failed to abort session ${session.sessionId}: ${err}`,
+                  );
+                });
+              };
+              abortSignal.addEventListener('abort', abortListener, { once: true });
+            }
+
+            const response = await client.session.prompt(promptOptions);
+            logger.debug(`OpenCode SDK response received`);
+
+            // The prompt has returned, so an abort from here on must not ask the
+            // server to kill the session it already answered.
+            if (abortListener && abortSignal) {
+              abortSignal.removeEventListener('abort', abortListener);
+              abortListener = undefined;
+            }
+
             if (abortSignal?.aborted) {
               return { error: 'OpenCode SDK call aborted' };
             }
-          }
 
-          const providerResponse = this.buildProviderResponse(
-            config,
-            response,
-            session.sessionId,
-            allSessionParts,
-          );
-          await cacheResponse(cacheResult, providerResponse, 'OpenCode SDK');
-          logger.debug(`OpenCode SDK response: ${providerResponse.output.slice(0, 100)}...`);
-          return providerResponse;
+            // Fetch only the parts that belong to the current prompt from the session
+            // history so that deriveSkillCalls captures skill calls from intermediate
+            // turns. Gated on the effective tool policy, so the extra round trip is
+            // skipped whenever the skill tool is denied and no skill parts can exist.
+            let allSessionParts: OpenCodePromptPart[] = [];
+            if (this.isSkillToolEnabled(config)) {
+              try {
+                allSessionParts = await this.fetchCurrentPromptParts(
+                  client,
+                  session,
+                  response,
+                  abortSignal,
+                );
+              } catch (e) {
+                logger.debug(
+                  `[OpenCode SDK] Could not fetch session history for skill tracking: ${e}`,
+                );
+              }
+              if (abortSignal?.aborted) {
+                return { error: 'OpenCode SDK call aborted' };
+              }
+            }
+
+            const providerResponse = this.buildProviderResponse(
+              config,
+              response,
+              session.sessionId,
+              allSessionParts,
+            );
+            await cacheResponse(cacheResult, providerResponse, 'OpenCode SDK');
+            logger.debug(`OpenCode SDK response: ${providerResponse.output.slice(0, 100)}...`);
+            return providerResponse;
+          } finally {
+            if (abortListener && callOptions?.abortSignal) {
+              callOptions.abortSignal.removeEventListener('abort', abortListener);
+              abortListener = undefined;
+            }
+            if (ephemeralSession) {
+              try {
+                await this.deleteSession(ephemeralSession);
+              } catch (err) {
+                logger.debug(
+                  `Failed to delete non-persistent session ${ephemeralSession.id}: ${err}`,
+                );
+              } finally {
+                ephemeralSession = undefined;
+              }
+            }
+          }
         },
       );
     } catch (error) {

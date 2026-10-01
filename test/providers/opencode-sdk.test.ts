@@ -1527,6 +1527,34 @@ describe('OpenCodeSDKProvider', () => {
         expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
       });
 
+      it('should finish ephemeral cleanup before swapping traceparent servers', async () => {
+        const firstDelete = createDeferred<void>();
+        mockSessionDelete
+          .mockImplementationOnce(() => firstDelete.promise)
+          .mockResolvedValueOnce(undefined);
+        const provider = new OpenCodeSDKProvider({
+          config: { restart_server_per_call: true },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const firstCall = provider.callApi('First', contextForTraceparent('00-first-01'));
+        await vi.waitFor(() => expect(mockSessionDelete).toHaveBeenCalledTimes(1));
+
+        const secondCall = provider.callApi('Second', contextForTraceparent('00-second-01'));
+        await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+        expect(mockCreateOpencode).toHaveBeenCalledTimes(1);
+        expect(mockServerClose).not.toHaveBeenCalled();
+
+        firstDelete.resolve(undefined);
+        await firstCall;
+        await secondCall;
+
+        expect(mockCreateOpencode).toHaveBeenCalledTimes(2);
+        expect(mockServerClose).toHaveBeenCalledTimes(1);
+        expect(mockSessionDelete).toHaveBeenCalledTimes(2);
+      });
+
       it('should resume session when session_id provided', async () => {
         const provider = new OpenCodeSDKProvider({
           config: { session_id: 'existing-session' },
