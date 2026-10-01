@@ -471,8 +471,13 @@ async function createBackgroundResponseWithCancellation(
       maxRetries,
     ).then(async (created) => {
       // Keep pending jobs resumable even if creation loses its last subscriber.
-      if (created.data.status === 'queued' || created.data.status === 'in_progress') {
-        await deferredCache?.updateCache?.(
+      if (
+        deferredCache?.updateCache &&
+        created.status >= 200 &&
+        created.status < 300 &&
+        (created.data.status === 'queued' || created.data.status === 'in_progress')
+      ) {
+        await deferredCache.updateCache(
           created.data,
           created.status,
           created.statusText,

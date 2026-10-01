@@ -63,6 +63,51 @@ function mockBackgroundCreateAndPoll(
 }
 
 describe('OpenAiResponsesProvider request building', () => {
+  it.each(
+    [401, 403].flatMap((status) => [false, true].map((replacement) => ({ status, replacement }))),
+  )(
+    'preserves a null HTTP $status response during background creation (replacement: $replacement)',
+    async ({ status, replacement }) => {
+      const updateCache = vi.fn().mockResolvedValue(undefined);
+      if (replacement) {
+        vi.mocked(cache.fetchWithCache)
+          .mockResolvedValueOnce({
+            data: { id: 'resp_expired_null', status: 'queued', output: [], usage: null },
+            cached: true,
+            status: 200,
+            statusText: 'OK',
+            deleteFromCache: vi.fn().mockResolvedValue(undefined),
+            updateCache,
+          })
+          .mockResolvedValueOnce({
+            data: { error: { message: 'Response expired' } },
+            cached: false,
+            status: 404,
+            statusText: 'Not Found',
+          });
+      }
+      const statusText = status === 401 ? 'Unauthorized' : 'Forbidden';
+      const headers = { 'x-request-id': 'fixture-auth-response' };
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: null,
+        cached: false,
+        status,
+        statusText,
+        headers,
+      });
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: { apiKey: 'test-key', background: true },
+      });
+
+      const result = await provider.callApi('Ordinary authentication error fixture');
+
+      expect(result.error).toContain(`API error: ${status} ${statusText}`);
+      expect(result.metadata).toEqual({ http: { status, statusText, headers } });
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(replacement ? 3 : 1);
+      expect(updateCache).not.toHaveBeenCalled();
+    },
+  );
+
   it('attributes a shared terminal policy response to only one subscriber', async () => {
     let creates = 0;
     let polls = 0;
