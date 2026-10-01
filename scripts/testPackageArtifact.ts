@@ -72,6 +72,26 @@ const requiredPackagedPaths = [
   'dist/src/tracing/proto/opentelemetry/proto/trace/v1/trace.proto',
 ];
 
+function timePhase<T>(name: string, operation: () => T): T {
+  const started = performance.now();
+  console.log(`[artifact-phase] start: ${name}`);
+  try {
+    return operation();
+  } finally {
+    console.log(`[artifact-phase] end: ${name} (${Math.round(performance.now() - started)} ms)`);
+  }
+}
+
+async function timeAsyncPhase<T>(name: string, operation: () => Promise<T>): Promise<T> {
+  const started = performance.now();
+  console.log(`[artifact-phase] start: ${name}`);
+  try {
+    return await operation();
+  } finally {
+    console.log(`[artifact-phase] end: ${name} (${Math.round(performance.now() - started)} ms)`);
+  }
+}
+
 function run(
   command: string,
   args: string[],
@@ -152,9 +172,16 @@ async function runAsync(
   });
 }
 
-function runNpm(args: string[], cwd: string, envOverrides: NodeJS.ProcessEnv = {}): string {
+function runNpm(
+  phase: string,
+  args: string[],
+  cwd: string,
+  envOverrides: NodeJS.ProcessEnv = {},
+): string {
   assert(process.env.npm_execpath, 'Expected npm_execpath when running package artifact test');
-  return run(process.execPath, [process.env.npm_execpath, ...args], cwd, envOverrides);
+  return timePhase(phase, () =>
+    run(process.execPath, [process.env.npm_execpath!, ...args], cwd, envOverrides),
+  );
 }
 
 function assertPackagedFiles(packResult: PackResult, compareSource: boolean): void {
@@ -649,6 +676,9 @@ ${script}
   for (const mode of ['missing', 'incompatible', 'installed']) {
     if (mode !== 'missing') {
       runNpm(
+        mode === 'incompatible'
+          ? 'install incompatible Codex Security SDK'
+          : 'install supported Codex Security SDK',
         [
           'install',
           '--ignore-scripts',
@@ -926,6 +956,7 @@ async function runOptionalSlackChecks(
   // Keep the omit-optional profile intact; exercise the real SDK in the default profile.
   if (withOptionalDependencies) {
     runNpm(
+      'install Slack SDK',
       [
         'install',
         '--ignore-scripts',
@@ -984,6 +1015,7 @@ async function runOptionalLangfuseChecks(
   // Keep the omit-optional profile intact; exercise the real SDK in the default profile.
   if (withOptionalDependencies) {
     runNpm(
+      'install Langfuse SDK',
       [
         'install',
         '--ignore-scripts',
@@ -1048,6 +1080,7 @@ async function assertOptionalBrowserDependencies(
   for (const state of withOptionalDependencies ? ['missing', 'incompatible'] : ['missing']) {
     if (state === 'incompatible') {
       runNpm(
+        'install incompatible browser SDK',
         [
           'install',
           '--ignore-scripts',
@@ -1070,7 +1103,9 @@ async function assertOptionalBrowserDependencies(
     }
   }
   if (withOptionalDependencies) {
-    await runInstalledCompressionEval(consumerDir, configDir);
+    await timeAsyncPhase('compression with browser dependencies', () =>
+      runInstalledCompressionEval(consumerDir, configDir),
+    );
   }
 }
 
@@ -1160,12 +1195,14 @@ ${script}
   };
   await runMode('absent');
   runNpm(
+    'install incompatible Transformers SDK',
     ['install', '--ignore-scripts', '--no-audit', '--no-fund', '@huggingface/transformers@3.8.1'],
     consumerDir,
     npmEnv,
   );
   await runMode('incompatible');
   runNpm(
+    'install supported Transformers SDK',
     ['install', '--ignore-scripts', '--no-audit', '--no-fund', '@huggingface/transformers@^4.0.0'],
     consumerDir,
     npmEnv,
@@ -1223,8 +1260,16 @@ async function main(): Promise<void> {
 
     // npm's dry-run inspects the supplied archive without repacking it or running hooks.
     const packOutput = suppliedTarball
-      ? runNpm(['pack', suppliedTarball, '--dry-run', '--ignore-scripts', '--json'], ROOT)
-      : runNpm(['pack', '--ignore-scripts', '--json', '--pack-destination', artifactsDir], ROOT);
+      ? runNpm(
+          'inspect supplied archive',
+          ['pack', suppliedTarball, '--dry-run', '--ignore-scripts', '--json'],
+          ROOT,
+        )
+      : runNpm(
+          'pack local archive',
+          ['pack', '--ignore-scripts', '--json', '--pack-destination', artifactsDir],
+          ROOT,
+        );
     let packResults: PackResult[];
     try {
       packResults = JSON.parse(packOutput) as PackResult[];
@@ -1251,6 +1296,7 @@ async function main(): Promise<void> {
     );
     console.log(`Installing packed consumer (${values.profile})...`);
     runNpm(
+      'install packed consumer',
       [
         'install',
         ...(values.profile === 'omit-optional' ? ['--omit=optional'] : ['--include=optional']),
@@ -1270,12 +1316,14 @@ async function main(): Promise<void> {
     const installedPackageDir = path.join(consumerDir, 'node_modules', 'promptfoo');
     // Capture the pristine consumer before optional-SDK acceptance installs fixtures.
     if (values['sbom-output']) {
-      writePackedConsumerSbom(
-        consumerDir,
-        tarballPath,
-        path.resolve(values['sbom-output']),
-        values.profile,
-        consumerNpmEnv,
+      timePhase('inventory packed consumer', () =>
+        writePackedConsumerSbom(
+          consumerDir,
+          tarballPath,
+          path.resolve(values['sbom-output']!),
+          values.profile,
+          consumerNpmEnv,
+        ),
       );
     }
     const installedPackageJson = JSON.parse(
@@ -1301,7 +1349,9 @@ async function main(): Promise<void> {
         relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative),
       );
     }
-    assertProviderTypeDocumentation(installedPackageDir);
+    timePhase('inspect declaration documentation', () =>
+      assertProviderTypeDocumentation(installedPackageDir),
+    );
 
     // Consumer files live outside the repository so neither workspaces nor devDependencies
     // can satisfy undeclared package imports. Keep all user state local to this fixture.
@@ -1317,19 +1367,30 @@ async function main(): Promise<void> {
     fs.cpSync(path.join(ROOT, 'test', 'fixtures', 'package-artifact'), consumerDir, {
       recursive: true,
     });
-    run(process.execPath, ['import-package.mjs'], consumerDir, consumerEnv);
-    run(process.execPath, ['require-package.cjs'], consumerDir, consumerEnv);
+    timePhase('import ESM package', () =>
+      run(process.execPath, ['import-package.mjs'], consumerDir, consumerEnv),
+    );
+    timePhase('require CommonJS package', () =>
+      run(process.execPath, ['require-package.cjs'], consumerDir, consumerEnv),
+    );
     const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
-    for (const tsconfig of [
-      'tsconfig.json',
-      'tsconfig.node16-cjs.json',
-      'tsconfig.api-esm.json',
-      'tsconfig.api-cjs.json',
+    for (const [phase, tsconfig] of [
+      ['typecheck ESM contracts', 'tsconfig.json'],
+      ['typecheck CommonJS contracts', 'tsconfig.node16-cjs.json'],
+      ['typecheck ESM root API', 'tsconfig.api-esm.json'],
+      ['typecheck CommonJS root API', 'tsconfig.api-cjs.json'],
     ]) {
-      run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
+      timePhase(phase, () => run(process.execPath, [tscPath, '--project', tsconfig], consumerDir));
     }
-    for (const script of ['import-api.mjs', 'require-api.cjs']) {
-      console.log(await runAsync(process.execPath, [script], consumerDir, consumerEnv));
+    for (const [phase, script] of [
+      ['evaluate ESM root API', 'import-api.mjs'],
+      ['evaluate CommonJS root API', 'require-api.cjs'],
+    ]) {
+      console.log(
+        await timeAsyncPhase(phase, () =>
+          runAsync(process.execPath, [script], consumerDir, consumerEnv),
+        ),
+      );
     }
     assertInstalledWebApp(installedPackageDir);
     const installedMigrations = path.join(installedPackageDir, 'dist', 'drizzle');
@@ -1363,32 +1424,45 @@ async function main(): Promise<void> {
         );
       }
     }
-    await runOptionalOpenAiAgentsChecks(consumerDir, configDir);
-    await runOptionalSlackChecks(
-      consumerDir,
-      configDir,
-      consumerNpmEnv,
-      values.profile === 'default',
+    await timeAsyncPhase('check optional OpenAI Agents SDK', () =>
+      runOptionalOpenAiAgentsChecks(consumerDir, configDir),
     );
-    await runOptionalLangfuseChecks(
-      consumerDir,
-      configDir,
-      consumerNpmEnv,
-      values.profile === 'default',
+    await timeAsyncPhase('check optional Slack SDK', () =>
+      runOptionalSlackChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default'),
+    );
+    await timeAsyncPhase('check optional Langfuse SDK', () =>
+      runOptionalLangfuseChecks(
+        consumerDir,
+        configDir,
+        consumerNpmEnv,
+        values.profile === 'default',
+      ),
     );
     if (values.profile === 'default') {
-      console.log(await runAsync(process.execPath, ['migrations.mjs'], consumerDir, consumerEnv));
-      await runInstalledCodexSecurityEval(consumerDir, configDir, consumerNpmEnv);
-      await runInstalledCompressionEval(consumerDir, configDir);
+      console.log(
+        await timeAsyncPhase('check installed migrations', () =>
+          runAsync(process.execPath, ['migrations.mjs'], consumerDir, consumerEnv),
+        ),
+      );
+      await timeAsyncPhase('check optional Codex Security SDK', () =>
+        runInstalledCodexSecurityEval(consumerDir, configDir, consumerNpmEnv),
+      );
+      await timeAsyncPhase('check response compression', () =>
+        runInstalledCompressionEval(consumerDir, configDir),
+      );
     }
-    await assertOptionalBrowserDependencies(
-      consumerDir,
-      configDir,
-      consumerNpmEnv,
-      values.profile === 'default',
+    await timeAsyncPhase('check optional browser dependencies', () =>
+      assertOptionalBrowserDependencies(
+        consumerDir,
+        configDir,
+        consumerNpmEnv,
+        values.profile === 'default',
+      ),
     );
     if (values.profile === 'default') {
-      await runInstalledTransformersProvider(consumerDir, configDir, consumerNpmEnv);
+      await timeAsyncPhase('check optional Transformers SDK', () =>
+        runInstalledTransformersProvider(consumerDir, configDir, consumerNpmEnv),
+      );
     }
 
     if (values['runtime-assets'] !== 'none') {
@@ -1404,6 +1478,7 @@ async function main(): Promise<void> {
 
     if (values.browser) {
       runNpm(
+        'install browser dependencies',
         [
           'install',
           '--ignore-scripts',
