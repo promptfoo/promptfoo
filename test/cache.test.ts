@@ -891,6 +891,48 @@ describe('fetchWithCache', () => {
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
     });
 
+    it.each([true, false])(
+      'should isolate an explicit null Request signal when inherited cancellation starts first: %s',
+      async (inheritedFirst) => {
+        const controller = new AbortController();
+        const request = new Request(url, { signal: controller.signal });
+        let markStarted: () => void = () => {};
+        const started = new Promise<void>((resolve) => {
+          markStarted = resolve;
+        });
+        let releaseResponse: () => void = () => {};
+        const responseReady = new Promise<void>((resolve) => {
+          releaseResponse = resolve;
+        });
+
+        mockFetchWithRetries.mockImplementation(async (input, options) => {
+          const effectiveRequest = new Request(input, options);
+          markStarted();
+          await responseReady;
+          effectiveRequest.signal.throwIfAborted();
+          return mockFetchWithRetriesResponse(true, response);
+        });
+
+        const first = fetchWithCache(request, inheritedFirst ? {} : { signal: null }, 1000);
+        await started;
+        const second = fetchWithCache(request, inheritedFirst ? { signal: null } : {}, 1000);
+        const settled = Promise.allSettled([first, second]);
+        controller.abort();
+        releaseResponse();
+        const results = await settled;
+
+        expect(results[inheritedFirst ? 0 : 1]).toMatchObject({
+          status: 'rejected',
+          reason: { name: 'AbortError' },
+        });
+        expect(results[inheritedFirst ? 1 : 0]).toMatchObject({
+          status: 'fulfilled',
+          value: { cached: false, data: response },
+        });
+        expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      },
+    );
+
     it('should handle request options in cache key', async () => {
       const options = { method: 'POST', body: JSON.stringify({ test: true }) };
       const mockResponse = mockFetchWithRetriesResponse(true, response);
