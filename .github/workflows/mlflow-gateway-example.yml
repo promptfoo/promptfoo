@@ -42,7 +42,7 @@ jobs:
           cache: npm
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: '3.12'
+          python-version: '3.14'
       - name: Install Promptfoo
         run: |
           npm install -g npm@11.19.0 --registry=https://registry.npmjs.org/
@@ -79,7 +79,7 @@ jobs:
           node-version-file: '.nvmrc'
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: '3.12'
+          python-version: '3.14'
       - name: Execute the documented PowerShell setup and check server health
         shell: pwsh
         run: ./examples/provider-mlflow-gateway/tests/test_windows_setup.ps1
