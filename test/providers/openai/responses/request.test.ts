@@ -118,7 +118,7 @@ describe('OpenAiResponsesProvider request building', () => {
   });
 
   it.each(['storage failure', 'deadline'] as const)(
-    'evicts an unclaimed terminal replacement after a claim %s',
+    'leaves no terminal replacement cached after a claim %s',
     async (failure) => {
       const realCache = await vi.importActual<typeof cache>('../../../../src/cache');
       let firstCreation = true;
@@ -199,6 +199,87 @@ describe('OpenAiResponsesProvider request building', () => {
       }
     },
   );
+
+  it('keeps a terminal replacement out of cache while its claim is pending', async () => {
+    const realCache = await vi.importActual<typeof cache>('../../../../src/cache');
+    const entered = createDeferred<void>();
+    const claim = createDeferred<boolean>();
+    const claimSpy = vi.spyOn(cache, 'claimBackgroundUsageOnce').mockImplementationOnce(() => {
+      entered.resolve();
+      return claim.promise;
+    });
+    let firstCreation = true;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (...args) => {
+      if (firstCreation && args[1]?.method === 'POST') {
+        firstCreation = false;
+        return {
+          data: { id: 'resp_expired_pending', status: 'queued', output: [], usage: null },
+          cached: true,
+          status: 200,
+          statusText: 'OK',
+          deleteFromCache: async () => {},
+        };
+      }
+      return realCache.fetchWithCache(...args);
+    });
+    let creates = 0;
+    vi.mocked(fetchWithRetries).mockImplementation(async (_url, options) => {
+      if (options?.method === 'GET') {
+        return new Response(JSON.stringify({ error: { message: 'Response expired' } }), {
+          status: 404,
+        });
+      }
+      creates++;
+      return new Response(
+        JSON.stringify({
+          id: `resp_pending_terminal_${creates}`,
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: `Result ${creates}` }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      );
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'fixture-key',
+        background: true,
+        headers: { 'X-Tenant-Id': 'pending-claim' },
+      },
+    });
+    try {
+      await realCache.withCacheNamespace('pending-terminal-publication', async () => {
+        const pending = provider.callApi('Pending terminal replacement');
+        await entered.promise;
+        let concurrent;
+        try {
+          concurrent = await provider.callApi('Pending terminal replacement');
+        } finally {
+          claim.reject(new Error('Claim fixture unavailable'));
+        }
+        const failed = await pending;
+        expect(failed.error).toContain('Claim fixture unavailable');
+        expect(concurrent.error).toBeUndefined();
+        expect(concurrent.output).toBe('Result 2');
+        expect(concurrent.cached).toBe(false);
+        expect(concurrent.cost).toBeGreaterThan(0);
+        expect(concurrent.tokenUsage).toMatchObject({ prompt: 10, completion: 5, total: 15 });
+        const replay = await provider.callApi('Pending terminal replacement');
+        expect(replay.output).toBe('Result 2');
+        expect(replay.cached).toBe(true);
+        expect(replay.cost).toBe(0);
+        expect(creates).toBe(2);
+      });
+    } finally {
+      claimSpy.mockRestore();
+    }
+  });
 
   it.each([
     'gpt-live-transcribe',
@@ -2330,7 +2411,7 @@ describe('OpenAiResponsesProvider request building', () => {
       expect.objectContaining({ method: 'POST' }),
       expect.any(Number),
       'json',
-      expect.objectContaining({ bust: false, cacheKey: expect.any(String) }),
+      expect.objectContaining({ bust: true, cacheKey: expect.any(String) }),
       undefined,
     );
   });
@@ -2398,7 +2479,7 @@ describe('OpenAiResponsesProvider request building', () => {
       expect.objectContaining({ method: 'POST' }),
       expect.any(Number),
       'json',
-      expect.objectContaining({ bust: false, cacheKey: expect.any(String) }),
+      expect.objectContaining({ bust: true, cacheKey: expect.any(String) }),
       undefined,
     );
   });
@@ -2444,7 +2525,7 @@ describe('OpenAiResponsesProvider request building', () => {
       expect.objectContaining({ method: 'POST' }),
       expect.any(Number),
       'json',
-      expect.objectContaining({ bust: false, cacheKey: expect.any(String) }),
+      expect.objectContaining({ bust: true, cacheKey: expect.any(String) }),
       undefined,
     );
   });
@@ -2628,8 +2709,9 @@ describe('OpenAiResponsesProvider request building', () => {
           usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
         },
         cached: false,
-        status: 200,
-        statusText: 'OK',
+        status: 201,
+        statusText: 'Created',
+        headers: { 'x-request-id': 'request-claim-retry', 'x-ratelimit-remaining-requests': '7' },
       };
     });
     const provider = new OpenAiResponsesProvider('gpt-4.1', {
@@ -2648,6 +2730,11 @@ describe('OpenAiResponsesProvider request building', () => {
       expect(completed.error).toBeUndefined();
       expect(completed.output).toBe('Ready');
       expect(completed.cached).toBe(false);
+      expect(completed.metadata?.http).toEqual({
+        status: 201,
+        statusText: 'Created',
+        headers: { 'x-request-id': 'request-claim-retry', 'x-ratelimit-remaining-requests': '7' },
+      });
       expect(claim).toHaveBeenCalledTimes(2);
       expect(claim.mock.calls.map(([, options]) => options?.deadline)).toEqual([
         started + 100,

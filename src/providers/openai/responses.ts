@@ -323,7 +323,7 @@ async function cancelBackgroundResponse(
 }
 
 async function pollBackgroundResponse(
-  initial: OpenAIResponsesResponse,
+  initial: BackgroundResponseResult,
   url: string,
   authentication: Pick<BackgroundRequest, 'headers' | 'getAuthHeaders'>,
   timeout: number,
@@ -332,19 +332,17 @@ async function pollBackgroundResponse(
   deadline = Date.now() + timeout,
   cancelOnStop = true,
 ): Promise<BackgroundResponseResult> {
-  if (!initial.id) {
+  const responseId = initial.data.id;
+  if (!responseId) {
     return {
-      data: initial,
+      data: initial.data,
       status: 0,
       statusText: 'Error',
       error: 'Background response is missing its response ID.',
     };
   }
 
-  let data = initial;
-  let status = 200;
-  let statusText = 'OK';
-  let responseHeaders: Record<string, string> | undefined;
+  let { data, status, statusText, headers: responseHeaders } = initial;
   let firstPoll = true;
   let deadlineSignal: AbortSignal | undefined;
 
@@ -360,13 +358,13 @@ async function pollBackgroundResponse(
       const remainingMs = deadline - Date.now();
       if (remainingMs <= 0) {
         if (cancelOnStop) {
-          await cancelBackgroundResponse(initial.id, url, authentication);
+          await cancelBackgroundResponse(responseId, url, authentication);
         }
         return {
           data,
           status: 0,
           statusText: 'Error',
-          error: `Background response ${initial.id} timed out after ${timeout}ms.`,
+          error: `Background response ${responseId} timed out after ${timeout}ms.`,
           timedOut: true,
         };
       }
@@ -374,7 +372,7 @@ async function pollBackgroundResponse(
       deadlineSignal = AbortSignal.timeout(remainingMs);
       const pollSignal = signal ? AbortSignal.any([signal, deadlineSignal]) : deadlineSignal;
       const polled = await fetchWithCache<OpenAIResponsesResponse>(
-        appendOpenAiApiPath(url, encodeURIComponent(initial.id)),
+        appendOpenAiApiPath(url, encodeURIComponent(responseId)),
         {
           method: 'GET',
           headers: authentication.headers,
@@ -396,7 +394,7 @@ async function pollBackgroundResponse(
         const shouldCancel =
           status >= 400 && status < 500 && ![404, 408, 409, 410, 425, 429].includes(status);
         if (shouldCancel) {
-          await cancelBackgroundResponse(initial.id, url, authentication);
+          await cancelBackgroundResponse(responseId, url, authentication);
         }
         return {
           data,
@@ -411,19 +409,19 @@ async function pollBackgroundResponse(
   } catch (error) {
     if (signal?.aborted) {
       if (cancelOnStop) {
-        await cancelBackgroundResponse(initial.id, url, authentication);
+        await cancelBackgroundResponse(responseId, url, authentication);
       }
       throw error;
     }
     if (deadlineSignal?.aborted || Date.now() >= deadline) {
       if (cancelOnStop) {
-        await cancelBackgroundResponse(initial.id, url, authentication);
+        await cancelBackgroundResponse(responseId, url, authentication);
       }
       return {
         data,
         status: 0,
         statusText: 'Error',
-        error: `Background response ${initial.id} timed out after ${timeout}ms.`,
+        error: `Background response ${responseId} timed out after ${timeout}ms.`,
         timedOut: true,
       };
     }
@@ -542,17 +540,17 @@ async function createBackgroundResponseWithCancellation(
 }
 
 async function resolveBackgroundResponse(
-  initial: OpenAIResponsesResponse,
+  initial: BackgroundResponseResult,
   url: string,
   request: BackgroundRequest,
   timeout: number,
   maxRetries: number | undefined,
   cached: boolean,
   deleteFromCache: (() => Promise<void>) | undefined,
+  updateCache: FetchWithCacheResult<OpenAIResponsesResponse>['updateCache'],
   cancelOnStop: boolean,
   deadline = Date.now() + timeout,
 ): Promise<BackgroundResponseResult> {
-  let deleteUnclaimedReplacement: (() => Promise<void>) | undefined;
   let polled = await pollBackgroundResponse(
     initial,
     url,
@@ -569,7 +567,7 @@ async function resolveBackgroundResponse(
       url,
       request,
       Math.max(1, deadline - Date.now()),
-      cancelOnStop,
+      true,
       maxRetries,
     );
     if (retried.status < 200 || retried.status >= 300) {
@@ -583,13 +581,17 @@ async function resolveBackgroundResponse(
       };
     }
 
-    if (retried.data.status === 'completed' || retried.data.status === 'incomplete') {
-      deleteUnclaimedReplacement = retried.deleteFromCache;
+    // Pending replacements remain resumable; terminal data waits for attribution below.
+    if (
+      !cancelOnStop &&
+      (retried.data.status === 'queued' || retried.data.status === 'in_progress')
+    ) {
+      await updateCache?.(retried.data, retried.status, retried.statusText, retried.headers);
     }
     polled =
       retried.data.status === 'queued' || retried.data.status === 'in_progress'
         ? await pollBackgroundResponse(
-            retried.data,
+            retried,
             url,
             request,
             timeout,
@@ -622,13 +624,9 @@ async function resolveBackgroundResponse(
           { signal: request.signal, deadline },
         ));
       } catch (error) {
-        // A replacement POST can cache terminal data before attribution succeeds.
-        await deleteUnclaimedReplacement?.();
         if (!request.signal?.aborted && Date.now() >= deadline) {
           return {
             ...polled,
-            status: 0,
-            statusText: 'Error',
             error: `Background response ${polled.data.id} timed out after ${timeout}ms.`,
             timedOut: true,
           };
@@ -641,17 +639,18 @@ async function resolveBackgroundResponse(
 }
 
 async function coalesceBackgroundResponse(
-  initial: OpenAIResponsesResponse,
+  initial: BackgroundResponseResult,
   url: string,
   request: BackgroundRequest,
   timeout: number,
   maxRetries: number | undefined,
   cached: boolean,
   deleteFromCache: (() => Promise<void>) | undefined,
+  updateCache: FetchWithCacheResult<OpenAIResponsesResponse>['updateCache'],
   cancelOnStop: boolean,
   deadline?: number,
 ): Promise<BackgroundResponseResult> {
-  const cacheIdentity = getBackgroundCacheIdentity(url, request, initial.id);
+  const cacheIdentity = getBackgroundCacheIdentity(url, request, initial.data.id);
   if (!cacheIdentity.coalescable) {
     return resolveBackgroundResponse(
       initial,
@@ -661,6 +660,7 @@ async function coalesceBackgroundResponse(
       maxRetries,
       cached,
       deleteFromCache,
+      updateCache,
       cancelOnStop,
       deadline,
     );
@@ -677,6 +677,7 @@ async function coalesceBackgroundResponse(
       maxRetries,
       cached,
       deleteFromCache,
+      updateCache,
       cancelOnStop,
       deadline,
     );
@@ -731,13 +732,14 @@ async function coalesceBackgroundResponse(
       }
       release();
       return await coalesceBackgroundResponse(
-        result.data,
+        result,
         url,
         request,
         timeout,
         maxRetries,
         cached,
         deleteFromCache,
+        updateCache,
         cancelOnStop,
         deadline,
       );
@@ -1371,14 +1373,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     let statusText: string;
     let cached = false;
     let deleteFromCache: (() => Promise<void>) | undefined;
-    let updateCache:
-      | ((
-          data: OpenAIResponsesResponse,
-          status: number,
-          statusText: string,
-          headers?: Record<string, string>,
-        ) => Promise<void>)
-      | undefined;
+    let updateCache: FetchWithCacheResult<OpenAIResponsesResponse>['updateCache'];
     let responseHeaders: Record<string, string> | undefined;
     let pollingBackground = false;
     try {
@@ -1666,13 +1661,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           Boolean(this.shouldBustCache(context)) ||
           !getBackgroundCacheIdentity(url, request, data.id).cacheable;
         const polled = await coalesceBackgroundResponse(
-          data,
+          { data, status, statusText, headers: responseHeaders },
           url,
           request,
           timeout,
           config.maxRetries,
           cached,
           deleteFromCache,
+          updateCache,
           cancelOnStop,
           backgroundDeadline,
         );
