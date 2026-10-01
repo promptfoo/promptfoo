@@ -439,7 +439,6 @@ describe('package manifests', () => {
       );
     for (const dependency of [
       '@anthropic-ai/claude-agent-sdk',
-      '@langfuse/client',
       '@modelcontextprotocol/sdk',
       '@opencode-ai/sdk',
       'hono',
