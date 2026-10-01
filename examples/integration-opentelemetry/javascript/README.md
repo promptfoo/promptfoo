@@ -20,7 +20,7 @@ To run the trajectory assertion variant from this directory, use:
 npx promptfoo@latest eval -c promptfooconfig.trajectory.yaml --no-cache
 ```
 
-To run the complete trace-based agent eval guide variant, including the model-graded `trajectory:goal-success` assertion, set `OPENAI_API_KEY` and run:
+The guide config adds `trajectory:goal-success`, which uses a model grader. Set `OPENAI_API_KEY` and run:
 
 ```bash
 OPENAI_API_KEY="your-api-key" npx promptfoo@latest eval -c promptfooconfig.trace-guide.yaml --no-cache
