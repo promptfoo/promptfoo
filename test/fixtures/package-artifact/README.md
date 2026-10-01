@@ -22,6 +22,11 @@ Both profiles check that Slack stays opt-in and rejects an incompatible SDK with
 affecting ordinary providers, in ESM and CommonJS. The default profile also installs
 the supported Slack SDK and constructs providers without making Slack requests.
 
+Langfuse prompt management is checked in both module formats with the SDK absent or
+incompatible. The default profile installs the real SDK and evaluates text and chat
+prompts against a loopback server, checking version/label selection, compilation,
+concurrent request sharing, and reuse of the SDK prompt cache.
+
 The default profile checks both CLI aliases and evaluates compressed HTTP responses
 from a local server. It also checks the Transformers provider with an offline model
 fixture when the optional SDK is absent, incompatible, and installed.
