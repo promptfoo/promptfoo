@@ -552,6 +552,7 @@ async function resolveBackgroundResponse(
   cancelOnStop: boolean,
   deadline = Date.now() + timeout,
 ): Promise<BackgroundResponseResult> {
+  let deleteUnclaimedReplacement: (() => Promise<void>) | undefined;
   let polled = await pollBackgroundResponse(
     initial,
     url,
@@ -582,6 +583,9 @@ async function resolveBackgroundResponse(
       };
     }
 
+    if (retried.data.status === 'completed' || retried.data.status === 'incomplete') {
+      deleteUnclaimedReplacement = retried.deleteFromCache;
+    }
     polled =
       retried.data.status === 'queued' || retried.data.status === 'in_progress'
         ? await pollBackgroundResponse(
@@ -618,6 +622,8 @@ async function resolveBackgroundResponse(
           { signal: request.signal, deadline },
         ));
       } catch (error) {
+        // A replacement POST can cache terminal data before attribution succeeds.
+        await deleteUnclaimedReplacement?.();
         if (!request.signal?.aborted && Date.now() >= deadline) {
           return {
             ...polled,
@@ -1670,11 +1676,13 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           cancelOnStop,
           backgroundDeadline,
         );
-        if (
+        if (polled.shared) {
+          cached = true;
+        } else if (
           !polled.error &&
           (polled.data.status === 'completed' || polled.data.status === 'incomplete')
         ) {
-          cached = Boolean(polled.shared);
+          cached = false;
         }
         data = polled.data;
         status = polled.status;

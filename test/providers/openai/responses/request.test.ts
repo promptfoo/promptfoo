@@ -63,6 +63,143 @@ function mockBackgroundCreateAndPoll(
 }
 
 describe('OpenAiResponsesProvider request building', () => {
+  it('attributes a shared terminal policy response to only one subscriber', async () => {
+    let creates = 0;
+    let polls = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (_url, options) => {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      if (options?.method === 'POST') {
+        creates++;
+        return {
+          data: { id: 'resp_shared_policy', status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      polls++;
+      return {
+        data: {
+          id: 'resp_shared_policy',
+          model: 'gpt-4.1',
+          status: 'failed',
+          error_type: 'refusal',
+          error: { code: 'policy_violation', message: 'The provider declined this request.' },
+          usage: { input_tokens: 100, output_tokens: 50, total_tokens: 150, cost: 0.004 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiBaseUrl: 'https://gateway.example/v1',
+        cost: 0.002,
+        apiKeyRequired: false,
+        headers: { Authorization: '' },
+        background: true,
+      },
+      env: { OPENAI_API_KEY: undefined },
+    });
+
+    const results = await Promise.all([
+      provider.callApi('A benign policy fixture'),
+      provider.callApi('A benign policy fixture'),
+    ]);
+
+    expect(creates).toBe(1);
+    expect(polls).toBe(1);
+    expect(results.every((result) => result.isRefusal && !result.error)).toBe(true);
+    expect(results.filter((result) => (result.cost ?? 0) > 0)).toHaveLength(1);
+    expect(results.filter((result) => result.cost === 0)).toHaveLength(1);
+    expect(results.filter((result) => result.tokenUsage?.cached === 150)).toHaveLength(1);
+    expect(results.filter((result) => result.cached === false)).toHaveLength(1);
+  });
+
+  it.each(['storage failure', 'deadline'] as const)(
+    'evicts an unclaimed terminal replacement after a claim %s',
+    async (failure) => {
+      const realCache = await vi.importActual<typeof cache>('../../../../src/cache');
+      let firstCreation = true;
+      let now = Date.now();
+      const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+      setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '1000' });
+      const claim = vi.spyOn(cache, 'claimBackgroundUsageOnce').mockImplementationOnce(async () => {
+        if (failure === 'deadline') {
+          now += 1001;
+        }
+        throw new Error('Claim fixture unavailable');
+      });
+      vi.mocked(cache.fetchWithCache).mockImplementation(async (...args) => {
+        if (firstCreation && args[1]?.method === 'POST') {
+          firstCreation = false;
+          return {
+            data: { id: 'resp_expired_claim', status: 'queued', output: [], usage: null },
+            cached: true,
+            status: 200,
+            statusText: 'OK',
+            deleteFromCache: async () => {},
+          };
+        }
+        return realCache.fetchWithCache(...args);
+      });
+      let creates = 0;
+      vi.mocked(fetchWithRetries).mockImplementation(async (_url, options) => {
+        if (options?.method === 'GET') {
+          return new Response(JSON.stringify({ error: { message: 'Response expired' } }), {
+            status: 404,
+            statusText: 'Not Found',
+          });
+        }
+        creates++;
+        return new Response(
+          JSON.stringify({
+            id: `resp_terminal_claim_${creates}`,
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: `Result ${creates}` }],
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      });
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'fixture-key',
+          background: true,
+          headers: { 'X-Tenant-Id': 'terminal-claim' },
+        },
+      });
+      try {
+        await realCache.withCacheNamespace(`terminal-claim-${failure}`, async () => {
+          const failed = await provider.callApi('Terminal replacement fixture');
+          expect(failed.error).toContain(
+            failure === 'deadline' ? 'timed out' : 'Claim fixture unavailable',
+          );
+          expect(failed.tokenUsage).toBeUndefined();
+          expect(claim).toHaveBeenCalledOnce();
+
+          const recovered = await provider.callApi('Terminal replacement fixture');
+          expect(recovered.error).toBeUndefined();
+          expect(recovered.output).toBe('Result 2');
+          expect(recovered.cached).toBe(false);
+          expect(recovered.cost).toBeGreaterThan(0);
+          expect(recovered.tokenUsage).toMatchObject({ prompt: 10, completion: 5, total: 15 });
+          expect(creates).toBe(2);
+        });
+      } finally {
+        clock.mockRestore();
+        claim.mockRestore();
+      }
+    },
+  );
+
   it.each([
     'gpt-live-transcribe',
     'gpt-live-transcribe-2026-09-01',
