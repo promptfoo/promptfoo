@@ -1,4 +1,4 @@
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -36,7 +36,10 @@ describe('runCommand', () => {
         ],
         { cwd },
       );
-      expect(JSON.parse(result.stdout)).toEqual({ args, cwd: await realpath(cwd) });
+      const actual = JSON.parse(result.stdout);
+      expect(actual.args).toEqual(args);
+      // Windows may report the same directory using its short (8.3) path name.
+      expect(await realpath(actual.cwd)).toBe(await realpath(cwd));
       expect(result.stdout.endsWith('\n')).toBe(true);
       expect(result.stdout.endsWith('\n\n')).toBe(false);
       expect(removeExitHandler).toHaveBeenCalledOnce();
@@ -48,6 +51,23 @@ describe('runCommand', () => {
   it('writes input and closes stdin for a command that waits for EOF', async () => {
     const result = await runNode('process.stdin.pipe(process.stdout)', { input: 'first\nsecond' });
     expect(result.stdout).toBe('first\nsecond');
+  });
+
+  it.each([
+    ['\r', '\r'],
+    ['\r\n', ''],
+    ['\n', ''],
+    ['\n\n', '\n'],
+  ])('preserves final-newline compatibility for %j', async (suffix, expected) => {
+    const script = `process.stdout.write(${JSON.stringify(`output${suffix}`)}); process.stderr.write(${JSON.stringify(`error${suffix}`)})`;
+    const text = await runNode(script);
+    expect(text).toEqual({ stdout: `output${expected}`, stderr: `error${expected}` });
+
+    const buffers = await runCommand(process.execPath, ['-e', script], { encoding: 'buffer' });
+    expect(buffers).toEqual({
+      stdout: Buffer.from(`output${expected}`),
+      stderr: Buffer.from(`error${expected}`),
+    });
   });
 
   it('preserves non-UTF8 binary data', async () => {
@@ -107,11 +127,24 @@ describe('runCommand', () => {
     ).resolves.toMatchObject({ stdout: '' });
   });
 
-  it('terminates an active child when the parent exit handler runs', async () => {
-    const result = runNode('setInterval(() => {}, 1000)');
-    const rejected = expect(result).rejects.toMatchObject({ signal: 'SIGTERM' });
-    onExit.mock.calls[0][0]();
-    await rejected;
-    expect(removeExitHandler).toHaveBeenCalledOnce();
+  it('terminates a child that ignores SIGTERM when the parent exit handler runs', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'promptfoo-command-exit-'));
+    const readyPath = path.join(directory, 'ready');
+    try {
+      const result = runNode(`
+        process.on('SIGTERM', () => {});
+        // End the fixture if cleanup regresses, so a failed test cannot leave an orphan.
+        setTimeout(() => process.exit(0), 1000);
+        require('node:fs').writeFileSync(${JSON.stringify(readyPath)}, 'ready');
+      `);
+      // Wait until the handler is installed; killing during startup misses this regression.
+      await vi.waitFor(async () => expect(await readFile(readyPath, 'utf8')).toBe('ready'));
+      const rejected = expect(result).rejects.toMatchObject({ signal: 'SIGKILL' });
+      onExit.mock.calls[0][0]();
+      await rejected;
+      expect(removeExitHandler).toHaveBeenCalledOnce();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });

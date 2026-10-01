@@ -71,13 +71,14 @@ export function runCommand(
     );
 
     const removeExitHandler = onExit(() => {
-      child.kill();
+      // The parent is already exiting, so there is no time for delayed escalation.
+      child.kill('SIGKILL');
     });
     child.stdin?.on('error', (error: NodeJS.ErrnoException) => {
       // A process may exit without consuming all input. Its exit status remains authoritative.
       if (error.code !== 'EPIPE' && error.code !== 'ERR_STREAM_DESTROYED') {
         inputError = error;
-        child.kill();
+        child.kill('SIGKILL');
       }
     });
     // Always close stdin: cat-file --batch-check waits for EOF before exiting.
