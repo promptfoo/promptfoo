@@ -1536,6 +1536,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           if (controller.signal.aborted) {
             throw new Error(`OpenAI streaming response timed out after ${timeout}ms`);
           }
+          controller.abort();
           throw err;
         } finally {
           clearTimeout(timeoutHandle);
