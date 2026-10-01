@@ -84,6 +84,57 @@ describe('universal target tracing', () => {
     expect(mocks.span.end).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    [{ cached: true, cacheHit: false }, false],
+    [{ cached: false, cacheHit: true }, true],
+    [{ cacheHit: true }, true],
+    [{ cacheHit: false }, false],
+    [{ cached: true, cacheHit: undefined }, true],
+    [{ cached: false }, false],
+  ])('records cache precedence for %j', async (response, expected) => {
+    const result = await withTargetSpan(
+      {
+        targetType: 'provider',
+        providerId: 'custom',
+        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      },
+      async () => response,
+    );
+
+    expect(result).toBe(response);
+    expect(mocks.span.setAttribute).toHaveBeenCalledWith(PromptfooAttributes.CACHE_HIT, expected);
+  });
+
+  it.each([
+    [{ cached: true, cacheHit: false }, false],
+    [{ cached: false, cacheHit: true }, true],
+    [{ cacheHit: true }, true],
+    [{ cacheHit: false }, false],
+  ])('keeps embedding and target cache attributes consistent for %j', async (flags, expected) => {
+    const response = { embedding: [0.1], ...flags };
+    const result = await withTracedProviderCall(
+      {
+        provider: { id: () => 'custom:embedding', callApi: async () => ({ output: 'unused' }) },
+        callContext: {
+          prompt: { raw: 'test', label: 'test' },
+          vars: {},
+          traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        },
+        operationName: 'embeddings',
+      },
+      async () => response,
+    );
+
+    expect(result).toBe(response);
+    const cacheAttributes = mocks.span.setAttribute.mock.calls.filter(
+      ([key]) => key === PromptfooAttributes.CACHE_HIT,
+    );
+    expect(cacheAttributes).toEqual([
+      [PromptfooAttributes.CACHE_HIT, expected],
+      [PromptfooAttributes.CACHE_HIT, expected],
+    ]);
+  });
+
   it('records provider error responses without swallowing the result', async () => {
     const result = await withTargetSpan(
       {
