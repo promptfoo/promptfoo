@@ -941,6 +941,64 @@ async function runOptionalSlackChecks(
   }
 }
 
+async function runOptionalLangfuseChecks(
+  consumerDir: string,
+  configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+  withOptionalDependencies: boolean,
+): Promise<void> {
+  const sdkDir = path.join(consumerDir, 'node_modules', '@langfuse', 'client');
+  assert(!fs.existsSync(sdkDir), 'Default consumers should not install the optional Langfuse SDK');
+  const runChecks = async (state: string) => {
+    for (const format of ['esm', 'cjs']) {
+      console.log(
+        await runAsync(process.execPath, ['optional-langfuse.mjs', format, state], consumerDir, {
+          NODE_PATH: '',
+          LANGFUSE_PUBLIC_KEY: '',
+          LANGFUSE_SECRET_KEY: '',
+          LANGFUSE_HOST: '',
+          LANGFUSE_BASE_URL: '',
+          PROMPTFOO_CONFIG_DIR: configDir,
+          PROMPTFOO_DISABLE_TELEMETRY: '1',
+          PROMPTFOO_DISABLE_UPDATE: 'true',
+        }),
+      );
+    }
+  };
+  await runChecks('missing');
+  fs.mkdirSync(sdkDir, { recursive: true });
+  try {
+    fs.writeFileSync(
+      path.join(sdkDir, 'package.json'),
+      JSON.stringify({ name: '@langfuse/client', version: '0.0.0', main: './index.js' }),
+    );
+    fs.writeFileSync(
+      path.join(sdkDir, 'index.js'),
+      'throw new Error("Unsupported Langfuse SDK code must not execute");',
+    );
+    await runChecks('incompatible');
+  } finally {
+    fs.rmSync(sdkDir, { recursive: true, force: true });
+  }
+
+  // Keep the omit-optional profile intact; exercise the real SDK in the default profile.
+  if (withOptionalDependencies) {
+    runNpm(
+      [
+        'install',
+        '--ignore-scripts',
+        '--no-audit',
+        '--no-fund',
+        '--no-package-lock',
+        '@langfuse/client@^5.11.1',
+      ],
+      consumerDir,
+      npmEnv,
+    );
+    await runChecks('installed');
+  }
+}
+
 async function assertOptionalBrowserDependencies(
   consumerDir: string,
   configDir: string,
@@ -1307,6 +1365,12 @@ async function main(): Promise<void> {
     }
     await runOptionalOpenAiAgentsChecks(consumerDir, configDir);
     await runOptionalSlackChecks(
+      consumerDir,
+      configDir,
+      consumerNpmEnv,
+      values.profile === 'default',
+    );
+    await runOptionalLangfuseChecks(
       consumerDir,
       configDir,
       consumerNpmEnv,
