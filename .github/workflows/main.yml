@@ -80,23 +80,26 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 2
           persist-credentials: false
 
       - name: Use Node ${{ matrix.node }}
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           # Keep the matrix label at 22.22 for stable check names, but install exactly
           # 22.22.0 so this lane tests the engines floor itself rather than latest 22.22.x.
           node-version: ${{ matrix.node == '22.22' && '22.22.0' || matrix.node }}
-          cache: 'npm'
+          # Windows already caches node_modules below; compressing npm's download cache
+          # again can stall post-job cleanup long after the tests finish.
+          cache: ${{ runner.os != 'Windows' && 'npm' || '' }}
+          package-manager-cache: false
 
       - name: Use Python 3.14
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: 3.14.4
+          python-version: 3.14.8
 
       # Ruby 4.0.1 is not yet available on Windows via setup-ruby, use 4.0.0 on Windows
       - name: Use Ruby
@@ -113,17 +116,20 @@ jobs:
           path: node_modules
           key: node-modules-${{ runner.os }}-node${{ matrix.node }}-${{ hashFiles('package-lock.json') }}
 
+      - name: Use npm 11
+        run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
+
       - name: Install Dependencies (Node 26)
         if: steps.cache-node-modules.outputs.cache-hit != 'true' && matrix.node == '26.x'
         # Node 26 hosted installs stall when lifecycle scripts run during npm ci.
         # Install the tree without scripts, then rebuild the native addon tests need.
         run: |
-          npm ci --ignore-scripts
+          npm ci --ignore-scripts --registry=https://registry.npmjs.org/
           npm rebuild better-sqlite3
 
       - name: Install Dependencies
         if: steps.cache-node-modules.outputs.cache-hit != 'true' && matrix.node != '26.x'
-        run: npx -y npm@11.11.0 ci
+        run: npm ci --registry=https://registry.npmjs.org/
 
       - name: Test
         # Treat a post-run forks-worker crash (all tests already passed, then the
@@ -172,27 +178,48 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
       - name: Use Node ${{ matrix.node }}
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           # Keep the matrix label at 22.22 for stable check names, but install exactly
           # 22.22.0 so this lane tests the engines floor itself rather than latest 22.22.x.
           node-version: ${{ matrix.node == '22.22' && '22.22.0' || matrix.node }}
           cache: 'npm'
 
+      - name: Use npm 11
+        run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
+
       - name: Install Dependencies
         # The build does not need native dependency lifecycle scripts. Skipping them
         # keeps the Node 26 build lane out of the install stall seen on hosted runners.
         run: |
           if [ "${{ matrix.node }}" = "26.x" ]; then
-            npm ci --ignore-scripts
+            npm ci --ignore-scripts --registry=https://registry.npmjs.org/
           else
-            npx -y npm@11.11.0 ci
+            npm ci --registry=https://registry.npmjs.org/
           fi
+
+      - name: Use Python for installed wrapper acceptance
+        if: matrix.node == '24.x'
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14.8'
+
+      - name: Use Ruby for installed wrapper acceptance
+        if: matrix.node == '24.x'
+        uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
+        with:
+          ruby-version: '4.0.1'
+
+      - name: Use Go for installed wrapper acceptance
+        if: matrix.node == '24.x'
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: src/golang/go.mod
 
       - name: Build
         run: npm run build
@@ -220,15 +247,90 @@ jobs:
             echo "PostHog key replacement verified successfully"
           fi
 
+      - name: Pack Package Artifact
+        id: package-artifact
+        run: |
+          tarball="$(npm run --silent package:pack -- --destination "$RUNNER_TEMP/package-artifact")"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+
       - name: Test Package Artifact
         env:
+          PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
           PROMPTFOO_DISABLE_TELEMETRY: 1
-        run: npm run test:package-artifact
+          RUNTIME_ASSETS: ${{ matrix.node == '24.x' && 'all' || 'none' }}
+          npm_config_install_strategy: ${{ matrix.node == '22.22' && 'shallow' || 'hoisted' }}
+        run: |
+          browser_args=()
+          if [ "$RUNTIME_ASSETS" = all ]; then
+            browser_args+=(--browser)
+          fi
+          npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL" --runtime-assets "$RUNTIME_ASSETS" "${browser_args[@]}"
+
+      - name: Test Package Artifact Without Optional Dependencies
+        if: matrix.node == '24.x'
+        env:
+          PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
+          PROMPTFOO_DISABLE_TELEMETRY: 1
+        run: npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL" --profile omit-optional --runtime-assets all
+
+      - name: Upload package for platform acceptance
+        if: matrix.node == '24.x'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: promptfoo-platform-package
+          path: ${{ steps.package-artifact.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Run built agent skill examples
         env:
           PROMPTFOO_POSTHOG_KEY: ''
         run: npm run test:smoke -- test/smoke/agent-skill-examples.test.ts
+
+  artifact-consumer:
+    name: Installed package on ${{ matrix.os }}
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macOS-latest, windows-2025-vs2026]
+    defaults:
+      run:
+        shell: bash
+    env:
+      npm_config_cache: ${{ github.workspace }}/.artifact-npm-cache
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22.22.0'
+      - name: Use npm 11
+        run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: promptfoo-platform-package
+          path: ${{ runner.temp }}/package-artifact
+      - name: Prepare isolated artifact tooling
+        id: prepare
+        env:
+          ARTIFACT_DIRECTORY: ${{ runner.temp }}/package-artifact
+        run: node scripts/preparePackageArtifactTest.mjs --artifact-directory "$ARTIFACT_DIRECTORY"
+      - name: Install isolated artifact tooling
+        working-directory: ${{ steps.prepare.outputs.tooling }}
+        # TypeScript's native compiler needs its optional platform package.
+        run: npm ci --ignore-scripts --include=optional --no-audit --no-fund --registry=https://registry.npmjs.org/
+      - name: Test the downloaded package
+        working-directory: ${{ steps.prepare.outputs.tooling }}
+        env:
+          PACKAGE_TARBALL: ${{ steps.prepare.outputs.tarball }}
+          PROMPTFOO_DISABLE_TELEMETRY: 1
+        run: npm run test:artifact -- --tarball "$PACKAGE_TARBALL"
 
   style-check:
     name: Style Check
@@ -236,12 +338,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
       - name: Use Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -296,7 +398,7 @@ jobs:
     timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: luizm/action-sh-checker@883217215b11c1fabbf00eb1a9a041f62d74c744
         env:
           SHFMT_OPTS: '-i 2' # 2 space indent
@@ -309,12 +411,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
       - name: Use Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -322,6 +424,7 @@ jobs:
       - name: Use Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
+          # The pinned ModelAudit schema generator requires Python <3.14.
           python-version: '3.13'
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
@@ -360,7 +463,9 @@ jobs:
         python-version: [3.9, 3.14]
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Use Python ${{ matrix.python-version }}
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -387,12 +492,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
       - name: Use Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -422,12 +527,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
       - name: Use Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -465,10 +570,10 @@ jobs:
       id-token: write # Required for OIDC authentication with Codecov
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Use Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -516,12 +621,13 @@ jobs:
       id-token: write # Required for OIDC authentication with Codecov
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 2
+          persist-credentials: false
 
       - name: Use Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -534,6 +640,10 @@ jobs:
 
       - name: Install Dependencies
         run: npm ci
+
+      # Browser binaries are opt-in; install the version from the locked SDK.
+      - name: Install Chromium
+        run: node node_modules/playwright/cli.js install --with-deps chromium
 
       - name: Run App Browser Tests
         run: npm run test:app:browser
@@ -564,12 +674,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
       - name: Use Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -583,7 +693,7 @@ jobs:
       - name: Use Python 3.14
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: 3.14.4
+          python-version: 3.14.8
 
       - name: Use Ruby
         uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
@@ -603,12 +713,12 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       # Keep real unsupported and minimum-supported runtimes available while
       # installing dependencies, building, and running Vitest on the repo Node.
       - name: Set up unsupported Node 20
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '20.20.0'
 
@@ -616,7 +726,7 @@ jobs:
         run: echo "PROMPTFOO_NODE20_BIN=$(node -p process.execPath)" >> "$GITHUB_ENV"
 
       - name: Set up minimum supported Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22.22.0'
 
@@ -624,7 +734,7 @@ jobs:
         run: echo "PROMPTFOO_MIN_NODE_BIN=$(node -p process.execPath)" >> "$GITHUB_ENV"
 
       - name: Use Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -638,7 +748,7 @@ jobs:
       - name: Use Python 3.14
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: 3.14.4
+          python-version: 3.14.8
 
       - name: Use Ruby
         uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
@@ -663,10 +773,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Use Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -760,10 +870,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Use Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -790,10 +900,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Use Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -832,7 +942,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Install and run actionlint
         run: |
@@ -848,7 +958,7 @@ jobs:
         ruby-version: ['3.0', '3.4']
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Use Ruby ${{ matrix.ruby-version }}
         uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
@@ -893,7 +1003,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6

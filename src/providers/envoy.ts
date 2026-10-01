@@ -1,3 +1,4 @@
+import { getEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { EnvOverrides } from '../types/env';
@@ -43,8 +44,11 @@ export function createEnvoyProvider(
   // Filter out basePath from config to avoid passing it to the API
   const { basePath: _, ...configWithoutBasePath } = options.config?.config || {};
 
-  // Get the gateway URL from config or environment
-  const apiBaseUrl = configWithoutBasePath.apiBaseUrl || process.env.ENVOY_API_BASE_URL;
+  const apiBaseUrl =
+    configWithoutBasePath.apiBaseUrl ||
+    options.config?.env?.ENVOY_API_BASE_URL ||
+    options.env?.ENVOY_API_BASE_URL ||
+    getEnvString('ENVOY_API_BASE_URL');
 
   if (!apiBaseUrl) {
     throw new Error(
@@ -52,17 +56,15 @@ export function createEnvoyProvider(
     );
   }
 
-  // Ensure the URL ends with the correct path if not already specified
-  const normalizedBaseUrl = apiBaseUrl.endsWith('/v1')
-    ? apiBaseUrl
-    : `${apiBaseUrl.replace(/\/$/, '')}/v1`;
+  const baseUrl = apiBaseUrl.replace(/\/+$/, '');
+  const normalizedBaseUrl = baseUrl.endsWith('/v1') ? baseUrl : `${baseUrl}/v1`;
 
   const envoyConfig = {
-    ...options,
+    ...options.config,
+    id: options.id ?? options.config?.id,
+    env: options.config?.env ?? options.env,
     config: {
       ...configWithoutBasePath,
-      // Keep the normalized URL last so a raw apiBaseUrl from the user's
-      // config cannot overwrite it (it may lack the /v1 suffix).
       apiBaseUrl: normalizedBaseUrl,
     },
   };

@@ -1,14 +1,17 @@
 import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 
-import { satisfies } from 'semver';
-import { shouldCopyDrizzlePath } from './postbuild';
+import { API } from 'typescript/unstable/sync';
+import { assertBuiltAssetsPackaged } from './packPackageArtifact';
 
 type PackFile = {
   mode: number;
@@ -32,15 +35,12 @@ type ArtifactEvalOutput = {
         output?: unknown;
       };
       success?: boolean;
+      score?: number;
     }>;
   };
 };
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const drizzleDir = path.join(ROOT, 'drizzle');
-// The August 2026 undici advisories were fixed in 6.28.0, 7.29.0 and 8.9.0. Keep this in sync
-// with PATCHED_UNDICI_RANGE in test/package-manifests.test.ts.
-const PATCHED_UNDICI_RANGE = '^6.28.0 || ^7.29.0 || >=8.9.0';
 const requiredPackagedPaths = [
   'dist/drizzle/meta/_journal.json',
   'dist/src/app/index.html',
@@ -52,6 +52,7 @@ const requiredPackagedPaths = [
   'dist/src/contracts.js',
   'dist/src/index.cjs',
   'dist/src/index.d.ts',
+  'dist/src/index.d.cts',
   'dist/src/index.js',
   'dist/src/main.js',
   'dist/src/package.json',
@@ -69,18 +70,6 @@ const requiredPackagedPaths = [
   'dist/src/tracing/proto/opentelemetry/proto/resource/v1/resource.proto',
   'dist/src/tracing/proto/opentelemetry/proto/trace/v1/trace.proto',
 ];
-
-function listFiles(rootDir: string): string[] {
-  return fs.readdirSync(rootDir, { withFileTypes: true }).flatMap((entry) => {
-    const fullPath = path.join(rootDir, entry.name);
-
-    if (entry.isDirectory()) {
-      return listFiles(fullPath);
-    }
-
-    return [path.relative(ROOT, fullPath).split(path.sep).join('/')];
-  });
-}
 
 function run(
   command: string,
@@ -167,27 +156,16 @@ function runNpm(args: string[], cwd: string, envOverrides: NodeJS.ProcessEnv = {
   return run(process.execPath, [process.env.npm_execpath, ...args], cwd, envOverrides);
 }
 
-function assertPackagedFiles(packResult: PackResult): void {
+function assertPackagedFiles(packResult: PackResult, compareSource: boolean): void {
   const packagedPaths = new Set(packResult.files.map((file) => file.path));
   const missingPaths = requiredPackagedPaths.filter((file) => !packagedPaths.has(file));
-  const missingDrizzleFiles = listFiles(drizzleDir)
-    .filter(shouldCopyDrizzlePath)
-    .map((file) => `dist/${file}`)
-    .filter((file) => !packagedPaths.has(file));
-  const missingWebAppFiles = listFiles(path.join(ROOT, 'dist', 'src', 'app'))
-    .filter((file) => !file.endsWith('.map'))
-    .filter((file) => !packagedPaths.has(file));
-
   assert.deepEqual(missingPaths, [], `Missing packaged runtime assets: ${missingPaths.join(', ')}`);
-  assert.deepEqual(
-    missingDrizzleFiles,
-    [],
-    `Missing packaged Drizzle files: ${missingDrizzleFiles.join(', ')}`,
-  );
-  assert.deepEqual(
-    missingWebAppFiles,
-    [],
-    `Missing packaged web app files: ${missingWebAppFiles.join(', ')}`,
+  if (compareSource) {
+    assertBuiltAssetsPackaged(ROOT, packResult.files);
+  }
+  assert(
+    packResult.files.every((file) => !file.path.endsWith('.tsbuildinfo')),
+    'TypeScript incremental build state should be excluded from the package',
   );
   assert(
     packResult.files.every((file) => !file.path.endsWith('.map')),
@@ -236,28 +214,6 @@ function assertInstalledWebApp(installedPackageDir: string): void {
     missingAssets,
     [],
     `Missing packaged web app assets: ${missingAssets.join(', ')}`,
-  );
-}
-
-/**
- * The ref parser fetches remote `$ref`s through its own nested undici, and consumers install
- * from the published tarball rather than this repo's lockfile — so the version they actually
- * resolve is only observable here. Asserting it against the parser's declared range would be a
- * tautology (npm cannot install outside it); the patched floor per undici major is the check
- * that can fail.
- */
-function assertInstalledRefParserTransport(installedPackageDir: string): void {
-  const packageRequire = createRequire(path.join(installedPackageDir, 'package.json'));
-  const parserRequire = createRequire(
-    packageRequire.resolve('@apidevtools/json-schema-ref-parser/package.json'),
-  );
-  const transportManifest = JSON.parse(
-    fs.readFileSync(parserRequire.resolve('undici/package.json'), 'utf8'),
-  ) as { version: string };
-
-  assert(
-    satisfies(transportManifest.version, PATCHED_UNDICI_RANGE),
-    `Installed ref parser resolved vulnerable undici ${transportManifest.version}`,
   );
 }
 
@@ -311,7 +267,11 @@ function assertExportsResolve(
   );
 }
 
-function runInstalledBinVersion(consumerDir: string, configDir: string, binName: string): string {
+export function runInstalledBinVersion(
+  consumerDir: string,
+  configDir: string,
+  binName: 'promptfoo' | 'pf',
+): string {
   const binPath = path.join(
     consumerDir,
     'node_modules',
@@ -326,9 +286,15 @@ function runInstalledBinVersion(consumerDir: string, configDir: string, binName:
   };
 
   if (process.platform === 'win32') {
+    // Keep the working directory out of cmd.exe's command string. Paths can contain
+    // percent signs, which cmd.exe expands even inside quotes.
+    const command =
+      binName === 'promptfoo'
+        ? '.\\node_modules\\.bin\\promptfoo.cmd'
+        : '.\\node_modules\\.bin\\pf.cmd';
     return run(
       process.env.ComSpec || 'cmd.exe',
-      ['/d', '/s', '/c', `"${binPath}" --version`],
+      ['/d', '/s', '/c', command, '--version'],
       consumerDir,
       envOverrides,
     );
@@ -337,46 +303,163 @@ function runInstalledBinVersion(consumerDir: string, configDir: string, binName:
   return run(binPath, ['--version'], consumerDir, envOverrides);
 }
 
+function assertProviderTypeDocumentation(installedPackageDir: string): void {
+  const api = new API();
+  try {
+    for (const declaration of ['contracts.d.ts', 'contracts.d.cts']) {
+      const declarationPath = path.join(installedPackageDir, 'dist', 'src', declaration);
+      const snapshot = api.updateSnapshot({ openFiles: [declarationPath] });
+      const project = snapshot.getDefaultProjectForFile(declarationPath);
+      assert(project, `Missing declaration project: ${declaration}`);
+      const checker = project.checker;
+      const source = project.program.getSourceFile(declarationPath);
+      assert(source, `Missing declaration source: ${declaration}`);
+      const moduleSymbol = checker.getSymbolAtLocation(source);
+      assert(moduleSymbol, `Missing declaration module: ${declaration}`);
+      const exports = checker.getExportsOfModule(moduleSymbol);
+
+      for (const name of [
+        'McpConfigInput',
+        'McpConfig',
+        'McpConfigParsed',
+        'HttpProviderConfigInput',
+      ]) {
+        const symbol = exports.find((entry) => entry.name === name);
+        assert(symbol, `Missing ${name} in ${declaration}`);
+        const configType = checker.getDeclaredTypeOfSymbol(symbol);
+        const properties =
+          name === 'HttpProviderConfigInput'
+            ? ['tools', 'tool_choice', 'transformToolsFormat', 'session']
+            : ['timeout', 'resetTimeoutOnProgress', 'maxTotalTimeout', 'pingOnConnect'];
+        for (const property of properties) {
+          const member = checker.getPropertyOfType(configType, property);
+          assert(member, `Missing ${name}.${property} in ${declaration}`);
+          const documentation = checker.getDocumentationCommentOfSymbol(member);
+          assert(
+            documentation.length > 0,
+            `Missing JSDoc for ${name}.${property} in ${declaration}`,
+          );
+          if (property === 'timeout') {
+            assert.match(documentation, /60000 \(60 seconds\)/);
+            assert.match(documentation, /MCP_REQUEST_TIMEOUT_MS/);
+          }
+        }
+        const responseParser = checker.getPropertyOfType(configType, 'responseParser');
+        assert(responseParser, `Missing ${name}.responseParser in ${declaration}`);
+        const deprecated = checker.getJsDocTagsOfSymbol(responseParser);
+        assert(
+          deprecated?.some(
+            (tag) => tag.name === 'deprecated' && tag.text?.includes('transformResponse'),
+          ),
+          `Missing responseParser deprecation in ${name} in ${declaration}`,
+        );
+      }
+      snapshot.dispose();
+    }
+  } finally {
+    api.close();
+  }
+}
+
 function writeConsumerScripts(consumerDir: string): void {
-  fs.writeFileSync(
-    path.join(consumerDir, 'import-package.mjs'),
-    [
-      "import { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } from 'promptfoo';",
-      "import { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } from 'promptfoo/contracts';",
-      '',
-      'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
-      "  if (!value || typeof value.safeParse !== 'function') {",
-      "    throw new Error('Missing expected ESM schema export');",
-      '  }',
-      '}',
-      'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
-      "  throw new Error('Missing expected ESM provider capability export');",
-      '}',
-      '',
-    ].join('\n'),
-  );
-  fs.writeFileSync(
-    path.join(consumerDir, 'require-package.cjs'),
-    [
-      "const { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } = require('promptfoo');",
-      "const { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } = require('promptfoo/contracts');",
-      '',
-      'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
-      "  if (!value || typeof value.safeParse !== 'function') {",
-      "    throw new Error('Missing expected CJS schema export');",
-      '  }',
-      '}',
-      'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
-      "  throw new Error('Missing expected CJS provider capability export');",
-      '}',
-      '',
-    ].join('\n'),
-  );
+  const authAssertions = [
+    "const httpInput = { method: 'GET', auth: { type: 'api_key', value: '{{ KEY }}', placement: 'header', keyName: 'X-Key' }, tls: {} };",
+    "if ('rejectUnauthorized' in HttpProviderConfigInputSchema.parse(httpInput).tls) {",
+    "  throw new Error('HTTP authoring schema inserted runtime defaults');",
+    '}',
+    "for (const invalid of [{method: 'POST'}, {body: {}, signatureAuth: {type: 'pem'}}, {method: 'GET', typo: true}]) {",
+    '  if (HttpProviderConfigInputSchema.safeParse(invalid).success) {',
+    "    throw new Error('HTTP authoring schema accepted invalid input');",
+    '  }',
+    '}',
+    "if (HttpAuthInputSchema.safeParse({ type: 'api_key', value: 'key' }).success) {",
+    "  throw new Error('HTTP auth lost its placement/name requirements');",
+    '}',
+    "if (HttpProviderConfigInputJsonSchema.$schema !== 'http://json-schema.org/draft-07/schema#') {",
+    "  throw new Error('Missing HTTP config JSON Schema export');",
+    '}',
+    "const extensionConfig = { server: { command: 'node', extension: true }, extension: true };",
+    'if (McpConfigInputSchema.safeParse(extensionConfig).success) {',
+    "  throw new Error('MCP authoring config accepted extension fields');",
+    '}',
+    'const compatibleConfig = McpConfigSchema.parse(extensionConfig);',
+    'if (compatibleConfig.extension !== true || compatibleConfig.server.extension !== true) {',
+    "  throw new Error('MCP runtime config lost extension fields');",
+    '}',
+    "if (McpAuthInputSchema.safeParse({ type: 'bearer', token: 'key', typo: true }).success) {",
+    "  throw new Error('MCP authoring auth accepted an unknown field');",
+    '}',
+    "const mcpInput = { servers: [{ url: 'https://mcp.example.test', auth: { type: 'api_key', api_key: 'key' } }] };",
+    "if ('enabled' in McpConfigInputSchema.parse(mcpInput)) {",
+    "  throw new Error('MCP config input parsing inserted defaults');",
+    '}',
+    'if (McpConfigSchema.parse(mcpInput).enabled !== true) {',
+    "  throw new Error('MCP config runtime default is missing');",
+    '}',
+    "if (McpConfigInputSchema.safeParse({ server: { url: 'https://mcp.example.test', auth: { type: 'api_key' } } }).success) {",
+    "  throw new Error('MCP config accepted invalid nested auth');",
+    '}',
+    "if (McpConfigInputJsonSchema.$schema !== 'http://json-schema.org/draft-07/schema#') {",
+    "  throw new Error('Missing MCP config JSON Schema export');",
+    '}',
+    "const authInput = { type: 'oauth', clientId: 'client', clientSecret: 'secret' };",
+    "if ('grantType' in McpAuthInputSchema.parse(authInput)) {",
+    "  throw new Error('MCP auth input parsing inserted a runtime default');",
+    '}',
+    "if (McpAuthSchema.parse(authInput)?.grantType !== 'client_credentials') {",
+    "  throw new Error('MCP runtime auth parsing lost its default');",
+    '}',
+    "if (McpAuthInputSchema.safeParse({ type: 'api_key' }).success) {",
+    "  throw new Error('MCP API-key auth accepted missing credentials');",
+    '}',
+    "if (McpAuthInputJsonSchema.$schema !== 'http://json-schema.org/draft-07/schema#') {",
+    "  throw new Error('Missing MCP auth JSON Schema export');",
+    '}',
+  ];
+  for (const filename of ['import-package.mjs', 'require-package.cjs']) {
+    const imports = [
+      ['promptfoo', 'AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema'],
+      [
+        'promptfoo/contracts',
+        'EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator',
+      ],
+      ['promptfoo/contracts', 'McpAuthInputJsonSchema, McpAuthInputSchema, McpAuthSchema'],
+      ['promptfoo/contracts', 'McpConfigInputJsonSchema, McpConfigInputSchema, McpConfigSchema'],
+      [
+        'promptfoo/contracts',
+        'HttpAuthInputSchema, HttpProviderConfigInputSchema, HttpProviderConfigInputJsonSchema',
+      ],
+    ].map(([specifier, names]) =>
+      filename.endsWith('.mjs')
+        ? `import { ${names} } from '${specifier}';`
+        : `const { ${names} } = require('${specifier}');`,
+    );
+    fs.writeFileSync(
+      path.join(consumerDir, filename),
+      [
+        ...imports,
+        'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
+        "  if (!value || typeof value.safeParse !== 'function') {",
+        "    throw new Error('Missing expected schema export');",
+        '  }',
+        '}',
+        'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
+        "  throw new Error('Missing expected provider capability export');",
+        '}',
+        ...authAssertions,
+        '',
+      ].join('\n'),
+    );
+  }
   fs.writeFileSync(
     path.join(consumerDir, 'import-contracts.ts'),
     [
       "import { GetUserResponseSchema, PromptSchema, hasFunctionToolCallValidator, isTransformFunction } from 'promptfoo/contracts';",
       "import type { BlobRef, FunctionToolCallValidator, GetUserResponse, Prompt, ProviderResponse, TransformFunction } from 'promptfoo/contracts';",
+      "import { McpAuthInputSchema, McpAuthSchema } from 'promptfoo/contracts';",
+      "import type { McpAuthInput, McpAuthParsed } from 'promptfoo/contracts';",
+      "import { McpConfigSchema, type McpConfigInput, type McpConfigParsed } from 'promptfoo/contracts';",
+      "import { HttpProviderConfigInputSchema, type HttpProviderConfigInput } from 'promptfoo/contracts';",
       '',
       "const prompt: Prompt = { label: 'Greeting', raw: 'Hello, world!' };",
       'const transform: TransformFunction<string, string> = (output) => output;',
@@ -384,6 +467,18 @@ function writeConsumerScripts(consumerDir: string): void {
       'const validator: FunctionToolCallValidator = { validateFunctionToolCall() {} };',
       "const blobRef: BlobRef = { hash: 'abc123', mimeType: 'image/png', provider: 'filesystem', sizeBytes: 3, uri: 'promptfoo://blob/abc123' };",
       "const response: ProviderResponse = { images: [{ blobRef }], output: 'ok' };",
+      "const authInput: McpAuthInput = { type: 'oauth', clientId: 'client', clientSecret: 'secret', scopes: 'read write' };",
+      'const auth: McpAuthParsed = McpAuthSchema.parse(McpAuthInputSchema.parse(authInput));',
+      "const mcpInput: McpConfigInput = { servers: [{ url: 'https://mcp.example.test', auth: authInput }] };",
+      'const mcp: McpConfigParsed = McpConfigSchema.parse(mcpInput);',
+      'const enabled: boolean = mcp.enabled;',
+      'void enabled;',
+      "const httpInput: HttpProviderConfigInput = { body: { prompt: '{{ prompt }}' }, auth: { type: 'bearer', token: 'key' } };",
+      'HttpProviderConfigInputSchema.parse(httpInput);',
+      "if (auth?.type === 'oauth') {",
+      "  const grant: 'client_credentials' | 'password' = auth.grantType;",
+      '  void grant;',
+      '}',
       '',
       'GetUserResponseSchema.parse(user);',
       'PromptSchema.parse(prompt);',
@@ -394,17 +489,63 @@ function writeConsumerScripts(consumerDir: string): void {
       '',
     ].join('\n'),
   );
+  // Only root API callers skip Drizzle's broken optional-driver declarations.
+  for (const [config, file, module, skipLibCheck] of [
+    ['tsconfig.json', 'import-contracts.ts', 'NodeNext', false],
+    ['tsconfig.node16-cjs.json', 'require-contracts.cts', 'Node16', false],
+    ['tsconfig.api-esm.json', 'import-api.ts', 'NodeNext', true],
+    ['tsconfig.api-cjs.json', 'require-api.cts', 'Node16', true],
+  ] as const) {
+    fs.writeFileSync(
+      path.join(consumerDir, config),
+      JSON.stringify({
+        compilerOptions: {
+          module,
+          moduleResolution: module,
+          noEmit: true,
+          strict: true,
+          skipLibCheck,
+        },
+        include: [file],
+      }),
+    );
+  }
+  const apiTypesBody = [
+    "const provider: ApiProvider = { id: () => 'local', callApi: async (prompt) => ({ output: prompt }) };",
+    "const suite: EvaluateTestSuite = { prompts: ['hello'], providers: [provider], tests: [{ assert: [{ type: 'equals', value: 'hello' }] }], writeLatestResults: false };",
+    'async function consume() {',
+    '  const record = await evaluate(suite, { cache: false });',
+    '  const summary = await record.toEvaluateSummary();',
+    '  const successes: number = summary.stats.successes;',
+    '  const id: string = record.id;',
+    '  void successes; void id;',
+    '  // @ts-expect-error Eval keeps its typed result surface',
+    '  await record.nonexistentMethod();',
+    '  // @ts-expect-error success counts remain numeric',
+    "  const invalid: typeof summary.stats.successes = 'wrong';",
+    '  void invalid;',
+    '}',
+    'void consume;',
+    '// @ts-expect-error providers are a required part of the public eval input',
+    "void evaluate({ prompts: ['hello'] });",
+  ].join('\n');
   fs.writeFileSync(
-    path.join(consumerDir, 'tsconfig.json'),
-    JSON.stringify({
-      compilerOptions: {
-        module: 'NodeNext',
-        moduleResolution: 'NodeNext',
-        noEmit: true,
-        strict: true,
-      },
-      include: ['import-contracts.ts'],
-    }),
+    path.join(consumerDir, 'import-api.ts'),
+    [
+      "import { evaluate } from 'promptfoo';",
+      "import type { ApiProvider, EvaluateTestSuite } from 'promptfoo';",
+      apiTypesBody,
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'require-api.cts'),
+    [
+      "import api = require('promptfoo');",
+      'const { evaluate } = api;',
+      'type ApiProvider = api.ApiProvider;',
+      'type EvaluateTestSuite = api.EvaluateTestSuite;',
+      apiTypesBody,
+    ].join('\n'),
   );
   fs.writeFileSync(
     path.join(consumerDir, 'require-contracts.cts'),
@@ -416,6 +557,18 @@ function writeConsumerScripts(consumerDir: string): void {
       'const validator: contracts.FunctionToolCallValidator = { validateFunctionToolCall() {} };',
       "const blobRef: contracts.BlobRef = { hash: 'abc123', mimeType: 'image/png', provider: 'filesystem', sizeBytes: 3, uri: 'promptfoo://blob/abc123' };",
       "const response: contracts.ProviderResponse = { images: [{ blobRef }], output: 'ok' };",
+      "const authInput: contracts.McpAuthInput = { type: 'oauth', clientId: 'client', clientSecret: 'secret', scopes: 'read write' };",
+      'const auth: contracts.McpAuthParsed = contracts.McpAuthSchema.parse(contracts.McpAuthInputSchema.parse(authInput));',
+      "const mcpInput: contracts.McpConfigInput = { servers: [{ url: 'https://mcp.example.test', auth: authInput }] };",
+      'const mcp: contracts.McpConfigParsed = contracts.McpConfigSchema.parse(mcpInput);',
+      'const enabled: boolean = mcp.enabled;',
+      'void enabled;',
+      "const httpInput: contracts.HttpProviderConfigInput = { body: { prompt: '{{ prompt }}' }, auth: { type: 'bearer', token: 'key' } };",
+      'contracts.HttpProviderConfigInputSchema.parse(httpInput);',
+      "if (auth?.type === 'oauth') {",
+      "  const grant: 'client_credentials' | 'password' = auth.grantType;",
+      '  void grant;',
+      '}',
       'contracts.GetUserResponseSchema.parse(user);',
       'contracts.PromptSchema.parse(prompt);',
       'void response;',
@@ -425,18 +578,94 @@ function writeConsumerScripts(consumerDir: string): void {
       '',
     ].join('\n'),
   );
-  fs.writeFileSync(
-    path.join(consumerDir, 'tsconfig.node16-cjs.json'),
-    JSON.stringify({
-      compilerOptions: {
-        module: 'Node16',
-        moduleResolution: 'Node16',
-        noEmit: true,
-        strict: true,
-      },
-      include: ['require-contracts.cts'],
-    }),
+}
+
+async function runInstalledCodexSecurityEval(
+  consumerDir: string,
+  configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+): Promise<void> {
+  const script = `const mode = process.argv[2];
+if (mode === 'missing') {
+  assert.throws(() => require.resolve('@openai/codex-security'), { code: 'MODULE_NOT_FOUND' });
+}
+const ordinary = await evaluate({
+  prompts: ['hello fixture'],
+  providers: ['echo'],
+  tests: [{ vars: {}, assert: [{ type: 'equals', value: 'hello fixture' }] }],
+}, { cache: false, maxConcurrency: 1 });
+const { results: ordinaryResults } = await ordinary.toEvaluateSummary();
+assert.equal(ordinaryResults.length, 1);
+assert.equal(ordinaryResults[0].success, true);
+assert.equal(ordinaryResults[0].score, 1);
+// The supported SDK must stop at repository validation, before running any scan.
+const record = await evaluate({
+  prompts: ['Validate SDK installation'],
+  providers: [{ id: 'openai:codex-security', config: {
+    repository: path.join(process.cwd(), 'does-not-exist'),
+  } }],
+  tests: [{ vars: {} }],
+}, { cache: false, maxConcurrency: 1 });
+const summary = await record.toEvaluateSummary();
+assert.equal(summary.results.length, 1);
+assert.equal(summary.results[0].success, false);
+assert.equal(summary.results[0].score, 0);
+assert.ok(summary.results[0].response.error.includes(mode === 'installed'
+  ? 'Repository is not a directory'
+  : 'npm install promptfoo @openai/codex-security@^0.1.31'));
+if (mode === 'incompatible') {
+  assert.ok(summary.results[0].response.error.includes('incompatible (0.1.28)'));
+}
+`;
+  const scriptPaths = ['codex-security.mjs', 'codex-security.cjs'].map((name) =>
+    path.join(consumerDir, name),
   );
+  fs.writeFileSync(
+    scriptPaths[0],
+    `import assert from 'node:assert/strict';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import { evaluate } from 'promptfoo';
+const require = createRequire(import.meta.url);
+${script}`,
+  );
+  fs.writeFileSync(
+    scriptPaths[1],
+    `const assert = require('node:assert/strict');
+const path = require('node:path');
+const { evaluate } = require('promptfoo');
+(async () => {
+${script}
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+`,
+  );
+  const env = {
+    PROMPTFOO_CONFIG_DIR: configDir,
+    PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+    PROMPTFOO_DISABLE_TELEMETRY: '1',
+    PROMPTFOO_DISABLE_UPDATE: 'true',
+  };
+  for (const mode of ['missing', 'incompatible', 'installed']) {
+    if (mode !== 'missing') {
+      runNpm(
+        [
+          'install',
+          '--ignore-scripts',
+          '--no-audit',
+          '--no-fund',
+          '--no-package-lock',
+          mode === 'incompatible'
+            ? '@openai/codex-security@0.1.28'
+            : '@openai/codex-security@^0.1.31',
+        ],
+        consumerDir,
+        npmEnv,
+      );
+    }
+    for (const scriptPath of scriptPaths) {
+      await runAsync(process.execPath, [scriptPath, mode], consumerDir, env);
+    }
+  }
 }
 
 async function runInstalledCompressionEval(consumerDir: string, configDir: string): Promise<void> {
@@ -552,6 +781,7 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
     assert(Array.isArray(results), 'Installed promptfoo output is missing evaluation results');
     assert.equal(results.length, 2, 'Expected one result for each compressed provider');
     for (const result of results) {
+      assert.equal(result.score, 1);
       assert.equal(result.success, true, `Compressed provider failed: ${JSON.stringify(result)}`);
       assert.equal(
         result.error,
@@ -575,12 +805,300 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
   }
 }
 
+async function runOptionalOpenAiAgentsChecks(
+  consumerDir: string,
+  configDir: string,
+): Promise<void> {
+  const sdkDir = path.join(consumerDir, 'node_modules', '@openai', 'agents');
+  assert(!fs.existsSync(sdkDir), 'Default consumers should not install the optional Agents SDK');
+  const checks = `
+    const echo = await loadApiProvider('echo');
+    assert.equal((await echo.callApi('ordinary evaluation')).output, 'ordinary evaluation');
+    await assert.rejects(
+      loadApiProvider('openai:agents:gpt-4.1-mini'),
+      (error) => {
+        assert.match(error.message, /npm install promptfoo @openai\\/agents@\\^0\\.11\\.8/);
+        if (process.argv[2] === 'incompatible') {
+          assert.match(error.message, /found 0\\.0\\.0/);
+        } else {
+          assert.match(error.message, /package is required/);
+        }
+        return true;
+      },
+    );
+  `;
+  fs.writeFileSync(
+    path.join(consumerDir, 'optional-agents.mjs'),
+    `import assert from 'node:assert/strict';
+     import { loadApiProvider } from 'promptfoo';
+     ${checks}`,
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'optional-agents.cjs'),
+    `const assert = require('node:assert/strict');
+     const { loadApiProvider } = require('promptfoo');
+     (async () => { ${checks} })().catch((error) => {
+       console.error(error);
+       process.exitCode = 1;
+     });`,
+  );
+  const runChecks = async (mode: string) => {
+    for (const script of ['optional-agents.mjs', 'optional-agents.cjs']) {
+      await runAsync(process.execPath, [script, mode], consumerDir, {
+        PROMPTFOO_CONFIG_DIR: configDir,
+        PROMPTFOO_DISABLE_TELEMETRY: '1',
+        PROMPTFOO_DISABLE_UPDATE: 'true',
+      });
+    }
+  };
+  await runChecks('missing');
+
+  // An unrelated application's SDK must not block ordinary providers. Reject an
+  // unsupported SDK before executing its code when the Agents feature is used.
+  const loaderPackages = path.join(consumerDir, 'loader-packages');
+  fs.mkdirSync(sdkDir, { recursive: true });
+  try {
+    fs.writeFileSync(
+      path.join(sdkDir, 'package.json'),
+      JSON.stringify({ name: '@openai/agents', version: '0.0.0', main: './index.js' }),
+    );
+    fs.writeFileSync(
+      path.join(sdkDir, 'index.js'),
+      'throw new Error("Unsupported SDK code must not execute");',
+    );
+    await runChecks('incompatible');
+
+    // CommonJS supports SDK installations provided through NODE_PATH. The
+    // compatibility check must inspect that SDK rather than report it missing.
+    const loaderSdk = path.join(loaderPackages, '@openai', 'agents');
+    fs.mkdirSync(path.dirname(loaderSdk), { recursive: true });
+    fs.renameSync(sdkDir, loaderSdk);
+    await runAsync(process.execPath, ['optional-agents.cjs', 'incompatible'], consumerDir, {
+      NODE_PATH: loaderPackages,
+      PROMPTFOO_CONFIG_DIR: configDir,
+      PROMPTFOO_DISABLE_TELEMETRY: '1',
+      PROMPTFOO_DISABLE_UPDATE: 'true',
+    });
+  } finally {
+    fs.rmSync(sdkDir, { recursive: true, force: true });
+    fs.rmSync(loaderPackages, { recursive: true, force: true });
+  }
+}
+
+async function assertOptionalBrowserDependencies(
+  consumerDir: string,
+  configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+  withOptionalDependencies: boolean,
+): Promise<void> {
+  const assertions = `
+    const incompatible = process.argv[2] === 'incompatible';
+    if (incompatible) {
+      assert.equal(require('playwright/package.json').version, '1.62.0');
+    } else {
+      for (const name of ['playwright', 'playwright-extra', 'puppeteer-extra-plugin-stealth', '@playwright/browser-chromium']) {
+        assert.throws(() => require.resolve(name), { code: 'MODULE_NOT_FOUND' });
+      }
+    }
+    for (const [id, config] of [
+      ['browser', { steps: [] }],
+      ['openai:chatkit:wf_fixture', { apiKey: 'fixture-key', usePool: false }],
+      ['openai:chatkit:wf_fixture', { apiKey: 'fixture-key', usePool: true }],
+    ]) {
+      const provider = await loadApiProvider(id, { options: { config } });
+      const response = await provider.callApi('optional browser fixture', { vars: {} });
+      assert.match(response.error, incompatible
+        ? /installed playwright package [(]1[.]62[.]0[)] is incompatible/
+        : /requires the optional Playwright package/);
+      assert.match(response.error, /npm install promptfoo/);
+      assert.match(response.error, /npx playwright install chromium/);
+      await provider.cleanup?.();
+    }
+  `;
+  for (const format of ['mjs', 'cjs']) {
+    const imports =
+      format === 'mjs'
+        ? `import assert from 'node:assert/strict';
+         import { createRequire } from 'node:module';
+         import { loadApiProvider } from 'promptfoo';
+         const require = createRequire(import.meta.url);`
+        : `const assert = require('node:assert/strict');
+         const { loadApiProvider } = require('promptfoo');`;
+    fs.writeFileSync(
+      path.join(consumerDir, `optional-browser.${format}`),
+      `${imports}\n(async () => {${assertions}})().catch(error => {
+        console.error(error); process.exitCode = 1;
+      });`,
+    );
+  }
+  for (const state of withOptionalDependencies ? ['missing', 'incompatible'] : ['missing']) {
+    if (state === 'incompatible') {
+      runNpm(
+        [
+          'install',
+          '--ignore-scripts',
+          '--no-audit',
+          '--no-fund',
+          '--no-package-lock',
+          'playwright@1.62.0',
+        ],
+        consumerDir,
+        npmEnv,
+      );
+    }
+    for (const format of ['mjs', 'cjs']) {
+      await runAsync(process.execPath, [`optional-browser.${format}`, state], consumerDir, {
+        PROMPTFOO_CONFIG_DIR: configDir,
+        PROMPTFOO_CACHE_ENABLED: 'false',
+        PROMPTFOO_DISABLE_TELEMETRY: '1',
+        PROMPTFOO_DISABLE_UPDATE: 'true',
+      });
+    }
+  }
+  if (withOptionalDependencies) {
+    await runInstalledCompressionEval(consumerDir, configDir);
+  }
+}
+
+async function runInstalledTransformersProvider(
+  consumerDir: string,
+  configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+): Promise<void> {
+  const modelDir = path.join(consumerDir, 'tiny-bert');
+  fs.cpSync(path.join(ROOT, 'test/fixtures/transformers/tiny-bert'), modelDir, { recursive: true });
+  const script = `const modelDir = ${JSON.stringify(modelDir)};
+const providerId = 'transformers:feature-extraction:' + modelDir;
+const mode = process.argv[2];
+// An unrelated local SDK version must not prevent ordinary evaluations.
+const ordinary = await evaluate({
+  prompts: ['hello world'],
+  providers: ['echo'],
+  tests: [{ vars: {}, assert: [{ type: 'equals', value: 'hello world' }] }],
+}, { cache: false, maxConcurrency: 1 });
+const { results: ordinaryResults } = await ordinary.toEvaluateSummary();
+assert.equal(ordinaryResults.length, 1);
+assert.equal(ordinaryResults[0].success, true);
+assert.equal(ordinaryResults[0].score, 1);
+if (mode !== 'installed') {
+  if (mode === 'absent') {
+    assert.throws(() => require.resolve('@huggingface/transformers'), { code: 'MODULE_NOT_FOUND' });
+  } else {
+    assert.doesNotThrow(() => require.resolve('@huggingface/transformers'));
+  }
+  await assert.rejects(loadApiProvider(providerId), (error) => {
+    assert.ok(error.message.includes('npm install promptfoo @huggingface/transformers@^4.0.0'));
+    if (mode === 'incompatible') { assert.match(error.message, /found 3\\.8\\.1/); }
+    return true;
+  });
+} else {
+  const config = { device: 'cpu', dtype: 'fp32', localFilesOnly: true, normalize: false, cacheDir: modelDir };
+  const provider = await loadApiProvider(providerId, { options: { config } });
+  const embedding = await provider.callEmbeddingApi('hello world');
+  assert.equal(embedding.error, undefined);
+  assert.deepEqual(embedding.embedding, [3.5]);
+  const record = await evaluate({
+    prompts: ['hello world'],
+    providers: ['echo'],
+    tests: [providerId, providerId + '/missing'].map((id) => ({
+      assert: [{ type: 'similar', value: 'hello world', threshold: 0.99, provider: { id, config } }],
+    })),
+  }, { cache: false, maxConcurrency: 1 });
+  const { results } = await record.toEvaluateSummary();
+  assert.equal(results.length, 2);
+  assert.equal(results[0].success, true);
+  assert.equal(results[0].score, 1);
+  assert.equal(results[0].error, undefined);
+  assert.equal(results[1].success, false);
+  assert.match(results[1].gradingResult.reason, /missing|not found|Unable to locate/i);
+}
+`;
+  const scriptPaths = ['transformers.mjs', 'transformers.cjs'].map((name) =>
+    path.join(consumerDir, name),
+  );
+  fs.writeFileSync(
+    scriptPaths[0],
+    `import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { evaluate, loadApiProvider } from 'promptfoo';
+const require = createRequire(import.meta.url);
+${script}`,
+  );
+  fs.writeFileSync(
+    scriptPaths[1],
+    `const assert = require('node:assert/strict');
+const { evaluate, loadApiProvider } = require('promptfoo');
+(async () => {
+${script}
+})().catch((error) => { console.error(error); process.exitCode = 1; });
+`,
+  );
+  const env = {
+    PROMPTFOO_CONFIG_DIR: configDir,
+    PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+    PROMPTFOO_DISABLE_TELEMETRY: '1',
+    PROMPTFOO_DISABLE_UPDATE: 'true',
+  };
+  const runMode = async (mode: string) => {
+    for (const scriptPath of scriptPaths) {
+      await runAsync(process.execPath, [scriptPath, mode], consumerDir, env);
+    }
+  };
+  await runMode('absent');
+  runNpm(
+    ['install', '--ignore-scripts', '--no-audit', '--no-fund', '@huggingface/transformers@3.8.1'],
+    consumerDir,
+    npmEnv,
+  );
+  await runMode('incompatible');
+  runNpm(
+    ['install', '--ignore-scripts', '--no-audit', '--no-fund', '@huggingface/transformers@^4.0.0'],
+    consumerDir,
+    npmEnv,
+  );
+  await runMode('installed');
+}
+
 async function main(): Promise<void> {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-'));
+  const { values } = parseArgs({
+    options: {
+      profile: { type: 'string', default: 'default' },
+      registry: { type: 'string', default: 'https://registry.npmjs.org/' },
+      tarball: { type: 'string' },
+      'runtime-assets': { type: 'string', default: 'none' },
+      browser: { type: 'boolean', default: false },
+    },
+  });
+  assert(
+    ['none', 'python-go', 'all'].includes(values['runtime-assets']),
+    `Unknown runtime asset profile: ${values['runtime-assets']}`,
+  );
+  const suppliedTarball = values.tarball === undefined ? undefined : path.resolve(values.tarball);
+  if (suppliedTarball) {
+    assert(suppliedTarball.endsWith('.tgz'), '--tarball must be a local .tgz file');
+    assert(fs.statSync(suppliedTarball).isFile(), '--tarball must be an existing file');
+  }
+  const originalHash = suppliedTarball
+    ? createHash('sha512').update(fs.readFileSync(suppliedTarball)).digest('hex')
+    : undefined;
+  assert(
+    ['default', 'omit-optional'].includes(values.profile),
+    `Unknown install profile: ${values.profile}`,
+  );
+  assert(!values.browser || values.profile === 'default', '--browser requires the default profile');
+  // Module resolution canonicalizes paths (for example /var to /private/var on macOS).
+  const tempDir = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-')),
+  );
   const artifactsDir = path.join(tempDir, 'artifacts');
   const configDir = path.join(tempDir, 'config');
   const consumerDir = path.join(tempDir, 'consumer');
   const consumerNpmrc = path.join(tempDir, 'consumer.npmrc');
+  const consumerNpmEnv = {
+    npm_config_engine_strict: 'false',
+    npm_config_userconfig: consumerNpmrc,
+    npm_config_registry: values.registry,
+  };
 
   try {
     fs.mkdirSync(artifactsDir);
@@ -588,10 +1106,10 @@ async function main(): Promise<void> {
     fs.mkdirSync(consumerDir);
     fs.writeFileSync(consumerNpmrc, '');
 
-    const packOutput = runNpm(
-      ['pack', '--ignore-scripts', '--json', '--pack-destination', artifactsDir],
-      ROOT,
-    );
+    // npm's dry-run inspects the supplied archive without repacking it or running hooks.
+    const packOutput = suppliedTarball
+      ? runNpm(['pack', suppliedTarball, '--dry-run', '--ignore-scripts', '--json'], ROOT)
+      : runNpm(['pack', '--ignore-scripts', '--json', '--pack-destination', artifactsDir], ROOT);
     let packResults: PackResult[];
     try {
       packResults = JSON.parse(packOutput) as PackResult[];
@@ -602,9 +1120,9 @@ async function main(): Promise<void> {
 
     const [packResult] = packResults;
     assert.equal(packResult.name, 'promptfoo');
-    assertPackagedFiles(packResult);
+    assertPackagedFiles(packResult, !suppliedTarball);
 
-    const tarballPath = path.join(artifactsDir, packResult.filename);
+    const tarballPath = suppliedTarball ?? path.join(artifactsDir, packResult.filename);
     assert(fs.existsSync(tarballPath), `Missing tarball: ${tarballPath}`);
 
     fs.writeFileSync(
@@ -615,21 +1133,20 @@ async function main(): Promise<void> {
         type: 'module',
       }),
     );
+    console.log(`Installing packed consumer (${values.profile})...`);
     runNpm(
       [
         'install',
+        ...(values.profile === 'omit-optional' ? ['--omit=optional'] : ['--include=optional']),
         '--ignore-scripts',
+        '--omit=dev',
         '--no-audit',
         '--no-fund',
         '--no-package-lock',
-        '--registry=https://registry.npmjs.org/',
         tarballPath,
       ],
       consumerDir,
-      {
-        npm_config_engine_strict: 'false',
-        npm_config_userconfig: consumerNpmrc,
-      },
+      consumerNpmEnv,
     );
 
     const installedPackageDir = path.join(consumerDir, 'node_modules', 'promptfoo');
@@ -642,32 +1159,172 @@ async function main(): Promise<void> {
     };
     assert.equal(installedPackageJson.version, packResult.version);
     assertExportsResolve(installedPackageDir, installedPackageJson);
-    assertInstalledRefParserTransport(installedPackageDir);
-
-    writeConsumerScripts(consumerDir);
-    run(process.execPath, ['import-package.mjs'], consumerDir);
-    run(process.execPath, ['require-package.cjs'], consumerDir);
-    const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
-    for (const tsconfig of ['tsconfig.json', 'tsconfig.node16-cjs.json']) {
-      run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
-    }
-    assertInstalledWebApp(installedPackageDir);
-
-    for (const binName of ['promptfoo', 'pf']) {
-      assert.equal(
-        runInstalledBinVersion(consumerDir, configDir, binName).trim(),
-        packResult.version,
+    const packageRequire = createRequire(path.join(installedPackageDir, 'package.json'));
+    if (values.profile === 'omit-optional') {
+      assert.throws(() => packageRequire.resolve('@anthropic-ai/claude-agent-sdk'), {
+        code: 'MODULE_NOT_FOUND',
+      });
+    } else {
+      const relative = path.relative(
+        fs.realpathSync(consumerDir),
+        fs.realpathSync(packageRequire.resolve('@anthropic-ai/claude-agent-sdk')),
+      );
+      assert(
+        relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative),
       );
     }
-    await runInstalledCompressionEval(consumerDir, configDir);
+    assertProviderTypeDocumentation(installedPackageDir);
 
-    console.log(`Verified installed package artifact: ${packResult.filename}`);
+    // Consumer files live outside the repository so neither workspaces nor devDependencies
+    // can satisfy undeclared package imports. Keep all user state local to this fixture.
+    const consumerEnv = {
+      NODE_PATH: '',
+      PROMPTFOO_CONFIG_DIR: configDir,
+      PROMPTFOO_CACHE_PATH: path.join(tempDir, 'cache'),
+      PROMPTFOO_DISABLE_TELEMETRY: '1',
+      PROMPTFOO_DISABLE_UPDATE: 'true',
+      PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+    };
+    writeConsumerScripts(consumerDir);
+    fs.cpSync(path.join(ROOT, 'test', 'fixtures', 'package-artifact'), consumerDir, {
+      recursive: true,
+    });
+    run(process.execPath, ['import-package.mjs'], consumerDir, consumerEnv);
+    run(process.execPath, ['require-package.cjs'], consumerDir, consumerEnv);
+    const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
+    for (const tsconfig of [
+      'tsconfig.json',
+      'tsconfig.node16-cjs.json',
+      'tsconfig.api-esm.json',
+      'tsconfig.api-cjs.json',
+    ]) {
+      run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
+    }
+    for (const script of ['import-api.mjs', 'require-api.cjs']) {
+      console.log(await runAsync(process.execPath, [script], consumerDir, consumerEnv));
+    }
+    assertInstalledWebApp(installedPackageDir);
+    const installedMigrations = path.join(installedPackageDir, 'dist', 'drizzle');
+    const journal = JSON.parse(
+      fs.readFileSync(path.join(installedMigrations, 'meta', '_journal.json'), 'utf8'),
+    ) as { entries: Array<{ tag: string }> };
+    assert(journal.entries.length > 0, 'Expected installed migration journal entries');
+    for (const { tag } of journal.entries) {
+      assert(
+        fs.statSync(path.join(installedMigrations, `${tag}.sql`)).isFile(),
+        `Missing installed migration: ${tag}`,
+      );
+    }
+
+    for (const binName of ['promptfoo', 'pf'] as const) {
+      if (values.profile === 'omit-optional') {
+        // The CLI currently initializes SQLite before handling --version. Omission removes
+        // libsql's native platform package: verify its actionable failure, not a crash.
+        assert.throws(
+          () => runInstalledBinVersion(consumerDir, configDir, binName),
+          (error: unknown) =>
+            error instanceof Error &&
+            (error.cause as { status?: number })?.status === 1 &&
+            error.message.includes('could not load its SQLite dependency') &&
+            error.message.includes('Required package: @libsql/'),
+        );
+      } else {
+        assert.equal(
+          runInstalledBinVersion(consumerDir, configDir, binName).trim(),
+          packResult.version,
+        );
+      }
+    }
+    await runOptionalOpenAiAgentsChecks(consumerDir, configDir);
+    if (values.profile === 'default') {
+      console.log(await runAsync(process.execPath, ['migrations.mjs'], consumerDir, consumerEnv));
+      await runInstalledCodexSecurityEval(consumerDir, configDir, consumerNpmEnv);
+      await runInstalledCompressionEval(consumerDir, configDir);
+    }
+    await assertOptionalBrowserDependencies(
+      consumerDir,
+      configDir,
+      consumerNpmEnv,
+      values.profile === 'default',
+    );
+    if (values.profile === 'default') {
+      await runInstalledTransformersProvider(consumerDir, configDir, consumerNpmEnv);
+    }
+
+    if (values['runtime-assets'] !== 'none') {
+      console.log(
+        await runAsync(
+          process.execPath,
+          ['runtime-assets.mjs', ...(values['runtime-assets'] === 'all' ? ['--ruby'] : [])],
+          consumerDir,
+          consumerEnv,
+        ),
+      );
+    }
+
+    if (values.browser) {
+      runNpm(
+        [
+          'install',
+          '--ignore-scripts',
+          '--no-audit',
+          '--no-fund',
+          '--no-package-lock',
+          'playwright@1.63.0',
+          'playwright-extra@4.3.6',
+          'puppeteer-extra-plugin-stealth@2.11.2',
+        ],
+        consumerDir,
+        consumerNpmEnv,
+      );
+      const playwrightManifest = packageRequire.resolve('playwright/package.json');
+      const playwright = JSON.parse(fs.readFileSync(playwrightManifest, 'utf8')) as {
+        bin: { playwright: string };
+      };
+      assert.equal(typeof playwright.bin.playwright, 'string');
+      const browsersPath = path.join(tempDir, 'browsers');
+      // Browser downloads use the CI job deadline, not the fixture timeout.
+      console.log(
+        run(
+          process.execPath,
+          [
+            path.resolve(path.dirname(playwrightManifest), playwright.bin.playwright),
+            'install',
+            'chromium',
+            '--only-shell',
+          ],
+          consumerDir,
+          { ...consumerEnv, PLAYWRIGHT_BROWSERS_PATH: browsersPath },
+        ),
+      );
+      console.log(
+        await runAsync(
+          process.execPath,
+          ['browser.mjs', '--browsers-path', browsersPath],
+          consumerDir,
+          consumerEnv,
+        ),
+      );
+    }
+
+    if (suppliedTarball) {
+      assert.equal(
+        createHash('sha512').update(fs.readFileSync(suppliedTarball)).digest('hex'),
+        originalHash,
+        'The tested tarball changed during validation',
+      );
+    }
   } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    console.log('Removing temporary artifact consumer...');
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+    console.log('Removed temporary artifact consumer');
   }
+  console.log(`Verified installed package artifact (${values.profile})`);
 }
 
-main().catch((error: unknown) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((error: unknown) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

@@ -10,7 +10,7 @@ import {
   FS_READONLY_TOOLS,
   OpenCodeSDKProvider,
 } from '../../src/providers/opencode-sdk';
-import { createDeferred } from '../util/utils';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 import type { MockInstance } from 'vitest';
 
 import type { CallApiContextParams } from '../../src/types/index';
@@ -303,6 +303,36 @@ describe('OpenCodeSDKProvider', () => {
 
   describe('callApi', () => {
     describe('basic functionality', () => {
+      it('passes scoped env-file defaults to the server while preserving provider overrides', async () => {
+        const { default: cliState } =
+          await vi.importActual<typeof import('../../src/cliState')>('../../src/cliState');
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([{ type: 'text', text: 'ok' }]),
+        );
+        try {
+          const provider = new OpenCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'provider-key' },
+          });
+          const result = await cliState.withEnvFileOverrides(
+            { PROMPTFOO_REVIEW_ENV_PROBE: 'file', ANTHROPIC_API_KEY: 'file-key' },
+            () => provider.callApi('Test prompt'),
+          );
+          expect(result.output).toBe('ok');
+          expect(mockCreateOpencode).toHaveBeenCalledWith(
+            expect.objectContaining({
+              env: expect.objectContaining({
+                PROMPTFOO_REVIEW_ENV_PROBE: 'file',
+                ANTHROPIC_API_KEY: 'provider-key',
+              }),
+            }),
+          );
+          expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
+        } finally {
+          restoreEnv();
+        }
+      });
+
       it('should successfully call API with simple prompt', async () => {
         mockSessionPrompt.mockResolvedValue(
           createMockPromptResponse(
@@ -1103,6 +1133,53 @@ describe('OpenCodeSDKProvider', () => {
           env: { ANTHROPIC_API_KEY: 'test-api-key' },
         });
         const result = await provider.callApi('Use the skill');
+
+        expect(mockSessionMessages).toHaveBeenCalledTimes(1);
+        expect(result.metadata?.skillCalls).toEqual([
+          { name: 'code-standards', input: { name: 'code-standards' }, source: 'tool' },
+        ]);
+      });
+
+      it('should fetch session history when a patterned policy allows some skills', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponseWithAnchors('All done.', {
+            id: 'assistant-msg-1',
+            parentID: 'user-msg-1',
+          }),
+        );
+        mockSessionMessages.mockResolvedValue([
+          {
+            info: { id: 'user-msg-1', role: 'user' },
+            parts: [{ type: 'text', text: 'Use the code standards skill' }],
+          },
+          {
+            info: { id: 'intermediate-msg-1', role: 'assistant' },
+            parts: [
+              {
+                type: 'tool',
+                tool: 'skill',
+                state: { status: 'completed', input: { name: 'code-standards' } },
+              },
+            ],
+          },
+          {
+            info: { id: 'assistant-msg-1', role: 'assistant' },
+            parts: [{ type: 'text', text: 'All done.' }],
+          },
+        ]);
+
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            permission: {
+              skill: {
+                '*': 'allow',
+                'blocked-skill': 'deny',
+              },
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Use the code standards skill');
 
         expect(mockSessionMessages).toHaveBeenCalledTimes(1);
         expect(result.metadata?.skillCalls).toEqual([

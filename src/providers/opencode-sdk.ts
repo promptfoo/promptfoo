@@ -6,7 +6,7 @@ import path from 'path';
 
 import dedent from 'dedent';
 import cliState from '../cliState';
-import { getEnvString } from '../envars';
+import { getEnvString, getProcessEnv } from '../envars';
 import { importModule } from '../esm';
 import logger, { getLogLevel } from '../logger';
 import {
@@ -16,6 +16,7 @@ import {
   initializeAgenticCache,
   resolveAgenticWorkingDir,
 } from './agentic-utils';
+import { assertIsolatedWorkingDir, clearRepositoryEnv } from './agentWorkspace';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -166,7 +167,7 @@ export interface OpenCodeAgentConfig {
   description: string;
   /** Agent mode: 'primary' for main assistants, 'subagent' for specialized tasks, 'all' for both */
   mode?: 'primary' | 'subagent' | 'all';
-  /** Full OpenCode provider/model-id for this agent (e.g., 'anthropic/claude-sonnet-4-6') */
+  /** Full OpenCode provider/model-id for this agent (e.g., 'anthropic/claude-sonnet-5') */
   model?: string;
   /** Temperature for response randomness (0.0-1.0) */
   temperature?: number;
@@ -263,7 +264,7 @@ export interface OpenCodeSDKConfig {
   provider_id?: string;
 
   /**
-   * Model ID within provider_id (e.g., 'claude-sonnet-4-6', 'gpt-4o').
+   * Model ID within provider_id (e.g., 'claude-sonnet-5', 'gpt-5.6').
    * Set provider_id separately; custom_agent.model uses the full provider/model-id instead.
    */
   model?: string;
@@ -297,6 +298,9 @@ export interface OpenCodeSDKConfig {
    * If not specified, uses a temporary directory
    */
   working_dir?: string;
+
+  /** Run each eval call in a fresh copy of `working_dir`, created by promptfoo eval. */
+  copy_working_dir?: boolean | 'git' | 'copy';
 
   /**
    * Workspace identifier for OpenCode v2 workspace-aware APIs
@@ -475,6 +479,7 @@ interface OpenCodeSessionHandle {
 
 interface OpenCodePreparedCall {
   config: OpenCodeSDKConfig;
+  inIsolatedWorkspace: boolean;
   isTempDir: boolean;
   workingDir?: string;
 }
@@ -595,6 +600,12 @@ function resolveEsmPackage(
   }
 
   return path.join(packageDir, esmEntry);
+}
+
+function hasRepositoryEnv(env: NodeJS.ProcessEnv): boolean {
+  const filtered = { ...env };
+  clearRepositoryEnv(filtered);
+  return Object.keys(env).some((key) => !(key in filtered));
 }
 
 function unwrapOpenCodeResult<T>(result: OpenCodeSdkResult<T> | undefined): T | undefined {
@@ -864,6 +875,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private sessionQueues = new Map<string, Promise<void>>();
   private readonly credentialCacheScope = crypto.randomUUID();
   private streamingWarningEmitted = false;
+  private serverHasRepositoryEnv = false;
 
   constructor(
     options: {
@@ -944,6 +956,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
     this.client = undefined;
     this.activeTraceparent = undefined;
+    this.serverHasRepositoryEnv = false;
   }
 
   /**
@@ -1079,7 +1092,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private buildServerEnv(config: OpenCodeSDKConfig, traceparent?: string): Record<string, string> {
     const serverEnv: Record<string, string> = {};
 
-    for (const [key, value] of Object.entries(process.env)) {
+    for (const [key, value] of Object.entries(getProcessEnv())) {
       if (value !== undefined) {
         serverEnv[key] = value;
       }
@@ -1114,6 +1127,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
       logger.debug(`Added ${opencodeBinPath} to PATH for OpenCode CLI`);
     }
 
+    if (assertIsolatedWorkingDir(config)) {
+      clearRepositoryEnv(serverEnv);
+    }
     return serverEnv;
   }
 
@@ -1261,6 +1277,20 @@ export class OpenCodeSDKProvider implements ApiProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+    const inIsolatedWorkspace = assertIsolatedWorkingDir(config);
+    // The SDK starts its server with process.env and ignores its env option.
+    if (
+      inIsolatedWorkspace &&
+      !config.baseUrl &&
+      (this.serverHasRepositoryEnv || hasRepositoryEnv(process.env))
+    ) {
+      throw new Error(
+        'copy_working_dir cannot isolate OpenCode while its server inherits Git repository ' +
+          'selectors such as GIT_DIR, GIT_WORK_TREE, or GIT_INDEX_FILE. The OpenCode SDK does ' +
+          'not support replacing that environment. Unset repository-selecting Git variables ' +
+          'before starting the provider.',
+      );
+    }
 
     if (config.apiKey !== this.config.apiKey) {
       throw new Error(
@@ -1326,6 +1356,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
       return {
         config,
+        inIsolatedWorkspace,
         isTempDir: false,
         workingDir,
       };
@@ -1333,6 +1364,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
     return {
       config,
+      inIsolatedWorkspace,
       isTempDir: true,
       workingDir: fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-opencode-sdk-')),
     };
@@ -1411,6 +1443,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
         serverOptions.config = serverConfig;
       }
 
+      this.serverHasRepositoryEnv = hasRepositoryEnv(process.env);
       let opencodePromise: ReturnType<typeof createOpencode>;
       if (config.restart_server_per_call) {
         const previousTraceparent = process.env.OPENCODE_TRACEPARENT;
@@ -1446,6 +1479,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
     } finally {
       if (this.clientInitialization === initialization) {
         this.clientInitialization = undefined;
+      }
+      if (!this.server) {
+        this.serverHasRepositoryEnv = false;
       }
     }
   }
@@ -1656,18 +1692,20 @@ export class OpenCodeSDKProvider implements ApiProvider {
    * Whether the skill tool can run for this config, so the session-history
    * round trip used for skill tracking can be skipped when it cannot.
    *
-   * OpenCode permission rules are last-match-wins and the effective ruleset
-   * starts with a wildcard deny, so the final rule covering `skill` decides.
+   * OpenCode permission rules are last-match-wins for each matching pattern.
+   * Since the prospective skill name is unknown here, any non-deny rule means
+   * a skill may run and its intermediate history must be inspected.
    */
   private isSkillToolEnabled(config: OpenCodeSDKConfig): boolean {
     const rules = this.buildEffectivePermissionRules(config);
-    for (let i = rules.length - 1; i >= 0; i--) {
-      const rule = rules[i];
-      if (rule.permission === 'skill' || rule.permission === '*') {
-        return rule.action !== 'deny';
-      }
-    }
-    return true;
+    // A pattern-specific rule only overrides earlier rules for matching skill names.
+    // We do not know which skill the model may invoke until after the call, so skip the
+    // history fetch only when every rule that could cover `skill` is a denial. Treating
+    // the final patterned rule as global loses allowed calls for policies such as
+    // { '*': 'allow', 'blocked-skill': 'deny' }.
+    return rules.some(
+      (rule) => (rule.permission === 'skill' || rule.permission === '*') && rule.action !== 'deny',
+    );
   }
 
   /**
@@ -1920,7 +1958,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const { config, isTempDir, workingDir } = this.prepareCall(context);
+    const { config, inIsolatedWorkspace, isTempDir, workingDir } = this.prepareCall(context);
     let ephemeralSession: OpenCodeSessionHandle | undefined;
     let abortListener: (() => void) | undefined;
 
@@ -1942,7 +1980,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
       const sensitiveMcpConfig = openCodeMcpContainsCacheSensitiveData(mcpConfig);
       const sensitiveBaseUrl = openCodeBaseUrlContainsCacheSensitiveData(config.baseUrl);
       const cacheResult =
-        statefulSession || hasPermissionRules || sensitiveMcpConfig || sensitiveBaseUrl
+        inIsolatedWorkspace ||
+        statefulSession ||
+        hasPermissionRules ||
+        sensitiveMcpConfig ||
+        sensitiveBaseUrl
           ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
           : await initializeAgenticCache(
               {
