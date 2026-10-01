@@ -421,7 +421,8 @@ jobs:
       - name: Use Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: '3.14'
+          # The pinned ModelAudit schema generator requires Python <3.14.
+          python-version: '3.13'
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
       # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
