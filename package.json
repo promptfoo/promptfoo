@@ -43,7 +43,8 @@
     "dist",
     "!dist/test",
     "!dist/src/__mocks__",
-    "!dist/**/*.map"
+    "!dist/**/*.map",
+    "!dist/**/*.tsbuildinfo"
   ],
   "engines": {
     "node": ">=22.22.0"
@@ -90,6 +91,7 @@
     "preversion": "command -v gh >/dev/null 2>&1 || (echo \"Error: GitHub CLI required.\" && exit 1) && [ \"$(git rev-parse --abbrev-ref HEAD)\" = \"main\" ] || (echo \"Error: Must be on main branch to version\" && exit 1) && git pull origin main && git checkout -b \"chore/bump-version-$(date +%s)\"",
     "changelog:release": "node scripts/update-changelog-version.cjs",
     "postversion": "npm run changelog:release && npm run citation:generate && git add CHANGELOG.md CITATION.cff && git commit --amend --no-edit && gh pr create --repo promptfoo/promptfoo --title \"chore: bump version $npm_package_version\" --body \"\"",
+    "package:pack": "tsx scripts/packPackageArtifact.ts",
     "prepublishOnly": "node -e \"if (!process.env.PROMPTFOO_POSTHOG_KEY) { console.error('Error: PROMPTFOO_POSTHOG_KEY must be set'); process.exit(1); }\" && npm run build:clean && npm run build",
     "test:app": "npm --prefix src/app run test --",
     "test:app:browser": "npm --prefix src/app run test:browser --",
@@ -163,7 +165,7 @@
     "@opentelemetry/sdk-trace-node": {
       "@opentelemetry/core": "2.11.0"
     },
-    "serialize-javascript": ">=7.0.5",
+    "serialize-javascript": ">=7.1.2",
     "gaxios": "^8.0.0",
     "ip-address": "10.7.2",
     "mongoose": {
@@ -218,26 +220,28 @@
       "chevrotain": "13.2.0"
     },
     "webpack": "5.111.1",
-    "dompurify": "3.4.15",
+    "dompurify": "3.4.16",
     "monaco-editor": {
       ".": "0.56.0",
-      "dompurify": "3.4.15"
+      "dompurify": "3.4.16"
     }
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.278",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
-    "@aws/bedrock-token-generator": "^1.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
     "@aws-sdk/client-sagemaker-runtime": "^3.1045.0",
     "@aws-sdk/credential-provider-sso": "^3.972.16",
+    "@aws/bedrock-token-generator": "^1.1.0",
     "@azure/identity": "^4.13.3",
     "@biomejs/biome": "2.5.14",
     "@fal-ai/client": "~1.10.1",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.11.1",
+    "@openai/agents": "^0.11.8",
+    "@openai/codex-security": "^0.1.31",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
     "@types/cli-progress": "^3.11.6",
@@ -297,9 +301,8 @@
     "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.11.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@openai/agents": "^0.11.3",
+    "@modelcontextprotocol/server-filesystem": "2026.8.31",
     "@openai/codex-sdk": "^0.156.1",
-    "@openai/codex-security": "^0.1.31",
     "@opencode-ai/sdk": "^1.18.31",
     "@slack/web-api": "^8.1.1",
     "@smithy/node-http-handler": "^4.4.14",
@@ -316,7 +319,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.127.0",
-    "@apidevtools/json-schema-ref-parser": "^16.0.2",
+    "@apidevtools/json-schema-ref-parser": "^16.0.3",
     "@hono/node-server": "2.1.1",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
@@ -332,7 +335,7 @@
     "@opentelemetry/resources": "^2.6.0",
     "@opentelemetry/sdk-trace-node": "^2.6.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
-    "ai": "^6.0.264",
+    "ai": "^6.0.286",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
@@ -416,12 +419,20 @@
   "homepage": "https://promptfoo.dev",
   "peerDependencies": {
     "@huggingface/transformers": "*",
+    "@openai/agents": "*",
+    "@openai/codex-security": "*",
     "playwright": "*",
     "playwright-extra": "*",
     "puppeteer-extra-plugin-stealth": "*"
   },
   "peerDependenciesMeta": {
     "@huggingface/transformers": {
+      "optional": true
+    },
+    "@openai/agents": {
+      "optional": true
+    },
+    "@openai/codex-security": {
       "optional": true
     },
     "playwright": {
