@@ -149,7 +149,7 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           # Includes npm 11 with trusted publishing support; no tool installation here.
-          node-version: '24.20.0'
+          node-version: '24.21.0'
           registry-url: 'https://registry.npmjs.org'
       - name: Download verified npm package
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
