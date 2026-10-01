@@ -54,10 +54,30 @@ export function validateInventory(value: unknown, surface: string): Inventory {
     const paths = new Set<string>();
     for (const asset of inventory.assets) {
       assert(typeof asset.path === 'string' && asset.path.length > 0);
+      assert(
+        !path.posix.isAbsolute(asset.path) &&
+          !path.win32.isAbsolute(asset.path) &&
+          !asset.path.includes('\\') &&
+          !asset.path.split('/').includes('..'),
+        `Invalid browser asset path: ${asset.path}`,
+      );
       assert(!paths.has(asset.path), `Duplicate asset: ${asset.path}`);
       paths.add(asset.path);
       assert(Number.isSafeInteger(asset.size) && asset.size >= 0);
       assert(typeof asset.sha256 === 'string' && /^[a-f\d]{64}$/.test(asset.sha256));
+    }
+  }
+  if (inventory.externalResources !== undefined) {
+    assert(Array.isArray(inventory.externalResources), 'Invalid external resources');
+    const resources = new Set<string>();
+    for (const resource of inventory.externalResources) {
+      assert(resource && typeof resource === 'object', 'Invalid external resource');
+      assert(typeof resource.url === 'string' && resource.url.length > 0);
+      assert(['http:', 'https:'].includes(new URL(resource.url).protocol));
+      assert(typeof resource.source === 'string' && resource.source.trim().length > 0);
+      const key = JSON.stringify([resource.url, resource.source]);
+      assert(!resources.has(key), `Duplicate external resource: ${key}`);
+      resources.add(key);
     }
   }
   return inventory;

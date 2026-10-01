@@ -131,6 +131,45 @@ describe('inventory comparison', () => {
     ).toThrow();
   });
 
+  it.each(['/absolute.js', 'C:/absolute.js', 'assets\\main.js', '../outside.js', 'a/../main.js'])(
+    'rejects non-portable browser asset path %s',
+    (assetPath) => {
+      const report = {
+        ...inventory('site'),
+        assets: [{ path: assetPath, size: 10, sha256: 'a'.repeat(64) }],
+      };
+      expect(() => validateInventory(report, 'site')).toThrow('Invalid browser asset path');
+    },
+  );
+
+  it.each([
+    null,
+    {},
+    [null],
+    [{ url: 42, source: null }],
+    [{ url: 'not-a-url', source: 'config.ts' }],
+    [{ url: 'file:///script.js', source: 'config.ts' }],
+    [{ url: 'https://example.com/script.js', source: '' }],
+    [
+      { url: 'https://example.com/script.js', source: 'config.ts' },
+      { url: 'https://example.com/script.js', source: 'config.ts' },
+    ],
+  ])('rejects malformed external resource evidence %#', (externalResources) => {
+    expect(() => validateInventory({ ...inventory('site'), externalResources }, 'site')).toThrow();
+  });
+
+  it('accepts distinct external resource sources and optional absent evidence', () => {
+    const report = {
+      ...inventory('site'),
+      externalResources: [
+        { url: 'https://example.com/script.js', source: 'config.ts' },
+        { url: 'https://example.com/script.js', source: 'loader.ts' },
+      ],
+    };
+    expect(validateInventory(report, 'site')).toBe(report);
+    expect(validateInventory(inventory('app'), 'app').externalResources).toBeUndefined();
+  });
+
   it('compares all three surfaces and preserves machine-readable evidence', () => {
     const options = fixture();
     const summary = writeComparison(options);
