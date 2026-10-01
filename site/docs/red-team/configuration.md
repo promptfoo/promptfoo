@@ -119,7 +119,7 @@ For multi-input testing, define `inputs` on the target/provider rather than unde
 
 ### Target output data handling
 
-Strategies that support `excludeTargetOutputFromAgenticAttackGeneration` use it to limit target-response content in follow-up prompts. It does not make a run local-only: GOAT failure extraction, optional unblocking, and remote graders can still receive target responses. To keep generation and grading local, set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true`, leave `PROMPTFOO_ENABLE_UNBLOCKING` disabled, avoid GOAT, and configure a local `redteam.provider` and grader. These settings do not disable [sharing](/docs/usage/sharing/#disabling-sharing), telemetry, or other configured network calls.
+Strategies that support `excludeTargetOutputFromAgenticAttackGeneration` use it to limit target-response content in follow-up prompts. It does not make a run local-only: GOAT failure extraction, optional unblocking, and remote graders can still receive target responses. A local `redteam.provider`, a local grader, and `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` do not prevent hosted-only strategies such as `indirect-web-pwn` from sending generation context remotely. These settings do not disable [sharing](/docs/usage/sharing/#disabling-sharing), telemetry, or other configured network calls.
 
 ### Framework Filtering
 
