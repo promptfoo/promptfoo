@@ -80,7 +80,7 @@ defaultTest:
 
 :::note
 
-All structured images returned by the provider are attached. Set `n: 1` when you want exactly one image per test.
+`llm-rubric` accepts up to four images per response by default. Set `PROMPTFOO_GRADING_MAX_IMAGES` to change the limit; responses above it fail grading before the judge is called. OpenAI image providers support `n: 1` to request one image. Gemini image providers do not use `n`.
 
 :::
 
