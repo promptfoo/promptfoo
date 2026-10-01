@@ -1,13 +1,13 @@
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
 import logger from '../../src/logger';
 import { LocalFileSystemProvider } from '../../src/storage/localFileSystemProvider';
-import { sleep } from '../../src/util/time';
 import { createDeferred, createTempDir, removeTempDir } from '../util/utils';
 
 vi.mock('node:fs/promises', async (importOriginal) => {
@@ -20,14 +20,14 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   };
 });
 
-vi.mock('../../src/util/time', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../src/util/time')>()),
-  sleep: vi.fn(),
+vi.mock('node:timers/promises', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:timers/promises')>()),
+  setTimeout: vi.fn(),
 }));
 
 const realFs = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
-const { sleep: realSleep } =
-  await vi.importActual<typeof import('../../src/util/time')>('../../src/util/time');
+const { setTimeout: realSleep } =
+  await vi.importActual<typeof import('node:timers/promises')>('node:timers/promises');
 const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')!;
 
 const data = Buffer.from('complete content-addressed media bytes');

@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import * as path from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
-import { sleep } from '../util/time';
 import { BLOB_SCHEME, DEFAULT_FILESYSTEM_SUBDIR } from './constants';
 
 import type {
