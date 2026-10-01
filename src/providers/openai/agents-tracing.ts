@@ -370,6 +370,7 @@ export class OTLPTracingExporter implements TracingExporter {
       .filter(([, value]) => value !== undefined)
       .map(([key, value]) => {
         const preserveTraceLinkage =
+          typeof value === 'string' &&
           TRACE_LINKAGE_ATTRIBUTE_KEYS.has(key) &&
           Object.prototype.hasOwnProperty.call(span.traceMetadata ?? {}, key);
         return {
@@ -614,6 +615,14 @@ function sanitizeCredentialText(value: string): string {
     return '<redacted>';
   }
 
+  for (const [, key] of value.matchAll(
+    /^[ \t]*(?:export[ \t]+)?(?:const|let|var)[ \t]+([A-Za-z_$][\w$]*)[ \t]*:[^=\r\n]*=/gm,
+  )) {
+    if (isCredentialAttributeKey(key)) {
+      return '<redacted>';
+    }
+  }
+
   if (
     /"ciphertext"\s*:\s*"[^"]+"/.test(value) &&
     /"tag"\s*:\s*"[^"]+"/.test(value) &&
@@ -674,8 +683,7 @@ function sanitizeCredentialText(value: string): string {
 
   const options =
     /(^|\s)(--?[A-Za-z][A-Za-z\d_.-]*)([ \t]+|=)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s;]+)/g;
-  const executable = value.trimStart().match(/^(?:"([^"]+)"|'([^']+)'|(\S+))/);
-  const usesCurlAuth = isCurlCommand(executable?.[1] ?? executable?.[2] ?? executable?.[3]);
+  const usesCurlAuth = isCurlCommand(value);
   let match: RegExpExecArray | null;
   let sanitized = '';
   let copied = 0;
@@ -749,7 +757,23 @@ function sanitizeCredentialText(value: string): string {
     );
 }
 
-function isCurlCommand(executable: unknown): boolean {
+function isCurlCommand(command: unknown): boolean {
+  let executable: unknown;
+  if (Array.isArray(command)) {
+    let index = 0;
+    while (['env', 'command', 'exec'].includes(command[index])) {
+      if (command[index] === 'env' && command[index + 1] === '-i') {
+        index++;
+      }
+      index++;
+    }
+    executable = command[index];
+  } else if (typeof command === 'string') {
+    const match = command
+      .trimStart()
+      .match(/^(?:(?:env(?:[ \t]+-i)?|command|exec)[ \t]+)*(?:"([^"]+)"|'([^']+)'|(\S+))/);
+    executable = match?.[1] ?? match?.[2] ?? match?.[3];
+  }
   return typeof executable === 'string' && /(?:^|[/\\])curl(?:\.exe)?$/i.test(executable);
 }
 
@@ -817,6 +841,9 @@ function isCredentialAttributeKey(key: string): boolean {
     .filter(Boolean);
 
   return parts.some((part, index) => {
+    if (part === 'session' || part === 'sessionid') {
+      return /(?:^(?:--?)?|\.)session(?:[._-]?id)?$/i.test(key);
+    }
     if (part === 'token' || part === 'tokens') {
       return (
         ![
@@ -884,8 +911,6 @@ function isCredentialAttributeKey(key: string): boolean {
         'sig',
         'signature',
         'pgpassword',
-        'session',
-        'sessionid',
       ].includes(part)
     ) {
       if (
@@ -924,8 +949,10 @@ function sanitizeAttributeByKey(key: string, value: unknown): unknown {
     if (isCredentialAttributeKey(key) || ArrayBuffer.isView(value)) {
       return '<redacted>';
     }
-    // Preserve intentional toJSON objects; inspect native byte views before serialization.
-    if (Array.isArray(value) || (isRecord(value) && typeof value.toJSON !== 'function')) {
+    if (value instanceof Date) {
+      return new Date(Date.prototype.getTime.call(value));
+    }
+    if (Array.isArray(value) || isRecord(value)) {
       return sanitizeStructuredAttribute(value, { changed: false }, false, isHeaderContainer(key));
     }
     return value;
@@ -953,7 +980,7 @@ function isCredentialPairValue(
     }
     return (
       /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(option) &&
-      isCredentialOption(option, isCurlCommand(source[0]))
+      isCredentialOption(option, isCurlCommand(source))
     );
   }
   return (
@@ -1018,6 +1045,13 @@ function sanitizeStructuredAttribute(
   headerPairs = false,
 ): Record<string, unknown> | unknown[] | string {
   try {
+    if (
+      !(value instanceof Date) &&
+      typeof (value as Record<string, unknown>).toJSON === 'function'
+    ) {
+      state.changed = true;
+      return '<redacted>';
+    }
     return sanitizeStructuredAttributeValue(value, state, normalizeScalars, headerPairs);
   } catch {
     state.changed = true;
@@ -1064,6 +1098,7 @@ function sanitizeStructuredAttributeValue(
       let sanitized: unknown;
       if (
         ArrayBuffer.isView(entry) ||
+        (isRecord(entry) && !(entry instanceof Date) && typeof entry.toJSON === 'function') ||
         isCredentialPairValue(source, key, sourceHeaders) ||
         isCredentialAttributeKey(key) ||
         isPrivateJwkParameter(source, key) ||
@@ -1071,11 +1106,8 @@ function sanitizeStructuredAttributeValue(
       ) {
         sanitized = '<redacted>';
         state.changed = true;
-      } else if (
-        !normalizeScalars &&
-        (losslessJson.isRawJSON?.(entry) || (isRecord(entry) && typeof entry.toJSON === 'function'))
-      ) {
-        sanitized = entry;
+      } else if (!normalizeScalars && (losslessJson.isRawJSON?.(entry) || entry instanceof Date)) {
+        sanitized = entry instanceof Date ? new Date(Date.prototype.getTime.call(entry)) : entry;
       } else if (isRecord(entry) || Array.isArray(entry)) {
         if (depth >= MAX_STRUCTURED_ATTRIBUTE_DEPTH) {
           sanitized = '<redacted>';

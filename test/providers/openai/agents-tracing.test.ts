@@ -88,6 +88,9 @@ describe('OTLPTracingExporter', () => {
           curlArgs: ['curl', '-u', 'fixture-user:fixture-password'],
           curlText: 'curl -u fixture-user:fixture-password',
           curlLong: 'curl --user fixture-user:fixture-password',
+          wrappedCurl: ['env', 'curl', '-u', 'fixture-user:fixture-password'],
+          wrappedCurlText: 'env -i curl --user fixture-user:fixture-password',
+          wrappedIdentity: 'env docker exec --user root app id',
           identity: ['docker', 'exec', '--user', 'root', 'app', 'id'],
           identityText: 'docker exec --user root app id',
           requiredOption: ['client', '--password', '-fixture-value'],
@@ -103,6 +106,13 @@ describe('OTLPTracingExporter', () => {
       });
       expect(attributes.curlText).toBe('curl -u <redacted>');
       expect(attributes.curlLong).toBe('curl --user <redacted>');
+      expect(attributes.wrappedCurl).toEqual({
+        arrayValue: {
+          values: ['env', 'curl', '-u', '<redacted>'].map((stringValue) => ({ stringValue })),
+        },
+      });
+      expect(attributes.wrappedCurlText).toBe('env -i curl --user <redacted>');
+      expect(attributes.wrappedIdentity).toBe('env docker exec --user root app id');
       expect(attributes.identity).toEqual({
         arrayValue: {
           values: ['docker', 'exec', '--user', 'root', 'app', 'id'].map((stringValue) => ({
@@ -308,6 +318,10 @@ describe('OTLPTracingExporter', () => {
       const { attributes } = await exportCustomData(
         {
           session_id: 'fixture-session',
+          session_status: 'completed',
+          session_duration: 42,
+          useSession: true,
+          arguments: ['client', '--session-id', 'fixture-session'],
           credentials: 'fixture-credential',
           certificateContent: 'public certificate',
           token_count: 10,
@@ -315,9 +329,32 @@ describe('OTLPTracingExporter', () => {
         format,
       );
       expect(attributes.session_id).toBe('<redacted>');
+      expect(attributes.session_status).toBe('completed');
+      expect(attributes.session_duration).toBe(42);
+      expect(attributes.useSession).toBe(true);
+      expect(attributes.arguments).toEqual({
+        arrayValue: {
+          values: ['client', '--session-id', '<redacted>'].map((stringValue) => ({ stringValue })),
+        },
+      });
       expect(attributes.credentials).toBe('<redacted>');
       expect(attributes.certificateContent).toBe('public certificate');
       expect(attributes.token_count).toBe(10);
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'redacts typed credential declarations in %s',
+    async (format) => {
+      const { attributes } = await exportCustomData(
+        {
+          declaration: 'const password: string = "fixture-value";',
+          ordinary: 'const token_count: number = 7;',
+        },
+        format,
+      );
+      expect(attributes.declaration).toBe('<redacted>');
+      expect(attributes.ordinary).toBe('const token_count: number = 7;');
     },
   );
 
@@ -1588,11 +1625,11 @@ describe('OTLPTracingExporter', () => {
   );
 
   it.each(['json', 'protobuf'] as const)(
-    'redacts unlabeled credentials and preserves JSON serialization in %s',
+    'redacts unlabeled credentials and preserves Date serialization in %s',
     async (format) => {
       const jwt = 'eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJl';
       const date = new Date('2026-01-01T00:00:00Z');
-      const serialized = { toJSON: () => ({ date, password: 'opaque-custom' }) };
+      const serialized = { toJSON: vi.fn(() => ({ date, password: 'opaque-custom' })) };
       const exporter = new OTLPTracingExporter();
       await exporter.export([
         {
@@ -1618,6 +1655,7 @@ describe('OTLPTracingExporter', () => {
           traceMetadata: {
             'promptfoo.otlp_format': format,
             recorded_at: date,
+            'evaluation.id': serialized,
             nested: { date },
             serialized,
             list: [date, serialized],
@@ -1632,20 +1670,21 @@ describe('OTLPTracingExporter', () => {
           : JSON.parse(body as string);
       const attributes = getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[0]);
       const dateText = JSON.stringify(date);
-      const serializedText = JSON.stringify({ date, password: '<redacted>' });
       expect(attributes).toMatchObject({
         result: '<redacted>',
         literal_yaml: '<redacted>',
         folded_yaml: '<redacted>',
         ordinary_yaml: 'description: |\n  public description',
         request: '{"offset":-0,"exponent":-0e0,"password":"<redacted>"}',
+        'evaluation.id': '<redacted>',
         'trace.metadata.recorded_at': dateText,
         'trace.metadata.nested': JSON.stringify({ date }),
-        'trace.metadata.serialized': serializedText,
+        'trace.metadata.serialized': '<redacted>',
         'trace.metadata.list': {
-          arrayValue: { values: [{ stringValue: dateText }, { stringValue: serializedText }] },
+          arrayValue: { values: [{ stringValue: dateText }, { stringValue: '<redacted>' }] },
         },
       });
+      expect(serialized.toJSON).not.toHaveBeenCalled();
       expect(JSON.stringify(payload)).not.toContain(jwt);
       expect(JSON.stringify(payload)).not.toContain('opaque-custom');
       expect(JSON.stringify(payload)).not.toContain('AIza' + 'a'.repeat(35));
