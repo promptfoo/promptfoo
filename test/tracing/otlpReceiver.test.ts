@@ -302,6 +302,51 @@ describe('OTLPReceiver', () => {
     });
 
     it.each([
+      ['json', false],
+      ['protobuf', false],
+      ['json', true],
+      ['protobuf', true],
+    ] as const)(
+      'preserves exact int64 attributes in %s before redaction: %s',
+      async (format, redact) => {
+        if (redact) {
+          receiver.setRedactAttributes(['private_marker']);
+        }
+        const values = ['9223372036854775807', '-9223372036854775808'];
+        const body = payload(
+          values.map((value) => ({
+            name: value,
+            attributes: [
+              { key: 'private_marker', value: { intValue: value } },
+              { key: 'count', value: { intValue: '42' } },
+            ],
+          })),
+        );
+        const encoded =
+          format === 'protobuf'
+            ? await (await import('../../src/tracing/protobuf')).encodeExportTraceServiceRequest(
+                body,
+              )
+            : body;
+        await request(receiver.getApp())
+          .post('/v1/traces')
+          .set(
+            'Content-Type',
+            format === 'protobuf' ? 'application/x-protobuf' : 'application/json',
+          )
+          .send(encoded)
+          .expect(200);
+        expect(mockTraceStore.addSpans.mock.calls[0][1][0].events).toEqual(
+          values.map((value) => ({
+            name: redact ? '[REDACTED]' : value,
+            timestamp: 1700000000000,
+            attributes: { private_marker: redact ? '[REDACTED]' : value, count: 42 },
+          })),
+        );
+      },
+    );
+
+    it.each([
       ['1.70000000000025e18', '1.70000000000075e18'],
       ['17000000000002500000e-1', '17000000000007500000e-1'],
     ])('accepts integer exponent-form span and event timestamps: %s', async (start, end) => {

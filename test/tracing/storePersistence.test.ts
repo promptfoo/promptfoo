@@ -73,7 +73,7 @@ describe('TraceStore span persistence', () => {
     ).toBe('fixture-private-value');
   });
 
-  it.each([123456, 0, false])(
+  it.each([123456, 0, false, '9223372036854775807', '-9223372036854775808'])(
     'redacts scalar event-name echoes on reads and exports: %s',
     async (value) => {
       const evaluation = await EvalFactory.create({ numResults: 0 });
@@ -112,40 +112,52 @@ describe('TraceStore span persistence', () => {
     },
   );
 
-  it.each([
-    ['promptfoo.request.body', 'PROMPTFOO_STRIP_PROMPT_TEXT', '[prompt stripped]'],
-    ['promptfoo.response.body', 'PROMPTFOO_STRIP_RESPONSE_OUTPUT', '[output stripped]'],
-  ])('strips long event-name body echoes from actual exports: %s', async (key, flag, marker) => {
-    const evaluation = await EvalFactory.create({ numResults: 0 });
-    evaluation.config.env = { [flag]: 'true' };
-    const traceId = 'long-body-export';
-    const store = new TraceStore();
-    await store.createTrace({ evaluationId: evaluation.id, testCaseId: 'ordinary', traceId });
-    const body = 'ordinary body text '.repeat(30);
-    await store.addSpans(traceId, [
-      {
-        spanId: 'body-span',
-        name: 'ordinary span',
-        startTime: 1,
-        attributes: { [key]: body },
-        events: [
-          { name: body, timestamp: 2 },
-          { name: body, timestamp: 3, attributes: { [key]: body } },
-          { name: 'ordinary event', timestamp: 4 },
-        ],
-      },
-    ]);
-    const output = await createOutputData(evaluation, null);
-    expect(output.traces?.[0].spans[0].events?.map((event) => event.name)).toEqual([
-      marker,
-      marker,
-      'ordinary event',
-    ]);
-    expect(JSON.stringify(output.traces)).not.toContain(body);
-    expect((await store.getSpans(traceId, { sanitizeAttributes: false }))[0].events?.[0].name).toBe(
-      body,
-    );
-  });
+  it.each(
+    [
+      ['promptfoo.request.body', 'PROMPTFOO_STRIP_PROMPT_TEXT', '[prompt stripped]'],
+      ['promptfoo.response.body', 'PROMPTFOO_STRIP_RESPONSE_OUTPUT', '[output stripped]'],
+    ].flatMap(([key, flag, marker]) =>
+      ['ordinary body text '.repeat(30), 123456, 0, false].map((body) => ({
+        key,
+        flag,
+        marker,
+        body,
+      })),
+    ),
+  )(
+    'strips event-name body echoes from actual exports: $key = $body',
+    async ({ key, flag, marker, body }) => {
+      const evaluation = await EvalFactory.create({ numResults: 0 });
+      evaluation.config.env = { [flag]: 'true' };
+      const traceId = 'long-body-export';
+      const store = new TraceStore();
+      await store.createTrace({ evaluationId: evaluation.id, testCaseId: 'ordinary', traceId });
+      await store.addSpans(traceId, [
+        {
+          spanId: 'body-span',
+          name: 'ordinary span',
+          startTime: 1,
+          attributes: { [key]: body },
+          events: [
+            { name: String(body), timestamp: 2 },
+            { name: String(body), timestamp: 3, attributes: { [key]: body } },
+            { name: 'ordinary event', timestamp: 4 },
+          ],
+        },
+      ]);
+      const output = await createOutputData(evaluation, null);
+      expect(output.traces?.[0].spans[0].events?.map((event) => event.name)).toEqual([
+        marker,
+        marker,
+        'ordinary event',
+      ]);
+      expect(output.traces?.[0].spans[0].attributes).toBeUndefined();
+      expect(output.traces?.[0].spans[0].events?.[1].attributes).toBeUndefined();
+      expect(
+        (await store.getSpans(traceId, { sanitizeAttributes: false }))[0].events?.[0].name,
+      ).toBe(String(body));
+    },
+  );
 
   it('matches long event-name echoes before local custom redaction', async () => {
     const traceId = 'long-local-redaction';

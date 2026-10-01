@@ -599,6 +599,8 @@ Evaluation result exports and sharing also apply the eval's saved `PROMPTFOO_STR
 
 Span events from OTLP and the local SDK exporter retain their names, timestamps, and attributes. Event attributes follow the span redaction and export rules, including configured redaction in local trace context. Event names that exactly match a redacted value or stripped prompt/response body are masked too, including the text form of numeric and boolean values. Display reads shorten matching names and attributes together before applying further redaction.
 
+OTLP integer attributes outside the JavaScript safe-integer range remain decimal strings, preserving their exact values for storage and redaction.
+
 Event timestamps use milliseconds, including fractions within JavaScript number precision. Missing, null, or zero OTLP timestamps use the span start. JSON integer timestamps accept exponent notation. Null event attribute lists are treated as absent, and individual attributes with missing or null values are skipped. Invalid OTLP event shapes return HTTP 400. Invalid event entries in imported or older stored traces are omitted while valid spans remain available.
 
 ### Exporting Traces

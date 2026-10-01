@@ -169,7 +169,7 @@ export function projectTracesForOutput(
     return {
       ...projectedTrace,
       spans: projectedTrace.spans.map((span) => {
-        const strippedValues = new Map<unknown, string>();
+        const strippedValues = new Map<string, string>();
         const projectAttributes = <T extends { attributes?: Record<string, unknown> }>(
           item: T,
         ): T => {
@@ -177,13 +177,21 @@ export function projectTracesForOutput(
             return item;
           }
           const attributes = { ...item.attributes };
-          if (shouldStripPromptText) {
-            strippedValues.set(attributes[PromptfooAttributes.REQUEST_BODY], '[prompt stripped]');
-            delete attributes[PromptfooAttributes.REQUEST_BODY];
-          }
-          if (shouldStripResponseOutput) {
-            strippedValues.set(attributes[PromptfooAttributes.RESPONSE_BODY], '[output stripped]');
-            delete attributes[PromptfooAttributes.RESPONSE_BODY];
+          for (const [key, strip, marker] of [
+            [PromptfooAttributes.REQUEST_BODY, shouldStripPromptText, '[prompt stripped]'],
+            [PromptfooAttributes.RESPONSE_BODY, shouldStripResponseOutput, '[output stripped]'],
+          ] as const) {
+            if (strip) {
+              const value = attributes[key];
+              if (
+                typeof value === 'string' ||
+                typeof value === 'number' ||
+                typeof value === 'boolean'
+              ) {
+                strippedValues.set(String(value), marker);
+              }
+              delete attributes[key];
+            }
           }
           const { attributes: _attributes, ...projected } = item;
           return { ...projected, ...(Object.keys(attributes).length > 0 && { attributes }) } as T;
