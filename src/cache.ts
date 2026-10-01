@@ -670,13 +670,19 @@ export async function claimBackgroundUsageOnce(
         throw new Error('Cache claims database path is a directory');
       }
       const { createClient } = await import('@libsql/client/node');
-      checkDeadline();
-      client = createClient({ url: pathToFileURL(databasePath).href, concurrency: 1, timeout: 0 });
-      // Native busy waits block the event loop. Retry asynchronously so cancellation can run.
-      await client.execute('PRAGMA busy_timeout = 0');
       while (true) {
         checkDeadline();
         try {
+          if (!client) {
+            client = createClient({
+              url: pathToFileURL(databasePath).href,
+              concurrency: 1,
+              timeout: 0,
+            });
+            // Native busy waits block cancellation; retry asynchronously instead.
+            await client.execute('PRAGMA busy_timeout = 0');
+          }
+          checkDeadline();
           await client.execute(
             'CREATE TABLE IF NOT EXISTS claims (key BLOB PRIMARY KEY) WITHOUT ROWID',
           );
@@ -699,10 +705,10 @@ export async function claimBackgroundUsageOnce(
           if (!code?.startsWith('SQLITE_BUSY') && !code?.startsWith('SQLITE_LOCKED')) {
             throw error;
           }
-          // A failed native statement may keep a lock until its connection is replaced.
-          await client.reconnect();
+          // Retrying initialization also covers the driver's initial database probe.
+          client?.close();
+          client = undefined;
           checkDeadline();
-          await client.execute('PRAGMA busy_timeout = 0');
           const delay = Math.min(25, deadline - Date.now());
           if (options.signal) {
             await sleepWithAbort(delay, options.signal);

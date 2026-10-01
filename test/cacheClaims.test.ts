@@ -169,6 +169,69 @@ describe('persistent cache claims', () => {
     },
   );
 
+  it('retries a busy database probe before creating the claim client', async () => {
+    const sqlite = await import('@libsql/client/node');
+    const open = vi.fn(sqlite.createClient).mockImplementationOnce(() => {
+      throw Object.assign(new Error('Database is busy'), { code: 'SQLITE_BUSY' });
+    });
+    const retry = vi.spyOn(await import('../src/util/time'), 'sleep').mockResolvedValue(undefined);
+    vi.doMock('@libsql/client/node', () => ({ ...sqlite, createClient: open }));
+    try {
+      expect(await cache.claimBackgroundUsageOnce('startup')).toBe(true);
+      expect(open).toHaveBeenCalledTimes(2);
+      expect(retry).toHaveBeenCalledOnce();
+    } finally {
+      vi.doUnmock('@libsql/client/node');
+      retry.mockRestore();
+    }
+    expect(await cache.claimBackgroundUsageOnce('startup')).toBe(false);
+  });
+
+  it.each(['deadline', 'cancellation'])(
+    'stops retrying database initialization after %s',
+    async (reason) => {
+      const sqlite = await import('@libsql/client/node');
+      const open = vi.fn(() => {
+        throw Object.assign(new Error('Database is busy'), { code: 'SQLITE_BUSY' });
+      });
+      const controller = new AbortController();
+      vi.useFakeTimers({ toFake: ['Date'] });
+      const deadline = Date.now() + 5000;
+      const time = await import('../src/util/time');
+      const retry = vi
+        .spyOn(time, reason === 'deadline' ? 'sleep' : 'sleepWithAbort')
+        .mockImplementation(async () => {
+          if (reason === 'deadline') {
+            vi.setSystemTime(deadline);
+          } else {
+            controller.abort();
+            controller.signal.throwIfAborted();
+          }
+        });
+      vi.doMock('@libsql/client/node', () => ({ ...sqlite, createClient: open }));
+      try {
+        await expect(
+          cache.claimBackgroundUsageOnce('startup-interrupted', {
+            deadline,
+            ...(reason === 'cancellation' ? { signal: controller.signal } : {}),
+          }),
+        ).rejects.toMatchObject({
+          cause:
+            reason === 'deadline'
+              ? { message: 'Timed out claiming background usage' }
+              : { name: 'AbortError' },
+        });
+        expect(open).toHaveBeenCalledOnce();
+        expect(retry).toHaveBeenCalledOnce();
+      } finally {
+        vi.doUnmock('@libsql/client/node');
+        retry.mockRestore();
+        vi.useRealTimers();
+      }
+      expect(await cache.claimBackgroundUsageOnce('startup-interrupted')).toBe(true);
+    },
+  );
+
   it('bounds lock retries by the caller deadline and leaves failed claims retriable', async () => {
     const release = await holdClaimLock();
     vi.useFakeTimers({ toFake: ['Date'] });
