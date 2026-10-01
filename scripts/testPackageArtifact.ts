@@ -885,6 +885,61 @@ async function runOptionalOpenAiAgentsChecks(
   }
 }
 
+async function runOptionalSlackChecks(
+  consumerDir: string,
+  configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+  withOptionalDependencies: boolean,
+): Promise<void> {
+  const sdkDir = path.join(consumerDir, 'node_modules', '@slack', 'web-api');
+  assert(!fs.existsSync(sdkDir), 'Default consumers should not install the optional Slack SDK');
+  const runChecks = async (state: string) => {
+    for (const format of ['esm', 'cjs']) {
+      console.log(
+        await runAsync(process.execPath, ['optional-slack.mjs', format, state], consumerDir, {
+          NODE_PATH: '',
+          SLACK_BOT_TOKEN: '',
+          PROMPTFOO_CONFIG_DIR: configDir,
+          PROMPTFOO_DISABLE_TELEMETRY: '1',
+          PROMPTFOO_DISABLE_UPDATE: 'true',
+        }),
+      );
+    }
+  };
+  await runChecks('missing');
+  fs.mkdirSync(sdkDir, { recursive: true });
+  try {
+    fs.writeFileSync(
+      path.join(sdkDir, 'package.json'),
+      JSON.stringify({ name: '@slack/web-api', version: '0.0.0', main: './index.js' }),
+    );
+    fs.writeFileSync(
+      path.join(sdkDir, 'index.js'),
+      'throw new Error("Unsupported Slack SDK code must not execute");',
+    );
+    await runChecks('incompatible');
+  } finally {
+    fs.rmSync(sdkDir, { recursive: true, force: true });
+  }
+
+  // Keep the omit-optional profile intact; exercise the real SDK in the default profile.
+  if (withOptionalDependencies) {
+    runNpm(
+      [
+        'install',
+        '--ignore-scripts',
+        '--no-audit',
+        '--no-fund',
+        '--no-package-lock',
+        '@slack/web-api@^8.1.1',
+      ],
+      consumerDir,
+      npmEnv,
+    );
+    await runChecks('installed');
+  }
+}
+
 async function assertOptionalBrowserDependencies(
   consumerDir: string,
   configDir: string,
@@ -1236,6 +1291,12 @@ async function main(): Promise<void> {
       }
     }
     await runOptionalOpenAiAgentsChecks(consumerDir, configDir);
+    await runOptionalSlackChecks(
+      consumerDir,
+      configDir,
+      consumerNpmEnv,
+      values.profile === 'default',
+    );
     if (values.profile === 'default') {
       console.log(await runAsync(process.execPath, ['migrations.mjs'], consumerDir, consumerEnv));
       await runInstalledCodexSecurityEval(consumerDir, configDir, consumerNpmEnv);

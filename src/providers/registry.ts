@@ -102,6 +102,7 @@ import { ScriptCompletionProvider } from './scriptCompletion';
 import { SequenceProvider } from './sequence';
 import { modelNameFromProviderPath } from './shared';
 import { SimulatedUser } from './simulatedUser';
+import { loadSlackProviderModule } from './slack-availability';
 import { createSnowflakeProvider } from './snowflake';
 import { createTogetherAiProvider } from './togetherai';
 import { TransformersEmbeddingProvider, TransformersTextGenerationProvider } from './transformers';
@@ -1746,56 +1747,47 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      try {
-        const { SlackProvider } = await import('./slack');
+      const { SlackProvider } = await loadSlackProviderModule(() => import('./slack'));
 
-        // Handle plain 'slack' format
-        if (providerPath === 'slack') {
-          return new SlackProvider(providerOptions);
-        }
+      // Handle plain 'slack' format
+      if (providerPath === 'slack') {
+        return new SlackProvider(providerOptions);
+      }
 
-        // Handle slack:* formats
-        const splits = providerPath.split(':');
+      // Handle slack:* formats
+      const splits = providerPath.split(':');
 
-        if (splits.length < 2) {
-          throw new Error(
-            'Invalid Slack provider path. Use slack:<channel_id> or slack:channel:<channel_id>',
-          );
-        }
+      if (splits.length < 2) {
+        throw new Error(
+          'Invalid Slack provider path. Use slack:<channel_id> or slack:channel:<channel_id>',
+        );
+      }
 
-        // Handle slack:C0123ABCDEF format
-        if (splits.length === 2) {
-          return new SlackProvider({
-            ...providerOptions,
-            config: {
-              ...providerOptions.config,
-              channel: splits[1],
-            },
-          });
-        }
+      // Handle slack:C0123ABCDEF format
+      if (splits.length === 2) {
+        return new SlackProvider({
+          ...providerOptions,
+          config: {
+            ...providerOptions.config,
+            channel: splits[1],
+          },
+        });
+      }
 
-        // Handle slack:channel:C0123ABCDEF or slack:user:U0123ABCDEF format
-        const targetType = splits[1];
-        const targetId = splits.slice(2).join(':');
+      // Handle slack:channel:C0123ABCDEF or slack:user:U0123ABCDEF format
+      const targetType = splits[1];
+      const targetId = splits.slice(2).join(':');
 
-        if (targetType === 'channel' || targetType === 'user') {
-          return new SlackProvider({
-            ...providerOptions,
-            config: {
-              ...providerOptions.config,
-              channel: targetId,
-            },
-          });
-        } else {
-          throw new Error(`Invalid Slack target type: ${targetType}. Use 'channel' or 'user'`);
-        }
-      } catch (error: any) {
-        if (error.code === 'MODULE_NOT_FOUND' && error.message.includes('@slack/web-api')) {
-          throw new Error(
-            'The Slack provider requires the @slack/web-api package. Please install it with: npm install @slack/web-api@^8',
-          );
-        }
-        throw error;
+      if (targetType === 'channel' || targetType === 'user') {
+        return new SlackProvider({
+          ...providerOptions,
+          config: {
+            ...providerOptions.config,
+            channel: targetId,
+          },
+        });
+      } else {
+        throw new Error(`Invalid Slack target type: ${targetType}. Use 'channel' or 'user'`);
       }
     },
   },

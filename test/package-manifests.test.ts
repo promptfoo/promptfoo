@@ -438,12 +438,10 @@ describe('package manifests', () => {
         'package-lock.json',
       );
     for (const dependency of [
-      '@alcalzone/ansi-tokenize',
       '@anthropic-ai/claude-agent-sdk',
       '@langfuse/client',
       '@modelcontextprotocol/sdk',
       '@opencode-ai/sdk',
-      '@slack/web-api',
       'hono',
       'ibm-cloud-sdk-core',
       'read-excel-file',
@@ -458,7 +456,7 @@ describe('package manifests', () => {
     expect(sitePackageJson.dependencies).not.toHaveProperty('sharp');
     expect(sitePackageJson.devDependencies).not.toHaveProperty('sharp');
 
-    for (const dependency of ['@alcalzone/ansi-tokenize', '@opencode-ai/sdk', '@slack/web-api']) {
+    for (const dependency of ['@opencode-ai/sdk']) {
       const entry = packageLock.packages[`node_modules/${dependency}`];
       expect(entry?.optional || entry?.devOptional, dependency).toBe(true);
     }
