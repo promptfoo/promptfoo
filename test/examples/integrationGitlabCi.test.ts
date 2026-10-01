@@ -95,7 +95,11 @@ process.exitCode = Number(process.env.TEST_EXIT_CODE ?? 0);
       path.join(rootDir, 'site/docs/integrations/gitlab-ci.md'),
       path.join(rootDir, 'site/docs/integrations/ci-cd.md'),
     ]) {
-      expect(fs.readFileSync(file, 'utf8')).toContain(`integrity: '${integrity}'`);
+      const documentation = fs.readFileSync(file, 'utf8');
+      expect(documentation).toContain(`integrity: '${integrity}'`);
+      expect(documentation).toMatch(
+        /https:\/\/raw\.githubusercontent\.com\/promptfoo\/promptfoo\/[a-f0-9]{40}\/examples\/integration-gitlab-ci\/gitlab-ci\.yml/,
+      );
     }
   });
 

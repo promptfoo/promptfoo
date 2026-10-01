@@ -22,7 +22,7 @@ Add this to `.gitlab-ci.yml`:
 
 ```yaml title=".gitlab-ci.yml"
 include:
-  - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
+  - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/3df5b0063de0ffffc4798b35f840855b39927fa5/examples/integration-gitlab-ci/gitlab-ci.yml'
     integrity: 'sha256-SgzKzJQY6AAFx/tlDmV/d/N0l6O+X2cLt/nZeXwybSE='
 
 promptfoo-eval:
@@ -41,7 +41,7 @@ promptfoo-eval:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 ```
 
-GitLab verifies the template's SHA-256 integrity value before starting the pipeline. On versions older than 17.9, replace `main` with a full, reviewed commit SHA and omit `integrity`. Update the pinned image tag and digest together when upgrading Promptfoo.
+The URL pins the template to a reviewed commit. GitLab 17.9 or later also verifies its SHA-256 integrity value before starting the pipeline; on older versions, omit `integrity` and keep the pinned URL. Update the URL and integrity value together when changing template versions.
 
 The job-level `merge_request_event` rule is required for merge request pipelines. To copy a runnable example with a local template instead:
 
@@ -128,7 +128,7 @@ A successful job prints the passed and total test counts and the required pass r
 
 1. **Template integrity mismatch:** Review the updated template before changing its hash. Calculate it with `openssl dgst -sha256 -binary gitlab-ci.yml | openssl base64 -A` and prefix the value with `sha256-`.
 2. **Provider credentials are unavailable:** Check the variable's protected status and whether the pipeline meets GitLab's protected-resource requirements.
-3. **Artifact directory is not empty:** Use a fresh checkout and keep the output directory out of caches and incoming artifacts.
+3. **Artifact directory is not empty:** Use a fresh checkout and keep the output directory out of caches and incoming artifacts. The job removes previous JSON and JUnit reports before failing this check; other files remain untouched.
 4. **Missing or invalid results:** Inspect the CLI logs and confirm the configured file contains runnable tests. A successful process exit alone does not pass the job.
 5. **Job timing out:** Set `timeout` on the extending job, for example `timeout: 2 hours`.
 

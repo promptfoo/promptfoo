@@ -16,7 +16,7 @@ Use a Docker or Kubernetes runner. To include the template without copying it:
 
 ```yaml
 include:
-  - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
+  - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/3df5b0063de0ffffc4798b35f840855b39927fa5/examples/integration-gitlab-ci/gitlab-ci.yml'
     integrity: 'sha256-SgzKzJQY6AAFx/tlDmV/d/N0l6O+X2cLt/nZeXwybSE='
 
 promptfoo-eval:
@@ -25,7 +25,7 @@ promptfoo-eval:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 ```
 
-GitLab 17.9 or later supports `include:integrity`. On older versions, replace `main` with a full, reviewed commit SHA and omit `integrity`. The template uses a digest-pinned Promptfoo image; update the image tag and digest together when upgrading.
+The URL pins the template to a reviewed commit. GitLab 17.9 or later also verifies `include:integrity`; on older versions, omit `integrity` and keep the pinned URL. Update the URL and integrity value together when changing template versions. The template uses a digest-pinned Promptfoo image.
 
 This template runs trusted project code with the job's permissions. It does not isolate providers or assertions from CI credentials. Keep provider credentials in masked, protected GitLab variables and only make them available to trusted pipelines. Merge request pipelines must meet [GitLab's protected-resource requirements](https://docs.gitlab.com/ci/pipelines/merge_request_pipelines/#control-access-to-protected-variables-and-runners) to receive protected variables.
 
