@@ -28,7 +28,8 @@ in the commands below. This avoids PowerShell script execution-policy restrictio
 1. **Install Node.js dependencies**:
 
 ```bash
-npm install playwright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth
+npm install promptfoo "playwright@^1.63.0" "playwright-extra@^4.3.6" "puppeteer-extra-plugin-stealth@^2.11.2"
+npx playwright install chromium
 ```
 
 2. **Install Python dependencies** (for the demo application):
@@ -72,7 +73,7 @@ This starts a local server at http://localhost:7860
 2. **Run the browser automation tests** in a second terminal, from the same example directory:
 
 ```bash
-npx promptfoo@latest eval -c promptfooconfig.yaml
+npx promptfoo eval -c promptfooconfig.yaml
 ```
 
 3. **View the results**:
@@ -196,7 +197,7 @@ steps:
 | Elements not found      | Use browser DevTools to verify selectors        |
 | Timing issues           | Increase wait times or use `waitForNewChildren` |
 | Want to see the browser | Set `headless: false` in the configuration      |
-| Need detailed logs      | Run with `npx promptfoo@latest eval --verbose`  |
+| Need detailed logs      | Run with `npx promptfoo eval --verbose`         |
 
 ## Additional Resources
 
