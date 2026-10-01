@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as traceSanitizer from '../../src/tracing/sanitizeAttributes';
 import { mockGlobal } from '../util/utils';
 
 const mockRandomUUID = vi.fn(() => 'test-uuid');
@@ -88,6 +89,40 @@ describe('TraceStore', () => {
     const values = mockDb.insert().values.mock.calls[0][0];
     expect(values[0].events).toBeUndefined();
     expect(values[1].events).toEqual([valid]);
+  });
+
+  it.each([
+    ['invoice.done', true],
+    ['*done', true],
+    ['display', false],
+  ])('filters stored names before display projection for %s', async (filter, matches) => {
+    const row = {
+      spanId: 'invoice',
+      name: 'invoice.done',
+      startTime: 1,
+      attributes: { summary: 'invoice.done' },
+    };
+    mockDb.select().orderBy = vi.fn().mockResolvedValue([row]);
+    const sanitizer = vi
+      .spyOn(traceSanitizer, 'sanitizeTraceAttributes')
+      .mockImplementation((_attributes, options) => {
+        options?.truncatedValues?.set('invoice.done', 'display');
+        return { summary: 'display' };
+      });
+
+    try {
+      const spans = await traceStore.getSpans('invoice-trace', { spanFilter: [filter] });
+
+      expect(spans).toEqual(
+        matches
+          ? [expect.objectContaining({ name: 'display', attributes: { summary: 'display' } })]
+          : [],
+      );
+      expect(row.name).toBe('invoice.done');
+      expect(row.attributes).toEqual({ summary: 'invoice.done' });
+    } finally {
+      sanitizer.mockRestore();
+    }
   });
 
   describe('createTrace', () => {

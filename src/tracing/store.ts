@@ -464,23 +464,24 @@ export class TraceStore {
           continue;
         }
 
-        const spanData = serializeSpan({ ...row, attributes: rawAttributes }, shouldSanitize);
-
         const hasExplicitFilter = Boolean(spanFilter?.length);
 
-        if (hasExplicitFilter && !matchesSpanFilter(spanData.name, spanFilter!)) {
+        if (hasExplicitFilter && !matchesSpanFilter(row.name, spanFilter!)) {
           continue;
         }
 
         if (
           !includeInternalSpans &&
           !hasExplicitFilter &&
-          !isRelevantSpan({ attributes: rawAttributes, statusCode: spanData.statusCode })
+          !isRelevantSpan({ attributes: rawAttributes, statusCode: row.statusCode ?? undefined })
         ) {
           continue;
         }
 
-        spanMap.set(spanData.spanId, spanData);
+        spanMap.set(
+          row.spanId,
+          serializeSpan({ ...row, attributes: rawAttributes }, shouldSanitize),
+        );
       }
 
       let spans = Array.from(spanMap.values());
