@@ -165,7 +165,7 @@ pi resolves credentials in the order `--api-key` flag > `~/.pi/agent/auth.json` 
 
 ## Tracing
 
-When [tracing](/docs/tracing/) is enabled, each call emits a GenAI span with model, token usage, and cost, linked through `traceparent`. Pi does not expose native OpenTelemetry spans for its internal work.
+When [tracing](/docs/tracing/) is enabled, each call emits a GenAI span with the requested model and token usage, linked through `traceparent`. Pi does not expose native OpenTelemetry spans for its internal work.
 
 ## Comparing Models Through Pi
 

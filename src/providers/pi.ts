@@ -768,6 +768,9 @@ export class PiProvider implements ApiProvider {
           signalGroup('SIGKILL');
         }
         options.abortSignal?.removeEventListener('abort', abortListener);
+        child.stdin.destroy();
+        child.stdout.destroy();
+        child.stderr.destroy();
         fn();
       };
 
@@ -905,24 +908,28 @@ export class PiProvider implements ApiProvider {
   }
 
   private collectAssistantMessages(events: PiEvent[]): PiMessage[] {
-    // agent_end carries the authoritative final message list; scan backwards
-    // for the last one that actually contains an assistant turn.
-    for (let i = events.length - 1; i >= 0; i--) {
-      const event = events[i];
+    let lastAgentEnd = -1;
+    let lastMessageEnd = -1;
+    events.forEach((event, index) => {
       if (event.type === 'agent_end' && event.messages) {
-        const assistant = event.messages.filter((message) => message.role === 'assistant');
-        if (assistant.length > 0) {
-          return assistant;
-        }
-        // agent_end carried no assistant turn (e.g. the assistant text only
-        // arrived via message_end). Stop scanning and use the fallback below.
-        break;
+        lastAgentEnd = index;
+      } else if (event.type === 'message_end' && event.message?.role === 'assistant') {
+        lastMessageEnd = index;
+      }
+    });
+    // Use the terminal snapshot only when no completed assistant turn follows it.
+    if (lastAgentEnd > lastMessageEnd) {
+      const assistant = events[lastAgentEnd].messages!.filter(
+        (message) => message.role === 'assistant',
+      );
+      if (assistant.length > 0) {
+        return assistant;
       }
     }
 
-    // Fall back to message_end events when the run ended without an agent_end
-    // that carried assistant messages.
+    // An interrupted retry can have completed turns without a terminal snapshot.
     return events
+      .slice(lastMessageEnd > lastAgentEnd ? lastAgentEnd + 1 : 0)
       .filter((event) => event.type === 'message_end' && event.message?.role === 'assistant')
       .map((event) => event.message!);
   }

@@ -29,11 +29,12 @@ const { spawn } = await import('child_process');
 const mockSpawn = vi.mocked(spawn);
 
 class FakeChildProcess extends EventEmitter {
-  stdout = Object.assign(new EventEmitter(), { setEncoding: vi.fn() });
-  stderr = Object.assign(new EventEmitter(), { setEncoding: vi.fn() });
+  stdout = Object.assign(new EventEmitter(), { setEncoding: vi.fn(), destroy: vi.fn() });
+  stderr = Object.assign(new EventEmitter(), { setEncoding: vi.fn(), destroy: vi.fn() });
   stdin = Object.assign(new EventEmitter(), {
     write: vi.fn(),
     end: vi.fn(),
+    destroy: vi.fn(),
   });
   exitCode: number | null = null;
   signalCode: NodeJS.Signals | null = null;
@@ -1006,6 +1007,30 @@ describe('PiProvider', () => {
       expect(result.tokenUsage?.total).toBe(110);
     });
 
+    it('retains completed messages from an interrupted retry', async () => {
+      const previous = assistantMessage('previous attempt', { usage: buildUsage(10, 1, 0.001) });
+      const current = [
+        assistantMessage('first completed turn', { usage: buildUsage(70, 7, 0.002) }),
+        assistantMessage('second completed turn', { usage: buildUsage(50, 5, 0.003) }),
+      ];
+      mockPiRun(
+        [
+          { type: 'message_end', message: previous },
+          { type: 'agent_end', messages: [previous], willRetry: true },
+          ...current.map((message) => ({ type: 'message_end', message })),
+        ],
+        { exitCode: 1 },
+      );
+
+      const result = await createProvider().callApi('test prompt');
+
+      expect(result.error).toContain('exited with code 1');
+      expect(result.output).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({ prompt: 120, completion: 12, total: 132 });
+      expect(result.cost).toBeCloseTo(0.005);
+      expect(JSON.parse(result.raw as string)).toEqual(current);
+    });
+
     it('preserves usage and cost on the message_end fallback path', async () => {
       mockPiRun([
         {
@@ -1346,6 +1371,9 @@ describe('PiProvider', () => {
 
         const result = await promise;
         expect(result.output).toBe('flushed before exit');
+        expect(child.stdin.destroy).toHaveBeenCalledOnce();
+        expect(child.stdout.destroy).toHaveBeenCalledOnce();
+        expect(child.stderr.destroy).toHaveBeenCalledOnce();
       } finally {
         vi.useRealTimers();
       }
