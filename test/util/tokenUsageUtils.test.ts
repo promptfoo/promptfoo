@@ -749,6 +749,49 @@ describe('tokenUsageUtils', () => {
       });
     });
 
+    it.each([false, undefined])('preserves zero-request failures when cached is %s', (cached) => {
+      const target = createEmptyTokenUsage();
+      const response = {
+        cached,
+        error: 'Fixture rejected before sending a request',
+        tokenUsage: { numRequests: 0 },
+      };
+
+      accumulateGradingResponseTokenUsage(target, response);
+
+      expect(target.assertions).toMatchObject({ total: 0, numRequests: 1 });
+      expect(target.incurredTokenUsage?.assertions).toMatchObject({ total: 0, numRequests: 0 });
+    });
+
+    it.each([
+      { total: 5, numRequests: 0 },
+      { total: 0, numRequests: 0, incurredTokenUsage: { total: 5, numRequests: 1 } },
+    ])('retains reported work when grading fails', (tokenUsage) => {
+      const target = createEmptyTokenUsage();
+      const response = { error: 'Fixture failed after model work', tokenUsage };
+
+      accumulateGradingResponseTokenUsage(target, response);
+
+      expect(target.incurredTokenUsage?.assertions ?? target.assertions).toMatchObject({
+        total: 5,
+        numRequests: 1,
+      });
+    });
+
+    it('keeps earlier incurred work when a later task fails before sending', () => {
+      const target = createEmptyTokenUsage();
+      accumulateGradingResponseTokenUsage(target, { tokenUsage: { total: 5, numRequests: 1 } });
+      const response = {
+        error: 'Fixture rejected before sending a request',
+        tokenUsage: { numRequests: 0 },
+      };
+
+      accumulateGradingResponseTokenUsage(target, response);
+
+      expect(target.assertions).toMatchObject({ total: 5, numRequests: 2 });
+      expect(target.incurredTokenUsage?.assertions).toMatchObject({ total: 5, numRequests: 1 });
+    });
+
     it('preserves explicitly fresh grading when avoided cached tokens exceed fresh usage', () => {
       const target = createEmptyTokenUsage();
       target.incurredTokenUsage = createEmptyTokenUsage();

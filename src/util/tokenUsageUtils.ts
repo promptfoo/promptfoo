@@ -295,7 +295,7 @@ export function accumulateAttackerTokenUsage(
 /** Record one grading task and retain its reported model usage. */
 export function accumulateGradingResponseTokenUsage(
   target: TokenUsage,
-  response: { cached?: boolean; tokenUsage?: Partial<TokenUsage> } | undefined,
+  response: { cached?: boolean; error?: string; tokenUsage?: Partial<TokenUsage> } | undefined,
 ): void {
   if (!response) {
     return;
@@ -312,16 +312,24 @@ export function accumulateGradingResponseTokenUsage(
       cachedTokens > 0 &&
       reportedTotal <= cachedTokens);
 
+  const reportedIncurredUsage = response.tokenUsage?.incurredTokenUsage ?? response.tokenUsage;
+  const failedWithoutRequest =
+    Boolean(response.error) &&
+    reportedIncurredUsage?.numRequests === 0 &&
+    (reportedIncurredUsage.total ??
+      (reportedIncurredUsage.prompt ?? 0) + (reportedIncurredUsage.completion ?? 0)) === 0;
+  const noIncurredUsage = cachedResponse || failedWithoutRequest;
+
   const logicalUsage = {
     ...response.tokenUsage,
     ...(cachedResponse && reportedTotal === 0 && cachedTokens > 0 && { total: cachedTokens }),
     ...(cachedResponse && { cached: Math.max(cachedTokens, reportedTotal) }),
     numRequests: 1,
   };
-  const incurredUsage = cachedResponse
+  const incurredUsage = noIncurredUsage
     ? createEmptyAssertions()
     : {
-        ...(response.tokenUsage?.incurredTokenUsage ?? response.tokenUsage),
+        ...reportedIncurredUsage,
         numRequests: 1,
       };
 
@@ -329,7 +337,7 @@ export function accumulateGradingResponseTokenUsage(
     assertions: logicalUsage,
     ...((target.incurredTokenUsage ||
       response.tokenUsage?.incurredTokenUsage ||
-      cachedResponse) && {
+      noIncurredUsage) && {
       incurredTokenUsage: { assertions: incurredUsage },
     }),
   });
