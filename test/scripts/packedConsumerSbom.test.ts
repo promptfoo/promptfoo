@@ -30,6 +30,38 @@ afterEach(() => {
 });
 
 describe('packed consumer SBOM', () => {
+  it('generates a real SBOM from a freshly installed local tarball', () => {
+    const directory = fixture();
+    const source = path.join(directory, 'source');
+    const consumer = path.join(directory, 'consumer');
+    writePackage(source, { name: 'promptfoo', version: '1.0.0' });
+    writeBrowser(path.join(source, 'dist/src/app'));
+    writePackage(consumer, { name: 'consumer', version: '0.0.0', private: true });
+    const npmExecPath = execSync('npm exec --offline --call "node -p process.env.npm_execpath"', {
+      encoding: 'utf8',
+    }).trim();
+    vi.stubEnv('npm_execpath', npmExecPath);
+    const runNpm = (args: string[], cwd: string) =>
+      execFileSync(process.execPath, [npmExecPath, ...args], {
+        cwd,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    const packed = JSON.parse(runNpm(['pack', '--ignore-scripts', '--json'], source));
+    const archive = path.join(source, packed[0].filename);
+    runNpm(
+      ['install', '--package-lock', '--ignore-scripts', '--no-audit', '--no-fund', archive],
+      consumer,
+    );
+    const output = path.join(directory, 'reports');
+    writePackedConsumerSbom(consumer, archive, output, 'default', {
+      npm_config_registry: 'https://registry.npmjs.org/',
+    });
+    expect(
+      JSON.parse(fs.readFileSync(path.join(output, 'runtime-default.json'), 'utf8')).components,
+    ).toEqual([{ name: 'promptfoo', version: '1.0.0' }]);
+  }, 30_000);
+
   it('matches a real npm SBOM against nested installed versions and scoped packages', () => {
     const directory = fixture();
     writePackage(directory, {

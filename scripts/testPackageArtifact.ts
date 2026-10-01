@@ -1186,6 +1186,7 @@ async function main(): Promise<void> {
       path.join(consumerDir, 'package.json'),
       JSON.stringify({
         name: 'promptfoo-package-artifact-consumer',
+        version: '0.0.0',
         private: true,
         type: 'module',
       }),
@@ -1199,7 +1200,9 @@ async function main(): Promise<void> {
         '--omit=dev',
         '--no-audit',
         '--no-fund',
-        '--no-package-lock',
+        // npm needs the local tarball's resolution metadata to validate its SBOM
+        // edge. The lock records this fresh install; SBOM generation reads disk.
+        values['sbom-output'] ? '--package-lock' : '--no-package-lock',
         tarballPath,
       ],
       consumerDir,

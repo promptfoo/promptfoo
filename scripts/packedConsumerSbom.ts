@@ -124,7 +124,13 @@ export function writePackedConsumerSbom(
     'Missing installed Promptfoo',
   );
   const sbom = JSON.parse(
-    runNpm(['sbom', '--sbom-format=cyclonedx', '--workspaces=false', '--omit=dev']),
+    runNpm([
+      'sbom',
+      '--sbom-format=cyclonedx',
+      '--package-lock-only=false',
+      '--workspaces=false',
+      '--omit=dev',
+    ]),
   );
   assertSbomCoverage(components, sbom);
   fs.mkdirSync(outputDir, { recursive: true });
