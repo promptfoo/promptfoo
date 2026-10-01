@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare Gemini chat API transports
+
+providers:
+  # Keep the provider ID while selecting Interactions.
+  - id: google:gemini-3.6-flash
+    label: interactions-config
+    config:
+      interactions: true
+
+  # Ordinary Google chat uses generateContent.
+  - id: google:gemini-3.6-flash
+    label: generateContent
+
+  # Explicit route. Equivalent to `interactions: true`, but changes the provider id.
+  - id: google:interactions:gemini-3.6-flash
+    label: interactions-explicit
+
+prompts:
+  - 'Answer in one word: what is the capital of {{country}}?'
+
+tests:
+  - vars:
+      country: France
+    assert:
+      - type: contains
+        value: Paris
+  - vars:
+      country: Japan
+    assert:
+      - type: contains
+        value: Tokyo

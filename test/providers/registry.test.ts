@@ -1974,6 +1974,19 @@ describe('Provider Registry', () => {
         'vertex:video:veo-3.1-generate-001',
         async () => (await import('../../src/providers/google/video')).GoogleVideoProvider,
       ],
+      // Interactions API chat route (GA June 2026), opt-in via service-type segment.
+      [
+        'google:interactions:gemini-3.6-flash',
+        async () =>
+          (await import('../../src/providers/google/interactionsChat'))
+            .GoogleInteractionsChatProvider,
+      ],
+      [
+        'vertex:interactions:gemini-3.6-flash',
+        async () =>
+          (await import('../../src/providers/google/interactionsChat'))
+            .GoogleInteractionsChatProvider,
+      ],
     ] as const)(
       'routes %s to the expected provider class',
       async (providerPath, loadExpectedProvider) => {
@@ -2027,6 +2040,143 @@ describe('Provider Registry', () => {
         const provider = await factory!.create(providerPath, bareOptions, bareContext);
         expect((provider as any).config?.vertexai).toBe(true);
         expect(provider.id()).toBe(providerPath);
+      },
+    );
+
+    it.each([
+      'google:interactions:gemini-3.6-flash',
+      'vertex:interactions:gemini-3.6-flash',
+      'google:gemini-3.6-flash',
+      'vertex:gemini-3.6-flash',
+      'vertex:chat:gemini-3.6-flash',
+    ])('preserves the explicit id for Interactions route %s', async (providerPath) => {
+      const options: ProviderOptions = {
+        id: 'my-evaluation-provider',
+        config: { interactions: true },
+      };
+      const factory = (await getProviderFactories(providerPath)).find((entry) =>
+        entry.test(providerPath),
+      );
+      const provider = await factory!.create(providerPath, options, { basePath: '/test', options });
+      expect(provider.id()).toBe('my-evaluation-provider');
+    });
+
+    it('pins google:interactions routes to AI Studio', async () => {
+      const providerPath = 'google:interactions:gemini-3.6-flash';
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      // Ambient VERTEX_*/GOOGLE_CLOUD_PROJECT settings must not flip a google:
+      // route over to Vertex, matching AIStudioChatProvider.
+      expect((provider as any).config?.vertexai).toBe(false);
+      expect(provider.id()).toBe(providerPath);
+    });
+
+    it('applies vertexai config for vertex:interactions routes', async () => {
+      const providerPath = 'vertex:interactions:gemini-3.6-flash';
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      expect((provider as any).config?.vertexai).toBe(true);
+      expect(provider.id()).toBe(providerPath);
+    });
+
+    it('rejects google:interactions without a model name', async () => {
+      const providerPath = 'google:interactions:';
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+        'Missing model name',
+      );
+    });
+
+    it.each(['google:gemini-3.6-flash', 'vertex:gemini-3.6-flash'])(
+      'routes %s through Interactions when config.interactions is set, keeping the provider id',
+      async (providerPath) => {
+        const options: ProviderOptions = { config: { interactions: true } };
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        const provider = await factory!.create(providerPath, options, {
+          basePath: '/test',
+          options,
+        });
+        const { GoogleInteractionsChatProvider } = await import(
+          '../../src/providers/google/interactionsChat'
+        );
+        expect(provider).toBeInstanceOf(GoogleInteractionsChatProvider);
+        // The opt-in flag must not rename the provider, so eval history stays stable.
+        expect(provider.id()).toBe(providerPath);
+      },
+    );
+
+    it.each([
+      ['google:gemini-3.8-flash', {}],
+      ['google:gemma-3-27b-it', {}],
+      ['google:codechat-bison', {}],
+      ['google:gemini-2.5-flash-preview-tts', {}],
+      ['google:gemini-3.6-flash', { safetySettings: [{ category: 'HARM_CATEGORY_HARASSMENT' }] }],
+      ['google:gemini-3.6-flash', { generationConfig: { responseModalities: ['AUDIO'] } }],
+      ['google:gemini-3.6-flash', { interactions: false }],
+      ['palm:chat-bison', {}],
+      ['google:custom-model.ts', {}],
+    ])('keeps %s on generateContent', async (providerPath, config) => {
+      const options: ProviderOptions = { config: config as any };
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      const provider = await factory!.create(providerPath, options, {
+        basePath: '/test',
+        options,
+      });
+      const { AIStudioChatProvider } = await import('../../src/providers/google/ai.studio');
+      expect(provider).toBeInstanceOf(AIStudioChatProvider);
+    });
+
+    it('keeps bare vertex:<model> on generateContent unless explicitly opted in', async () => {
+      const providerPath = 'vertex:gemini-3-flash-preview';
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      const { VertexChatProvider } = await import('../../src/providers/google/vertex');
+      // Vertex Interactions serves fewer models, forces retention, and ignores
+      // stored history, so it stays opt-in.
+      expect(provider).toBeInstanceOf(VertexChatProvider);
+    });
+
+    it.each([
+      'google:interactions:gemini-omni-flash-preview',
+      'vertex:interactions:gemini-omni-flash-preview',
+      'google:interactions:gemini-omni-1.1-flash',
+      'vertex:interactions:gemini-omni-1.1-flash-preview',
+    ])('keeps %s on the video-capable Omni provider', async (providerPath) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      const { GoogleInteractionsProvider } = await import(
+        '../../src/providers/google/interactions'
+      );
+      // The chat provider collects only text, so an Omni video response would
+      // come back empty.
+      expect(provider).toBeInstanceOf(GoogleInteractionsProvider);
+    });
+
+    it('rejects vertex:interactions without a model name', async () => {
+      const providerPath = 'vertex:interactions:';
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+        'Missing model name',
+      );
+    });
+
+    it.each(['vertex:embedding:gemini-embedding-001', 'vertex:embeddings:gemini-embedding-001'])(
+      'keeps %s on the embedding provider even with interactions enabled',
+      async (providerPath) => {
+        const options: ProviderOptions = { config: { interactions: true } };
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        const provider = await factory!.create(providerPath, options, {
+          basePath: '/test',
+          options,
+        });
+        const { VertexEmbeddingProvider } = await import('../../src/providers/google/vertex');
+        // Embeddings have no Interactions equivalent; routing them to the chat
+        // provider would send "embedding:<model>" to the wrong endpoint.
+        expect(provider).toBeInstanceOf(VertexEmbeddingProvider);
       },
     );
 

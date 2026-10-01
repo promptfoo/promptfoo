@@ -7,6 +7,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleAuthManager } from './auth';
+import { normalizeOpenAiInteractionMedia } from './interactionsShared';
 import { calculateGoogleCost, mergeGoogleCompletionOptions } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -40,19 +41,6 @@ type InteractionResponse = {
     output_tokens_by_modality?: Array<{ modality?: string; tokens?: number }>;
   };
 };
-
-function normalizeAudioMimeType(format?: string): string {
-  if (format?.startsWith('audio/')) {
-    return format;
-  }
-  if (format === 'mp3') {
-    return 'audio/mpeg';
-  }
-  if (format === 'pcm16') {
-    return 'audio/pcm';
-  }
-  return `audio/${format || 'mpeg'}`;
-}
 
 function parseInteractionInput(prompt: string): string | unknown[] | Record<string, unknown> {
   try {
@@ -107,29 +95,7 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
             }
             return part;
           }
-          const imagePart = part as { type?: string; image_url?: string | { url?: string } };
-          if (imagePart.type === 'input_audio') {
-            const inputAudio = (part as { input_audio?: { data?: string; format?: string } })
-              .input_audio;
-            if (inputAudio?.data) {
-              const mimeType = normalizeAudioMimeType(inputAudio.format?.toLowerCase());
-              return { type: 'audio', mime_type: mimeType, data: inputAudio.data };
-            }
-          }
-          if (imagePart.type !== 'image_url' && imagePart.type !== 'input_image') {
-            return part;
-          }
-          const imageUrl =
-            typeof imagePart.image_url === 'string'
-              ? imagePart.image_url
-              : imagePart.image_url?.url;
-          if (!imageUrl) {
-            return part;
-          }
-          const inlineImage = /^data:([^;,]+);base64,(.*)$/is.exec(imageUrl);
-          return inlineImage
-            ? { type: 'image', mime_type: inlineImage[1], data: inlineImage[2] }
-            : { type: 'image', uri: imageUrl };
+          return normalizeOpenAiInteractionMedia(part) ?? part;
         };
 
         if (!('role' in content)) {

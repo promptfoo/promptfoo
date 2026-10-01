@@ -278,6 +278,36 @@ providers:
 
 See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed setup instructions.
 
+## Interactions chat API
+
+Use `google:interactions:<model>` to select the [Gemini Interactions API](https://ai.google.dev/gemini-api/docs/interactions-overview) for chat. Ordinary `google:<model>` providers keep using `generateContent`. You can also set `config.interactions: true` to select Interactions without changing the provider ID:
+
+```yaml
+providers:
+  - id: google:gemini-3.8-flash
+    config:
+      interactions: true
+      temperature: 0.2
+```
+
+The chat adapter supports text, Gemini and OpenAI chat prompts, media inputs, system instructions, JSON response schemas, and function tools. Configured `functionToolCallbacks` run for up to eight rounds. A call without a matching callback is returned in the output for assertions to inspect. The adapter does not execute any callbacks if a response also contains an unhandled call.
+
+Use `responseSchema` or `generationConfig.responseSchema` for structured output. Simple `googleSearch`, `codeExecution`, and `urlContext` tools are translated to Interactions tools. Native Interactions tools can be supplied through `passthrough.tools`.
+
+Unsupported controls return a provider error before a request is sent. These include `safetySettings`, required or named tool choices, thinking token budgets, MCP, function response schemas or media, and configured Gemini search-retrieval options. Keep those evaluations on `generateContent`. Media output, streaming, and background execution are not supported by this chat adapter; use the existing image, audio, or Omni providers for media output.
+
+### Storage and history
+
+AI Studio chat requests send `store: false` by default. Set `store: true` to retain an interaction, then use the returned `metadata.interactionId` as `previousInteractionId` on a later request. A previous ID implies storage unless you explicitly set `store: false`, which returns an error. These settings control Interactions storage, not other Google data-use policies.
+
+`vertex:interactions:<model>` uses OAuth and defaults to `store: true`; `store: false` and `previousInteractionId` are rejected on that route. Use a supported model and `region: global`, and pass prior turns inline. See [Vertex Interactions documentation](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/capabilities/interactions) for current model availability and storage restrictions.
+
+Chat requests bypass Promptfoo's persistent response cache. Token usage and cost include each request in a callback exchange.
+
+The existing Omni video provider retains its own behavior and storage defaults. The non-stored AI Studio default above applies to **chat** only.
+
+See the [google-interactions example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-interactions) for transport comparison, tool callbacks, and storage configuration.
+
 ## Available Models
 
 ### Chat and Multimodal Models

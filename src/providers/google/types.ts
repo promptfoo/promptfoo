@@ -118,6 +118,8 @@ export interface FunctionDeclaration {
   /** Live API function execution mode. Extended Thinking requires NON_BLOCKING. */
   behavior?: 'BLOCKING' | 'NON_BLOCKING';
   parameters?: Schema;
+  parametersJsonSchema?: unknown;
+  parameters_json_schema?: unknown;
   response?: Schema;
 }
 
@@ -199,9 +201,11 @@ export interface CompletionOptions {
   region?: string;
   publisher?: string;
   apiVersion?: string; // Live API: Gemini 'v1alpha'/'v1beta'; Vertex 'v1'/'v1beta1'
-  /** Previous Gemini Interactions API ID for conversational video editing. */
+  /** Opt in to the Interactions chat API while keeping the provider ID. */
+  interactions?: boolean;
+  /** Previous Interactions API ID for server-side history. */
   previousInteractionId?: string;
-  /** Keep a Gemini interaction available for subsequent editing turns. */
+  /** Store an interaction server-side. Chat defaults to false on AI Studio, true on Vertex. */
   store?: boolean;
   anthropicVersion?: string;
   anthropic_version?: string; // Alternative format

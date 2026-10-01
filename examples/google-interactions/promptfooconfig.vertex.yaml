@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Gemini Interactions API on Vertex AI
+
+# Requires OAuth credentials and a Google Cloud project.
+# Vertex Interactions stores requests; pass conversation history inline.
+providers:
+  - id: vertex:interactions:gemini-3-flash-preview
+    config:
+      region: global
+      store: true
+      tools: file://tools.yaml
+      functionToolCallbacks:
+        get_weather: file://callbacks.js:get_weather
+
+prompts:
+  - 'What is the weather in {{city}}? Use the tool. Answer in one sentence.'
+
+tests:
+  - vars:
+      city: Boston
+    assert:
+      - type: contains
+        value: '52'

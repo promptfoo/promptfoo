@@ -1837,6 +1837,7 @@ export function validateFunctionCall(
   output: string | object,
   functions?: Tool[] | string,
   vars?: Record<string, VarValue>,
+  additionalFunctions?: Tool[] | string,
 ) {
   let functionCalls: FunctionCall[];
   try {
@@ -1859,20 +1860,41 @@ export function validateFunctionCall(
     );
   }
 
-  const interpolatedFunctions = loadFile(functions, vars) as Tool[];
+  const interpolatedFunctions = [functions, additionalFunctions]
+    .filter((configured) => configured !== undefined)
+    .flatMap((configured) => loadFile(configured, vars) as Tool[]);
 
   for (const functionCall of functionCalls) {
     // Parse function call and validate it against schema
     const functionName = functionCall.name;
     const functionArgs = parseStringObject(functionCall.args);
     const functionSchema = interpolatedFunctions
-      ?.flatMap((tool) => tool.functionDeclarations ?? [])
+      .flatMap((tool) => {
+        const native = tool as { type?: string; name?: string; parameters?: Schema };
+        return native.type === 'function' && native.name
+          ? [{ name: native.name, parameters: native.parameters, nativeSchema: true }]
+          : (tool.functionDeclarations ?? []).map((declaration) => ({
+              ...declaration,
+              parameters:
+                declaration.parametersJsonSchema ??
+                declaration.parameters_json_schema ??
+                declaration.parameters,
+              nativeSchema:
+                declaration.parametersJsonSchema !== undefined ||
+                declaration.parameters_json_schema !== undefined,
+            }));
+      })
       .find((declaration) => declaration.name === functionName);
     if (!functionSchema) {
       throw new Error(`Called "${functionName}", but there is no function with that name`);
     }
-    if (Object.keys(functionArgs).length !== 0 && functionSchema?.parameters) {
-      const parameterSchema = normalizeSchemaTypes(functionSchema.parameters);
+    if (
+      functionSchema.parameters !== undefined &&
+      (functionSchema.nativeSchema || Object.keys(functionArgs).length !== 0)
+    ) {
+      const parameterSchema = functionSchema.nativeSchema
+        ? functionSchema.parameters
+        : normalizeSchemaTypes(functionSchema.parameters);
       let validate;
       try {
         validate = ajv.compile(parameterSchema as AnySchema);
