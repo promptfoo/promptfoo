@@ -164,48 +164,61 @@ describe('OpenAiResponsesProvider HTTP metadata', () => {
     expect(result.output).toBe('Streaming response');
   });
 
-  it('aborts the transport after a parser error while preserving that error', async () => {
-    let signal: AbortSignal | null | undefined;
-    let finishResponse = () => {};
-    let loggingRead: Promise<string> | undefined;
-    const closeTransport = vi.fn(() => finishResponse());
-    vi.mocked(fetchWithRetries).mockImplementation(async (_url, options) => {
-      signal = options?.signal;
-      const response = new Response(
-        new ReadableStream({
-          start(controller) {
-            let closed = false;
-            finishResponse = () => {
-              if (!closed) {
-                closed = true;
-                controller.close();
-              }
-            };
-            controller.enqueue(
-              new TextEncoder().encode('data: {"type":"error","message":"fixture failure"}\n\n'),
-            );
-          },
-        }),
-      );
-      signal?.addEventListener('abort', closeTransport, { once: true });
-      loggingRead = response.clone().text();
-      return response;
-    });
+  it.each([false, true])(
+    'aborts the transport after a parser error with background=%s',
+    async (background) => {
+      let signal: AbortSignal | null | undefined;
+      let finishResponse = () => {};
+      let loggingRead: Promise<string> | undefined;
+      const cancellationSignals: boolean[] = [];
+      const closeTransport = vi.fn(() => finishResponse());
+      vi.mocked(cache.fetchWithCache).mockImplementation(async () => {
+        cancellationSignals.push(signal?.aborted === true);
+        return { data: { status: 'cancelled' }, cached: false, status: 200, statusText: 'OK' };
+      });
+      vi.mocked(fetchWithRetries).mockImplementation(async (_url, options) => {
+        signal = options?.signal;
+        const response = new Response(
+          new ReadableStream({
+            start(controller) {
+              let closed = false;
+              finishResponse = () => {
+                if (!closed) {
+                  closed = true;
+                  controller.close();
+                }
+              };
+              controller.enqueue(
+                new TextEncoder().encode(
+                  (background
+                    ? 'data: {"type":"response.created","response":{"id":"resp_fixture","status":"in_progress"}}\n\n'
+                    : '') + 'data: {"type":"error","message":"fixture failure"}\n\n',
+                ),
+              );
+            },
+          }),
+        );
+        signal?.addEventListener('abort', closeTransport, { once: true });
+        loggingRead = response.clone().text();
+        return response;
+      });
 
-    try {
-      const result = await new OpenAiResponsesProvider('gpt-4o', {
-        config: { apiKey: 'test-key', stream: true },
-      }).callApi('Test prompt');
-      expect(result.error).toContain('fixture failure');
-      expect(result.error).not.toContain('timed out');
-      expect(signal?.aborted).toBe(true);
-      expect(closeTransport).toHaveBeenCalledOnce();
-    } finally {
-      signal?.removeEventListener('abort', closeTransport);
-      finishResponse();
-      await loggingRead;
-    }
-  });
+      try {
+        const result = await new OpenAiResponsesProvider('gpt-4o', {
+          config: { apiKey: 'test-key', stream: true, background },
+        }).callApi('Test prompt');
+        expect(result.error).toContain('fixture failure');
+        expect(result.error).not.toContain('timed out');
+        expect(signal?.aborted).toBe(true);
+        expect(closeTransport).toHaveBeenCalledOnce();
+        expect(cancellationSignals).toEqual(background ? [true] : []);
+      } finally {
+        signal?.removeEventListener('abort', closeTransport);
+        finishResponse();
+        await loggingRead;
+      }
+    },
+  );
 
   it('times out and cancels a response body that stalls after headers', async () => {
     vi.useFakeTimers();

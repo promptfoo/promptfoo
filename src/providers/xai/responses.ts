@@ -466,6 +466,7 @@ export class XAIResponsesProvider implements ApiProvider {
           if (err instanceof Error && err.name === 'AbortError') {
             throw new Error(`xAI streaming response timed out after ${timeoutMs}ms`);
           }
+          controller.abort();
           throw err;
         } finally {
           clearTimeout(timeoutHandle);

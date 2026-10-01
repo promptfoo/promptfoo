@@ -87,6 +87,27 @@ describe('Responses stream transport', () => {
     },
   );
 
+  it.each([false, true])(
+    'preserves a terminal failure after malformed data with preserveFailedOutput=%s',
+    async (preserveFailedOutput) => {
+      const failed = {
+        id: 'response-1',
+        status: 'failed',
+        error: { code: 'rate_limit_exceeded', message: 'Rate limit exceeded' },
+      };
+      const response = chunkedResponse(
+        'data: {"type":"response.output_text.delta","delta":"draft"}\n\n' +
+          'data: not-json\n\n' +
+          `data: ${JSON.stringify({ type: 'response.failed', response: failed })}\n\n`,
+        7,
+      );
+      await expect(
+        readResponsesStream(response, 'fixture', logger, undefined, { preserveFailedOutput }),
+      ).resolves.toEqual(failed);
+      expect(response.body?.locked).toBe(false);
+    },
+  );
+
   it('cancels the body when a provider error ends parsing', async () => {
     const cancel = vi.fn();
     const response = new Response(

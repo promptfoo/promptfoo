@@ -1483,10 +1483,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
               headers: Object.fromEntries(response.headers.entries()),
             };
           } catch (err) {
+            const timedOut = controller.signal.aborted && !abortSignal?.aborted;
+            controller.abort();
             if (backgroundResponseId) {
               await cancelBackgroundResponse(backgroundResponseId, url, request);
             }
-            if (controller.signal.aborted && !abortSignal?.aborted) {
+            if (timedOut) {
               throw new Error(`OpenAI streaming response timed out after ${timeout}ms`);
             }
             throw err;

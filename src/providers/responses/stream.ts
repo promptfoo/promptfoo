@@ -247,6 +247,9 @@ export async function readResponsesStream(
   }
 
   if (malformedEvent && outputText && !latestResponseIsCompleted) {
+    if (latestResponse?.status === 'failed' && latestResponse.error) {
+      return latestResponse;
+    }
     throw new Error(`${providerName} streaming response contains malformed SSE data`);
   }
 
