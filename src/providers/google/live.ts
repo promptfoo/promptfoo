@@ -139,9 +139,6 @@ function getRoboticsConfigError(
   if (!isRoboticsStreamingModel) {
     return undefined;
   }
-  if (config.apiVersion && config.apiVersion !== 'v1beta') {
-    return ROBOTICS_API_VERSION_ERROR;
-  }
   if (
     responseModalities !== undefined &&
     (responseModalities.length !== 1 || responseModalities[0] !== 'TEXT')
@@ -637,7 +634,7 @@ export class GoogleLiveProvider implements ApiProvider {
             'Gemini 3.5 Live Translate does not support generationConfig.thinkingConfig or generationConfig.thinking_config; remove the thinking configuration.',
         };
       }
-      if (config.apiVersion && config.apiVersion !== 'v1beta') {
+      if (!this.isVertex && config.apiVersion && config.apiVersion !== 'v1beta') {
         return {
           error:
             'Gemini 3.5 Live Translate requires apiVersion v1beta; remove the override or set apiVersion to v1beta.',
@@ -695,6 +692,14 @@ export class GoogleLiveProvider implements ApiProvider {
     const requestTools = toolsDisabled
       ? removeGoogleFunctionDeclarations(normalizedTools)
       : normalizedTools;
+    if (
+      supportsTextResponse &&
+      !this.isVertex &&
+      config.apiVersion &&
+      config.apiVersion !== 'v1beta'
+    ) {
+      return { error: ROBOTICS_API_VERSION_ERROR };
+    }
     const roboticsConfigError = getRoboticsConfigError(
       supportsTextResponse,
       config,
