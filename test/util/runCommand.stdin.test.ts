@@ -34,6 +34,22 @@ function finishAfterStdinError(inputError: NodeJS.ErrnoException, exitError: Err
   return { result, kill };
 }
 
+it('preserves a synchronously thrown error and code while escaping its diagnostic', async () => {
+  const error = Object.assign(new Error('invalid\u00a0argument\u2028marker'), {
+    code: 'ERR_INVALID_ARG_VALUE',
+  });
+  execFile.mockImplementation(() => {
+    throw error;
+  });
+
+  await expect(runCommand('fixture-command', [])).rejects.toBe(error);
+  expect(error).toMatchObject({
+    code: 'ERR_INVALID_ARG_VALUE',
+    message: 'invalid\\u00a0argument\\u2028marker',
+  });
+  expect(onExit).not.toHaveBeenCalled();
+});
+
 describe('runCommand stdin errors', () => {
   it.each(['EOF', 'EPIPE', 'ERR_STREAM_DESTROYED'])(
     'keeps a successful child exit authoritative after %s on stdin',

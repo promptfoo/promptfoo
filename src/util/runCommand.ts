@@ -54,7 +54,7 @@ export function runCommand(
   args: string[],
   options: CommandOptions = {},
 ): Promise<CommandResult<string | Buffer>> {
-  return new Promise((resolve, reject) => {
+  return new Promise<CommandResult<string | Buffer>>((resolve, reject) => {
     let inputError: Error | undefined;
     const child = execFile(
       file,
@@ -80,7 +80,6 @@ export function runCommand(
             : { stdout: output.stdout.toString('utf8'), stderr: output.stderr.toString('utf8') };
         const failure = inputError ?? error;
         if (failure) {
-          failure.message = escapeCommandMessage(failure.message);
           reject(Object.assign(failure, result));
         } else {
           resolve(result);
@@ -102,5 +101,11 @@ export function runCommand(
     });
     // Always close stdin: cat-file --batch-check waits for EOF before exiting.
     child.stdin?.end(options.input);
+  }).catch((error: unknown) => {
+    // Also cover validation errors thrown before execFile creates a child.
+    if (error instanceof Error) {
+      error.message = escapeCommandMessage(error.message);
+    }
+    throw error;
   });
 }

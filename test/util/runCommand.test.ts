@@ -152,6 +152,19 @@ describe('runCommand', () => {
     expect(removeExitHandler).toHaveBeenCalledOnce();
   });
 
+  it('escapes synchronous argument-validation diagnostics before rejecting', async () => {
+    const failure = await runCommand(process.execPath, ['\u0000invalid\u00a0argument']).catch(
+      (error: unknown) => error,
+    );
+
+    expect(failure).toMatchObject({
+      code: 'ERR_INVALID_ARG_VALUE',
+      message: expect.stringContaining('invalid\\u00a0argument'),
+    });
+    expect(failure).toHaveProperty('message', expect.not.stringContaining('\u00a0'));
+    expect(onExit).not.toHaveBeenCalled();
+  });
+
   it('tolerates a command exiting without reading large stdin', async () => {
     await expect(
       runNode('process.exit(0)', { input: Buffer.alloc(2 * 1024 * 1024) }),
