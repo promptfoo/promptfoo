@@ -12,6 +12,7 @@ import {
   getLatestTurnSteps,
   getVertexInteractionsEndpoint,
   getVertexInteractionsRegion,
+  normalizeOpenAiInteractionMedia,
   resolveInteractionsTransport,
 } from './interactionsShared';
 import {
@@ -138,14 +139,17 @@ function geminiPartToInteractionContent(part: unknown): Record<string, unknown> 
   if (!part || typeof part !== 'object') {
     return undefined;
   }
-  if (
-    Object.keys(part).some(
-      (key) => !['text', 'inlineData', 'inline_data', 'fileData', 'file_data'].includes(key),
-    )
-  ) {
+  const media = normalizeOpenAiInteractionMedia(part);
+  const allowedFields = media
+    ? ['type', media.type === 'audio' ? 'input_audio' : 'image_url']
+    : ['text', 'inlineData', 'inline_data', 'fileData', 'file_data'];
+  if (Object.keys(part).some((key) => !allowedFields.includes(key))) {
     throw new Error(
       'Unsupported Gemini prompt part fields for the Interactions chat adapter. Use generateContent.',
     );
+  }
+  if (media) {
+    return media;
   }
   const typed = part as {
     text?: string;

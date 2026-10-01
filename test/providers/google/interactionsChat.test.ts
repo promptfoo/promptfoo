@@ -142,6 +142,59 @@ describe('GoogleInteractionsChatProvider', () => {
   );
 
   describe('request mapping', () => {
+    it.each([
+      [
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,aW1hZ2U=' } },
+        { type: 'image', mime_type: 'image/png', data: 'aW1hZ2U=' },
+      ],
+      [
+        { type: 'input_image', image_url: 'https://image.example/ordinary.png' },
+        { type: 'image', uri: 'https://image.example/ordinary.png' },
+      ],
+      [
+        { type: 'input_audio', input_audio: { data: 'YXVkaW8=', format: 'MP3' } },
+        { type: 'audio', mime_type: 'audio/mpeg', data: 'YXVkaW8=' },
+      ],
+      [
+        { type: 'input_audio', input_audio: { data: 'YXVkaW8=', format: 'pcm16' } },
+        { type: 'audio', mime_type: 'audio/pcm', data: 'YXVkaW8=' },
+      ],
+      [
+        { type: 'input_audio', input_audio: { data: 'YXVkaW8=', format: 'audio/wav' } },
+        { type: 'audio', mime_type: 'audio/wav', data: 'YXVkaW8=' },
+      ],
+    ])('normalizes OpenAI media content before requesting: %j', async (part, expected) => {
+      mockFetchWithCache.mockResolvedValue(interaction() as any);
+      const result = await make().callApi(
+        JSON.stringify([
+          { role: 'user', content: [{ type: 'text', text: 'Describe this sample.' }, part] },
+        ]),
+      );
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Hello');
+      expect(bodyOf(mockFetchWithCache.mock.calls[0]).input).toEqual([
+        {
+          type: 'user_input',
+          content: [{ type: 'text', text: 'Describe this sample.' }, expected],
+        },
+      ]);
+    });
+
+    it.each([
+      { type: 'image_url', image_url: {} },
+      { type: 'input_audio', input_audio: { format: 'wav' } },
+      {
+        type: 'image_url',
+        image_url: 'https://image.example/ordinary.png',
+        fileData: { fileUri: 'https://image.example/other.png' },
+      },
+    ])('rejects invalid OpenAI media content before requesting: %j', async (part) => {
+      const result = await make().callApi(JSON.stringify([{ role: 'user', content: [part] }]));
+      expect(result.error).toContain('Unsupported Gemini prompt part');
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+
     it.each(['system_instruction', 'systemInstruction'])(
       'preserves %s in native Gemini prompt wrappers',
       async (field) => {

@@ -16,6 +16,48 @@ export type InteractionContent = {
   mime_type?: string;
 };
 
+function normalizeAudioMimeType(format?: string): string {
+  if (format?.startsWith('audio/')) {
+    return format;
+  }
+  if (format === 'mp3') {
+    return 'audio/mpeg';
+  }
+  if (format === 'pcm16') {
+    return 'audio/pcm';
+  }
+  return `audio/${format || 'mpeg'}`;
+}
+
+export function normalizeOpenAiInteractionMedia(part: unknown): InteractionContent | undefined {
+  if (!part || typeof part !== 'object') {
+    return undefined;
+  }
+  const media = part as {
+    type?: string;
+    image_url?: string | { url?: string };
+    input_audio?: { data?: string; format?: string };
+  };
+  if (media.type === 'input_audio' && media.input_audio?.data) {
+    return {
+      type: 'audio',
+      mime_type: normalizeAudioMimeType(media.input_audio.format?.toLowerCase()),
+      data: media.input_audio.data,
+    };
+  }
+  if (media.type !== 'image_url' && media.type !== 'input_image') {
+    return undefined;
+  }
+  const imageUrl = typeof media.image_url === 'string' ? media.image_url : media.image_url?.url;
+  if (!imageUrl) {
+    return undefined;
+  }
+  const inlineImage = /^data:([^;,]+);base64,(.*)$/is.exec(imageUrl);
+  return inlineImage
+    ? { type: 'image', mime_type: inlineImage[1], data: inlineImage[2] }
+    : { type: 'image', uri: imageUrl };
+}
+
 export type InteractionStep = {
   type?: string;
   id?: string;
