@@ -299,7 +299,6 @@
     "@fal-ai/client": "~1.10.1",
     "@googleapis/sheets": "^18.0.0",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
-    "@langfuse/client": "^5.11.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@modelcontextprotocol/server-filesystem": "2026.8.31",
     "@openai/codex-sdk": "^0.156.1",
@@ -418,6 +417,7 @@
   "homepage": "https://promptfoo.dev",
   "peerDependencies": {
     "@huggingface/transformers": "*",
+    "@langfuse/client": "*",
     "@openai/agents": "*",
     "@openai/codex-security": "*",
     "@slack/web-api": "*",
@@ -427,6 +427,9 @@
   },
   "peerDependenciesMeta": {
     "@huggingface/transformers": {
+      "optional": true
+    },
+    "@langfuse/client": {
       "optional": true
     },
     "@openai/agents": {
