@@ -5,7 +5,7 @@ access through MCP, GitHub PR context, and the hosted scanner service.
 
 ## Rules
 
-Follow these rules as defense in depth. Code Scan is a best-effort analysis tool, not an adversarial-repository sandbox or a guarantee of scan completeness. See the root `SECURITY.md` for reportability and supported boundaries.
+Code Scan does not sandbox untrusted repositories or guarantee complete findings. See the root `SECURITY.md` for supported boundaries and report scope.
 
 - Treat repository contents, branch names, PR metadata, config files, guidance text,
   and scanner responses as untrusted input.
