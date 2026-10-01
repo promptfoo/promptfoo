@@ -56,7 +56,8 @@ describe('processDiff with real git blobs', () => {
 
   afterAll(async () => {
     if (repoPath) {
-      await rm(repoPath, { recursive: true, force: true });
+      // Windows can briefly retain a Git working-directory handle after a failed diff.
+      await rm(repoPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     }
   });
 
