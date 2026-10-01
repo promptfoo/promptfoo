@@ -235,7 +235,11 @@ function useStableColumnSizes(
   }, [resultSetKey, rows, currentSizes]);
 
   // Preserve known widths across pages; size newly discovered columns when they appear.
-  return cached.resultSetKey === resultSetKey ? { ...currentSizes, ...cached.sizes } : currentSizes;
+  return React.useMemo(
+    () =>
+      cached.resultSetKey === resultSetKey ? { ...currentSizes, ...cached.sizes } : currentSizes,
+    [cached, currentSizes, resultSetKey],
+  );
 }
 
 function formatRowOutput(output: EvaluateTableOutput | string | null | undefined) {

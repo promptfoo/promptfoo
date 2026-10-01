@@ -5164,6 +5164,40 @@ describe('ResultsTable default column sizing', () => {
     }));
   });
 
+  it.each(['variable', 'transform'])(
+    'keeps expanded %s text open when zoom changes',
+    async (kind) => {
+      const text = 'Detailed ordinary evaluation text. '.repeat(12);
+      const table = {
+        ...mockTable,
+        head: { ...mockTable.head, vars: kind === 'variable' ? ['detail'] : [] },
+        body: [
+          {
+            ...mockTable.body[0],
+            vars: kind === 'variable' ? [text] : [],
+            outputs: [
+              {
+                ...mockTable.body[0].outputs[0],
+                metadata: kind === 'transform' ? { transformDisplayVars: { __detail: text } } : {},
+              },
+            ],
+          },
+        ],
+      };
+      const state = vi.mocked(useTableStore)();
+      vi.mocked(useTableStore).mockReturnValue({ ...state, table });
+      const user = userEvent.setup();
+      const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      await user.click(screen.getByText('...'));
+      const collapseControl = screen.getByText('Show less');
+
+      rerender(<ResultsTable {...defaultProps} zoom={1.25} />);
+
+      expect(screen.getByText('Show less')).toBe(collapseControl);
+    },
+  );
+
   it('gives larger metadata columns more initial width than compact metadata columns', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
 
