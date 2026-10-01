@@ -109,9 +109,9 @@ For GPT-6 Sol and Luna, set `reasoning_effort` or `passthrough.reasoning`. Choos
 
 For multi-turn Chat requests, OpenRouter supports changing effort through a [`configuration_update` on an empty system or developer message](https://openrouter.ai/docs/cookbook/evaluate-and-optimize/model-migrations/gpt-6#chat-completions-api). This is an OpenRouter extension; native OpenAI Chat Completions does not support it.
 
-Some models return reasoning text alongside their answer. Set `showThinking: false` to hide it from formatted output. A prompt's `config.showThinking` overrides the provider setting. This controls display; it does not disable model reasoning or redact raw diagnostic responses.
+Some models return reasoning text alongside their answer. Set `showThinking: false` to hide it from formatted output, or set `config.showThinking` on a prompt to override the provider setting. The setting controls display; model reasoning and raw diagnostic responses are unchanged.
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 providers:
   - id: openrouter:google/gemini-2.5-pro
     config:
