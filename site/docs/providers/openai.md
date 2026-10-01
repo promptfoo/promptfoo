@@ -253,6 +253,17 @@ For endpoint-specific fields, see the [Chat Completions reference](https://devel
 
 </details>
 
+### Safety identifiers
+
+Set `config.safety_identifier` to send a stable end-user ID with Chat Completions or Responses requests. For Realtime, Promptfoo sends it as the `OpenAI-Safety-Identifier` connection header. Hash email addresses or internal user IDs before setting this value; Promptfoo sends it unchanged. See [OpenAI's safety checks guide](https://developers.openai.com/api/docs/guides/safety-checks).
+
+```yaml
+providers:
+  - id: openai:responses:gpt-4.1-mini
+    config:
+      safety_identifier: hashed-user-id
+```
+
 ### Ultrafast mode
 
 Set `service_tier: ultrafast` to opt in on a supported model:

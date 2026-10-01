@@ -825,6 +825,11 @@ describe('loadApiProvider', () => {
     ['openai:chatkit:gpt-5-codex-mini', 'openai:chatkit:gpt-5-codex-mini'],
     ['openai:chatkit:gpt-5.3-codex-spark', 'openai:chatkit:gpt-5.3-codex-spark'],
   ])('should allow Codex-like names on identifier-based route %s', async (route, expectedId) => {
+    if (route.startsWith('openai:agents:')) {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ name: '@openai/agents', version: '0.14.3' }),
+      );
+    }
     const provider = await loadApiProvider(route);
 
     expect(provider.id()).toBe(expectedId);

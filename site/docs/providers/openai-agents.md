@@ -26,9 +26,23 @@ If you are using the Python `openai-agents` SDK, use the [OpenAI Agents Python S
 
 ## Prerequisites
 
-- Install the optional JavaScript SDK in the project that defines or runs the agent: `npm install @openai/agents`
+- Install Promptfoo and the supported JavaScript SDK together: `npm install promptfoo @openai/agents@^0.14.1`
 - Set `OPENAI_API_KEY` environment variable
 - Agent definition (inline or in a TypeScript/JavaScript file)
+
+The SDK is an optional peer and is not installed by default. Use the project-local `npx promptfoo` command for file-exported agents so Promptfoo and the agent share the same SDK installation. An incompatible SDK in your project does not prevent ordinary Promptfoo evals; selecting `openai:agents:*` checks compatibility.
+
+For inline agents, a global installation is also supported:
+
+```bash
+npm install -g promptfoo @openai/agents@^0.14.1
+```
+
+For a one-off inline-agent eval, run this from an empty directory outside an existing npm project, using an absolute config path:
+
+```bash
+npx --yes --package=promptfoo --package=@openai/agents@^0.14.1 promptfoo eval -c /absolute/path/config.yaml --no-cache
+```
 
 ## Basic Usage
 
@@ -539,6 +553,7 @@ For sessions, tracing assertions, sandbox agents, and skills, see the runnable [
 ```bash
 npx promptfoo@latest init --example openai-agents-advanced
 cd openai-agents-advanced
+npm install
 npx promptfoo eval -c promptfooconfig.yaml --no-cache -j 1
 npx promptfoo eval -c promptfooconfig.sandbox.yaml --no-cache
 ```
