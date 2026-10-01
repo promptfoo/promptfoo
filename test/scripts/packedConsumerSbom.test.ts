@@ -53,13 +53,29 @@ describe('packed consumer SBOM', () => {
       ['install', '--package-lock', '--ignore-scripts', '--no-audit', '--no-fund', archive],
       consumer,
     );
+    // Capture everything physically present, even when npm classifies a package
+    // as development-only. Install-time omission already defines this surface.
+    const consumerManifest = JSON.parse(
+      fs.readFileSync(path.join(consumer, 'package.json'), 'utf8'),
+    );
+    writePackage(consumer, {
+      ...consumerManifest,
+      devDependencies: { 'retained-fixture': '1.0.0' },
+    });
+    writePackage(path.join(consumer, 'node_modules/retained-fixture'), {
+      name: 'retained-fixture',
+      version: '1.0.0',
+    });
     const output = path.join(directory, 'reports');
     writePackedConsumerSbom(consumer, archive, output, 'default', {
       npm_config_registry: 'https://registry.npmjs.org/',
     });
     expect(
       JSON.parse(fs.readFileSync(path.join(output, 'runtime-default.json'), 'utf8')).components,
-    ).toEqual([{ name: 'promptfoo', version: '1.0.0' }]);
+    ).toEqual([
+      { name: 'promptfoo', version: '1.0.0' },
+      { name: 'retained-fixture', version: '1.0.0' },
+    ]);
   });
 
   it('matches a real npm SBOM against nested installed versions and scoped packages', () => {

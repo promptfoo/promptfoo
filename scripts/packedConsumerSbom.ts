@@ -141,7 +141,11 @@ export function writePackedConsumerSbom(
       '--sbom-format=cyclonedx',
       '--package-lock-only=false',
       '--workspaces=false',
-      '--omit=dev',
+      // The consumer install already applied omission policy. Inventory every
+      // package that remains on disk, regardless of npm's dependency selectors.
+      '--include=dev',
+      '--include=optional',
+      '--include=peer',
     ]),
   );
   assertSbomCoverage(components, sbom);
