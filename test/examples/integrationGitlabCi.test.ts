@@ -167,9 +167,15 @@ process.exitCode = Number(process.env.TEST_EXIT_CODE ?? 0);
   });
 
   it('requires a fresh artifact directory', async () => {
-    fs.mkdirSync(path.join(tempDir, '.promptfoo-results'));
-    fs.writeFileSync(path.join(tempDir, '.promptfoo-results/previous.json'), '{}');
+    const outputDir = path.join(tempDir, '.promptfoo-results');
+    fs.mkdirSync(outputDir);
+    fs.writeFileSync(path.join(outputDir, 'previous.json'), '{}');
+    fs.writeFileSync(path.join(outputDir, 'results.json'), '{"previous":true}');
+    fs.writeFileSync(path.join(outputDir, 'results.junit.xml'), '<testsuites />');
     expect((await run()).status).toBe(1);
     expect(fs.existsSync(path.join(tempDir, 'arguments.json'))).toBe(false);
+    expect(fs.existsSync(path.join(outputDir, 'results.json'))).toBe(false);
+    expect(fs.existsSync(path.join(outputDir, 'results.junit.xml'))).toBe(false);
+    expect(fs.existsSync(path.join(outputDir, 'previous.json'))).toBe(true);
   });
 });

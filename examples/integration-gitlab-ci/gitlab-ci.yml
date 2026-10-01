@@ -21,8 +21,15 @@
   script:
     - |
       set -eu
-      : "${PROMPTFOO_CONFIG:?PROMPTFOO_CONFIG must point to a config file}"
       : "${PROMPTFOO_OUTPUT_DIR:?PROMPTFOO_OUTPUT_DIR must not be empty}"
+      mkdir -p "$PROMPTFOO_OUTPUT_DIR"
+      if find "$PROMPTFOO_OUTPUT_DIR/." -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
+        rm -f "$PROMPTFOO_OUTPUT_DIR/results.json" "$PROMPTFOO_OUTPUT_DIR/results.junit.xml"
+        echo 'PROMPTFOO_OUTPUT_DIR must be empty before running an eval.' >&2
+        exit 1
+      fi
+
+      : "${PROMPTFOO_CONFIG:?PROMPTFOO_CONFIG must point to a config file}"
       threshold="$(node -e '
         const input = process.argv[1];
         const value = Number(input);
@@ -32,12 +39,6 @@
         }
         console.log(value);
       ' -- "${PROMPTFOO_PASS_RATE_THRESHOLD:-}")"
-      mkdir -p "$PROMPTFOO_OUTPUT_DIR"
-      if find "$PROMPTFOO_OUTPUT_DIR" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
-        echo 'PROMPTFOO_OUTPUT_DIR must be empty before running an eval.' >&2
-        exit 1
-      fi
-
       set -- eval \
         --config "$PROMPTFOO_CONFIG" \
         --no-progress-bar \
