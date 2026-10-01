@@ -578,7 +578,7 @@ Legacy - please use is-valid-function-call instead. This ensures that any JSON L
 
 ### is-valid-openai-tools-call
 
-Checks tool calls against the provider’s `tools` schema. Missing or null output fails the assertion. See [OpenAI tool calling](/docs/providers/openai/#tool-calling).
+Checks the model output against the provider's `tools` schema. Missing or null output fails the assertion. See [OpenAI tool calling](/docs/providers/openai/#tool-calling).
 
 **MCP Support**: This assertion also validates MCP (Model Context Protocol) tool calls when using OpenAI's Responses API. It will:
 
@@ -1449,7 +1449,7 @@ METEOR requires the optional `natural` package. Install it before using METEOR a
 npm install natural@^8.1.0
 ```
 
-If the package is not installed, you'll receive an error message with installation instructions when attempting to use METEOR assertions.
+If the package is not installed, METEOR assertions return a failed result (`pass: false`, `score: 0`) with installation instructions in the reason.
 :::
 
 #### How METEOR Works
