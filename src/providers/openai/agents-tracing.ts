@@ -1098,6 +1098,7 @@ function sanitizeStructuredAttributeValue(
 
       let sanitized: unknown;
       if (
+        typeof entry === 'function' ||
         ArrayBuffer.isView(entry) ||
         ((isRecord(entry) || Array.isArray(entry)) &&
           !(entry instanceof Date) &&

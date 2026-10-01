@@ -197,6 +197,21 @@ describe('OTLPTracingExporter', () => {
   );
 
   it.each(['json', 'protobuf'] as const)(
+    'redacts unsupported callable metadata and preserves adjacent values in %s',
+    async (format) => {
+      const { attributes } = await exportCustomData(
+        { structured: { callback: () => 'ordinary callback', note: 'kept' } },
+        format,
+      );
+
+      expect(JSON.parse(attributes.structured as string)).toEqual({
+        callback: '<redacted>',
+        note: 'kept',
+      });
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
     'preserves trailing holes in ordinary nested arrays in %s',
     async (format) => {
       const items = ['first'];
