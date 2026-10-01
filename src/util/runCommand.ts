@@ -24,7 +24,7 @@ function stripFinalNewline(output: Buffer): Buffer {
 
 function escapeCommandMessage(message: string): string {
   // Preserve readable multiline diagnostics while making terminal controls visible.
-  return stripVTControlCharacters(message).replaceAll(/[\p{Separator}\p{Other}]/gu, (character) => {
+  return stripVTControlCharacters(message).replace(/[\p{Separator}\p{Other}]/gu, (character) => {
     if (character === ' ' || character === '\n') {
       return character;
     }
@@ -78,7 +78,7 @@ export function runCommand(
           options.encoding === 'buffer'
             ? output
             : { stdout: output.stdout.toString('utf8'), stderr: output.stderr.toString('utf8') };
-        const failure = error ?? inputError;
+        const failure = inputError ?? error;
         if (failure) {
           failure.message = escapeCommandMessage(failure.message);
           reject(Object.assign(failure, result));
