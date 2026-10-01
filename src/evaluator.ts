@@ -13,7 +13,7 @@ import {
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
-import { getBlobByHash } from './blobs';
+import { getBlobByHash, isBlobAllowedForShare } from './blobs';
 import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
@@ -151,12 +151,6 @@ import type {
 } from './types/index';
 import type { InternalEvaluateOptions } from './types/internal';
 import type { CallApiContextParams } from './types/providers';
-
-// Keep storage access in the evaluator and pass only the resolver to grading.
-const resolveImageBlob: GradingBlobResolver = async (hash) => {
-  const blob = await getBlobByHash(hash);
-  return { data: blob.data, mimeType: blob.metadata.mimeType };
-};
 
 export class PromptSuggestionsRejectedError extends Error {
   constructor(message = 'No prompts selected. Aborting.') {
@@ -1461,6 +1455,15 @@ async function gradeRunEvalResponse({
   ) {
     await flushOtel();
   }
+
+  // Stored bytes require the same eval-owned provenance as sharing.
+  const resolveImageBlob: GradingBlobResolver = async (hash) => {
+    if (!evalId || !(await isBlobAllowedForShare(hash, evalId))) {
+      throw new Error('Image blob is not authorized for this eval.');
+    }
+    const blob = await getBlobByHash(hash);
+    return { data: blob.data, mimeType: blob.metadata.mimeType };
+  };
 
   const assertionProviderResponse = {
     ...processedResponse,

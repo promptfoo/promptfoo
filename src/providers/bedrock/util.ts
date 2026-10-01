@@ -245,7 +245,7 @@ function novaNormalizeContentPart(part: unknown): unknown {
   }
   const block = part as Record<string, unknown>;
 
-  // Already Nova-shaped, or a tool block -> leave untouched.
+  // Preserve native Nova content and tool blocks.
   if (typeof block.text === 'string' && !('type' in block)) {
     return block;
   }

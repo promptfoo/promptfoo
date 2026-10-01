@@ -193,10 +193,7 @@ function isChatMessageArray(value: unknown): value is ChatMessageLike[] {
 }
 
 function isValidBase64Payload(data: string): boolean {
-  // Accept both the standard (`+`/`/`) and URL-safe (`-`/`_`) base64 alphabets.
-  // Providers that forward upstream bytes (HTTP/custom/Python) commonly emit
-  // base64url, and `ImageOutput.data` is documented as "data URI or base64".
-  if (!data || data.length % 4 === 1 || !/^[A-Za-z0-9+/_-]*={0,2}$/.test(data)) {
+  if (!data || data.length % 4 === 1 || !/^[A-Za-z0-9+/]*={0,2}$/.test(data)) {
     return false;
   }
 
@@ -207,13 +204,6 @@ function isValidBase64Payload(data: string): boolean {
 
   const padding = data.slice(firstPaddingIndex);
   return data.length % 4 === 0 && padding.length <= 2 && /^=+$/.test(padding);
-}
-
-/** Use the standard alphabet and complete padding for provider payloads. */
-function toStandardBase64(base64: string): string {
-  const standardized = base64.replace(/-/g, '+').replace(/_/g, '/');
-  const remainder = standardized.length % 4;
-  return remainder === 0 ? standardized : standardized + '='.repeat(4 - remainder);
 }
 
 export function normalizeBase64ImageData(
@@ -247,13 +237,13 @@ export function normalizeBase64ImageData(
   }
 
   // Providers may return line-wrapped or URL-safe base64.
-  const rawBase64 = payload.replace(/\s/g, '');
+  const rawBase64 = payload.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
   if (!isValidBase64Payload(rawBase64)) {
     throw new Error(
       'Image output data is not valid base64. Provide a base64 or base64url encoded image, optionally wrapped in a data: URI.',
     );
   }
-  const base64Data = toStandardBase64(rawBase64);
+  const base64Data = rawBase64.padEnd(Math.ceil(rawBase64.length / 4) * 4, '=');
 
   const decodedBytes = getBase64DecodedBytes(base64Data);
   if (decodedBytes <= 0) {
@@ -328,10 +318,10 @@ function imageOutputToImageUrl(
 
 function getBlobHashForImage(image: ImageOutput): string | undefined {
   if (typeof image.blobRef?.hash === 'string' && BLOB_HASH_REGEX.test(image.blobRef.hash)) {
-    return image.blobRef.hash;
+    return image.blobRef.hash.toLowerCase();
   }
   if (image.data?.length === 'promptfoo://blob/'.length + 64) {
-    return BLOB_URI_REGEX.exec(image.data)?.[1];
+    return BLOB_URI_REGEX.exec(image.data)?.[1]?.toLowerCase();
   }
   return undefined;
 }
@@ -354,9 +344,8 @@ function getGradingImageLimits(): GradingImageLimits {
     'PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES',
     DEFAULT_GRADING_IMAGE_MAX_TOTAL_BYTES,
   );
-  // Derive the raw-char caps from the *resolved* byte limits (not the compile-time
-  // defaults) so raising PROMPTFOO_GRADING_IMAGE_MAX_BYTES alone is sufficient and
-  // isn't silently clamped by a separate raw-char default.
+  // Derive character limits from the configured byte limits. Raising a byte limit
+  // should also raise its default character limit.
   const maxRawChars = getEnvInt(
     'PROMPTFOO_GRADING_IMAGE_MAX_RAW_CHARS',
     Math.ceil(maxImageBytes / 3) * 4 + DATA_URI_METADATA_MAX_CHARS,
@@ -371,7 +360,7 @@ function getGradingImageLimits(): GradingImageLimits {
 function getImageOutputRawChars(image: ImageOutput, maxRawChars: number): number {
   let rawChars = image.data?.length ?? 0;
   // Only inspect the payload (and count its separate mimeType) while it is still
-  // within the cap. A bounded prefix check avoids trimming an adversarial string.
+  // within the cap. A bounded prefix check avoids trimming an oversized string.
   if (image.data && rawChars <= maxRawChars && !/^\s*data:/i.test(image.data.slice(0, 64))) {
     rawChars += image.mimeType?.length ?? 0;
   }

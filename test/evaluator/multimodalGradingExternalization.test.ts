@@ -6,6 +6,7 @@ import path from 'node:path';
 import { randomUUID } from 'crypto';
 
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import * as blobs from '../../src/blobs';
 import { resetBlobStorageProvider, setBlobStorageProvider } from '../../src/blobs';
 import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
 import { evaluate } from '../../src/evaluator';
@@ -23,9 +24,63 @@ describeEvaluator('multimodal grading externalization', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     resetBlobStorageProvider();
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
+
+  it.each([false, true])(
+    'checks current-eval image authorization before reading (allowed=%s)',
+    async (allowed) => {
+      const hash = 'c'.repeat(64);
+      const authorize = vi.spyOn(blobs, 'isBlobAllowedForShare').mockResolvedValue(allowed);
+      const read = vi.spyOn(blobs, 'getBlobByHash').mockResolvedValue({
+        data: Buffer.from('abc'),
+        metadata: { mimeType: 'image/png' },
+      } as Awaited<ReturnType<typeof blobs.getBlobByHash>>);
+      const grader: ApiProvider = {
+        id: () => 'test-image-grader',
+        callApi: vi.fn(async () => ({ output: '{"pass":true,"score":1}' })),
+      };
+      const suite: TestSuite = {
+        providers: [
+          {
+            id: () => 'image-target',
+            callApi: async () => ({
+              output: 'Stored image',
+              images: [
+                {
+                  blobRef: {
+                    hash,
+                    uri: `promptfoo://blob/${hash}`,
+                    mimeType: 'image/png',
+                    sizeBytes: 3,
+                    provider: 'fixture',
+                  },
+                },
+              ],
+            }),
+          },
+        ],
+        prompts: [toPrompt('Describe the image')],
+        defaultTest: {
+          options: { provider: grader },
+          assert: [{ type: 'llm-rubric', value: 'An image is attached.' }],
+        },
+        tests: [{}],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, record, {});
+      const summary = await record.toEvaluateSummary();
+      expect(authorize).toHaveBeenCalledExactlyOnceWith(hash, record.id);
+      expect(read).toHaveBeenCalledTimes(allowed ? 1 : 0);
+      expect(grader.callApi).toHaveBeenCalledTimes(allowed ? 1 : 0);
+      expect(summary.stats.successes).toBe(allowed ? 1 : 0);
+      if (!allowed) {
+        expect(summary.results[0].error).toContain('Failed to load blob-backed image');
+      }
+    },
+  );
 
   it.each([1, 2])(
     'externalizes %i images and resolves them without persisting base64',
@@ -88,7 +143,7 @@ describeEvaluator('multimodal grading externalization', () => {
         storedUris.every((uri: string) => /^promptfoo:\/\/blob\/[a-f0-9]{64}$/.test(uri)),
       ).toBe(true);
 
-      // The heavy base64 is not persisted anywhere on the stored response.
+      // Image bytes stay out of the saved response.
       expect(JSON.stringify(result.response)).not.toContain(base64);
 
       // The blob was resolved and attached to the grader; the prompt text uses the placeholder.

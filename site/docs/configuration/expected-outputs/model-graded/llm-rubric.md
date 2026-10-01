@@ -201,8 +201,9 @@ defaultTest:
 ```
 
 Supported outputs include raw base64, base64url, image data URIs, and Promptfoo blob references.
-The evaluator resolves its stored image blobs automatically. Direct matcher or assertion callers
-must supply `resolveImageBlob` for blob references. Remote HTTP image URLs are rejected.
+The evaluator resolves stored images only when the eval has a classified or imported reference.
+Direct matcher or assertion callers must supply `resolveImageBlob` and enforce their storage access
+rules. Remote HTTP image URLs are rejected.
 
 Image-only output text is replaced with a placeholder; accompanying descriptions remain available
 to the grader. Grading metadata records `renderedGradingPromptImages` and the text prompt without

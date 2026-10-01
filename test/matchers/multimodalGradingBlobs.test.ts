@@ -23,6 +23,31 @@ afterEach(() => {
 });
 
 describe('blob-backed image grading', () => {
+  it.each(['reference', 'uri'] as const)(
+    'normalizes an uppercase stored hash (%s)',
+    async (mode) => {
+      const upper = hash.toUpperCase();
+      const resolveImageBlob = vi.fn(async () => ({ data: Buffer.from('abc') }));
+      const image =
+        mode === 'reference'
+          ? { blobRef: { ...blobRef, hash: upper, uri: `promptfoo://blob/${upper}` } }
+          : { data: `promptfoo://blob/${upper}` };
+      const result = await matchesLlmRubric(
+        'An image is attached.',
+        image.blobRef?.uri ?? image.data!,
+        { provider: createGrader() },
+        {},
+        undefined,
+        {
+          providerResponse: { images: [image] },
+          resolveImageBlob,
+        },
+      );
+      expect(result.pass).toBe(true);
+      expect(resolveImageBlob).toHaveBeenCalledExactlyOnceWith(hash);
+    },
+  );
+
   it.each(['single', 'batch'] as const)(
     'keeps the explicit resolver without a target provider (%s)',
     async (mode) => {
