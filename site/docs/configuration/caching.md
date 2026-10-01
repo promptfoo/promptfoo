@@ -55,7 +55,7 @@ const fetchCacheKey = `fetch:v3:<request-digest>`;
   - Cache is manually cleared
 - Memory storage is used automatically when `NODE_ENV=test`
 
-OpenAI background responses also create files under `cache/claims/` to prevent separate eval processes from counting the same response's usage twice. These billing claims persist after response entries expire, so their directory can keep growing even with a finite `PROMPTFOO_CACHE_TTL`.
+OpenAI background responses store billing claims in `cache/claims/claims.db` to prevent separate eval processes from counting the same response's usage twice. The SQLite index avoids creating a file for each response, but keeps claims after response entries expire. Claim history can therefore keep growing even with a finite `PROMPTFOO_CACHE_TTL`. Existing claim files remain valid until you clear the cache.
 
 ## Command Line
 

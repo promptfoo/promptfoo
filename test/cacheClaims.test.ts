@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { createClient } from '@libsql/client/node';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sha256 } from '../src/util/createHash';
-import { mockProcessEnv } from './util/utils';
+import { mockProcessEnv, removeTempDir } from './util/utils';
 
 describe('persistent cache claims', () => {
   let cachePath: string;
@@ -36,14 +36,10 @@ describe('persistent cache claims', () => {
     cache = await import('../src/cache');
   });
 
-  afterEach(async () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
     vi.useRealTimers();
-    await fs.promises.rm(cachePath, {
-      recursive: true,
-      force: true,
-      maxRetries: 5,
-      retryDelay: 50,
-    });
+    removeTempDir(cachePath);
   });
 
   it('keeps claims after the response TTL without creating per-response files', async () => {
@@ -121,13 +117,75 @@ describe('persistent cache claims', () => {
     expect(await cache.claimBackgroundUsageOnce('expired')).toBe(true);
   });
 
+  it.each(['cancellation', 'deadline'])(
+    'rolls back a claim interrupted by %s before commit',
+    async (reason) => {
+      const sqlite = await import('@libsql/client/node');
+      const create = sqlite.createClient;
+      const controller = new AbortController();
+      vi.useFakeTimers({ toFake: ['Date'] });
+      const deadline = Date.now() + 5000;
+      const interruptInsert = (connection: Pick<ReturnType<typeof create>, 'execute'>) => {
+        const execute = connection.execute.bind(connection);
+        vi.spyOn(connection, 'execute').mockImplementation(async (...args) => {
+          const result = await execute(...args);
+          const statement: unknown = args[0];
+          const sql =
+            typeof statement === 'string' ? statement : (statement as { sql: string }).sql;
+          if (sql.startsWith('INSERT')) {
+            if (reason === 'cancellation') {
+              controller.abort();
+            } else {
+              vi.setSystemTime(deadline);
+            }
+          }
+          return result;
+        });
+      };
+      vi.doMock('@libsql/client/node', () => ({
+        ...sqlite,
+        createClient: (config: Parameters<typeof create>[0]) => {
+          const client = create(config);
+          interruptInsert(client);
+          const transaction = client.transaction.bind(client);
+          vi.spyOn(client, 'transaction').mockImplementation(async (...args) => {
+            const result = await transaction(...args);
+            interruptInsert(result);
+            return result;
+          });
+          return client;
+        },
+      }));
+      try {
+        await expect(
+          cache.claimBackgroundUsageOnce('interrupted', { signal: controller.signal, deadline }),
+        ).rejects.toThrow('Failed to persist a one-time cache claim');
+      } finally {
+        vi.doUnmock('@libsql/client/node');
+        vi.useRealTimers();
+      }
+      expect(await cache.claimBackgroundUsageOnce('interrupted')).toBe(true);
+      expect(await cache.claimBackgroundUsageOnce('interrupted')).toBe(false);
+    },
+  );
+
   it('bounds lock retries by the caller deadline and leaves failed claims retriable', async () => {
     const release = await holdClaimLock();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const deadline = Date.now() + 5000;
+    const retry = vi
+      .spyOn(await import('../src/util/time'), 'sleep')
+      .mockImplementationOnce(async () => {
+        vi.setSystemTime(deadline);
+      });
     try {
-      await expect(
-        cache.claimBackgroundUsageOnce('locked', { deadline: Date.now() + 80 }),
-      ).rejects.toMatchObject({ cause: { message: 'Timed out claiming background usage' } });
+      await expect(cache.claimBackgroundUsageOnce('locked', { deadline })).rejects.toMatchObject({
+        cause: { message: 'Timed out claiming background usage' },
+      });
+      expect(retry).toHaveBeenCalledOnce();
     } finally {
+      retry.mockRestore();
+      vi.useRealTimers();
       await release();
     }
     expect(await cache.claimBackgroundUsageOnce('locked')).toBe(true);
@@ -137,14 +195,21 @@ describe('persistent cache claims', () => {
   it('lets cancellation interrupt a contended claim without blocking the event loop', async () => {
     const release = await holdClaimLock();
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 25);
+    const time = await import('../src/util/time');
+    const sleepWithAbort = time.sleepWithAbort;
+    const retry = vi.spyOn(time, 'sleepWithAbort').mockImplementationOnce((delay, signal) => {
+      const sleeping = sleepWithAbort(delay, signal);
+      controller.abort();
+      return sleeping;
+    });
     try {
       await expect(
         cache.claimBackgroundUsageOnce('cancelled', { signal: controller.signal }),
       ).rejects.toThrow('Failed to persist a one-time cache claim');
       expect(controller.signal.aborted).toBe(true);
+      expect(retry).toHaveBeenCalledOnce();
     } finally {
-      clearTimeout(timer);
+      retry.mockRestore();
       await release();
     }
     expect(await cache.claimBackgroundUsageOnce('cancelled')).toBe(true);
@@ -197,7 +262,7 @@ describe('persistent cache claims', () => {
           }
         });
         child.once('error', reject);
-        child.once('exit', (code) => {
+        child.once('close', (code) => {
           if (code === 0 && result) {
             resolve(result);
           } else {
@@ -214,7 +279,12 @@ describe('persistent cache claims', () => {
       expect(results.filter((result) => result.claimed)).toHaveLength(1);
       expect(await cache.claimBackgroundUsageOnce('shared-background-response')).toBe(false);
     } finally {
-      workers.forEach((worker) => worker.child.kill());
+      workers.forEach(({ child }) => {
+        if (child.exitCode === null && child.signalCode === null) {
+          child.kill();
+        }
+      });
+      await Promise.allSettled(workers.map((worker) => worker.finished));
     }
   });
 });

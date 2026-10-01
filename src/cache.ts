@@ -681,11 +681,19 @@ export async function claimBackgroundUsageOnce(
             'CREATE TABLE IF NOT EXISTS claims (key BLOB PRIMARY KEY) WITHOUT ROWID',
           );
           checkDeadline();
-          const result = await client.execute({
-            sql: 'INSERT OR IGNORE INTO claims (key) VALUES (?)',
-            args: [Buffer.from(hash, 'hex')],
-          });
-          return result.rowsAffected === 1;
+          const transaction = await client.transaction('write');
+          try {
+            checkDeadline();
+            const result = await transaction.execute({
+              sql: 'INSERT OR IGNORE INTO claims (key) VALUES (?)',
+              args: [Buffer.from(hash, 'hex')],
+            });
+            checkDeadline();
+            await transaction.commit();
+            return result.rowsAffected === 1;
+          } finally {
+            transaction.close();
+          }
         } catch (error) {
           const code = (error as { code?: string }).code;
           if (!code?.startsWith('SQLITE_BUSY') && !code?.startsWith('SQLITE_LOCKED')) {
