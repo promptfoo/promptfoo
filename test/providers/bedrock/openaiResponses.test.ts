@@ -160,6 +160,33 @@ describe('bedrock openaiResponses helper', () => {
       );
     });
 
+    it.each(['provider', 'prompt'] as const)(
+      'preserves GPT OSS capabilities for a %s model override',
+      async (scope) => {
+        const override = { passthrough: { model: 'openai.gpt-oss-20b' } };
+        const provider = new BedrockGptOssResponsesProvider('openai.gpt-oss-120b', {
+          config: {
+            reasoning_effort: 'high',
+            temperature: 0.4,
+            top_p: 0.8,
+            ...(scope === 'provider' ? override : {}),
+          },
+        });
+        const { body } = await provider.getOpenAiBody(
+          'hello',
+          scope === 'prompt'
+            ? { prompt: { raw: 'hello', label: 'fixture', config: override }, vars: {} }
+            : undefined,
+        );
+
+        expect(body.model).toBe('openai.gpt-oss-20b');
+        expect(body.reasoning).toEqual({ effort: 'high' });
+        expect(body.temperature).toBe(0.4);
+        expect(body.top_p).toBe(0.8);
+        expect(body).not.toHaveProperty('max_output_tokens');
+      },
+    );
+
     it('uses the standard mantle endpoint and preserves GPT OSS reasoning controls', async () => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
       const provider = createBedrockOpenAiResponsesProvider('openai.gpt-oss-120b', {
