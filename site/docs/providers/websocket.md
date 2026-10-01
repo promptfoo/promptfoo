@@ -94,7 +94,7 @@ Some WebSocket endpoints stream their replies as multiple messages (for example,
   - `result`: the updated accumulated result you want to carry forward.
   - `complete` (boolean): set `true` only when you’ve received the final message and want to stop streaming and return the result.
 
-When `complete` is `false`, promptfoo keeps the WebSocket open and waits for the next message. When `true`, the connection is closed and `result` is returned (after being normalized as a `ProviderResponse`). For streams, the `timeoutMs` inactivity timer resets when the connection opens and after each message. Active streams can run longer than the timeout; stalled or prematurely closed streams fail. Stalls can be retried by the scheduler. Set `maxRetries: 0` to disable retries.
+When `complete` is `false`, promptfoo keeps the WebSocket open and waits for the next message. When `true`, the connection is closed and `result` is returned (after being normalized as a `ProviderResponse`). For streams, the `timeoutMs` inactivity timer resets when the connection opens and after each message. Active streams can run longer than the timeout; stalled or prematurely closed streams fail. Stalls can be retried by the scheduler. Set `maxRetries: 0` to disable retries. Evaluation cancellation closes the connection and clears its timeout.
 
 :::info
 `data` is the browser/Node `MessageEvent`. Most servers send the useful payload in `data.data` as a string. Parse it if needed:

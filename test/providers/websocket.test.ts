@@ -866,6 +866,139 @@ describe('WebSocketProvider', () => {
     });
   });
 
+  describe('request cancellation', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.spyOn(logger, 'error').mockImplementation(() => {});
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it.each([false, true])(
+      'does not connect with a pre-aborted signal (stream: %s)',
+      async (stream) => {
+        if (stream) {
+          provider = new WebSocketProvider('ws://test.com', {
+            config: {
+              messageTemplate: '{{ prompt }}',
+              streamResponse: (_accumulator: unknown, event: WebSocket.MessageEvent) => [
+                { output: event.data },
+                true,
+              ],
+            },
+          });
+        }
+        const controller = new AbortController();
+        controller.abort(new Error('fixture cancellation'));
+        const response = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+        const outcome = response.catch((error) => error);
+        await vi.runAllTimersAsync();
+
+        await expect(outcome).resolves.toMatchObject({ name: 'AbortError' });
+        expect(WebSocket).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
+
+    it.each([false, true])(
+      'cancels and cleans up before/after open (opened: %s)',
+      async (opened) => {
+        const controller = new AbortController();
+        const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+        const response = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+        const outcome = response.catch((error) => error);
+        if (opened) {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        }
+        controller.abort('fixture cancellation');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(mockWs.close).toHaveBeenCalledOnce();
+        expect(vi.getTimerCount()).toBe(0);
+        expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+        await expect(outcome).resolves.toMatchObject({ name: 'AbortError' });
+
+        const sent = mockWs.send.mock.calls.length;
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        mockWs.onmessage?.({ data: 'late response' } as WebSocket.MessageEvent);
+        expect(mockWs.send).toHaveBeenCalledTimes(sent);
+        expect(mockWs.close).toHaveBeenCalledOnce();
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
+
+    it('cancels a prepared streaming request and ignores later events', async () => {
+      const transform = vi.fn(
+        (_accumulator, event) => [{ output: event.data }, true] as [any, boolean],
+      );
+      provider = new WebSocketProvider('ws://test.com', {
+        config: { messageTemplate: '{{ prompt }}', streamResponse: transform },
+      });
+      const controller = new AbortController();
+      const response = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+      const outcome = response.catch((error) => error);
+      await vi.advanceTimersByTimeAsync(0);
+      controller.abort();
+      await vi.runAllTimersAsync();
+      await expect(outcome).resolves.toMatchObject({ name: 'AbortError' });
+      mockWs.onmessage?.({ data: 'complete response' } as WebSocket.MessageEvent);
+      expect(transform).not.toHaveBeenCalled();
+      expect(mockWs.close).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('does not connect if cancellation arrives while the stream transform is being prepared', async () => {
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          streamResponse: (_accumulator: unknown, event: WebSocket.MessageEvent) => [
+            { output: event.data },
+            true,
+          ],
+        },
+      });
+      const controller = new AbortController();
+      const response = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+      const outcome = response.catch((error) => error);
+      controller.abort();
+      await vi.runAllTimersAsync();
+      await expect(outcome).resolves.toMatchObject({ name: 'AbortError' });
+      expect(WebSocket).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it.each(['message', 'error', 'close', 'timeout'])(
+      'removes the abort listener after settlement by %s',
+      async (terminal) => {
+        const controller = new AbortController();
+        const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+        const response = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+        const outcome = response.catch((error) => error);
+        if (terminal === 'message') {
+          mockWs.onmessage?.({ data: 'complete response' } as WebSocket.MessageEvent);
+        } else if (terminal === 'error') {
+          mockWs.onerror?.({
+            error: new Error('fixture error'),
+            message: 'fixture error',
+          } as WebSocket.ErrorEvent);
+        } else if (terminal === 'close') {
+          mockWs.onclose?.({
+            type: 'close',
+            target: mockWs,
+            code: 1000,
+            reason: '',
+            wasClean: true,
+          } as WebSocket.CloseEvent);
+        } else {
+          await vi.advanceTimersByTimeAsync(1000);
+        }
+        await outcome;
+        expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+        controller.abort();
+        expect(mockWs.close).toHaveBeenCalledOnce();
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
+  });
+
   describe('stream settlement', () => {
     beforeEach(() => {
       vi.useFakeTimers();

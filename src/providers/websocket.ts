@@ -16,6 +16,7 @@ import { parseFileTransformReference } from './transformUtils';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
 } from '../types/index';
@@ -281,7 +282,15 @@ export class WebSocketProvider implements ApiProvider {
     return `[WebSocket Provider ${this.providerId}]`;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const signal = options?.abortSignal;
+    if (signal?.aborted) {
+      throw new DOMException('WebSocket request aborted', 'AbortError');
+    }
     const vars = {
       ...(context?.vars || {}),
       prompt,
@@ -294,6 +303,10 @@ export class WebSocketProvider implements ApiProvider {
     logger.debug(`Sending WebSocket message: ${message}`);
     let accumulator: ProviderResponse = { error: 'unknown error occurred' };
     return new Promise<ProviderResponse>((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new DOMException('WebSocket request aborted', 'AbortError'));
+        return;
+      }
       const wsOptions: ClientOptions = {};
       const protocols = normalizeWebSocketProtocols(this.config.protocols);
       if (this.config.headers) {
@@ -317,6 +330,7 @@ export class WebSocketProvider implements ApiProvider {
         }
         settled = true;
         clearTimeout(timeout);
+        signal?.removeEventListener('abort', onAbort);
         ws.close();
         if (result instanceof Error) {
           reject(result);
@@ -324,6 +338,7 @@ export class WebSocketProvider implements ApiProvider {
           resolve(result);
         }
       };
+      const onAbort = () => settle(new DOMException('WebSocket request aborted', 'AbortError'));
       const resetTimeout = () => {
         clearTimeout(timeout);
         timeout = setTimeout(() => {
@@ -404,6 +419,10 @@ export class WebSocketProvider implements ApiProvider {
         logger.debug(`[WebSocket Provider] Message sent: ${safeJsonStringify(message)}`);
         ws.send(message);
       };
+      signal?.addEventListener('abort', onAbort, { once: true });
+      if (signal?.aborted) {
+        onAbort();
+      }
     });
   }
 }
