@@ -1149,14 +1149,23 @@ export class OpenCodeSDKProvider implements ApiProvider {
     const serverEnv: Record<string, string | undefined> = {};
     const processEnv = getProcessEnv();
     const isWindows = os.platform() === 'win32';
-    const pathKey = isWindows
-      ? (Object.keys(processEnv).find((key) => key.toLowerCase() === 'path') ?? 'PATH')
-      : 'PATH';
+    const canonicalKeys = new Map<string, string>();
+    const envKey = (key: string): string => {
+      if (!isWindows) {
+        return key;
+      }
+      const normalized = key.toUpperCase();
+      const existing = canonicalKeys.get(normalized);
+      if (existing) {
+        return existing;
+      }
+      canonicalKeys.set(normalized, key);
+      return key;
+    };
 
     for (const [key, value] of Object.entries(processEnv)) {
       if (value !== undefined) {
-        const envKey = isWindows && key.toLowerCase() === 'path' ? pathKey : key;
-        serverEnv[envKey] = value;
+        serverEnv[envKey(key)] = value;
       }
     }
 
@@ -1164,17 +1173,18 @@ export class OpenCodeSDKProvider implements ApiProvider {
       for (const key of Object.keys(this.env).sort()) {
         const value = this.env[key];
         if (value !== undefined) {
-          const envKey = isWindows && key.toLowerCase() === 'path' ? pathKey : key;
-          serverEnv[envKey] = value;
+          serverEnv[envKey(key)] = value;
         }
       }
     }
 
     if (config.log_level === 'debug' || isDebugMode()) {
-      serverEnv.DEBUG = serverEnv.DEBUG || 'opencode:*';
+      const debugKey = envKey('DEBUG');
+      serverEnv[debugKey] = serverEnv[debugKey] || 'opencode:*';
       logger.debug('[OpenCode SDK] Debug mode enabled, synced from promptfoo log level');
     }
 
+    const pathKey = envKey('PATH');
     const homeDir = os.homedir();
     const opencodeBinPath = path.join(homeDir, '.opencode', 'bin');
     if (!serverEnv[pathKey]?.split(path.delimiter).includes(opencodeBinPath)) {
@@ -1184,13 +1194,12 @@ export class OpenCodeSDKProvider implements ApiProvider {
       logger.debug(`Added ${opencodeBinPath} to PATH for OpenCode CLI`);
     }
 
+    const traceparentKey = envKey(OPENCODE_TRACEPARENT_ENV);
     // Restart mode owns the trace context; otherwise preserve an ambient value.
     if (config.restart_server_per_call) {
-      serverEnv[OPENCODE_TRACEPARENT_ENV] = isValidTraceparent(traceparent)
-        ? traceparent
-        : undefined;
-    } else if (isValidTraceparent(traceparent) && !serverEnv[OPENCODE_TRACEPARENT_ENV]) {
-      serverEnv[OPENCODE_TRACEPARENT_ENV] = traceparent;
+      serverEnv[traceparentKey] = isValidTraceparent(traceparent) ? traceparent : undefined;
+    } else if (isValidTraceparent(traceparent) && !serverEnv[traceparentKey]) {
+      serverEnv[traceparentKey] = traceparent;
     }
 
     if (assertIsolatedWorkingDir(config)) {
@@ -1338,12 +1347,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     this.sessionOrder.push(cacheKey);
   }
 
-  private prepareCall(context?: CallApiContextParams): OpenCodePreparedCall {
-    const config: OpenCodeSDKConfig = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
-    const inIsolatedWorkspace = assertIsolatedWorkingDir(config);
+  private assertServerWorkspace(config: OpenCodeSDKConfig, inIsolatedWorkspace: boolean): void {
     // A reused server must not retain repository selectors from an earlier call.
     if (
       inIsolatedWorkspace &&
@@ -1357,6 +1361,15 @@ export class OpenCodeSDKProvider implements ApiProvider {
           'before starting the provider.',
       );
     }
+  }
+
+  private prepareCall(context?: CallApiContextParams): OpenCodePreparedCall {
+    const config: OpenCodeSDKConfig = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
+    const inIsolatedWorkspace = assertIsolatedWorkingDir(config);
+    this.assertServerWorkspace(config, inIsolatedWorkspace);
 
     if (config.apiKey !== this.config.apiKey) {
       throw new Error(
@@ -2093,6 +2106,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
           let abortListener: (() => void) | undefined;
           try {
             await this.ensureClient(config, context?.traceparent);
+            this.assertServerWorkspace(config, inIsolatedWorkspace);
             const session = await this.getOrCreateSession(config, workingDir);
             ephemeralSession = session.ephemeralSession;
             if (callOptions?.abortSignal?.aborted) {

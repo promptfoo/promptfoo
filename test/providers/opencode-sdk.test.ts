@@ -3237,6 +3237,8 @@ describe('OpenCodeSDKProvider', () => {
         seen.push({
           OPENCODE_TRACEPARENT: process.env.OPENCODE_TRACEPARENT,
           PATH: process.env.PATH,
+          Path: process.env.Path,
+          OPENAI_API_KEY: process.env.OPENAI_API_KEY,
         });
         return {
           client: mockClient,
@@ -3392,11 +3394,96 @@ describe('OpenCodeSDKProvider', () => {
           expect(serverEnv.Path).toBe(
             `${path.join(os.homedir(), '.opencode', 'bin')};${providerPath ?? 'C:\\file'}`,
           );
-          expect(seen[0].PATH).toBeUndefined();
+          expect(seen[0].Path).toBe(serverEnv.Path);
           expect(process.env.Path).toBe('C:\\ambient');
-          expect(process.env.PATH).toBeUndefined();
+          expect(process.env.PATH).toBe(process.platform === 'win32' ? 'C:\\ambient' : undefined);
         } finally {
           Object.defineProperty(path, 'delimiter', delimiter);
+        }
+      },
+    );
+
+    it.each([undefined, 'provider-value'])(
+      'collapses Windows credential aliases with provider override %s',
+      async (providerValue) => {
+        const { default: cliState } =
+          await vi.importActual<typeof import('../../src/cliState')>('../../src/cliState');
+        vi.spyOn(os, 'platform').mockReturnValue('win32');
+        const restoreEnv = mockProcessEnv({
+          openai_api_key: undefined,
+          OPENAI_API_KEY: 'ambient-value',
+        });
+        const ambientEnv = { ...process.env };
+        const seen = captureSpawnEnv();
+        try {
+          const provider = new OpenCodeSDKProvider({
+            ...(providerValue ? { env: { OPENAI_API_KEY: providerValue } } : {}),
+          });
+          await cliState.withEnvFileOverrides({ openai_api_key: 'file-value' }, () =>
+            provider.callApi('Hello', contextWith(TRACEPARENT_A)),
+          );
+          const serverEnv = mockCreateOpencode.mock.calls[0][0].env;
+          expect(
+            Object.keys(serverEnv).filter((key) => key.toUpperCase() === 'OPENAI_API_KEY'),
+          ).toEqual(['OPENAI_API_KEY']);
+          expect(serverEnv.OPENAI_API_KEY).toBe(providerValue ?? 'file-value');
+          expect(seen[0].OPENAI_API_KEY).toBe(providerValue ?? 'file-value');
+          expect(process.env).toEqual(ambientEnv);
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
+    it.each(['provider', 'env-file'])(
+      'rejects concurrent isolated reuse of a server with %s repository settings',
+      async (source) => {
+        const workspace = await import('../../src/providers/agentWorkspace');
+        vi.spyOn(workspace, 'assertIsolatedWorkingDir').mockImplementation(
+          (config) => config.working_dir === '/isolated',
+        );
+        const { default: cliState } =
+          await vi.importActual<typeof import('../../src/cliState')>('../../src/cliState');
+        const initialized = createDeferred<void>();
+        const release = createDeferred<void>();
+        mockCreateOpencode.mockImplementation(async () => {
+          initialized.resolve();
+          await release.promise;
+          return {
+            client: mockClient,
+            server: { url: 'http://127.0.0.1:4096', close: mockServerClose },
+          };
+        });
+        mockSessionCreate.mockRejectedValue(new Error('Session creation stopped by fixture'));
+        const provider = new OpenCodeSDKProvider({
+          config: { persist_sessions: true },
+          ...(source === 'provider' ? { env: { GIT_DIR: '/ordinary/.git' } } : {}),
+        });
+        const run = async () => {
+          const ordinary = provider.callApi('Hello', {
+            ...contextWith(undefined),
+            prompt: { raw: '', label: '', config: { working_dir: '/ordinary' } },
+          });
+          const isolated = provider.callApi('Hello', {
+            ...contextWith(undefined),
+            prompt: { raw: '', label: '', config: { working_dir: '/isolated' } },
+          });
+          await initialized.promise;
+          release.resolve();
+          const results = await Promise.all([ordinary, isolated]);
+          expect(results[0].error).toContain('Session creation stopped by fixture');
+          expect(results[1].error).toContain('cannot isolate OpenCode');
+          expect(mockSessionCreate).toHaveBeenCalledTimes(1);
+          expect(mockSessionPrompt).not.toHaveBeenCalled();
+        };
+        try {
+          await cliState.withEnvFileOverrides(
+            source === 'env-file' ? { GIT_DIR: '/ordinary/.git' } : {},
+            run,
+          );
+        } finally {
+          release.resolve();
+          await provider.cleanup();
         }
       },
     );
