@@ -319,7 +319,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.127.0",
-    "@apidevtools/json-schema-ref-parser": "^16.0.2",
+    "@apidevtools/json-schema-ref-parser": "^16.0.3",
     "@hono/node-server": "2.1.1",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
