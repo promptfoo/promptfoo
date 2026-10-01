@@ -1,11 +1,11 @@
 ---
 sidebar_label: Custom Go (Golang)
-description: Configure custom Go providers to integrate your own Go-based LLM clients, models, and APIs with promptfoo's testing framework for seamless evaluation
+description: Use Go functions as Promptfoo providers. Configure provider files, pass options, and return outputs from named packages or legacy package main implementations.
 ---
 
 # Custom Go Provider
 
-The Go (`golang`) provider allows you to use Go code as an API provider for evaluating prompts. This is useful when you have custom logic, API clients, or models implemented in Go that you want to integrate with your test suite.
+Use a Go function as a Promptfoo provider to evaluate your existing Go clients, models, or application logic.
 
 ## Quick Start
 
@@ -36,7 +36,7 @@ Place the provider inside a Go module with a `go.mod` in its directory or an anc
 
 ## Configuration
 
-To configure the Go provider, you need to specify the path to your Go script and any additional options you want to pass to the script. Here's an example configuration in YAML format:
+Set the provider file path and pass custom values through `config`:
 
 ```yaml
 providers:
@@ -62,7 +62,6 @@ import (
     "github.com/sashabaranov/go-openai"
 )
 
-// client is the shared OpenAI client instance.
 var client = openai.NewClient(os.Getenv("OPENAI_API_KEY"))
 
 // CallApi processes prompts with configurable options.
@@ -74,7 +73,6 @@ func CallApi(prompt string, options map[string]interface{}, ctx map[string]inter
         }
     }
 
-    // Call the API
     resp, err := client.CreateChatCompletion(
         context.Background(),
         openai.ChatCompletionRequest{
