@@ -52,24 +52,31 @@ describe('evalTableUtils', () => {
     expect(mockTable.body[0].outputs[0].sourceEvalId).toBe('unrelated-eval');
   });
 
-  it('retains each source row test-case ID for comparison trace lookup', () => {
-    mockTable.body[0].test.metadata = { testCaseId: 'main-custom-case' };
-    const comparison = structuredClone(mockTable);
-    comparison.body[0].test.metadata = { testCaseId: 'comparison-custom-case' };
-    comparison.body[1].outputs[0].id = 'comparison-result';
-    const merged = mergeComparisonTables('main-eval', mockTable, [
-      { evalId: 'comparison-eval', table: comparison },
-    ]);
-    expect(merged.body[0].outputs.map((output) => output.sourceTestCaseId)).toEqual([
-      'main-custom-case',
-      'main-custom-case',
-      'comparison-custom-case',
-      'comparison-custom-case',
-    ]);
-    expect(merged.body[1].outputs[0].sourceTestCaseId).toBeUndefined();
-    expect(merged.body[1].outputs[2].sourceTestCaseId).toBe('comparison-result');
-    expect(comparison.body[0].outputs[0].sourceTestCaseId).toBeUndefined();
-  });
+  it.each(['comparison-test', undefined])(
+    'preserves source test-case IDs in comparison outputs: %s',
+    (testCaseId) => {
+      mockTable.body[0].test.metadata = { testCaseId: 'main-test' };
+      const compared = {
+        ...mockTable,
+        body: mockTable.body.map((row) => ({
+          ...row,
+          test: { ...row.test, metadata: { testCaseId } },
+          outputs: row.outputs.map((output) => ({ ...output, sourceTestCaseId: 'stored-value' })),
+        })),
+      };
+      const merged = mergeComparisonTables('main-eval', mockTable, [
+        { evalId: 'comparison-eval', table: compared },
+      ]);
+      expect(merged.body[0].outputs.map((output) => output.sourceTestCaseId)).toEqual([
+        'main-test',
+        'main-test',
+        testCaseId,
+        testCaseId,
+      ]);
+      expect(merged.body[0].test.metadata?.testCaseId).toBe('main-test');
+      expect(compared.body[0].outputs[0].sourceTestCaseId).toBe('stored-value');
+    },
+  );
 
   beforeEach(() => {
     mockTable = {

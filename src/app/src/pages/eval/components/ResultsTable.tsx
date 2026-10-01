@@ -2237,6 +2237,12 @@ function ResultsTable({
             ),
             cell: (info: CellContext<EvaluateTableRow, EvaluateTableOutput>) => {
               const output = getOutput(info.row.index, idx);
+              const sourceEvalId =
+                inComparisonMode &&
+                output?.sourceEvalId &&
+                (output.sourceEvalId === evalId || comparisonEvalIds.includes(output.sourceEvalId))
+                  ? output.sourceEvalId
+                  : undefined;
               return output ? (
                 <ErrorBoundary
                   name={`EvalOutputCell-${info.row.index}-${idx}`}
@@ -2268,18 +2274,11 @@ function ResultsTable({
                     searchText={debouncedSearchText}
                     showStats={showStats}
                     isRedteam={isRedteam}
-                    evaluationId={
-                      inComparisonMode &&
-                      output.sourceEvalId &&
-                      (output.sourceEvalId === evalId ||
-                        comparisonEvalIds.includes(output.sourceEvalId))
-                        ? output.sourceEvalId
-                        : evalId || undefined
-                    }
+                    evaluationId={sourceEvalId ?? (evalId || undefined)}
                     testCaseId={
-                      output.sourceTestCaseId ||
-                      info.row.original.test?.metadata?.testCaseId ||
-                      output.id
+                      sourceEvalId && sourceEvalId !== evalId
+                        ? output.sourceTestCaseId || output.id
+                        : info.row.original.test?.metadata?.testCaseId || output.id
                     }
                   />
                 </ErrorBoundary>

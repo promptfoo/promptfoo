@@ -218,6 +218,54 @@ describe('share-time blob upload', () => {
     },
   );
 
+  it.each(['distinct hashes', 'shared hash across rows'])(
+    'bounds trace uploads while overlapping %s',
+    async (scenario) => {
+      const cache = createRemoteBlobUploadCache();
+      const context = { localEvalId: 'local-eval-trace', remoteEvalId: 'remote-eval-trace' };
+      const refs = Array.from(
+        { length: 5 },
+        (_, i) => `promptfoo://blob/${String(scenario === 'distinct hashes' ? i : 0).repeat(64)}`,
+      );
+      if (scenario === 'shared hash across rows') {
+        refs.forEach((ref, testIdx) =>
+          recordResultBlobRefsForShare(ref, cache, { ...context, testIdx }),
+        );
+      }
+      let active = 0;
+      let peak = 0;
+      const releases: Array<() => void> = [];
+      vi.mocked(uploadBlobRemote).mockImplementation(async () => {
+        active++;
+        peak = Math.max(peak, active);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        active--;
+        return remoteBlobResult;
+      });
+      const pending = uploadTraceBlobRefsForShare(refs, cache, context);
+      try {
+        await vi.waitFor(() => expect(uploadBlobRemote).toHaveBeenCalledTimes(4));
+        releases.shift()?.();
+        await vi.waitFor(() => expect(uploadBlobRemote).toHaveBeenCalledTimes(5));
+        releases.splice(0).forEach((release) => release());
+        await pending;
+        expect(peak).toBe(4);
+        if (scenario === 'shared hash across rows') {
+          expect(
+            vi
+              .mocked(uploadBlobRemote)
+              .mock.calls.map((call) => call[2]?.testIdx)
+              .sort(),
+          ).toEqual([0, 1, 2, 3, 4]);
+        }
+      } finally {
+        vi.mocked(uploadBlobRemote).mockResolvedValue(remoteBlobResult);
+        releases.splice(0).forEach((release) => release());
+        await pending;
+      }
+    },
+  );
+
   it('uses recorded result provenance for a blob later referenced by a trace', async () => {
     const hash = '8'.repeat(64);
     const cache = createRemoteBlobUploadCache();

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { and, eq, isNotNull, or } from 'drizzle-orm';
 import { getDb } from '../database';
-import { blobAssetsTable, blobReferencesTable } from '../database/tables';
+import { blobAssetsTable, blobReferencesTable, evalsTable } from '../database/tables';
 import logger from '../logger';
 import { FilesystemBlobStorageProvider } from './filesystemProvider';
 import { BLOB_MIME_TYPE_FALLBACK, sanitizeBlobMimeType } from './mimeTypes';
@@ -84,7 +84,14 @@ export async function storeBlob(
       .where(eq(blobAssetsTable.hash, result.ref.hash))
       .get();
 
-    if (refContext?.evalId) {
+    const persistedEval = refContext?.evalId
+      ? await tx
+          .select({ id: evalsTable.id })
+          .from(evalsTable)
+          .where(eq(evalsTable.id, refContext.evalId))
+          .get()
+      : undefined;
+    if (persistedEval && refContext?.evalId) {
       await tx
         .insert(blobReferencesTable)
         .values({
@@ -186,6 +193,14 @@ export async function recordBlobReference(
   }
 
   const db = await getDb();
+  const persistedEval = await db
+    .select({ id: evalsTable.id })
+    .from(evalsTable)
+    .where(eq(evalsTable.id, refContext.evalId))
+    .get();
+  if (!persistedEval) {
+    return;
+  }
   // A failed store can retain bytes without committing their asset registration.
   // Referencing those bytes must not adopt them or create an invalid foreign key.
   const asset = await db

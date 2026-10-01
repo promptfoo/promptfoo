@@ -430,7 +430,7 @@ export interface EvaluateTableOutput {
   sourceEvalId?: string;
   /** Prompt index within sourceEvalId before comparison columns are merged. */
   sourcePromptIndex?: number;
-  /** Test-case ID belonging to the source row before comparison tables are merged. */
+  /** Custom test-case ID from the output's source row. */
   sourceTestCaseId?: string;
   cost: number;
   failureReason: ResultFailureReason;

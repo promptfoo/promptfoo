@@ -78,6 +78,7 @@ vi.mock('./EvalOutputCell', () => {
       testCaseId?: string;
       searchText?: string;
       evaluationId?: string;
+      testCaseId?: string;
     }) => {
       return (
         <div
@@ -902,49 +903,56 @@ describe('ResultsTable Metrics Display', () => {
       },
     );
 
-    it('keeps merged prompt coordinates separate from comparison trace coordinates', () => {
-      vi.mocked(useResultsViewSettingsStore).mockReturnValue({
-        inComparisonMode: true,
-        comparisonEvalIds: ['comparison-eval'],
-        renderMarkdown: true,
-      });
-      vi.mocked(useTableStore).mockReturnValue({
-        config: {},
-        evalId: '123',
-        setTable: vi.fn(),
-        version: 4,
-        fetchEvalData: vi.fn(),
-        filters: { values: {}, appliedCount: 0, options: { metric: [] } },
-        table: {
-          head: { ...mockTable.head, prompts: [{}, {}, {}] },
-          body: [
-            {
-              ...mockTable.body[0],
-              test: { metadata: { testCaseId: 'main-custom-case' } },
-              outputs: [
-                null,
-                null,
-                {
-                  pass: true,
-                  score: 1,
-                  text: 'comparison output',
-                  sourceEvalId: 'comparison-eval',
-                  sourcePromptIndex: 0,
-                  sourceTestCaseId: 'comparison-custom-case',
-                },
-              ],
-            },
-          ],
-        },
-      });
+    it.each([
+      ['comparison-test', 'comparison-test'],
+      [undefined, 'comparison-output'],
+    ])(
+      'keeps comparison trace coordinates and source test-case ID: %s',
+      (sourceTestCaseId, expectedId) => {
+        vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+          inComparisonMode: true,
+          comparisonEvalIds: ['comparison-eval'],
+          renderMarkdown: true,
+        });
+        vi.mocked(useTableStore).mockReturnValue({
+          config: {},
+          evalId: '123',
+          setTable: vi.fn(),
+          version: 4,
+          fetchEvalData: vi.fn(),
+          filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+          table: {
+            head: { ...mockTable.head, prompts: [{}, {}, {}] },
+            body: [
+              {
+                ...mockTable.body[0],
+                test: { metadata: { testCaseId: 'main-test' } },
+                outputs: [
+                  null,
+                  null,
+                  {
+                    pass: true,
+                    score: 1,
+                    text: 'comparison output',
+                    id: 'comparison-output',
+                    sourceTestCaseId,
+                    sourceEvalId: 'comparison-eval',
+                    sourcePromptIndex: 0,
+                  },
+                ],
+              },
+            ],
+          },
+        });
 
-      renderWithProviders(<ResultsTable {...defaultProps} />);
+        renderWithProviders(<ResultsTable {...defaultProps} />);
 
-      const cell = screen.getByTestId('eval-output-cell');
-      expect(cell).toHaveAttribute('data-promptindex', '2');
-      expect(cell).toHaveAttribute('data-tracepromptindex', '0');
-      expect(cell).toHaveAttribute('data-testcaseid', 'comparison-custom-case');
-    });
+        const cell = screen.getByTestId('eval-output-cell');
+        expect(cell).toHaveAttribute('data-promptindex', '2');
+        expect(cell).toHaveAttribute('data-tracepromptindex', '0');
+        expect(cell).toHaveAttribute('data-testcaseid', expectedId);
+      },
+    );
 
     it('remounts a failed blob image and its open lightbox after a table refresh', async () => {
       const user = userEvent.setup();
