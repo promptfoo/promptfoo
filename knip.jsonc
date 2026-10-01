@@ -80,7 +80,6 @@
         "@mui/*",
         "@generated/*",
         // Transitive pins for the Docusaurus build; never imported directly.
-        "dompurify",
         "langium"
       ]
     },
