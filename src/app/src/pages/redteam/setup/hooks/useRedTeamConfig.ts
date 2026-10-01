@@ -63,6 +63,7 @@ const AGENTIC_PROVIDER_IDS = [
   'openinterpreter',
   'opencode',
   'opencode:sdk',
+  'pi',
 ];
 let recoverableNonObjectTargetMarker: string | null = null;
 let recoverableValidImportTargetMarker: string | null = null;

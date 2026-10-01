@@ -1,0 +1,25 @@
+# provider-pi/model-comparison (Compare Models Through Pi)
+
+Runs the same Python task through three models using the Pi CLI.
+
+## Usage
+
+Requires Linux or macOS and Pi 0.99.1 or later. Download this example:
+
+```bash
+npx promptfoo@latest init --example provider-pi/model-comparison
+```
+
+From the downloaded directory, install the Pi CLI and set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `GEMINI_API_KEY` in your environment (or configure the matching providers with Pi's `/login` command):
+
+```bash
+npm install --ignore-scripts @earendil-works/pi-coding-agent
+```
+
+Run the eval from the downloaded directory:
+
+```bash
+npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache -o output.json
+```
+
+Use `npx pi --list-models` to check model availability and edit the provider IDs if needed. See the [Pi provider guide](https://www.promptfoo.dev/docs/providers/pi/) for authentication and configuration options.

@@ -516,6 +516,9 @@
         "PALM_API_KEY": {
           "type": "string"
         },
+        "PI_CODING_AGENT_DIR": {
+          "type": "string"
+        },
         "PORTKEY_API_KEY": {
           "type": "string"
         },

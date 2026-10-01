@@ -7,6 +7,7 @@
  */
 
 import crypto from 'crypto';
+import nodeFs from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -28,6 +29,7 @@ const AGENTIC_PROVIDER_IDS = [
   'openinterpreter',
   'opencode',
   'opencode:sdk',
+  'pi',
 ] as const;
 
 /**
@@ -53,7 +55,7 @@ export function isAgenticProvider(provider: ApiProvider | null | undefined): boo
 }
 
 /**
- * Security scanners run agentic workflows but cannot return rubric grading verdicts.
+ * Rubric graders must return verdicts and accept the target workspace handoff.
  */
 export function isAgenticGradingProvider(provider: ApiProvider | null | undefined): boolean {
   if (!provider || !isAgenticProvider(provider)) {
@@ -61,7 +63,9 @@ export function isAgenticGradingProvider(provider: ApiProvider | null | undefine
   }
 
   const providerId = provider.id();
-  return providerId !== 'openai:codex-security' && !providerId.startsWith('openai:codex-security:');
+  return !['openai:codex-security', 'pi'].some(
+    (id) => providerId === id || providerId.startsWith(`${id}:`),
+  );
 }
 
 /**
@@ -88,6 +92,30 @@ export function resolveAgenticWorkingDir(
 
   const basePath = configBasePath ? path.resolve(configBasePath) : process.cwd();
   return safeResolve(basePath, workingDir);
+}
+
+/**
+ * Validate a resolved coding-agent working directory, throwing the error
+ * messages shared by agentic providers.
+ *
+ * @param workingDir - Absolute resolved directory path
+ * @param configuredValue - The configured working_dir value, for error messages
+ */
+export function validateAgenticWorkingDir(workingDir: string, configuredValue: string): void {
+  let stats: nodeFs.Stats;
+  try {
+    stats = nodeFs.statSync(workingDir);
+  } catch (err: any) {
+    throw new Error(
+      `Working directory ${configuredValue} (resolved to ${workingDir}) does not exist or isn't accessible: ${err.message}`,
+    );
+  }
+
+  if (!stats.isDirectory()) {
+    throw new Error(
+      `Working directory ${configuredValue} (resolved to ${workingDir}) is not a directory`,
+    );
+  }
 }
 
 /**

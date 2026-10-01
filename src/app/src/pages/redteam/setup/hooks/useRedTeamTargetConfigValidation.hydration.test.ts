@@ -1238,6 +1238,8 @@ it.each([
     'openai:agents:demo',
     { agent: { type: 'sandbox' }, sandbox: { type: 'unix-local' } },
   ],
+  ['Pi default agent', 'pi', {}],
+  ['Pi configured agent', 'pi:fixture/model', { working_dir: './project' }],
   ['OpenAI ChatKit agent', 'openai:chatkit:wf_demo', {}],
   ['OpenAI assistant agent', 'openai:assistant:asst_demo', {}],
   ['Azure assistant agent', 'azure:assistant:deployment', {}],

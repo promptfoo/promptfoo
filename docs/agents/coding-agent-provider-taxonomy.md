@@ -26,6 +26,7 @@ The main providers in this family today are:
 | Claude Agent SDK        | `anthropic:claude-agent-sdk`, `anthropic:claude-code` | `@anthropic-ai/claude-agent-sdk` library        |
 | Open Interpreter        | `openinterpreter`                                     | Local `interpreter app-server` JSON-RPC process |
 | OpenCode SDK            | `opencode:sdk`, `opencode`                            | OpenCode SDK plus local or existing server      |
+| Pi Coding Agent         | `pi`, `pi:<provider>/<model>`                         | Local Pi CLI process                            |
 
 Standard OpenAI, Anthropic, Bedrock, Azure, and other model providers still matter
 for grading and comparison, but they are outside this taxonomy unless they expose a
@@ -163,8 +164,10 @@ The coding-agent providers already share several practical patterns:
 - Session or thread caches are keyed by provider config.
 - Provider-level config is stricter than prompt-level merged config.
 - Tool and skill usage are surfaced through metadata where possible.
-- Tracing is supported for Codex and is partially shared through OpenAI agent
-  tracing helpers.
+- A top-level GenAI `callApi` span is shared across providers via `withGenAISpan`
+  (Pi emits this span too). Deep tracing into the agent runtime — child OTEL
+  spans linked by `traceparent` — is implemented for Codex and the Claude Agent
+  SDK; Pi has no native OpenTelemetry, so the provider-level span is its boundary.
 
 Useful files:
 
@@ -174,6 +177,7 @@ Useful files:
 - `src/providers/openai/codex-sdk.ts`
 - `src/providers/openai/codex-security.ts`
 - `src/providers/openai/codex-app-server.ts`
+- `src/providers/pi.ts`
 - `src/providers/registry.ts`
 
 ### OpenAI Codex SDK
@@ -351,6 +355,34 @@ Docs and examples:
 
 - `site/docs/providers/opencode-sdk.md`
 - `examples/provider-opencode-sdk/`
+
+### Pi Coding Agent
+
+Status: implemented and documented.
+
+Provider IDs: `pi` and `pi:<provider>/<model>`, with an optional `:<thinking>` suffix.
+
+- Starts Pi 0.99.1 or later with `--mode rpc --no-session` for each call. Prompts
+  travel through stdin unchanged; `agent_settled` marks completion.
+- Resolves the CLI from an absolute `pi_path` or a package under the current project
+  directory or its parents. Supports Linux and macOS.
+- Uses a temporary directory with tools disabled by default. A configured
+  `working_dir` enables `read`, `grep`, `find`, and `ls`.
+- Disables resource discovery and project trust by default. Execution settings
+  come from provider configuration; test rows may override `model` and `thinking`.
+- Returns assistant text, concrete model, stop reason, tool metadata, and the final
+  attempt's token usage and cost. Discarded retry attempts are not included.
+- Emits one GenAI span per call. Pi's internal operations have no native OTEL spans.
+
+Pi runs with the user's privileges and inherited environment. Its working directory
+is not a sandbox; use an isolated environment for untrusted prompts with tools enabled.
+The default agent directory is `~/.pi/agent`, preserving Pi's stored credentials and
+custom models. Set `agent_dir` to use separate runtime configuration.
+
+Calls do not share sessions or cached responses. Automatic `copy_working_dir` and
+`agent-rubric` workspace handoff are unsupported; use an explicitly isolated directory.
+
+See `site/docs/providers/pi.md` and `examples/provider-pi/` for configuration and examples.
 
 ## Current Naming Guidance
 
