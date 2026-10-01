@@ -8,7 +8,6 @@ import {
 } from '../../src/assertions/synthesis';
 import { getDefaultProviders } from '../../src/providers/defaults';
 import { loadApiProvider } from '../../src/providers/index';
-import { withProviderCleanup } from '../../src/providers/lifecycle';
 import { createMockProvider } from '../factories/provider';
 
 import type { ApiProvider, TestCase } from '../../src/types/index';
@@ -74,17 +73,13 @@ describe('synthesize', () => {
       }));
     vi.mocked(loadApiProvider).mockResolvedValue(provider);
 
-    const result = await withProviderCleanup(async () => {
-      const assertions = await synthesize({
-        provider: 'fixture-provider',
-        prompts: ['Return a short greeting.'],
-        instructions: 'Use the provided greeting criteria.',
-        tests: [{}],
-        numQuestions: 2,
-        type: 'llm-rubric',
-      });
-      expect(provider.cleanup).not.toHaveBeenCalled();
-      return assertions;
+    const result = await synthesize({
+      provider: 'fixture-provider',
+      prompts: ['Return a short greeting.'],
+      instructions: 'Use the provided greeting criteria.',
+      tests: [{}],
+      numQuestions: 2,
+      type: 'llm-rubric',
     });
 
     expect(result).toHaveLength(2);
@@ -111,9 +106,7 @@ describe('synthesize', () => {
     vi.mocked(loadApiProvider).mockResolvedValue(provider);
 
     await expect(
-      withProviderCleanup(() =>
-        synthesize({ provider: 'fixture-provider', prompts: ['Return a greeting.'], tests: [] }),
-      ),
+      synthesize({ provider: 'fixture-provider', prompts: ['Return a greeting.'], tests: [] }),
     ).rejects.toThrow(message);
 
     expect(provider.callApi).toHaveBeenCalledOnce();
@@ -135,12 +128,61 @@ describe('synthesize', () => {
     vi.mocked(loadApiProvider).mockResolvedValue(provider);
 
     await expect(
-      withProviderCleanup(() =>
-        synthesize({ provider: 'fixture-provider', prompts: ['Return a greeting.'], tests: [] }),
-      ),
+      synthesize({ provider: 'fixture-provider', prompts: ['Return a greeting.'], tests: [] }),
     ).rejects.toBe(conversionError);
 
     expect(provider.callApi).toHaveBeenCalledTimes(2);
+    expect(provider.cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('reports a cleanup failure after successful synthesis', async () => {
+    const cleanupError = new Error('fixture cleanup failed');
+    const provider = createMockProvider({
+      response: { output: { questions: [] } },
+      cleanup: () => {
+        throw cleanupError;
+      },
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(provider);
+
+    await expect(
+      synthesize({ provider: 'fixture-provider', prompts: ['Return a greeting.'], tests: [] }),
+    ).rejects.toBe(cleanupError);
+    expect(provider.cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('waits for other conversions before cleanup when one conversion fails', async () => {
+    const conversionError = new Error('fixture conversion failed');
+    const provider = createMockProvider({ cleanup: true });
+    let cleanedBeforeLastResponse: boolean | undefined;
+    provider.callApi
+      .mockResolvedValueOnce({
+        output: {
+          questions: [
+            { label: 'Greeting', question: 'Does it include a greeting?' },
+            { label: 'Length', question: 'Is it short?' },
+          ],
+        },
+      })
+      .mockImplementation(async (prompt) => {
+        if (prompt.includes('Does it include a greeting?')) {
+          throw conversionError;
+        }
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        cleanedBeforeLastResponse = provider.cleanup!.mock.calls.length > 0;
+        return { output: 'None' };
+      });
+    vi.mocked(loadApiProvider).mockResolvedValue(provider);
+
+    await expect(
+      synthesize({
+        provider: 'fixture-provider',
+        prompts: ['Return a greeting.'],
+        tests: [],
+        numQuestions: 2,
+      }),
+    ).rejects.toBe(conversionError);
+    expect(cleanedBeforeLastResponse).toBe(false);
     expect(provider.cleanup).toHaveBeenCalledOnce();
   });
 
@@ -155,11 +197,9 @@ describe('synthesize', () => {
       synthesizeProvider: provider,
     });
 
-    const result = await withProviderCleanup(() =>
-      synthesizeFromTestSuite(
-        { providers: [], prompts: [{ raw: 'Return a greeting.', label: 'Greeting' }] },
-        {},
-      ),
+    const result = await synthesizeFromTestSuite(
+      { providers: [], prompts: [{ raw: 'Return a greeting.', label: 'Greeting' }] },
+      {},
     );
 
     expect(result).toEqual([
