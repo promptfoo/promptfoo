@@ -7,11 +7,13 @@ sidebar_position: 7
 
 # Evaluating Image Generation
 
-Use `llm-rubric` with a vision-capable grader to compare generated images against written criteria. Built-in OpenAI and Gemini image providers return structured images, which Promptfoo attaches to the grading prompt automatically.
+Use `llm-rubric` with a vision-capable grader to compare generated images against written criteria. Promptfoo automatically attaches structured images whose `data` contains a data URI or raw base64 bytes.
 
 ## How It Works
 
-Each test sends a prompt to the image provider. The grader receives the generated images and the assertion's criteria, then returns a pass/fail result, score, and reason. Set `PROMPTFOO_INLINE_MEDIA=true` to keep image bytes available to the grader. Stored image blob references are not supported by this grading path.
+Each test sends a prompt to the image provider. The grader receives the generated images and the assertion's criteria, then returns a pass/fail result, score, and reason. Set `PROMPTFOO_INLINE_MEDIA=true` to keep image bytes available to the grader. Remote image URLs and stored blob references are not supported by this grading path.
+
+The GPT Image and Gemini image routes shown below return image bytes. For other `openai:image` compatibility routes, set `config.response_format: b64_json` and use an endpoint that supports that format. Inline media preserves bytes already in the response; it does not download image URLs.
 
 ## Prerequisites
 
@@ -80,7 +82,7 @@ defaultTest:
 
 :::note
 
-`llm-rubric` accepts up to four images per response by default. Set `PROMPTFOO_GRADING_MAX_IMAGES` to change the limit; responses above it fail grading before the judge is called. OpenAI image providers support `n: 1` to request one image. Gemini image providers do not use `n`.
+`llm-rubric` limits responses to four images by default. Set `PROMPTFOO_GRADING_MAX_IMAGES` to change the limit; responses above it fail grading before the judge is called. OpenAI image providers support `n: 1` to request one image. Gemini image providers do not use `n`.
 
 :::
 
@@ -93,7 +95,7 @@ providers:
   - id: google:gemini-3.1-flash-image
 ```
 
-A custom provider should return images through [`ProviderResponse.images`](/docs/configuration/reference/#providerresponse). A raw JSON string containing `b64_json` is not a structured image response and is not covered by this workflow. The grader must support image inputs.
+A custom provider should return images through [`ProviderResponse.images`](/docs/configuration/reference/#providerresponse). Set each image's `data` to a data URI or raw base64 bytes, with the corresponding `mimeType`. A raw JSON string containing `b64_json` is not a structured image response and is not covered by this workflow. The grader must support image inputs.
 
 ## Tips
 
