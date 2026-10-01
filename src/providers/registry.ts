@@ -1,3 +1,4 @@
+import os from 'os';
 import path from 'path';
 
 import dedent from 'dedent';
@@ -127,6 +128,7 @@ export function mergeProviderEnv(
   ...layers: (NonNullable<ProviderOptions['env']> | undefined)[]
 ): NonNullable<ProviderOptions['env']> | undefined {
   const isCodexSDK = /^openai:(?:codex-sdk|codex)(?::|$)/.test(providerPath);
+  const isWindowsOpenCode = os.platform() === 'win32' && /^opencode(?::|$)/.test(providerPath);
   let merged: NonNullable<ProviderOptions['env']> | undefined;
   for (const layer of layers) {
     if (!layer) {
@@ -137,10 +139,19 @@ export function mergeProviderEnv(
       delete merged.OPENAI_API_KEY;
       delete merged.CODEX_API_KEY;
     }
-    Object.assign(
-      merged,
-      Object.fromEntries(Object.entries(layer).filter(([, value]) => value !== undefined)),
-    );
+    for (const [key, value] of Object.entries(layer)) {
+      if (value === undefined) {
+        continue;
+      }
+      if (isWindowsOpenCode) {
+        for (const existingKey of Object.keys(merged)) {
+          if (existingKey !== key && existingKey.toUpperCase() === key.toUpperCase()) {
+            delete merged[existingKey];
+          }
+        }
+      }
+      merged[key] = value;
+    }
   }
   return merged;
 }
