@@ -76,7 +76,8 @@ export function runCommand(
     });
     child.stdin?.on('error', (error: NodeJS.ErrnoException) => {
       // A process may exit without consuming all input. Its exit status remains authoritative.
-      if (error.code !== 'EPIPE' && error.code !== 'ERR_STREAM_DESTROYED') {
+      // Windows reports an early closed stdin pipe as EOF rather than EPIPE.
+      if (error.code !== 'EOF' && error.code !== 'EPIPE' && error.code !== 'ERR_STREAM_DESTROYED') {
         inputError = error;
         child.kill('SIGKILL');
       }
