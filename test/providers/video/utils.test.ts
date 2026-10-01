@@ -4,7 +4,9 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getCacheMappingPath,
+  isVideoCacheReferenceUrlSafe,
   readCacheMapping,
+  sanitizeVideoSourceUri,
   storeCacheMapping,
 } from '../../../src/providers/video/utils';
 import { getConfigDirectoryPath } from '../../../src/util/config/manage';
@@ -97,5 +99,39 @@ describe('video cache utilities', () => {
       expect.stringContaining('"videoKey": "video/abc.mp4"'),
       'utf8',
     );
+  });
+
+  it('rejects JWT query values from cache identity and persisted source metadata', () => {
+    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEyMyJ9.signature';
+    const sourceUri = `https://generativelanguage.googleapis.com/v1beta/files/example?download=${jwt}&alt=media`;
+
+    expect(isVideoCacheReferenceUrlSafe(sourceUri)).toBe(false);
+    expect(sanitizeVideoSourceUri(sourceUri)).toBe(
+      'https://generativelanguage.googleapis.com/v1beta/files/example?alt=media',
+    );
+  });
+
+  it('rejects signed credentials carried in URL fragments', () => {
+    const sourceUri = 'https://cdn.example.com/video.mp4#X-Amz-Signature=abcd1234&view=preview';
+
+    expect(isVideoCacheReferenceUrlSafe(sourceUri)).toBe(false);
+    expect(sanitizeVideoSourceUri(sourceUri)).toBe(
+      'https://cdn.example.com/video.mp4#view=preview',
+    );
+  });
+
+  it('scrubs all secret-named URL parameters from persisted source metadata', () => {
+    const sourceUri = 'https://cdn.example.com/video.mp4?session=private-value&view=preview';
+
+    expect(isVideoCacheReferenceUrlSafe(sourceUri)).toBe(false);
+    expect(sanitizeVideoSourceUri(sourceUri)).toBe(
+      'https://cdn.example.com/video.mp4?view=preview',
+    );
+  });
+
+  it('rejects bare credential fragments from persistent cache identities', () => {
+    const sourceUri = 'https://cdn.example.com/video.mp4#sk-proj-abcdefghijklmnopqrstuvwxyz';
+
+    expect(isVideoCacheReferenceUrlSafe(sourceUri)).toBe(false);
   });
 });

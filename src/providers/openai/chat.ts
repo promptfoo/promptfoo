@@ -48,12 +48,15 @@ import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
   getOpenAiChatChoiceError,
+  getOpenAiEffectiveServiceTier,
   getOpenAiGatewayErrorType,
   getOpenAiGatewayProviderCode,
   getOpenAiPartialOutput,
   getOpenAiPolicyRefusal,
   getTokenUsage,
   isCustomOpenAiEndpoint,
+  normalizeOpenAiBillingModelName,
+  normalizeOpenAiServiceTierForWire,
   OPENAI_CHAT_MODELS,
   validateFunctionCall,
 } from './util';
@@ -130,10 +133,14 @@ function getChatSearchCitations(
 }
 
 function getChatSearchSurcharge(modelName: string): number {
-  if (/(?:^|\/)gpt-5-search-api(?:-|$)/.test(modelName)) {
+  const billingModelName = normalizeOpenAiBillingModelName(modelName);
+  if (billingModelName.includes('/')) {
+    return 0;
+  }
+  if (/^gpt-5-search-api(?:-|$)/.test(billingModelName)) {
     return 0.01;
   }
-  if (/(?:^|\/)gpt-4o(?:-mini)?-search-preview(?:-|$)/.test(modelName)) {
+  if (/^gpt-4o(?:-mini)?-search-preview(?:-|$)/.test(billingModelName)) {
     return 0.025;
   }
   return 0;
@@ -353,6 +360,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
   }
 
+  protected isReasoningCapabilityModel(modelName: string): boolean {
+    return super.isReasoningModel(modelName);
+  }
+
+  protected supportsTemperatureForCapabilityModel(modelName: string): boolean {
+    return !this.isReasoningCapabilityModel(modelName);
+  }
+
   /**
    * Loads a function from an external file
    * @param fileRef The file reference in the format 'file://path/to/file:functionName'
@@ -386,19 +401,25 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ) {
     // Merge configs from the provider and the prompt
+    const promptConfig = context?.prompt?.config;
     const config = {
       ...this.config,
-      ...context?.prompt?.config,
+      ...promptConfig,
     };
+    const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config, promptConfig);
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
     const passthroughModel =
       typeof config.passthrough?.model === 'string' ? config.passthrough.model : undefined;
-    const capabilityModelName = (passthroughModel ?? this.getCapabilityModelName()).replace(
-      /(^|\/)ft:/,
-      '$1',
-    );
+    const capabilityModelName = this.normalizeCapabilityModelName(
+      passthroughModel ?? this.getCapabilityModelName(),
+    ).replace(/(^|\/)ft:/, '$1');
+    // Repeating the configured model must preserve subclass capabilities, such as
+    // Mantle Grok's completion cap and temperature support.
+    const usesConfiguredCapabilities =
+      capabilityModelName ===
+      this.normalizeCapabilityModelName(this.getCapabilityModelName()).replace(/(^|\/)ft:/, '$1');
     const isGPT5Model = this.isGPT5Model(capabilityModelName);
     const isOSeriesModel =
       capabilityModelName.startsWith('o1') ||
@@ -409,10 +430,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       capabilityModelName.includes('/o4');
     const isGPT6Model = isGpt6Model(capabilityModelName);
     const isOpenRouterGpt6 = isGPT6Model && this.usesOpenRouter();
-    const isReasoningModel =
-      passthroughModel === undefined
-        ? this.isReasoningModel()
-        : super.isReasoningModel(capabilityModelName);
+    const isReasoningModel = usesConfiguredCapabilities
+      ? this.isReasoningModel()
+      : this.isReasoningCapabilityModel(capabilityModelName);
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
@@ -429,10 +449,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    // GPT-6 sampling depends on the final reasoning effort; its request rules remove it if needed.
     const supportsTemperature =
       isGPT6Model ||
-      (passthroughModel === undefined ? this.supportsTemperature() : !isReasoningModel);
+      (usesConfiguredCapabilities
+        ? this.supportsTemperature()
+        : this.supportsTemperatureForCapabilityModel(capabilityModelName));
     const temperature = supportsTemperature
       ? (config.temperature ?? temperatureDefault)
       : undefined;
@@ -507,6 +528,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? {}
         : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.passthrough || {}),
+      ...(effectiveServiceTier === undefined
+        ? {}
+        : {
+            service_tier: normalizeOpenAiServiceTierForWire(effectiveServiceTier, this.getApiUrl()),
+          }),
       ...(capabilityModelName.includes('audio')
         ? {
             modalities: config.modalities || ['text', 'audio'],
@@ -531,9 +557,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
 
     // Add other basic parameters
-    if (config.service_tier) {
-      body.service_tier = config.service_tier;
-    }
     if (config.user) {
       body.user = config.user;
     }
@@ -589,7 +612,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       isOpenRouter: isOpenRouterGpt6,
     });
 
-    return { body, config: { ...config, service_tier: body.service_tier } };
+    return { body, config: { ...config, service_tier: effectiveServiceTier } };
+  }
+
+  protected override getBillingModelName(config: OpenAiCompletionOptions): string {
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    return typeof passthroughModel === 'string'
+      ? passthroughModel
+      : super.getBillingModelName(config);
+  }
+
+  protected getBillingRegion(): string | undefined {
+    return undefined;
   }
 
   /**
@@ -606,14 +640,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     if (this.usesOpenRouter()) {
       return calculateOpenRouterResponseCost(data, config);
     }
-    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
-    const modelName =
-      typeof passthroughModel === 'string' ? passthroughModel : this.getBillingModelName(config);
-    const billingModelName = modelName.split('/').pop() ?? modelName;
+    const modelName = this.getBillingModelName(config);
+    const billingModelName = normalizeOpenAiBillingModelName(modelName);
     const tokenCost = calculateOpenAIUsageCost(billingModelName, config, data.usage, {
       apiUrl: this.getApiUrl(),
       cachedResponse: cached,
       provider: this.getGenAISystem(),
+      region: this.getBillingRegion(),
       serviceTier: data.service_tier ?? config.service_tier,
     });
     const searchCost = cached ? 0 : getChatSearchSurcharge(modelName);
