@@ -1088,6 +1088,7 @@ function sanitizeStructuredAttributeValue(
         state.changed = true;
         return '<redacted>';
       }
+      (target as unknown[]).length = source.length;
     }
     for (const [key, entry] of structuredAttributeEntries(source)) {
       if (--budget.remaining < 0) {
@@ -1098,7 +1099,9 @@ function sanitizeStructuredAttributeValue(
       let sanitized: unknown;
       if (
         ArrayBuffer.isView(entry) ||
-        (isRecord(entry) && !(entry instanceof Date) && typeof entry.toJSON === 'function') ||
+        ((isRecord(entry) || Array.isArray(entry)) &&
+          !(entry instanceof Date) &&
+          typeof (entry as Record<string, unknown>).toJSON === 'function') ||
         isCredentialPairValue(source, key, sourceHeaders) ||
         isCredentialAttributeKey(key) ||
         isPrivateJwkParameter(source, key) ||

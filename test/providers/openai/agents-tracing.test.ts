@@ -197,6 +197,20 @@ describe('OTLPTracingExporter', () => {
   );
 
   it.each(['json', 'protobuf'] as const)(
+    'preserves trailing holes in ordinary nested arrays in %s',
+    async (format) => {
+      const items = ['first'];
+      items.length = 3;
+      const structured = { items, empty: new Array(2) };
+      const { attributes } = await exportCustomData({ structured }, format);
+
+      expect(attributes.structured).toBe(JSON.stringify(structured));
+      expect(items).toHaveLength(3);
+      expect(Object.keys(items)).toEqual(['0']);
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
     'masks whitespace-delimited properties and retains ordinary lines in %s',
     async (format) => {
       const { attributes } = await exportCustomData(
