@@ -422,6 +422,7 @@ describe('GoogleInteractionsChatProvider', () => {
       const downgraded = await make({ service_tier: 'priority' }).callApi('Hello');
       const standard = await make({ service_tier: 'standard' }).callApi('Hello');
       expect(downgraded.cost).toBe(standard.cost);
+      expect(downgraded.metadata?.serviceTier).toBe('standard');
       expect(downgraded.cost).toBeGreaterThan(0);
       mockFetchWithCache.mockResolvedValue(interaction() as any);
       const priority = await make({ service_tier: 'priority' }).callApi('Hello');
@@ -434,6 +435,7 @@ describe('GoogleInteractionsChatProvider', () => {
         .mockResolvedValueOnce(interaction() as any);
       const polled = await make({ service_tier: 'priority' }).callApi('Hello');
       expect(polled.cost).toBe(standard.cost);
+      expect(polled.metadata?.serviceTier).toBe('standard');
     });
 
     it('renders loaded schema content once after resolving the filename', async () => {

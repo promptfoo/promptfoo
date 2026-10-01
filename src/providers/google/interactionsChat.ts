@@ -570,6 +570,7 @@ function buildTokenUsage(totals: UsageTotals) {
 
 type ToolLoopResult = {
   lastData: InteractionResponse;
+  serviceTier?: ReturnType<typeof getGoogleResponseServiceTier>;
   totals: UsageTotals;
   cost?: number;
   executedToolCalls: Array<{ name: string; args: unknown; result?: unknown; error?: string }>;
@@ -849,6 +850,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     let currentInput: InteractionInputItem[] = timeline;
     let currentPreviousInteractionId = args.previousInteractionId;
     let lastData: InteractionResponse | undefined;
+    let actualServiceTier: ReturnType<typeof getGoogleResponseServiceTier>;
     let rounds = 0;
     const maxRounds = DEFAULT_MAX_TOOL_ROUNDS;
 
@@ -862,6 +864,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
         ...(!error.raw && lastData ? { raw: lastData } : {}),
         metadata: {
           ...error.metadata,
+          ...(actualServiceTier ? { serviceTier: actualServiceTier } : {}),
           ...(executedToolCalls.length > 0 ? { rateLimitRetryable: false } : {}),
           ...(executedToolCalls.length > 0 ? { toolCalls: executedToolCalls } : {}),
           ...(groundingCalls.length > 0 ? { groundingToolCalls: groundingCalls } : {}),
@@ -917,6 +920,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       };
 
       const result = await this.postInteraction(endpoint, headers, body, config, abortSignal);
+      actualServiceTier = result.serviceTier;
       if ('error' in result) {
         if (isInteractionResponse(result.error.raw) && result.error.raw.usage) {
           recordRound(result.error.raw, result.serviceTier);
@@ -1001,6 +1005,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     }
     return {
       lastData,
+      serviceTier: actualServiceTier,
       totals,
       cost: cost(),
       executedToolCalls,
@@ -1168,7 +1173,14 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
     if ('error' in exchange) {
       return exchange.error;
     }
-    const { lastData, totals, cost, executedToolCalls, groundingCalls } = exchange;
+    const {
+      lastData,
+      serviceTier: actualServiceTier,
+      totals,
+      cost,
+      executedToolCalls,
+      groundingCalls,
+    } = exchange;
     const { executedCallIds } = exchange;
     if (!lastData) {
       return { error: 'Gemini Interactions API returned no data' };
@@ -1194,6 +1206,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
         tokenUsage: buildTokenUsage(totals),
         cost,
         metadata: {
+          ...(actualServiceTier ? { serviceTier: actualServiceTier } : {}),
           ...(executedToolCalls.length > 0 ? { toolCalls: executedToolCalls } : {}),
           ...(groundingCalls.length > 0 ? { groundingToolCalls: groundingCalls } : {}),
         },
@@ -1233,6 +1246,7 @@ export class GoogleInteractionsChatProvider extends GoogleGenericProvider {
       tokenUsage: buildTokenUsage(totals),
       cost,
       metadata: {
+        ...(actualServiceTier ? { serviceTier: actualServiceTier } : {}),
         ...(lastData.id ? { interactionId: lastData.id } : {}),
         ...(lastData.status ? { interactionStatus: lastData.status } : {}),
         interactionStored: store,
