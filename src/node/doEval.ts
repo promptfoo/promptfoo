@@ -294,6 +294,7 @@ async function doEvalWithEnv(
   envFileOverrides: EnvOverrides | undefined,
 ): Promise<Eval> {
   const isCliInvocation = isCliEventSource(evaluateOptions);
+  const callerTimeoutMs = evaluateOptions.timeoutMs;
 
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
@@ -594,7 +595,7 @@ async function doEvalWithEnv(
       evaluateOptions = {
         ...evaluateOptions,
         ...config.evaluateOptions,
-        timeoutMs: evaluateOptions.timeoutMs ?? config.evaluateOptions.timeoutMs,
+        timeoutMs: callerTimeoutMs ?? config.evaluateOptions.timeoutMs,
         eventSource: evaluateOptions.eventSource,
         generationEventId: evaluateOptions.generationEventId,
         generationTokenUsage: evaluateOptions.generationTokenUsage,
