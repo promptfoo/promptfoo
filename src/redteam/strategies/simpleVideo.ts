@@ -7,6 +7,7 @@ import { Presets, SingleBar } from 'cli-progress';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
+import { runCommand } from '../../util/runCommand';
 import { neverGenerateRemote } from '../remoteGeneration';
 
 import type { TestCase } from '../../types/index';
@@ -53,8 +54,7 @@ async function checkFfmpegAvailable(): Promise<void> {
     return;
   }
   try {
-    const { execa } = await import('execa');
-    await execa('ffmpeg', ['-version']);
+    await runCommand('ffmpeg', ['-version']);
     ffmpegAvailable = true;
   } catch (error) {
     throw new Error(
@@ -69,7 +69,7 @@ async function checkFfmpegAvailable(): Promise<void> {
 
 export function escapeDrawtextString(text: string): string {
   // Escape special characters for FFmpeg's drawtext filter when text is
-  // wrapped in single quotes and passed directly via execa (no shell).
+  // wrapped in single quotes and passed directly as an argument (no shell).
   // See: https://ffmpeg.org/ffmpeg-filters.html#drawtext-1
   return text
     .replace(/\\/g, '\\\\') // Backslash must be escaped first (special even in single-quoted strings)
@@ -118,8 +118,7 @@ async function textToVideo(text: string): Promise<string> {
         const systemFont = await getSystemFont();
 
         // Create a 5-second video with white background and text overlay
-        const { execa } = await import('execa');
-        await execa('ffmpeg', [
+        await runCommand('ffmpeg', [
           '-f',
           'lavfi',
           '-i',
