@@ -57,22 +57,9 @@ function rougeNScore(candidate: string, reference: string, n = 1, beta = 1): num
   return rouge.fMeasure(precision, recall, beta);
 }
 
-/**
- * Computes ROUGE-L or ROUGE-S with js-rouge.
- *
- * js-rouge counts repeated matches from 3.2.1 on (3.2.0 deduplicated them, so
- * identical text with a repeated token scored below 1.0). Its ROUGE-L is the
- * summary-level variant, ROUGE-Lsum: both texts are split into sentences and each
- * reference sentence is matched against every candidate sentence, so reordering whole
- * sentences does not lower the score. ROUGE-S counts skip-bigrams over the whole text.
- *
- * js-rouge throws on blank input. Blank text has no tokens to match, so it scores 0
- * here, as it does in `rougeNScore`.
- *
- * @internal
- */
 function jsRougeScore(fnName: 'l' | 's', candidate: string, reference: string): number {
-  // js-rouge also treats Unicode NEXT LINE as whitespace; String.trim does not.
+  // js-rouge rejects blanks, including NEXT LINE (which String.trim does not remove).
+  // Match ROUGE-N's zero score for inputs with no tokens.
   if (/^[\s\u0085]*$/u.test(candidate) || /^[\s\u0085]*$/u.test(reference)) {
     return 0;
   }

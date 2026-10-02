@@ -129,6 +129,35 @@ describe('getRunnableAssertionValueError', () => {
     });
   });
 
+  describe.each(['rouge-l', 'rouge-s', 'not-rouge-l', 'not-rouge-s'] as const)('%s', (type) => {
+    it('accepts a string reference and thresholds at both boundaries', () => {
+      expect(
+        getRunnableAssertionValueError(make({ type, value: 'expected output' })),
+      ).toBeUndefined();
+      for (const threshold of [0, 1]) {
+        expect(
+          getRunnableAssertionValueError(make({ type, value: 'expected output', threshold })),
+        ).toBeUndefined();
+      }
+    });
+
+    it('requires a non-blank string reference', () => {
+      for (const value of ['', '   ', 42, ['expected output']]) {
+        expect(getRunnableAssertionValueError(make({ type, value }))).toMatch(
+          /Enter an expected value/,
+        );
+      }
+    });
+
+    it('rejects thresholds outside [0, 1]', () => {
+      for (const threshold of [-0.1, 1.1]) {
+        expect(
+          getRunnableAssertionValueError(make({ type, value: 'expected output', threshold })),
+        ).toMatch(/from 0 to 1/);
+      }
+    });
+  });
+
   describe('LLM-graded assertions', () => {
     it('requires criteria for select-best', () => {
       expect(

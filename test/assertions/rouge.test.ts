@@ -122,11 +122,7 @@ describe('handleRougeScore', () => {
     expect(result.reason).toBe('ROUGE-S score 1.00 is greater than or equal to threshold 0.75');
   });
 
-  // A metric that scores identical text below 1.0 is broken by definition. ROUGE-N
-  // uses clipped counts for this reason (see rouge.ts). ROUGE-L and ROUGE-S delegate
-  // to js-rouge, which deduplicated matches before counting them until 3.2.1: 3.2.0
-  // scores this sentence 0.83 on ROUGE-L and 0.93 on ROUGE-S. The ROUGE-L/S cases
-  // above cannot catch that because 'The Quick Brown Fox' has no repeated token.
+  // js-rouge before 3.2.1 undercounted repeated L/S matches.
   describe.each([
     ['rouge-n', 'ROUGE-N'],
     ['rouge-l', 'ROUGE-L'],
@@ -148,6 +144,15 @@ describe('handleRougeScore', () => {
 
       expect(result.score).toBe(0);
       expect(result.pass).toBe(false);
+    });
+
+    it('keeps a partial match between 0 and 1', () => {
+      const result = handleRougeScore(
+        makeParams('the dog sat on the mat', 'the cat sat on the mat', { baseType }),
+      );
+
+      expect(result.score).toBeGreaterThan(0);
+      expect(result.score).toBeLessThan(1);
     });
 
     it.each(['', ' ', '\n', '\u0085', ' \u0085\n'])(
@@ -182,11 +187,6 @@ describe('handleRougeScore', () => {
     });
   });
 
-  // These pin the js-rouge 3.2.1 behaviour that rouge-l and rouge-s rely on. On
-  // js-rouge 3.2.0 all but the single-token ROUGE-L case fail: it scores the repeated
-  // texts 0.67 and 0.40, the mid-output period 1.00 (ROUGE-L) and 0.33 (ROUGE-S) and
-  // the ROUGE-S reorder 0.29, and it throws on the ROUGE-L reorder and on a single
-  // ROUGE-S token.
   describe('js-rouge scoring', () => {
     it.each([
       ['rouge-l', 'the the cat'],
