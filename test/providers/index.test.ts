@@ -73,6 +73,23 @@ vi.mock('proxy-agent', async (importOriginal) => {
 const mockExecFile = vi.hoisted(() => vi.fn());
 vi.mock('child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('child_process')>();
+  const { promisify } = await import('node:util');
+  // Preserve execFile's custom promise result when replacing its callback implementation.
+  Object.defineProperty(mockExecFile, promisify.custom, {
+    value: (...args: unknown[]) => {
+      let child;
+      const promise = new Promise((resolve, reject) => {
+        child = mockExecFile(...args, (error: Error | null, stdout: string, stderr: string) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve({ stdout, stderr });
+          }
+        });
+      });
+      return Object.assign(promise, { child });
+    },
+  });
   return {
     ...actual,
     default: {
