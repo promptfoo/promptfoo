@@ -111,6 +111,25 @@ describe('VoiceCrescendoProvider', () => {
     expect(provider.id()).toBe('promptfoo:redteam:voice-crescendo');
   });
 
+  it('keeps an explicit redteamProvider local when remote generation is enabled', async () => {
+    // Regression test for https://github.com/promptfoo/promptfoo/issues/10977:
+    // a configured redteamProvider must not be swapped for the cloud provider.
+    const { shouldGenerateRemote } = await import('../../../../src/redteam/remoteGeneration');
+    vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+
+    const provider = new VoiceCrescendoProvider({
+      injectVar: 'goal',
+      redteamProvider: 'ollama:chat:llama3.1:8b',
+    });
+
+    const attacker = await (provider as any).getRedTeamProvider();
+
+    expect(redteamProviderManager.getProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'ollama:chat:llama3.1:8b' }),
+    );
+    expect(attacker).toBe(mockRedteamProvider);
+  });
+
   it('should return error when no target provider configured', async () => {
     const provider = new VoiceCrescendoProvider({ injectVar: 'goal' });
 
