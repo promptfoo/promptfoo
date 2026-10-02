@@ -1,5 +1,6 @@
+import { addProviderTestCases } from './testCaseAdapters';
+
 import type { TestCase } from '../../types/index';
-import type { Inputs } from '../../types/shared';
 
 interface AdaptiveMultiTurnStrategyDefinition {
   providerName: string;
@@ -24,35 +25,17 @@ export function createAdaptiveMultiTurnStrategy(
   return (testCases, injectVar, config) => {
     const scanId = crypto.randomUUID(); // Generate once for all tests in this scan
 
-    return testCases.map((testCase) => {
-      const originalText = String(testCase.vars![injectVar]);
-      // Get inputs from plugin config if available
-      const pluginConfig = testCase.metadata?.pluginConfig as Record<string, unknown> | undefined;
-      const inputs = pluginConfig?.inputs as Inputs | undefined;
-
-      return {
-        ...testCase,
-        provider: {
-          id: providerName,
-          config: {
-            injectVar,
-            scanId,
-            ...config,
-            // Pass inputs from plugin config to Hydra provider
-            ...(inputs && { inputs }),
-          },
-        },
-        assert: testCase.assert?.map((assertion) => ({
-          ...assertion,
-          metric: assertion.metric ? `${assertion.metric}/${metricSuffix}` : assertion.metric,
-        })),
-        metadata: {
-          ...testCase.metadata,
-          strategyId,
-          originalText,
-        },
-      };
-    });
+    return addProviderTestCases(
+      testCases,
+      injectVar,
+      { scanId, ...config },
+      {
+        providerName,
+        metricSuffix,
+        strategyId,
+        forwardPluginInputs: true,
+      },
+    );
   };
 }
 
