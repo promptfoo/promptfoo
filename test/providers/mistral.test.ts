@@ -989,6 +989,17 @@ describe('Mistral', () => {
     it('should create a provider with default options', () => {
       expect(provider.modelName).toBe('mistral-embed');
       expect(provider.config).toEqual({});
+      expect(provider.id()).toBe('mistral:embedding:mistral-embed');
+    });
+
+    it('should honor a custom embedding provider ID without changing the model', () => {
+      const customProvider = new MistralEmbeddingProvider({
+        id: 'custom-embedding',
+        modelName: 'codestral-embed',
+      });
+
+      expect(customProvider.id()).toBe('custom-embedding');
+      expect(customProvider.modelName).toBe('codestral-embed');
     });
 
     it('should support non-default embedding models such as codestral-embed', async () => {
