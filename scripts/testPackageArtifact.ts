@@ -817,7 +817,7 @@ async function runOptionalOpenAiAgentsChecks(
     await assert.rejects(
       loadApiProvider('openai:agents:gpt-4.1-mini'),
       (error) => {
-        assert.match(error.message, /npm install promptfoo @openai\\/agents@\\^0\\.11\\.8/);
+        assert.match(error.message, /npm install promptfoo @openai\\/agents@\\^0\\.14\\.1/);
         if (process.argv[2] === 'incompatible') {
           assert.match(error.message, /found 0\\.0\\.0/);
         } else {
