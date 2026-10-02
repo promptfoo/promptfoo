@@ -28,13 +28,18 @@ const workflow = yaml.load(
   jobs: Record<string, Job>;
 };
 const directories: string[] = [];
+// npm and npx expose sibling entrypoints; other runners can still use npm from PATH.
+const npmCli = process.env.npm_execpath
+  ? path.join(path.dirname(process.env.npm_execpath), 'npm-cli.js')
+  : undefined;
+const directNpm = npmCli && fs.existsSync(npmCli);
 const bash =
   process.platform === 'win32'
     ? path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Git/bin/bash.exe')
     : 'bash';
 afterEach(() => {
   for (const directory of directories.splice(0)) {
-    fs.rmSync(directory, { recursive: true, force: true });
+    fs.rmSync(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 });
 
@@ -218,13 +223,13 @@ describe('exact artifact release', () => {
     (failure) => {
       const root = fs.mkdtempSync(path.join(os.tmpdir(), 'backfill-acceptance-'));
       directories.push(root);
-      const fixture = path.join(root, 'fixture');
-      const native = path.join(root, 'native');
+      const fixture = path.join(root, 'fixture', 'package');
+      const native = path.join(root, 'native', 'package');
       const packageDir = path.join(root, 'artifact');
       const tarball = path.join(packageDir, 'promptfoo-0.0.0.tgz').replaceAll('\\', '/');
       const nativeTarball = path.join(root, 'better-sqlite3-0.0.0.tgz').replaceAll('\\', '/');
-      fs.mkdirSync(fixture);
-      fs.mkdirSync(native);
+      fs.mkdirSync(fixture, { recursive: true });
+      fs.mkdirSync(native, { recursive: true });
       fs.mkdirSync(packageDir);
       // Newer npm requires explicit approval even for these local test lifecycle scripts.
       fs.writeFileSync(
@@ -286,21 +291,27 @@ else {
       )!.run!;
       const evidence = path.join(root, 'cli-calls');
       const result = spawnSync(bash, ['-e', '-o', 'pipefail'], {
+        // Git Bash's npm launcher starts several helper processes to rediscover Node and npm.
+        // Use this runner's entrypoints, while still running the real npm install and rebuild.
+        // Relative archive paths avoid GNU tar treating Windows drive letters as remote hosts.
         input:
-          'npm pack "$NATIVE_FIXTURE" --ignore-scripts --pack-destination "$RUNNER_TEMP"\n' +
-          'npm pack --ignore-scripts --pack-destination "$PACKAGE_DIR"\n' +
+          (directNpm ? 'npm() { "$NODE_BINARY" "$NPM_CLI" "$@"; }\n' : '') +
+          'tar -czf better-sqlite3-0.0.0.tgz -C native package\n' +
+          'tar -czf artifact/promptfoo-0.0.0.tgz -C fixture package\n' +
+          'cd fixture/package\n' +
           'export EXPECTED_SHA512="$(node -e \'console.log(require("node:crypto").createHash("sha512").update(require("node:fs").readFileSync(process.argv[1])).digest("hex"))\' "$PACKAGE_TARBALL")"\n' +
           validate,
-        cwd: fixture,
+        cwd: root,
         encoding: 'utf8',
         timeout: 15_000,
         env: {
           ...process.env,
+          NODE_BINARY: process.execPath.replaceAll('\\', '/'),
+          NPM_CLI: npmCli?.replaceAll('\\', '/'),
           RUNNER_TEMP: root.replaceAll('\\', '/'),
           PACKAGE_TARBALL: tarball,
           PACKAGE_DIR: packageDir.replaceAll('\\', '/'),
           TAG_NAME: '0.0.0',
-          NATIVE_FIXTURE: native.replaceAll('\\', '/'),
           BACKFILL_EVIDENCE: evidence,
           BACKFILL_FAILURE: failure,
           npm_config_offline: 'true',
@@ -309,8 +320,9 @@ else {
           npm_config_cache: path.join(root, 'npm-cache'),
         },
       });
-      expect(result.error).toBeUndefined();
-      expect(result.status === 0, result.stderr).toBe(failure === 'none');
+      const output = `${result.stdout}\n${result.stderr}`;
+      expect(result.error, output).toBeUndefined();
+      expect(result.status === 0, output).toBe(failure === 'none');
       expect(fs.existsSync(evidence)).toBe(failure !== 'rebuild');
       if (failure === 'rebuild') {
         expect(result.stderr).toContain('fixture native rebuild failed');

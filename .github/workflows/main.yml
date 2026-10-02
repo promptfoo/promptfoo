@@ -91,7 +91,10 @@ jobs:
           # Keep the matrix label at 22.22 for stable check names, but install exactly
           # 22.22.0 so this lane tests the engines floor itself rather than latest 22.22.x.
           node-version: ${{ matrix.node == '22.22' && '22.22.0' || matrix.node }}
-          cache: 'npm'
+          # Windows already caches node_modules below; compressing npm's download cache
+          # again can stall post-job cleanup long after the tests finish.
+          cache: ${{ runner.os != 'Windows' && 'npm' || '' }}
+          package-manager-cache: false
 
       - name: Use Python 3.14
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -149,6 +152,8 @@ jobs:
 
       - name: Upload Backend Coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard
+        # Authentication can fail before fail_ci_if_error applies; uploads are informational.
+        continue-on-error: true
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: ./coverage/coverage-final.json
@@ -260,8 +265,18 @@ jobs:
           browser_args=()
           if [ "$RUNTIME_ASSETS" = all ]; then
             browser_args+=(--browser)
+            browser_args+=(--sbom-output "$RUNNER_TEMP/sbom-runtime")
           fi
           npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL" --runtime-assets "$RUNTIME_ASSETS" "${browser_args[@]}"
+
+      - name: Upload packed consumer inventory
+        if: matrix.node == '24.x'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom-runtime
+          path: ${{ runner.temp }}/sbom-runtime
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Test Package Artifact Without Optional Dependencies
         if: matrix.node == '24.x'
@@ -288,7 +303,8 @@ jobs:
     name: Installed package on ${{ matrix.os }}
     needs: build
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    # Fresh Windows consumer installs can take 17m; leave time for assertions and cleanup.
+    timeout-minutes: ${{ matrix.os == 'windows-2025-vs2026' && 40 || 20 }}
     permissions:
       contents: read
     strategy:
@@ -518,6 +534,84 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Upload docs browser inventory
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom-site
+          path: site/build/browser-inventory.json
+          if-no-files-found: error
+          retention-days: 30
+
+  sbom-comparison:
+    name: Compare shipped dependency inventories
+    needs: [build, docs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: '.nvmrc'
+          package-manager-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: sbom-runtime
+          path: ${{ runner.temp }}/sbom-current
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: sbom-site
+          path: ${{ runner.temp }}/sbom-site
+      # Only this API/download step has a token; neither PR scripts nor downloaded
+      # artifact contents execute with credentials. Never use pull_request_target.
+      - name: Find exact base inventory
+        id: baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          status=no-base
+          if [[ "$BASE_SHA" =~ ^[a-f0-9]{40}$ ]] && [[ "$BASE_SHA" != 0000000000000000000000000000000000000000 ]]; then
+            run_id="$(gh api "repos/$GH_REPO/actions/workflows/main.yml/runs?event=push&branch=main&head_sha=$BASE_SHA&status=success&per_page=100" --jq '.workflow_runs[0].id // empty')"
+            status=no-successful-run
+            if [[ "$run_id" =~ ^[0-9]+$ ]]; then
+              artifact="$(gh api "repos/$GH_REPO/actions/runs/$run_id/artifacts?per_page=100" --jq '[.artifacts[] | select(.name == "sbom-inventory")][0] // empty')"
+              status=missing-artifact
+              if [[ -n "$artifact" ]]; then
+                status=expired-artifact
+                if [[ "$(jq -r '.expired' <<< "$artifact")" == false ]]; then
+                  gh run download "$run_id" --name sbom-inventory --dir "$RUNNER_TEMP/sbom-baseline"
+                  status=available
+                fi
+              fi
+            fi
+          fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+      - name: Compare runtime and browser inventories
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASELINE_STATUS: ${{ steps.baseline.outputs.status }}
+        run: |
+          cp "$RUNNER_TEMP/sbom-site/browser-inventory.json" "$RUNNER_TEMP/sbom-current/site-browser.json"
+          node scripts/compareSbom.ts \
+            --current "$RUNNER_TEMP/sbom-current" \
+            --baseline "$RUNNER_TEMP/sbom-baseline" \
+            --baseline-status "$BASELINE_STATUS" \
+            --source-sha "$GITHUB_SHA" --base-sha "$BASE_SHA" \
+            --output "$RUNNER_TEMP/sbom-report"
+      - name: Upload SBOM comparison and next baseline
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom-inventory
+          path: ${{ runner.temp }}/sbom-report
+          if-no-files-found: error
+          retention-days: 90
+
   code-scan-action:
     name: Code Scan Action
     timeout-minutes: 10
@@ -595,6 +689,8 @@ jobs:
         run: test -s ./site/coverage/coverage-final.json
 
       - name: Upload Site Coverage to Codecov
+        # Authentication can fail before fail_ci_if_error applies; uploads are informational.
+        continue-on-error: true
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: ./site/coverage/coverage-final.json
@@ -652,6 +748,8 @@ jobs:
         run: npm run test:coverage:ratchet -- --report frontend
 
       - name: Upload Frontend Coverage to Codecov
+        # Authentication can fail before fail_ci_if_error applies; uploads are informational.
+        continue-on-error: true
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: ./src/app/coverage/coverage-final.json
