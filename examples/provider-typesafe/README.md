@@ -1,5 +1,7 @@
 # provider-typesafe (TypeSafe Jev)
 
+Jev is TypeSafe's "System One" model. It answers typed questions with probabilities instead of generating text, which makes it a fast grader and classifier.
+
 You can run this example with:
 
 ```bash
@@ -9,28 +11,34 @@ cd provider-typesafe
 
 ## Usage
 
-Set your `TYPESAFE_API_KEY` environment variable. You can create a key in the [TypeSafe console](https://console.typesafe.ai/keys).
-
-Then run:
+Set `TYPESAFE_API_KEY`. You can create a key in the [TypeSafe console](https://console.typesafe.ai/keys).
 
 ```bash
-npx promptfoo@latest eval --no-cache -o results.json
+export TYPESAFE_API_KEY=your_api_key_here
 ```
 
-Inspect `results.json` for assertion scores and errors, or view the results with `npx promptfoo@latest view`. The example makes five separate grading calls to TypeSafe, plus any retries, and uses your account's API credits. Each assertion sends the canned reply as state; the calls are not batched together.
+### Grade and classify outputs
 
-## What this shows
+```bash
+npx promptfoo@latest eval
+```
 
-Jev is TypeSafe's "System One" model. It answers typed questions with calibrated probabilities instead of generating text. The config uses the `echo` provider to return two canned support replies, then grades them with Jev:
+`promptfooconfig.yaml` uses the `echo` provider to return two canned support replies, then grades them with Jev:
 
-- `llm-rubric` with `typesafe:jev-latest` as the grader. Each rubric is sent as a yes/no (Noul) question. Set its cutoff with the provider's `config.threshold` (default 0.5).
-- `llm-rubric` with `levels`, which sends a Score question and scales the result to 0–1.
-- `classifier` with `labels`, which sends a Choice question and checks the probability of one label.
+- `llm-rubric` sends each rubric as a yes/no (Noul) question. The score is the probability that the rubric holds.
+- `llm-rubric` with `levels` sends a Score question and scales the result to 0–1.
+- `classifier` sends a Choice question and checks the probability of one label.
 
-The example's thresholds are starting points. Tune them against representative passing and failing outputs, and pin a versioned model when you do: `jev-latest` can change. Score and classifier thresholds use the score or label probability, not TypeSafe's separate confidence value.
+Jev doesn't return a rationale, so each `reason` states how the verdict was derived, such as `Jev Noul probability 0.99 >= threshold 0.5`.
 
-Jev doesn't return a rationale. Each `llm-rubric` grading `reason` is derived from the answer, such as `Derived from Jev Noul p=0.93 >= threshold 0.5`. Its raw answer is in the grading result's `metadata.typesafe`; classifier assertions report the requested label's probability as their score without this metadata.
+### Test your own Jev questions
 
-Caching is disabled by default. To reuse responses, give each TypeSafe provider config the same nonsecret, account-specific `cacheNamespace` and omit `--no-cache`. Use different namespaces for different accounts; never use an API key as a namespace.
+```bash
+npx promptfoo@latest eval -c promptfooconfig.questions.yaml
+```
+
+`promptfooconfig.questions.yaml` makes Jev the provider under test. It asks three questions about each support ticket in one request and asserts on the answers.
+
+The thresholds in both configs are starting points. Tune them on your own data, and pin a model version such as `typesafe:jev-1.13.0` when you do, because `jev-latest` moves with each release.
 
 See the [provider docs](https://www.promptfoo.dev/docs/providers/typesafe/) for all options.

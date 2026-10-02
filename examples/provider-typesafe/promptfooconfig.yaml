@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: TypeSafe Jev as a grader and classifier
+description: Grade and classify outputs with TypeSafe Jev
 
 # The echo provider returns each canned reply unchanged, so Jev grades fixed
 # outputs and the example needs only TYPESAFE_API_KEY.
@@ -11,7 +11,7 @@ providers:
 
 defaultTest:
   options:
-    # llm-rubric sends each rubric to Jev as a yes/no (Noul) question.
+    # Each llm-rubric becomes a yes/no (Noul) question about the output.
     provider: typesafe:jev-latest
 
 tests:
@@ -29,15 +29,15 @@ tests:
         provider:
           id: typesafe:jev-latest
           config:
-            threshold: 0.6
+            threshold: 0.75
             levels:
               - Ignores the customer's problem
               - Acknowledges the problem but offers no fix
               - Acknowledges the problem and offers a concrete fix
-      # classifier asks a Choice question over the configured labels.
+      # classifier asks a Choice question and checks one label's probability.
       - type: classifier
         value: resolution
-        threshold: 0.5
+        threshold: 0.8
         provider:
           id: typesafe:jev-latest
           config:
@@ -53,3 +53,14 @@ tests:
     assert:
       - type: not-llm-rubric
         value: The reply offers a replacement or a refund
+      - type: classifier
+        value: deflection
+        threshold: 0.8
+        provider:
+          id: typesafe:jev-latest
+          config:
+            instructions: What is this support reply doing?
+            labels:
+              resolution: Resolves the issue or offers a concrete fix
+              deflection: Redirects the customer without helping
+              question: Asks the customer for more information
