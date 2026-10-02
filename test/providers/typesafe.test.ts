@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { matchesClassification } from '../../src/matchers/classification';
-import { matchesLlmRubric } from '../../src/matchers/llmGrading';
+import { matchesLlmRubric, matchesTrajectoryGoalSuccess } from '../../src/matchers/llmGrading';
 import { TypeSafeProvider } from '../../src/providers/typesafe';
 import { isProviderResponseRateLimited } from '../../src/scheduler/types';
+import { HttpRateLimitError } from '../../src/util/fetch/errors';
 import { mockProcessEnv } from '../util/utils';
 
 import type { TypeSafeConfig } from '../../src/providers/typesafe';
@@ -19,12 +20,13 @@ const mockedFetchWithCache = vi.mocked(fetchWithCache);
 const LEVELS = ['Calm', 'Frustrated', 'Very angry'];
 const TEAM_PROBABILITIES = { billing: 0.88, technical: 0.12, sales: 0 };
 
+/** `body` is serialized, because the provider reads the response as text. */
 function mockResponse(
-  data: unknown,
+  body: unknown,
   overrides: Partial<Awaited<ReturnType<typeof fetchWithCache>>> = {},
 ) {
   const response = {
-    data,
+    data: typeof body === 'string' ? body : JSON.stringify(body),
     cached: false,
     status: 200,
     statusText: 'OK',
@@ -196,6 +198,41 @@ describe('TypeSafeProvider', () => {
       );
 
       expect(result.output).toMatchObject({ pass: true, score: 0.1 });
+    });
+
+    it.each([[''], ['0.7'], [75], [-0.1], [Number.NaN]])(
+      'rejects threshold %j instead of passing every output',
+      async (threshold) => {
+        const result = await createProvider({ threshold: threshold as number }).callApi(
+          '',
+          rubricContext('Is polite', 'Thanks!'),
+        );
+
+        expect(result.error).toContain('`threshold` must be a number from 0 to 1');
+        expect(mockedFetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
+    it('uses the default threshold when YAML leaves it blank', async () => {
+      mockAnswer({ type: 'noul', noul: 0.04 });
+
+      const result = await createProvider({ threshold: null as unknown as number }).callApi(
+        '',
+        rubricContext('Is polite', 'Thanks!'),
+      );
+
+      expect(result.output).toMatchObject({ pass: false, score: 0.04 });
+    });
+
+    it('sends numeric levels as text, which the API requires', async () => {
+      mockAnswer({ type: 'score', score: 3 });
+
+      await createProvider({ levels: [1, 2, 3, 4, 5] as unknown as string[] }).callApi(
+        '',
+        rubricContext('Rate it', 'text'),
+      );
+
+      expect(lastRequest().body.questions.grade.criteria).toEqual(['1', '2', '3', '4', '5']);
     });
 
     it('rejects fewer than two levels without calling the API', async () => {
@@ -455,6 +492,37 @@ describe('TypeSafeProvider', () => {
     });
   });
 
+  describe('unsupported graders', () => {
+    const questions: TypeSafeConfig['questions'] = {
+      urgent: { type: 'noul', instructions: 'Does this convey urgency?' },
+    };
+
+    it.each(['agent-rubric', 'trajectory:goal-success'])(
+      'refuses to grade %s even when questions are configured',
+      async (label) => {
+        const result = await createProvider({ questions }).callApi('grading prompt', {
+          prompt: { raw: 'grading prompt', label },
+          vars: {},
+        });
+
+        expect(result.error).toContain(`cannot grade \`${label}\` assertions`);
+        expect(mockedFetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
+    it('does not let Jev answers pass a trajectory assertion', async () => {
+      // The JSON graders pass any object that has no `pass` field.
+      mockAnswer({ type: 'noul', noul: 0.04 }, 'urgent');
+
+      const result = await matchesTrajectoryGoalSuccess('Book a flight', '[]', 'Done', {
+        provider: createProvider({ questions }),
+      });
+
+      expect(result).toMatchObject({ pass: false, score: 0 });
+      expect(result.reason).toContain('cannot grade `trajectory:goal-success` assertions');
+    });
+  });
+
   describe('errors', () => {
     const context = rubricContext('Is polite', 'Thanks!');
 
@@ -495,21 +563,49 @@ describe('TypeSafeProvider', () => {
         },
         'TypeSafe API error: 422 Unprocessable Entity (request id req_123)\nbody.state.str: Input should be a valid string; body.questions: Field required',
       ],
+      // Not from the API itself: a proxy error page, an empty body, and odd detail shapes.
       [
         502,
         'Bad Gateway',
-        'Empty Response: 502: Bad Gateway',
-        'TypeSafe API error: 502 Bad Gateway (request id req_123)\nEmpty Response: 502: Bad Gateway',
+        '<html>Bad Gateway</html>',
+        'TypeSafe API error: 502 Bad Gateway (request id req_123)\n<html>Bad Gateway</html>',
       ],
-    ])('reports HTTP %i %s with the API detail', async (status, statusText, data, error) => {
-      mockResponse(data, { status, statusText });
+      [
+        503,
+        'Service Unavailable',
+        '',
+        'TypeSafe API error: 503 Service Unavailable (request id req_123)',
+      ],
+      [
+        500,
+        'Internal Server Error',
+        { detail: null, trace: 'abc' },
+        'TypeSafe API error: 500 Internal Server Error (request id req_123)\n{"detail":null,"trace":"abc"}',
+      ],
+      [
+        400,
+        'Bad Request',
+        { detail: { message: { code: 1 } } },
+        'TypeSafe API error: 400 Bad Request (request id req_123)\n{"message":{"code":1}}',
+      ],
+      [
+        422,
+        'Unprocessable Entity',
+        { detail: [{ loc: ['body', 'x'] }] },
+        'TypeSafe API error: 422 Unprocessable Entity (request id req_123)\n{"loc":["body","x"]}',
+      ],
+    ])('reports HTTP %i %s with the API detail', async (status, statusText, body, error) => {
+      mockResponse(body, { status, statusText });
 
       await expect(createProvider().callApi('', context)).resolves.toEqual({ error });
     });
 
     it.each([
-      ['the server Retry-After', { 'retry-after': '7', 'set-cookie': 'session=1' }, '7'],
-      ['a short default delay', {}, '2'],
+      ['Retry-After seconds', { 'retry-after': '7', 'set-cookie': 'session=1' }, '7000'],
+      ['retry-after-ms', { 'retry-after-ms': '250' }, '250'],
+      // The scheduler would otherwise pause the provider for a minute.
+      ['a short default without timing', {}, '2000'],
+      ['a short default for unparseable timing', { 'retry-after': '0.5' }, '2000'],
     ])('marks 529 Overloaded as a retryable rate limit with %s', async (_name, headers, delay) => {
       mockResponse({ detail: 'Overloaded' }, { status: 529, statusText: '', headers });
 
@@ -519,10 +615,63 @@ describe('TypeSafeProvider', () => {
         error: 'TypeSafe API error: 529\nOverloaded',
         metadata: {
           rateLimitKind: 'rate_limit',
-          http: { status: 529, statusText: '', headers: { 'retry-after': delay } },
+          http: { status: 529, statusText: '', headers: { 'retry-after-ms': delay } },
         },
       });
       expect(isProviderResponseRateLimited(result, undefined)).toBe(true);
+    });
+
+    it('still retries a 529 that has no JSON body', async () => {
+      mockResponse('', { status: 529, statusText: '', headers: {} });
+
+      const result = await createProvider().callApi('', context);
+
+      expect(result.error).toBe('TypeSafe API error: 529');
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(true);
+    });
+
+    it('keeps the server timing when the transport exhausts its 429 retries', async () => {
+      mockedFetchWithCache.mockRejectedValue(
+        new HttpRateLimitError({
+          status: 429,
+          statusText: 'Too Many Requests',
+          retryAfterMs: 1000,
+          body: { detail: 'Slow down' },
+        }),
+      );
+
+      const result = await createProvider().callApi('', context);
+
+      expect(result).toEqual({
+        error: expect.stringMatching(
+          /^TypeSafe API error: Rate limit exceeded: HTTP 429 Too Many Requests Slow down/,
+        ),
+        metadata: {
+          rateLimitKind: 'rate_limit',
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: { 'retry-after-ms': '1000' },
+          },
+        },
+      });
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(true);
+    });
+
+    it('does not ask the scheduler to retry an exhausted quota', async () => {
+      mockedFetchWithCache.mockRejectedValue(
+        new HttpRateLimitError({
+          status: 429,
+          statusText: 'Too Many Requests',
+          code: 'insufficient_quota',
+        }),
+      );
+
+      const result = await createProvider().callApi('', context);
+
+      expect(result.error).toContain('Quota exceeded');
+      expect(result.metadata?.rateLimitKind).toBe('quota');
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
     });
 
     it('returns transport failures as errors', async () => {
@@ -554,14 +703,15 @@ describe('TypeSafeProvider', () => {
       ['no answers', { model: 'jev-1.13.0' }],
       ['a missing answer', { answers: {} }],
       ['a non-numeric answer', { answers: { grade: { type: 'noul', noul: 'yes' } } }],
-      ['a non-object body', 'ok'],
-    ])('evicts and reports a grading response with %s', async (_name, data) => {
-      const response = mockResponse(data);
+      ['a non-object body', [1, 2]],
+      ['a body that is not JSON', '<html>OK</html>'],
+    ])('evicts and reports a grading response with %s', async (_name, body) => {
+      const response = mockResponse(body);
 
       const result = await createProvider().callApi('', context);
 
       expect(result).toEqual({
-        error: `TypeSafe API returned an unexpected response (request id req_123): ${JSON.stringify(data)}`,
+        error: `TypeSafe API returned an unexpected response (request id req_123): ${response.data}`,
       });
       expect(response.deleteFromCache).toHaveBeenCalledOnce();
     });

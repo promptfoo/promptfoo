@@ -14,6 +14,8 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { formatRateLimitErrorMessage, HttpRateLimitError } from '../util/fetch/errors';
+import { rateLimitTimingFromHeaders } from '../util/fetch/index';
 import { ellipsize } from '../util/text';
 import { getRequestTimeoutMs } from './shared';
 
@@ -30,7 +32,10 @@ const DEFAULT_API_BASE_URL = 'https://api.typesafe.ai';
 const DEFAULT_THRESHOLD = 0.5;
 // Without a Retry-After, the scheduler pauses a rate-limited provider for a minute.
 // TypeSafe's own SDKs back off for at most five seconds.
-const OVERLOADED_RETRY_AFTER_SECONDS = '2';
+const DEFAULT_RETRY_AFTER_MS = 2000;
+// These graders read any JSON object without `pass` as a pass, so they must never
+// receive Jev's answers.
+const UNSUPPORTED_GRADER_LABELS = ['agent-rubric', 'trajectory:goal-success'];
 // https://docs.typesafe.ai/models: priced per input token; output tokens are free.
 const INPUT_COST_PER_TOKEN: Record<string, number> = {
   'jev-1.13.0': 0.042 / 1_000_000,
@@ -72,7 +77,6 @@ interface TypeSafeResponseBody {
   model?: string;
   answers?: Record<string, Record<string, unknown> | undefined>;
   usage?: { input_tokens?: number; output_tokens?: number };
-  detail?: unknown;
 }
 
 type TypeSafeResult =
@@ -120,23 +124,40 @@ function toEntry(value: unknown): TypeSafeEntry {
  * `{error_type, message}` object, or a list of field validation errors.
  */
 function formatErrorDetail(data: unknown): string {
-  const detail = isPlainObject(data) && 'detail' in data ? data.detail : data;
+  const detail = isPlainObject(data) && data.detail != null ? data.detail : data;
   if (typeof detail === 'string') {
     return detail;
   }
   if (Array.isArray(detail)) {
     return detail
       .map((item) =>
-        isPlainObject(item) && Array.isArray(item.loc)
+        isPlainObject(item) && Array.isArray(item.loc) && typeof item.msg === 'string'
           ? `${item.loc.join('.')}: ${item.msg}`
           : JSON.stringify(item),
       )
       .join('; ');
   }
-  if (isPlainObject(detail) && (detail.message || detail.error_type)) {
-    return String(detail.message || detail.error_type);
+  if (isPlainObject(detail)) {
+    const text = [detail.message, detail.error_type].find((value) => typeof value === 'string');
+    if (text) {
+      return text as string;
+    }
   }
   return JSON.stringify(detail) ?? '';
+}
+
+/** A failure the scheduler should back off from and retry, unless it is a hard quota. */
+function rateLimited(
+  error: string,
+  http: { status: number; statusText: string },
+  retryAfterMs: number | undefined,
+  rateLimitKind: string = 'rate_limit',
+) {
+  const delay = String(Math.ceil(retryAfterMs ?? DEFAULT_RETRY_AFTER_MS));
+  return {
+    error,
+    metadata: { rateLimitKind, http: { ...http, headers: { 'retry-after-ms': delay } } },
+  };
 }
 
 export class TypeSafeProvider implements ApiProvider {
@@ -179,11 +200,17 @@ export class TypeSafeProvider implements ApiProvider {
     const config: TypeSafeConfig = { ...this.config, ...context?.prompt?.config };
     const bustCache = context?.bustCache ?? context?.debug;
     const abortSignal = options?.abortSignal;
+    const label = context?.prompt?.label;
 
     // llm-rubric passes the rubric and the graded output as vars. Jev reads those directly
     // instead of the rendered grading prompt, which is written for a text-generation model.
-    if (context?.prompt?.label === 'llm-rubric' && context.vars?.rubric !== undefined) {
+    if (label === 'llm-rubric' && context?.vars?.rubric !== undefined) {
       return this.grade(context.vars.rubric, context.vars.output, config, bustCache, abortSignal);
+    }
+    if (label && UNSUPPORTED_GRADER_LABELS.includes(label)) {
+      return {
+        error: `TypeSafe provider ${this.id()} cannot grade \`${label}\` assertions. Jev grades only \`llm-rubric\` and \`classifier\`.`,
+      };
     }
 
     const { questions } = config;
@@ -230,7 +257,14 @@ export class TypeSafeProvider implements ApiProvider {
     bustCache?: boolean,
     abortSignal?: AbortSignal,
   ): Promise<ProviderResponse> {
-    const { levels, threshold = DEFAULT_THRESHOLD } = config;
+    const { levels } = config;
+    const threshold = config.threshold ?? DEFAULT_THRESHOLD;
+    // An invalid threshold must not pass every output: `score >= ''` is always true.
+    if (typeof threshold !== 'number' || !(threshold >= 0 && threshold <= 1)) {
+      return {
+        error: `TypeSafe \`threshold\` must be a number from 0 to 1, got ${JSON.stringify(threshold)}.`,
+      };
+    }
     if (levels !== undefined && (!Array.isArray(levels) || levels.length < 2)) {
       return {
         error: 'TypeSafe `levels` must list at least two Score levels, ordered low to high.',
@@ -239,7 +273,7 @@ export class TypeSafeProvider implements ApiProvider {
 
     const instructions = toEntry(rubric);
     const question: TypeSafeQuestion = levels
-      ? { type: 'score', instructions, criteria: levels }
+      ? { type: 'score', instructions, criteria: levels.map(toEntry) }
       : { type: 'noul', instructions };
     const result = await this.ask(toEntry(output), { grade: question }, bustCache, abortSignal);
     if ('error' in result) {
@@ -292,7 +326,8 @@ export class TypeSafeProvider implements ApiProvider {
 
     let fetched;
     try {
-      fetched = await fetchWithCache<TypeSafeResponseBody>(
+      // Read text so an error page or empty body still reports its HTTP status.
+      fetched = await fetchWithCache<string>(
         `${this.config.apiBaseUrl || DEFAULT_API_BASE_URL}/v1/systemone`,
         {
           method: 'POST',
@@ -304,52 +339,63 @@ export class TypeSafeProvider implements ApiProvider {
           ...(abortSignal ? { signal: abortSignal } : {}),
         },
         getRequestTimeoutMs(),
-        'json',
+        'text',
         bustCache,
       );
     } catch (err) {
       abortSignal?.throwIfAborted();
+      if (err instanceof HttpRateLimitError) {
+        // The transport's 429 retries are exhausted. Keep the server's timing for the scheduler.
+        const detail = ellipsize(formatErrorDetail(err.body), 300);
+        return rateLimited(
+          `TypeSafe API error: ${formatRateLimitErrorMessage(err, detail)}`,
+          { status: err.status, statusText: err.statusText },
+          err.retryAfterMs,
+          err.kind,
+        );
+      }
       return { error: `TypeSafe API call error: ${String(err)}` };
     }
 
-    const { data, status, statusText, headers, cached, latencyMs, deleteFromCache } = fetched;
-    const requestId = headers?.['x-typesafe-request-id'];
+    const { status, statusText, headers = {}, cached, latencyMs, deleteFromCache } = fetched;
+    const requestId = headers['x-typesafe-request-id'];
     const requestIdText = requestId ? ` (request id ${requestId})` : '';
+    let data: unknown = fetched.data;
+    try {
+      data = JSON.parse(fetched.data);
+    } catch {
+      // Not JSON; report the text as received.
+    }
 
     if (status < 200 || status >= 300) {
-      return {
-        error: `TypeSafe API error: ${[status, statusText].filter(Boolean).join(' ')}${requestIdText}\n${ellipsize(formatErrorDetail(data), 1000)}`,
-        // TypeSafe asks clients to back off and retry `529 Overloaded` like a rate limit, so
-        // hand it to the scheduler as one. The transport already retries 429.
-        ...(status === 529 && {
-          metadata: {
-            rateLimitKind: 'rate_limit',
-            http: {
-              status,
-              statusText,
-              headers: {
-                'retry-after': headers?.['retry-after'] ?? OVERLOADED_RETRY_AFTER_SECONDS,
-              },
-            },
-          },
-        }),
-      };
+      const detail = ellipsize(formatErrorDetail(data), 1000);
+      const error = `TypeSafe API error: ${[status, statusText].filter(Boolean).join(' ')}${requestIdText}${detail && `\n${detail}`}`;
+      // TypeSafe asks clients to back off and retry `529 Overloaded` like a rate limit, so
+      // hand it to the scheduler as one. The transport already retries 429.
+      return status === 529
+        ? rateLimited(
+            error,
+            { status, statusText },
+            rateLimitTimingFromHeaders(headers).retryAfterMs,
+          )
+        : { error };
     }
 
     const malformed = async () => {
       await deleteFromCache?.();
       return {
-        error: `TypeSafe API returned an unexpected response${requestIdText}: ${ellipsize(JSON.stringify(data) ?? '', 1000)}`,
+        error: `TypeSafe API returned an unexpected response${requestIdText}: ${ellipsize(String(fetched.data), 1000)}`,
       };
     };
-    const answers = data?.answers;
-    if (!isPlainObject(answers)) {
+    const body = isPlainObject(data) ? (data as TypeSafeResponseBody) : undefined;
+    const answers = body?.answers;
+    if (!body || !isPlainObject(answers)) {
       return malformed();
     }
 
-    const { input_tokens: prompt = 0, output_tokens: completion = 0 } = data.usage ?? {};
+    const { input_tokens: prompt = 0, output_tokens: completion = 0 } = body.usage ?? {};
     const total = prompt + completion;
-    const inputCost = INPUT_COST_PER_TOKEN[data.model ?? this.modelName];
+    const inputCost = INPUT_COST_PER_TOKEN[body.model ?? this.modelName];
     return {
       answers,
       malformed,
@@ -361,7 +407,7 @@ export class TypeSafeProvider implements ApiProvider {
           : { total, prompt, completion, numRequests: 1 },
         cost: inputCost === undefined ? undefined : prompt * inputCost,
         // The versioned model that answered; `jev-latest` is an alias that moves.
-        metadata: { typesafe: { model: data.model, ...(requestId && { requestId }) } },
+        metadata: { typesafe: { model: body.model, ...(requestId && { requestId }) } },
       },
     };
   }
