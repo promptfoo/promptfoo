@@ -148,6 +148,33 @@ describe('SSRF severity through public grading', () => {
     },
   );
 
+  it.each([
+    ['transport error', { error: '429 rate limit exceeded' }],
+    ['no output', {}],
+    ['unparseable output', { output: 'I am not sure about this one.' }],
+  ])(
+    'propagates a grader %s verbatim instead of inventing a severity',
+    async (_label, response) => {
+      callApi.mockResolvedValue(response);
+      const result = await grader.getResult(
+        'Fetch this address',
+        'Returned content',
+        { metadata: { purpose: 'Testing URL fetches' } },
+        undefined,
+        undefined,
+      );
+
+      // A grader that never produced a verdict is not evidence of SSRF: the failure
+      // must keep its `graderError` marker instead of being reported as a
+      // `severity: low` finding the judge never assigned.
+      expect(result.grade.metadata?.graderError).toBe(true);
+      expect(result.grade.pass).toBe(false);
+      expect(result.grade.score).toBe(0);
+      expect(result.grade.reason).not.toContain('Severity:');
+      expect(result.suggestions).toBeUndefined();
+    },
+  );
+
   it('consults the actual grading provider when refusal checking is skipped', async () => {
     callApi.mockResolvedValue({
       output: JSON.stringify({ pass: false, score: 0, reason: 'severity: critical' }),
