@@ -604,13 +604,18 @@ export class WatsonXProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
+
     // Set up tracing context
     const spanContext: GenAISpanContext = {
       system: 'watsonx',
       operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
-      maxTokens: this.options.config.maxNewTokens,
+      maxTokens: config.maxNewTokens,
       testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace

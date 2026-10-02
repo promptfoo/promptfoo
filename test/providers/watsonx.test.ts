@@ -1579,6 +1579,34 @@ describe('WatsonXChatProvider', () => {
       },
     );
 
+    it.each([7, undefined, null])(
+      'traces the effective prompt-level chat maxNewTokens override (%s)',
+      async (maxNewTokens) => {
+        const provider = new WatsonXChatProvider(modelName, { config });
+
+        await provider.callApi(prompt, {
+          vars: {},
+          prompt: { raw: prompt, label: 'override-prompt', config: { maxNewTokens } },
+        });
+        await tracerProvider.forceFlush();
+
+        expect(textChat).toHaveBeenCalledTimes(1);
+        const [params] = textChat.mock.calls[0];
+        if (maxNewTokens === undefined) {
+          expect(params).not.toHaveProperty('maxTokens');
+        } else {
+          expect(params).toHaveProperty('maxTokens', maxNewTokens);
+        }
+        const spans = exporter.getFinishedSpans();
+        expect(spans).toHaveLength(1);
+        if (typeof maxNewTokens === 'number') {
+          expect(spans[0].attributes['gen_ai.request.max_tokens']).toBe(maxNewTokens);
+        } else {
+          expect(spans[0].attributes).not.toHaveProperty('gen_ai.request.max_tokens');
+        }
+      },
+    );
+
     it('records returned chat errors without changing the response', async () => {
       textChat.mockRejectedValue(new Error('Chat API error'));
       const provider = new WatsonXChatProvider(modelName, { config });
