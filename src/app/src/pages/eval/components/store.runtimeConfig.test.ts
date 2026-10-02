@@ -5,13 +5,10 @@ vi.mock('@app/utils/api', () => ({
 }));
 
 async function loadSettingsStore(prettifyJson: boolean, showPassFail: boolean) {
-  const { callApi } = await import('@app/utils/api');
-  vi.mocked(callApi).mockResolvedValue({
-    ok: true,
-    json: vi.fn(async () => ({
-      tableSettings: { prettifyJson, showPassFail },
-    })),
-  } as unknown as Response);
+  const { mockCallApiResponse } = await import('@app/tests/apiMocks');
+  mockCallApiResponse({
+    tableSettings: { prettifyJson, showPassFail },
+  });
 
   const { loadRuntimeConfig } = await import('@app/config/runtime');
   await loadRuntimeConfig();
