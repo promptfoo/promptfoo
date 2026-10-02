@@ -75,7 +75,7 @@ export interface TypeSafeConfig {
 
 interface TypeSafeResponseBody {
   model?: string;
-  answers?: Record<string, Record<string, unknown> | undefined>;
+  answers?: Record<string, Record<string, unknown>>;
   usage?: { input_tokens?: number; output_tokens?: number };
 }
 
@@ -243,7 +243,7 @@ export class TypeSafeProvider implements ApiProvider {
       return result;
     }
 
-    const probabilities = result.answers.classification?.probabilities;
+    const { probabilities } = result.answers.classification;
     if (!isPlainObject(probabilities) || !Object.values(probabilities).every(isFiniteNumber)) {
       return result.malformed();
     }
@@ -280,15 +280,15 @@ export class TypeSafeProvider implements ApiProvider {
       return result;
     }
 
+    // A Noul is a probability. A Score is a probability-weighted position on levels 0..top.
     const answer = result.answers.grade;
-    const raw = levels ? answer?.score : answer?.noul;
-    if (!isFiniteNumber(raw)) {
+    const raw = levels ? answer.score : answer.noul;
+    const top = levels ? levels.length - 1 : 1;
+    if (!isFiniteNumber(raw) || raw < 0 || raw > top) {
       return result.malformed();
     }
 
-    // A Score is a probability-weighted position on levels 0..top; scale it to 0–1.
-    // Rounding keeps float error from the division out of the threshold comparison.
-    const top = levels ? levels.length - 1 : 1;
+    // Scale to 0–1. Rounding keeps float error from the division out of the threshold comparison.
     const score = Number((raw / top).toFixed(6));
     const pass = score >= threshold;
     const comparison = `${pass ? '>=' : '<'} threshold ${threshold}`;
@@ -389,7 +389,10 @@ export class TypeSafeProvider implements ApiProvider {
     };
     const body = isPlainObject(data) ? (data as TypeSafeResponseBody) : undefined;
     const answers = body?.answers;
-    if (!body || !isPlainObject(answers)) {
+    // Every question must have its own answer, or assertions would run on partial output.
+    const isAnswered = (id: string) =>
+      Object.prototype.hasOwnProperty.call(answers, id) && isPlainObject(answers?.[id]);
+    if (!body || !isPlainObject(answers) || !Object.keys(questions).every(isAnswered)) {
       return malformed();
     }
 

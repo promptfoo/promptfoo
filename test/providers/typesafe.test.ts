@@ -703,12 +703,44 @@ describe('TypeSafeProvider', () => {
       ['no answers', { model: 'jev-1.13.0' }],
       ['a missing answer', { answers: {} }],
       ['a non-numeric answer', { answers: { grade: { type: 'noul', noul: 'yes' } } }],
+      ['a probability above 1', { answers: { grade: { type: 'noul', noul: 1.2 } } }],
+      ['a negative probability', { answers: { grade: { type: 'noul', noul: -0.1 } } }],
       ['a non-object body', [1, 2]],
       ['a body that is not JSON', '<html>OK</html>'],
     ])('evicts and reports a grading response with %s', async (_name, body) => {
       const response = mockResponse(body);
 
       const result = await createProvider().callApi('', context);
+
+      expect(result).toEqual({
+        error: `TypeSafe API returned an unexpected response (request id req_123): ${response.data}`,
+      });
+      expect(response.deleteFromCache).toHaveBeenCalledOnce();
+    });
+
+    it('evicts and reports a Score beyond the configured levels', async () => {
+      // Levels 0–2 cannot score 5; normalizing it would pass any threshold.
+      const response = mockAnswer({ type: 'score', score: 5 });
+
+      const result = await createProvider({ levels: LEVELS }).callApi('', context);
+
+      expect(result.error).toContain('TypeSafe API returned an unexpected response');
+      expect(response.deleteFromCache).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      ['no answers', {}],
+      ['only some of the answers', { urgent: { type: 'noul', noul: 0.9 } }],
+      ['a null answer', { urgent: { type: 'noul', noul: 0.9 }, team: null }],
+    ])('evicts and reports a questions response with %s', async (_name, answers) => {
+      const response = mockResponse({ model: 'jev-1.13.0', answers });
+
+      const result = await createProvider({
+        questions: {
+          urgent: { type: 'noul', instructions: 'Does this convey urgency?' },
+          team: { type: 'choice', instructions: 'Which team?', criteria: { a: null, b: null } },
+        },
+      }).callApi('Payouts are failing!');
 
       expect(result).toEqual({
         error: `TypeSafe API returned an unexpected response (request id req_123): ${response.data}`,
