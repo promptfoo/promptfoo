@@ -12,6 +12,8 @@ export class PythonWorkerPool {
   private workers: PythonWorker[] = [];
   private queue: QueuedRequest[] = [];
   private isInitialized: boolean = false;
+  /** Shared by concurrent shutdown callers so each waits for the same cleanup. */
+  private shutdownPromise: Promise<void> | null = null;
 
   constructor(
     private scriptPath: string,
@@ -51,13 +53,23 @@ export class PythonWorkerPool {
         this.functionName,
         this.pythonPath,
         this.timeout,
-        () => this.processQueue(), // Resume queue processing when worker becomes ready
+        () => this.processQueue(), // Dispatch or fail queued requests when worker state changes
       );
       initPromises.push(worker.initialize());
       this.workers.push(worker);
     }
 
-    await Promise.all(initPromises);
+    const results = await Promise.allSettled(initPromises);
+    const failure = results.find(
+      (result): result is PromiseRejectedResult => result.status === 'rejected',
+    );
+    if (failure) {
+      // Don't leave the workers that did start running with nothing to shut them down.
+      await Promise.all(this.workers.map((worker) => worker.shutdown()));
+      this.workers = [];
+      throw failure.reason;
+    }
+
     this.isInitialized = true;
     logger.debug(`Python worker pool initialized with ${this.workerCount} workers`);
   }
@@ -74,12 +86,40 @@ export class PythonWorkerPool {
     if (worker) {
       // Worker available, execute immediately and trigger queue processing when done
       return worker.call(functionName, args).finally(() => this.processQueue());
-    } else {
-      // All workers busy, queue the request
-      return new Promise<unknown>((resolve, reject) => {
-        this.queue.push({ functionName, args, resolve, reject });
-        logger.debug(`Request queued (queue size: ${this.queue.length})`);
-      });
+    }
+
+    // Queuing when no worker can ever become available again would never settle.
+    if (this.allWorkersDead()) {
+      throw this.createAllWorkersDeadError();
+    }
+
+    // All workers busy or restarting, queue the request
+    return new Promise<unknown>((resolve, reject) => {
+      this.queue.push({ functionName, args, resolve, reject });
+      logger.debug(`Request queued (queue size: ${this.queue.length})`);
+    });
+  }
+
+  private allWorkersDead(): boolean {
+    return this.workers.length > 0 && this.workers.every((worker) => worker.isDead());
+  }
+
+  private createAllWorkersDeadError(): Error {
+    return new Error(
+      `All ${this.workers.length} Python worker(s) for ${this.scriptPath} crashed and could not be restarted. ` +
+        'Check the logs for the Python worker stderr output.',
+    );
+  }
+
+  private rejectQueue(error: Error): void {
+    const queued = this.queue;
+    this.queue = [];
+    for (const request of queued) {
+      try {
+        request.reject(error);
+      } catch {
+        // Ignore errors from rejecting
+      }
     }
   }
 
@@ -93,6 +133,11 @@ export class PythonWorkerPool {
   }
 
   private processQueue(): void {
+    if (this.queue.length > 0 && this.allWorkersDead()) {
+      this.rejectQueue(this.createAllWorkersDeadError());
+      return;
+    }
+
     // Drain the entire queue - process all waiting requests with available workers
     while (this.queue.length > 0) {
       const worker = this.getAvailableWorker();
@@ -121,23 +166,26 @@ export class PythonWorkerPool {
   }
 
   async shutdown(): Promise<void> {
+    this.shutdownPromise ??= this.shutdownWorkers();
+    return this.shutdownPromise;
+  }
+
+  private async shutdownWorkers(): Promise<void> {
     logger.debug(`Shutting down Python worker pool (${this.workers.length} workers)`);
 
+    // Reject new requests from now on, not only once every worker has stopped
+    this.isInitialized = false;
+
     // Reject any queued requests
-    for (const req of this.queue) {
-      try {
-        req.reject(new Error('Worker pool shutting down'));
-      } catch {
-        // Ignore errors from rejecting
-      }
-    }
+    this.rejectQueue(new Error('Worker pool shutting down'));
 
-    // Shutdown all workers in parallel
-    await Promise.all(this.workers.map((w) => w.shutdown()));
-
+    // Detach the workers first so an initialize() during shutdown starts fresh ones
+    const workers = this.workers;
     this.workers = [];
     this.queue = [];
-    this.isInitialized = false;
+
+    // Shutdown all workers in parallel
+    await Promise.all(workers.map((w) => w.shutdown()));
 
     logger.debug('Python worker pool shutdown complete');
   }
