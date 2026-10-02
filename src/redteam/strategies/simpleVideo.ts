@@ -67,14 +67,18 @@ async function checkFfmpegAvailable(): Promise<void> {
   }
 }
 
-export function escapeDrawtextString(text: string): string {
-  // Escape special characters for FFmpeg's drawtext filter when text is
-  // wrapped in single quotes and passed directly as an argument (no shell).
-  // See: https://ffmpeg.org/ffmpeg-filters.html#drawtext-1
-  return text
+function escapeDrawtextValue(value: string): string {
+  // Values are single-quoted in the filtergraph, then parsed again as drawtext
+  // options. An apostrophe needs an escaped backslash to survive both parsers.
+  // See: https://ffmpeg.org/ffmpeg-filters.html#Notes-on-filtergraph-escaping
+  return value
     .replace(/\\/g, '\\\\') // Backslash must be escaped first (special even in single-quoted strings)
-    .replace(/'/g, "'\\''") // Single quote: close quote, escaped quote, reopen quote
-    .replace(/:/g, '\\:') // Colon (option separator even within single-quoted values)
+    .replace(/'/g, "'\\\\\\''") // Close quote, escape for both parsers, reopen quote
+    .replace(/:/g, '\\:'); // Colon (option separator even within single-quoted values)
+}
+
+export function escapeDrawtextString(text: string): string {
+  return escapeDrawtextValue(text)
     .replace(/\n/g, '\\n') // Newline
     .replace(/%/g, '%%'); // Percent: drawtext uses %{} expansion; %% is the literal
 }
@@ -115,7 +119,7 @@ async function textToVideo(text: string): Promise<string> {
 
       try {
         const escapedText = escapeDrawtextString(text);
-        const systemFont = await getSystemFont();
+        const escapedFont = escapeDrawtextValue(await getSystemFont());
 
         // Create a 5-second video with white background and text overlay
         await runCommand('ffmpeg', [
@@ -124,7 +128,7 @@ async function textToVideo(text: string): Promise<string> {
           '-i',
           'color=white:s=640x480:d=5',
           '-vf',
-          `drawtext=fontfile=${systemFont}:text='${escapedText}':fontcolor=black:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2`,
+          `drawtext=fontfile='${escapedFont}':text='${escapedText}':fontcolor=black:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2`,
           '-y', // Overwrite output file if it exists
           outputPath,
         ]);

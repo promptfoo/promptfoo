@@ -38,27 +38,38 @@ const PATCH_CONCURRENCY = 8;
 const TEXT_DETECTION_CONCURRENCY = 16;
 
 /**
- * Parse git diff --numstat output
- * Format: added\tremoved\tpath
+ * Parse git diff --numstat -z output.
+ * Normal entries: added\tremoved\tpath\0
+ * Renames/copies: added\tremoved\t\0oldpath\0newpath\0
  */
 function parseNumstat(numstatOutput: string): Map<string, NumstatEntry> {
   const map = new Map<string, NumstatEntry>();
+  const records = numstatOutput.split('\0');
 
-  for (const line of numstatOutput.split('\n')) {
-    if (!line.trim()) {
+  for (let i = 0; i < records.length; i++) {
+    const record = records[i];
+    const firstTab = record.indexOf('\t');
+    const secondTab = record.indexOf('\t', firstTab + 1);
+    if (firstTab === -1 || secondTab === -1) {
       continue;
     }
 
-    const parts = line.split('\t');
-    if (parts.length < 3) {
+    const added = record.slice(0, firstTab);
+    const removed = record.slice(firstTab + 1, secondTab);
+    let filePath = record.slice(secondTab + 1);
+    if (!filePath) {
+      // Rename/copy records carry both paths separately; raw diff uses the destination.
+      i += 2;
+      filePath = records[i];
+    }
+    if (!filePath) {
       continue;
     }
 
-    const added = parts[0] === '-' ? 0 : Number.parseInt(parts[0], 10);
-    const removed = parts[1] === '-' ? 0 : Number.parseInt(parts[1], 10);
-    const path = parts[2];
-
-    map.set(path, { linesAdded: added, linesRemoved: removed });
+    map.set(filePath, {
+      linesAdded: added === '-' ? 0 : Number.parseInt(added, 10),
+      linesRemoved: removed === '-' ? 0 : Number.parseInt(removed, 10),
+    });
   }
 
   return map;
@@ -78,7 +89,7 @@ async function discoverChangedFiles(
         cwd: repoPath,
       },
     ),
-    runCommand('git', ['diff', '--numstat', `${base}...${compare}`], {
+    runCommand('git', ['diff', '--numstat', '-z', `${base}...${compare}`], {
       cwd: repoPath,
     }),
   ]);

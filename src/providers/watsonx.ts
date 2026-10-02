@@ -637,7 +637,7 @@ export class WatsonXProvider implements ApiProvider {
     );
   }
 
-  private async callApiInternal(
+  protected async callApiInternal(
     prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
@@ -772,7 +772,7 @@ export class WatsonXProvider implements ApiProvider {
  * WatsonX Chat Provider using the textChat API for messages-based interactions.
  */
 export class WatsonXChatProvider extends WatsonXProvider {
-  async callApi(
+  protected override async callApiInternal(
     prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,

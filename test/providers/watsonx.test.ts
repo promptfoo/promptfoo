@@ -1,6 +1,12 @@
 import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
+import { context, propagation, SpanStatusCode, trace } from '@opentelemetry/api';
+import {
+  InMemorySpanExporter,
+  NodeTracerProvider,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-node';
 import { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
 import * as envarsModule from '../../src/envars';
 import logger from '../../src/logger';
@@ -1487,6 +1493,129 @@ describe('WatsonXChatProvider', () => {
   afterEach(() => {
     vi.clearAllMocks();
     clearModelSpecsCache();
+  });
+
+  describe('GenAI tracing', () => {
+    const exporter = new InMemorySpanExporter();
+    const tracerProvider = new NodeTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(exporter)],
+    });
+    const textChat = vi.fn();
+
+    beforeAll(() => {
+      tracerProvider.register();
+    });
+
+    beforeEach(() => {
+      exporter.reset();
+      textChat.mockReset().mockResolvedValue({
+        result: {
+          choices: [{ message: { role: 'assistant', content: 'Traced chat reply' } }],
+          usage: { prompt_tokens: 10, completion_tokens: 8, total_tokens: 18 },
+        },
+      });
+      mockClient({ textChat });
+      vi.mocked(isCacheEnabled).mockReturnValue(false);
+    });
+
+    afterEach(() => {
+      textChat.mockReset();
+    });
+
+    afterAll(async () => {
+      try {
+        await tracerProvider.shutdown();
+      } finally {
+        trace.disable();
+        context.disable();
+        propagation.disable();
+      }
+    });
+
+    it.each([false, true])(
+      'records chat usage and evaluation context (cached: %s)',
+      async (cached) => {
+        const cachedResponse = {
+          output: 'Traced chat reply',
+          tokenUsage: { prompt: 10, completion: 8, total: 18 },
+        };
+        vi.mocked(isCacheEnabled).mockReturnValue(cached);
+        vi.mocked(getCache).mockReturnValue({
+          get: vi.fn().mockResolvedValue(JSON.stringify(cachedResponse)),
+          set: vi.fn(),
+        } as unknown as ReturnType<typeof getCache>);
+        const provider = new WatsonXChatProvider(modelName, { config });
+        const response = await provider.callApi(prompt, {
+          vars: {},
+          prompt: { raw: prompt, label: 'traced-prompt' },
+          testIdx: 3,
+          traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        });
+        await tracerProvider.forceFlush();
+
+        expect(response).toMatchObject(cachedResponse);
+        expect(textChat).toHaveBeenCalledTimes(cached ? 0 : 1);
+        const spans = exporter.getFinishedSpans();
+        expect(spans).toHaveLength(1);
+        expect(spans[0].name).toBe(`chat ${modelName}`);
+        expect(spans[0].spanContext().traceId).toBe('0123456789abcdef0123456789abcdef');
+        expect(spans[0].parentSpanContext?.spanId).toBe('0123456789abcdef');
+        expect(spans[0].attributes).toMatchObject({
+          'gen_ai.provider.name': 'ibm.watsonx.ai',
+          'gen_ai.operation.name': 'chat',
+          'gen_ai.request.model': modelName,
+          'gen_ai.request.max_tokens': config.maxNewTokens,
+          'promptfoo.provider.id': provider.id(),
+          'promptfoo.test.index': 3,
+          'promptfoo.prompt.label': 'traced-prompt',
+          'gen_ai.usage.input_tokens': 10,
+          'gen_ai.usage.output_tokens': 8,
+          'promptfoo.usage.total_tokens': 18,
+        });
+        if (cached) {
+          expect(spans[0].attributes['promptfoo.cache_hit']).toBe(true);
+        }
+        expect(spans[0].status.code).toBe(SpanStatusCode.OK);
+      },
+    );
+
+    it('records returned chat errors without changing the response', async () => {
+      textChat.mockRejectedValue(new Error('Chat API error'));
+      const provider = new WatsonXChatProvider(modelName, { config });
+
+      const response = await provider.callApi(prompt);
+      await tracerProvider.forceFlush();
+
+      expect(response).toEqual({
+        error: 'API call error: Error: Chat API error',
+        output: '',
+        tokenUsage: createEmptyTokenUsage(),
+      });
+      const spans = exporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      expect(spans[0].status.code).toBe(SpanStatusCode.ERROR);
+      expect(spans[0].attributes['error.type']).toBe('provider_error');
+    });
+
+    it('records cancellation without initializing the chat client', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const provider = new WatsonXChatProvider(modelName, { config });
+
+      await expect(
+        provider.callApi(prompt, undefined, { abortSignal: controller.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError', message: 'Request aborted' });
+      await tracerProvider.forceFlush();
+
+      expect(WatsonXAI.newInstance).not.toHaveBeenCalled();
+      expect(textChat).not.toHaveBeenCalled();
+      const spans = exporter.getFinishedSpans();
+      expect(spans).toHaveLength(1);
+      expect(spans[0].status).toEqual({
+        code: SpanStatusCode.ERROR,
+        message: 'Request aborted',
+      });
+    });
   });
 
   it('should parse JSON chat messages and call textChat', async () => {
