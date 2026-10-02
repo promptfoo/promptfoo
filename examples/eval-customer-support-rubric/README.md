@@ -1,4 +1,4 @@
-# Customer support rubric with severity gating
+# eval-customer-support-rubric (Customer support rubric with severity gating)
 
 Scores a support assistant's replies on five quality dimensions at once, and fails
 high-severity tickets on a single failed dimension regardless of how the rest of
@@ -33,11 +33,13 @@ That contrast is the point of the example.
 
 ## Running it
 
+To try it in a fresh directory, run `npx promptfoo@latest init --example eval-customer-support-rubric`.
+
 The `echo` provider stands in for the bot: it returns the canned `reply` column
 of each CSV row, so the only API key you need is the one that grades the
 rubrics (`openai:gpt-4.1-mini` in `defaultTest.options.provider`).
 
-```
+```sh
 OPENAI_API_KEY=your-key npx promptfoo@latest eval -f examples/eval-customer-support-rubric/promptfooconfig.yaml
 ```
 
