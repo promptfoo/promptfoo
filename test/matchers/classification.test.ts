@@ -1,10 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { matchesClassification } from '../../src/matchers/classification';
 import { HuggingfaceTextClassificationProvider } from '../../src/providers/huggingface';
-import {
-  withProviderCallExecutionContext,
-  withProviderCallTracingContext,
-} from '../../src/scheduler/providerCallExecutionContext';
+import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import { createMockProvider } from '../factories/provider';
 
 import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
@@ -16,10 +13,6 @@ import type {
 } from '../../src/types/index';
 
 describe('matchesClassification', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   class TestGrader implements ApiProvider {
     async callApi(): Promise<ProviderResponse> {
       throw new Error('Not implemented');
@@ -75,32 +68,6 @@ describe('matchesClassification', () => {
       expect.objectContaining({ provider, role: 'grader', promptLabel: 'classification' }),
       expect.any(Function),
     );
-  });
-
-  it('forwards evaluator cancellation to the classification provider', async () => {
-    const abortSignal = new AbortController().signal;
-    const provider = new TestGrader();
-    const call = vi.spyOn(provider, 'callClassificationApi');
-
-    await withProviderCallExecutionContext({ abortSignal }, () =>
-      matchesClassification('classA', 'sample output', 0.5, { provider }),
-    );
-
-    expect(call).toHaveBeenCalledWith('sample output', undefined, { abortSignal });
-  });
-
-  it('propagates a cancelled classification instead of returning a grading verdict', async () => {
-    const abortSignal = AbortSignal.abort();
-    const provider = new TestGrader();
-    vi.spyOn(provider, 'callClassificationApi').mockRejectedValue(
-      new DOMException('Classification cancelled', 'AbortError'),
-    );
-
-    await expect(
-      withProviderCallExecutionContext({ abortSignal }, () =>
-        matchesClassification('classA', 'sample output', 0.5, { provider }),
-      ),
-    ).rejects.toMatchObject({ name: 'AbortError' });
   });
 
   it('should fail when the classification score is below the threshold', async () => {

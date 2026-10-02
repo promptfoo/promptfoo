@@ -225,7 +225,7 @@ export async function fetchWithProxy(
     : options.signal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
-  const { getAuthHeaders, retryableResponse: _retryableResponse, ...requestOptions } = options;
+  const { getAuthHeaders, ...requestOptions } = options;
   const finalOptions: FetchOptions & { dispatcher?: any } = {
     ...requestOptions,
     headers: getFetchWithProxyHeaders(url, options),
@@ -743,8 +743,7 @@ export async function fetchWithRetries(
   timeout: number,
   maxRetries?: number,
 ): Promise<Response> {
-  const { retryableResponse, ...requestOptions } = options;
-  options = preserveCloudAuthRedirects(url, requestOptions);
+  options = preserveCloudAuthRedirects(url, options);
   const contextMaxRetries = getFetchRetryContextMaxRetries();
   maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
 
@@ -762,29 +761,12 @@ export async function fetchWithRetries(
         timeout,
       );
 
-      const retry5xx =
-        getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600;
-      // Opt-in callers consume the final response, including globally retried 5xxs.
-      // Preserve the legacy thrown error for callers without a response predicate.
-      const shouldRetryResponse =
-        retryableResponse?.(response) || (retryableResponse !== undefined && retry5xx);
-      if (retry5xx && !retryableResponse) {
+      if (getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600) {
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
       }
 
       if (response && isRateLimited(response)) {
         await handleRateLimitedResponse(response, url, i, maxRetries, signal);
-        continue;
-      }
-
-      if (shouldRetryResponse && i < maxRetries) {
-        const { retryAfterMs } = rateLimitTimingFromHeaders(
-          Object.fromEntries(response.headers.entries()),
-        );
-        // A logging clone may keep cleanup pending; do not block retries on its stream.
-        void response.body?.cancel().catch(() => {});
-        const waitTime = retryAfterMs ?? Math.pow(2, i) * (backoff + 1000 * Math.random());
-        await sleepWithAbort(waitTime, signal);
         continue;
       }
 

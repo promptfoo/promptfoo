@@ -7,9 +7,6 @@ import type { ApiProvider } from '../types/providers';
  * Same provider with different API keys/regions get different keys.
  */
 export function getRateLimitKey(provider: ApiProvider): string {
-  if (provider.getRateLimitKey) {
-    return provider.getRateLimitKey();
-  }
   const providerId = provider.id();
 
   // Extract config that affects rate limiting

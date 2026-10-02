@@ -3,15 +3,6 @@
  */
 export interface FetchOptions extends RequestInit {
   /**
-   * Opt additional responses into fetchWithRetries' existing attempt budget.
-   * Retry-After is honored; the final response (including globally retried 5xxs)
-   * is returned for callers to report its body and headers. This predicate must not
-   * consume the body and does not disable existing rate-limit or global 5xx retries.
-   * It is not forwarded to fetch.
-   */
-  retryableResponse?: (response: Response) => boolean;
-
-  /**
    * Resolve default authentication headers immediately before each HTTP attempt, including
    * retries. Explicit request headers take precedence (case-insensitively). The signal includes
    * the request timeout. The callback is never forwarded to fetch or included in cache keys.
