@@ -227,7 +227,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.278",
+    "@anthropic-ai/claude-agent-sdk": "0.3.280",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -285,7 +285,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.278",
+    "@anthropic-ai/claude-agent-sdk": "0.3.280",
     "@aws/bedrock-token-generator": "^1.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -298,7 +298,6 @@
     "@azure/storage-blob": "^12.31.0",
     "@fal-ai/client": "~1.10.1",
     "@googleapis/sheets": "^18.0.0",
-    "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@modelcontextprotocol/server-filesystem": "2026.8.31",
     "@openai/codex-sdk": "^0.156.1",
@@ -306,7 +305,6 @@
     "@smithy/node-http-handler": "^4.4.14",
     "google-auth-library": "^11.1.0",
     "hono": "^4.13.8",
-    "ibm-cloud-sdk-core": "^5.6.2",
     "jks-js": "^1.1.5",
     "natural": "^8.1.1",
     "node-sql-parser": "^5.4.0",
@@ -316,7 +314,7 @@
     "sharp": "^0.35.4"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.127.0",
+    "@anthropic-ai/sdk": "0.128.0",
     "@apidevtools/json-schema-ref-parser": "^16.0.3",
     "@hono/node-server": "2.1.1",
     "@inquirer/checkbox": "^5.1.0",
@@ -416,16 +414,21 @@
   "homepage": "https://promptfoo.dev",
   "peerDependencies": {
     "@huggingface/transformers": "*",
+    "@ibm-cloud/watsonx-ai": "*",
     "@langfuse/client": "*",
     "@openai/agents": "*",
     "@openai/codex-security": "*",
     "@slack/web-api": "*",
+    "ibm-cloud-sdk-core": "*",
     "playwright": "*",
     "playwright-extra": "*",
     "puppeteer-extra-plugin-stealth": "*"
   },
   "peerDependenciesMeta": {
     "@huggingface/transformers": {
+      "optional": true
+    },
+    "@ibm-cloud/watsonx-ai": {
       "optional": true
     },
     "@langfuse/client": {
@@ -438,6 +441,9 @@
       "optional": true
     },
     "@slack/web-api": {
+      "optional": true
+    },
+    "ibm-cloud-sdk-core": {
       "optional": true
     },
     "playwright": {

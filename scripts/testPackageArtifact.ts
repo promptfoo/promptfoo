@@ -1031,6 +1031,84 @@ async function runOptionalLangfuseChecks(
   }
 }
 
+async function runOptionalWatsonXChecks(
+  consumerDir: string,
+  configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+  withOptionalDependencies: boolean,
+): Promise<void> {
+  const packages = ['@ibm-cloud/watsonx-ai', 'ibm-cloud-sdk-core'];
+  const [aiDir, coreDir] = packages.map((name) => path.join(consumerDir, 'node_modules', name));
+  for (const directory of [aiDir, coreDir]) {
+    assert(!fs.existsSync(directory), 'Default consumers should not install the WatsonX SDKs');
+  }
+  const runChecks = async (state: string) => {
+    for (const format of ['esm', 'cjs']) {
+      console.log(
+        await runAsync(process.execPath, ['optional-watsonx.mjs', format, state], consumerDir, {
+          NODE_PATH: '',
+          WATSONX_AI_APIKEY: '',
+          WATSONX_AI_BEARER_TOKEN: '',
+          WATSONX_AI_AUTH_TYPE: '',
+          WATSONX_AI_PROJECT_ID: '',
+          PROMPTFOO_CONFIG_DIR: configDir,
+          PROMPTFOO_CACHE_ENABLED: 'false',
+          PROMPTFOO_DISABLE_TELEMETRY: '1',
+          PROMPTFOO_DISABLE_UPDATE: 'true',
+        }),
+      );
+    }
+  };
+  const writeStub = (directory: string, name: string, version: string, source: string) => {
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(
+      path.join(directory, 'package.json'),
+      JSON.stringify({ name, version, main: './index.js' }),
+    );
+    fs.writeFileSync(path.join(directory, 'index.js'), source);
+  };
+  const unsupported = 'throw new Error("Unsupported WatsonX SDK code must not execute");';
+  try {
+    await runChecks('missing-both');
+    writeStub(aiDir, packages[0], '1.7.16', unsupported);
+    await runChecks('missing-core');
+    writeStub(coreDir, packages[1], '0.0.0', unsupported);
+    await runChecks('incompatible-core');
+    fs.rmSync(aiDir, { recursive: true, force: true });
+    writeStub(
+      coreDir,
+      packages[1],
+      '5.6.2',
+      'exports.IamAuthenticator = class {}; exports.BearerTokenAuthenticator = class {};',
+    );
+    await runChecks('missing-ai');
+    writeStub(aiDir, packages[0], '0.0.0', unsupported);
+    await runChecks('incompatible-ai');
+  } finally {
+    fs.rmSync(aiDir, { recursive: true, force: true });
+    fs.rmSync(coreDir, { recursive: true, force: true });
+  }
+
+  // Preserve the omit-optional profile and install the real pair only in the default profile.
+  if (withOptionalDependencies) {
+    runNpm(
+      'install WatsonX SDKs',
+      [
+        'install',
+        '--ignore-scripts',
+        '--no-audit',
+        '--no-fund',
+        '--no-package-lock',
+        '@ibm-cloud/watsonx-ai@^1.7.16',
+        'ibm-cloud-sdk-core@^5.6.2',
+      ],
+      consumerDir,
+      npmEnv,
+    );
+    await runChecks('installed');
+  }
+}
+
 async function assertOptionalBrowserDependencies(
   consumerDir: string,
   configDir: string,
@@ -1432,6 +1510,14 @@ async function main(): Promise<void> {
     );
     await timeAsyncPhase('check optional Langfuse SDK', () =>
       runOptionalLangfuseChecks(
+        consumerDir,
+        configDir,
+        consumerNpmEnv,
+        values.profile === 'default',
+      ),
+    );
+    await timeAsyncPhase('check optional WatsonX SDKs', () =>
+      runOptionalWatsonXChecks(
         consumerDir,
         configDir,
         consumerNpmEnv,

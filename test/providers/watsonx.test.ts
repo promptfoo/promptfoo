@@ -140,6 +140,21 @@ describe('WatsonXProvider', () => {
   });
 
   describe('getClient', () => {
+    it('preserves authenticator constructor errors and allows initialization to retry', async () => {
+      const error = new Error('Authenticator construction failed');
+      vi.mocked(IamAuthenticator).mockImplementationOnce(function () {
+        throw error;
+      });
+      const mockedWatsonXAIClient = { generateText: vi.fn() };
+      mockClient(mockedWatsonXAIClient);
+      const provider = new WatsonXProvider(modelName, { config });
+
+      await expect(provider.getClient()).rejects.toBe(error);
+      expect(WatsonXAI.newInstance).not.toHaveBeenCalled();
+      await expect(provider.getClient()).resolves.toBe(mockedWatsonXAIClient);
+      expect(WatsonXAI.newInstance).toHaveBeenCalledTimes(1);
+    });
+
     it('should initialize WatsonXAI client with correct parameters', async () => {
       const mockedWatsonXAIClient: Partial<any> = {
         generateText: vi.fn(),
