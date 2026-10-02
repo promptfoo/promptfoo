@@ -62,6 +62,7 @@ const KNOWN_BAD_RELEASES = new Map([
   ['cache-manager', '7.2.10'], // Shai-Hulud compromise (#10301)
   ['cacheable-request', '13.0.20'], // Shai-Hulud compromise (#10301)
   ['dompurify', '<=3.4.15'], // GHSA-p98j-92pf-mc4p, GHSA-6688-9rhm-gjv2
+  ['drizzle-orm', '<0.45.2 || >=1.0.0-beta.2 <1.0.0-beta.20'], // GHSA-gpj5-g38j-94v9
   ['extract-zip', '<=2.0.1'], // GHSA-jmr9-qjv8-65gv, GHSA-7pqw-9j4j-h8q3
   ['fast-uri', '<2.4.7 || >=3.0.0 <3.1.8 || >=4.0.0 <4.1.5'], // GHSA-hrr3-gc8f-f4qj, GHSA-qw65-cvwx-89v3, GHSA-58mr-gqgx-xq4g
   ['image-size', '>=0.6.3 <=2.0.2'], // GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr
@@ -437,14 +438,10 @@ describe('package manifests', () => {
         'package-lock.json',
       );
     for (const dependency of [
-      '@alcalzone/ansi-tokenize',
       '@anthropic-ai/claude-agent-sdk',
-      '@langfuse/client',
       '@modelcontextprotocol/sdk',
       '@opencode-ai/sdk',
-      '@slack/web-api',
       'hono',
-      'ibm-cloud-sdk-core',
       'read-excel-file',
       'sharp',
     ]) {
@@ -457,7 +454,7 @@ describe('package manifests', () => {
     expect(sitePackageJson.dependencies).not.toHaveProperty('sharp');
     expect(sitePackageJson.devDependencies).not.toHaveProperty('sharp');
 
-    for (const dependency of ['@alcalzone/ansi-tokenize', '@opencode-ai/sdk', '@slack/web-api']) {
+    for (const dependency of ['@opencode-ai/sdk']) {
       const entry = packageLock.packages[`node_modules/${dependency}`];
       expect(entry?.optional || entry?.devOptional, dependency).toBe(true);
     }
