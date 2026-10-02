@@ -37,6 +37,8 @@ interface ShareDomainResult {
 export interface ShareOptions {
   /** Suppress progress bar and "Sharing to:" messages for async background sharing */
   silent?: boolean;
+  /** Allow prompting for a missing share author email. Defaults to true. */
+  interactive?: boolean;
   /** Show authentication info in the URL */
   showAuth?: boolean;
 }
@@ -738,7 +740,7 @@ export function stripAuthFromUrl(urlString: string): string {
   }
 }
 
-async function handleEmailCollection(evalRecord: Eval): Promise<void> {
+async function handleEmailCollection(evalRecord: Eval, interactive: boolean): Promise<void> {
   // Skip email collection if author is already set
   if (evalRecord.author) {
     logger.debug(`[Share] Skipping email collection because author is already set`, {
@@ -753,6 +755,9 @@ async function handleEmailCollection(evalRecord: Eval): Promise<void> {
 
   let email = getUserEmail();
   if (!email) {
+    if (!interactive) {
+      return;
+    }
     email = await input({
       message: `${chalk.bold('Please enter your work email address')} (for managing shared URLs):`,
       validate: (value) => value.includes('@') || 'Please enter a valid email address',
@@ -820,7 +825,7 @@ export async function createShareableUrl(
   evalRecord: Eval,
   options: ShareOptions = {},
 ): Promise<string | null> {
-  const { silent = false, showAuth = false } = options;
+  const { silent = false, showAuth = false, interactive = true } = options;
 
   // If sharing is explicitly disabled, return null
   if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
@@ -840,7 +845,7 @@ export async function createShareableUrl(
   }
 
   // 1. Handle email collection
-  await handleEmailCollection(evalRecord);
+  await handleEmailCollection(evalRecord, interactive);
 
   // 2. Get API configuration
   const { url } = await getApiConfig(evalRecord);

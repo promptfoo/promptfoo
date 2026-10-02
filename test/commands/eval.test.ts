@@ -55,7 +55,10 @@ import { mockProcessEnv } from '../util/utils';
 
 import type { ApiProvider, EnvOverrides, TestSuite, UnifiedConfig } from '../../src/types/index';
 
-vi.mock('../../src/cache');
+vi.mock('../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/cache')>()),
+  disableCache: vi.fn(),
+}));
 vi.mock('../../src/evaluator');
 vi.mock('../../src/globalConfig/accounts');
 vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
@@ -660,6 +663,17 @@ describe('evalCommand', () => {
 
     it('removes deleted environment flags on the next watch run', async () => {
       const flags: boolean[] = [];
+      const cleanupFlags: boolean[] = [];
+      const cleanups = [0, 1].map(() =>
+        vi.fn(async () => {
+          cleanupFlags.push(getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT'));
+        }),
+      );
+      const providers = cleanups.map((cleanup) => ({
+        id: () => 'echo',
+        callApi: vi.fn(),
+        cleanup,
+      }));
       const config = {
         prompts: ['hello'],
         providers: ['echo'],
@@ -667,19 +681,25 @@ describe('evalCommand', () => {
       } as UnifiedConfig;
       vi.mocked(resolveConfigs)
         .mockReset()
-        .mockResolvedValueOnce({
-          config,
-          basePath: watchBase,
-          testSuite: {
-            prompts: [],
-            providers: [],
-            env: { PROMPTFOO_STRIP_PROMPT_TEXT: 'true' } as EnvOverrides,
-          },
+        .mockImplementationOnce(async () => {
+          trackProvider(providers[0]);
+          return {
+            config,
+            basePath: watchBase,
+            testSuite: {
+              prompts: [],
+              providers: [providers[0]],
+              env: { PROMPTFOO_STRIP_PROMPT_TEXT: 'true' } as EnvOverrides,
+            },
+          };
         })
-        .mockResolvedValueOnce({
-          config,
-          basePath: watchBase,
-          testSuite: { prompts: [], providers: [] },
+        .mockImplementationOnce(async () => {
+          trackProvider(providers[1]);
+          return {
+            config,
+            basePath: watchBase,
+            testSuite: { prompts: [], providers: [providers[1]] },
+          };
         });
       vi.mocked(evaluate).mockImplementation(async (_suite, record) => record as Eval);
       vi.mocked(writeMultipleOutputs).mockImplementation(async () => {
@@ -694,6 +714,10 @@ describe('evalCommand', () => {
         );
         await chokidarMocks.handlers.get('change')!(defaultConfigPath);
         expect(flags).toEqual([true, false]);
+        expect(cleanupFlags).toEqual([true, false]);
+        for (const cleanup of cleanups) {
+          expect(cleanup).toHaveBeenCalledOnce();
+        }
         expect(resolveConfigs).toHaveBeenCalledTimes(2);
       } finally {
         vi.mocked(resolveConfigs).mockReset();
@@ -2248,7 +2272,9 @@ describe('evalCommand', () => {
       return record as Eval;
     });
     try {
-      await expect(doEval({}, defaultConfig, defaultConfigPath, {})).resolves.toBeDefined();
+      await expect(
+        doEval({}, defaultConfig, defaultConfigPath, { eventSource: 'cli' }),
+      ).resolves.toBeDefined();
       expect(process.exitCode).toBe(42);
       expect(provider.cleanup).toHaveBeenCalledOnce();
     } finally {
