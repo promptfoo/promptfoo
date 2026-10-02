@@ -8,6 +8,7 @@ import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../t
 import invariant from '../util/invariant';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
+import { loadWatsonXDependency } from './watsonx-availability';
 import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import type { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
 
@@ -508,17 +509,10 @@ export class WatsonXProvider implements ApiProvider {
   }
 
   async getAuth(): Promise<IamAuthenticator | BearerTokenAuthenticator> {
-    let IamAuthenticator: any;
-    let BearerTokenAuthenticator: any;
-
-    try {
-      ({ IamAuthenticator, BearerTokenAuthenticator } = await import('ibm-cloud-sdk-core'));
-    } catch (err) {
-      logger.error(`Error loading ibm-cloud-sdk-core: ${err}`);
-      throw new Error(
-        'The ibm-cloud-sdk-core package is required as a peer dependency. Please install it in your project or globally.',
-      );
-    }
+    const { IamAuthenticator, BearerTokenAuthenticator } = await loadWatsonXDependency(
+      'ibm-cloud-sdk-core',
+      () => import('ibm-cloud-sdk-core'),
+    );
 
     const authSelection = this.getAuthSelection();
     if (!this.client) {
@@ -593,21 +587,16 @@ export class WatsonXProvider implements ApiProvider {
 
   private async initializeClient(): Promise<WatsonXAIClient> {
     const authenticator = await this.getAuth();
-
-    try {
-      const { WatsonXAI } = await import('@ibm-cloud/watsonx-ai');
-      this.client = WatsonXAI.newInstance({
-        version: this.options.config.version || '2023-05-29',
-        serviceUrl: this.options.config.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
-        authenticator,
-      });
-      return this.client!;
-    } catch (err) {
-      logger.error(`Error loading @ibm-cloud/watsonx-ai: ${err}`);
-      throw new Error(
-        'The @ibm-cloud/watsonx-ai package is required as a peer dependency. Please install it in your project or globally.',
-      );
-    }
+    const { WatsonXAI } = await loadWatsonXDependency(
+      '@ibm-cloud/watsonx-ai',
+      () => import('@ibm-cloud/watsonx-ai'),
+    );
+    this.client = WatsonXAI.newInstance({
+      version: this.options.config.version || '2023-05-29',
+      serviceUrl: this.options.config.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
+      authenticator,
+    });
+    return this.client!;
   }
 
   async callApi(

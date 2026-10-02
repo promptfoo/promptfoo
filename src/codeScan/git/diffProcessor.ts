@@ -13,11 +13,11 @@ import path from 'path';
 
 import async from 'async';
 import binaryExtensions from 'binary-extensions';
-import { execa } from 'execa';
 import { isText } from 'istextorbinary';
 import textExtensions from 'text-extensions';
 import logger from '../../logger';
 import { DiffProcessorError } from '../../types/codeScan';
+import { runCommand } from '../../util/runCommand';
 import { isInDenylist, MAX_BLOB_SIZE_BYTES, MAX_PATCH_SIZE_BYTES } from '../constants/filtering';
 import { annotateDiffWithLineRanges } from './diffAnnotator';
 import { parseRawDiff } from './rawDiffParser';
@@ -71,14 +71,14 @@ async function discoverChangedFiles(
 ): Promise<FileRecord[]> {
   // Run git diff --raw and --numstat in parallel
   const [rawResult, numstatResult] = await Promise.all([
-    execa(
+    runCommand(
       'git',
       ['diff', '--raw', '-z', '--no-color', '--no-ext-diff', '--no-abbrev', `${base}...${compare}`],
       {
         cwd: repoPath,
       },
     ),
-    execa('git', ['diff', '--numstat', `${base}...${compare}`], {
+    runCommand('git', ['diff', '--numstat', `${base}...${compare}`], {
       cwd: repoPath,
     }),
   ]);
@@ -134,7 +134,7 @@ async function collectBlobSizes(
 
   // Use git cat-file --batch-check
   const shaList = Array.from(shas).join('\n');
-  const result = await execa(
+  const result = await runCommand(
     'git',
     ['cat-file', '--batch-check=%(objectname) %(objecttype) %(objectsize)'],
     {
@@ -196,7 +196,7 @@ function attachBlobSizesAndFilter(files: FileRecord[], sizeMap: Map<string, numb
 
 async function isBlobText(repoPath: string, sha: string): Promise<boolean> {
   try {
-    const result = await execa('git', ['cat-file', 'blob', sha], {
+    const result = await runCommand('git', ['cat-file', 'blob', sha], {
       cwd: repoPath,
       encoding: 'buffer',
     });
@@ -296,7 +296,7 @@ async function generatePatchForFile(
   filePath: string,
 ): Promise<PatchResult> {
   try {
-    const result = await execa(
+    const result = await runCommand(
       'git',
       [
         'diff',
