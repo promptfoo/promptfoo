@@ -656,6 +656,7 @@ export class VLGuardGrader extends RedteamGraderBase {
           ? getImageDatasetRequestText(
               vars.inputPrompt ?? vars.prompt,
               vars.inputVars ?? vars.testVars,
+              (vars.inputVars ?? vars.testVars)?.[vars.imageDatasetInputVar],
             )
           : '',
       categoryGuidance: this.guidance[key ?? 'default'],

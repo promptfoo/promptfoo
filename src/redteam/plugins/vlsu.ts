@@ -640,6 +640,7 @@ export class VLSUGrader extends RedteamGraderBase {
           ? getImageDatasetRequestText(
               vars.inputPrompt ?? vars.prompt,
               vars.inputVars ?? vars.testVars,
+              (vars.inputVars ?? vars.testVars)?.image,
             )
           : '',
     });

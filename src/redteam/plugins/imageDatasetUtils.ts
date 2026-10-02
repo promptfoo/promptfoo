@@ -6,14 +6,19 @@ import { fetchWithProxy } from '../../util/fetch/index';
 export function getImageDatasetRequestText(
   prompt: unknown,
   inputVars: Record<string, unknown> = {},
+  selectedImage?: unknown,
 ): string {
   if (typeof prompt !== 'string') {
     return '';
   }
   // Other input images help identify byte boundaries, but are never attached to the judge.
-  const payloads = Object.values(Object.getOwnPropertyDescriptors(inputVars))
+  const images = Object.values(Object.getOwnPropertyDescriptors(inputVars))
     .filter((descriptor) => descriptor.enumerable)
     .map((descriptor) => descriptor.value)
+    // Only the explicitly selected media may have internal whitespace. Other
+    // variables can contain a whole request beginning with an image URI.
+    .filter((value) => typeof value === 'string' && !/\s/.test(value.trim()));
+  const payloads = [selectedImage, ...images]
     .filter(
       (value): value is string =>
         typeof value === 'string' && /^\s*data:image\/[^,]*;base64,/i.test(value),
@@ -22,7 +27,7 @@ export function getImageDatasetRequestText(
     .filter((value) => /^[\w+/=-]+$/.test(value))
     .sort((a, b) => b.length - a.length);
   const imageBoundaryError =
-    'Image grading cannot distinguish wrapped image data from request text. Use a test image variable or structured media field.';
+    'Image grading cannot distinguish wrapped image data from request text. Use a single-line data URI variable or structured media field.';
   const redactImages = (text: string) => {
     const chunks: string[] = [];
     let end = 0;
@@ -46,7 +51,7 @@ export function getImageDatasetRequestText(
             break;
           }
         }
-        return matched === payload.length;
+        return matched === payload.length && !/[\w+/=-]/.test(text[cursor] ?? '');
       });
       if (!known) {
         cursor = start;
@@ -56,7 +61,7 @@ export function getImageDatasetRequestText(
       }
       // Base64 and ordinary words share an alphabet. Without known image bytes,
       // whitespace cannot tell us where a wrapped payload ends and a query begins.
-      if (!known && /^\s+[\w+/=-]/.test(text.slice(cursor))) {
+      if (!known && (text[cursor] === '\\' || /^\s+[\w+/=-]/.test(text.slice(cursor)))) {
         throw new Error(imageBoundaryError);
       }
       chunks.push(text.slice(end, match.index));
@@ -92,40 +97,59 @@ export function getImageDatasetRequestText(
     return redactImages(prompt);
   }
   let hasText = false;
-  const sanitize = (value: unknown, key = ''): unknown => {
+  const sanitize = (
+    value: unknown,
+    key = '',
+    literalText = false,
+    mediaContainer = false,
+  ): unknown => {
     if (Array.isArray(value)) {
-      return value.map((part) => sanitize(part)).filter((part) => part !== undefined);
+      return value
+        .map((part) => sanitize(part, key, literalText, mediaContainer))
+        .filter((part) => part !== undefined);
     }
     if (value && typeof value === 'object') {
       const object = value as Record<string, unknown>;
-      if (
+      const media =
+        mediaContainer ||
         /^(?:image|image_url|input_image|audio|input_audio|video|file|input_file|base64)$/.test(
           String(object.type),
         ) ||
         [object.mimeType, object.mime_type, object.media_type].some(
           (mime) => typeof mime === 'string' && /^(?:image|audio|video)\//.test(mime),
-        )
-      ) {
-        return undefined;
-      }
+        );
+      const nativeMessage = ['system', 'developer', 'user', 'assistant', 'model', 'tool'].includes(
+        String(object.role),
+      );
+      const nativeTextPart =
+        typeof object.text === 'string' &&
+        [undefined, 'text', 'input_text', 'output_text'].some((type) => type === object.type);
       return Object.fromEntries(
         Object.entries(object).flatMap(([field, child]) => {
-          if (
+          const mediaField =
             /^(?:images?|image_url|input_image|input_audio|inline_?data|file_?data)$/i.test(
               field,
             ) ||
-            (field === 'source' && child && typeof child === 'object' && 'bytes' in child)
-          ) {
-            return [];
-          }
-          const sanitized = sanitize(child, field);
+            (media && /^(?:data|bytes|source|url|uri|file_data)$/.test(field)) ||
+            (key === 'source' && field === 'bytes' && typeof child === 'string');
+          const sanitized = sanitize(
+            child,
+            field,
+            literalText ||
+              (nativeMessage && ['content', 'parts'].includes(field)) ||
+              (nativeTextPart && field === 'text'),
+            mediaField,
+          );
           return sanitized === undefined ? [] : [[field, sanitized]];
         }),
       );
     }
+    if (mediaContainer) {
+      return undefined;
+    }
     if (typeof value === 'string') {
       // HTTP targets may parse JSON stored inside another request field.
-      if (/^\s*[\[{]/.test(value)) {
+      if (!literalText && /^\s*[\[{]/.test(value)) {
         try {
           return sanitize(JSON.parse(value));
         } catch (error) {

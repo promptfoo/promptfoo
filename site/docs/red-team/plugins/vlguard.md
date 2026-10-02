@@ -77,7 +77,7 @@ Safe controls supply the selected inline image and text from the evaluated promp
 
 Safe controls with missing or `null` output are graded as empty strings, so their transforms must accept empty strings. Known unsafe cases without output images retain the redteam no-output shortcut: assertions and transforms are skipped. Dynamic assertion values are evaluated because they may select safe-control criteria.
 
-Grading uses the rendered prompt (or a strategy-provided final prompt); it cannot reconstruct extra fields that a custom provider adds internally. Keep wrapped inline images in test variables or structured media fields so the grader can remove their payloads without discarding query text. Ambiguous wrapped image data produces a grading error.
+Grading uses the rendered prompt (or a strategy-provided final prompt); it cannot reconstruct extra fields that a custom provider adds internally. Use structured media fields or single-line data URI variables for additional images so the grader can remove their payloads without discarding query text. Ambiguous wrapped image data produces a grading error.
 
 ## Configuration Options
 
