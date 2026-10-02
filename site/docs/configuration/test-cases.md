@@ -392,7 +392,12 @@ promptfoo eval --filter-metadata tags=ai
 
 # Multiple filters use AND logic (tests must match ALL conditions)
 promptfoo eval --filter-metadata category=math --filter-metadata difficulty=easy
+
+# Comma-separated values use OR logic within one key
+promptfoo eval --filter-metadata category=math,science
 ```
+
+Each value uses case-sensitive substring matching, including for array metadata. Repeated flags use AND even for the same key. Whitespace is significant; commas always separate alternatives, and leading, trailing, or consecutive commas are invalid.
 
 ### JSON in CSV
 
