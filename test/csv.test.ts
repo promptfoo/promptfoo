@@ -922,6 +922,42 @@ describe('assertionFromString', () => {
     expect(result.threshold).toBe(0.9);
   });
 
+  it('should keep an explicit threshold for types without a CSV default threshold', () => {
+    for (const type of [
+      'bleu',
+      'gleu',
+      'meteor',
+      'tool-call-f1',
+      'g-eval',
+      'llm-rubric',
+      'factuality',
+      'javascript',
+    ]) {
+      const result: Assertion = assertionFromString(`${type}(0.3):Expected output`);
+      expect(result).toEqual({ type, value: 'Expected output', threshold: 0.3 });
+    }
+    expect(assertionFromString('not-bleu(0.9):Expected output')).toEqual({
+      type: 'not-bleu',
+      value: 'Expected output',
+      threshold: 0.9,
+    });
+  });
+
+  it('should not add a threshold for types without a CSV default when none is specified', () => {
+    expect(assertionFromString('bleu:Expected output')).toStrictEqual({
+      type: 'bleu',
+      value: 'Expected output',
+    });
+  });
+
+  it('should preserve an explicit zero threshold for types without a CSV default', () => {
+    expect(assertionFromString('bleu(0):Expected output')).toEqual({
+      type: 'bleu',
+      value: 'Expected output',
+      threshold: 0,
+    });
+  });
+
   it('should preserve zero threshold when explicitly specified', () => {
     const expected = 'levenshtein(0):Expected output';
 

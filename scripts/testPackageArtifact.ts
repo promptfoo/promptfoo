@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
@@ -10,7 +11,8 @@ import { parseArgs } from 'node:util';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 
 import { API } from 'typescript/unstable/sync';
-import { shouldCopyDrizzlePath } from './postbuild';
+import { writePackedConsumerSbom } from './packedConsumerSbom';
+import { assertBuiltAssetsPackaged } from './packPackageArtifact';
 
 type PackFile = {
   mode: number;
@@ -40,7 +42,6 @@ type ArtifactEvalOutput = {
 };
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const drizzleDir = path.join(ROOT, 'drizzle');
 const requiredPackagedPaths = [
   'dist/drizzle/meta/_journal.json',
   'dist/src/app/index.html',
@@ -71,16 +72,24 @@ const requiredPackagedPaths = [
   'dist/src/tracing/proto/opentelemetry/proto/trace/v1/trace.proto',
 ];
 
-function listFiles(rootDir: string): string[] {
-  return fs.readdirSync(rootDir, { withFileTypes: true }).flatMap((entry) => {
-    const fullPath = path.join(rootDir, entry.name);
+function timePhase<T>(name: string, operation: () => T): T {
+  const started = performance.now();
+  console.log(`[artifact-phase] start: ${name}`);
+  try {
+    return operation();
+  } finally {
+    console.log(`[artifact-phase] end: ${name} (${Math.round(performance.now() - started)} ms)`);
+  }
+}
 
-    if (entry.isDirectory()) {
-      return listFiles(fullPath);
-    }
-
-    return [path.relative(ROOT, fullPath).split(path.sep).join('/')];
-  });
+async function timeAsyncPhase<T>(name: string, operation: () => Promise<T>): Promise<T> {
+  const started = performance.now();
+  console.log(`[artifact-phase] start: ${name}`);
+  try {
+    return await operation();
+  } finally {
+    console.log(`[artifact-phase] end: ${name} (${Math.round(performance.now() - started)} ms)`);
+  }
 }
 
 function run(
@@ -163,32 +172,28 @@ async function runAsync(
   });
 }
 
-function runNpm(args: string[], cwd: string, envOverrides: NodeJS.ProcessEnv = {}): string {
+function runNpm(
+  phase: string,
+  args: string[],
+  cwd: string,
+  envOverrides: NodeJS.ProcessEnv = {},
+): string {
   assert(process.env.npm_execpath, 'Expected npm_execpath when running package artifact test');
-  return run(process.execPath, [process.env.npm_execpath, ...args], cwd, envOverrides);
+  return timePhase(phase, () =>
+    run(process.execPath, [process.env.npm_execpath!, ...args], cwd, envOverrides),
+  );
 }
 
-function assertPackagedFiles(packResult: PackResult): void {
+function assertPackagedFiles(packResult: PackResult, compareSource: boolean): void {
   const packagedPaths = new Set(packResult.files.map((file) => file.path));
   const missingPaths = requiredPackagedPaths.filter((file) => !packagedPaths.has(file));
-  const missingDrizzleFiles = listFiles(drizzleDir)
-    .filter(shouldCopyDrizzlePath)
-    .map((file) => `dist/${file}`)
-    .filter((file) => !packagedPaths.has(file));
-  const missingWebAppFiles = listFiles(path.join(ROOT, 'dist', 'src', 'app'))
-    .filter((file) => !file.endsWith('.map'))
-    .filter((file) => !packagedPaths.has(file));
-
   assert.deepEqual(missingPaths, [], `Missing packaged runtime assets: ${missingPaths.join(', ')}`);
-  assert.deepEqual(
-    missingDrizzleFiles,
-    [],
-    `Missing packaged Drizzle files: ${missingDrizzleFiles.join(', ')}`,
-  );
-  assert.deepEqual(
-    missingWebAppFiles,
-    [],
-    `Missing packaged web app files: ${missingWebAppFiles.join(', ')}`,
+  if (compareSource) {
+    assertBuiltAssetsPackaged(ROOT, packResult.files);
+  }
+  assert(
+    packResult.files.every((file) => !file.path.endsWith('.tsbuildinfo')),
+    'TypeScript incremental build state should be excluded from the package',
   );
   assert(
     packResult.files.every((file) => !file.path.endsWith('.map')),
@@ -671,6 +676,9 @@ ${script}
   for (const mode of ['missing', 'incompatible', 'installed']) {
     if (mode !== 'missing') {
       runNpm(
+        mode === 'incompatible'
+          ? 'install incompatible Codex Security SDK'
+          : 'install supported Codex Security SDK',
         [
           'install',
           '--ignore-scripts',
@@ -828,6 +836,279 @@ async function runInstalledCompressionEval(consumerDir: string, configDir: strin
   }
 }
 
+async function runOptionalOpenAiAgentsChecks(
+  consumerDir: string,
+  configDir: string,
+): Promise<void> {
+  const sdkDir = path.join(consumerDir, 'node_modules', '@openai', 'agents');
+  assert(!fs.existsSync(sdkDir), 'Default consumers should not install the optional Agents SDK');
+  const checks = `
+    const echo = await loadApiProvider('echo');
+    assert.equal((await echo.callApi('ordinary evaluation')).output, 'ordinary evaluation');
+    await assert.rejects(
+      loadApiProvider('openai:agents:gpt-4.1-mini'),
+      (error) => {
+        assert.match(error.message, /npm install promptfoo @openai\\/agents@\\^0\\.11\\.8/);
+        if (process.argv[2] === 'incompatible') {
+          assert.match(error.message, /found 0\\.0\\.0/);
+        } else {
+          assert.match(error.message, /package is required/);
+        }
+        return true;
+      },
+    );
+  `;
+  fs.writeFileSync(
+    path.join(consumerDir, 'optional-agents.mjs'),
+    `import assert from 'node:assert/strict';
+     import { loadApiProvider } from 'promptfoo';
+     ${checks}`,
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'optional-agents.cjs'),
+    `const assert = require('node:assert/strict');
+     const { loadApiProvider } = require('promptfoo');
+     (async () => { ${checks} })().catch((error) => {
+       console.error(error);
+       process.exitCode = 1;
+     });`,
+  );
+  const runChecks = async (mode: string) => {
+    for (const script of ['optional-agents.mjs', 'optional-agents.cjs']) {
+      await runAsync(process.execPath, [script, mode], consumerDir, {
+        PROMPTFOO_CONFIG_DIR: configDir,
+        PROMPTFOO_DISABLE_TELEMETRY: '1',
+        PROMPTFOO_DISABLE_UPDATE: 'true',
+      });
+    }
+  };
+  await runChecks('missing');
+
+  // An unrelated application's SDK must not block ordinary providers. Reject an
+  // unsupported SDK before executing its code when the Agents feature is used.
+  const loaderPackages = path.join(consumerDir, 'loader-packages');
+  fs.mkdirSync(sdkDir, { recursive: true });
+  try {
+    fs.writeFileSync(
+      path.join(sdkDir, 'package.json'),
+      JSON.stringify({ name: '@openai/agents', version: '0.0.0', main: './index.js' }),
+    );
+    fs.writeFileSync(
+      path.join(sdkDir, 'index.js'),
+      'throw new Error("Unsupported SDK code must not execute");',
+    );
+    await runChecks('incompatible');
+
+    // CommonJS supports SDK installations provided through NODE_PATH. The
+    // compatibility check must inspect that SDK rather than report it missing.
+    const loaderSdk = path.join(loaderPackages, '@openai', 'agents');
+    fs.mkdirSync(path.dirname(loaderSdk), { recursive: true });
+    fs.renameSync(sdkDir, loaderSdk);
+    await runAsync(process.execPath, ['optional-agents.cjs', 'incompatible'], consumerDir, {
+      NODE_PATH: loaderPackages,
+      PROMPTFOO_CONFIG_DIR: configDir,
+      PROMPTFOO_DISABLE_TELEMETRY: '1',
+      PROMPTFOO_DISABLE_UPDATE: 'true',
+    });
+  } finally {
+    fs.rmSync(sdkDir, { recursive: true, force: true });
+    fs.rmSync(loaderPackages, { recursive: true, force: true });
+  }
+}
+
+async function runOptionalSlackChecks(
+  consumerDir: string,
+  configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+  withOptionalDependencies: boolean,
+): Promise<void> {
+  const sdkDir = path.join(consumerDir, 'node_modules', '@slack', 'web-api');
+  assert(!fs.existsSync(sdkDir), 'Default consumers should not install the optional Slack SDK');
+  const runChecks = async (state: string) => {
+    for (const format of ['esm', 'cjs']) {
+      console.log(
+        await runAsync(process.execPath, ['optional-slack.mjs', format, state], consumerDir, {
+          NODE_PATH: '',
+          SLACK_BOT_TOKEN: '',
+          PROMPTFOO_CONFIG_DIR: configDir,
+          PROMPTFOO_DISABLE_TELEMETRY: '1',
+          PROMPTFOO_DISABLE_UPDATE: 'true',
+        }),
+      );
+    }
+  };
+  await runChecks('missing');
+  fs.mkdirSync(sdkDir, { recursive: true });
+  try {
+    fs.writeFileSync(
+      path.join(sdkDir, 'package.json'),
+      JSON.stringify({ name: '@slack/web-api', version: '0.0.0', main: './index.js' }),
+    );
+    fs.writeFileSync(
+      path.join(sdkDir, 'index.js'),
+      'throw new Error("Unsupported Slack SDK code must not execute");',
+    );
+    await runChecks('incompatible');
+  } finally {
+    fs.rmSync(sdkDir, { recursive: true, force: true });
+  }
+
+  // Keep the omit-optional profile intact; exercise the real SDK in the default profile.
+  if (withOptionalDependencies) {
+    runNpm(
+      'install Slack SDK',
+      [
+        'install',
+        '--ignore-scripts',
+        '--no-audit',
+        '--no-fund',
+        '--no-package-lock',
+        '@slack/web-api@^8.1.1',
+      ],
+      consumerDir,
+      npmEnv,
+    );
+    await runChecks('installed');
+  }
+}
+
+async function runOptionalLangfuseChecks(
+  consumerDir: string,
+  configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+  withOptionalDependencies: boolean,
+): Promise<void> {
+  const sdkDir = path.join(consumerDir, 'node_modules', '@langfuse', 'client');
+  assert(!fs.existsSync(sdkDir), 'Default consumers should not install the optional Langfuse SDK');
+  const runChecks = async (state: string) => {
+    for (const format of ['esm', 'cjs']) {
+      console.log(
+        await runAsync(process.execPath, ['optional-langfuse.mjs', format, state], consumerDir, {
+          NODE_PATH: '',
+          LANGFUSE_PUBLIC_KEY: '',
+          LANGFUSE_SECRET_KEY: '',
+          LANGFUSE_HOST: '',
+          LANGFUSE_BASE_URL: '',
+          PROMPTFOO_CONFIG_DIR: configDir,
+          PROMPTFOO_DISABLE_TELEMETRY: '1',
+          PROMPTFOO_DISABLE_UPDATE: 'true',
+        }),
+      );
+    }
+  };
+  await runChecks('missing');
+  fs.mkdirSync(sdkDir, { recursive: true });
+  try {
+    fs.writeFileSync(
+      path.join(sdkDir, 'package.json'),
+      JSON.stringify({ name: '@langfuse/client', version: '0.0.0', main: './index.js' }),
+    );
+    fs.writeFileSync(
+      path.join(sdkDir, 'index.js'),
+      'throw new Error("Unsupported Langfuse SDK code must not execute");',
+    );
+    await runChecks('incompatible');
+  } finally {
+    fs.rmSync(sdkDir, { recursive: true, force: true });
+  }
+
+  // Keep the omit-optional profile intact; exercise the real SDK in the default profile.
+  if (withOptionalDependencies) {
+    runNpm(
+      'install Langfuse SDK',
+      [
+        'install',
+        '--ignore-scripts',
+        '--no-audit',
+        '--no-fund',
+        '--no-package-lock',
+        '@langfuse/client@^5.11.1',
+      ],
+      consumerDir,
+      npmEnv,
+    );
+    await runChecks('installed');
+  }
+}
+
+async function runOptionalWatsonXChecks(
+  consumerDir: string,
+  configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+  withOptionalDependencies: boolean,
+): Promise<void> {
+  const packages = ['@ibm-cloud/watsonx-ai', 'ibm-cloud-sdk-core'];
+  const [aiDir, coreDir] = packages.map((name) => path.join(consumerDir, 'node_modules', name));
+  for (const directory of [aiDir, coreDir]) {
+    assert(!fs.existsSync(directory), 'Default consumers should not install the WatsonX SDKs');
+  }
+  const runChecks = async (state: string) => {
+    for (const format of ['esm', 'cjs']) {
+      console.log(
+        await runAsync(process.execPath, ['optional-watsonx.mjs', format, state], consumerDir, {
+          NODE_PATH: '',
+          WATSONX_AI_APIKEY: '',
+          WATSONX_AI_BEARER_TOKEN: '',
+          WATSONX_AI_AUTH_TYPE: '',
+          WATSONX_AI_PROJECT_ID: '',
+          PROMPTFOO_CONFIG_DIR: configDir,
+          PROMPTFOO_CACHE_ENABLED: 'false',
+          PROMPTFOO_DISABLE_TELEMETRY: '1',
+          PROMPTFOO_DISABLE_UPDATE: 'true',
+        }),
+      );
+    }
+  };
+  const writeStub = (directory: string, name: string, version: string, source: string) => {
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(
+      path.join(directory, 'package.json'),
+      JSON.stringify({ name, version, main: './index.js' }),
+    );
+    fs.writeFileSync(path.join(directory, 'index.js'), source);
+  };
+  const unsupported = 'throw new Error("Unsupported WatsonX SDK code must not execute");';
+  try {
+    await runChecks('missing-both');
+    writeStub(aiDir, packages[0], '1.7.16', unsupported);
+    await runChecks('missing-core');
+    writeStub(coreDir, packages[1], '0.0.0', unsupported);
+    await runChecks('incompatible-core');
+    fs.rmSync(aiDir, { recursive: true, force: true });
+    writeStub(
+      coreDir,
+      packages[1],
+      '5.6.2',
+      'exports.IamAuthenticator = class {}; exports.BearerTokenAuthenticator = class {};',
+    );
+    await runChecks('missing-ai');
+    writeStub(aiDir, packages[0], '0.0.0', unsupported);
+    await runChecks('incompatible-ai');
+  } finally {
+    fs.rmSync(aiDir, { recursive: true, force: true });
+    fs.rmSync(coreDir, { recursive: true, force: true });
+  }
+
+  // Preserve the omit-optional profile and install the real pair only in the default profile.
+  if (withOptionalDependencies) {
+    runNpm(
+      'install WatsonX SDKs',
+      [
+        'install',
+        '--ignore-scripts',
+        '--no-audit',
+        '--no-fund',
+        '--no-package-lock',
+        '@ibm-cloud/watsonx-ai@^1.7.16',
+        'ibm-cloud-sdk-core@^5.6.2',
+      ],
+      consumerDir,
+      npmEnv,
+    );
+    await runChecks('installed');
+  }
+}
+
 async function assertOptionalBrowserDependencies(
   consumerDir: string,
   configDir: string,
@@ -877,6 +1158,7 @@ async function assertOptionalBrowserDependencies(
   for (const state of withOptionalDependencies ? ['missing', 'incompatible'] : ['missing']) {
     if (state === 'incompatible') {
       runNpm(
+        'install incompatible browser SDK',
         [
           'install',
           '--ignore-scripts',
@@ -899,7 +1181,9 @@ async function assertOptionalBrowserDependencies(
     }
   }
   if (withOptionalDependencies) {
-    await runInstalledCompressionEval(consumerDir, configDir);
+    await timeAsyncPhase('compression with browser dependencies', () =>
+      runInstalledCompressionEval(consumerDir, configDir),
+    );
   }
 }
 
@@ -989,12 +1273,14 @@ ${script}
   };
   await runMode('absent');
   runNpm(
+    'install incompatible Transformers SDK',
     ['install', '--ignore-scripts', '--no-audit', '--no-fund', '@huggingface/transformers@3.8.1'],
     consumerDir,
     npmEnv,
   );
   await runMode('incompatible');
   runNpm(
+    'install supported Transformers SDK',
     ['install', '--ignore-scripts', '--no-audit', '--no-fund', '@huggingface/transformers@^4.0.0'],
     consumerDir,
     npmEnv,
@@ -1007,13 +1293,33 @@ async function main(): Promise<void> {
     options: {
       profile: { type: 'string', default: 'default' },
       registry: { type: 'string', default: 'https://registry.npmjs.org/' },
+      tarball: { type: 'string' },
+      'runtime-assets': { type: 'string', default: 'none' },
+      browser: { type: 'boolean', default: false },
+      'sbom-output': { type: 'string' },
     },
   });
+  assert(
+    ['none', 'python-go', 'all'].includes(values['runtime-assets']),
+    `Unknown runtime asset profile: ${values['runtime-assets']}`,
+  );
+  const suppliedTarball = values.tarball === undefined ? undefined : path.resolve(values.tarball);
+  if (suppliedTarball) {
+    assert(suppliedTarball.endsWith('.tgz'), '--tarball must be a local .tgz file');
+    assert(fs.statSync(suppliedTarball).isFile(), '--tarball must be an existing file');
+  }
+  const originalHash = suppliedTarball
+    ? createHash('sha512').update(fs.readFileSync(suppliedTarball)).digest('hex')
+    : undefined;
   assert(
     ['default', 'omit-optional'].includes(values.profile),
     `Unknown install profile: ${values.profile}`,
   );
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-'));
+  assert(!values.browser || values.profile === 'default', '--browser requires the default profile');
+  // Module resolution canonicalizes paths (for example /var to /private/var on macOS).
+  const tempDir = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-')),
+  );
   const artifactsDir = path.join(tempDir, 'artifacts');
   const configDir = path.join(tempDir, 'config');
   const consumerDir = path.join(tempDir, 'consumer');
@@ -1030,10 +1336,18 @@ async function main(): Promise<void> {
     fs.mkdirSync(consumerDir);
     fs.writeFileSync(consumerNpmrc, '');
 
-    const packOutput = runNpm(
-      ['pack', '--ignore-scripts', '--json', '--pack-destination', artifactsDir],
-      ROOT,
-    );
+    // npm's dry-run inspects the supplied archive without repacking it or running hooks.
+    const packOutput = suppliedTarball
+      ? runNpm(
+          'inspect supplied archive',
+          ['pack', suppliedTarball, '--dry-run', '--ignore-scripts', '--json'],
+          ROOT,
+        )
+      : runNpm(
+          'pack local archive',
+          ['pack', '--ignore-scripts', '--json', '--pack-destination', artifactsDir],
+          ROOT,
+        );
     let packResults: PackResult[];
     try {
       packResults = JSON.parse(packOutput) as PackResult[];
@@ -1044,21 +1358,23 @@ async function main(): Promise<void> {
 
     const [packResult] = packResults;
     assert.equal(packResult.name, 'promptfoo');
-    assertPackagedFiles(packResult);
+    assertPackagedFiles(packResult, !suppliedTarball);
 
-    const tarballPath = path.join(artifactsDir, packResult.filename);
+    const tarballPath = suppliedTarball ?? path.join(artifactsDir, packResult.filename);
     assert(fs.existsSync(tarballPath), `Missing tarball: ${tarballPath}`);
 
     fs.writeFileSync(
       path.join(consumerDir, 'package.json'),
       JSON.stringify({
         name: 'promptfoo-package-artifact-consumer',
+        version: '0.0.0',
         private: true,
         type: 'module',
       }),
     );
     console.log(`Installing packed consumer (${values.profile})...`);
     runNpm(
+      'install packed consumer',
       [
         'install',
         ...(values.profile === 'omit-optional' ? ['--omit=optional'] : ['--include=optional']),
@@ -1066,7 +1382,9 @@ async function main(): Promise<void> {
         '--omit=dev',
         '--no-audit',
         '--no-fund',
-        '--no-package-lock',
+        // npm needs the local tarball's resolution metadata to validate its SBOM
+        // edge. The lock records this fresh install; SBOM generation reads disk.
+        values['sbom-output'] ? '--package-lock' : '--no-package-lock',
         tarballPath,
       ],
       consumerDir,
@@ -1074,6 +1392,18 @@ async function main(): Promise<void> {
     );
 
     const installedPackageDir = path.join(consumerDir, 'node_modules', 'promptfoo');
+    // Capture the pristine consumer before optional-SDK acceptance installs fixtures.
+    if (values['sbom-output']) {
+      timePhase('inventory packed consumer', () =>
+        writePackedConsumerSbom(
+          consumerDir,
+          tarballPath,
+          path.resolve(values['sbom-output']!),
+          values.profile,
+          consumerNpmEnv,
+        ),
+      );
+    }
     const installedPackageJson = JSON.parse(
       fs.readFileSync(path.join(installedPackageDir, 'package.json'), 'utf8'),
     ) as {
@@ -1097,7 +1427,9 @@ async function main(): Promise<void> {
         relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative),
       );
     }
-    assertProviderTypeDocumentation(installedPackageDir);
+    timePhase('inspect declaration documentation', () =>
+      assertProviderTypeDocumentation(installedPackageDir),
+    );
 
     // Consumer files live outside the repository so neither workspaces nor devDependencies
     // can satisfy undeclared package imports. Keep all user state local to this fixture.
@@ -1113,21 +1445,43 @@ async function main(): Promise<void> {
     fs.cpSync(path.join(ROOT, 'test', 'fixtures', 'package-artifact'), consumerDir, {
       recursive: true,
     });
-    run(process.execPath, ['import-package.mjs'], consumerDir, consumerEnv);
-    run(process.execPath, ['require-package.cjs'], consumerDir, consumerEnv);
+    timePhase('import ESM package', () =>
+      run(process.execPath, ['import-package.mjs'], consumerDir, consumerEnv),
+    );
+    timePhase('require CommonJS package', () =>
+      run(process.execPath, ['require-package.cjs'], consumerDir, consumerEnv),
+    );
     const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
-    for (const tsconfig of [
-      'tsconfig.json',
-      'tsconfig.node16-cjs.json',
-      'tsconfig.api-esm.json',
-      'tsconfig.api-cjs.json',
+    for (const [phase, tsconfig] of [
+      ['typecheck ESM contracts', 'tsconfig.json'],
+      ['typecheck CommonJS contracts', 'tsconfig.node16-cjs.json'],
+      ['typecheck ESM root API', 'tsconfig.api-esm.json'],
+      ['typecheck CommonJS root API', 'tsconfig.api-cjs.json'],
     ]) {
-      run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
+      timePhase(phase, () => run(process.execPath, [tscPath, '--project', tsconfig], consumerDir));
     }
-    for (const script of ['import-api.mjs', 'require-api.cjs']) {
-      console.log(await runAsync(process.execPath, [script], consumerDir, consumerEnv));
+    for (const [phase, script] of [
+      ['evaluate ESM root API', 'import-api.mjs'],
+      ['evaluate CommonJS root API', 'require-api.cjs'],
+    ]) {
+      console.log(
+        await timeAsyncPhase(phase, () =>
+          runAsync(process.execPath, [script], consumerDir, consumerEnv),
+        ),
+      );
     }
     assertInstalledWebApp(installedPackageDir);
+    const installedMigrations = path.join(installedPackageDir, 'dist', 'drizzle');
+    const journal = JSON.parse(
+      fs.readFileSync(path.join(installedMigrations, 'meta', '_journal.json'), 'utf8'),
+    ) as { entries: Array<{ tag: string }> };
+    assert(journal.entries.length > 0, 'Expected installed migration journal entries');
+    for (const { tag } of journal.entries) {
+      assert(
+        fs.statSync(path.join(installedMigrations, `${tag}.sql`)).isFile(),
+        `Missing installed migration: ${tag}`,
+      );
+    }
 
     for (const binName of ['promptfoo', 'pf'] as const) {
       if (values.profile === 'omit-optional') {
@@ -1148,24 +1502,125 @@ async function main(): Promise<void> {
         );
       }
     }
-    if (values.profile === 'default') {
-      await runInstalledCodexSecurityEval(consumerDir, configDir, consumerNpmEnv);
-      await runInstalledCompressionEval(consumerDir, configDir);
-    }
-    await assertOptionalBrowserDependencies(
-      consumerDir,
-      configDir,
-      consumerNpmEnv,
-      values.profile === 'default',
+    await timeAsyncPhase('check optional OpenAI Agents SDK', () =>
+      runOptionalOpenAiAgentsChecks(consumerDir, configDir),
+    );
+    await timeAsyncPhase('check optional Slack SDK', () =>
+      runOptionalSlackChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default'),
+    );
+    await timeAsyncPhase('check optional Langfuse SDK', () =>
+      runOptionalLangfuseChecks(
+        consumerDir,
+        configDir,
+        consumerNpmEnv,
+        values.profile === 'default',
+      ),
+    );
+    await timeAsyncPhase('check optional WatsonX SDKs', () =>
+      runOptionalWatsonXChecks(
+        consumerDir,
+        configDir,
+        consumerNpmEnv,
+        values.profile === 'default',
+      ),
     );
     if (values.profile === 'default') {
-      await runInstalledTransformersProvider(consumerDir, configDir, consumerNpmEnv);
+      console.log(
+        await timeAsyncPhase('check installed migrations', () =>
+          runAsync(process.execPath, ['migrations.mjs'], consumerDir, consumerEnv),
+        ),
+      );
+      await timeAsyncPhase('check optional Codex Security SDK', () =>
+        runInstalledCodexSecurityEval(consumerDir, configDir, consumerNpmEnv),
+      );
+      await timeAsyncPhase('check response compression', () =>
+        runInstalledCompressionEval(consumerDir, configDir),
+      );
+    }
+    await timeAsyncPhase('check optional browser dependencies', () =>
+      assertOptionalBrowserDependencies(
+        consumerDir,
+        configDir,
+        consumerNpmEnv,
+        values.profile === 'default',
+      ),
+    );
+    if (values.profile === 'default') {
+      await timeAsyncPhase('check optional Transformers SDK', () =>
+        runInstalledTransformersProvider(consumerDir, configDir, consumerNpmEnv),
+      );
     }
 
-    console.log(`Verified installed package artifact (${values.profile}): ${packResult.filename}`);
+    if (values['runtime-assets'] !== 'none') {
+      console.log(
+        await runAsync(
+          process.execPath,
+          ['runtime-assets.mjs', ...(values['runtime-assets'] === 'all' ? ['--ruby'] : [])],
+          consumerDir,
+          consumerEnv,
+        ),
+      );
+    }
+
+    if (values.browser) {
+      runNpm(
+        'install browser dependencies',
+        [
+          'install',
+          '--ignore-scripts',
+          '--no-audit',
+          '--no-fund',
+          '--no-package-lock',
+          'playwright@1.63.0',
+          'playwright-extra@4.3.6',
+          'puppeteer-extra-plugin-stealth@2.11.2',
+        ],
+        consumerDir,
+        consumerNpmEnv,
+      );
+      const playwrightManifest = packageRequire.resolve('playwright/package.json');
+      const playwright = JSON.parse(fs.readFileSync(playwrightManifest, 'utf8')) as {
+        bin: { playwright: string };
+      };
+      assert.equal(typeof playwright.bin.playwright, 'string');
+      const browsersPath = path.join(tempDir, 'browsers');
+      // Browser downloads use the CI job deadline, not the fixture timeout.
+      console.log(
+        run(
+          process.execPath,
+          [
+            path.resolve(path.dirname(playwrightManifest), playwright.bin.playwright),
+            'install',
+            'chromium',
+            '--only-shell',
+          ],
+          consumerDir,
+          { ...consumerEnv, PLAYWRIGHT_BROWSERS_PATH: browsersPath },
+        ),
+      );
+      console.log(
+        await runAsync(
+          process.execPath,
+          ['browser.mjs', '--browsers-path', browsersPath],
+          consumerDir,
+          consumerEnv,
+        ),
+      );
+    }
+
+    if (suppliedTarball) {
+      assert.equal(
+        createHash('sha512').update(fs.readFileSync(suppliedTarball)).digest('hex'),
+        originalHash,
+        'The tested tarball changed during validation',
+      );
+    }
   } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    console.log('Removing temporary artifact consumer...');
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+    console.log('Removed temporary artifact consumer');
   }
+  console.log(`Verified installed package artifact (${values.profile})`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
