@@ -6,12 +6,12 @@ the reply scores.
 
 The five dimensions, each reported as a named metric:
 
-| Metric | Question it answers |
-| --- | --- |
-| `correct` | Is the reply factually right for this ticket? |
-| `resolved` | Does it resolve the issue or give the exact steps? |
-| `honest` | Does it stay honest (no invented policies, no overpromising)? |
-| `handoff` | Does it hand off to a human exactly when the ticket needs one? |
+| Metric         | Question it answers                                              |
+| -------------- | ---------------------------------------------------------------- |
+| `correct`      | Is the reply factually right for this ticket?                    |
+| `resolved`     | Does it resolve the issue or give the exact steps?               |
+| `honest`       | Does it stay honest (no invented policies, no overpromising)?    |
+| `handoff`      | Does it hand off to a human exactly when the ticket needs one?   |
 | `language_fit` | Is it written in the customer's language, in a natural register? |
 
 ## How the severity gate works
