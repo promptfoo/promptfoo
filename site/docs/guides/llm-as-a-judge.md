@@ -760,13 +760,26 @@ npx promptfoo view
 Inspect the exported JSON to compare human labels against judge results:
 
 ```bash
-jq -r '.results.results[] | [.metadata.expected_label, (if .success then "pass" else "fail" end)] | @tsv' results.json
+jq -r '.results.results[] |
+  (if .failureReason == 2 or
+      (.gradingResult.pass | type) != "boolean" or
+      ([.gradingResult, .gradingResult.componentResults[]?] |
+        any(.metadata.graderError == true))
+    then "not judged"
+    elif .gradingResult.pass then "pass"
+    else "fail" end) as $judgment |
+  [.metadata.expected_label, $judgment] | @tsv' results.json
 ```
+
+For example, a run with two valid judgments and one error would show:
 
 ```text
 fail    fail
 pass    pass
+fail    not judged
 ```
+
+Here, `failureReason: 2` denotes an execution error; `metadata.graderError` marks a grader failure. Missing verdicts are also not judged. Exclude these rows from agreement calculations and report their count alongside the number of judged rows. This example uses one rubric assertion per row; with multiple assertions, compare the relevant assertion's verdict rather than the aggregate result.
 
 Refine rubric wording until agreement is >90%.
 
