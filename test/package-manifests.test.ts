@@ -442,7 +442,6 @@ describe('package manifests', () => {
       '@modelcontextprotocol/sdk',
       '@opencode-ai/sdk',
       'hono',
-      'ibm-cloud-sdk-core',
       'read-excel-file',
       'sharp',
     ]) {
