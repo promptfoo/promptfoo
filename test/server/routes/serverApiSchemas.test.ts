@@ -133,6 +133,7 @@ describe('inline server API DTO validation', () => {
 
   afterEach(() => {
     promptCacheService.invalidate();
+    vi.unstubAllEnvs();
     vi.resetAllMocks();
   });
 
@@ -157,6 +158,33 @@ describe('inline server API DTO validation', () => {
       message: 'remote generation and grading are disabled',
     });
     expect(mockedCheckRemoteHealth).not.toHaveBeenCalled();
+  });
+
+  it('returns built-in web viewer table defaults', async () => {
+    const response = await api.get('/api/app-config');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      tableSettings: {
+        prettifyJson: false,
+        showPassFail: true,
+      },
+    });
+  });
+
+  it('returns environment-controlled web viewer table defaults', async () => {
+    vi.stubEnv('PROMPTFOO_WEB_VIEWER_TABLE_SETTING_PRETTIFY_JSON', '1');
+    vi.stubEnv('PROMPTFOO_WEB_VIEWER_TABLE_SETTING_SHOW_PASS_FAIL', '0');
+
+    const response = await api.get('/api/app-config');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      tableSettings: {
+        prettifyJson: true,
+        showPassFail: false,
+      },
+    });
   });
 
   it('validates /api/results query params before loading summaries', async () => {

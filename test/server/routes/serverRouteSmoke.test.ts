@@ -369,6 +369,12 @@ const smokeCases: SmokeCase[] = [
     path: '/api/remote-health',
     expectedStatus: 200,
   },
+  {
+    method: 'get',
+    openApiPath: '/api/app-config',
+    path: '/api/app-config',
+    expectedStatus: 200,
+  },
   { method: 'get', openApiPath: '/api/results', path: '/api/results', expectedStatus: 200 },
   {
     method: 'get',

@@ -94,7 +94,7 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+export const SERVER_OPENAPI_ROUTE_COUNT = 68;
 
 type OpenApiSchema = NonNullable<ZodMediaTypeObject['schema']>;
 type OpenApiResponse = ResponseConfig & { description: string };
@@ -248,6 +248,17 @@ export function createServerOpenApiRegistry() {
     summary: 'Check remote generation health',
     responses: {
       200: jsonResponse('RemoteHealthResponse', ServerSchemas.RemoteHealth.Response),
+    },
+  });
+
+  register({
+    method: 'get',
+    path: '/api/app-config',
+    operationId: 'getAppConfig',
+    tags: ['Config'],
+    summary: 'Get runtime web application configuration',
+    responses: {
+      200: jsonResponse('AppConfigResponse', ServerSchemas.AppConfig.Response),
     },
   });
 

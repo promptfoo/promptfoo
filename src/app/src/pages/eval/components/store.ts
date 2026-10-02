@@ -1,3 +1,4 @@
+import { getRuntimeConfig } from '@app/config/runtime';
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
@@ -452,11 +453,11 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
         set(() => ({ showInferenceDetails })),
       renderMarkdown: false,
       setRenderMarkdown: (renderMarkdown: boolean) => set(() => ({ renderMarkdown })),
-      prettifyJson: false,
+      prettifyJson: getRuntimeConfig().tableSettings.prettifyJson,
       setPrettifyJson: (prettifyJson: boolean) => set(() => ({ prettifyJson })),
       showPrompts: false,
       setShowPrompts: (showPrompts: boolean) => set(() => ({ showPrompts })),
-      showPassFail: true,
+      showPassFail: getRuntimeConfig().tableSettings.showPassFail,
       setShowPassFail: (showPassFail: boolean) => set(() => ({ showPassFail })),
       showPassReasons: false,
       setShowPassReasons: (showPassReasons: boolean) => set(() => ({ showPassReasons })),

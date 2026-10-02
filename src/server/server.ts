@@ -15,6 +15,7 @@ import {
   setupSignalWatcher,
   updateEvalIds,
 } from '../database/signal';
+import { getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -145,6 +146,17 @@ export function createApp() {
 
     const result = await checkRemoteHealth(apiUrl);
     res.json(ServerSchemas.RemoteHealth.Response.parse(result));
+  });
+
+  app.get('/api/app-config', (_req: Request, res: Response): void => {
+    res.json(
+      ServerSchemas.AppConfig.Response.parse({
+        tableSettings: {
+          prettifyJson: getEnvBool('PROMPTFOO_WEB_VIEWER_TABLE_SETTING_PRETTIFY_JSON', false),
+          showPassFail: getEnvBool('PROMPTFOO_WEB_VIEWER_TABLE_SETTING_SHOW_PASS_FAIL', true),
+        },
+      }),
+    );
   });
 
   /**

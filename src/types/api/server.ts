@@ -29,6 +29,15 @@ const RemoteHealthResponseSchema = z.object({
   message: z.string(),
 });
 
+const AppConfigResponseSchema = z.object({
+  tableSettings: z.object({
+    prettifyJson: z.boolean(),
+    showPassFail: z.boolean(),
+  }),
+});
+
+export type AppConfigResponse = z.infer<typeof AppConfigResponseSchema>;
+
 const ListResultsQuerySchema = z.object({
   datasetId: z.string().min(1).optional(),
   type: z.enum(['redteam', 'eval']).optional(),
@@ -112,6 +121,9 @@ export const ServerSchemas = {
   },
   RemoteHealth: {
     Response: RemoteHealthResponseSchema,
+  },
+  AppConfig: {
+    Response: AppConfigResponseSchema,
   },
   ResultList: {
     Query: ListResultsQuerySchema,
