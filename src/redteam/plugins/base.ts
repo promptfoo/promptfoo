@@ -487,7 +487,7 @@ export abstract class RedteamGraderBase {
       ...this.normalizeGradingVars(templateGradingContext),
       // Spread renderedValue to make properties accessible at top level (e.g., categoryGuidance)
       // This is done after gradingContext so renderedValue properties take precedence,
-      // except for the canonical evaluated output and extracted trace properties below.
+      // except for the canonical request, output, and extracted trace properties below.
       ...this.normalizeGradingVars({
         ...(typeof renderedValue === 'object' && renderedValue !== null ? renderedValue : {}),
       }),
@@ -495,6 +495,7 @@ export abstract class RedteamGraderBase {
       output: llmOutput,
       // Request evidence must not be replaced by dataset metadata or assertion values.
       inputPrompt: prompt,
+      inputVars: test.vars ?? {},
       // Extract specific trace properties for convenience (these override any conflicts)
       traceSummary: gradingContext?.traceSummary ?? '',
       traceContext: gradingContext?.traceContext,

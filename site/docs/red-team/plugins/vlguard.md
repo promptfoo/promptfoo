@@ -73,9 +73,11 @@ Unsafe-image grading uses subcategory guidance when available, then category gui
 
 The `safe` and `vlguardSafe` fields are aliases. Assertion values override grading context, which overrides test metadata, even when a lower-priority source supplies both aliases. Within one source, either field set to `true` marks the record safe.
 
-Safe controls supply the selected inline image and text from the actual target request as grading context, separate from the model’s output. Dataset questions that were not sent to the target are not grading requirements. Configure a vision-capable grading provider through `redteam.provider`, `defaultTest.provider`, or `defaultTest.options.provider`. The hosted grading endpoint does not accept input images, so grading reports an error when it would use that endpoint or when the selected input image is missing. Generated tests record its variable name in `metadata.imageDatasetInputVar`; unrelated image variables are not sent to the grader. For older safe-control tests, regenerate them or set this metadata to the variable containing the inline input image.
+Safe controls supply the selected inline image and text from the evaluated prompt as grading context, separate from the model’s output. Dataset questions that were not sent to the target are not grading requirements. Configure a vision-capable grading provider through `redteam.provider`, `defaultTest.provider`, or `defaultTest.options.provider`. The hosted grading endpoint does not accept input images, so grading reports an error when it would use that endpoint or when the selected input image is missing. Generated tests record its variable name in `metadata.imageDatasetInputVar`; unrelated image variables are not sent to the grader. For older safe-control tests, regenerate them or set this metadata to the variable containing the inline input image.
 
 Safe controls with missing or `null` output are graded as empty strings, so their transforms must accept empty strings. Known unsafe cases without output images retain the redteam no-output shortcut: assertions and transforms are skipped. Dynamic assertion values are evaluated because they may select safe-control criteria.
+
+Grading uses the rendered prompt (or a strategy-provided final prompt); it cannot reconstruct extra fields that a custom provider adds internally. Keep wrapped inline images in test variables or structured media fields so the grader can remove their payloads without discarding query text. Ambiguous wrapped image data produces a grading error.
 
 ## Configuration Options
 

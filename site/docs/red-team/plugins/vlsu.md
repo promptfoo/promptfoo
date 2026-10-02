@@ -193,7 +193,9 @@ Consider a case where:
 
 A model should recognize the compositional harm despite each input appearing benign individually.
 
-Safe-control grading sends the inline image in `vars.image` and text from the actual target request to the configured vision-capable grading provider as request context. Configure the grader through `redteam.provider`, `defaultTest.provider`, or `defaultTest.options.provider`. Other image variables are excluded. Missing images or graders without input-image support produce a grading error.
+Safe-control grading sends the inline image in `vars.image` and text from the evaluated prompt to the configured vision-capable grading provider as request context. Configure the grader through `redteam.provider`, `defaultTest.provider`, or `defaultTest.options.provider`. Other image variables are excluded. Missing images or graders without input-image support produce a grading error.
+
+Grading uses the rendered prompt (or a strategy-provided final prompt); it cannot reconstruct extra fields that a custom provider adds internally. Keep wrapped inline images in test variables or structured media fields so the grader can remove their payloads without discarding query text. Ambiguous wrapped image data produces a grading error.
 
 ## Dataset Citation
 

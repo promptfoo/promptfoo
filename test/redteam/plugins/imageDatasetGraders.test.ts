@@ -566,6 +566,20 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
   const payload = inputImage.split(',')[1];
   const wrappedImage = `data:image/png;base64,${payload.slice(0, 32)}\n  ${payload.slice(32)}`;
   const parameterImage = inputImage.replace(';base64,', ';charset=utf-8;base64,');
+  const safeMetadata = {
+    purpose,
+    imageDatasetInputVar: 'image',
+    safe: true,
+    vlguardSafe: true,
+    question: 'UNSENT_DATASET_TASK',
+    combinedGrade: 'safe',
+    imageGrade: 'safe',
+    textGrade: 'safe',
+    vlsuCategory: 'C13',
+    vlsuCategoryName: 'Jailbreaks',
+    vlsuSeverityPattern: 'safe_safe_safe',
+    isCompositional: false,
+  };
   it.each([
     ['plain', `${actualTask}\n${inputImage}`, true],
     ['image only', inputImage, false],
@@ -581,6 +595,78 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
     ['unwrapped image before query', `${inputImage}\n${actualTask}`, true, wrappedImage],
     ['repeated wrapped images', `${wrappedImage}\n${wrappedImage}\n${actualTask}`, true],
     ['image with additional encoded data', `${inputImage}${nativeImageData}\n${actualTask}`, true],
+    ['custom prompt envelope', JSON.stringify({ prompt: actualTask, image: inputImage }), true],
+    [
+      'custom source prose',
+      JSON.stringify({ question: actualTask, source: { data: actualTask } }),
+      true,
+    ],
+    [
+      'custom bare image bytes',
+      JSON.stringify({ question: actualTask, attachment: payload }),
+      true,
+    ],
+    [
+      'native audio',
+      JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: actualTask },
+            { type: 'input_audio', input_audio: { data: nativeImageData, format: 'wav' } },
+          ],
+        },
+      ]),
+      true,
+    ],
+    [
+      'native video',
+      JSON.stringify([
+        { type: 'text', text: actualTask },
+        { type: 'video', mime_type: 'video/mp4', data: nativeImageData },
+      ]),
+      true,
+    ],
+    [
+      'native file',
+      JSON.stringify([
+        { type: 'input_text', text: actualTask },
+        { type: 'input_file', file_data: nativeImageData },
+      ]),
+      true,
+    ],
+    ['custom question envelope', JSON.stringify({ question: actualTask, image: inputImage }), true],
+    [
+      'nested custom envelope',
+      JSON.stringify({
+        payload: { question: actualTask, image: inputImage },
+        data: { instructions: actualTask },
+        source: { title: actualTask },
+      }),
+      true,
+    ],
+    [
+      'custom instructions beside native messages',
+      JSON.stringify({
+        instructions: actualTask,
+        messages: [
+          { role: 'user', content: [{ type: 'image_url', image_url: { url: inputImage } }] },
+        ],
+      }),
+      true,
+    ],
+    [
+      'nested JSON string envelope',
+      JSON.stringify({
+        payload: JSON.stringify({ question: actualTask, image: { data: nativeImageData } }),
+      }),
+      true,
+    ],
+    [
+      'custom source bytes',
+      JSON.stringify({ question: actualTask, source: { bytes: nativeImageData } }),
+      true,
+    ],
     [
       'OpenAI JSON',
       JSON.stringify([
@@ -693,12 +779,6 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
       true,
     ],
     ['custom image object', JSON.stringify({ image: { data: nativeImageData } }), false],
-    ['malformed native JSON', `{"image":{"data":"${nativeImageData}",}`, false],
-    [
-      'malformed native YAML',
-      `- role: user\n  source: {data: ${nativeImageData}, broken: [`,
-      false,
-    ],
   ] as const)(
     'uses actual %s text without media or dataset-only instructions',
     async (_, request, hasText, selectedImage: string = inputImage) => {
@@ -707,28 +787,22 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
         'Blue.',
         {
           vars: { image: selectedImage, prompt: 'UNSENT_DATASET_TASK', unrelated: nativeImageData },
-          metadata: {
-            purpose,
-            imageDatasetInputVar: 'image',
-            safe: true,
-            vlguardSafe: true,
-            question: 'UNSENT_DATASET_TASK',
-            combinedGrade: 'safe',
-            imageGrade: 'safe',
-            textGrade: 'safe',
-            vlsuCategory: 'C13',
-            vlsuCategoryName: 'Jailbreaks',
-            vlsuSeverityPattern: 'safe_safe_safe',
-            isCompositional: false,
-          },
+          metadata: safeMetadata,
         },
         undefined,
-        { prompt: 'ASSERTION_OVERRIDE_TASK', inputPrompt: 'ASSERTION_OVERRIDE_TASK' },
+        {
+          prompt: 'ASSERTION_OVERRIDE_TASK',
+          inputPrompt: 'ASSERTION_OVERRIDE_TASK',
+          inputVars: { image: 'ASSERTION_OVERRIDE_TASK' },
+          testVars: { image: 'ASSERTION_OVERRIDE_TASK' },
+        },
         undefined,
         false,
         {
           prompt: 'CONTEXT_OVERRIDE_TASK',
           inputPrompt: 'CONTEXT_OVERRIDE_TASK',
+          inputVars: { image: 'CONTEXT_OVERRIDE_TASK' },
+          testVars: { image: 'CONTEXT_OVERRIDE_TASK' },
         } as RedteamGradingContext,
       );
       expect(rubric.includes(actualTask)).toBe(hasText);
@@ -747,6 +821,85 @@ describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) =
       expect(vi.mocked(matchesLlmRubric).mock.calls[0][5]).toEqual({
         inputImages: [{ data: selectedImage.trim() }],
       });
+    },
+  );
+
+  it.each(['plain', 'structured'])(
+    'redacts a non-selected wrapped image in %s requests without attaching it',
+    async (format) => {
+      const otherImage = 'data:image/png;base64,QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo=';
+      const wrapped = otherImage.replace('TU5P', '\nTU5P');
+      const request =
+        format === 'plain'
+          ? `${wrapped}\nDescribe`
+          : JSON.stringify({ question: 'Describe', image: wrapped });
+      const { rubric } = await new Grader().getResult(
+        request,
+        'Blue.',
+        {
+          vars: Object.defineProperty({ image: inputImage, otherImage }, 'unused', {
+            enumerable: true,
+            get() {
+              throw new Error('Unrelated image variables must not be evaluated');
+            },
+          }),
+          metadata: safeMetadata,
+        },
+        undefined,
+        { inputVars: { otherImage: inputImage }, testVars: { otherImage: inputImage } },
+      );
+      expect(rubric).toContain('Describe');
+      expect(rubric).not.toContain('QUJDREVGR0hJSktM');
+      expect(rubric).not.toContain('TU5PUFFSU1RVVldYWVo=');
+      expect(vi.mocked(matchesLlmRubric).mock.calls[0][5]).toEqual({
+        inputImages: [{ data: inputImage }],
+      });
+    },
+  );
+
+  it.each([
+    ['native JSON', `{"image":{"data":"${nativeImageData}",}`],
+    ['native YAML', `- role: user\n  source: {data: ${nativeImageData}, broken: [`],
+    [
+      'nested JSON string',
+      JSON.stringify({ question: actualTask, payload: `{"image":{"data":"${nativeImageData}",}` }),
+    ],
+  ])('rejects malformed %s without sending media to the judge', async (_, request) => {
+    await expect(
+      new Grader().getResult(
+        request,
+        'Blue.',
+        { vars: { image: inputImage }, metadata: safeMetadata },
+        undefined,
+        undefined,
+      ),
+    ).rejects.toThrow('cannot safely read malformed media');
+    expect(matchesLlmRubric).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'data:image/png;base64,QUJDREVGR0hJSktM\nTU5PUFFSU1RVVldYWVo=\nDescribe',
+    `Describe\n${payload.slice(0, 32)}\n${payload.slice(32)}`,
+    JSON.stringify({
+      question: 'Describe',
+      attachment: `Image: ${payload.slice(0, 32)}\n${payload.slice(32)}`,
+    }),
+  ])(
+    'rejects ambiguous wrapped image data without sending it to the judge: %s',
+    async (request) => {
+      await expect(
+        new Grader().getResult(
+          request,
+          'Blue.',
+          {
+            vars: { image: inputImage },
+            metadata: safeMetadata,
+          },
+          undefined,
+          undefined,
+        ),
+      ).rejects.toThrow('test image variable or structured media field');
+      expect(matchesLlmRubric).not.toHaveBeenCalled();
     },
   );
 });

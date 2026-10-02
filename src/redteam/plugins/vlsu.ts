@@ -637,7 +637,10 @@ export class VLSUGrader extends RedteamGraderBase {
       ...vars,
       inputText:
         vars.combinedGrade === 'safe'
-          ? getImageDatasetRequestText(vars.inputPrompt ?? vars.prompt, vars.testVars?.image)
+          ? getImageDatasetRequestText(
+              vars.inputPrompt ?? vars.prompt,
+              vars.inputVars ?? vars.testVars,
+            )
           : '',
     });
   }
