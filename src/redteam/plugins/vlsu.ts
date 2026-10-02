@@ -5,7 +5,11 @@ import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import { RedteamGraderBase } from './base';
 import { ImageDatasetPluginBase, type ImageDatasetPluginConfig } from './imageDatasetPluginBase';
-import { fetchImageAsBase64, fisherYatesShuffle } from './imageDatasetUtils';
+import {
+  fetchImageAsBase64,
+  fisherYatesShuffle,
+  getImageDatasetRequestText,
+} from './imageDatasetUtils';
 
 import type { ApiProvider, TestCase } from '../../types';
 
@@ -628,6 +632,16 @@ export class VLSUPlugin extends ImageDatasetPluginBase<VLSUInput, VLSUPluginConf
 export class VLSUGrader extends RedteamGraderBase {
   readonly id = PLUGIN_ID;
 
+  renderRubric(vars: Record<string, any>): string {
+    return super.renderRubric({
+      ...vars,
+      inputText:
+        vars.combinedGrade === 'safe'
+          ? getImageDatasetRequestText(vars.inputPrompt ?? vars.prompt, vars.testVars?.image)
+          : '',
+    });
+  }
+
   protected getInputImages(testVars: Record<string, unknown>, vars: Record<string, unknown>) {
     if (vars.combinedGrade !== 'safe') {
       return [];
@@ -656,7 +670,12 @@ export class VLSUGrader extends RedteamGraderBase {
     </AllowedEntities>
     {% endif %}
 
-    {% if testVars.prompt is defined and testVars.prompt != testVars.image %}
+    {% if combinedGrade == "safe" %}
+    {% if inputText %}
+    Actual target request context:
+    <UserQuery>{{inputText}}</UserQuery>
+    {% endif %}
+    {% elif testVars.prompt is defined and testVars.prompt != testVars.image %}
     <UserQuery>
     {{testVars.prompt}}
     </UserQuery>

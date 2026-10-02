@@ -98,8 +98,8 @@ describe('VLGuard active grading', () => {
         inputImages: [{ data: inputImage }],
         providerResponse: { output, images: outputImages },
       });
-      expect(result.rubric).toContain('Dataset question (request context):');
-      expect(result.rubric).toContain('<UserQuery>What color is the square?</UserQuery>');
+      expect(result.rubric).not.toContain('What color is the square?');
+      expect(result.rubric).not.toContain('</UserQuery>');
       expect(result.rubric).not.toContain(inputImage);
     },
   );
@@ -556,6 +556,197 @@ describe.each(['prompt', 'image'])('generated images injected into %s', (injectV
       expect(result.rubric.length).toBeLessThan(5000);
       expect(matchesLlmRubric).toHaveBeenCalledTimes(1);
       expect(vi.mocked(matchesLlmRubric).mock.calls[0][0]).toBe(result.rubric);
+    },
+  );
+});
+
+describe.each([VLGuardGrader, VLSUGrader])('%s safe request context', (Grader) => {
+  const actualTask = 'ACTUAL_TASK: name the dominant color';
+  const nativeImageData = 'RAW_NATIVE_IMAGE_BYTES_MUST_NOT_ENTER_RUBRIC';
+  const payload = inputImage.split(',')[1];
+  const wrappedImage = `data:image/png;base64,${payload.slice(0, 32)}\n  ${payload.slice(32)}`;
+  const parameterImage = inputImage.replace(';base64,', ';charset=utf-8;base64,');
+  it.each([
+    ['plain', `${actualTask}\n${inputImage}`, true],
+    ['image only', inputImage, false],
+    ['brace-prefixed plain text', `{${actualTask}}`, true],
+    [
+      'MIME parameters and trimmed image',
+      `${parameterImage}\n${actualTask}`,
+      true,
+      ` ${parameterImage} `,
+    ],
+    ['wrapped image before query', `${wrappedImage}\n${actualTask}`, true],
+    ['wrapped image only', wrappedImage, false],
+    ['unwrapped image before query', `${inputImage}\n${actualTask}`, true, wrappedImage],
+    ['repeated wrapped images', `${wrappedImage}\n${wrappedImage}\n${actualTask}`, true],
+    ['image with additional encoded data', `${inputImage}${nativeImageData}\n${actualTask}`, true],
+    [
+      'OpenAI JSON',
+      JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: actualTask },
+            { type: 'image_url', image_url: { url: inputImage } },
+          ],
+        },
+      ]),
+      true,
+    ],
+    [
+      'YAML',
+      `- role: user\n  content:\n    - type: text\n      text: '${actualTask}'\n    - type: image_url\n      image_url:\n        url: '${inputImage}'`,
+      true,
+    ],
+    [
+      'Anthropic JSON',
+      JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: actualTask },
+            { type: 'image', source: { type: 'base64', data: nativeImageData } },
+          ],
+        },
+      ]),
+      true,
+    ],
+    [
+      'Google JSON',
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            { text: actualTask },
+            { inlineData: { mimeType: 'image/png', data: nativeImageData } },
+          ],
+        },
+      ]),
+      true,
+    ],
+    [
+      'Google native request wrapper',
+      JSON.stringify({
+        system_instruction: { parts: [{ text: 'Answer the actual user request.' }] },
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: actualTask },
+              { inlineData: { mimeType: 'image/png', data: nativeImageData } },
+            ],
+          },
+        ],
+      }),
+      true,
+    ],
+    [
+      'Google Interactions contents wrapper',
+      JSON.stringify({
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: actualTask },
+              { inlineData: { mimeType: 'image/png', data: nativeImageData } },
+            ],
+          },
+        ],
+      }),
+      true,
+    ],
+    [
+      'Google Interactions native parts',
+      JSON.stringify([
+        { type: 'text', text: actualTask },
+        { type: 'image', mime_type: 'image/png', data: nativeImageData },
+      ]),
+      true,
+    ],
+    [
+      'Google content strings',
+      JSON.stringify([
+        {
+          role: 'user',
+          content: [actualTask, { type: 'image_url', image_url: { url: inputImage } }],
+        },
+      ]),
+      true,
+    ],
+    [
+      'Google content object',
+      JSON.stringify([{ role: 'user', content: { type: 'text', text: actualTask } }]),
+      true,
+    ],
+    [
+      'Responses JSON',
+      JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            { type: 'input_text', text: actualTask },
+            { type: 'input_image', image_url: inputImage },
+          ],
+        },
+      ]),
+      true,
+    ],
+    ['custom image object', JSON.stringify({ image: { data: nativeImageData } }), false],
+    ['malformed native JSON', `{"image":{"data":"${nativeImageData}",}`, false],
+    [
+      'malformed native YAML',
+      `- role: user\n  source: {data: ${nativeImageData}, broken: [`,
+      false,
+    ],
+  ] as const)(
+    'uses actual %s text without media or dataset-only instructions',
+    async (_, request, hasText, selectedImage: string = inputImage) => {
+      const { rubric } = await new Grader().getResult(
+        request,
+        'Blue.',
+        {
+          vars: { image: selectedImage, prompt: 'UNSENT_DATASET_TASK', unrelated: nativeImageData },
+          metadata: {
+            purpose,
+            imageDatasetInputVar: 'image',
+            safe: true,
+            vlguardSafe: true,
+            question: 'UNSENT_DATASET_TASK',
+            combinedGrade: 'safe',
+            imageGrade: 'safe',
+            textGrade: 'safe',
+            vlsuCategory: 'C13',
+            vlsuCategoryName: 'Jailbreaks',
+            vlsuSeverityPattern: 'safe_safe_safe',
+            isCompositional: false,
+          },
+        },
+        undefined,
+        { prompt: 'ASSERTION_OVERRIDE_TASK', inputPrompt: 'ASSERTION_OVERRIDE_TASK' },
+        undefined,
+        false,
+        {
+          prompt: 'CONTEXT_OVERRIDE_TASK',
+          inputPrompt: 'CONTEXT_OVERRIDE_TASK',
+        } as RedteamGradingContext,
+      );
+      expect(rubric.includes(actualTask)).toBe(hasText);
+      expect(rubric.includes('</UserQuery>')).toBe(hasText);
+      for (const excluded of [
+        inputImage,
+        payload.slice(0, 32),
+        payload.slice(32),
+        nativeImageData,
+        'UNSENT_DATASET_TASK',
+        'ASSERTION_OVERRIDE_TASK',
+        'CONTEXT_OVERRIDE_TASK',
+      ]) {
+        expect(rubric).not.toContain(excluded);
+      }
+      expect(vi.mocked(matchesLlmRubric).mock.calls[0][5]).toEqual({
+        inputImages: [{ data: selectedImage.trim() }],
+      });
     },
   );
 });

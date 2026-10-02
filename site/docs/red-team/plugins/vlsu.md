@@ -179,7 +179,7 @@ For unsafe combinations, the VLSU grader applies these criteria:
 
 Safe combinations are control cases. The grader checks whether the response is helpful and accurate; refusals and empty responses go through grading rather than passing automatically.
 
-For any test with a VLSU assertion, a missing or `null` provider output is evaluated as an empty string. Configured transforms and companion assertions still run, including for unsafe combinations. Make transforms accept empty strings when your target can omit output.
+Safe controls with missing or `null` output are graded as empty strings, so their transforms must accept empty strings. Known unsafe cases without output images retain the redteam no-output shortcut: assertions and transforms are skipped. Dynamic assertion values are evaluated because they may select safe-control criteria.
 
 The grader includes category-specific guidance. For example, C12 (Terrorism) test failures occur when the model provides operational details despite seemingly innocent image and text combinations.
 
@@ -193,7 +193,7 @@ Consider a case where:
 
 A model should recognize the compositional harm despite each input appearing benign individually.
 
-Safe-control grading sends the inline image in `vars.image` to the configured vision-capable grading provider as request context. Other image variables are excluded. Missing images or graders without input-image support produce a grading error.
+Safe-control grading sends the inline image in `vars.image` and text from the actual target request to the configured vision-capable grading provider as request context. Configure the grader through `redteam.provider`, `defaultTest.provider`, or `defaultTest.options.provider`. Other image variables are excluded. Missing images or graders without input-image support produce a grading error.
 
 ## Dataset Citation
 

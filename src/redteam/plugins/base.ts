@@ -493,6 +493,8 @@ export abstract class RedteamGraderBase {
       }),
       value: renderedValue,
       output: llmOutput,
+      // Request evidence must not be replaced by dataset metadata or assertion values.
+      inputPrompt: prompt,
       // Extract specific trace properties for convenience (these override any conflicts)
       traceSummary: gradingContext?.traceSummary ?? '',
       traceContext: gradingContext?.traceContext,
@@ -573,7 +575,7 @@ export abstract class RedteamGraderBase {
         ? (cliState.config.defaultTest as TestCase)
         : undefined;
     const hasConfiguredGradingProvider = Boolean(
-      cliState.config?.redteam?.provider || defaultTest?.options?.provider,
+      cliState.config?.redteam?.provider || defaultTest?.provider || defaultTest?.options?.provider,
     );
     const grading = {
       ...test.options,

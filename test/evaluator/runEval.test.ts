@@ -725,15 +725,37 @@ describe('runEval', () => {
         value: { combinedGrade: 'unsafe' },
         shouldGrade: false,
       },
+      {
+        name: 'legacy safety alias override',
+        response: {},
+        metadataGrade: 'unsafe',
+        value: { combinedGrade: 'safe' },
+        aliasOnly: true,
+        shouldGrade: true,
+      },
+      {
+        name: 'unsafe legacy safety alias override',
+        response: {},
+        metadataGrade: 'safe',
+        value: { combinedGrade: 'unsafe' },
+        aliasOnly: true,
+        shouldGrade: false,
+      },
       { name: 'unsafe omitted', response: {}, metadataGrade: 'unsafe', shouldGrade: false },
+      {
+        name: 'nested unsafe companion assertion',
+        response: {},
+        metadataGrade: 'unsafe',
+        nested: true,
+        companion: true,
+        shouldGrade: false,
+      },
       {
         name: 'unsafe companion assertion',
         response: {},
         metadataGrade: 'unsafe',
         companion: true,
         shouldGrade: false,
-        expected: { success: false, score: 0.5, failureReason: ResultFailureReason.ASSERT },
-        expectedError: 'required',
       },
       {
         name: 'unsafe test transform',
@@ -741,8 +763,6 @@ describe('runEval', () => {
         metadataGrade: 'unsafe',
         transform: 'JSON.parse(output)',
         shouldGrade: false,
-        expected: { success: false, score: 0, failureReason: ResultFailureReason.ERROR },
-        expectedError: 'Unexpected end of JSON input',
       },
       {
         name: 'nested assertion',
@@ -774,8 +794,7 @@ describe('runEval', () => {
         companion,
         transform,
         shouldGrade,
-        expected,
-        expectedError,
+        aliasOnly,
       }) => {
         if (transform) {
           const actual = await vi.importActual<typeof import('../../src/util/transform')>(
@@ -798,7 +817,10 @@ describe('runEval', () => {
         });
         const assertion: Assertion = {
           type: `promptfoo:redteam:${plugin}`,
-          value: plugin === 'vlguard' && value ? { safe: value.combinedGrade === 'safe' } : value,
+          value:
+            plugin === 'vlguard' && value
+              ? { [aliasOnly ? 'vlguardSafe' : 'safe']: value.combinedGrade === 'safe' }
+              : value,
         };
         const [result] = await runEval({
           ...defaultOptions,
@@ -825,22 +847,20 @@ describe('runEval', () => {
               image:
                 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC',
             },
-            assert: nested
-              ? [{ type: 'assert-set', assert: [assertion] }]
-              : [
-                  assertion,
-                  ...(companion ? [{ type: 'contains' as const, value: 'required' }] : []),
-                ],
+            assert: [
+              ...(nested ? [{ type: 'assert-set' as const, assert: [assertion] }] : [assertion]),
+              ...(companion ? [{ type: 'contains' as const, value: 'required' }] : []),
+            ],
             options: { transform },
           },
           conversations: {},
           registers: {},
         });
-        expect(result).toMatchObject(
-          expected ?? { success: !shouldGrade, score: Number(!shouldGrade) },
-        );
-        if (expectedError) {
-          expect(result.error).toContain(expectedError);
+        // An ungraded empty redteam response retains the evaluator's initial score.
+        expect(result).toMatchObject({ success: !shouldGrade, score: 0 });
+        if (!shouldGrade) {
+          expect(result.error).toBeUndefined();
+          expect(transformOutput).not.toHaveBeenCalled();
         }
         expect(grade).toHaveBeenCalledTimes(Number(shouldGrade));
         if (shouldGrade) {
@@ -853,6 +873,57 @@ describe('runEval', () => {
       },
     );
   });
+
+  it.each([
+    ['non-enumerable false', () => Object.defineProperty({}, 'safe', { value: false }), true],
+    [
+      'inherited true',
+      () => Object.assign(Object.create({ vlguardSafe: true }), { safe: false }),
+      false,
+    ],
+    [
+      'accessor',
+      () => ({
+        get safe() {
+          return true;
+        },
+      }),
+      true,
+    ],
+  ] as const)(
+    'classifies VLGuard %s aliases like the grader',
+    async (_, makeValue, shouldGrade) => {
+      const value = makeValue();
+      const grade = vi.spyOn(llmGrading, 'matchesLlmRubric').mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Safe control did not respond',
+      });
+      vi.spyOn(redteamProviderManager, 'getGradingProvider').mockResolvedValue(
+        mockGradingApiProviderPasses,
+      );
+      const [result] = await runEval({
+        ...defaultOptions,
+        isRedteam: true,
+        provider: { id: () => 'alias-fixture', callApi: vi.fn().mockResolvedValue({}) },
+        prompt: { raw: 'Describe the image', label: 'alias fixture' },
+        test: {
+          vars: { image: 'data:image/png;base64,aW1hZ2U=' },
+          metadata: {
+            purpose: 'Describe images',
+            safe: true,
+            vlguardSafe: true,
+            imageDatasetInputVar: 'image',
+          },
+          assert: [{ type: 'promptfoo:redteam:vlguard', value }],
+        },
+        conversations: {},
+        registers: {},
+      });
+      expect(result.success).toBe(!shouldGrade);
+      expect(grade).toHaveBeenCalledTimes(Number(shouldGrade));
+    },
+  );
 
   it.each(['provider', 'test', 'postprocess', 'assertion'] as const)(
     'grades transformed OpenAI refusal output at the %s level',

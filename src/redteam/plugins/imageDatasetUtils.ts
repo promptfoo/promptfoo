@@ -1,5 +1,105 @@
 import logger from '../../logger';
+import { parseChatPrompt } from '../../providers/shared';
 import { fetchWithProxy } from '../../util/fetch/index';
+
+/** Extract actual request text without copying image payloads into the grading rubric. */
+export function getImageDatasetRequestText(prompt: unknown, image: unknown): string {
+  if (typeof prompt !== 'string') {
+    return '';
+  }
+  const imageUri = typeof image === 'string' ? image.trim() : '';
+  const payload = imageUri.slice(imageUri.indexOf(',') + 1).replace(/\s/g, '');
+  const selectedPayload = /^[\w+/=-]+$/.test(payload) ? payload : '';
+  const redactImages = (text: string) => {
+    const chunks: string[] = [];
+    let end = 0;
+    for (const match of text.matchAll(/data:[^\s,]*;base64,/gi)) {
+      if (match.index < end) {
+        continue;
+      }
+      const start = match.index + match[0].length;
+      let cursor = start;
+      let matched = 0;
+      // Match only the selected payload across whitespace, stopping before any
+      // following prose. Never build a regex proportional to the image size.
+      while (cursor < text.length && matched < selectedPayload.length) {
+        if (/\s/.test(text[cursor])) {
+          cursor++;
+        } else if (text[cursor] === selectedPayload[matched]) {
+          matched++;
+          cursor++;
+        } else {
+          break;
+        }
+      }
+      if (!selectedPayload || matched !== selectedPayload.length) {
+        cursor = start;
+      }
+      while (cursor < text.length && /[\w+/=-]/.test(text[cursor])) {
+        cursor++;
+      }
+      chunks.push(text.slice(end, match.index));
+      end = cursor;
+    }
+    return [...chunks, text.slice(end)].join('').trim();
+  };
+  let parsed: unknown;
+  try {
+    parsed = parseChatPrompt<unknown>(prompt, prompt);
+  } catch {
+    // Other targets accept literal text beginning with braces. Never fall back to
+    // copying malformed native image objects, which may contain bare base64 data.
+    return /(?:^|[\s,{])["']?(?:image|source|inline_?data)["']?\s*:/i.test(prompt)
+      ? ''
+      : redactImages(prompt);
+  }
+  const request = parsed as { system_instruction?: unknown; contents?: unknown[] } | null;
+  const messages = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(request?.contents)
+      ? request.contents
+      : [parsed];
+  const system = request?.system_instruction;
+  if (system) {
+    messages.unshift(
+      typeof system === 'object'
+        ? { ...system, role: 'system' }
+        : { role: 'system', content: system },
+    );
+  }
+  return messages
+    .map((message) => {
+      if (typeof message === 'string') {
+        return redactImages(message);
+      }
+      if (!message || typeof message !== 'object') {
+        return '';
+      }
+      const { role, content, parts } = message as Record<string, unknown>;
+      const body = content ?? parts ?? message;
+      const text = (Array.isArray(body) ? body : [body])
+        .map((part) => {
+          if (typeof part === 'string') {
+            return redactImages(part);
+          }
+          return part &&
+            typeof part.text === 'string' &&
+            (part.type === undefined || ['text', 'input_text', 'output_text'].includes(part.type))
+            ? redactImages(part.text)
+            : '';
+        })
+        .filter(Boolean)
+        .join('\n');
+      if (!text) {
+        return '';
+      }
+      return ['system', 'developer', 'user', 'assistant', 'model', 'tool'].includes(String(role))
+        ? `${role}: ${text}`
+        : text;
+    })
+    .filter(Boolean)
+    .join('\n\n');
+}
 
 /**
  * Detect image format from buffer
