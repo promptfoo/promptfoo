@@ -128,7 +128,7 @@ assert:
 
 `labels` can also be a plain list, such as `[billing, technical, sales]`, with up to 255 options. `value` must match a label exactly. Always set the assertion's `threshold`: it defaults to 1, and the provider's `config.threshold` applies only to `llm-rubric`.
 
-Choice probabilities are relative to the labels you list, so one label can score high even when none fits. Add a catch-all label such as `other` when that can happen.
+Choice probabilities are relative to the labels you list, so one label can score high even when none fits. Add a catch-all label such as `other` when that can happen. Label order has a small effect on the probabilities, and labels that look like integers, such as `1` and `2`, are always sent in ascending order.
 
 ## Test your own questions
 
