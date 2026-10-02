@@ -118,7 +118,7 @@ describe('AssertsForm', () => {
       );
 
       await user.click(screen.getByRole('combobox', { name: 'Type' }));
-      await user.click(await screen.findByRole('option', { name: type, exact: true }));
+      await user.click(await screen.findByRole('option', { name: type }));
 
       expect(onAdd).toHaveBeenCalledWith([{ type, value: 'expected output' }]);
     },
