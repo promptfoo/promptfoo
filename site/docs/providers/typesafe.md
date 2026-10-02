@@ -92,7 +92,9 @@ List levels from low to high. The API accepts up to 10.
 
 ### Thresholds
 
-Set the pass cutoff with the provider's `config.threshold`. If the assertion also sets `threshold`, both must pass, so the effective cutoff is the higher of the two. `not-llm-rubric` inverts the result.
+Set the pass cutoff with the provider's `config.threshold`, a number from 0 to 1. If the assertion also sets `threshold`, both must pass, so the effective cutoff is the higher of the two.
+
+`not-llm-rubric` passes when the score is below the threshold, so raising `threshold` makes negated assertions easier to pass. Give them their own provider config if they need a different cutoff.
 
 ### Reasons and metadata
 
@@ -103,7 +105,7 @@ Jev Noul probability 0.93 >= threshold 0.5
 Jev Score 1.43 on levels 0–2 (0.715 normalized) >= threshold 0.5; nearest level: "Acknowledges the problem but offers no fix"
 ```
 
-Jev's full answer, including a Score's `probabilities` and `confidence`, is in the grading result's `metadata.typesafe.answer`, next to the model version and request ID.
+Jev's full answer, including a Score's `probabilities` and `confidence`, is in the grading result's `metadata.typesafe.answer`, next to the model version and request ID. The result's `renderedGradingPrompt` shows Promptfoo's standard grading prompt, which is not sent to Jev.
 
 ## Classify with `classifier`
 
@@ -124,7 +126,7 @@ assert:
           sales: Pricing, upgrades, new accounts
 ```
 
-`labels` can also be a plain list, such as `[billing, technical, sales]`, with up to 255 options. Always set the assertion's `threshold`: it defaults to 1, and the provider's `config.threshold` applies only to `llm-rubric`.
+`labels` can also be a plain list, such as `[billing, technical, sales]`, with up to 255 options. `value` must match a label exactly. Always set the assertion's `threshold`: it defaults to 1, and the provider's `config.threshold` applies only to `llm-rubric`.
 
 Choice probabilities are relative to the labels you list, so one label can score high even when none fits. Add a catch-all label such as `other` when that can happen.
 
@@ -184,7 +186,7 @@ providers:
 | -------------- | ------------ | ------------------------- | --------------------------------------------------------------------------- |
 | `apiKey`       | All          | `TYPESAFE_API_KEY`        | TypeSafe API key                                                            |
 | `apiBaseUrl`   | All          | `https://api.typesafe.ai` | API base URL                                                                |
-| `threshold`    | `llm-rubric` | `0.5`                     | Minimum 0–1 score to pass                                                   |
+| `threshold`    | `llm-rubric` | `0.5`                     | Minimum score to pass, from 0 to 1                                          |
 | `levels`       | `llm-rubric` | -                         | Two or more Score levels, low to high. Omit to ask a yes/no Noul question   |
 | `instructions` | `classifier` | -                         | What to decide                                                              |
 | `labels`       | `classifier` | -                         | The options: a list of labels, or a map of label to description             |
