@@ -64,6 +64,7 @@ vi.mock('cache-manager', () => ({
     const expiresAt = new Map<string, number>();
     const inflight = new Map<string, Promise<unknown>>();
     const memoryStore = {
+      opts: { store: cache },
       iterator: vi.fn().mockImplementation(async function* (namespace?: string) {
         const prefix = namespace ? `${namespace}:` : undefined;
         for (const [key, value] of cache.entries()) {
@@ -176,7 +177,9 @@ vi.mock('cache-manager', () => ({
 // Mock keyv and keyv-file with proper class constructors
 vi.mock('keyv', () => {
   return {
-    Keyv: class MockKeyv {},
+    Keyv: class MockKeyv {
+      constructor(public opts: { store?: object } = {}) {}
+    },
   };
 });
 
@@ -254,7 +257,7 @@ describe('cache configuration', () => {
     // In production, stores array should have at least one store (disk cache)
     expect(cache.stores.length).toBeGreaterThan(0);
     expect(cache.stores[0]?.constructor?.name).toBe('MockKeyv');
-    const expectedCachePath = path.join('/mock/config/path', 'cache');
+    const expectedCachePath = path.resolve('/mock/config/path', 'cache');
     expect(fs.existsSync).toHaveBeenCalledWith(expectedCachePath);
     expect(fs.mkdirSync).toHaveBeenCalledWith(expectedCachePath, { recursive: true });
   });
@@ -296,7 +299,7 @@ describe('cache configuration', () => {
 
     expect(cacheModule.claimCacheKeyOnce(key)).toBe(true);
     await cacheModule.clearCache();
-    expect(rmSync).toHaveBeenCalledWith(path.join('/custom/cache/path', 'claims'), {
+    expect(rmSync).toHaveBeenCalledWith(path.resolve('/custom/cache/path', 'claims'), {
       force: true,
       recursive: true,
     });
@@ -312,7 +315,9 @@ describe('cache configuration', () => {
     mockProcessEnv({ NODE_ENV: 'production' });
     const cacheModule = await import('../src/cache');
     cacheModule.getCache();
-    expect(fs.mkdirSync).toHaveBeenCalledWith('/custom/cache/path', { recursive: true });
+    expect(fs.mkdirSync).toHaveBeenCalledWith(path.resolve('/custom/cache/path'), {
+      recursive: true,
+    });
   });
 
   it('should respect cache configuration from environment', async () => {

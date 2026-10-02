@@ -6,7 +6,7 @@ import chokidar from 'chokidar';
 import dedent from 'dedent';
 import ora from 'ora';
 import { z } from 'zod';
-import { disableCache } from '../cache';
+import { withCacheEnabled } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
@@ -633,7 +633,6 @@ async function doEvalWithEnv(
 
     if (cache === false) {
       logger.info('Cache is disabled.');
-      disableCache();
     }
 
     // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
@@ -942,12 +941,16 @@ async function doEvalWithEnv(
     // Run the evaluation!!!!!!
     let ret;
     try {
-      ret = await evaluate(testSuite, evalRecord, {
+      const resolvedTestSuite = testSuite;
+      const resolvedOptions = {
         ...options,
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
         abortSignal: evaluateOptions.abortSignal,
         isRedteam: Boolean(config.redteam),
-      });
+      };
+      ret = await withCacheEnabled(cache === false ? false : undefined, () =>
+        evaluate(resolvedTestSuite, evalRecord, resolvedOptions),
+      );
 
       // Post-evaluation cleanup for retry-errors mode
       // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics

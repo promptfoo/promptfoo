@@ -213,7 +213,6 @@ export class AnthropicGenericProvider implements ApiProvider {
     string,
     { response: string; expiresAt: number }
   >();
-  private ephemeralCacheClearGeneration = 0;
 
   constructor(
     modelName: string,
@@ -399,13 +398,14 @@ export class AnthropicGenericProvider implements ApiProvider {
       return cache.get<string | undefined>(cacheKey);
     }
 
-    this.syncEphemeralCache(clearGeneration);
-    const entry = this.ephemeralResponseCache.get(ephemeralCacheKey);
+    // The generation identifies both the backend and its most recent clear.
+    const key = `${clearGeneration}:${ephemeralCacheKey}`;
+    const entry = this.ephemeralResponseCache.get(key);
     if (!entry) {
       return undefined;
     }
     if (entry.expiresAt <= Date.now()) {
-      this.ephemeralResponseCache.delete(ephemeralCacheKey);
+      this.ephemeralResponseCache.delete(key);
       return undefined;
     }
     return entry.response;
@@ -424,10 +424,10 @@ export class AnthropicGenericProvider implements ApiProvider {
       return;
     }
 
-    this.syncEphemeralCache(clearGeneration);
+    const key = `${clearGeneration}:${ephemeralCacheKey}`;
 
     if (
-      !this.ephemeralResponseCache.has(ephemeralCacheKey) &&
+      !this.ephemeralResponseCache.has(key) &&
       this.ephemeralResponseCache.size >= MAX_EPHEMERAL_RESPONSE_CACHE_ENTRIES
     ) {
       const oldestKey = this.ephemeralResponseCache.keys().next().value;
@@ -435,17 +435,10 @@ export class AnthropicGenericProvider implements ApiProvider {
         this.ephemeralResponseCache.delete(oldestKey);
       }
     }
-    this.ephemeralResponseCache.set(ephemeralCacheKey, {
+    this.ephemeralResponseCache.set(key, {
       response,
       expiresAt: ttlMs <= 0 ? Number.POSITIVE_INFINITY : Date.now() + ttlMs,
     });
-  }
-
-  private syncEphemeralCache(clearGeneration: number): void {
-    if (this.ephemeralCacheClearGeneration !== clearGeneration) {
-      this.ephemeralResponseCache.clear();
-      this.ephemeralCacheClearGeneration = clearGeneration;
-    }
   }
 
   /**
