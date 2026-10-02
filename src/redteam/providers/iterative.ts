@@ -13,7 +13,7 @@ import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { TokenUsageTracker } from '../../util/tokenUsage';
+import { trackResponseUsage } from '../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
   accumulateGradingResponseTokenUsage,
@@ -294,7 +294,7 @@ export async function runRedteamConversation({
       },
       options,
     );
-    TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
+    trackResponseUsage(redteamProvider.id(), redteamResp);
     accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
     if (redteamProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
@@ -735,7 +735,7 @@ export async function runRedteamConversation({
       options,
     );
 
-    TokenUsageTracker.getInstance().trackResponseUsage(gradingProvider.id(), judgeResp);
+    trackResponseUsage(gradingProvider.id(), judgeResp);
     accumulateGradingResponseTokenUsage(totalTokenUsage, judgeResp);
     if (gradingProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${gradingProvider.delay}ms`);

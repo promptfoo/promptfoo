@@ -19,7 +19,7 @@ import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
-import { TokenUsageTracker } from '../../../util/tokenUsage';
+import { trackResponseUsage } from '../../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
   accumulateGradingResponseTokenUsage,
@@ -336,7 +336,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     );
 
     accumulateAttackerTokenUsage(totalTokenUsage, response);
-    TokenUsageTracker.getInstance().trackResponseUsage(redTeamProvider.id(), response);
+    trackResponseUsage(redTeamProvider.id(), response);
 
     if (response.error) {
       throw new Error(`Failed to generate voice prompt: ${response.error}`);
@@ -434,7 +434,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
       ]),
     );
 
-    TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), evalResponse);
+    trackResponseUsage(scoringProvider.id(), evalResponse);
 
     if (evalResponse.error) {
       logger.warn(`[VoiceCrescendo] Evaluation error: ${evalResponse.error}`);

@@ -9,6 +9,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { evaluate, runEval } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { isAgentWorkspace } from '../../src/providers/agentWorkspace';
+import { getProviderTokenUsage } from '../../src/util/tokenUsage';
 import { mockProcessEnv } from '../util/utils';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
@@ -30,7 +31,10 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
       fs.writeFileSync(path.join(dir, 'run.txt'), `repeat ${context?.repeatIndex}\n`);
       workspaces.push(dir);
       liveWorkspaceCounts.push(workspaces.filter((workspace) => fs.existsSync(workspace)).length);
-      return { output: `workspace-${workspaces.length - 1}` };
+      return {
+        output: `workspace-${workspaces.length - 1}`,
+        tokenUsage: { total: 7, prompt: 4, completion: 3 },
+      };
     }),
   });
 
@@ -41,7 +45,10 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
       const index = Number(/workspace-(\d+)/.exec(prompt)?.[1]);
       const exists = fs.existsSync(path.join(workspaces[index], 'run.txt'));
       existedDuringGrading.push(exists);
-      return { output: JSON.stringify({ pass: exists, score: exists ? 1 : 0, reason: 'checked' }) };
+      return {
+        output: JSON.stringify({ pass: exists, score: exists ? 1 : 0, reason: 'checked' }),
+        tokenUsage: { total: 3, prompt: 2, completion: 1 },
+      };
     }),
   });
 
@@ -80,6 +87,10 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
       const summary = await evalRecord.toEvaluateSummary();
 
       expect(summary.stats.successes).toBe(3);
+      expect(summary.stats.tokenUsage.assertions).toMatchObject({ total: 9, numRequests: 3 });
+      expect([...getProviderTokenUsage(evalRecord).values()]).toEqual([
+        expect.objectContaining({ total: 21, prompt: 12, completion: 9, numRequests: 3 }),
+      ]);
       expect(new Set(workspaces).size).toBe(3);
       expect(existedDuringGrading).toEqual([true, true, true]);
       expect(Math.max(...liveWorkspaceCounts)).toBeLessThanOrEqual(maxConcurrency);

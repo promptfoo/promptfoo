@@ -17,7 +17,7 @@ import {
 import { getTargetResponse, redteamProviderManager } from '../../../src/redteam/providers/shared';
 import * as remoteGeneration from '../../../src/redteam/remoteGeneration';
 import { getNunjucksEngine } from '../../../src/util/templates';
-import { TokenUsageTracker } from '../../../src/util/tokenUsage';
+import { getProviderTokenUsage, withTokenUsageTracking } from '../../../src/util/tokenUsage';
 import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
@@ -128,7 +128,6 @@ describe('RedteamIterativeProvider', () => {
     beforeEach(() => {
       mockRedteamProvider = createMockProvider({ id: 'mock-provider' });
       mockRedteamProvider.callApi.mockReset();
-      TokenUsageTracker.getInstance().resetProviderUsage(mockRedteamProvider.id());
     });
 
     it('should evaluate response correctly without penalized phrase', async () => {
@@ -209,22 +208,26 @@ describe('RedteamIterativeProvider', () => {
       });
       const tokenUsage = createEmptyTokenUsage();
 
-      await evaluateResponse(
-        mockRedteamProvider,
-        'Judge prompt',
-        'Target response',
-        'Previous response',
-        false,
-        tokenUsage,
+      const result = await withTokenUsageTracking(() =>
+        evaluateResponse(
+          mockRedteamProvider,
+          'Judge prompt',
+          'Target response',
+          'Previous response',
+          false,
+          tokenUsage,
+        ),
       );
 
       expect(tokenUsage).toMatchObject({
         assertions: { total: 19, numRequests: 1 },
         incurredTokenUsage: { assertions: { total: 0, numRequests: 0 } },
       });
-      expect(
-        TokenUsageTracker.getInstance().getProviderUsage(mockRedteamProvider.id()),
-      ).toMatchObject({ total: 0, cached: 19, numRequests: 0 });
+      expect(getProviderTokenUsage(result).get(mockRedteamProvider.id())).toMatchObject({
+        total: 0,
+        cached: 19,
+        numRequests: 0,
+      });
     });
 
     it('should apply penalty for penalized phrases', async () => {
@@ -304,7 +307,6 @@ describe('RedteamIterativeProvider', () => {
     beforeEach(() => {
       mockRedteamProvider = createMockProvider({ id: 'mock-provider' });
       mockRedteamProvider.callApi.mockReset();
-      TokenUsageTracker.getInstance().resetProviderUsage(mockRedteamProvider.id());
     });
 
     it('should generate a new prompt correctly', async () => {
@@ -341,9 +343,14 @@ describe('RedteamIterativeProvider', () => {
         tokenUsage: { total: 23, prompt: 15, completion: 8, numRequests: 1 },
       });
 
-      await expect(getNewPrompt(mockRedteamProvider, [], undefined, usage)).rejects.toMatchObject({
-        message: 'Error from redteam provider: tree attacker failed after inference',
-        tokenUsage: usage,
+      const result = await withTokenUsageTracking(async () => {
+        await expect(getNewPrompt(mockRedteamProvider, [], undefined, usage)).rejects.toMatchObject(
+          {
+            message: 'Error from redteam provider: tree attacker failed after inference',
+            tokenUsage: usage,
+          },
+        );
+        return usage;
       });
 
       expect(usage).toMatchObject({
@@ -351,9 +358,12 @@ describe('RedteamIterativeProvider', () => {
         numRequests: 0,
         attacker: { total: 23, prompt: 15, completion: 8, numRequests: 1 },
       });
-      expect(
-        TokenUsageTracker.getInstance().getProviderUsage(mockRedteamProvider.id()),
-      ).toMatchObject({ total: 23, prompt: 15, completion: 8, numRequests: 1 });
+      expect(getProviderTokenUsage(result).get(mockRedteamProvider.id())).toMatchObject({
+        total: 23,
+        prompt: 15,
+        completion: 8,
+        numRequests: 1,
+      });
     });
 
     it('keeps cached attacker usage in the scan footprint but out of incurred provider totals', async () => {
@@ -364,15 +374,19 @@ describe('RedteamIterativeProvider', () => {
         tokenUsage: { total: 23, prompt: 15, completion: 8, numRequests: 1 },
       });
 
-      await getNewPrompt(mockRedteamProvider, [], undefined, usage);
+      const result = await withTokenUsageTracking(() =>
+        getNewPrompt(mockRedteamProvider, [], undefined, usage),
+      );
 
       expect(usage).toMatchObject({
         attacker: { total: 23, numRequests: 1 },
         incurredTokenUsage: { attacker: { total: 0, numRequests: 0 } },
       });
-      expect(
-        TokenUsageTracker.getInstance().getProviderUsage(mockRedteamProvider.id()),
-      ).toMatchObject({ total: 0, cached: 23, numRequests: 0 });
+      expect(getProviderTokenUsage(result).get(mockRedteamProvider.id())).toMatchObject({
+        total: 0,
+        cached: 23,
+        numRequests: 0,
+      });
     });
 
     it('returns accumulated attacker usage when the tree provider fails', async () => {
@@ -1564,11 +1578,7 @@ describe('Metadata Validation with New Fields', () => {
 });
 
 describe('Token Counting', () => {
-  beforeEach(async () => {
-    // Reset TokenUsageTracker between tests to ensure clean state
-    const { TokenUsageTracker } = await import('../../../src/util/tokenUsage');
-    TokenUsageTracker.getInstance().resetAllUsage();
-  });
+  beforeEach(async () => {});
 
   it('should correctly track token usage from target provider responses', async () => {
     const mockTargetProvider = createMockProvider({
