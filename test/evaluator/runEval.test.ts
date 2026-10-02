@@ -1,6 +1,6 @@
 import './setup';
 
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import { runEval } from '../../src/evaluator';
 import * as llmGrading from '../../src/matchers/llmGrading';
@@ -13,24 +13,18 @@ import {
   ResultFailureReason,
   type TestSuite,
 } from '../../src/types/index';
+import { transform as transformOutput } from '../../src/util/transform';
 import { mockGradingApiProviderPasses, resetMockProviders } from './helpers';
 
 describe('runEval', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     resetMockProviders();
   });
 
   afterEach(async () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
-    vi.clearAllMocks();
     await clearCache();
-  });
-
-  afterAll(() => {
-    vi.restoreAllMocks();
-    vi.resetModules();
   });
 
   const mockProvider: ApiProvider = {
@@ -733,6 +727,24 @@ describe('runEval', () => {
       },
       { name: 'unsafe omitted', response: {}, metadataGrade: 'unsafe', shouldGrade: false },
       {
+        name: 'unsafe companion assertion',
+        response: {},
+        metadataGrade: 'unsafe',
+        companion: true,
+        shouldGrade: false,
+        expected: { success: false, score: 0.5, failureReason: ResultFailureReason.ASSERT },
+        expectedError: 'required',
+      },
+      {
+        name: 'unsafe test transform',
+        response: { output: null },
+        metadataGrade: 'unsafe',
+        transform: 'JSON.parse(output)',
+        shouldGrade: false,
+        expected: { success: false, score: 0, failureReason: ResultFailureReason.ERROR },
+        expectedError: 'Unexpected end of JSON input',
+      },
+      {
         name: 'nested assertion',
         response: { output: null },
         metadataGrade: 'unsafe',
@@ -754,7 +766,23 @@ describe('runEval', () => {
       },
     ])(
       'grades $name output through the existing refusal controls',
-      async ({ response, metadataGrade, value, nested, shouldGrade }) => {
+      async ({
+        response,
+        metadataGrade,
+        value,
+        nested,
+        companion,
+        transform,
+        shouldGrade,
+        expected,
+        expectedError,
+      }) => {
+        if (transform) {
+          const actual = await vi.importActual<typeof import('../../src/util/transform')>(
+            '../../src/util/transform',
+          );
+          vi.mocked(transformOutput).mockImplementationOnce(actual.transform);
+        }
         const providerResponse: ProviderResponse = Object.freeze(response);
         const provider: ApiProvider = {
           id: () => 'local-image-control-fixture',
@@ -783,6 +811,7 @@ describe('runEval', () => {
               imageDatasetInputVar: 'image',
               combinedGrade: metadataGrade,
               safe: metadataGrade === 'safe',
+              vlguardSafe: metadataGrade === 'safe',
               imageGrade: 'safe',
               textGrade: 'safe',
               vlsuCategory: 'C4',
@@ -796,13 +825,23 @@ describe('runEval', () => {
               image:
                 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC',
             },
-            assert: nested ? [{ type: 'assert-set', assert: [assertion] }] : [assertion],
+            assert: nested
+              ? [{ type: 'assert-set', assert: [assertion] }]
+              : [
+                  assertion,
+                  ...(companion ? [{ type: 'contains' as const, value: 'required' }] : []),
+                ],
+            options: { transform },
           },
           conversations: {},
           registers: {},
         });
-        expect(result.success).toBe(!shouldGrade);
-        expect(result.score).toBe(shouldGrade ? 0 : 1);
+        expect(result).toMatchObject(
+          expected ?? { success: !shouldGrade, score: Number(!shouldGrade) },
+        );
+        if (expectedError) {
+          expect(result.error).toContain(expectedError);
+        }
         expect(grade).toHaveBeenCalledTimes(Number(shouldGrade));
         if (shouldGrade) {
           expect(grade.mock.calls[0][1]).toBe('');

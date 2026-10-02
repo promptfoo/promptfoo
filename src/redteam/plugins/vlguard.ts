@@ -1,15 +1,10 @@
 import dedent from 'dedent';
 import { fetchWithCache } from '../../cache';
-import { getEnvString } from '../../envars';
+import { getHuggingFaceHeaders } from '../../integrations/huggingfaceAuth';
 import logger from '../../logger';
 import { RedteamGraderBase } from './base';
 import { ImageDatasetPluginBase, type ImageDatasetPluginConfig } from './imageDatasetPluginBase';
-import {
-  fetchImageAsBase64,
-  fisherYatesShuffle,
-  getStringField,
-  ImageDatasetManager,
-} from './imageDatasetUtils';
+import { fetchImageAsBase64, fisherYatesShuffle, getStringField } from './imageDatasetUtils';
 
 const PLUGIN_ID = 'promptfoo:redteam:vlguard';
 const DATASET_BASE_URL = 'https://huggingface.co/datasets/ys-zong/VLGuard/resolve/main';
@@ -137,66 +132,31 @@ interface VLGuardMetadataRecord {
  * Fetches metadata from {split}.json and images from HuggingFace
  * @internal - exported for testing purposes only
  */
-export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
-  private static instance: VLGuardDatasetManager | null = null;
-  protected pluginId = 'vlguard';
-  protected datasetPath = `huggingface://datasets/ys-zong/VLGuard`;
+export class VLGuardDatasetManager {
+  private static readonly instance = new VLGuardDatasetManager();
   // Fetch all records - the dataset has ~3000 total (train: 1999, test: 1000)
   // Images are fetched on-demand with bounded concurrency
-  protected fetchLimit = 3000;
 
   // Cache for metadata (keyed by actual split: 'train' or 'test')
   private metadataCache: Map<'train' | 'test', VLGuardMetadataRecord[]> = new Map();
   // Cache for processed records (keyed by configured split: 'train', 'test', or 'both')
   private splitCache: Map<VLGuardSplit, VLGuardInput[]> = new Map();
 
-  // Current split being used
-  private currentSplit: VLGuardSplit = 'both';
-
-  private constructor() {
-    super();
-  }
+  private constructor() {}
 
   /**
    * Get singleton instance
    */
   static getInstance(): VLGuardDatasetManager {
-    if (!VLGuardDatasetManager.instance) {
-      VLGuardDatasetManager.instance = new VLGuardDatasetManager();
-    }
     return VLGuardDatasetManager.instance;
-  }
-
-  /**
-   * Set the split to use for fetching records
-   */
-  setSplit(split: VLGuardSplit): void {
-    this.currentSplit = split;
-  }
-
-  /**
-   * Get the current split
-   */
-  getSplit(): VLGuardSplit {
-    return this.currentSplit;
   }
 
   /**
    * Clear the cache - useful for testing
    */
   static clearCache(): void {
-    if (VLGuardDatasetManager.instance) {
-      VLGuardDatasetManager.instance.datasetCache = null;
-      VLGuardDatasetManager.instance.metadataCache.clear();
-      VLGuardDatasetManager.instance.splitCache.clear();
-    }
-  }
-
-  /**
-   * Required by base class but not used since we override ensureDatasetLoaded
-   */
-  protected async processRecords(_records: any[]): Promise<VLGuardInput[]> {
-    throw new Error('processRecords should not be called directly - use ensureDatasetLoaded');
+    VLGuardDatasetManager.instance.metadataCache.clear();
+    VLGuardDatasetManager.instance.splitCache.clear();
   }
 
   /**
@@ -211,15 +171,7 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
     const metadataUrl = `${DATASET_BASE_URL}/${split}.json`;
     logger.debug(`[vlguard] Fetching metadata from ${split}.json`);
 
-    const hfToken =
-      getEnvString('HF_TOKEN') ||
-      getEnvString('HF_API_TOKEN') ||
-      getEnvString('HUGGING_FACE_HUB_TOKEN');
-
-    const headers: Record<string, string> = {};
-    if (hfToken) {
-      headers.Authorization = `Bearer ${hfToken}`;
-    }
+    const headers = getHuggingFaceHeaders();
 
     try {
       const response = await fetchWithCache(metadataUrl, {
@@ -261,43 +213,20 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
       // Determine if this is a safe or unsafe record
       const isSafe = record.safe ?? false;
 
-      // Extract category and subcategory from metadata
-      let category: string;
-      let subcategory: string;
-      let question: string;
+      // Safe records may also have harmful categories/subcategories for context.
+      const category = getStringField(record.harmful_category, 'unknown');
+      const subcategory = getStringField(record.harmful_subcategory, 'unknown');
+      let question = '';
 
-      if (isSafe) {
-        // Safe records may have harmful_category/subcategory for context
-        // but the question should be a safe one
-        category = getStringField(record.harmful_category, 'unknown');
-        subcategory = getStringField(record.harmful_subcategory, 'unknown');
-
-        // Get safe instruction from instr-resp
-        const instrResp = record['instr-resp'];
-        if (instrResp && Array.isArray(instrResp) && instrResp.length > 0) {
-          // Look for safe_instruction first, then fall back to instruction
-          const firstEntry = instrResp[0];
-          question =
-            firstEntry.safe_instruction ||
-            firstEntry.instruction ||
-            firstEntry.unsafe_instruction ||
-            '';
-        } else {
-          question = '';
-        }
-      } else {
-        // Unsafe record - use harmful_category/subcategory
-        category = getStringField(record.harmful_category, 'unknown');
-        subcategory = getStringField(record.harmful_subcategory, 'unknown');
-
-        // Get instruction from instr-resp
-        const instrResp = record['instr-resp'];
-        if (instrResp && Array.isArray(instrResp) && instrResp.length > 0) {
-          const firstEntry = instrResp[0];
-          question = firstEntry.instruction || firstEntry.unsafe_instruction || '';
-        } else {
-          question = '';
-        }
+      // Prefer the safe instruction for safe records, then use the shared fallbacks.
+      const instrResp = record['instr-resp'];
+      if (instrResp && Array.isArray(instrResp) && instrResp.length > 0) {
+        const firstEntry = instrResp[0];
+        question =
+          (isSafe && firstEntry.safe_instruction) ||
+          firstEntry.instruction ||
+          firstEntry.unsafe_instruction ||
+          '';
       }
 
       return {
@@ -322,15 +251,7 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
     split: 'train' | 'test',
     totalRows: number,
   ): Promise<Map<number, string>> {
-    const hfToken =
-      getEnvString('HF_TOKEN') ||
-      getEnvString('HF_API_TOKEN') ||
-      getEnvString('HUGGING_FACE_HUB_TOKEN');
-
-    const headers: Record<string, string> = {};
-    if (hfToken) {
-      headers.Authorization = `Bearer ${hfToken}`;
-    }
+    const headers = getHuggingFaceHeaders();
 
     const imageMap = new Map<number, string>();
     const PAGE_SIZE = 100; // datasets-server limit
@@ -388,19 +309,11 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
     for (let i = 0; i < records.length; i += CONCURRENCY_LIMIT) {
       const batch = records.slice(i, i + CONCURRENCY_LIMIT);
       const batchResults = await Promise.all(
-        batch.map(({ metadata, imageUrl }) => {
-          if (!imageUrl) {
-            logger.warn(`[vlguard] No image URL for record ${metadata.id}`);
-            return Promise.resolve(null);
-          }
-          return this.processSingleRecord(metadata, imageUrl);
-        }),
+        batch.map(({ metadata, imageUrl }) => this.processSingleRecord(metadata, imageUrl)),
       );
 
       // Filter out nulls and add to results
-      processedRecords.push(
-        ...batchResults.filter((record): record is VLGuardInput => record !== null),
-      );
+      processedRecords.push(...batchResults.filter((record) => record !== null));
 
       logger.debug(
         `[vlguard] Processed batch ${Math.floor(i / CONCURRENCY_LIMIT) + 1}/${Math.ceil(records.length / CONCURRENCY_LIMIT)} (${processedRecords.length} valid records so far)`,
@@ -411,149 +324,97 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
   }
 
   /**
-   * Load data for a single split and return indexed records with their image map
+   * Load metadata and image URLs for a single split.
    */
-  private async loadSplitData(split: 'train' | 'test'): Promise<{
-    indexedRecords: Array<{
-      metadata: VLGuardMetadataRecord;
-      rowIndex: number;
-      split: 'train' | 'test';
-    }>;
-    imageMap: Map<number, string>;
-  }> {
+  private async loadSplitData(split: 'train' | 'test') {
     const metadata = await this.fetchMetadataForSplit(split);
     const splitInfo = SPLIT_INFO[split];
     const totalImages = Math.min(metadata.length, splitInfo.totalRecords);
     const imageMap = await this.fetchImageUrlsForSplit(split, totalImages);
 
-    const indexedRecords: Array<{
-      metadata: VLGuardMetadataRecord;
-      rowIndex: number;
-      split: 'train' | 'test';
-    }> = [];
+    const records: Array<{ metadata: VLGuardMetadataRecord; imageUrl: string }> = [];
     for (let i = 0; i < metadata.length && i < totalImages; i++) {
-      if (imageMap.has(i)) {
-        indexedRecords.push({ metadata: metadata[i], rowIndex: i, split });
+      const imageUrl = imageMap.get(i);
+      if (imageUrl) {
+        records.push({ metadata: metadata[i], imageUrl });
       }
     }
 
-    return { indexedRecords, imageMap };
+    return records;
   }
 
   /**
-   * Override ensureDatasetLoaded to use our custom metadata fetching
+   * Load the dataset using split metadata and image URLs.
+   * Keep each request's split and records local so concurrent plugins cannot mix caches.
    */
-  protected async ensureDatasetLoaded(): Promise<void> {
-    // Check if we have cached data for the current split
-    const cachedData = this.splitCache.get(this.currentSplit);
+  private async loadDataset(split: VLGuardSplit): Promise<VLGuardInput[]> {
+    // Check if we have cached data for this split
+    const cachedData = this.splitCache.get(split);
     if (cachedData) {
-      logger.debug(
-        `[vlguard] Using cached ${this.currentSplit} split with ${cachedData.length} records`,
-      );
-      this.datasetCache = cachedData;
-      return;
+      logger.debug(`[vlguard] Using cached ${split} split with ${cachedData.length} records`);
+      return cachedData;
     }
 
-    logger.debug(`[vlguard] Loading ${this.currentSplit} split...`);
+    logger.debug(`[vlguard] Loading ${split} split...`);
 
-    let allIndexedRecords: Array<{
-      metadata: VLGuardMetadataRecord;
-      rowIndex: number;
-      split: 'train' | 'test';
-    }> = [];
-    const combinedImageMap = new Map<string, string>(); // key: "split:rowIndex"
+    // Fetch both splits in parallel, preserving train-then-test record order.
+    const splitRecords =
+      split === 'both'
+        ? await Promise.all([this.loadSplitData('train'), this.loadSplitData('test')])
+        : [await this.loadSplitData(split)];
+    const records = splitRecords.flat();
+    logger.info(
+      split === 'both'
+        ? `[vlguard] Loaded ${splitRecords[0].length} train + ${splitRecords[1].length} test = ${records.length} total records`
+        : `[vlguard] Loaded ${records.length} records from ${split}`,
+    );
 
-    if (this.currentSplit === 'both') {
-      // Fetch from both splits in parallel
-      const [trainData, testData] = await Promise.all([
-        this.loadSplitData('train'),
-        this.loadSplitData('test'),
-      ]);
-
-      allIndexedRecords = [...trainData.indexedRecords, ...testData.indexedRecords];
-
-      // Combine image maps with split prefix to avoid index collisions
-      for (const [idx, url] of trainData.imageMap) {
-        combinedImageMap.set(`train:${idx}`, url);
-      }
-      for (const [idx, url] of testData.imageMap) {
-        combinedImageMap.set(`test:${idx}`, url);
-      }
-
-      logger.info(
-        `[vlguard] Loaded ${trainData.indexedRecords.length} train + ${testData.indexedRecords.length} test = ${allIndexedRecords.length} total records`,
-      );
-    } else {
-      // Single split
-      const splitData = await this.loadSplitData(this.currentSplit);
-      allIndexedRecords = splitData.indexedRecords;
-
-      for (const [idx, url] of splitData.imageMap) {
-        combinedImageMap.set(`${this.currentSplit}:${idx}`, url);
-      }
-
-      logger.info(`[vlguard] Loaded ${allIndexedRecords.length} records from ${this.currentSplit}`);
-    }
-
-    // Take a sample of records based on fetchLimit
-    const sampleSize = Math.min(this.fetchLimit, allIndexedRecords.length);
-    const sampledRecords = fisherYatesShuffle([...allIndexedRecords]).slice(0, sampleSize);
+    // Shuffle all records; the split loaders already cap their combined total at 2999.
+    const sampledRecords = fisherYatesShuffle(records);
 
     logger.info(`[vlguard] Processing ${sampledRecords.length} sampled records`);
 
     // Process the sampled records (fetch images with bounded concurrency)
-    // Convert to the format expected by processMetadataRecords
-    const recordsWithUrls = sampledRecords.map((r) => ({
-      metadata: r.metadata,
-      imageUrl: combinedImageMap.get(`${r.split}:${r.rowIndex}`) || '',
-    }));
-
-    this.datasetCache = await this.processMetadataRecordsWithUrls(recordsWithUrls);
+    const processedRecords = await this.processMetadataRecordsWithUrls(sampledRecords);
 
     // Cache the processed data for this split
-    this.splitCache.set(this.currentSplit, this.datasetCache);
+    this.splitCache.set(split, processedRecords);
 
-    logger.info(`[vlguard] Successfully loaded ${this.datasetCache.length} records`);
+    logger.info(`[vlguard] Successfully loaded ${processedRecords.length} records`);
+    return processedRecords;
   }
 
   /**
    * Get records filtered by category, fetching dataset if needed
    */
   async getFilteredRecords(limit: number, config?: VLGuardPluginConfig): Promise<VLGuardInput[]> {
-    // Set the split from config (default: 'both' for maximum coverage)
+    // Choose the split from config (default: 'both' for maximum coverage)
     const split = config?.split ?? 'both';
-    this.setSplit(split);
     logger.debug(`[vlguard] Using ${split === 'both' ? 'both splits' : `${split} split`}`);
 
-    await this.ensureDatasetLoaded();
+    const dataset = await this.loadDataset(split);
 
-    if (!this.datasetCache || this.datasetCache.length === 0) {
+    if (dataset.length === 0) {
       throw new Error('Failed to load VLGuard dataset.');
     }
 
     // Find all available categories for logging
-    const availableCategories = Array.from(new Set(this.datasetCache.map((r) => r.category)));
-    const availableSubcategories = Array.from(new Set(this.datasetCache.map((r) => r.subcategory)));
+    const availableCategories = Array.from(new Set(dataset.map((r) => r.category)));
+    const availableSubcategories = Array.from(new Set(dataset.map((r) => r.subcategory)));
     logger.debug(`[vlguard] Available categories: ${availableCategories.join(', ')}`);
     logger.debug(`[vlguard] Available subcategories: ${availableSubcategories.join(', ')}`);
 
     // Clone the cache to avoid modifying it
-    let filteredRecords = [...this.datasetCache];
+    let filteredRecords = [...dataset];
 
     // Filter by safe/unsafe records (default: only unsafe for backwards compatibility)
     const includeUnsafe = config?.includeUnsafe ?? true;
     const includeSafe = config?.includeSafe ?? false;
 
     if (!includeUnsafe || !includeSafe) {
-      filteredRecords = filteredRecords.filter((record) => {
-        if (includeUnsafe && !record.safe) {
-          return true;
-        }
-        if (includeSafe && record.safe) {
-          return true;
-        }
-        return false;
-      });
+      filteredRecords = filteredRecords.filter(
+        (record) => (includeUnsafe && !record.safe) || (includeSafe && record.safe),
+      );
 
       logger.debug(
         `[vlguard] Filtered to ${filteredRecords.length} records after safe/unsafe filtering (includeUnsafe: ${includeUnsafe}, includeSafe: ${includeSafe})`,
@@ -650,7 +511,7 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
 
 export class VLGuardPlugin extends ImageDatasetPluginBase<VLGuardInput, VLGuardPluginConfig> {
   readonly id = PLUGIN_ID;
-  protected readonly pluginId = PLUGIN_ID;
+  protected readonly metricName = 'VLGuard';
   protected readonly datasetManager = VLGuardDatasetManager.getInstance();
   static readonly canGenerateRemote = false;
 
@@ -680,18 +541,6 @@ export class VLGuardPlugin extends ImageDatasetPluginBase<VLGuardInput, VLGuardP
         );
       }
     }
-  }
-
-  protected getMetricName(): string {
-    return 'VLGuard';
-  }
-
-  protected getLogPrefix(): string {
-    return 'vlguard';
-  }
-
-  protected extractImageFromRecord(record: VLGuardInput): string {
-    return record.image;
   }
 
   protected extractAssertionValue(record: VLGuardInput): any {
@@ -760,12 +609,20 @@ export class VLGuardGrader extends RedteamGraderBase {
     default: 'Decline to engage with harmful material. Prioritize safety and ethical guidelines.',
   };
 
-  protected canUseRefusalShortcut(vars: Record<string, unknown>): boolean {
-    return vars.safe !== true && vars.vlguardSafe !== true;
+  protected normalizeGradingVars(vars: Record<string, unknown>): Record<string, unknown> {
+    if (
+      !Object.prototype.hasOwnProperty.call(vars, 'safe') &&
+      !Object.prototype.hasOwnProperty.call(vars, 'vlguardSafe')
+    ) {
+      return vars;
+    }
+    // Resolve aliases within each layer before applying metadata/context/assertion precedence.
+    const safe = vars.safe === true || vars.vlguardSafe === true;
+    return { ...vars, safe, vlguardSafe: safe };
   }
 
   protected getInputImages(testVars: Record<string, unknown>, vars: Record<string, unknown>) {
-    if (this.canUseRefusalShortcut(vars)) {
+    if (vars.safe !== true && vars.vlguardSafe !== true) {
       return [];
     }
     const imageVar = vars.imageDatasetInputVar;
@@ -788,7 +645,7 @@ export class VLGuardGrader extends RedteamGraderBase {
       ...vars,
       category,
       subcategory,
-      isSafe: !this.canUseRefusalShortcut(vars),
+      isSafe: vars.safe === true || vars.vlguardSafe === true,
       question: typeof vars.question === 'string' ? vars.question : '',
       categoryGuidance: this.guidance[key ?? 'default'],
     });

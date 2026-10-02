@@ -17,12 +17,7 @@ import type { Assertion, AtomicTestCase, GradingResult } from '../../../src/type
 type TestProvider = ReturnType<typeof createMockProvider>;
 const mockLoadTools = vi.hoisted(() => vi.fn());
 
-vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    matchesLlmRubric: vi.fn(),
-  };
-});
+vi.mock('../../../src/matchers/llmGrading');
 
 vi.mock('../../../src/providers/openai/agents-loader', () => ({
   loadTools: mockLoadTools,
@@ -39,8 +34,6 @@ vi.mock('../../../src/util/file', async (importOriginal) => {
       }
       return tools;
     }),
-
-    renderVarsInObject: vi.fn(),
   };
 });
 
@@ -72,7 +65,6 @@ describe('RedteamPluginBase', () => {
   afterEach(() => {
     cliState.config = {};
     mockLoadTools.mockReset();
-    vi.clearAllMocks();
   });
 
   it('should generate test cases correctly', async () => {
@@ -1263,7 +1255,6 @@ describe('RedteamGraderBase', () => {
     mockTest = {
       metadata: { purpose: 'test-purpose', harmCategory: 'test-harm' },
     } as AtomicTestCase;
-    vi.clearAllMocks();
   });
 
   it('should throw an error if test is missing purpose metadata', async () => {
@@ -2107,7 +2098,27 @@ describe('RedteamGraderBase', () => {
       expect(matchesLlmRubric).not.toHaveBeenCalled();
     });
 
-    it('should grade empty responses when provider response images are present', async () => {
+    it.each<[string, Parameters<RedteamGraderBase['getResult']>[7]]>([
+      [
+        'should grade empty responses when provider response images are present',
+        {
+          providerResponse: {
+            output: '',
+            images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+          },
+        },
+      ],
+      [
+        'should grade empty responses when strategy image outputs are present',
+        {
+          imageOutputs: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+          providerResponse: {
+            output: '',
+            images: [{ data: 'data:image/png;base64,ignored', mimeType: 'image/png' }],
+          },
+        },
+      ],
+    ])('%s', async (_name, gradingContext) => {
       const mockResult: GradingResult = {
         pass: false,
         score: 0,
@@ -2124,12 +2135,7 @@ describe('RedteamGraderBase', () => {
         undefined,
         undefined,
         undefined,
-        {
-          providerResponse: {
-            output: '',
-            images,
-          },
-        },
+        gradingContext,
       );
 
       expect(result.grade).toEqual(mockResult);
@@ -2143,48 +2149,6 @@ describe('RedteamGraderBase', () => {
           providerResponse: {
             output: '',
             images,
-          },
-        },
-      );
-    });
-
-    it('should grade empty responses when strategy image outputs are present', async () => {
-      const mockResult: GradingResult = {
-        pass: false,
-        score: 0,
-        reason: 'Image violates policy',
-      };
-      const imageOutputs = [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }];
-      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
-
-      const result = await grader.getResult(
-        'test prompt',
-        '',
-        mockTest,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {
-          imageOutputs,
-          providerResponse: {
-            output: '',
-            images: [{ data: 'data:image/png;base64,ignored', mimeType: 'image/png' }],
-          },
-        },
-      );
-
-      expect(result.grade).toEqual(mockResult);
-      expect(matchesLlmRubric).toHaveBeenCalledWith(
-        expect.any(String),
-        '',
-        expect.any(Object),
-        undefined,
-        undefined,
-        {
-          providerResponse: {
-            output: '',
-            images: imageOutputs,
           },
         },
       );
@@ -2930,14 +2894,6 @@ describe('RedteamGraderBase', () => {
   });
 
   describe('gradingGuidance + graderExamples integration', () => {
-    let _testProvider: TestProvider;
-
-    beforeEach(() => {
-      _testProvider = createMockProvider({
-        response: createProviderResponse({ output: 'Prompt: test prompt' }),
-      });
-    });
-
     it('should work correctly with both gradingGuidance and graderExamples', async () => {
       const mockResult: GradingResult = {
         pass: false,

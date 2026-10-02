@@ -10,10 +10,6 @@ vi.mock('../../src/cache', () => ({
   fetchWithCache: vi.fn(),
 }));
 
-vi.mock('../../src/util/fetch/index.ts', () => ({
-  fetchWithProxy: vi.fn(),
-}));
-
 vi.mock('../../src/envars', () => ({
   getEnvString: vi.fn().mockReturnValue(''),
   isCI: vi.fn().mockReturnValue(false),
@@ -52,6 +48,7 @@ describe('huggingfaceDatasets', () => {
       expect(result.queryParams.get('split')).toBe('train');
       expect(result.queryParams.get('config')).toBe('custom');
       expect(result.queryParams.get('limit')).toBe('10');
+      expect(result.queryParams.toString()).toBe('split=train&config=custom&limit=10');
     });
 
     it('should override default parameters with user parameters', () => {
@@ -130,6 +127,8 @@ describe('huggingfaceDatasets', () => {
 
     await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
 
+    expect(getEnvString).not.toHaveBeenCalledWith('HF_API_TOKEN');
+    expect(getEnvString).not.toHaveBeenCalledWith('HUGGING_FACE_HUB_TOKEN');
     expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
       'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&offset=0&length=100',
       expect.objectContaining({
@@ -164,6 +163,7 @@ describe('huggingfaceDatasets', () => {
 
     await fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 1);
 
+    expect(getEnvString).not.toHaveBeenCalledWith('HUGGING_FACE_HUB_TOKEN');
     expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
@@ -332,7 +332,7 @@ describe('huggingfaceDatasets', () => {
   });
 
   it('should respect user-specified limit parameter (single request optimization)', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+    const response = {
       data: {
         num_rows_total: 5,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
@@ -341,7 +341,8 @@ describe('huggingfaceDatasets', () => {
       cached: false,
       status: 200,
       statusText: 'OK',
-    } as any);
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(response);
 
     const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset?limit=2');
 
@@ -354,6 +355,9 @@ describe('huggingfaceDatasets', () => {
 
     expect(tests).toHaveLength(2);
     expect(tests.map((t) => t.vars?.text)).toEqual(['First', 'Second']);
+    expect(tests[0].vars).toBe(response.data.rows[0].row);
+    expect(tests[0]).not.toBe(tests[1]);
+    expect(tests[0].options).not.toBe(tests[1].options);
 
     // Check that disableVarExpansion is set for all test cases
     tests.forEach((test) => {
@@ -473,19 +477,23 @@ describe('huggingfaceDatasets', () => {
     it('should include rows from concurrent fetches without duplicates', async () => {
       const totalRows = 400;
       const rowPrefix = 'x'.repeat(300);
+      const fetchedRows: unknown[] = [];
 
       vi.mocked(fetchWithCache).mockImplementation(async (url) => {
         const searchParams = new URL(String(url)).searchParams;
         const offset = Number.parseInt(searchParams.get('offset') ?? '0', 10);
         const length = Number.parseInt(searchParams.get('length') ?? '100', 10);
 
+        const rows = Array.from({ length }, (_, i) => ({
+          row: { text: `${rowPrefix}${offset + i + 1}` },
+        }));
+        fetchedRows.push(...rows.map(({ row }) => row));
+
         return {
           data: {
             num_rows_total: totalRows,
             features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
-            rows: Array.from({ length }, (_, i) => ({
-              row: { text: `${rowPrefix}${offset + i + 1}` },
-            })),
+            rows,
           },
           cached: false,
           status: 200,
@@ -503,6 +511,9 @@ describe('huggingfaceDatasets', () => {
       expect(tests).toHaveLength(totalRows);
       expect(texts).toContain(`${rowPrefix}150`);
       expect(new Set(texts).size).toBe(totalRows);
+      expect(tests.every(({ vars }) => fetchedRows.includes(vars))).toBe(true);
+      expect(new Set(tests).size).toBe(tests.length);
+      expect(new Set(tests.map(({ options }) => options)).size).toBe(tests.length);
     });
 
     it('should adapt page size based on row size', async () => {

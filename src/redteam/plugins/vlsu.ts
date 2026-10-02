@@ -5,9 +5,9 @@ import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import { RedteamGraderBase } from './base';
 import { ImageDatasetPluginBase, type ImageDatasetPluginConfig } from './imageDatasetPluginBase';
-import { fetchImageAsBase64, fisherYatesShuffle, ImageDatasetManager } from './imageDatasetUtils';
+import { fetchImageAsBase64, fisherYatesShuffle } from './imageDatasetUtils';
 
-import type { ApiProvider, Assertion, TestCase } from '../../types';
+import type { ApiProvider, TestCase } from '../../types';
 
 const PLUGIN_ID = 'promptfoo:redteam:vlsu';
 
@@ -166,7 +166,6 @@ interface VLSUInput {
   imageCategory: string;
   textCategory: string;
   combinedCategory: string;
-  webPath: string;
   uuid: string;
   severityPattern: string; // e.g., 'safe_safe_unsafe'
 }
@@ -235,27 +234,18 @@ function normalizeGrade(grade: string): VLSUGrade {
  * DatasetManager to handle VLSU dataset caching and filtering
  * Fetches CSV from GitHub and images from web URLs
  */
-export class VLSUDatasetManager extends ImageDatasetManager<VLSUInput> {
-  private static instance: VLSUDatasetManager | null = null;
-
-  protected pluginId = 'vlsu';
-  protected datasetPath = VLSU_CSV_URL;
-  protected fetchLimit = 10000; // CSV is ~8K rows
+export class VLSUDatasetManager {
+  private static readonly instance = new VLSUDatasetManager();
 
   // CSV data cache
   private csvCache: VLSURawRecord[] | null = null;
 
-  private constructor() {
-    super();
-  }
+  private constructor() {}
 
   /**
    * Get singleton instance
    */
   static getInstance(): VLSUDatasetManager {
-    if (!VLSUDatasetManager.instance) {
-      VLSUDatasetManager.instance = new VLSUDatasetManager();
-    }
     return VLSUDatasetManager.instance;
   }
 
@@ -263,17 +253,7 @@ export class VLSUDatasetManager extends ImageDatasetManager<VLSUInput> {
    * Clear all caches
    */
   static clearCache(): void {
-    if (VLSUDatasetManager.instance) {
-      VLSUDatasetManager.instance.csvCache = null;
-      VLSUDatasetManager.instance.datasetCache = null;
-    }
-  }
-
-  /**
-   * Required by base class but not used since we override ensureDatasetLoaded
-   */
-  protected async processRecords(_records: unknown[]): Promise<VLSUInput[]> {
-    throw new Error('processRecords should not be called directly - use getFilteredRecords');
+    VLSUDatasetManager.instance.csvCache = null;
   }
 
   /**
@@ -357,7 +337,6 @@ export class VLSUDatasetManager extends ImageDatasetManager<VLSUInput> {
             imageCategory: extractCategoryCode(record.image_category),
             textCategory: extractCategoryCode(record.text_category),
             combinedCategory: extractCategoryCode(record.combined_category),
-            webPath: record.web_path,
             uuid: record.uuid,
             severityPattern: computeSeverityPattern(imageGrade, textGrade, combinedGrade),
           };
@@ -428,9 +407,7 @@ export class VLSUDatasetManager extends ImageDatasetManager<VLSUInput> {
     // Filter by grades
     if (config?.grades && config.grades.length > 0) {
       const gradeSet = new Set(config.grades.map((g) => g.toLowerCase()));
-      filtered = filtered.filter((r) =>
-        gradeSet.has(normalizeGrade(r.consensus_combined_grade).toLowerCase()),
-      );
+      filtered = filtered.filter((r) => gradeSet.has(normalizeGrade(r.consensus_combined_grade)));
       logger.debug(`[vlsu] Grade filter: ${filtered.length} records`);
     }
 
@@ -459,8 +436,7 @@ export class VLSUDatasetManager extends ImageDatasetManager<VLSUInput> {
     filtered = fisherYatesShuffle([...filtered]);
 
     // Sample more than needed to account for broken images
-    const sampleSize = Math.min(filtered.length, limit * 2);
-    const sampled = filtered.slice(0, sampleSize);
+    const sampled = filtered.slice(0, limit * 2);
 
     logger.info(`[vlsu] Processing ${sampled.length} records (target: ${limit})`);
 
@@ -490,7 +466,7 @@ export class VLSUDatasetManager extends ImageDatasetManager<VLSUInput> {
  */
 export class VLSUPlugin extends ImageDatasetPluginBase<VLSUInput, VLSUPluginConfig> {
   readonly id = PLUGIN_ID;
-  protected readonly pluginId = PLUGIN_ID;
+  protected readonly metricName = 'VLSU';
   protected readonly datasetManager = VLSUDatasetManager.getInstance();
   static readonly canGenerateRemote = false;
 
@@ -552,31 +528,12 @@ export class VLSUPlugin extends ImageDatasetPluginBase<VLSUInput, VLSUPluginConf
     }
   }
 
-  protected getMetricName(): string {
-    return 'VLSU';
-  }
-
-  protected getLogPrefix(): string {
-    return 'vlsu';
-  }
-
-  /**
-   * Extract image from record
-   * The prompt is added separately in generateTests
-   */
-  protected extractImageFromRecord(record: VLSUInput): string {
-    return record.image;
-  }
-
   /**
    * Extract assertion value for grading context
    * These values are spread into the rubric template variables
    */
   protected extractAssertionValue(record: VLSUInput): Record<string, unknown> {
-    const isCompositional =
-      record.imageGrade === 'safe' &&
-      record.textGrade === 'safe' &&
-      record.combinedGrade === 'unsafe';
+    const isCompositional = record.severityPattern === 'safe_safe_unsafe';
 
     const categoryName = CATEGORY_NAMES[record.combinedCategory] || record.combinedCategory;
 
@@ -589,25 +546,15 @@ export class VLSUPlugin extends ImageDatasetPluginBase<VLSUInput, VLSUPluginConf
       imageGrade: record.imageGrade,
       textGrade: record.textGrade,
       isCompositional,
-      categoryGuidance: this.getCategoryGuidance(record.combinedCategory),
+      categoryGuidance: CATEGORY_GUIDANCE[record.combinedCategory] || CATEGORY_GUIDANCE.default,
     };
-  }
-
-  /**
-   * Get category-specific guidance for grading
-   */
-  private getCategoryGuidance(category: string): string {
-    return CATEGORY_GUIDANCE[category] || CATEGORY_GUIDANCE.default;
   }
 
   /**
    * Map record to test case metadata
    */
   protected mapRecordToMetadata(record: VLSUInput): Record<string, unknown> {
-    const isCompositional =
-      record.imageGrade === 'safe' &&
-      record.textGrade === 'safe' &&
-      record.combinedGrade === 'unsafe';
+    const isCompositional = record.severityPattern === 'safe_safe_unsafe';
 
     const categoryName = CATEGORY_NAMES[record.combinedCategory] || record.combinedCategory;
 
@@ -650,18 +597,6 @@ export class VLSUPlugin extends ImageDatasetPluginBase<VLSUInput, VLSUPluginConf
   }
 
   /**
-   * Get assertions for test case
-   */
-  protected getAssertions(_prompt: string): Assertion[] {
-    return [
-      {
-        type: PLUGIN_ID as Assertion['type'],
-        metric: this.getMetricName(),
-      },
-    ];
-  }
-
-  /**
    * Override to handle n=0 case and ensure both image and prompt variables are set correctly
    */
   async generateTests(n: number, delayMs: number = 0): Promise<TestCase[]> {
@@ -670,41 +605,20 @@ export class VLSUPlugin extends ImageDatasetPluginBase<VLSUInput, VLSUPluginConf
       return [];
     }
 
-    // Get base test cases from parent
-    // Note: Base class sets vars[injectVar] = image, but we need both image AND prompt
     const tests = await super.generateTests(n, delayMs);
-
-    // Ensure both image and prompt variables are set correctly
-    // The base class may have put the image under a different var name (e.g., 'prompt')
-    // We always want: vars.image = base64 image, vars.prompt = text prompt
-    return tests.map((test) => {
-      const originalPrompt = test.metadata?.originalPrompt as string | undefined;
-      const includePrompt = this.pluginConfig?.includePrompt ?? true;
-
-      // Find the image data (it's whatever extractImageFromRecord returned)
-      // The base class puts it under this.injectVar
-      const imageData = test.vars?.[this.injectVar] as string | undefined;
-
-      // Build new vars with explicit image and prompt keys
-      const newVars: Record<string, string | string[] | object> = {
-        ...(test.vars as Record<string, string | string[] | object>),
-      };
-
-      // Always set image explicitly
-      if (imageData) {
-        newVars.image = imageData;
+    // The base creates fresh vars. Keep the image separately when text replaces its injected alias.
+    for (const test of tests) {
+      const vars = test.vars!;
+      const image = vars[this.injectVar];
+      if (image) {
+        vars.image = image;
       }
-
-      // Add prompt if configured
-      if (includePrompt && originalPrompt) {
-        newVars.prompt = originalPrompt;
+      const text = test.metadata?.originalPrompt;
+      if ((this.pluginConfig?.includePrompt ?? true) && text) {
+        vars.prompt = text;
       }
-
-      return {
-        ...test,
-        vars: newVars,
-      };
-    });
+    }
+    return tests;
   }
 }
 
@@ -714,12 +628,8 @@ export class VLSUPlugin extends ImageDatasetPluginBase<VLSUInput, VLSUPluginConf
 export class VLSUGrader extends RedteamGraderBase {
   readonly id = PLUGIN_ID;
 
-  protected canUseRefusalShortcut(vars: Record<string, unknown>): boolean {
-    return vars.combinedGrade !== 'safe';
-  }
-
   protected getInputImages(testVars: Record<string, unknown>, vars: Record<string, unknown>) {
-    if (this.canUseRefusalShortcut(vars)) {
+    if (vars.combinedGrade !== 'safe') {
       return [];
     }
     const image = testVars.image;

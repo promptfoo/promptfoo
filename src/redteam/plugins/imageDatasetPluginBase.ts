@@ -1,6 +1,5 @@
 import logger from '../../logger';
 import { RedteamPluginBase } from './base';
-import { ImageDatasetManager } from './imageDatasetUtils';
 
 import type { Assertion, PluginConfig, TestCase } from '../../types/index';
 
@@ -16,11 +15,12 @@ export interface ImageDatasetPluginConfig extends PluginConfig {
  * Base class for image dataset plugins (VLGuard, UnsafeBench, etc.)
  */
 export abstract class ImageDatasetPluginBase<
-  TInput,
+  TInput extends { image: string },
   TConfig extends ImageDatasetPluginConfig = ImageDatasetPluginConfig,
 > extends RedteamPluginBase {
-  protected abstract readonly pluginId: string;
-  protected abstract readonly datasetManager: ImageDatasetManager<TInput>;
+  protected abstract readonly datasetManager: {
+    getFilteredRecords(limit: number, config?: TConfig): Promise<TInput[]>;
+  };
   protected pluginConfig?: TConfig;
 
   constructor(provider: any, purpose: string, injectVar: string, config?: TConfig) {
@@ -33,9 +33,7 @@ export abstract class ImageDatasetPluginBase<
    * Validate plugin configuration
    * Override in subclasses to add specific validation
    */
-  protected validateConfig(_config?: TConfig): void {
-    // Base implementation - subclasses can override
-  }
+  protected abstract validateConfig(config?: TConfig): void;
 
   /**
    * Get the template for the plugin
@@ -50,27 +48,21 @@ export abstract class ImageDatasetPluginBase<
   protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
-        type: this.pluginId as Assertion['type'],
-        metric: this.getMetricName(),
+        type: this.id as Assertion['type'],
+        metric: this.metricName,
       },
     ];
   }
 
   /**
-   * Get the metric name for assertions
-   * Override if different from plugin name
+   * Display name for assertion metrics; its lowercase form prefixes logs.
    */
-  protected abstract getMetricName(): string;
+  protected abstract readonly metricName: string;
 
   /**
    * Map a record to test case metadata
    */
   protected abstract mapRecordToMetadata(record: TInput): Record<string, any>;
-
-  /**
-   * Extract the image data from a record
-   */
-  protected abstract extractImageFromRecord(record: TInput): string;
 
   /**
    * Extract assertion value from a record
@@ -81,6 +73,7 @@ export abstract class ImageDatasetPluginBase<
    * Generate test cases
    */
   async generateTests(n: number, _delayMs: number = 0): Promise<TestCase[]> {
+    const logPrefix = this.metricName.toLowerCase();
     try {
       // Determine how many images to fetch
       const categories = this.pluginConfig?.categories || [];
@@ -95,24 +88,24 @@ export abstract class ImageDatasetPluginBase<
 
       if (records.length === 0) {
         const errorMessage = this.getNoRecordsErrorMessage();
-        logger.error(`[${this.getLogPrefix()}] ${errorMessage}`);
+        logger.error(`[${logPrefix}] ${errorMessage}`);
         throw new Error(errorMessage);
       }
 
       if (records.length < limit) {
         logger.warn(
-          `[${this.getLogPrefix()}] Requested ${limit} tests but only ${records.length} records were found`,
+          `[${logPrefix}] Requested ${limit} tests but only ${records.length} records were found`,
         );
       }
 
       // Map records to test cases
       return records.map(
         (record: TInput): TestCase => ({
-          vars: { [this.injectVar]: this.extractImageFromRecord(record) },
+          vars: { [this.injectVar]: record.image },
           assert: [
             {
-              type: this.pluginId as Assertion['type'],
-              metric: this.getMetricName(),
+              type: this.id as Assertion['type'],
+              metric: this.metricName,
               value: this.extractAssertionValue(record),
             },
           ],
@@ -121,15 +114,10 @@ export abstract class ImageDatasetPluginBase<
       );
     } catch (error) {
       const errorMessage = `Failed to generate tests: ${error instanceof Error ? error.message : String(error)}`;
-      logger.error(`[${this.getLogPrefix()}] ${errorMessage}`);
+      logger.error(`[${logPrefix}] ${errorMessage}`);
       throw new Error(errorMessage);
     }
   }
-
-  /**
-   * Get the log prefix for this plugin
-   */
-  protected abstract getLogPrefix(): string;
 
   /**
    * Get the error message when no records are found

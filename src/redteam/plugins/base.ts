@@ -384,8 +384,8 @@ export abstract class RedteamGraderBase {
   abstract id: string;
   abstract rubric: string;
 
-  protected canUseRefusalShortcut(_vars: Record<string, unknown>): boolean {
-    return true;
+  protected normalizeGradingVars(vars: Record<string, unknown>): Record<string, unknown> {
+    return vars;
   }
 
   protected getInputImages(
@@ -476,7 +476,7 @@ export abstract class RedteamGraderBase {
         : undefined;
 
     const vars = {
-      ...test.metadata,
+      ...this.normalizeGradingVars({ ...test.metadata }),
       goal: test.metadata?.goal || prompt,
       prompt,
       entities: test.metadata?.entities ?? [],
@@ -484,11 +484,13 @@ export abstract class RedteamGraderBase {
       testVars: test.vars ?? {},
       // Spread public grading context properties to make them accessible in rubrics.
       // Image payloads/provider internals are intentionally excluded above.
-      ...templateGradingContext,
+      ...this.normalizeGradingVars(templateGradingContext),
       // Spread renderedValue to make properties accessible at top level (e.g., categoryGuidance)
       // This is done after gradingContext so renderedValue properties take precedence,
       // except for the canonical evaluated output and extracted trace properties below.
-      ...(typeof renderedValue === 'object' && renderedValue !== null ? renderedValue : {}),
+      ...this.normalizeGradingVars({
+        ...(typeof renderedValue === 'object' && renderedValue !== null ? renderedValue : {}),
+      }),
       value: renderedValue,
       output: llmOutput,
       // Extract specific trace properties for convenience (these override any conflicts)
@@ -556,7 +558,7 @@ export abstract class RedteamGraderBase {
 
     if (
       !skipRefusalCheck &&
-      this.canUseRefusalShortcut(vars) &&
+      !inputImages.length &&
       !imagesForGrading?.length &&
       (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput))
     ) {

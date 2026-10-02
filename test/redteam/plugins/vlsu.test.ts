@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, type MockedFunction, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../src/cache';
 import logger from '../../../src/logger';
 import * as imageDatasetUtils from '../../../src/redteam/plugins/imageDatasetUtils';
@@ -9,9 +9,7 @@ import {
   VLSUDatasetManager,
   VLSUPlugin,
 } from '../../../src/redteam/plugins/vlsu';
-import { createMockProvider, createProviderResponse } from '../../factories/provider';
-
-import type { ApiProvider } from '../../../src/types/index';
+import { createMockProvider } from '../../factories/provider';
 
 vi.mock('../../../src/logger');
 vi.mock('../../../src/cache');
@@ -19,6 +17,15 @@ vi.mock('../../../src/redteam/plugins/imageDatasetUtils', async () => ({
   ...(await vi.importActual('../../../src/redteam/plugins/imageDatasetUtils')),
   fetchImageAsBase64: vi.fn(),
 }));
+
+const mockProvider = createMockProvider();
+const mockFetchWithCache = vi.mocked(cache.fetchWithCache);
+const mockFetchImageAsBase64 = vi.mocked(imageDatasetUtils.fetchImageAsBase64);
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  VLSUDatasetManager.clearCache();
+});
 
 // Helper to create mock CSV data matching VLSU format
 function createMockCSVRecord(overrides: Partial<Record<string, string>> = {}) {
@@ -38,10 +45,6 @@ function createMockCSVRecord(overrides: Partial<Record<string, string>> = {}) {
 
 // Helper to create mock CSV text
 function createMockCSVText(records: Array<Record<string, string>>): string {
-  if (records.length === 0) {
-    return 'prompt,image_grade,consensus_text_grade,consensus_combined_grade,image_category,text_category,combined_category,web_path,uuid';
-  }
-
   const headers = Object.keys(records[0]).join(',');
   const rows = records.map((r) =>
     Object.values(r)
@@ -51,24 +54,17 @@ function createMockCSVText(records: Array<Record<string, string>>): string {
   return [headers, ...rows].join('\n');
 }
 
+function mockDataset(records: Array<Record<string, string>>) {
+  mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+  mockFetchWithCache.mockResolvedValue({
+    status: 200,
+    data: createMockCSVText(records),
+    cached: false,
+    statusText: 'OK',
+  } as any);
+}
+
 describe('VLSUPlugin', () => {
-  const mockProvider = createMockProvider({
-    response: createProviderResponse({
-      output: 'test',
-      tokenUsage: { total: 10, prompt: 5, completion: 5 },
-    }),
-  });
-
-  const mockFetchWithCache = cache.fetchWithCache as MockedFunction<typeof cache.fetchWithCache>;
-  const mockFetchImageAsBase64 = imageDatasetUtils.fetchImageAsBase64 as MockedFunction<
-    typeof imageDatasetUtils.fetchImageAsBase64
-  >;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    VLSUDatasetManager.clearCache();
-  });
-
   describe('constructor', () => {
     it('should initialize with default config', () => {
       const plugin = new VLSUPlugin(mockProvider, 'test purpose', 'image', {});
@@ -92,40 +88,16 @@ describe('VLSUPlugin', () => {
       ).not.toThrow();
     });
 
-    it('should validate categories in config', () => {
-      const config = {
-        categories: ['C1', 'invalid-category'] as string[],
-      };
-
+    it.each([
+      [{ categories: ['C1', 'invalid-category'] }, 'Invalid categories: invalid-category'],
+      [{ grades: ['safe', 'invalid-grade'] as any }, 'Invalid grades: invalid-grade'],
+      [
+        { severityPatterns: ['safe_safe_unsafe', 'invalid_pattern'] },
+        'Invalid severity pattern: invalid_pattern',
+      ],
+    ])('should validate config %j', (config, warning) => {
       new VLSUPlugin(mockProvider, 'test purpose', 'image', config);
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Invalid categories: invalid-category'),
-      );
-    });
-
-    it('should validate grades in config', () => {
-      const config = {
-        grades: ['safe', 'invalid-grade'] as any,
-      };
-
-      new VLSUPlugin(mockProvider, 'test purpose', 'image', config);
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Invalid grades: invalid-grade'),
-      );
-    });
-
-    it('should validate severity patterns in config', () => {
-      const config = {
-        severityPatterns: ['safe_safe_unsafe', 'invalid_pattern'] as string[],
-      };
-
-      new VLSUPlugin(mockProvider, 'test purpose', 'image', config);
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Invalid severity pattern: invalid_pattern'),
-      );
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining(warning));
     });
 
     it('should set canGenerateRemote to false', () => {
@@ -196,14 +168,7 @@ describe('VLSUPlugin', () => {
         }),
       ];
 
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
-
-      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+      mockDataset(mockRecords);
 
       const plugin = new VLSUPlugin(mockProvider, 'test purpose', 'image', {});
       const tests = await plugin.generateTests(2);
@@ -221,14 +186,7 @@ describe('VLSUPlugin', () => {
         createMockCSVRecord({ combined_category: 'C12: Terrorism and Violent Extremism' }),
       ];
 
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
-
-      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+      mockDataset(mockRecords);
 
       const plugin = new VLSUPlugin(mockProvider, 'test purpose', 'image', {
         categories: ['C4'],
@@ -246,14 +204,7 @@ describe('VLSUPlugin', () => {
         createMockCSVRecord({ consensus_combined_grade: 'borderline' }),
       ];
 
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
-
-      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+      mockDataset(mockRecords);
 
       const plugin = new VLSUPlugin(mockProvider, 'test purpose', 'image', {
         grades: ['unsafe'],
@@ -283,14 +234,7 @@ describe('VLSUPlugin', () => {
         }),
       ];
 
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
-
-      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+      mockDataset(mockRecords);
 
       const plugin = new VLSUPlugin(mockProvider, 'test purpose', 'image', {
         severityPatterns: ['safe_safe_unsafe'],
@@ -323,14 +267,7 @@ describe('VLSUPlugin', () => {
         }),
       ];
 
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
-
-      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+      mockDataset(mockRecords);
 
       const plugin = new VLSUPlugin(mockProvider, 'test purpose', 'image', {
         compositionalOnly: true,
@@ -347,12 +284,7 @@ describe('VLSUPlugin', () => {
     it('should throw error when no records match filters', async () => {
       const mockRecords = [createMockCSVRecord({ combined_category: 'C4: Self-Harm and Suicide' })];
 
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
+      mockDataset(mockRecords);
 
       const plugin = new VLSUPlugin(mockProvider, 'test purpose', 'image', {
         categories: ['C15'], // No records match this
@@ -381,22 +313,12 @@ describe('VLSUPlugin', () => {
         createMockCSVRecord({ uuid: 'success-2' }),
       ];
 
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
+      mockDataset(mockRecords);
 
       // Fail one specific call deterministically (second call fails)
-      let callCount = 0;
-      mockFetchImageAsBase64.mockImplementation(async () => {
-        callCount++;
-        if (callCount === 2) {
-          return null;
-        }
-        return 'data:image/jpeg;base64,test';
-      });
+      mockFetchImageAsBase64
+        .mockResolvedValueOnce('data:image/jpeg;base64,test')
+        .mockResolvedValueOnce(null);
 
       const plugin = new VLSUPlugin(mockProvider, 'test purpose', 'image', {});
       const tests = await plugin.generateTests(3);
@@ -408,14 +330,7 @@ describe('VLSUPlugin', () => {
     it('should warn when fewer records are available than requested', async () => {
       const mockRecords = [createMockCSVRecord()];
 
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
-
-      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+      mockDataset(mockRecords);
 
       const plugin = new VLSUPlugin(mockProvider, 'test purpose', 'image', {});
       const tests = await plugin.generateTests(10);
@@ -429,14 +344,7 @@ describe('VLSUPlugin', () => {
     it('should include prompt as separate variable by default', async () => {
       const mockRecords = [createMockCSVRecord({ prompt: 'Test multimodal prompt' })];
 
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
-
-      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+      mockDataset(mockRecords);
 
       const plugin = new VLSUPlugin(mockProvider, 'test purpose', 'image', {});
       const tests = await plugin.generateTests(1);
@@ -451,14 +359,7 @@ describe('VLSUPlugin', () => {
     it('should not include prompt variable when includePrompt is false', async () => {
       const mockRecords = [createMockCSVRecord({ prompt: 'Test prompt' })];
 
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
-
-      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+      mockDataset(mockRecords);
 
       const plugin = new VLSUPlugin(mockProvider, 'test purpose', 'image', {
         includePrompt: false,
@@ -483,14 +384,7 @@ describe('VLSUPlugin', () => {
         }),
       ];
 
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
-
-      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+      mockDataset(mockRecords);
 
       const plugin = new VLSUPlugin(mockProvider, 'test purpose', 'image', {});
       const tests = await plugin.generateTests(1);
@@ -510,16 +404,6 @@ describe('VLSUPlugin', () => {
 });
 
 describe('VLSUDatasetManager', () => {
-  const mockFetchWithCache = cache.fetchWithCache as MockedFunction<typeof cache.fetchWithCache>;
-  const mockFetchImageAsBase64 = imageDatasetUtils.fetchImageAsBase64 as MockedFunction<
-    typeof imageDatasetUtils.fetchImageAsBase64
-  >;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    VLSUDatasetManager.clearCache();
-  });
-
   describe('singleton pattern', () => {
     it('should return same instance on multiple calls', () => {
       const instance1 = VLSUDatasetManager.getInstance();
@@ -530,14 +414,7 @@ describe('VLSUDatasetManager', () => {
     it('should clear cache correctly', async () => {
       const mockRecords = [createMockCSVRecord()];
 
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
-
-      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+      mockDataset(mockRecords);
 
       const manager = VLSUDatasetManager.getInstance();
       await manager.getFilteredRecords(1, {});
@@ -555,14 +432,7 @@ describe('VLSUDatasetManager', () => {
     it('should cache CSV data after first fetch', async () => {
       const mockRecords = [createMockCSVRecord()];
 
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
-
-      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+      mockDataset(mockRecords);
 
       const manager = VLSUDatasetManager.getInstance();
       await manager.getFilteredRecords(1, {});
@@ -574,42 +444,15 @@ describe('VLSUDatasetManager', () => {
   });
 
   describe('category code extraction', () => {
-    it('should extract category codes from full category strings', async () => {
-      const mockRecords = [
-        createMockCSVRecord({ combined_category: 'C12: Terrorism and Violent Extremism' }),
-      ];
-
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
-
-      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
-
+    it.each([
+      ['C12: Terrorism and Violent Extremism', 'C12'],
+      ['', ''],
+    ])('should extract category code %j as %j', async (combined_category, expected) => {
+      const mockRecords = [createMockCSVRecord({ combined_category })];
+      mockDataset(mockRecords);
       const manager = VLSUDatasetManager.getInstance();
       const records = await manager.getFilteredRecords(1, {});
-
-      expect(records[0].combinedCategory).toBe('C12');
-    });
-
-    it('should handle empty category strings', async () => {
-      const mockRecords = [createMockCSVRecord({ combined_category: '' })];
-
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
-
-      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
-
-      const manager = VLSUDatasetManager.getInstance();
-      const records = await manager.getFilteredRecords(1, {});
-
-      expect(records[0].combinedCategory).toBe('');
+      expect(records[0].combinedCategory).toBe(expected);
     });
   });
 
@@ -623,14 +466,7 @@ describe('VLSUDatasetManager', () => {
         }),
       ];
 
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
-
-      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+      mockDataset(mockRecords);
 
       const manager = VLSUDatasetManager.getInstance();
       const records = await manager.getFilteredRecords(1, {});
@@ -641,56 +477,16 @@ describe('VLSUDatasetManager', () => {
 });
 
 describe('edge cases', () => {
-  const mockFetchWithCache = cache.fetchWithCache as MockedFunction<typeof cache.fetchWithCache>;
-  const mockFetchImageAsBase64 = imageDatasetUtils.fetchImageAsBase64 as MockedFunction<
-    typeof imageDatasetUtils.fetchImageAsBase64
-  >;
-
-  const mockProvider: ApiProvider = {
-    id: () => 'test-provider',
-    callApi: async () => ({ output: 'test', tokenUsage: { total: 10, prompt: 5, completion: 5 } }),
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    VLSUDatasetManager.clearCache();
-  });
-
   describe('small n values', () => {
-    it('should handle n=1 correctly', async () => {
+    it.each([1, 0])('should handle n=%i correctly', async (n) => {
       const mockRecords = [createMockCSVRecord()];
 
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
-
-      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+      mockDataset(mockRecords);
 
       const plugin = new VLSUPlugin(mockProvider, 'test purpose', 'image', {});
-      const tests = await plugin.generateTests(1);
+      const tests = await plugin.generateTests(n);
 
-      expect(tests).toHaveLength(1);
-    });
-
-    it('should handle n=0 correctly', async () => {
-      const mockRecords = [createMockCSVRecord()];
-
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
-
-      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
-
-      const plugin = new VLSUPlugin(mockProvider, 'test purpose', 'image', {});
-      const tests = await plugin.generateTests(0);
-
-      expect(tests).toHaveLength(0);
+      expect(tests).toHaveLength(n);
     });
   });
 
@@ -704,20 +500,16 @@ describe('edge cases', () => {
         }),
       ];
 
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
-
-      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+      mockDataset(mockRecords);
 
       const plugin = new VLSUPlugin(mockProvider, 'test purpose', 'image', {});
       const tests = await plugin.generateTests(1);
 
       expect(tests[0].metadata?.imageGrade).toBe('not_sure');
       expect(tests[0].metadata?.vlsuSeverityPattern).toBe('not_sure_safe_unsafe');
+      expect(tests[0].metadata?.isCompositional).toBe(false);
+      expect(tests[0].metadata?.vlsuIsCompositional).toBe(false);
+      expect(tests[0].assert?.[0]).toMatchObject({ value: { isCompositional: false } });
     });
   });
 
@@ -747,14 +539,7 @@ describe('edge cases', () => {
         }),
       ];
 
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
-
-      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+      mockDataset(mockRecords);
 
       const plugin = new VLSUPlugin(mockProvider, 'test purpose', 'image', {
         categories: ['C9'],
@@ -774,14 +559,7 @@ describe('edge cases', () => {
     it('should handle uppercase category codes', async () => {
       const mockRecords = [createMockCSVRecord({ combined_category: 'C9: Violence' })];
 
-      mockFetchWithCache.mockResolvedValue({
-        status: 200,
-        data: createMockCSVText(mockRecords),
-        cached: false,
-        statusText: 'OK',
-      } as any);
-
-      mockFetchImageAsBase64.mockResolvedValue('data:image/jpeg;base64,test');
+      mockDataset(mockRecords);
 
       const plugin = new VLSUPlugin(mockProvider, 'test purpose', 'image', {
         categories: ['c9'], // lowercase in config

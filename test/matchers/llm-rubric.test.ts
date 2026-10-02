@@ -1,6 +1,6 @@
 import path from 'path';
 
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadFromJavaScriptFile } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -24,13 +24,7 @@ vi.mock('../../src/esm', () => ({
 vi.mock('../../src/remoteGrading', () => ({
   doRemoteGrading: vi.fn(),
 }));
-vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../src/redteam/remoteGeneration')>();
-  return {
-    ...actual,
-    shouldGenerateRemote: vi.fn().mockReturnValue(false),
-  };
-});
+vi.mock('../../src/redteam/remoteGeneration');
 // Create mock functions that can be configured in tests - use vi.hoisted for mock factory access
 const { mockExistsSync, mockReadFileSync } = vi.hoisted(() => ({
   mockExistsSync: vi.fn(),
@@ -71,22 +65,18 @@ describe('matchesLlmRubric', () => {
   const mockFileContent = 'This is an external rubric prompt';
 
   beforeEach(() => {
-    vi.clearAllMocks();
     vi.resetAllMocks();
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(mockFileContent);
 
     cliState.config = {};
-    cliState.selectedProviderConfigs = undefined;
 
-    vi.mocked(remoteGrading.doRemoteGrading).mockReset();
     vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
       pass: true,
       score: 1,
       reason: 'Remote grading passed',
     });
 
-    vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
     vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
       output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
@@ -168,35 +158,46 @@ describe('matchesLlmRubric', () => {
       expect(result.metadata?.renderedGradingPromptImages).toBeUndefined();
     });
 
-    it('labels input and output images separately after ignoring empty output entries', async () => {
-      const provider = createMockProvider({
-        response: { output: JSON.stringify({ pass: true, score: 1, reason: 'Fixture verdict' }) },
-      });
-      const result = await matchesLlmRubric(
-        'Compare the colors',
-        outputData,
-        { provider },
-        {},
-        undefined,
-        { inputImages: [inputImage], providerResponse: { images: [{}, outputImage] } },
-      );
-      const parts = JSON.parse(provider.callApi.mock.calls[0][0] as string).at(-1).content;
-      const inputIndex = parts.findIndex(
-        (part: { image_url?: { url: string } }) => part.image_url?.url === inputData,
-      );
-      const outputIndex = parts.findIndex(
-        (part: { image_url?: { url: string } }) => part.image_url?.url === outputData,
-      );
-      expect(inputIndex).toBeGreaterThan(0);
-      expect(outputIndex).toBeGreaterThan(inputIndex);
-      expect(parts[inputIndex - 1].text).toContain('input context');
-      expect(parts[outputIndex - 1].text).toContain('The evaluated output includes');
-      expect(parts[0].text).toContain('[Image output attached.');
-      expect(result.metadata?.renderedGradingPromptInputImages).toBe(1);
-      expect(result.metadata?.renderedGradingPromptImages).toBe(1);
-      expect(JSON.stringify(result.metadata)).not.toContain(inputData);
-      expect(JSON.stringify(result.metadata)).not.toContain(outputData);
-    });
+    it.each([1, 5])(
+      'labels input and output images after ignoring %s empty entries',
+      async (count) => {
+        const provider = createMockProvider({
+          response: { output: JSON.stringify({ pass: true, score: 1, reason: 'Fixture verdict' }) },
+        });
+        const result = await matchesLlmRubric(
+          'Compare the colors',
+          outputData,
+          { provider },
+          {},
+          undefined,
+          {
+            inputImages: [inputImage],
+            providerResponse: {
+              images: [
+                ...Array.from({ length: count }, (_, index) => (index % 2 ? { data: '' } : {})),
+                outputImage,
+              ],
+            },
+          },
+        );
+        const parts = JSON.parse(provider.callApi.mock.calls[0][0] as string).at(-1).content;
+        const inputIndex = parts.findIndex(
+          (part: { image_url?: { url: string } }) => part.image_url?.url === inputData,
+        );
+        const outputIndex = parts.findIndex(
+          (part: { image_url?: { url: string } }) => part.image_url?.url === outputData,
+        );
+        expect(inputIndex).toBeGreaterThan(0);
+        expect(outputIndex).toBeGreaterThan(inputIndex);
+        expect(parts[inputIndex - 1].text).toContain('input context');
+        expect(parts[outputIndex - 1].text).toContain('The evaluated output includes');
+        expect(parts[0].text).toContain('[Image output attached.');
+        expect(result.metadata?.renderedGradingPromptInputImages).toBe(1);
+        expect(result.metadata?.renderedGradingPromptImages).toBe(1);
+        expect(JSON.stringify(result.metadata)).not.toContain(inputData);
+        expect(JSON.stringify(result.metadata)).not.toContain(outputData);
+      },
+    );
 
     it.each([
       ['PROMPTFOO_GRADING_MAX_IMAGES', '1', 'Too many images'],
@@ -297,36 +298,43 @@ describe('matchesLlmRubric', () => {
     expect(assertionUsage).toMatchObject({ total: 10, prompt: 7, completion: 3 });
   });
 
-  it('should keep reserved output and rubric vars ahead of user vars', async () => {
-    const provider = createMockProvider({
-      response: {
-        output: JSON.stringify({ pass: true, reason: 'Test grading output' }),
-        tokenUsage: { total: 10, prompt: 5, completion: 5 },
-      },
-    });
-    const options: GradingConfig = {
-      rubricPrompt: 'output={{ output }}\nrubric={{ rubric }}\nextra={{ extra }}',
-      provider,
-    };
+  it.each([
+    { output: 'output from provider', expectedOutput: 'output from provider' },
+    { output: '{"key":"value"}', expectedOutput: { key: 'value' } },
+    { output: '', expectedOutput: '' },
+  ])(
+    'should keep reserved output and rubric vars ahead of user vars for $output',
+    async ({ output, expectedOutput }) => {
+      const provider = createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, reason: 'Test grading output' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        },
+      });
+      const options: GradingConfig = {
+        rubricPrompt: 'output={{ output }}\nrubric={{ rubric }}\nextra={{ extra }}',
+        provider,
+      };
 
-    await matchesLlmRubric('rubric from assertion', 'output from provider', options, {
-      output: 'vars output sentinel',
-      rubric: 'vars rubric sentinel',
-      extra: 'kept user var',
-    });
+      await matchesLlmRubric('rubric from assertion', output, options, {
+        output: 'vars output sentinel',
+        rubric: 'vars rubric sentinel',
+        extra: 'kept user var',
+      });
 
-    const [prompt, callApiContext] = provider.callApi.mock.calls[0];
-    expect(prompt).toContain('output=output from provider');
-    expect(prompt).toContain('rubric=rubric from assertion');
-    expect(prompt).toContain('extra=kept user var');
-    expect(prompt).not.toContain('vars output sentinel');
-    expect(prompt).not.toContain('vars rubric sentinel');
-    expect(callApiContext?.vars).toMatchObject({
-      output: 'output from provider',
-      rubric: 'rubric from assertion',
-      extra: 'kept user var',
-    });
-  });
+      const [prompt, callApiContext] = provider.callApi.mock.calls[0];
+      expect(prompt).toContain(`output=${output}`);
+      expect(prompt).toContain('rubric=rubric from assertion');
+      expect(prompt).toContain('extra=kept user var');
+      expect(prompt).not.toContain('vars output sentinel');
+      expect(prompt).not.toContain('vars rubric sentinel');
+      expect(callApiContext?.vars).toMatchObject({
+        output: expectedOutput,
+        rubric: 'rubric from assertion',
+        extra: 'kept user var',
+      });
+    },
+  );
 
   it('should handle when provider returns direct object output instead of string', async () => {
     const expected = 'Expected output';
@@ -623,230 +631,78 @@ describe('matchesLlmRubric', () => {
     });
   });
 
-  it('should preserve JSON chat rubric prompts when attaching images', async () => {
-    const provider = createMockProvider({
-      response: {
-        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-      },
-    });
-
-    await matchesLlmRubric(
-      'Does the image match?',
-      'Generated image',
+  it.each(
+    [
       {
+        name: 'should preserve JSON chat rubric prompts when attaching images',
+        providerOptions: {},
         rubricPrompt: JSON.stringify([
           { role: 'system', content: 'Return JSON.' },
           { role: 'user', content: 'Grade this output: {{ output }}' },
         ]),
-        provider,
-      },
-      {},
-      undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'abc123', mimeType: 'image/webp' }],
-        },
-      },
-    );
-
-    const prompt = provider.callApi.mock.calls[0][0] as string;
-    expect(JSON.parse(prompt)).toEqual([
-      { role: 'system', content: 'Return JSON.' },
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: 'Grade this output: Generated image' },
+        images: [{ data: 'abc123', mimeType: 'image/webp' }],
+        expected: [
+          { role: 'system', content: 'Return JSON.' },
           {
-            type: 'text',
-            text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Grade this output: Generated image' },
+              {
+                type: 'text',
+                text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
+              },
+              { type: 'image_url', image_url: { url: 'data:image/webp;base64,abc123' } },
+            ],
           },
-          { type: 'image_url', image_url: { url: 'data:image/webp;base64,abc123' } },
         ],
       },
-    ]);
-  });
-
-  it('should preserve YAML chat rubric prompts when attaching images', async () => {
-    const provider = createMockProvider({
-      response: {
-        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-      },
-    });
-
-    await matchesLlmRubric(
-      'Does the image match?',
-      'Generated image',
       {
+        name: 'should preserve YAML chat rubric prompts when attaching images',
+        providerOptions: {},
         rubricPrompt: [
           '- role: system',
           '  content: Return JSON.',
           '- role: user',
           '  content: "Grade this output: {{ output }}"',
         ].join('\n'),
-        provider,
-      },
-      {},
-      undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'abc123', mimeType: 'image/webp' }],
-        },
-      },
-    );
-
-    const prompt = provider.callApi.mock.calls[0][0] as string;
-    expect(JSON.parse(prompt)).toEqual([
-      { role: 'system', content: 'Return JSON.' },
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: 'Grade this output: Generated image' },
+        images: [{ data: 'abc123', mimeType: 'image/webp' }],
+        expected: [
+          { role: 'system', content: 'Return JSON.' },
           {
-            type: 'text',
-            text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Grade this output: Generated image' },
+              {
+                type: 'text',
+                text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
+              },
+              { type: 'image_url', image_url: { url: 'data:image/webp;base64,abc123' } },
+            ],
           },
-          { type: 'image_url', image_url: { url: 'data:image/webp;base64,abc123' } },
         ],
       },
-    ]);
-  });
-
-  it('should use Anthropic image parts for Anthropic grading providers', async () => {
-    const provider = createMockProvider({
-      id: 'anthropic:messages:claude-3-5-sonnet-latest',
-      response: {
-        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-      },
-    });
-
-    await matchesLlmRubric(
-      'Does the image match?',
-      'Generated image',
-      {
+      ...['google:gemini-2.5-pro', 'vertex:gemini-2.5-pro'].map((id) => ({
+        name: `should use Google inlineData image parts for Gemini grading provider ${id}`,
+        providerOptions: { id },
         rubricPrompt: 'Grade this output: {{ output }}',
-        provider,
-      },
-      {},
-      undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
-        },
-      },
-    );
-
-    const prompt = provider.callApi.mock.calls[0][0] as string;
-    expect(JSON.parse(prompt)[0].content).toContainEqual({
-      type: 'image',
-      source: {
-        type: 'base64',
-        media_type: 'image/png',
-        data: 'abc123',
-      },
-    });
-  });
-
-  it.each([
-    'cloudflare-ai-gateway:anthropic:messages:claude-3-5-sonnet-latest',
-    'cloudflare-gateway:anthropic:claude-sonnet-4-20250514',
-    'bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0',
-    'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
-    'vertex:claude-3-5-sonnet-v2@20241022',
-  ])('should use Anthropic image parts for wrapped Anthropic grading provider %s', async (id) => {
-    const provider = createMockProvider({
-      id,
-      response: {
-        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-      },
-    });
-
-    await matchesLlmRubric(
-      'Does the image match?',
-      'Generated image',
-      {
-        rubricPrompt: 'Grade this output: {{ output }}',
-        provider,
-      },
-      {},
-      undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
-        },
-      },
-    );
-
-    const prompt = provider.callApi.mock.calls[0][0] as string;
-    expect(JSON.parse(prompt)[0].content).toContainEqual({
-      type: 'image',
-      source: {
-        type: 'base64',
-        media_type: 'image/png',
-        data: 'abc123',
-      },
-    });
-  });
-
-  it.each(['google:gemini-2.5-pro', 'vertex:gemini-2.5-pro'])(
-    'should use Google inlineData image parts for Gemini grading provider %s',
-    async (id) => {
-      const provider = createMockProvider({
-        id,
-        response: {
-          output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-        },
-      });
-
-      await matchesLlmRubric(
-        'Does the image match?',
-        'Generated image',
-        {
-          rubricPrompt: 'Grade this output: {{ output }}',
-          provider,
-        },
-        {},
-        undefined,
-        {
-          providerResponse: {
-            output: 'Generated image',
-            images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+        expected: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Grade this output: Generated image' },
+              {
+                type: 'text',
+                text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
+              },
+              { inlineData: { mimeType: 'image/png', data: 'abc123' } },
+            ],
           },
-        },
-      );
-
-      const prompt = provider.callApi.mock.calls[0][0] as string;
-      expect(JSON.parse(prompt)).toEqual([
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: 'Grade this output: Generated image' },
-            {
-              type: 'text',
-              text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
-            },
-            { inlineData: { mimeType: 'image/png', data: 'abc123' } },
-          ],
-        },
-      ]);
-    },
-  );
-
-  it('should convert existing chat content parts when using Gemini grading providers', async () => {
-    const provider = createMockProvider({
-      id: 'google:gemini-2.5-pro',
-      response: {
-        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-      },
-    });
-
-    await matchesLlmRubric(
-      'Does the image match?',
-      'Generated image',
+        ],
+      })),
       {
+        name: 'should convert existing chat content parts when using Gemini grading providers',
+        providerOptions: { id: 'google:gemini-2.5-pro' },
         rubricPrompt: JSON.stringify([
           { role: 'system', content: 'Return JSON.' },
           {
@@ -857,48 +713,26 @@ describe('matchesLlmRubric', () => {
             ],
           },
         ]),
-        provider,
-      },
-      {},
-      undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'abc123', mimeType: 'image/png' }],
-        },
-      },
-    );
-
-    const prompt = provider.callApi.mock.calls[0][0] as string;
-    expect(JSON.parse(prompt)).toEqual([
-      { role: 'system', content: 'Return JSON.' },
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: 'Grade this output: Generated image' },
-          { inlineData: { mimeType: 'image/png', data: 'existing' } },
+        images: [{ data: 'abc123', mimeType: 'image/png' }],
+        expected: [
+          { role: 'system', content: 'Return JSON.' },
           {
-            type: 'text',
-            text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Grade this output: Generated image' },
+              { inlineData: { mimeType: 'image/png', data: 'existing' } },
+              {
+                type: 'text',
+                text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
+              },
+              { inlineData: { mimeType: 'image/png', data: 'abc123' } },
+            ],
           },
-          { inlineData: { mimeType: 'image/png', data: 'abc123' } },
         ],
       },
-    ]);
-  });
-
-  it('should normalize supported existing image content shapes for Gemini grading providers', async () => {
-    const provider = createMockProvider({
-      id: 'google:gemini-2.5-pro',
-      response: {
-        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-      },
-    });
-
-    await matchesLlmRubric(
-      'Does the image match?',
-      'Generated image',
       {
+        name: 'should normalize supported existing image content shapes for Gemini grading providers',
+        providerOptions: { id: 'google:gemini-2.5-pro' },
         rubricPrompt: JSON.stringify([
           {
             role: 'user',
@@ -922,175 +756,54 @@ describe('matchesLlmRubric', () => {
             ],
           },
         ]),
-        provider,
-      },
-      {},
-      undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'abc123', mimeType: 'image/png' }],
-        },
-      },
-    );
-
-    const prompt = provider.callApi.mock.calls[0][0] as string;
-    expect(JSON.parse(prompt)).toEqual([
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: 'Literal chat content' },
-          { type: 'text', text: 'Grade this output: Generated image' },
-          { inlineData: { mimeType: 'image/jpeg', data: 'input123' } },
+        images: [{ data: 'abc123', mimeType: 'image/png' }],
+        expected: [
           {
-            type: 'text',
-            text: '{"type":"input_image","image_url":"not-a-data-uri"}',
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Literal chat content' },
+              { type: 'text', text: 'Grade this output: Generated image' },
+              { inlineData: { mimeType: 'image/jpeg', data: 'input123' } },
+              {
+                type: 'text',
+                text: '{"type":"input_image","image_url":"not-a-data-uri"}',
+              },
+              { inlineData: { mimeType: 'image/webp', data: 'anthro123' } },
+              { inlineData: { mimeType: 'image/gif', data: 'inline123' } },
+              { inlineData: { mimeType: 'image/png', data: 'snake123' } },
+              { type: 'text', text: '{"unexpected":"value"}' },
+              { type: 'text', text: 'null' },
+              {
+                type: 'text',
+                text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
+              },
+              { inlineData: { mimeType: 'image/png', data: 'abc123' } },
+            ],
           },
-          { inlineData: { mimeType: 'image/webp', data: 'anthro123' } },
-          { inlineData: { mimeType: 'image/gif', data: 'inline123' } },
-          { inlineData: { mimeType: 'image/png', data: 'snake123' } },
-          { type: 'text', text: '{"unexpected":"value"}' },
-          { type: 'text', text: 'null' },
-          {
-            type: 'text',
-            text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
-          },
-          { inlineData: { mimeType: 'image/png', data: 'abc123' } },
         ],
       },
-    ]);
-  });
-
-  it('should use Responses image parts for Responses grading providers', async () => {
-    const provider = createMockProvider({
-      id: 'openai:responses:gpt-5.4',
-      response: {
-        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-      },
-    });
-
-    await matchesLlmRubric(
-      'Does the image match?',
-      'Generated image',
       {
+        name: 'should use Responses image parts for Responses grading providers',
+        providerOptions: { id: 'openai:responses:gpt-5.4' },
         rubricPrompt: 'Grade this output: {{ output }}',
-        provider,
-      },
-      {},
-      undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
-        },
-      },
-    );
-
-    const prompt = provider.callApi.mock.calls[0][0] as string;
-    expect(JSON.parse(prompt)).toEqual([
-      {
-        role: 'user',
-        content: [
-          { type: 'input_text', text: 'Grade this output: Generated image' },
+        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+        expected: [
           {
-            type: 'input_text',
-            text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
+            role: 'user',
+            content: [
+              { type: 'input_text', text: 'Grade this output: Generated image' },
+              {
+                type: 'input_text',
+                text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
+              },
+              { type: 'input_image', image_url: 'data:image/png;base64,abc123' },
+            ],
           },
-          { type: 'input_image', image_url: 'data:image/png;base64,abc123' },
         ],
       },
-    ]);
-  });
-
-  it.each([
-    ['azure:my-deployment', 'AzureResponsesProvider'],
-    ['bedrock:openai.gpt-5.5', 'BedrockOpenAiResponsesProvider'],
-    ['openai:gpt-5.5', 'OpenAiResponsesProvider'],
-  ])(
-    'should use Responses image parts for %s when provider class is %s',
-    async (id, providerClassName) => {
-      const provider = createMockProvider({
-        id,
-        response: {
-          output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-        },
-      });
-      Object.defineProperty(provider, 'constructor', {
-        value: { name: providerClassName },
-      });
-
-      await matchesLlmRubric(
-        'Does the image match?',
-        'Generated image',
-        {
-          rubricPrompt: 'Grade this output: {{ output }}',
-          provider,
-        },
-        {},
-        undefined,
-        {
-          providerResponse: {
-            output: 'Generated image',
-            images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
-          },
-        },
-      );
-
-      const prompt = provider.callApi.mock.calls[0][0] as string;
-      expect(JSON.parse(prompt)[0].content).toContainEqual({
-        type: 'input_image',
-        image_url: 'data:image/png;base64,abc123',
-      });
-    },
-  );
-
-  it('should not use Responses image parts for Bedrock completion providers', async () => {
-    const provider = createMockProvider({
-      id: 'bedrock:completion:openai.gpt-oss-120b-1:0',
-      response: {
-        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-      },
-    });
-    Object.defineProperty(provider, 'constructor', {
-      value: { name: 'AwsBedrockCompletionProvider' },
-    });
-
-    await matchesLlmRubric(
-      'Does the image match?',
-      'Generated image',
       {
-        rubricPrompt: 'Grade this output: {{ output }}',
-        provider,
-      },
-      {},
-      undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
-        },
-      },
-    );
-
-    const prompt = provider.callApi.mock.calls[0][0] as string;
-    expect(JSON.parse(prompt)[0].content).toContainEqual({
-      type: 'image_url',
-      image_url: { url: 'data:image/png;base64,abc123' },
-    });
-  });
-
-  it('should convert existing chat content parts when using Responses grading providers', async () => {
-    const provider = createMockProvider({
-      id: 'openai:responses:gpt-5.4',
-      response: {
-        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-      },
-    });
-
-    await matchesLlmRubric(
-      'Does the image match?',
-      'Generated image',
-      {
+        name: 'should convert existing chat content parts when using Responses grading providers',
+        providerOptions: { id: 'openai:responses:gpt-5.4' },
         rubricPrompt: JSON.stringify([
           { role: 'system', content: 'Return JSON.' },
           {
@@ -1101,74 +814,138 @@ describe('matchesLlmRubric', () => {
             ],
           },
         ]),
-        provider,
-      },
-      {},
-      undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'abc123', mimeType: 'image/png' }],
-        },
-      },
-    );
-
-    const prompt = provider.callApi.mock.calls[0][0] as string;
-    expect(JSON.parse(prompt)).toEqual([
-      { role: 'system', content: 'Return JSON.' },
-      {
-        role: 'user',
-        content: [
-          { type: 'input_text', text: 'Grade this output: Generated image' },
-          { type: 'input_image', image_url: 'data:image/png;base64,existing' },
+        images: [{ data: 'abc123', mimeType: 'image/png' }],
+        expected: [
+          { role: 'system', content: 'Return JSON.' },
           {
-            type: 'input_text',
-            text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
+            role: 'user',
+            content: [
+              { type: 'input_text', text: 'Grade this output: Generated image' },
+              { type: 'input_image', image_url: 'data:image/png;base64,existing' },
+              {
+                type: 'input_text',
+                text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
+              },
+              { type: 'input_image', image_url: 'data:image/png;base64,abc123' },
+            ],
           },
-          { type: 'input_image', image_url: 'data:image/png;base64,abc123' },
         ],
       },
-    ]);
-  });
-
-  it('should append a user message when a JSON chat rubric has no user message', async () => {
-    const provider = createMockProvider({
-      response: {
-        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
+      {
+        name: 'should append a user message when a JSON chat rubric has no user message',
+        providerOptions: {},
+        rubricPrompt: JSON.stringify([{ role: 'system', content: 'Return JSON.' }]),
+        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+        expected: [
+          { role: 'system', content: 'Return JSON.' },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
+              },
+              { type: 'image_url', image_url: { url: 'data:image/png;base64,abc123' } },
+            ],
+          },
+        ],
       },
+      {
+        name: 'should use Anthropic image parts for Anthropic grading providers',
+        providerOptions: { id: 'anthropic:messages:claude-3-5-sonnet-latest' },
+        rubricPrompt: 'Grade this output: {{ output }}',
+        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+        expected: {
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: 'image/png',
+            data: 'abc123',
+          },
+        },
+      },
+      ...[
+        'cloudflare-ai-gateway:anthropic:messages:claude-3-5-sonnet-latest',
+        'cloudflare-gateway:anthropic:claude-sonnet-4-20250514',
+        'bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+        'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
+        'vertex:claude-3-5-sonnet-v2@20241022',
+      ].map((id) => ({
+        name: `should use Anthropic image parts for wrapped Anthropic grading provider ${id}`,
+        providerOptions: { id },
+        rubricPrompt: 'Grade this output: {{ output }}',
+        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+        expected: {
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: 'image/png',
+            data: 'abc123',
+          },
+        },
+      })),
+      {
+        name: 'should normalize whitespace-padded base64 image output before grading',
+        providerOptions: {},
+        rubricPrompt: 'Grade this output',
+        images: [{ data: 'data:image/png;base64, a b c 1 2 3 ', mimeType: 'image/png' }],
+        expected: {
+          type: 'image_url',
+          image_url: { url: 'data:image/png;base64,abc123' },
+        },
+      },
+      ...[
+        ['azure:my-deployment', 'AzureResponsesProvider'],
+        ['bedrock:openai.gpt-5.5', 'BedrockOpenAiResponsesProvider'],
+        ['openai:gpt-5.5', 'OpenAiResponsesProvider'],
+      ].map(([id, providerClassName]) => ({
+        name: `should use Responses image parts for ${id} when provider class is ${providerClassName}`,
+        providerOptions: { id },
+        rubricPrompt: 'Grade this output: {{ output }}',
+        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+        expected: {
+          type: 'input_image',
+          image_url: 'data:image/png;base64,abc123',
+        },
+        providerClassName,
+      })),
+      {
+        name: 'should not use Responses image parts for Bedrock completion providers',
+        providerOptions: { id: 'bedrock:completion:openai.gpt-oss-120b-1:0' },
+        rubricPrompt: 'Grade this output: {{ output }}',
+        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+        expected: {
+          type: 'image_url',
+          image_url: { url: 'data:image/png;base64,abc123' },
+        },
+        providerClassName: 'AwsBedrockCompletionProvider',
+      },
+    ].map((testCase) => [testCase.name, testCase] as const),
+  )('%s', async (_name, testCase) => {
+    const { providerOptions, rubricPrompt, images, expected } = testCase;
+    const provider = createMockProvider({
+      ...providerOptions,
+      response: { output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }) },
     });
-
+    if ('providerClassName' in testCase) {
+      Object.defineProperty(provider, 'constructor', {
+        value: { name: testCase.providerClassName },
+      });
+    }
     await matchesLlmRubric(
       'Does the image match?',
       'Generated image',
-      {
-        rubricPrompt: JSON.stringify([{ role: 'system', content: 'Return JSON.' }]),
-        provider,
-      },
+      { rubricPrompt, provider },
       {},
       undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
-        },
-      },
+      { providerResponse: { output: 'Generated image', images } },
     );
-
     const prompt = provider.callApi.mock.calls[0][0] as string;
-    expect(JSON.parse(prompt)).toEqual([
-      { role: 'system', content: 'Return JSON.' },
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: 'The evaluated output includes the attached image(s). Treat the attached image(s) as primary evidence in <Output>. Inspect the visual content directly, and do not infer visual traits, demographics, safety issues, or rubric failures from the user prompt or from any base64/data URI text.',
-          },
-          { type: 'image_url', image_url: { url: 'data:image/png;base64,abc123' } },
-        ],
-      },
-    ]);
+    if (Array.isArray(expected)) {
+      expect(JSON.parse(prompt)).toEqual(expected);
+    } else {
+      expect(JSON.parse(prompt)[0].content).toContainEqual(expected);
+    }
   });
 
   it('should leave the grading prompt unchanged when image outputs cannot be materialized', async () => {
@@ -1204,277 +981,85 @@ describe('matchesLlmRubric', () => {
     });
   });
 
-  it('should reject remote image URLs before grading', async () => {
-    const provider = createMockProvider({
-      response: {
-        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-      },
-    });
-
-    await expect(
-      matchesLlmRubric(
-        'Does the image match?',
-        'Generated image',
-        {
-          rubricPrompt: 'Grade this output',
-          provider,
-        },
-        {},
-        undefined,
-        {
-          providerResponse: {
-            output: 'Generated image',
-            images: [{ data: 'https://example.com/image.png', mimeType: 'image/png' }],
-          },
-        },
-      ),
-    ).rejects.toThrow(
-      'Remote image URLs are not supported for multimodal grading. Provide local image output as a data URI or raw base64 string instead.',
-    );
-    expect(provider.callApi).not.toHaveBeenCalled();
-  });
-
-  it('should reject blob-backed image outputs before grading', async () => {
-    const hash = 'a'.repeat(64);
-    const provider = createMockProvider({
-      response: {
-        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-      },
-    });
-
-    await expect(
-      matchesLlmRubric(
-        'Does the image match?',
-        'Generated image',
-        {
-          rubricPrompt: 'Grade this output',
-          provider,
-        },
-        {},
-        undefined,
-        {
-          providerResponse: {
-            output: 'Generated image',
-            images: [
-              {
-                blobRef: {
-                  uri: `promptfoo://blob/${hash}`,
-                  hash,
-                  mimeType: 'image/png',
-                  sizeBytes: 11,
-                  provider: 'filesystem',
-                },
-              },
-            ],
-          },
-        },
-      ),
-    ).rejects.toThrow(
-      'Blob-backed image outputs are not supported for multimodal grading yet. Configure the image provider to return base64 or data URI image output.',
-    );
-    expect(provider.callApi).not.toHaveBeenCalled();
-  });
-
-  it('should normalize whitespace-padded base64 image output before grading', async () => {
-    const provider = createMockProvider({
-      response: {
-        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-      },
-    });
-
-    await matchesLlmRubric(
-      'Does the image match?',
-      'Generated image',
+  it.each(
+    [
       {
-        rubricPrompt: 'Grade this output',
-        provider,
+        name: 'should reject remote image URLs before grading',
+        images: [{ data: 'https://example.com/image.png', mimeType: 'image/png' }],
+        error:
+          'Remote image URLs are not supported for multimodal grading. Provide local image output as a data URI or raw base64 string instead.',
       },
-      {},
-      undefined,
       {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'data:image/png;base64, a b c 1 2 3 ', mimeType: 'image/png' }],
+        name: 'should reject blob-backed image outputs before grading',
+        images: [
+          {
+            blobRef: {
+              uri: `promptfoo://blob/${'a'.repeat(64)}`,
+              hash: 'a'.repeat(64),
+              mimeType: 'image/png',
+              sizeBytes: 11,
+              provider: 'filesystem',
+            },
+          },
+        ],
+        error:
+          'Blob-backed image outputs are not supported for multimodal grading yet. Configure the image provider to return base64 or data URI image output.',
+      },
+      {
+        name: 'should reject whitespace-only image output data before grading',
+        images: [{ data: '   ', mimeType: 'image/png' }],
+        error: 'Image output data must contain non-empty base64 image data.',
+      },
+      {
+        name: 'should reject raw image data that exceeds the raw character cap before grading',
+        env: { PROMPTFOO_GRADING_IMAGE_MAX_RAW_CHARS: '20' },
+        images: [{ data: `abc123${' '.repeat(20)}`, mimeType: 'image/png' }],
+        error: 'Image output raw data exceeds multimodal grading size limit',
+      },
+      {
+        name: 'should reject too many image outputs before grading',
+        env: { PROMPTFOO_GRADING_MAX_IMAGES: '1' },
+        images: [
+          { data: 'abc123', mimeType: 'image/png' },
+          { data: 'def456', mimeType: 'image/png' },
+        ],
+        error: 'Too many images for multimodal grading: received 2, maximum is 1.',
+      },
+      {
+        name: 'should reject oversized inline image outputs before grading',
+        env: { PROMPTFOO_GRADING_IMAGE_MAX_BYTES: '4' },
+        images: [{ data: Buffer.alloc(5).toString('base64'), mimeType: 'image/png' }],
+        error: 'Image output exceeds multimodal grading size limit: 5 bytes, maximum is 4.',
+      },
+      {
+        name: 'should reject inline image outputs that exceed the total size limit before grading',
+        env: {
+          PROMPTFOO_GRADING_IMAGE_MAX_BYTES: '10',
+          PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES: '9',
         },
+        images: [
+          { data: Buffer.alloc(5).toString('base64'), mimeType: 'image/png' },
+          { data: Buffer.alloc(5).toString('base64'), mimeType: 'image/png' },
+        ],
+        error: 'Image outputs exceed multimodal grading total size limit: 10 bytes, maximum is 9.',
       },
-    );
-
-    const prompt = provider.callApi.mock.calls[0][0] as string;
-    expect(JSON.parse(prompt)[0].content).toContainEqual({
-      type: 'image_url',
-      image_url: { url: 'data:image/png;base64,abc123' },
-    });
-  });
-
-  it('should reject whitespace-only image output data before grading', async () => {
-    const provider = createMockProvider({
-      response: {
-        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-      },
-    });
-
-    await expect(
-      matchesLlmRubric(
-        'Does the image match?',
-        'Generated image',
-        {
-          rubricPrompt: 'Grade this output',
-          provider,
-        },
-        {},
-        undefined,
-        {
-          providerResponse: {
-            output: 'Generated image',
-            images: [{ data: '   ', mimeType: 'image/png' }],
-          },
-        },
-      ),
-    ).rejects.toThrow('Image output data must contain non-empty base64 image data.');
-    expect(provider.callApi).not.toHaveBeenCalled();
-  });
-
-  it('should reject raw image data that exceeds the raw character cap before grading', async () => {
-    const restoreEnv = mockProcessEnv({ PROMPTFOO_GRADING_IMAGE_MAX_RAW_CHARS: '20' });
-    const provider = createMockProvider({
-      response: {
-        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-      },
-    });
-
+    ].map((testCase) => [testCase.name, testCase] as const),
+  )('%s', async (_name, { env, images, error }) => {
+    const restoreEnv = env ? mockProcessEnv(env) : undefined;
+    const provider = createMockProvider();
     try {
       await expect(
         matchesLlmRubric(
           'Does the image match?',
           'Generated image',
-          {
-            rubricPrompt: 'Grade this output',
-            provider,
-          },
+          { rubricPrompt: 'Grade this output', provider },
           {},
           undefined,
-          {
-            providerResponse: {
-              output: 'Generated image',
-              images: [{ data: `abc123${' '.repeat(20)}`, mimeType: 'image/png' }],
-            },
-          },
+          { providerResponse: { output: 'Generated image', images } },
         ),
-      ).rejects.toThrow('Image output raw data exceeds multimodal grading size limit');
+      ).rejects.toThrow(error);
     } finally {
-      restoreEnv();
-    }
-    expect(provider.callApi).not.toHaveBeenCalled();
-  });
-
-  it('should reject too many image outputs before grading', async () => {
-    const restoreEnv = mockProcessEnv({ PROMPTFOO_GRADING_MAX_IMAGES: '1' });
-    const provider = createMockProvider({
-      response: {
-        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-      },
-    });
-
-    try {
-      await expect(
-        matchesLlmRubric(
-          'Does the image match?',
-          'Generated image',
-          {
-            rubricPrompt: 'Grade this output',
-            provider,
-          },
-          {},
-          undefined,
-          {
-            providerResponse: {
-              output: 'Generated image',
-              images: [
-                { data: 'abc123', mimeType: 'image/png' },
-                { data: 'def456', mimeType: 'image/png' },
-              ],
-            },
-          },
-        ),
-      ).rejects.toThrow('Too many images for multimodal grading: received 2, maximum is 1.');
-    } finally {
-      restoreEnv();
-    }
-    expect(provider.callApi).not.toHaveBeenCalled();
-  });
-
-  it('should reject oversized inline image outputs before grading', async () => {
-    const restoreEnv = mockProcessEnv({ PROMPTFOO_GRADING_IMAGE_MAX_BYTES: '4' });
-    const provider = createMockProvider({
-      response: {
-        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-      },
-    });
-
-    try {
-      await expect(
-        matchesLlmRubric(
-          'Does the image match?',
-          'Generated image',
-          {
-            rubricPrompt: 'Grade this output',
-            provider,
-          },
-          {},
-          undefined,
-          {
-            providerResponse: {
-              output: 'Generated image',
-              images: [{ data: Buffer.alloc(5).toString('base64'), mimeType: 'image/png' }],
-            },
-          },
-        ),
-      ).rejects.toThrow(
-        'Image output exceeds multimodal grading size limit: 5 bytes, maximum is 4.',
-      );
-    } finally {
-      restoreEnv();
-    }
-    expect(provider.callApi).not.toHaveBeenCalled();
-  });
-
-  it('should reject inline image outputs that exceed the total size limit before grading', async () => {
-    const restoreEnv = mockProcessEnv({
-      PROMPTFOO_GRADING_IMAGE_MAX_BYTES: '10',
-      PROMPTFOO_GRADING_IMAGE_MAX_TOTAL_BYTES: '9',
-    });
-    const provider = createMockProvider({
-      response: {
-        output: JSON.stringify({ pass: true, score: 1, reason: 'image ok' }),
-      },
-    });
-
-    try {
-      await expect(
-        matchesLlmRubric(
-          'Does the image match?',
-          'Generated image',
-          {
-            rubricPrompt: 'Grade this output',
-            provider,
-          },
-          {},
-          undefined,
-          {
-            providerResponse: {
-              output: 'Generated image',
-              images: [
-                { data: Buffer.alloc(5).toString('base64'), mimeType: 'image/png' },
-                { data: Buffer.alloc(5).toString('base64'), mimeType: 'image/png' },
-              ],
-            },
-          },
-        ),
-      ).rejects.toThrow(
-        'Image outputs exceed multimodal grading total size limit: 10 bytes, maximum is 9.',
-      );
-    } finally {
-      restoreEnv();
+      restoreEnv?.();
     }
     expect(provider.callApi).not.toHaveBeenCalled();
   });
@@ -2325,7 +1910,6 @@ describe('matchesLlmRubric', () => {
   { "role": "system", "content": {{ system_prompt | dump }} },
   { "role": "user", "content": "Output: {{ output }}" }
 ]`;
-    mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(mockJsonContent);
 
     const rubric = 'Test rubric';
@@ -2384,7 +1968,6 @@ Evaluate the response
   content: {{ system_prompt }}
 - role: user
   content: "Output: {{ output }}"`;
-    mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(mockYamlContent);
 
     const rubric = 'Test rubric';
@@ -2573,11 +2156,6 @@ Evaluate the response
 
     const remoteGeneration = await import('../../src/redteam/remoteGeneration');
     vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
-    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Remote grading passed',
-    });
     (cliState as any).config = { redteam: {} };
 
     const result = await matchesLlmRubric(rubric, llmOutput, grading, undefined, undefined, {
@@ -2748,13 +2326,7 @@ Evaluate the response
     // No provider configured - this is the key change
     const grading = {};
 
-    // Clear and set up specific mock behavior for this test
-    vi.mocked(remoteGrading.doRemoteGrading).mockClear();
-    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Remote grading passed',
-    });
+    // Use the passing remote response installed by the shared setup.
 
     // Import and set up shouldGenerateRemote mock properly
     const remoteGeneration = await import('../../src/redteam/remoteGeneration');
@@ -2782,7 +2354,6 @@ Evaluate the response
     const llmOutput = 'Test output';
     const grading = {};
 
-    vi.mocked(remoteGrading.doRemoteGrading).mockClear();
     vi.mocked(remoteGrading.doRemoteGrading).mockRejectedValue(new Error('network down'));
 
     const remoteGeneration = await import('../../src/redteam/remoteGeneration');
@@ -2810,13 +2381,7 @@ Evaluate the response
       }),
     };
 
-    // Clear and set up specific mock behavior for this test
-    vi.mocked(remoteGrading.doRemoteGrading).mockClear();
-    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Remote grading passed',
-    });
+    // Use the passing remote response installed by the shared setup.
 
     // Import and set up shouldGenerateRemote mock properly
     const remoteGeneration2 = await import('../../src/redteam/remoteGeneration');
@@ -2837,50 +2402,7 @@ Evaluate the response
   });
 });
 
-describe('tryParse and renderLlmRubricPrompt', () => {
-  let tryParse: (content: string | null | undefined) => any;
-
-  beforeAll(async () => {
-    const context: { capturedFn: null | Function } = { capturedFn: null };
-
-    await renderLlmRubricPrompt('{"test":"value"}', {
-      __capture(fn: Function) {
-        context.capturedFn = fn;
-        return 'captured';
-      },
-    });
-
-    tryParse = function (content: string | null | undefined) {
-      try {
-        if (content === null || content === undefined) {
-          return content;
-        }
-        return JSON.parse(content);
-      } catch {}
-      return content;
-    };
-  });
-
-  it('should parse valid JSON', () => {
-    const input = '{"key": "value"}';
-    expect(tryParse(input)).toEqual({ key: 'value' });
-  });
-
-  it('should return original string for invalid JSON', () => {
-    const input = 'not json';
-    expect(tryParse(input)).toBe('not json');
-  });
-
-  it('should handle empty string', () => {
-    const input = '';
-    expect(tryParse(input)).toBe('');
-  });
-
-  it('should handle null and undefined', () => {
-    expect(tryParse(null)).toBeNull();
-    expect(tryParse(undefined)).toBeUndefined();
-  });
-
+describe('renderLlmRubricPrompt', () => {
   it('should render strings inside JSON objects', async () => {
     const template = '{"role": "user", "content": "Hello {{name}}"}';
     const result = await renderLlmRubricPrompt(template, { name: 'World' });
@@ -2895,10 +2417,13 @@ describe('tryParse and renderLlmRubricPrompt', () => {
     expect(parsed).toEqual({ nested: { text: 'test', number: 42 } });
   });
 
-  it('should handle non-JSON templates with legacy rendering', async () => {
-    const template = 'Hello {{name}}';
+  it.each([
+    ['Hello {{name}}', 'Hello World'],
+    ['not json', 'not json'],
+    ['', ''],
+  ])('should handle non-JSON template %j with legacy rendering', async (template, expected) => {
     const result = await renderLlmRubricPrompt(template, { name: 'World' });
-    expect(result).toBe('Hello World');
+    expect(result).toBe(expected);
   });
 
   it('should handle complex objects in context', async () => {

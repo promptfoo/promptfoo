@@ -22,10 +22,7 @@ import type { RedteamGradingContext } from '../../../src/redteam/grading/types';
 import type { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import type { AssertionValue, AtomicTestCase } from '../../../src/types/index';
 
-vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => ({
-  ...(await importOriginal()),
-  matchesLlmRubric: vi.fn(),
-}));
+vi.mock('../../../src/matchers/llmGrading');
 
 const grade = { pass: false, score: 0, reason: 'Fixture verdict' };
 const output = 'A description of the synthetic fixture.';
@@ -41,7 +38,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  vi.mocked(matchesLlmRubric).mockReset();
 });
 
 async function evaluate(
@@ -68,6 +64,11 @@ async function evaluate(
   expect(vi.mocked(matchesLlmRubric).mock.calls[0][1]).toBe(output);
   expect(result.grade).toEqual(grade);
   return result.rubric;
+}
+
+async function expectMissingImage(grader: RedteamGraderBase, test: AtomicTestCase, error: string) {
+  await expect(grader.getResult(prompt, output, test, undefined, undefined)).rejects.toThrow(error);
+  expect(matchesLlmRubric).not.toHaveBeenCalled();
 }
 
 describe('VLGuard active grading', () => {
@@ -106,33 +107,23 @@ describe('VLGuard active grading', () => {
   it.each([undefined, 'missing'])(
     'does not substitute unrelated images when the selected variable is %s',
     async (imageDatasetInputVar) => {
-      await expect(
-        new VLGuardGrader().getResult(
-          prompt,
-          output,
-          {
-            vars: { prompt, unrelated: inputImage },
-            metadata: { purpose, safe: true, imageDatasetInputVar },
-          },
-          undefined,
-          undefined,
-        ),
-      ).rejects.toThrow('VLGuard safe-control grading requires');
-      expect(matchesLlmRubric).not.toHaveBeenCalled();
+      await expectMissingImage(
+        new VLGuardGrader(),
+        {
+          vars: { prompt, unrelated: inputImage },
+          metadata: { purpose, safe: true, imageDatasetInputVar },
+        },
+        'VLGuard safe-control grading requires',
+      );
     },
   );
 
   it('rejects safe-control grading without inline image evidence', async () => {
-    await expect(
-      new VLGuardGrader().getResult(
-        prompt,
-        output,
-        { vars: { prompt }, metadata: { purpose, safe: true } },
-        undefined,
-        undefined,
-      ),
-    ).rejects.toThrow('VLGuard safe-control grading requires an input image');
-    expect(matchesLlmRubric).not.toHaveBeenCalled();
+    await expectMissingImage(
+      new VLGuardGrader(),
+      { vars: { prompt }, metadata: { purpose, safe: true } },
+      'VLGuard safe-control grading requires an input image',
+    );
   });
 
   it.each([
@@ -179,6 +170,27 @@ describe('VLGuard active grading', () => {
         { metadata: { [alias]: true }, value: { [alias]: false }, context: undefined, safe: false },
         { metadata: { [alias]: false }, value: undefined, context: { [alias]: true }, safe: true },
         { metadata: { [alias]: true }, value: undefined, context: { [alias]: false }, safe: false },
+        {
+          metadata: { safe: true, vlguardSafe: true },
+          value: { [alias]: false },
+          context: undefined,
+          safe: false,
+        },
+        {
+          metadata: { safe: true, vlguardSafe: true },
+          value: undefined,
+          context: { [alias]: false },
+          safe: false,
+        },
+        {
+          metadata: { [alias]: true },
+          value: Object.assign(
+            Object.create({ [alias === 'safe' ? 'vlguardSafe' : 'safe']: true }),
+            { [alias]: false },
+          ),
+          context: undefined,
+          safe: false,
+        },
         {
           metadata: { [alias]: true },
           value: { [alias]: true },
@@ -346,8 +358,7 @@ describe('shared grading behavior', () => {
 });
 
 describe('VLSU generated assertions and active grading', () => {
-  const safeMetadata = {
-    purpose,
+  const safeFields = {
     vlsuCategory: 'C4',
     vlsuCategoryName: CATEGORY_NAMES.C4,
     vlsuSeverityPattern: 'safe_safe_safe',
@@ -356,6 +367,7 @@ describe('VLSU generated assertions and active grading', () => {
     combinedGrade: 'safe',
     isCompositional: false,
   };
+  const safeMetadata = { purpose, ...safeFields };
 
   it('attaches only the VLSU safe-control input image', async () => {
     await new VLSUGrader().getResult(
@@ -374,16 +386,11 @@ describe('VLSU generated assertions and active grading', () => {
   });
 
   it('rejects VLSU safe controls without the input image', async () => {
-    await expect(
-      new VLSUGrader().getResult(
-        prompt,
-        output,
-        { vars: { prompt, unrelated: inputImage }, metadata: safeMetadata },
-        undefined,
-        undefined,
-      ),
-    ).rejects.toThrow('VLSU safe-control grading requires');
-    expect(matchesLlmRubric).not.toHaveBeenCalled();
+    await expectMissingImage(
+      new VLSUGrader(),
+      { vars: { prompt, unrelated: inputImage }, metadata: safeMetadata },
+      'VLSU safe-control grading requires',
+    );
   });
 
   it.each([...VLSU_CATEGORIES, 'unknown'])(
@@ -399,7 +406,6 @@ describe('VLSU generated assertions and active grading', () => {
           imageCategory: '',
           textCategory: '',
           combinedCategory: category,
-          webPath: '',
           uuid: 'fixture',
           severityPattern: 'safe_safe_unsafe',
         },
@@ -446,7 +452,6 @@ describe('VLSU generated assertions and active grading', () => {
           imageCategory: 'C4',
           textCategory: 'C4',
           uuid: 'image-only-fixture',
-          webPath: 'fixture/image.png',
           severityPattern: 'safe_safe_unsafe',
         },
       ]);
@@ -477,14 +482,8 @@ describe('VLSU generated assertions and active grading', () => {
         { vars: { prompt, image: inputImage }, metadata: { purpose } },
         undefined,
         {
-          vlsuCategory: 'C4',
-          vlsuCategoryName: CATEGORY_NAMES.C4,
-          vlsuSeverityPattern: 'safe_safe_safe',
-          imageGrade: 'safe',
-          textGrade: 'safe',
-          combinedGrade: 'safe',
+          ...safeFields,
           categoryGuidance: CATEGORY_GUIDANCE.C4,
-          isCompositional: false,
         },
       );
       expect(matchesLlmRubric).toHaveBeenCalledTimes(1);
@@ -498,14 +497,8 @@ describe('VLSU generated assertions and active grading', () => {
       new VLSUGrader(),
       {},
       {
-        vlsuCategory: 'C4',
-        vlsuCategoryName: CATEGORY_NAMES.C4,
-        vlsuSeverityPattern: 'safe_safe_safe',
-        imageGrade: 'safe',
-        textGrade: 'safe',
-        combinedGrade: 'safe',
+        ...safeFields,
         categoryGuidance: CATEGORY_GUIDANCE.C4,
-        isCompositional: false,
       },
     );
     expect(rubric).toContain('This is a CONTROL CASE where the combination is safe');

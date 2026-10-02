@@ -1,4 +1,3 @@
-import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 
@@ -6,53 +5,19 @@ import { fetchWithProxy } from '../../util/fetch/index';
  * Detect image format from buffer
  */
 function detectImageFormat(buffer: Buffer): string {
-  // Check JPEG signature
-  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xd8) {
-    return 'image/jpeg';
-  }
   // Check PNG signature
-  if (
-    buffer.length >= 8 &&
-    buffer[0] === 0x89 &&
-    buffer[1] === 0x50 &&
-    buffer[2] === 0x4e &&
-    buffer[3] === 0x47 &&
-    buffer[4] === 0x0d &&
-    buffer[5] === 0x0a &&
-    buffer[6] === 0x1a &&
-    buffer[7] === 0x0a
-  ) {
+  if (buffer.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) {
     return 'image/png';
   }
   // Check GIF signature
-  if (
-    buffer.length >= 6 &&
-    ((buffer[0] === 0x47 &&
-      buffer[1] === 0x49 &&
-      buffer[2] === 0x46 &&
-      buffer[3] === 0x38 &&
-      buffer[4] === 0x37 &&
-      buffer[5] === 0x61) ||
-      (buffer[0] === 0x47 &&
-        buffer[1] === 0x49 &&
-        buffer[2] === 0x46 &&
-        buffer[3] === 0x38 &&
-        buffer[4] === 0x39 &&
-        buffer[5] === 0x61))
-  ) {
+  const gif = buffer.subarray(0, 6);
+  if (gif.equals(Buffer.from('GIF87a')) || gif.equals(Buffer.from('GIF89a'))) {
     return 'image/gif';
   }
   // Check WebP signature
   if (
-    buffer.length >= 12 &&
-    buffer[0] === 0x52 &&
-    buffer[1] === 0x49 &&
-    buffer[2] === 0x46 &&
-    buffer[3] === 0x46 &&
-    buffer[8] === 0x57 &&
-    buffer[9] === 0x45 &&
-    buffer[10] === 0x42 &&
-    buffer[11] === 0x50
+    buffer.subarray(0, 4).equals(Buffer.from('RIFF')) &&
+    buffer.subarray(8, 12).equals(Buffer.from('WEBP'))
   ) {
     return 'image/webp';
   }
@@ -116,69 +81,4 @@ export function fisherYatesShuffle<T>(array: T[]): T[] {
  */
 export function getStringField(field: unknown, defaultValue: string = ''): string {
   return typeof field === 'string' ? field : defaultValue;
-}
-
-/**
- * Base class for image dataset managers with caching
- */
-export abstract class ImageDatasetManager<T> {
-  protected datasetCache: T[] | null = null;
-  protected abstract pluginId: string;
-  protected abstract datasetPath: string;
-  protected abstract fetchLimit: number;
-
-  /**
-   * Ensure the dataset is loaded into cache
-   */
-  protected async ensureDatasetLoaded(): Promise<void> {
-    if (this.datasetCache !== null) {
-      logger.debug(
-        `[${this.pluginId}] Using cached dataset with ${this.datasetCache.length} records`,
-      );
-      return;
-    }
-
-    logger.debug(`[${this.pluginId}] Fetching ${this.fetchLimit} records from dataset`);
-
-    try {
-      const records = await fetchHuggingFaceDataset(this.datasetPath, this.fetchLimit);
-
-      if (!records || records.length === 0) {
-        throw new Error(`No records returned from dataset. Check your Hugging Face API token.`);
-      }
-
-      logger.debug(`[${this.pluginId}] Fetched ${records.length} total records`);
-
-      // Process records - to be implemented by subclass
-      this.datasetCache = await this.processRecords(records);
-
-      logger.debug(`[${this.pluginId}] Cached ${this.datasetCache.length} processed records`);
-    } catch (error) {
-      logger.error(
-        `[${this.pluginId}] Error fetching dataset: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      throw new Error(
-        `Failed to fetch dataset: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
-  /**
-   * Process raw records from Hugging Face into the desired format
-   * Must be implemented by subclasses
-   */
-  protected abstract processRecords(records: any[]): Promise<T[]>;
-
-  /**
-   * Get filtered records based on plugin configuration
-   * Must be implemented by subclasses
-   */
-  public abstract getFilteredRecords(limit: number, config?: any): Promise<T[]>;
-
-  /**
-   * Clear the cache - useful for testing
-   */
-  public clearCache(): void {
-    this.datasetCache = null;
-  }
 }

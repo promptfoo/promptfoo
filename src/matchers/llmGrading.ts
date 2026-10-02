@@ -153,10 +153,8 @@ function getGradingOutputForImages(llmOutput: string, imageOutputs: ProviderResp
 
   if (
     imageOutputs.some((image) => {
-      if (!image.data) {
-        return false;
-      }
-      const imageData = image.data.trim();
+      // The caller supplies materialized image outputs with canonical data URIs.
+      const imageData = image.data!.trim();
       return imageData === trimmedOutput || getDataUriPayload(imageData) === trimmedOutput;
     })
   ) {
