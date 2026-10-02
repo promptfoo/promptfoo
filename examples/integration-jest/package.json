@@ -4,9 +4,9 @@
   "description": "A small example of testing LLM prompts using Jest, Vitest, and promptfoo.",
   "main": "index.js",
   "scripts": {
-    "test": "jest",
-    "test:jest": "npx jest",
-    "test:vitest": "npx vitest"
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:jest": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:vitest": "vitest"
   },
   "keywords": [
     "jest",
@@ -20,8 +20,13 @@
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "jest": "^30.2.0",
+    "promptfoo": "latest",
     "ts-jest": "^29.4.6",
     "typescript": "^5.9.3",
     "vitest": "^5.0.0"
-  }
+  },
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "type": "module"
 }
