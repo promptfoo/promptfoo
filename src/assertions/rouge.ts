@@ -63,7 +63,7 @@ function jsRougeScore(fnName: 'l' | 's', candidate: string, reference: string): 
   if (/^[\s\u0085]*$/u.test(candidate) || /^[\s\u0085]*$/u.test(reference)) {
     return 0;
   }
-  return rouge[fnName](candidate, reference, {});
+  return rouge[fnName](candidate, reference, { caseSensitive: false });
 }
 
 export function handleRougeScore({
@@ -76,16 +76,11 @@ export function handleRougeScore({
   invariant(typeof renderedValue === 'string', '"rouge" assertion type must be a string value');
   const fnName = baseType[baseType.length - 1] as 'n' | 'l' | 's';
 
-  // Score case-insensitively, matching the other text-overlap metrics
-  // (bleu/gleu/meteor all lowercase their inputs). A difference in capitalization
-  // should not crater the score.
-  const candidate = outputString.toLowerCase();
-  const reference = renderedValue.toLowerCase();
-
-  // ROUGE-N is computed in-house with clipped counts so repeated tokens score
-  // correctly. ROUGE-L/S are delegated to js-rouge on the lowercased inputs.
+  // Preserve ROUGE-N's local scoring; let js-rouge segment L/S text before folding case.
   const score =
-    fnName === 'n' ? rougeNScore(candidate, reference) : jsRougeScore(fnName, candidate, reference);
+    fnName === 'n'
+      ? rougeNScore(outputString.toLowerCase(), renderedValue.toLowerCase())
+      : jsRougeScore(fnName, outputString, renderedValue);
 
   const threshold = assertion.threshold ?? 0.75;
   const pass = score >= threshold !== inverse;

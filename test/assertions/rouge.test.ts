@@ -242,6 +242,41 @@ describe('handleRougeScore', () => {
       expect(result.pass).toBe(false);
     });
 
+    it.each([false, true])(
+      'rouge-l matches reordered quoted sentences with inverse=%s',
+      (inverse) => {
+        const result = handleRougeScore(
+          makeParams('"The cat sat." "A dog ran."', '"A dog ran." "The cat sat."', {
+            baseType: 'rouge-l',
+            inverse,
+          }),
+        );
+
+        expect(result.score).toBe(inverse ? 0 : 1);
+        expect(result.pass).toBe(!inverse);
+      },
+    );
+
+    describe.each([
+      ['rouge-l', 5 / 7],
+      ['rouge-s', 2 / 3],
+    ])('%s line wrapping', (baseType, expected) => {
+      it.each(['\n', '\r\n'])('scores a %j wrap like a space', (separator) => {
+        const reference = 'Sat on the mat the cat.';
+        const flat = handleRougeScore(
+          makeParams('The cat sat on the mat.', reference, { baseType }),
+        );
+        const wrapped = handleRougeScore(
+          makeParams(`The cat${separator}sat on the mat.`, reference, { baseType }),
+        );
+
+        expect(flat.score).toBeCloseTo(expected, 12);
+        expect(wrapped.score).toBeCloseTo(expected, 12);
+        expect(flat.pass).toBe(false);
+        expect(wrapped.pass).toBe(false);
+      });
+    });
+
     it.each([
       ['rouge-l', 1],
       ['rouge-s', 0],
