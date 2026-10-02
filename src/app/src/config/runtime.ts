@@ -1,7 +1,13 @@
 import { callApi } from '@app/utils/api';
-import type { AppConfigResponse } from '@promptfoo/types/api/server';
 
-const DEFAULT_RUNTIME_CONFIG: AppConfigResponse = {
+type RuntimeConfig = {
+  tableSettings: {
+    prettifyJson: boolean;
+    showPassFail: boolean;
+  };
+};
+
+const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
   tableSettings: {
     prettifyJson: false,
     showPassFail: true,
@@ -10,7 +16,7 @@ const DEFAULT_RUNTIME_CONFIG: AppConfigResponse = {
 
 let runtimeConfig = DEFAULT_RUNTIME_CONFIG;
 
-export function getRuntimeConfig(): AppConfigResponse {
+export function getRuntimeConfig(): RuntimeConfig {
   return runtimeConfig;
 }
 
@@ -21,7 +27,7 @@ export async function loadRuntimeConfig(): Promise<void> {
       return;
     }
 
-    const config = (await response.json()) as AppConfigResponse;
+    const config = (await response.json()) as RuntimeConfig;
     if (
       typeof config?.tableSettings?.prettifyJson === 'boolean' &&
       typeof config.tableSettings.showPassFail === 'boolean'

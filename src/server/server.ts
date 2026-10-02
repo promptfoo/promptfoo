@@ -15,7 +15,6 @@ import {
   setupSignalWatcher,
   updateEvalIds,
 } from '../database/signal';
-import { getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -58,6 +57,14 @@ const JS_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
 
 // Express middleware limits
 const REQUEST_SIZE_LIMIT = '100mb';
+
+function getProcessEnvBool(key: string, defaultValue: boolean): boolean {
+  const value = process.env[key];
+  if (!value) {
+    return defaultValue;
+  }
+  return ['1', 'true', 'yes', 'yup', 'yeppers'].includes(value.toLowerCase());
+}
 
 /**
  * Middleware to set proper MIME types for JavaScript files.
@@ -152,8 +159,14 @@ export function createApp() {
     res.json(
       ServerSchemas.AppConfig.Response.parse({
         tableSettings: {
-          prettifyJson: getEnvBool('PROMPTFOO_WEB_VIEWER_TABLE_SETTING_PRETTIFY_JSON', false),
-          showPassFail: getEnvBool('PROMPTFOO_WEB_VIEWER_TABLE_SETTING_SHOW_PASS_FAIL', true),
+          prettifyJson: getProcessEnvBool(
+            'PROMPTFOO_WEB_VIEWER_TABLE_SETTING_PRETTIFY_JSON',
+            false,
+          ),
+          showPassFail: getProcessEnvBool(
+            'PROMPTFOO_WEB_VIEWER_TABLE_SETTING_SHOW_PASS_FAIL',
+            true,
+          ),
         },
       }),
     );
