@@ -1,4 +1,5 @@
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import { countSelectedCustomIntents } from '../../utils/plugins';
 import type { Strategy } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 
@@ -102,7 +103,23 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
 
 export function getEstimatedProbes(config: Config) {
   const numTests = config.numTests ?? 5;
-  const baseProbes = numTests * config.plugins.length;
+  const pluginCounts = new Map<string, number>();
+  for (const entry of config.plugins) {
+    const plugin = typeof entry === 'string' ? { id: entry } : entry;
+    const severity = 'severity' in plugin ? plugin.severity : undefined;
+    // Match config deduplication: the last count wins for the same options and severity.
+    const key = `${plugin.id}:${JSON.stringify(plugin.config)}:${severity || ''}`;
+    const pluginNumTests =
+      typeof entry === 'object' && 'numTests' in entry ? entry.numTests : undefined;
+    const count =
+      plugin.id === 'intent'
+        ? countSelectedCustomIntents({ plugins: [plugin] })
+        : pluginNumTests || numTests;
+    const language = plugin.config?.language ?? config.language;
+    const numLanguages = Array.isArray(language) ? language.length : 1;
+    pluginCounts.set(key, count * numLanguages);
+  }
+  const baseProbes = Array.from(pluginCounts.values()).reduce((total, count) => total + count, 0);
 
   // Calculate total multiplier for all active strategies
   const strategyMultiplier = config.strategies.reduce((total, strategy) => {
@@ -111,16 +128,7 @@ export function getEstimatedProbes(config: Config) {
     return total + STRATEGY_PROBE_MULTIPLIER[strategyId];
   }, 0);
 
-  // Get number of languages from global language config
-  const numLanguages = Array.isArray(config.language)
-    ? config.language.length
-    : config.language
-      ? 1
-      : 1;
-
-  const strategyProbes = strategyMultiplier * baseProbes;
-
-  return (baseProbes + strategyProbes) * numLanguages;
+  return baseProbes * (1 + strategyMultiplier);
 }
 
 export function getEstimatedDuration(config: Config): string {

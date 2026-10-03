@@ -179,6 +179,31 @@ describe('getUnifiedConfig', () => {
     ]);
   });
 
+  it.each([undefined, {}, { targetSystems: ['documents'] }])(
+    'preserves per-plugin counts and severity with config %j',
+    (pluginConfig) => {
+      const plugin = Object.freeze({
+        id: 'bola',
+        numTests: 17,
+        severity: Severity.Critical,
+        config: pluginConfig,
+      });
+      const result = getUnifiedConfig({ ...baseConfig, numTests: 5, plugins: [plugin] });
+
+      expect(result.redteam.plugins).toEqual([
+        {
+          id: 'bola',
+          numTests: 17,
+          severity: Severity.Critical,
+          ...(pluginConfig && Object.keys(pluginConfig).length > 0 && { config: pluginConfig }),
+        },
+      ]);
+      expect(result.redteam.plugins![0]).not.toBe(plugin);
+      expect(plugin.config).toBe(pluginConfig);
+      expect(result.redteam.numTests).toBe(5);
+    },
+  );
+
   it('should transform strategies with stateful config', () => {
     const configWithStrategies: SavedRedteamConfig = {
       ...baseConfig,
