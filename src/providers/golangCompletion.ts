@@ -24,6 +24,15 @@ import type {
 
 const execFileAsync = util.promisify(execFile);
 
+/** Entry point supplied by promptfoo; compiled alongside the provider. */
+const WRAPPER_FILE = 'wrapper.go';
+
+// Give generated-file errors a name distinct from common provider filenames.
+const ADAPTER_FILE = 'promptfoo_adapter.go';
+
+// Both names resolve to CallApi in src/golang/wrapper.go.
+const SUPPORTED_FUNCTION_NAMES = new Set(['CallApi', 'call_api']);
+
 interface GolangProviderConfig {
   goExecutable?: string;
 }
@@ -65,11 +74,62 @@ export class GolangProvider implements ApiProvider {
     throw new Error('Could not find go.mod file in any parent directory');
   }
 
+  // Named packages need a separate entry point; legacy main packages use an explicit
+  // file list so multiple providers can share a directory without duplicate symbols.
+  private async prepareBuild({
+    goExecutable,
+    tempDir,
+    scriptDir,
+    scriptFile,
+    env,
+  }: {
+    goExecutable: string;
+    tempDir: string;
+    scriptDir: string;
+    scriptFile: string;
+    env: NodeJS.ProcessEnv;
+  }): Promise<{ buildDir: string; buildFiles: string[] }> {
+    const { stdout } = await execFileAsync(goExecutable, ['list', '-json', '.'], {
+      cwd: scriptDir,
+      env,
+    });
+
+    let packageInfo: { ImportPath?: string; Name?: string };
+    try {
+      packageInfo = JSON.parse(stdout);
+    } catch {
+      throw new Error(`Could not parse 'go list' output for the Go provider package: ${stdout}`);
+    }
+
+    if (!packageInfo.Name || packageInfo.Name === 'main') {
+      return { buildDir: scriptDir, buildFiles: [WRAPPER_FILE, scriptFile] };
+    }
+
+    if (!packageInfo.ImportPath) {
+      throw new Error('Could not determine Go provider import path');
+    }
+
+    const buildDir = await fs.mkdtemp(path.join(tempDir, '.promptfoo-wrapper-'));
+    await fs.writeFile(
+      path.join(buildDir, ADAPTER_FILE),
+      `package main\n\nimport provider ${JSON.stringify(packageInfo.ImportPath)}\n\nvar CallApi = ApiFunc(provider.CallApi)\n`,
+    );
+    return { buildDir, buildFiles: [WRAPPER_FILE, ADAPTER_FILE] };
+  }
+
   private async executeGolangScript(
     prompt: string,
     context: CallApiContextParams | undefined,
     apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
   ): Promise<any> {
+    // Validate before caching so a previous response cannot hide a configuration error.
+    if (this.functionName && !SUPPORTED_FUNCTION_NAMES.has(this.functionName)) {
+      throw new Error(
+        `Go providers must export a function named 'CallApi', but '${this.scriptPath}' requested '${this.functionName}'. ` +
+          `Rename the function to 'CallApi' or drop the ':${this.functionName}' suffix from the provider id.`,
+      );
+    }
+
     const absPath = path.resolve(path.join(this.options?.config?.basePath || '', this.scriptPath));
     const moduleRoot = await this.findModuleRoot(path.dirname(absPath));
     logger.debug(`Found module root at ${moduleRoot}`);
@@ -135,31 +195,19 @@ export class GolangProvider implements ApiProvider {
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);
         const goExecutable = this.config.goExecutable || 'go';
+
         const env = getProcessEnv();
-        const { stdout: packageJson } = await execFileAsync(goExecutable, ['list', '-json', '.'], {
-          cwd: scriptDir,
+        const { buildDir, buildFiles } = await this.prepareBuild({
+          goExecutable,
+          tempDir,
+          scriptDir,
+          scriptFile: path.basename(relativeScriptPath),
           env,
         });
-        const packageInfo = JSON.parse(packageJson) as { ImportPath?: string; Name?: string };
-        let buildDir = scriptDir;
-        let buildFiles = ['wrapper.go', path.basename(relativeScriptPath)];
-
-        if (packageInfo.Name && packageInfo.Name !== 'main') {
-          if (!packageInfo.ImportPath) {
-            throw new Error('Could not determine Go provider import path');
-          }
-
-          buildDir = await fs.mkdtemp(path.join(tempDir, '.promptfoo-wrapper-'));
-          await fs.writeFile(
-            path.join(buildDir, 'provider.go'),
-            `package main\n\nimport provider ${JSON.stringify(packageInfo.ImportPath)}\n\nvar CallApi = provider.CallApi\n`,
-          );
-          buildFiles = ['wrapper.go', 'provider.go'];
-        }
 
         await fs.copyFile(
-          path.join(getWrapperDir('golang'), 'wrapper.go'),
-          path.join(buildDir, 'wrapper.go'),
+          path.join(getWrapperDir('golang'), WRAPPER_FILE),
+          path.join(buildDir, WRAPPER_FILE),
         );
 
         await execFileAsync(goExecutable, ['build', '-o', executablePath, ...buildFiles], {

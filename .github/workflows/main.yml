@@ -809,6 +809,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       # Keep real unsupported and minimum-supported runtimes available while
       # installing dependencies, building, and running Vitest on the repo Node.
@@ -849,6 +851,12 @@ jobs:
         uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
         with:
           ruby-version: 4.0.1
+
+      - name: Use Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: src/golang/go.mod
+          cache-dependency-path: examples/provider-golang/go.sum
 
       - name: Install Dependencies
         run: npm ci
@@ -1099,6 +1107,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -1110,3 +1120,9 @@ jobs:
         working-directory: src/golang
         run: |
           go test -v wrapper.go wrapper_test.go
+
+      - name: Build Go provider example
+        working-directory: examples/provider-golang
+        run: |
+          go build ./...
+          go vet ./...
