@@ -670,24 +670,14 @@ describe('loadApiProvider', () => {
     expect(provider.id()).not.toContain('secret');
   });
 
-  it('loadApiProvider with huggingface:text-generation', async () => {
-    const provider = await loadApiProvider('huggingface:text-generation:foobar/baz');
-    expect(provider).toBeInstanceOf(HuggingfaceTextGenerationProvider);
-  });
-
-  it('loadApiProvider with huggingface:feature-extraction', async () => {
-    const provider = await loadApiProvider('huggingface:feature-extraction:foobar/baz');
-    expect(provider).toBeInstanceOf(HuggingfaceFeatureExtractionProvider);
-  });
-
-  it('loadApiProvider with huggingface:text-classification', async () => {
-    const provider = await loadApiProvider('huggingface:text-classification:foobar/baz');
-    expect(provider).toBeInstanceOf(HuggingfaceTextClassificationProvider);
-  });
-
-  it('loadApiProvider with hf:text-classification', async () => {
-    const provider = await loadApiProvider('hf:text-classification:foobar/baz');
-    expect(provider).toBeInstanceOf(HuggingfaceTextClassificationProvider);
+  it.each([
+    ['huggingface:text-generation', HuggingfaceTextGenerationProvider],
+    ['huggingface:feature-extraction', HuggingfaceFeatureExtractionProvider],
+    ['huggingface:text-classification', HuggingfaceTextClassificationProvider],
+    ['hf:text-classification', HuggingfaceTextClassificationProvider],
+  ] as const)('loadApiProvider with %s', async (prefix, Provider) => {
+    const provider = await loadApiProvider(`${prefix}:foobar/baz`);
+    expect(provider).toBeInstanceOf(Provider);
   });
 
   it('loadApiProvider with bedrock:completion', async () => {
