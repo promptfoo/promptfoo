@@ -205,6 +205,10 @@ export function getAwsCredentialCacheNamespace(
       ? (scoped.AWS_ACCESS_KEY_ID ?? getEnvString('AWS_ACCESS_KEY_ID'))
       : undefined;
   const files = [options.filepath, options.configFilepath, options.webIdentityTokenFile];
+  // The SDK combines a scoped token file with an inherited role ARN. Keep that
+  // public account/role selector in the same response-cache identity.
+  const roleArn =
+    options.roleArn ?? (options.webIdentityTokenFile ? getEnvString('AWS_ROLE_ARN') : undefined);
   if (source.profile) {
     files.push(
       options.filepath ??
@@ -216,13 +220,7 @@ export function getAwsCredentialCacheNamespace(
     );
   }
   return getCredentialCacheNamespace(
-    [
-      source.accessKeyId,
-      source.profile,
-      options.roleArn,
-      options.roleSessionName,
-      profileSourceAccessKey,
-    ],
+    [source.accessKeyId, source.profile, roleArn, options.roleSessionName, profileSourceAccessKey],
     [...new Set(files.filter((file): file is string => file !== undefined))],
   );
 }

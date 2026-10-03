@@ -12,7 +12,6 @@ import { storeBlob } from '../../blobs';
 import logger from '../../logger';
 import { ellipsize } from '../../util/text';
 import { sleep } from '../../util/time';
-import { getAwsCredentialProviderOptions, resolveAwsCredentials } from '../awsCredentials';
 import { AwsBedrockGenericProvider } from './base';
 import { getScopedBedrockTokenOptions } from './util';
 
@@ -222,14 +221,12 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
         '@aws-sdk/client-bedrock-runtime'
       );
 
-      const credentials = await resolveAwsCredentials(this.config, this.env);
+      const credentialOptions = await this.getMediaCredentialOptions();
 
       const client = new BedrockRuntimeClient({
         region: this.getRegion(),
         ...getScopedBedrockTokenOptions(),
-        ...getAwsCredentialProviderOptions(this.env),
-        ...(credentials ? { credentials } : {}),
-        ...(this.getProfile() === undefined ? {} : { profile: this.getProfile() }),
+        ...credentialOptions,
       });
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -268,14 +265,12 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
         '@aws-sdk/client-bedrock-runtime'
       );
 
-      const credentials = await resolveAwsCredentials(this.config, this.env);
+      const credentialOptions = await this.getMediaCredentialOptions();
 
       const client = new BedrockRuntimeClient({
         region: this.getRegion(),
         ...getScopedBedrockTokenOptions(),
-        ...getAwsCredentialProviderOptions(this.env),
-        ...(credentials ? { credentials } : {}),
-        ...(this.getProfile() === undefined ? {} : { profile: this.getProfile() }),
+        ...credentialOptions,
       });
 
       while (Date.now() - startTime < maxPollTimeMs) {
@@ -334,13 +329,11 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
 
       // Download from S3
       const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
-      const credentials = await resolveAwsCredentials(this.config, this.env);
+      const credentialOptions = await this.getMediaCredentialOptions();
 
       const s3 = new S3Client({
         region: this.getRegion(),
-        ...getAwsCredentialProviderOptions(this.env),
-        ...(credentials ? { credentials } : {}),
-        ...(this.getProfile() === undefined ? {} : { profile: this.getProfile() }),
+        ...credentialOptions,
       });
 
       // Luma Ray outputs to {s3Uri}/output.mp4

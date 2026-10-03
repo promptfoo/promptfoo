@@ -326,70 +326,106 @@ describe('real cloud SDK credential construction without authentication calls', 
       'sdk-keyfile',
       'environment-adc',
       'well-known-adc',
+      'metadata-adc',
+      'api-key',
+      'nested-api-key',
     ].flatMap((mode) =>
-      ['host-quota', 'empty-host', 'scoped-quota', 'empty-scope'].map((scope) => ({ mode, scope })),
+      ['host-quota', 'empty-host', 'scoped-quota', 'empty-scope'].flatMap((scope) =>
+        [undefined, '', 'configured-quota'].flatMap((clientQuota) =>
+          [undefined, 'credential-quota'].map((jsonQuota) => ({
+            mode,
+            scope,
+            clientQuota,
+            jsonQuota,
+          })),
+        ),
+      ),
     ),
-  )('retains native quota precedence for $mode with $scope', async ({ mode, scope }) => {
-    const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-quota-precedence-'));
-    const file = path.join(dir, 'application_default_credentials.json');
-    const json = {
-      type: 'authorized_user',
-      client_id: 'fixture-client',
-      client_secret: 'fixture-secret',
-      refresh_token: 'fixture-refresh',
-      quota_project_id: 'credential-quota',
-    };
-    fs.writeFileSync(file, JSON.stringify(json));
-    mockProcessEnv({
-      GOOGLE_CLOUD_PROJECT: 'fixture-project',
-      GOOGLE_APPLICATION_CREDENTIALS: mode === 'well-known-adc' ? undefined : file,
-      CLOUDSDK_CONFIG: dir,
-      GOOGLE_CLOUD_QUOTA_PROJECT: scope === 'empty-host' ? '' : 'host-quota',
-    });
-    const options =
-      mode === 'explicit-json'
-        ? { credentials: JSON.stringify(json) }
-        : mode === 'sdk-credentials'
-          ? { googleAuthOptions: { credentials: json } }
-          : mode === 'sdk-keyfile'
-            ? { googleAuthOptions: { keyFilename: file } }
-            : {};
-    const scopedQuota =
-      scope === 'scoped-quota' ? 'scoped-quota' : scope === 'empty-scope' ? '' : undefined;
-    try {
-      // Release-equivalent SDK construction with the selected environment value.
-      const restoreQuota =
-        scopedQuota === undefined
-          ? () => {}
-          : mockProcessEnv({ GOOGLE_CLOUD_QUOTA_PROJECT: scopedQuota });
-      let expected;
+  )(
+    'retains native quota precedence for $mode with $scope, options=$clientQuota, JSON=$jsonQuota',
+    async ({ mode, scope, clientQuota, jsonQuota }) => {
+      const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-quota-precedence-'));
+      const file = path.join(dir, 'application_default_credentials.json');
+      const json = {
+        type: 'authorized_user',
+        client_id: 'fixture-client',
+        client_secret: 'fixture-secret',
+        refresh_token: 'fixture-refresh',
+        quota_project_id: jsonQuota,
+      };
+      if (mode !== 'metadata-adc') {
+        fs.writeFileSync(file, JSON.stringify(json));
+      }
+      if (mode === 'metadata-adc') {
+        vi.spyOn(GoogleAuth.prototype, '_checkIsGCE').mockResolvedValue(true);
+      }
+      mockProcessEnv({
+        GOOGLE_CLOUD_PROJECT: 'fixture-project',
+        GOOGLE_APPLICATION_CREDENTIALS: ['well-known-adc', 'metadata-adc'].includes(mode)
+          ? undefined
+          : file,
+        CLOUDSDK_CONFIG: dir,
+        GOOGLE_CLOUD_QUOTA_PROJECT: scope === 'empty-host' ? '' : 'host-quota',
+      });
+      const sourceOptions =
+        mode === 'explicit-json'
+          ? { credentials: JSON.stringify(json) }
+          : mode === 'sdk-credentials'
+            ? { googleAuthOptions: { credentials: json } }
+            : mode === 'sdk-keyfile'
+              ? { googleAuthOptions: { keyFilename: file } }
+              : mode === 'api-key'
+                ? { googleAuthOptions: { apiKey: 'fixture-api-key' } }
+                : mode === 'nested-api-key'
+                  ? { googleAuthOptions: { clientOptions: { apiKey: 'fixture-api-key' } } }
+                  : {};
+      const options = {
+        ...sourceOptions,
+        googleAuthOptions: {
+          ...sourceOptions.googleAuthOptions,
+          clientOptions: {
+            ...sourceOptions.googleAuthOptions?.clientOptions,
+            quotaProjectId: clientQuota,
+          },
+        },
+      };
+      const scopedQuota =
+        scope === 'scoped-quota' ? 'scoped-quota' : scope === 'empty-scope' ? '' : undefined;
       try {
-        const auth = new GoogleAuth(options.googleAuthOptions);
-        expected = mode === 'explicit-json' ? auth.fromJSON(json) : await auth.getClient();
+        // Release-equivalent SDK construction with the selected environment value.
+        const restoreQuota =
+          scopedQuota === undefined
+            ? () => {}
+            : mockProcessEnv({ GOOGLE_CLOUD_QUOTA_PROJECT: scopedQuota });
+        let expected;
+        try {
+          const auth = new GoogleAuth(options.googleAuthOptions);
+          expected = mode === 'explicit-json' ? auth.fromJSON(json) : await auth.getClient();
+        } finally {
+          restoreQuota();
+        }
+        const { client } = await cliState.withEnvFileOverrides(
+          scopedQuota === undefined ? {} : { GOOGLE_CLOUD_QUOTA_PROJECT: scopedQuota },
+          () => GoogleAuthManager.getOAuthClient(options, false),
+        );
+        for (const credential of [expected, client]) {
+          credential.credentials = {
+            access_token: 'fixture-token',
+            expiry_date: Date.now() + 3600000,
+          };
+        }
+        expect(client.quotaProjectId).toBe(expected.quotaProjectId);
+        expect((await client.getRequestHeaders()).get('x-goog-user-project')).toBe(
+          (await expected.getRequestHeaders()).get('x-goog-user-project'),
+        );
+        expect(process.env.GOOGLE_CLOUD_QUOTA_PROJECT).toBe(
+          scope === 'empty-host' ? '' : 'host-quota',
+        );
       } finally {
-        restoreQuota();
+        fs.rmSync(dir, { recursive: true, force: true });
       }
-      const { client } = await cliState.withEnvFileOverrides(
-        scopedQuota === undefined ? {} : { GOOGLE_CLOUD_QUOTA_PROJECT: scopedQuota },
-        () => GoogleAuthManager.getOAuthClient(options, false),
-      );
-      for (const credential of [expected, client]) {
-        credential.credentials = {
-          access_token: 'fixture-token',
-          expiry_date: Date.now() + 3600000,
-        };
-      }
-      expect(client.quotaProjectId).toBe(expected.quotaProjectId);
-      expect((await client.getRequestHeaders()).get('x-goog-user-project')).toBe(
-        (await expected.getRequestHeaders()).get('x-goog-user-project'),
-      );
-      expect(process.env.GOOGLE_CLOUD_QUOTA_PROJECT).toBe(
-        scope === 'empty-host' ? '' : 'host-quota',
-      );
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
+    },
+  );
 
   it.each([
     'AzureCliCredential',

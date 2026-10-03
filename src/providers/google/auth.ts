@@ -494,7 +494,7 @@ export class GoogleAuthManager {
     // For ADC, an empty environment value falls back to the credential's quota.
     const quotaProjectId = hasConfiguredCredentialSource
       ? undefined
-      : (authOptions.clientOptions?.quotaProjectId ?? (environmentQuotaProjectId || undefined));
+      : environmentQuotaProjectId || undefined;
     if (quotaProjectId !== undefined) {
       authOptions.clientOptions = { ...authOptions.clientOptions, quotaProjectId };
     }
@@ -549,13 +549,15 @@ export class GoogleAuthManager {
       client !== authOptions.authClient &&
       process.env.GOOGLE_CLOUD_QUOTA_PROJECT
     ) {
-      // Ambient ADC discovery may have applied the host quota after loading a
-      // well-known file. Recover that file's quota when this invocation clears it.
+      // SDK discovery may have applied the host quota after loading a well-known
+      // file or constructing a metadata/API-key client. Restore its native
+      // credential or client-option fallback when this invocation clears it.
       const credentialJson = auth.jsonContent;
-      client.quotaProjectId =
-        credentialJson && 'quota_project_id' in credentialJson
+      client.quotaProjectId = credentialJson
+        ? 'quota_project_id' in credentialJson
           ? credentialJson.quota_project_id
-          : undefined;
+          : undefined
+        : authOptions.clientOptions?.quotaProjectId;
     }
 
     // Try to get project ID from Google Auth Library

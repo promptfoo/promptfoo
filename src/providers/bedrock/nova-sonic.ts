@@ -3,8 +3,14 @@ import { Readable } from 'node:stream';
 
 import logger from '../../logger';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  getAwsCredentialProviderOptions,
+  getScopedAwsCredentialConfig,
+  resolveAwsCredentials,
+} from '../awsCredentials';
 import { createEnvironmentScopedState } from '../scopedState';
 import { AwsBedrockGenericProvider } from './base';
+import { getScopedBedrockTokenOptions } from './util';
 import type { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import type { BedrockAmazonNovaSonicGenerationOptions } from '.';
 
@@ -153,14 +159,21 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       const sessionTimeout = this.config?.sessionTimeout ?? 300000;
       const requestTimeout = this.config?.requestTimeout ?? 300000;
 
-      const authOptions = await this.getBedrockAuthOptions();
+      // Sonic historically used SDK discovery, ignoring configured key/profile
+      // and provider-only bearer fields. Its bidirectional command requires IAM
+      // credentials; do not introduce the generic provider's bearer selection.
+      const credentials = await resolveAwsCredentials({}, this.env);
+      const profile = getScopedAwsCredentialConfig({}, this.env)?.profile;
       try {
         const { BedrockRuntimeClient } = await import('@aws-sdk/client-bedrock-runtime');
         const { NodeHttp2Handler } = await import('@smithy/node-http-handler');
 
         state.client = new BedrockRuntimeClient({
           region: this.getRegion(),
-          ...authOptions,
+          ...getScopedBedrockTokenOptions(),
+          ...getAwsCredentialProviderOptions(this.env),
+          ...(credentials ? { credentials } : {}),
+          ...(profile === undefined ? {} : { profile }),
           requestHandler: new NodeHttp2Handler({
             requestTimeout,
             sessionTimeout,
