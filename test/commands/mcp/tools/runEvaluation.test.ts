@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import cliState from '../../../../src/cliState';
 import { AnthropicMessagesProvider } from '../../../../src/providers/anthropic/messages';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -73,6 +74,68 @@ describe('runEvaluation tool', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it.each([undefined, 7500])('forwards the per-test timeout (%s)', async (timeoutMs) => {
+    const { doEval } = await import('../../../../src/node/doEval');
+    const { registerRunEvaluationTool } = await import(
+      '../../../../src/commands/mcp/tools/runEvaluation'
+    );
+    const tool = vi.fn();
+    registerRunEvaluationTool({ tool } as unknown as McpServer);
+    const handler = tool.mock.calls[0][2];
+
+    const result = await handler({ timeoutMs });
+
+    expect(result.isError).toBe(false);
+    expect(doEval).toHaveBeenCalledWith(
+      expect.anything(),
+      {},
+      'promptfooconfig.yaml',
+      expect.objectContaining({ timeoutMs: timeoutMs ?? 30000, eventSource: 'mcp' }),
+    );
+  });
+
+  it.each([
+    { testCaseIndices: -1 },
+    { testCaseIndices: 0.5 },
+    { testCaseIndices: [] },
+    { testCaseIndices: [0, 1.5] },
+    { testCaseIndices: [-1, 0] },
+    { testCaseIndices: { start: 0.5, end: 2 } },
+    { testCaseIndices: { start: 0, end: 2.5 } },
+    { testCaseIndices: { start: -1, end: 2 } },
+    { maxConcurrency: 1.5 },
+    { repeat: 1.5 },
+    { resultLimit: 1.5 },
+    { resultOffset: 0.5 },
+    { promptFilter: [] },
+    { providerFilter: [] },
+  ])('rejects invalid counts or selections: %j', async (args) => {
+    const { registerRunEvaluationTool } = await import(
+      '../../../../src/commands/mcp/tools/runEvaluation'
+    );
+    const tool = vi.fn();
+    registerRunEvaluationTool({ tool } as unknown as McpServer);
+    const schema = z.object(tool.mock.calls[0][1]);
+
+    expect(schema.safeParse(args).success).toBe(false);
+  });
+
+  it.each([
+    { testCaseIndices: 0 },
+    { testCaseIndices: [0, 2] },
+    { testCaseIndices: { start: 0, end: 2 } },
+    { maxConcurrency: 2, repeat: 2, resultLimit: 1, resultOffset: 0 },
+    { promptFilter: ['0', '2'], providerFilter: ['echo'] },
+  ])('accepts supported counts and selections: %j', async (args) => {
+    const { registerRunEvaluationTool } = await import(
+      '../../../../src/commands/mcp/tools/runEvaluation'
+    );
+    const tool = vi.fn();
+    registerRunEvaluationTool({ tool } as unknown as McpServer);
+
+    expect(z.object(tool.mock.calls[0][1]).safeParse(args).success).toBe(true);
   });
 
   it.each([false, true])(
