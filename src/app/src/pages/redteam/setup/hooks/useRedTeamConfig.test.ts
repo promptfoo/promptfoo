@@ -963,7 +963,31 @@ describe('useRedTeamConfig', () => {
       { steps: [{ action: 'extract', name: 'response', args: { selector: '[' } }] },
     ],
     ['browser screenshot without path', 'browser', { steps: [{ action: 'screenshot', args: {} }] }],
-    ['browser wait without duration', 'browser', { steps: [{ action: 'wait', args: {} }] }],
+    [
+      'browser wait with null duration',
+      'browser',
+      { steps: [{ action: 'wait', args: { ms: null } }] },
+    ],
+    [
+      'browser wait with blank duration',
+      'browser',
+      { steps: [{ action: 'wait', args: { ms: '' } }] },
+    ],
+    [
+      'browser wait with string duration',
+      'browser',
+      { steps: [{ action: 'wait', args: { ms: '1000' } }] },
+    ],
+    [
+      'browser wait with NaN duration',
+      'browser',
+      { steps: [{ action: 'wait', args: { ms: Number.NaN } }] },
+    ],
+    [
+      'browser wait with infinite duration',
+      'browser',
+      { steps: [{ action: 'wait', args: { ms: Number.POSITIVE_INFINITY } }] },
+    ],
     [
       'browser wait with negative duration',
       'browser',
@@ -1313,6 +1337,36 @@ describe('useRedTeamConfig', () => {
     });
 
     expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+  });
+
+  it.each([
+    ['omitted arguments', undefined],
+    ['omitted duration', {}],
+    ['cleared duration', { ms: undefined }],
+    ['zero duration', { ms: 0 }],
+    ['explicit duration', { ms: 25 }],
+  ])('recovers an imported browser wait with %s', (_case, args) => {
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: {
+        id: 'browser',
+        label: 'Imported target',
+        config: null as unknown as Config['target']['config'],
+      },
+    });
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).not.toBeNull();
+
+    const config: Config['target']['config'] = { steps: [{ action: 'wait', args }] };
+    useRedTeamConfig.getState().updateConfig('target', {
+      ...useRedTeamConfig.getState().config.target,
+      config,
+    });
+
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+    expect(useRedTeamTargetConfigValidation.getState().targetConfigDraft).toBeNull();
+    expect(
+      JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
+    ).toEqual(JSON.parse(JSON.stringify(config)));
   });
 
   it('recovers an imported browser target with valid Playwright selector extensions', () => {

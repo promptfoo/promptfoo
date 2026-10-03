@@ -801,7 +801,10 @@ const isValidBrowserStep = (step: unknown): boolean => {
     case 'screenshot':
       return isNonEmptyString(args.path);
     case 'wait':
-      return typeof args.ms === 'number' && Number.isFinite(args.ms) && args.ms >= 0;
+      return (
+        args.ms === undefined ||
+        (typeof args.ms === 'number' && Number.isFinite(args.ms) && args.ms >= 0)
+      );
     case 'waitForNewChildren':
       return (
         isValidSelector(args.parentSelector) &&
