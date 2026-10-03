@@ -75,6 +75,10 @@ describe('synthesize', () => {
     vi.restoreAllMocks();
   });
 
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   beforeEach(() => {
     vi.resetAllMocks();
 
@@ -3827,7 +3831,7 @@ describe('Language configuration', () => {
       expect(oneMatches?.length).toBeGreaterThanOrEqual(8); // At least 8 occurrences of "1"
     });
 
-    it('should use policy name when available instead of hash + truncated text', async () => {
+    it('should include cloud policy ids with policy names', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({
         action: mockPluginAction,
@@ -3837,13 +3841,13 @@ describe('Language configuration', () => {
       await synthesize({
         numTests: 2,
         plugins: [
-          // Policy with a name - should display the name
+          // Named policy labels include a shortened cloud ID.
           {
             id: 'policy',
             numTests: 2,
             config: {
               policy: {
-                id: 'abc123def456',
+                id: 'abc123de-f456-4123-8123-abc123def456',
                 text: 'Some policy text',
                 name: 'Secret Protection Policy',
               },
@@ -3867,11 +3871,116 @@ describe('Language configuration', () => {
       expect(reportMessage).toBeDefined();
       const cleanReport = stripAnsi(reportMessage || '');
 
-      // Named policy should show just the name (no hash in display)
-      expect(cleanReport).toMatch(/Secret Protection Policy/);
-      expect(cleanReport).not.toMatch(/Secret Protection Policy \[[a-f0-9]/); // No hash after name
+      // Named policies retain the shortened ID in their display label.
+      expect(cleanReport).toMatch(/policy \[abc123def456\]: Secret Protect/);
       // Inline policy should show: "policy [hash]: preview..."
       expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]:/);
+    });
+
+    it.each([
+      {
+        name: 'UUID prefixes',
+        ids: ['123e4567-e89b-4123-8123-111111111111', '123e4567-e89b-4123-8123-222222222222'],
+        languages: [undefined, undefined],
+      },
+      {
+        name: 'separate language configurations',
+        ids: ['123e4567-e89b-4123-8123-111111111111', '123e4567-e89b-4123-8123-111111111111'],
+        languages: ['en', 'fr'],
+      },
+    ])('retains mixed report outcomes for matching $name', async ({ ids, languages }) => {
+      const action = vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ vars: { query: 'A short sentence.' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action, key: 'policy' });
+      const result = await synthesize({
+        numTests: 1,
+        plugins: ids.map((id, index) => ({
+          id: 'policy',
+          numTests: 1,
+          config: {
+            policy: { id, name: 'House style', text: 'Use short sentences.' },
+            ...(languages[index] ? { language: languages[index] } : {}),
+          },
+        })),
+        prompts: ['Write a greeting.'],
+        purpose: 'Report fixture',
+        entities: [],
+        strategies: [],
+        targetIds: ['test-provider'],
+        maxConcurrency: 1,
+      });
+      expect(result.failedPlugins).toHaveLength(1);
+      expect(result.failedPlugins[0]).toEqual({
+        pluginId: 'policy [123e4567e89b]: House style',
+        requested: 1,
+      });
+      const report = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string => typeof arg === 'string' && arg.includes('Test Generation Report'),
+        );
+      const cleanReport = stripAnsi(report ?? '');
+      expect(cleanReport.match(/policy \[123e4567e89b\]/g)).toHaveLength(2);
+      expect(cleanReport).toContain('Failed');
+      expect(cleanReport).toContain('Success');
+      if (languages[1]) {
+        expect(cleanReport).toContain('(fr) policy');
+      }
+    });
+
+    it('should keep named inline policy object ids distinct in the report', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      await synthesize({
+        numTests: 1,
+        plugins: [
+          {
+            id: 'policy',
+            numTests: 1,
+            config: {
+              policy: {
+                id: '111111111111',
+                text: 'The assistant must not provide restricted export instructions.',
+                name: 'Restricted Export',
+              },
+            },
+          },
+          {
+            id: 'policy',
+            numTests: 1,
+            config: {
+              policy: {
+                id: '222222222222',
+                text: 'The assistant must not provide restricted export workaround steps.',
+                name: 'Restricted Export',
+              },
+            },
+          },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      const reportMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string => typeof arg === 'string' && arg.includes('Test Generation Report'),
+        );
+
+      expect(reportMessage).toBeDefined();
+      const cleanReport = stripAnsi(reportMessage || '');
+
+      expect(cleanReport).toContain('policy [111111111111]: Restricted Exp');
+      expect(cleanReport).toContain('policy [222222222222]: Restricted Exp');
     });
 
     it('should work correctly with both built-in plugins and policy plugins', async () => {
@@ -3902,7 +4011,7 @@ describe('Language configuration', () => {
             numTests: 2,
             config: {
               policy: {
-                id: 'abc123def456',
+                id: 'abc123de-f456-4123-8123-abc123def456',
                 text: 'Never share confidential data',
                 name: 'Data Protection Policy',
               },
@@ -3929,9 +4038,8 @@ describe('Language configuration', () => {
       // Built-in plugins should show their ID directly
       expect(cleanReport).toMatch(/hallucination/);
       expect(cleanReport).toMatch(/contracts/);
-      // Named policy should show just the name
-      expect(cleanReport).toMatch(/Data Protection Policy/);
-      expect(cleanReport).not.toMatch(/Data Protection Policy \[/); // No ID after name
+      // Named policy should keep the stable cloud id prefix.
+      expect(cleanReport).toMatch(/policy \[abc123def456\]: Data Protect/);
       // Inline policy should show "policy [hash]: preview..."
       expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]:/);
       // Should have 4 plugin rows (hallucination, contracts, named policy, inline policy)
