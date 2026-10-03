@@ -260,6 +260,41 @@ describe('OpenCodeSDKProvider', () => {
   });
 
   describe('getApiKey', () => {
+    it.each([
+      ['openai', 'OPENAI_API_KEY'],
+      ['anthropic', 'ANTHROPIC_API_KEY'],
+      ['google', 'GOOGLE_API_KEY'],
+    ])('uses the winning Windows credential alias for %s', (providerId, key) => {
+      vi.spyOn(os, 'platform').mockReturnValue('win32');
+      const provider = new OpenCodeSDKProvider({
+        config: { provider_id: providerId },
+        env: { [key]: 'file-key', [key.toLowerCase()]: 'provider-key' },
+      });
+      expect(provider.getApiKey()).toBe('provider-key');
+    });
+
+    it.each([
+      ['openai', 'OPENAI_API_KEY'],
+      ['anthropic', 'ANTHROPIC_API_KEY'],
+      ['google', 'GOOGLE_API_KEY'],
+    ])('preserves case-sensitive POSIX credentials for %s', (providerId, key) => {
+      vi.spyOn(os, 'platform').mockReturnValue('linux');
+      const provider = new OpenCodeSDKProvider({
+        config: { provider_id: providerId },
+        env: { [key]: 'file-key', [key.toLowerCase()]: 'provider-key' },
+      });
+      expect(provider.getApiKey()).toBe('file-key');
+    });
+
+    it('ignores undefined Windows credential aliases', () => {
+      vi.spyOn(os, 'platform').mockReturnValue('win32');
+      const provider = new OpenCodeSDKProvider({
+        config: { provider_id: 'openai' },
+        env: { OPENAI_API_KEY: 'file-key', openai_api_key: undefined },
+      });
+      expect(provider.getApiKey()).toBe('file-key');
+    });
+
     it('should prioritize config apiKey', () => {
       const provider = new OpenCodeSDKProvider({
         config: { apiKey: 'config-key' },

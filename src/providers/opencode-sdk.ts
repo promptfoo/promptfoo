@@ -946,23 +946,36 @@ export class OpenCodeSDKProvider implements ApiProvider {
       return config.apiKey;
     }
 
+    let env = this.env;
+    if (os.platform() === 'win32' && env) {
+      // Match the alias ordering used when building the spawned server environment.
+      // Preflight must recognize the winning credential before the server starts.
+      const configuredEnv = env;
+      env = {};
+      for (const key of Object.keys(configuredEnv).sort()) {
+        if (configuredEnv[key] !== undefined) {
+          env[key.toUpperCase()] = configuredEnv[key];
+        }
+      }
+    }
+
     // Check provider-specific env vars based on provider_id
     const providerId = config?.provider_id?.toLowerCase();
     if (providerId === 'anthropic') {
-      return this.env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
+      return env?.ANTHROPIC_API_KEY || getEnvString('ANTHROPIC_API_KEY');
     }
     if (providerId === 'openai') {
-      return this.env?.OPENAI_API_KEY || getEnvString('OPENAI_API_KEY');
+      return env?.OPENAI_API_KEY || getEnvString('OPENAI_API_KEY');
     }
     if (providerId === 'google') {
-      return this.env?.GOOGLE_API_KEY || getEnvString('GOOGLE_API_KEY');
+      return env?.GOOGLE_API_KEY || getEnvString('GOOGLE_API_KEY');
     }
 
     // Fall back to common env vars
     return (
-      this.env?.ANTHROPIC_API_KEY ||
+      env?.ANTHROPIC_API_KEY ||
       getEnvString('ANTHROPIC_API_KEY') ||
-      this.env?.OPENAI_API_KEY ||
+      env?.OPENAI_API_KEY ||
       getEnvString('OPENAI_API_KEY')
     );
   }
