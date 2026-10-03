@@ -10,14 +10,12 @@ interface CartContextValue {
   // Cart state
   cart: FourthwallCart | null;
   isLoading: boolean;
-  error: string | null;
   itemCount: number;
 
   // Cart actions
   addToCart: (variantId: string, quantity?: number) => Promise<FourthwallCart | undefined>;
   removeFromCart: (itemId: string) => Promise<FourthwallCart | undefined>;
   updateQuantity: (itemId: string, quantity: number) => Promise<FourthwallCart | undefined>;
-  clearCart: () => void;
 
   // Cart drawer state
   isCartOpen: boolean;
@@ -40,12 +38,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const {
     cart,
     isLoading,
-    error,
     itemCount,
     addToCart: addToCartApi,
     removeFromCart: removeFromCartApi,
     updateQuantity: updateQuantityApi,
-    clearCart: clearCartApi,
   } = useCart();
 
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -91,25 +87,23 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   // Re-check URL on client-side navigations (Docusaurus SPA route changes)
   useEffect(() => {
-    const handleRouteChange = () => ingestCouponFromUrl();
-
     // Docusaurus uses pushState/replaceState for navigation
-    window.addEventListener('popstate', handleRouteChange);
+    window.addEventListener('popstate', ingestCouponFromUrl);
 
     // Patch pushState/replaceState to detect Docusaurus client-side navigation
     const originalPushState = window.history.pushState;
     const originalReplaceState = window.history.replaceState;
     window.history.pushState = function (...args) {
       originalPushState.apply(this, args);
-      handleRouteChange();
+      ingestCouponFromUrl();
     };
     window.history.replaceState = function (...args) {
       originalReplaceState.apply(this, args);
-      handleRouteChange();
+      ingestCouponFromUrl();
     };
 
     return () => {
-      window.removeEventListener('popstate', handleRouteChange);
+      window.removeEventListener('popstate', ingestCouponFromUrl);
       window.history.pushState = originalPushState;
       window.history.replaceState = originalReplaceState;
     };
@@ -150,12 +144,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const value: CartContextValue = {
     cart,
     isLoading,
-    error,
     itemCount,
     addToCart,
     removeFromCart: removeFromCartApi,
     updateQuantity: updateQuantityApi,
-    clearCart: clearCartApi,
     isCartOpen,
     openCart,
     closeCart,

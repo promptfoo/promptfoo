@@ -14,33 +14,6 @@ const CHECKOUT_DOMAIN = 'https://promptfoo-shop.fourthwall.com';
 const MAX_PAGES = 50;
 const PAGE_SIZE = 10;
 
-// Safe localStorage wrapper (handles private browsing mode)
-function safeLocalStorage() {
-  return {
-    getItem(key: string): string | null {
-      try {
-        return localStorage.getItem(key);
-      } catch {
-        return null;
-      }
-    },
-    setItem(key: string, value: string): void {
-      try {
-        localStorage.setItem(key, value);
-      } catch {
-        // Silently fail in private browsing mode
-      }
-    },
-    removeItem(key: string): void {
-      try {
-        localStorage.removeItem(key);
-      } catch {
-        // Silently fail in private browsing mode
-      }
-    },
-  };
-}
-
 // Input validation helpers
 function validateVariantId(variantId: string): void {
   if (!variantId || typeof variantId !== 'string' || variantId.trim() === '') {
@@ -85,7 +58,7 @@ export function useProducts(collectionSlug: string = 'all') {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function fetchAllProducts() {
+    const fetchAllProducts = async () => {
       setIsLoading(true);
       setError(null);
 
@@ -122,7 +95,7 @@ export function useProducts(collectionSlug: string = 'all') {
       } finally {
         setIsLoading(false);
       }
-    }
+    };
 
     fetchAllProducts();
   }, [collectionSlug]);
@@ -132,35 +105,37 @@ export function useProducts(collectionSlug: string = 'all') {
 
 // Cart operations
 const CART_STORAGE_KEY = 'promptfoo_cart_id';
-const storage = safeLocalStorage();
 
 export function useCart() {
   const [cart, setCart] = useState<FourthwallCart | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Load existing cart on mount
   useEffect(() => {
-    const cartId = storage.getItem(CART_STORAGE_KEY);
+    let cartId: string | null = null;
+    try {
+      cartId = localStorage.getItem(CART_STORAGE_KEY);
+    } catch {
+      // Safe localStorage access (handles private browsing mode)
+    }
     if (cartId) {
       setIsLoading(true);
       apiFetch<FourthwallCart>(`/carts/${cartId}`)
         .then(setCart)
         .catch(() => {
           // Cart expired or invalid, clear it
-          storage.removeItem(CART_STORAGE_KEY);
+          try {
+            localStorage.removeItem(CART_STORAGE_KEY);
+          } catch {
+            // Silently fail in private browsing mode
+          }
         })
         .finally(() => setIsLoading(false));
     }
   }, []);
 
   const createCart = useCallback(async (variantId: string, quantity: number = 1) => {
-    // Validate inputs
-    validateVariantId(variantId);
-    validateQuantity(quantity);
-
     setIsLoading(true);
-    setError(null);
     try {
       const newCart = await apiFetch<FourthwallCart>('/carts', {
         method: 'POST',
@@ -168,12 +143,14 @@ export function useCart() {
           items: [{ variantId, quantity }],
         }),
       });
-      storage.setItem(CART_STORAGE_KEY, newCart.id);
+      const cartId = newCart.id;
+      try {
+        localStorage.setItem(CART_STORAGE_KEY, cartId);
+      } catch {
+        // Silently fail in private browsing mode
+      }
       setCart(newCart);
       return newCart;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create cart');
-      throw err;
     } finally {
       setIsLoading(false);
     }
@@ -186,7 +163,6 @@ export function useCart() {
       validateQuantity(quantity);
 
       setIsLoading(true);
-      setError(null);
       try {
         if (!cart) {
           return createCart(variantId, quantity);
@@ -200,9 +176,6 @@ export function useCart() {
         });
         setCart(updatedCart);
         return updatedCart;
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to add to cart');
-        throw err;
       } finally {
         setIsLoading(false);
       }
@@ -218,7 +191,6 @@ export function useCart() {
       validateVariantId(variantId);
 
       setIsLoading(true);
-      setError(null);
       try {
         // API expects: { items: [{ variantId }] }
         const updatedCart = await apiFetch<FourthwallCart>(`/carts/${cart.id}/remove`, {
@@ -229,9 +201,6 @@ export function useCart() {
         });
         setCart(updatedCart);
         return updatedCart;
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to remove from cart');
-        throw err;
       } finally {
         setIsLoading(false);
       }
@@ -248,7 +217,6 @@ export function useCart() {
       validateQuantity(quantity);
 
       setIsLoading(true);
-      setError(null);
       try {
         // API expects: { items: [{ variantId, quantity }] }
         const updatedCart = await apiFetch<FourthwallCart>(`/carts/${cart.id}/change`, {
@@ -259,9 +227,6 @@ export function useCart() {
         });
         setCart(updatedCart);
         return updatedCart;
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to update quantity');
-        throw err;
       } finally {
         setIsLoading(false);
       }
@@ -269,22 +234,13 @@ export function useCart() {
     [cart],
   );
 
-  const clearCart = useCallback(() => {
-    storage.removeItem(CART_STORAGE_KEY);
-    setCart(null);
-  }, []);
-
-  const itemCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0;
-
   return {
     cart,
     isLoading,
-    error,
-    itemCount,
+    itemCount: cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0,
     addToCart,
     removeFromCart,
     updateQuantity,
-    clearCart,
   };
 }
 

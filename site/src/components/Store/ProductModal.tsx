@@ -153,7 +153,7 @@ export function ProductModal() {
       await addToCart(selectedVariantId, 1);
       closeProductModal();
     } catch {
-      // Error is handled by the cart context
+      // Keep the product modal open when adding fails.
     } finally {
       setIsAdding(false);
     }

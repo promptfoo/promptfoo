@@ -4,8 +4,9 @@ import { useColorMode } from '@docusaurus/theme-common';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import EventsBanner from '@site/src/components/EventsBanner';
 import ForceLightTheme from '@site/src/components/ForceLightTheme';
-import { CartDrawer, CartProvider } from '@site/src/components/Store';
-import { useIsDocsPage, useIsEventDetailPage, useIsStorePage } from '@site/src/hooks/useIsDocsPage';
+import { CartDrawer } from '@site/src/components/Store/CartDrawer';
+import { CartProvider } from '@site/src/components/Store/CartProvider';
+import { useSupportsThemeChoice } from '@site/src/hooks/useSupportsThemeChoice';
 import OriginalLayout from '@theme-original/Layout';
 import type { Props } from '@theme/Layout';
 
@@ -85,10 +86,7 @@ function LayoutInner({
 }
 
 export default function Layout(props: Props): React.ReactElement {
-  const isDocsPage = useIsDocsPage();
-  const isEventDetailPage = useIsEventDetailPage();
-  const isStorePage = useIsStorePage();
-  const shouldForceLight = !isDocsPage && !isEventDetailPage && !isStorePage;
+  const shouldForceLight = !useSupportsThemeChoice();
 
   return (
     <CartProvider>
