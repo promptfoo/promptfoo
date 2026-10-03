@@ -17,7 +17,7 @@
 
 import logger from '../../logger';
 import { ResultFailureReason } from '../../types/index';
-import { getTestCaseDeduplicationKey } from '../../util/comparison';
+import { deduplicateTestCases } from '../../util/comparison';
 import { filterByRange } from '../../util/filterRange';
 import { warnEmptyFilterRange } from '../../util/filterRangeWarn';
 import { filterTestsByResults } from './filterTestsUtil';
@@ -248,16 +248,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     );
 
     // Create a union of both sets, deduplicating by test identity
-    const seen = new Set<string>();
-
-    tests = [...failingOnlyTests, ...errorTests].filter((test) => {
-      const key = getTestCaseDeduplicationKey(test);
-      if (seen.has(key)) {
-        return false;
-      }
-      seen.add(key);
-      return true;
-    });
+    tests = deduplicateTestCases([...failingOnlyTests, ...errorTests]);
 
     logger.debug(
       `Combined failingOnly (${failingOnlyTests.length}) and errors (${errorTests.length}) filters: ${tests.length} unique tests`,

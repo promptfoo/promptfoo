@@ -1,3 +1,5 @@
+import { createTokenOutput } from '../factories/literalFixtures';
+
 import './setup';
 
 import { randomUUID } from 'crypto';
@@ -37,10 +39,7 @@ describeEvaluator('evaluator options and hooks', () => {
   it('should apply prompt config to provider call', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test response',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Test response')),
     };
 
     const testSuite: TestSuite = {
@@ -105,10 +104,7 @@ describeEvaluator('evaluator options and hooks', () => {
   it('should apply dynamic prompt function config to provider call', async () => {
     const mockDynamicConfigProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test response',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Test response')),
     };
 
     const testSuite: TestSuite = {

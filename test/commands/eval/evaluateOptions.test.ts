@@ -80,6 +80,15 @@ function writeTempConfig(tmpDir: string, fileName: string, config: Record<string
   return configPath;
 }
 
+function writeOptionsConfig(tmpDir: string, fileName: string, config: Record<string, unknown>) {
+  return writeTempConfig(tmpDir, fileName, {
+    ...config,
+    providers: [{ id: 'openai:gpt-4o-mini' }],
+    prompts: ['Test prompt'],
+    tests: [{ vars: { input: 'test' } }],
+  });
+}
+
 async function runEvalAndGetOptions(
   cmdObj: Partial<CommandLineOptions & Command>,
 ): Promise<EvaluateOptions> {
@@ -214,128 +223,47 @@ describe('evaluateOptions behavior', () => {
   });
 
   describe('Reading values from config file', () => {
-    it('should read evaluateOptions.maxConcurrency', async () => {
-      const options = await runEvalAndGetOptions({
-        config: [noDelayConfigPath],
-      });
+    it.each([
+      ['maxConcurrency', () => noDelayConfigPath, 9],
+      ['repeat', () => configPath, 99],
+      ['delay', () => configPath, 999],
+      ['showProgressBar', () => configPath, false],
+      ['cache', () => configPath, false],
+      ['timeoutMs', () => configPath, 9999],
+      ['maxEvalTimeMs', () => configPath, 99999],
+    ] as const)('should read evaluateOptions.%s', async (key, configPath, expected) => {
+      const options = await runEvalAndGetOptions({ config: [configPath()] });
 
-      expect(options.maxConcurrency).toBe(9);
-    });
-
-    it('should read evaluateOptions.repeat', async () => {
-      const options = await runEvalAndGetOptions({
-        config: [configPath],
-      });
-
-      expect(options.repeat).toBe(99);
-    });
-
-    it('should read evaluateOptions.delay', async () => {
-      const options = await runEvalAndGetOptions({
-        config: [configPath],
-      });
-
-      expect(options.delay).toBe(999);
-    });
-
-    it('should read evaluateOptions.showProgressBar', async () => {
-      const options = await runEvalAndGetOptions({
-        config: [configPath],
-      });
-
-      expect(options.showProgressBar).toBe(false);
-    });
-
-    it('should read evaluateOptions.cache', async () => {
-      const options = await runEvalAndGetOptions({
-        config: [configPath],
-      });
-
-      expect(options.cache).toBe(false);
-    });
-
-    it('should read evaluateOptions.timeoutMs', async () => {
-      const options = await runEvalAndGetOptions({
-        config: [configPath],
-      });
-
-      expect(options.timeoutMs).toBe(9999);
-    });
-
-    it('should read evaluateOptions.maxEvalTimeMs', async () => {
-      const options = await runEvalAndGetOptions({
-        config: [configPath],
-      });
-
-      expect(options.maxEvalTimeMs).toBe(99999);
+      expect(options[key]).toBe(expected);
     });
   });
 
   describe('Prioritization of CLI options over config file options', () => {
-    it('should prioritize maxConcurrency from command line options over config file options', async () => {
-      const options = await runEvalAndGetOptions({
-        config: [noDelayConfigPath],
-        maxConcurrency: 5,
-      });
+    it.each([
+      ['maxConcurrency', 'maxConcurrency', () => noDelayConfigPath, 5, 5],
+      ['repeat', 'repeat', () => configPath, 5, 5],
+      ['delay', 'delay', () => configPath, 5, 5],
+      ['showProgressBar', 'progressBar', () => configPath, true, true],
+      ['cache', 'cache', () => noRepeatConfigPath, true, true],
+    ] as const)(
+      'should prioritize %s from command line options over config file options',
+      async (key, cliKey, configPath, value, expected) => {
+        const options = await runEvalAndGetOptions({ config: [configPath()], [cliKey]: value });
 
-      expect(options.maxConcurrency).toBe(5);
-    });
-
-    it('should prioritize repeat from command line options over config file options', async () => {
-      const options = await runEvalAndGetOptions({
-        config: [configPath],
-        repeat: 5,
-      });
-
-      expect(options.repeat).toBe(5);
-    });
-
-    it('should prioritize delay from command line options over config file options', async () => {
-      const options = await runEvalAndGetOptions({
-        config: [configPath],
-        delay: 5,
-      });
-
-      expect(options.delay).toBe(5);
-    });
-
-    it('should prioritize showProgressBar from command line options over config file options', async () => {
-      const options = await runEvalAndGetOptions({
-        config: [configPath],
-        progressBar: true,
-      });
-
-      expect(options.showProgressBar).toBe(true);
-    });
-
-    it('should prioritize cache from command line options over config file options', async () => {
-      const options = await runEvalAndGetOptions({
-        config: [noRepeatConfigPath],
-        cache: true,
-      });
-
-      expect(options.cache).toBe(true);
-    });
+        expect(options[key]).toBe(expected);
+      },
+    );
   });
 
-  it('should correctly merge evaluateOptions from multiple sources', () => {
-    const config = {
-      evaluateOptions: {
-        maxConcurrency: 3,
-        showProgressBar: false,
-      },
-      providers: [],
-      prompts: [],
-    };
-
-    const initialOptions: EvaluateOptions = {
+  it('should correctly merge evaluateOptions from multiple sources', async () => {
+    const configPath = writeOptionsConfig(tmpDir, 'test-merge-options.yaml', {
+      evaluateOptions: { maxConcurrency: 3, showProgressBar: false },
+    });
+    await doEval({ config: [configPath], table: false, write: false }, {}, undefined, {
       showProgressBar: true,
-    };
-
-    const mergedOptions = config.evaluateOptions
-      ? { ...initialOptions, ...config.evaluateOptions }
-      : initialOptions;
-
+    });
+    expect(evaluateMock).toHaveBeenCalled();
+    const mergedOptions = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
     expect(mergedOptions.maxConcurrency).toBe(3);
     expect(mergedOptions.showProgressBar).toBe(false);
   });
@@ -391,13 +319,10 @@ describe('evaluateOptions behavior', () => {
 
   describe('commandLineOptions behavior', () => {
     it('should respect commandLineOptions.maxConcurrency from config', async () => {
-      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-maxconcurrency.yaml', {
+      const tempConfig = writeOptionsConfig(tmpDir, 'test-commandline-maxconcurrency.yaml', {
         commandLineOptions: {
           maxConcurrency: 10,
         },
-        providers: [{ id: 'openai:gpt-4o-mini' }],
-        prompts: ['Test prompt'],
-        tests: [{ vars: { input: 'test' } }],
       });
 
       const options = await runEvalAndGetOptions({
@@ -408,14 +333,15 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should prioritize CLI --max-concurrency over commandLineOptions.maxConcurrency', async () => {
-      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-maxconcurrency-override.yaml', {
-        commandLineOptions: {
-          maxConcurrency: 10,
+      const tempConfig = writeOptionsConfig(
+        tmpDir,
+        'test-commandline-maxconcurrency-override.yaml',
+        {
+          commandLineOptions: {
+            maxConcurrency: 10,
+          },
         },
-        providers: [{ id: 'openai:gpt-4o-mini' }],
-        prompts: ['Test prompt'],
-        tests: [{ vars: { input: 'test' } }],
-      });
+      );
 
       const options = await runEvalAndGetOptions({
         config: [tempConfig],
@@ -426,7 +352,7 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should prioritize commandLineOptions.maxConcurrency over evaluateOptions.maxConcurrency', async () => {
-      const tempConfig = writeTempConfig(
+      const tempConfig = writeOptionsConfig(
         tmpDir,
         'test-commandline-vs-evaluateoptions-maxconcurrency.yaml',
         {
@@ -436,9 +362,6 @@ describe('evaluateOptions behavior', () => {
           evaluateOptions: {
             maxConcurrency: 5,
           },
-          providers: [{ id: 'openai:gpt-4o-mini' }],
-          prompts: ['Test prompt'],
-          tests: [{ vars: { input: 'test' } }],
         },
       );
       const options = await runEvalAndGetOptions({
@@ -449,13 +372,10 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should respect commandLineOptions.repeat from config', async () => {
-      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-repeat.yaml', {
+      const tempConfig = writeOptionsConfig(tmpDir, 'test-commandline-repeat.yaml', {
         commandLineOptions: {
           repeat: 5,
         },
-        providers: [{ id: 'openai:gpt-4o-mini' }],
-        prompts: ['Test prompt'],
-        tests: [{ vars: { input: 'test' } }],
       });
 
       const options = await runEvalAndGetOptions({
@@ -466,13 +386,10 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should prioritize CLI --repeat over commandLineOptions.repeat', async () => {
-      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-repeat-override.yaml', {
+      const tempConfig = writeOptionsConfig(tmpDir, 'test-commandline-repeat-override.yaml', {
         commandLineOptions: {
           repeat: 5,
         },
-        providers: [{ id: 'openai:gpt-4o-mini' }],
-        prompts: ['Test prompt'],
-        tests: [{ vars: { input: 'test' } }],
       });
 
       const options = await runEvalAndGetOptions({
@@ -484,13 +401,10 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should respect commandLineOptions.delay from config', async () => {
-      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-delay.yaml', {
+      const tempConfig = writeOptionsConfig(tmpDir, 'test-commandline-delay.yaml', {
         commandLineOptions: {
           delay: 500,
         },
-        providers: [{ id: 'openai:gpt-4o-mini' }],
-        prompts: ['Test prompt'],
-        tests: [{ vars: { input: 'test' } }],
       });
 
       const options = await runEvalAndGetOptions({
@@ -501,13 +415,10 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should prioritize CLI --delay over commandLineOptions.delay', async () => {
-      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-delay-override.yaml', {
+      const tempConfig = writeOptionsConfig(tmpDir, 'test-commandline-delay-override.yaml', {
         commandLineOptions: {
           delay: 500,
         },
-        providers: [{ id: 'openai:gpt-4o-mini' }],
-        prompts: ['Test prompt'],
-        tests: [{ vars: { input: 'test' } }],
       });
 
       const options = await runEvalAndGetOptions({
@@ -519,13 +430,10 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should respect commandLineOptions.cache from config', async () => {
-      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-cache.yaml', {
+      const tempConfig = writeOptionsConfig(tmpDir, 'test-commandline-cache.yaml', {
         commandLineOptions: {
           cache: false,
         },
-        providers: [{ id: 'openai:gpt-4o-mini' }],
-        prompts: ['Test prompt'],
-        tests: [{ vars: { input: 'test' } }],
       });
 
       const options = await runEvalAndGetOptions({
@@ -536,13 +444,10 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should prioritize CLI --cache over commandLineOptions.cache', async () => {
-      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-cache-override.yaml', {
+      const tempConfig = writeOptionsConfig(tmpDir, 'test-commandline-cache-override.yaml', {
         commandLineOptions: {
           cache: false,
         },
-        providers: [{ id: 'openai:gpt-4o-mini' }],
-        prompts: ['Test prompt'],
-        tests: [{ vars: { input: 'test' } }],
       });
 
       const options = await runEvalAndGetOptions({
@@ -554,13 +459,10 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should respect commandLineOptions.generateSuggestions from config', async () => {
-      const tempConfig = writeTempConfig(tmpDir, 'test-generate-suggestions.yaml', {
+      const tempConfig = writeOptionsConfig(tmpDir, 'test-generate-suggestions.yaml', {
         commandLineOptions: {
           generateSuggestions: true,
         },
-        providers: [{ id: 'openai:gpt-4o-mini' }],
-        prompts: ['Test prompt'],
-        tests: [{ vars: { input: 'test' } }],
       });
 
       const options = await runEvalAndGetOptions({
@@ -571,14 +473,11 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should preserve evaluateOptions.suggestionsCount from config defaults', async () => {
-      const tempConfig = writeTempConfig(tmpDir, 'test-suggestions-count.yaml', {
+      const tempConfig = writeOptionsConfig(tmpDir, 'test-suggestions-count.yaml', {
         evaluateOptions: {
           generateSuggestions: true,
           suggestionsCount: 2,
         },
-        providers: [{ id: 'openai:gpt-4o-mini' }],
-        prompts: ['Test prompt'],
-        tests: [{ vars: { input: 'test' } }],
       });
 
       const options = await runEvalAndGetOptions({
@@ -590,14 +489,11 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should respect commandLineOptions.suggestionsCount from config defaults', async () => {
-      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-suggestions-count.yaml', {
+      const tempConfig = writeOptionsConfig(tmpDir, 'test-commandline-suggestions-count.yaml', {
         commandLineOptions: {
           generateSuggestions: true,
           suggestionsCount: 3,
         },
-        providers: [{ id: 'openai:gpt-4o-mini' }],
-        prompts: ['Test prompt'],
-        tests: [{ vars: { input: 'test' } }],
       });
 
       const options = await runEvalAndGetOptions({
@@ -609,7 +505,7 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should let commandLineOptions.suggestionsCount override evaluateOptions defaults', async () => {
-      const tempConfig = writeTempConfig(
+      const tempConfig = writeOptionsConfig(
         tmpDir,
         'test-commandline-suggestions-count-overrides-evaluate-default.yaml',
         {
@@ -619,9 +515,6 @@ describe('evaluateOptions behavior', () => {
           commandLineOptions: {
             suggestionsCount: 4,
           },
-          providers: [{ id: 'openai:gpt-4o-mini' }],
-          prompts: ['Test prompt'],
-          tests: [{ vars: { input: 'test' } }],
         },
       );
 
@@ -1201,13 +1094,10 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should prioritize CLI --suggest-prompts over commandLineOptions.generateSuggestions', async () => {
-      const tempConfig = writeTempConfig(tmpDir, 'test-generate-suggestions-override.yaml', {
+      const tempConfig = writeOptionsConfig(tmpDir, 'test-generate-suggestions-override.yaml', {
         commandLineOptions: {
           generateSuggestions: false,
         },
-        providers: [{ id: 'openai:gpt-4o-mini' }],
-        prompts: ['Test prompt'],
-        tests: [{ vars: { input: 'test' } }],
       });
 
       const options = await runEvalAndGetOptions({
@@ -1220,13 +1110,10 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should let an explicit generateSuggestions=false override commandLineOptions config', async () => {
-      const tempConfig = writeTempConfig(tmpDir, 'test-generate-suggestions-disabled.yaml', {
+      const tempConfig = writeOptionsConfig(tmpDir, 'test-generate-suggestions-disabled.yaml', {
         commandLineOptions: {
           generateSuggestions: true,
         },
-        providers: [{ id: 'openai:gpt-4o-mini' }],
-        prompts: ['Test prompt'],
-        tests: [{ vars: { input: 'test' } }],
       });
 
       const options = await runEvalAndGetOptions({
@@ -1239,7 +1126,7 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should let an explicit generateSuggestions=false override evaluateOptions config', async () => {
-      const tempConfig = writeTempConfig(
+      const tempConfig = writeOptionsConfig(
         tmpDir,
         'test-generate-suggestions-disabled-evaluate.yaml',
         {
@@ -1247,9 +1134,6 @@ describe('evaluateOptions behavior', () => {
             generateSuggestions: true,
             suggestionsCount: 4,
           },
-          providers: [{ id: 'openai:gpt-4o-mini' }],
-          prompts: ['Test prompt'],
-          tests: [{ vars: { input: 'test' } }],
         },
       );
 
@@ -1263,15 +1147,12 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should let commandLineOptions.generateSuggestions=false override evaluateOptions.generateSuggestions=true', async () => {
-      const tempConfig = writeTempConfig(
+      const tempConfig = writeOptionsConfig(
         tmpDir,
         'test-cli-options-disable-overrides-evaluate.yaml',
         {
           commandLineOptions: { generateSuggestions: false },
           evaluateOptions: { generateSuggestions: true, suggestionsCount: 4 },
-          providers: [{ id: 'openai:gpt-4o-mini' }],
-          prompts: ['Test prompt'],
-          tests: [{ vars: { input: 'test' } }],
         },
       );
 
@@ -1282,11 +1163,7 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should honor cmdObj.suggestionsCount from non-Commander callers', async () => {
-      const tempConfig = writeTempConfig(tmpDir, 'test-cmdobj-suggestions-count.yaml', {
-        providers: [{ id: 'openai:gpt-4o-mini' }],
-        prompts: ['Test prompt'],
-        tests: [{ vars: { input: 'test' } }],
-      });
+      const tempConfig = writeOptionsConfig(tmpDir, 'test-cmdobj-suggestions-count.yaml', {});
 
       const options = await runEvalAndGetOptions({
         config: [tempConfig],
@@ -1299,11 +1176,11 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should let --suggest-prompts override an explicit generateSuggestions=false', async () => {
-      const tempConfig = writeTempConfig(tmpDir, 'test-suggest-prompts-overrides-disable.yaml', {
-        providers: [{ id: 'openai:gpt-4o-mini' }],
-        prompts: ['Test prompt'],
-        tests: [{ vars: { input: 'test' } }],
-      });
+      const tempConfig = writeOptionsConfig(
+        tmpDir,
+        'test-suggest-prompts-overrides-disable.yaml',
+        {},
+      );
 
       const options = await runEvalAndGetOptions({
         config: [tempConfig],
@@ -1316,13 +1193,10 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should respect commandLineOptions.table from config', async () => {
-      const tempConfig = writeTempConfig(tmpDir, 'test-table.yaml', {
+      const tempConfig = writeOptionsConfig(tmpDir, 'test-table.yaml', {
         commandLineOptions: {
           table: false,
         },
-        providers: [{ id: 'openai:gpt-4o-mini' }],
-        prompts: ['Test prompt'],
-        tests: [{ vars: { input: 'test' } }],
       });
 
       const cmdObj: Partial<CommandLineOptions & Command> = {
@@ -1338,13 +1212,10 @@ describe('evaluateOptions behavior', () => {
     });
 
     it('should respect commandLineOptions.write = false from config', async () => {
-      const tempConfig = writeTempConfig(tmpDir, 'test-write.yaml', {
+      const tempConfig = writeOptionsConfig(tmpDir, 'test-write.yaml', {
         commandLineOptions: {
           write: false,
         },
-        providers: [{ id: 'openai:gpt-4o-mini' }],
-        prompts: ['Test prompt'],
-        tests: [{ vars: { input: 'test' } }],
       });
 
       const cmdObj: Partial<CommandLineOptions & Command> = {

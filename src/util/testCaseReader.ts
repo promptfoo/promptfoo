@@ -382,6 +382,10 @@ async function readJsonTestCases(resolvedVarsPath: string): Promise<TestCase[]> 
   return parseJsonTestCases(fileContent, resolvedVarsPath);
 }
 
+function withDefaultDescription(testCase: TestCase, index: number): TestCase {
+  return { ...testCase, description: testCase.description || `Row #${index + 1}` };
+}
+
 function parseJsonTestCases(fileContent: string, filePath: string): TestCase[] {
   let jsonData: any;
   try {
@@ -392,10 +396,7 @@ function parseJsonTestCases(fileContent: string, filePath: string): TestCase[] {
     );
   }
   const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
-  return testCases.map((item, idx) => ({
-    ...item,
-    description: item.description || `Row #${idx + 1}`,
-  }));
+  return testCases.map(withDefaultDescription);
 }
 
 async function readJsonlTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
@@ -433,10 +434,7 @@ function parseJsonlLines(fileContent: string, filePath: string): TestCase[] {
 }
 
 function parseJsonlTestCases(fileContent: string, filePath: string): TestCase[] {
-  return parseJsonlLines(fileContent, filePath).map((testCase, idx) => ({
-    ...testCase,
-    description: testCase.description || `Row #${idx + 1}`,
-  }));
+  return parseJsonlLines(fileContent, filePath).map(withDefaultDescription);
 }
 
 function parseYamlTestCases(fileContent: string): TestCase[] {
@@ -444,10 +442,7 @@ function parseYamlTestCases(fileContent: string): TestCase[] {
   const testCases: TestCase[] = Array.isArray(rawContent)
     ? (rawContent as TestCase[])
     : [rawContent as TestCase];
-  return testCases.map((item, idx) => ({
-    ...item,
-    description: item.description || `Row #${idx + 1}`,
-  }));
+  return testCases.map(withDefaultDescription);
 }
 
 async function loadTestWithVars(

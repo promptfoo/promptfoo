@@ -57,6 +57,14 @@ describe('getEvaluationDetails eval ID validation', () => {
   });
 
   describe('invalid eval IDs', () => {
+    const createInvalidEvalIdCheck = () => (id: string) => {
+      const result = evalIdSchema.safeParse(id);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].message).toBe('Invalid eval ID format');
+      }
+    };
+
     it('should reject empty strings', () => {
       const result = evalIdSchema.safeParse('');
       expect(result.success).toBe(false);
@@ -73,13 +81,7 @@ describe('getEvaluationDetails eval ID validation', () => {
         ' eval-2024-10-01T18:24:51',
       ];
 
-      invalidIds.forEach((id) => {
-        const result = evalIdSchema.safeParse(id);
-        expect(result.success).toBe(false);
-        if (!result.success) {
-          expect(result.error.issues[0].message).toBe('Invalid eval ID format');
-        }
-      });
+      invalidIds.forEach(createInvalidEvalIdCheck());
     });
 
     it('should reject IDs with special characters', () => {
@@ -105,13 +107,7 @@ describe('getEvaluationDetails eval ID validation', () => {
         'eval!test',
       ];
 
-      invalidIds.forEach((id) => {
-        const result = evalIdSchema.safeParse(id);
-        expect(result.success).toBe(false);
-        if (!result.success) {
-          expect(result.error.issues[0].message).toBe('Invalid eval ID format');
-        }
-      });
+      invalidIds.forEach(createInvalidEvalIdCheck());
     });
 
     it('should reject IDs with newlines or tabs', () => {
