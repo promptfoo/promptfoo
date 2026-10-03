@@ -709,7 +709,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const { body, config } = prepared;
     const getAuthHeaders = this.getRequestAuthentication();
 
-    type OpenAIChatCompletionResponse = OpenAI.ChatCompletion & {
+    type OpenAIChatCompletionResponse = Omit<OpenAI.ChatCompletion, 'choices'> & {
       choices: Array<
         OpenAI.ChatCompletion.Choice & {
           message: OpenAI.ChatCompletion.Choice['message'] & {
@@ -900,7 +900,16 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
 
     try {
-      const message = data.choices[0].message;
+      const choices =
+        config.showThinking === false
+          ? data.choices.map((choice) => {
+              const message = { ...choice.message };
+              delete message.reasoning;
+              delete message.reasoning_content;
+              return { ...choice, message };
+            })
+          : data.choices;
+      const message = choices[0].message;
       const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
       const cost = this.calculateResponseCost(data, config, cached);
       const providerMetadata = this.getProviderResponseMetadata(data);
@@ -953,12 +962,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
 
-      let reasoning = '';
+      // Preserve empty content even when reasoning is hidden.
+      const reasoning = data.choices[0].message.reasoning;
       let output: any = '';
-      if (message.reasoning) {
-        reasoning = message.reasoning;
-        output = message.content;
-      } else if (message.content && (message.function_call || message.tool_calls)) {
+      if (message.content && (message.function_call || message.tool_calls)) {
         if (Array.isArray(message.tool_calls) && message.tool_calls.length === 0) {
           output = message.content;
         } else {
@@ -969,7 +976,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         message.content === undefined ||
         (message.content === '' && message.tool_calls)
       ) {
-        output = message.function_call || message.tool_calls;
+        output =
+          message.function_call ||
+          (reasoning && !message.tool_calls?.length ? message.content : message.tool_calls);
       } else {
         output = message.content;
       }
@@ -986,7 +995,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         }
       }
       // Handle reasoning as thinking content if present and showThinking is enabled
-      if (reasoning && typeof output === 'string' && (this.config.showThinking ?? true)) {
+      if (reasoning && typeof output === 'string' && (config.showThinking ?? true)) {
         output = `Thinking: ${reasoning}\n\n${output}`;
       }
 
@@ -1109,7 +1118,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         message.reasoning_content &&
         typeof message.reasoning_content === 'string' &&
         typeof output === 'string' &&
-        (this.config.showThinking ?? true)
+        (config.showThinking ?? true)
       ) {
         output = `Thinking: ${message.reasoning_content}\n\n${output}`;
       }
@@ -1161,7 +1170,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             headers: responseHeaders ?? {},
           },
           // Include all choices for multi-response requests (n > 1)
-          ...(data.choices.length > 1 && { choices: data.choices }),
+          ...(choices.length > 1 && { choices }),
           ...(Array.isArray(message.annotations) &&
             message.annotations.length > 0 && { annotations: message.annotations }),
           ...(citations.length > 0 && { citations }),

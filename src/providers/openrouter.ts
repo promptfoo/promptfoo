@@ -308,10 +308,10 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     } else if (message.content && message.content.trim()) {
       output = message.content;
       // Add reasoning as thinking content if present and showThinking is enabled
-      if (message.reasoning && (this.config.showThinking ?? true)) {
+      if (message.reasoning && (config.showThinking ?? true)) {
         output = `Thinking: ${message.reasoning}\n\n${output}`;
       }
-    } else if (message.reasoning && (this.config.showThinking ?? true)) {
+    } else if (message.reasoning && (config.showThinking ?? true)) {
       // Fallback to reasoning if no content and showThinking is enabled
       output = message.reasoning;
     }
