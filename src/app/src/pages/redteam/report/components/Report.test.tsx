@@ -72,12 +72,12 @@ vi.mock('./ToolsDialog', () => ({ default: () => null }));
 
 const readStrategyStats = () => JSON.parse(screen.getByTestId('strategy-stats').textContent!);
 
-describe('Report filtering logic', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockWindowLocation({ search: '?evalId=test-eval-id' });
-  });
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockWindowLocation({ search: '?evalId=test-eval-id' });
+});
 
+describe('Report filtering logic', () => {
   const readGroups = () =>
     JSON.parse(screen.getByTestId('report-groups').textContent!) as {
       failuresByPlugin: Record<string, { result: EvaluateResult }[]>;
@@ -276,11 +276,6 @@ const createComponentMockEvalData = (
   }) as unknown as ResultsFile;
 
 describe('App component target selection', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockWindowLocation({ search: '?evalId=test-eval-id' });
-  });
-
   it('should handle evalData with empty prompts array and non-zero selectedPromptIndex gracefully', async () => {
     const evalData: ResultsFile = {
       version: 4,
@@ -337,11 +332,6 @@ describe('App component target selection', () => {
 });
 
 describe('App component target selector rendering', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockWindowLocation({ search: '?evalId=test-eval-id' });
-  });
-
   it('should render the target selector dropdown when there are multiple prompts', async () => {
     const results = [
       createComponentMockResult(0, 'plugin1', true),
@@ -519,11 +509,6 @@ describe('App component target selector rendering', () => {
 });
 
 describe('App component categoryStats calculation with moderation', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockWindowLocation({ search: '?evalId=test-eval-id' });
-  });
-
   it('should correctly increment passWithFilter but not pass when moderation tests fail but other tests pass', async () => {
     const pluginId = 'testPlugin';
     const moderationFailure: GradingResult = {
@@ -563,11 +548,6 @@ describe('App component categoryStats calculation with moderation', () => {
 });
 
 describe('Filter panel regression tests', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockWindowLocation({ search: '?evalId=test-eval-id' });
-  });
-
   it('should open filter panel without errors when filter button is clicked', async () => {
     // Regression test for #7246 - clicking filter button caused Radix UI error
     // due to SelectItem components with empty string values
