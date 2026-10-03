@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
-import { resolveAwsCredentials } from '../../src/providers/awsCredentials';
+import {
+  getAwsCredentialProviderOptions,
+  resolveAwsCredentials,
+} from '../../src/providers/awsCredentials';
 import { mockProcessEnv } from '../util/utils';
 
 afterEach(() => {
@@ -62,6 +65,62 @@ describe('explicit AWS SSO profiles', () => {
 });
 
 describe('backwards-compatible AWS env-file handoff', () => {
+  it.each(
+    ['suite', 'provider'].flatMap((scope) =>
+      [
+        {
+          mode: 'undefined',
+          input: {
+            AWS_WEB_IDENTITY_TOKEN_FILE: undefined,
+            AWS_ROLE_ARN: undefined,
+            AWS_ROLE_SESSION_NAME: undefined,
+          },
+          expected: {
+            webIdentityTokenFile: '/fixture/file-token',
+            roleArn: 'arn:aws:iam::123456789012:role/File',
+            roleSessionName: 'file-session',
+          },
+        },
+        {
+          mode: 'override',
+          input: {
+            AWS_WEB_IDENTITY_TOKEN_FILE: '/fixture/override-token',
+            AWS_ROLE_ARN: 'arn:aws:iam::123456789012:role/Override',
+            AWS_ROLE_SESSION_NAME: 'override-session',
+          },
+          expected: {
+            webIdentityTokenFile: '/fixture/override-token',
+            roleArn: 'arn:aws:iam::123456789012:role/Override',
+            roleSessionName: 'override-session',
+          },
+        },
+        {
+          mode: 'empty',
+          input: {
+            AWS_WEB_IDENTITY_TOKEN_FILE: '',
+            AWS_ROLE_ARN: '',
+            AWS_ROLE_SESSION_NAME: '',
+          },
+          expected: { webIdentityTokenFile: '', roleArn: '', roleSessionName: '' },
+        },
+      ].map((scenario) => ({ scope, ...scenario })),
+    ),
+  )('forwards web identity options with $scope $mode values', ({ scope, input, expected }) => {
+    cliState.withEnvFileOverrides(
+      {
+        AWS_WEB_IDENTITY_TOKEN_FILE: '/fixture/file-token',
+        AWS_ROLE_ARN: 'arn:aws:iam::123456789012:role/File',
+        AWS_ROLE_SESSION_NAME: 'file-session',
+      },
+      () =>
+        cliState.withEnv(scope === 'suite' ? input : undefined, () => {
+          expect(getAwsCredentialProviderOptions(scope === 'provider' ? input : undefined)).toEqual(
+            expected,
+          );
+        }),
+    );
+  });
+
   it('combines a file session token with existing host access keys without mutating them', async () => {
     const restore = mockProcessEnv({
       AWS_ACCESS_KEY_ID: 'host-access',

@@ -138,7 +138,7 @@ export abstract class AwsBedrockGenericProvider {
     return this.getSdkState().cacheNamespace;
   }
 
-  private selectResponseCacheNamespace(): string | undefined {
+  protected selectResponseCacheNamespace(): string | undefined {
     if (this.config.accessKeyId && this.config.secretAccessKey) {
       return undefined;
     }

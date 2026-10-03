@@ -1,7 +1,7 @@
 import { createHmac } from 'crypto';
 
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvOverrides, getEnvString } from '../../envars';
+import { getEnvString, getMergedEnvOverrides } from '../../envars';
 import logger from '../../logger';
 import { setGenAIResponseAttributes } from '../../tracing/genaiTracer';
 import { createAzureCredential } from '../../util/azureCredentials';
@@ -327,7 +327,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   }
 
   private selectResponseCacheNamespace(): string | undefined {
-    const env = Object.assign({}, getEnvOverrides('file'), getEnvOverrides(), this.env);
+    const env = getMergedEnvOverrides(this.env);
     const names = [
       'AZURE_CLIENT_ID',
       'AZURE_CLIENT_SECRET',

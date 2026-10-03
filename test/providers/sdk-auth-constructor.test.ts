@@ -29,6 +29,83 @@ afterEach(() => {
 });
 
 describe('real cloud SDK credential construction without authentication calls', () => {
+  it.each(['suite', 'provider'] as const)(
+    'retains file Azure credentials and cache identity under undefined %s values',
+    async (layer) => {
+      const selected = {
+        AZURE_CLIENT_ID: 'file-client',
+        AZURE_TENANT_ID: 'file-tenant',
+        AZURE_CLIENT_SECRET: 'file-secret',
+      };
+      const undefinedValues = {
+        AZURE_CLIENT_ID: undefined,
+        AZURE_TENANT_ID: undefined,
+        AZURE_CLIENT_SECRET: undefined,
+      };
+      mockProcessEnv({
+        AZURE_CLIENT_ID: 'host-client',
+        AZURE_TENANT_ID: 'host-tenant',
+        AZURE_CLIENT_SECRET: 'host-secret',
+      });
+      await cliState.withEnvFileOverrides(selected, async () => {
+        const create = (env?: typeof undefinedValues) =>
+          new AzureFoundryAgentProvider('fixture', {
+            config: { projectUrl: 'https://fixture.services.ai.azure.com/api/projects/project' },
+            env,
+          });
+        const lower = create();
+        const expectedNamespace = Reflect.get(lower, 'getResponseCacheNamespace').call(lower);
+        expect(expectedNamespace).toBeDefined();
+        const verify = async () => {
+          const env = layer === 'provider' ? undefinedValues : undefined;
+          const credential = await createAzureCredential({}, env);
+          expect(credential).toBeInstanceOf(ClientSecretCredential);
+          expect(Reflect.get(credential, 'tenantId')).toBe('file-tenant');
+          const actual = create(env);
+          expect(Reflect.get(actual, 'getResponseCacheNamespace').call(actual)).toBe(
+            expectedNamespace,
+          );
+        };
+        if (layer === 'suite') {
+          await cliState.withEnv(undefinedValues, verify);
+        } else {
+          await verify();
+        }
+      });
+      expect(process.env.AZURE_TENANT_ID).toBe('host-tenant');
+    },
+  );
+
+  it.each(['suite', 'provider'] as const)(
+    'retains an explicit empty Azure %s mask instead of treating it as undefined',
+    async (layer) => {
+      mockProcessEnv({
+        AZURE_CLIENT_ID: 'host-client',
+        AZURE_TENANT_ID: 'host-tenant',
+        AZURE_CLIENT_SECRET: 'host-secret',
+      });
+      await cliState.withEnvFileOverrides(
+        {
+          AZURE_CLIENT_ID: 'file-client',
+          AZURE_TENANT_ID: 'file-tenant',
+          AZURE_CLIENT_SECRET: 'file-secret',
+        },
+        async () => {
+          const selected = { AZURE_CLIENT_SECRET: '' };
+          const verify = () =>
+            expect(
+              createAzureCredential({}, layer === 'provider' ? selected : undefined),
+            ).rejects.toThrow('AZURE_CLIENT_SECRET is empty');
+          if (layer === 'suite') {
+            await cliState.withEnv(selected, verify);
+          } else {
+            await verify();
+          }
+        },
+      );
+    },
+  );
+
   it.each(['AZURE_CLIENT_ID', 'AZURE_TENANT_ID'])(
     'does not restore a host username credential through cleared %s',
     async (cleared) => {

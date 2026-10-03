@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 
-import { getEnvOverrides, getEnvString } from '../envars';
+import { getEnvString, getMergedEnvOverrides } from '../envars';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider, Logger } from '@smithy/types';
 
 import type { EnvOverrides } from '../contracts/env';
@@ -122,7 +122,7 @@ export async function getScopedAwsProfileCredentials(
   options: ProfileOptions,
   env?: EnvOverrides,
 ): Promise<AwsCredentialIdentityProvider | undefined> {
-  const scoped = Object.assign({}, getEnvOverrides('file'), getEnvOverrides(), env);
+  const scoped = getMergedEnvOverrides(env);
   const scopedKeys = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN'].some(
     (key) => scoped[key] !== undefined,
   );

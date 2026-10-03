@@ -5,11 +5,7 @@ import telemetry from '../../telemetry';
 import { sha256 } from '../../util/createHash';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
-import {
-  getAwsCredentialCacheNamespace,
-  getAwsCredentialProviderOptions,
-  resolveAwsCredentials,
-} from '../awsCredentials';
+import { getAwsCredentialProviderOptions, resolveAwsCredentials } from '../awsCredentials';
 import { createEnvironmentScopedState } from '../scopedState';
 import { AwsBedrockGenericProvider } from './base';
 import { assertBedrockModelIsAvailable } from './index';
@@ -96,7 +92,7 @@ export class AwsBedrockKnowledgeBaseProvider
   }
   private readonly getClientState = createEnvironmentScopedState(
     () => ({
-      cacheNamespace: getAwsCredentialCacheNamespace(this.config, this.env),
+      cacheNamespace: this.selectResponseCacheNamespace(),
       client: undefined as BedrockAgentRuntimeClient | undefined,
       initialization: undefined as Promise<BedrockAgentRuntimeClient> | undefined,
     }),

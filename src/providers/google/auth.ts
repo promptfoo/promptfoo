@@ -469,8 +469,7 @@ export class GoogleAuthManager {
       }
     }
     authOptions.projectId =
-      opts.projectId ??
-      authOptions.projectId ??
+      (opts.projectId || authOptions.projectId) ??
       env?.GOOGLE_CLOUD_PROJECT ??
       getEnvString('GOOGLE_CLOUD_PROJECT');
     const scopedProjectId =

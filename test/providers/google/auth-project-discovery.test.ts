@@ -81,6 +81,53 @@ async function releasedProjectId(scope: Scope) {
 
 describe('Google SDK project discovery with empty project settings', () => {
   it.each(
+    [undefined, '', 'top-project'].flatMap((projectId) =>
+      [undefined, '', 'sdk-project'].map((sdkProjectId) => ({ projectId, sdkProjectId })),
+    ),
+  )(
+    'preserves configured SDK project precedence for $projectId/$sdkProjectId',
+    async ({ projectId, sdkProjectId }) => {
+      mockProcessEnv({
+        GOOGLE_APPLICATION_CREDENTIALS: credentialFile,
+        GCLOUD_PROJECT: 'host-alias-project',
+      });
+      const options = { keyFilename: credentialFile, projectId: sdkProjectId };
+      const native = new GoogleAuth({ ...options, ...(projectId ? { projectId } : {}) });
+      await native.getClient();
+      const result = await GoogleAuthManager.getOAuthClient({
+        projectId,
+        googleAuthOptions: options,
+      });
+      expect(result.projectId).toBe(await native.getProjectId());
+      expect(result.projectId).toBe(projectId || sdkProjectId || 'host-alias-project');
+      expect(gcloudProject).not.toHaveBeenCalled();
+      expect(metadataProject).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['provider', 'suite', 'file'] as const)(
+    'keeps the configured SDK project above a %s host mask and blank top-level project',
+    async (scope) => {
+      mockProcessEnv({
+        GOOGLE_APPLICATION_CREDENTIALS: credentialFile,
+        GOOGLE_CLOUD_PROJECT: 'host-project',
+        GCLOUD_PROJECT: 'host-alias-project',
+      });
+      const result = await withProjectScope(scope, (options) =>
+        GoogleAuthManager.getOAuthClient({
+          ...options,
+          projectId: '',
+          googleAuthOptions: { projectId: 'sdk-project' },
+        }),
+      );
+      expect(result.projectId).toBe('sdk-project');
+      expect(process.env.GOOGLE_CLOUD_PROJECT).toBe('host-project');
+      expect(gcloudProject).not.toHaveBeenCalled();
+      expect(metadataProject).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(
     scopes.flatMap((scope) =>
       [undefined, ''].flatMap((hostProject) =>
         ['gcloud', 'metadata', 'absent'].map((source) => ({ scope, hostProject, source })),

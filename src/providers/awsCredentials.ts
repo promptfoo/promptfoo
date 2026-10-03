@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 import path from 'node:path';
 
-import { getEnvOverrides, getEnvString } from '../envars';
+import { getEnvString, getMergedEnvOverrides } from '../envars';
 import { getScopedAwsProfileCredentials } from './awsProfileCredentials';
 import { getCredentialCacheNamespace } from './credentialCache';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@smithy/types';
@@ -33,7 +33,7 @@ function resolveSharedFilePath(filename: string, kind: 'credentials' | 'config')
 
 /** Options consumed by the SDK's existing default credential provider. */
 export function getAwsCredentialProviderOptions(env?: EnvOverrides) {
-  const scoped = Object.assign({}, getEnvOverrides('file'), getEnvOverrides(), env);
+  const scoped = getMergedEnvOverrides(env);
   return {
     ...(['AWS_PROFILE', 'AWS_SHARED_CREDENTIALS_FILE', 'AWS_CONFIG_FILE'].some(
       (name) => scoped[name] !== undefined,
@@ -71,7 +71,7 @@ export function getScopedAwsCredentialConfig(
   if (config.profile || (includeBearer && config.apiKey)) {
     return config;
   }
-  const scoped = Object.assign({}, getEnvOverrides('file'), getEnvOverrides(), env);
+  const scoped = getMergedEnvOverrides(env);
   const value = (key: string) => scoped[key] ?? getEnvString(key);
   const keyFields = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'];
   const harmlessStaticPlaceholders =
@@ -195,7 +195,7 @@ export function getAwsCredentialCacheNamespace(
   if (!source || (source === config && !hasScopedProfileFiles)) {
     return undefined;
   }
-  const scoped = Object.assign({}, getEnvOverrides('file'), getEnvOverrides(), env);
+  const scoped = getMergedEnvOverrides(env);
   const profileSourceAccessKey =
     source !== config &&
     source.profile &&

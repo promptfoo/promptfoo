@@ -62,6 +62,44 @@ afterEach(() => {
 const options = () => ({ profile: 'fixture', configFilepath, filepath, ignoreCache: true });
 
 describe('scoped AWS profile source credentials', () => {
+  it.each(
+    ['suite', 'provider'].flatMap((upper) =>
+      ['undefined', 'override', 'empty'].map((value) => ({ upper, value })),
+    ),
+  )('preserves Environment role sources with $upper $value values', async ({ upper, value }) => {
+    fs.writeFileSync(
+      configFilepath,
+      '[profile fixture]\nrole_arn=arn:aws:iam::123456789012:role/Fixture\ncredential_source=Environment\n',
+    );
+    const roleAssumer = vi.fn().mockResolvedValue(assumedCredentials);
+    const higher =
+      value === 'override'
+        ? { AWS_ACCESS_KEY_ID: 'other-access', AWS_SECRET_ACCESS_KEY: 'other-secret' }
+        : {
+            AWS_ACCESS_KEY_ID: value === 'empty' ? '' : undefined,
+            AWS_SECRET_ACCESS_KEY: value === 'empty' ? '' : undefined,
+          };
+    await cliState.withEnvFileOverrides(sourceKeys, () =>
+      cliState.withEnv(upper === 'suite' ? higher : undefined, async () => {
+        const provider = await getScopedAwsProfileCredentials(
+          { ...options(), roleAssumer },
+          upper === 'provider' ? higher : undefined,
+        );
+        expect(provider).toBeTypeOf('function');
+        if (value === 'empty') {
+          await expect(provider?.()).rejects.toThrow('AWS role source credentials are incomplete');
+          expect(roleAssumer).not.toHaveBeenCalled();
+        } else {
+          expect(await provider?.()).toEqual(assumedCredentials);
+          expect(roleAssumer.mock.calls[0][0]).toMatchObject({
+            accessKeyId: value === 'override' ? 'other-access' : 'scoped-access',
+            sessionToken: 'scoped-session',
+          });
+        }
+      }),
+    );
+  });
+
   it.each(['host-present', 'host-absent'])(
     'assumes a role using scoped Environment credentials with %s',
     async (hostState) => {

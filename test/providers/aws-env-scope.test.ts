@@ -48,6 +48,117 @@ afterEach(() => {
 
 // Use real SDK constructors and a local request-handler stub: no credential or model service calls.
 describe('scoped AWS SDK authentication', () => {
+  it.each(
+    ['suite', 'provider'].flatMap((upper) =>
+      ['config-file', 'credentials-file', 'profile', 'static-keys'].flatMap((kind) =>
+        ['undefined', 'override', 'empty'].map((value) => ({ upper, kind, value })),
+      ),
+    ),
+  )(
+    'preserves $kind selection and cache identity with $upper $value values',
+    async ({ upper, kind, value }) => {
+      const dir = fs.mkdtempSync(path.join(fixtureTempRoot, 'promptfoo-aws-env-merge-'));
+      const ini = (label: string, config = false) =>
+        `[${config ? 'profile ' : ''}target]\naws_access_key_id=${label}-access\naws_secret_access_key=${label}-secret\n` +
+        `[${config ? 'profile ' : ''}other]\naws_access_key_id=other-access\naws_secret_access_key=other-secret\n` +
+        '[default]\naws_access_key_id=default-access\naws_secret_access_key=default-secret\n';
+      fs.mkdirSync(path.join(dir, '.aws'));
+      for (const label of ['host', 'scoped', 'other']) {
+        fs.writeFileSync(path.join(dir, `${label}-config`), ini(label, true));
+        fs.writeFileSync(path.join(dir, `${label}-credentials`), ini(label));
+      }
+      fs.writeFileSync(path.join(dir, '.aws', 'config'), ini('home', true));
+      fs.writeFileSync(path.join(dir, '.aws', 'credentials'), ini('home'));
+      fs.writeFileSync(path.join(dir, 'empty'), '');
+      mockProcessEnv({
+        ...keys('host'),
+        HOME: dir,
+        AWS_PROFILE: kind === 'profile' ? 'host' : undefined,
+        AWS_CONFIG_FILE: path.join(dir, 'host-config'),
+        AWS_SHARED_CREDENTIALS_FILE: path.join(dir, 'host-credentials'),
+      });
+      const profileEnv = {
+        AWS_PROFILE: 'target',
+        AWS_CONFIG_FILE: path.join(dir, 'empty'),
+        AWS_SHARED_CREDENTIALS_FILE: path.join(dir, 'scoped-credentials'),
+      };
+      const scenarios: Record<
+        string,
+        { lower: EnvOverrides; override: EnvOverrides; emptyIdentity: string }
+      > = {
+        'config-file': {
+          lower: {
+            AWS_PROFILE: 'target',
+            AWS_CONFIG_FILE: path.join(dir, 'scoped-config'),
+            AWS_SHARED_CREDENTIALS_FILE: path.join(dir, 'empty'),
+          },
+          override: { AWS_CONFIG_FILE: path.join(dir, 'other-config') },
+          emptyIdentity: 'home-access',
+        },
+        'credentials-file': {
+          lower: profileEnv,
+          override: { AWS_SHARED_CREDENTIALS_FILE: path.join(dir, 'other-credentials') },
+          emptyIdentity: 'home-access',
+        },
+        profile: {
+          lower: profileEnv,
+          override: { AWS_PROFILE: 'other' },
+          emptyIdentity: 'host-access',
+        },
+        'static-keys': {
+          lower: keys('scoped'),
+          override: keys('other'),
+          emptyIdentity: 'default-access',
+        },
+      };
+      const { lower, override, emptyIdentity } = scenarios[kind];
+      const higher: EnvOverrides =
+        value === 'override'
+          ? override
+          : Object.fromEntries(
+              Object.keys(override).map((key) => [key, value === 'empty' ? '' : undefined]),
+            );
+      const expectedIdentities: Record<string, string> = {
+        undefined: 'scoped-access',
+        override: 'other-access',
+        empty: emptyIdentity,
+      };
+      const expected = expectedIdentities[value];
+      const handle = vi
+        .spyOn(NodeHttpHandler.prototype, 'handle')
+        .mockResolvedValue({ response: { statusCode: 200, headers: {}, body: Buffer.from('{}') } });
+      try {
+        await cliState.withEnvFileOverrides(lower, async () => {
+          const namespace = getAwsCredentialCacheNamespace();
+          await cliState.withEnv(upper === 'suite' ? higher : undefined, async () => {
+            const env = upper === 'provider' ? higher : undefined;
+            const client = await new AwsBedrockCompletionProvider('fixture', {
+              env,
+              config: { region: 'us-east-1' },
+            }).getBedrockInstance();
+            try {
+              expect((await client.config.credentials()).accessKeyId).toBe(expected);
+              await client.invokeModel({ modelId: 'fixture', body: Buffer.from('{}') });
+              expect(handle.mock.calls[0][0].headers.authorization).toContain(
+                `Credential=${expected}/`,
+              );
+              if (value === 'undefined') {
+                expect(getAwsCredentialCacheNamespace({}, env)).toBe(namespace);
+              } else {
+                expect(getAwsCredentialCacheNamespace({}, env)).not.toBe(namespace);
+              }
+            } finally {
+              client.destroy();
+            }
+          });
+        });
+        expect(process.env.AWS_ACCESS_KEY_ID).toBe('host-access');
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
   it.each(['file', 'suite'] as const)(
     'does not restore a host bearer cleared by the %s environment',
     async (scope) => {

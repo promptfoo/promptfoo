@@ -1,4 +1,4 @@
-import { getEnvOverrides, getEnvString } from '../envars';
+import { getEnvString, getMergedEnvOverrides } from '../envars';
 import { createScopedAzureWorkloadCredential } from './azureWorkloadIdentity';
 import type { TokenCredential } from '@azure/identity';
 
@@ -17,7 +17,7 @@ export async function createAzureCredential(
   env?: EnvOverrides,
 ): Promise<TokenCredential> {
   const identity = await import('@azure/identity');
-  const scoped = Object.assign({}, getEnvOverrides('file'), getEnvOverrides(), env);
+  const scoped = getMergedEnvOverrides(env);
   const names = [
     'AZURE_CLIENT_ID',
     'AZURE_CLIENT_SECRET',
